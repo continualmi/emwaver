@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import base64
 import time
 import uuid
 from typing import Any, Dict, Optional
 
-from flask import Blueprint, jsonify, request, current_app
+from flask import Blueprint, Response, jsonify, request, current_app
 from sqlalchemy.orm import Session
 
 from emw_backend.auth import verify_request_identity
@@ -12,6 +13,9 @@ from emw_backend.config import Config
 from emw_backend.db import SessionLocal
 from emw_backend.models import User, UserFile
 from emw_backend.storage_azure import AzureBlobConfig, make_download_url, make_upload_url
+
+# NOTE: We also support a simpler "upload via backend" flow for dev/manual testing,
+# where the backend uploads bytes to Azure directly (no SAS).
 
 
 files_bp = Blueprint("files", __name__, url_prefix="/v1")
@@ -222,6 +226,163 @@ def init_upload():
 
         upload_url = make_upload_url(_azure_cfg(config), blob_key)
         return jsonify({"file": _file_json(f), "upload_url": upload_url}), 201
+    finally:
+        db.close()
+
+
+@files_bp.post("/files/upload")
+def upload_file_via_backend():
+    """One-shot upload through backend (no SAS).
+
+    This is a simpler flow than init-upload + Azure PUT + commit-upload.
+
+    Request JSON:
+      {
+        "kind": "script"|"signal_raw"|"signal_text"|...,   (required)
+        "name": "tesla.raw",                               (required)
+        "content_type": "application/octet-stream",        (optional)
+        "data_base64": "...",                               (required)
+        "size_bytes": 1234                                   (optional)
+      }
+
+    Overwrite semantics:
+      - If a file with same (user, kind, name) exists, its blob is overwritten in-place.
+    """
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    user = _require_user(config)
+    if user is None:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    payload = request.get_json(force=True, silent=False)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    kind = str(payload.get("kind") or "file").strip()
+    name = str(payload.get("name") or "").strip()
+    content_type = payload.get("content_type")
+    data_b64 = payload.get("data_base64")
+    size_bytes_raw = payload.get("size_bytes")
+
+    if not name:
+        return jsonify({"error": "Missing 'name'"}), 400
+    if not data_b64 or not isinstance(data_b64, str):
+        return jsonify({"error": "Missing 'data_base64'"}), 400
+    if content_type is not None and not isinstance(content_type, str):
+        return jsonify({"error": "Invalid 'content_type'"}), 400
+
+    try:
+        data = base64.b64decode(data_b64, validate=True)
+    except Exception:
+        return jsonify({"error": "Invalid base64 in 'data_base64'"}), 400
+
+    if size_bytes_raw is not None:
+        try:
+            size_bytes = int(size_bytes_raw)
+        except Exception:
+            return jsonify({"error": "Invalid 'size_bytes'"}), 400
+        if size_bytes < 0:
+            return jsonify({"error": "Invalid 'size_bytes'"}), 400
+        if size_bytes != len(data):
+            return jsonify({"error": "'size_bytes' does not match decoded data length"}), 400
+
+    ext = _file_ext(name)
+    now = str(_now_epoch())
+
+    # Upsert DB record by (user_id, kind, name)
+    db: Session = SessionLocal()
+    try:
+        f = (
+            db.query(UserFile)
+            .filter(UserFile.user_id == user.id)
+            .filter(UserFile.kind == kind)
+            .filter(UserFile.name == name)
+            .one_or_none()
+        )
+
+        if f is None:
+            file_id = str(uuid.uuid4())
+            blob_key = f"u/{user.firebase_uid}/{file_id}/{name}"
+            f = UserFile(
+                id=file_id,
+                user_id=user.id,
+                kind=kind,
+                name=name,
+                extension=ext,
+                content_type=content_type or "application/octet-stream",
+                storage_provider="azure_blob",
+                blob_container=config.azure_blob_container,
+                blob_key=blob_key,
+                size_bytes=len(data),
+                etag=now,
+                created_at=int(now),
+                updated_at=int(now),
+            )
+            db.add(f)
+            db.commit()
+            db.refresh(f)
+        else:
+            # Overwrite existing blob in-place.
+            f.content_type = content_type or f.content_type or "application/octet-stream"
+            f.size_bytes = len(data)
+            f.etag = now
+            f.updated_at = int(now)
+            db.commit()
+            db.refresh(f)
+
+        # Upload bytes to Azure via account key.
+        try:
+            from azure.storage.blob import BlobServiceClient
+            from azure.storage.blob import ContentSettings
+
+            cfg = _azure_cfg(config)
+            bs = BlobServiceClient(account_url=f"https://{cfg.account}.blob.core.windows.net", credential=cfg.key)
+            bc = bs.get_blob_client(container=cfg.container, blob=f.blob_key)
+            bc.upload_blob(
+                data,
+                overwrite=True,
+                content_settings=ContentSettings(content_type=f.content_type),
+            )
+        except Exception as e:
+            return jsonify({"error": f"Azure upload failed: {e}"}), 502
+
+        return jsonify({"file": _file_json(f)}), 200
+    finally:
+        db.close()
+
+
+@files_bp.get("/files/<file_id>/content")
+def download_content_via_backend(file_id: str):
+    """Downloads file bytes through backend (no SAS).
+
+    Intended for manual testing and debugging.
+    """
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    user = _require_user(config)
+    if user is None:
+        return jsonify({"error": "Unauthorized"}), 401
+
+    db: Session = SessionLocal()
+    try:
+        f = (
+            db.query(UserFile)
+            .filter(UserFile.user_id == user.id)
+            .filter(UserFile.id == file_id)
+            .one_or_none()
+        )
+        if f is None:
+            return jsonify({"error": "Not found"}), 404
+
+        try:
+            from azure.storage.blob import BlobServiceClient
+
+            cfg = _azure_cfg(config)
+            bs = BlobServiceClient(account_url=f"https://{cfg.account}.blob.core.windows.net", credential=cfg.key)
+            bc = bs.get_blob_client(container=cfg.container, blob=f.blob_key)
+            data = bc.download_blob().readall()
+        except Exception as e:
+            return jsonify({"error": f"Azure download failed: {e}"}), 502
+
+        return Response(data, mimetype=f.content_type)
     finally:
         db.close()
 

@@ -153,6 +153,56 @@ def _openapi_spec(*, base_url: str) -> dict:
                     },
                 }
             },
+            "/v1/files/upload": {
+                "post": {
+                    "summary": "Upload file via backend (overwrite by name)",
+                    "description": "One-shot flow: client sends base64 bytes to backend; backend stores in Azure and upserts metadata.",
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string", "example": "signal_raw"},
+                                        "name": {"type": "string", "example": "tesla.raw"},
+                                        "content_type": {"type": "string", "example": "application/octet-stream"},
+                                        "data_base64": {"type": "string", "example": "AAECAw=="},
+                                        "size_bytes": {"type": "integer", "example": 4},
+                                    },
+                                    "required": ["kind", "name", "data_base64"],
+                                }
+                            }
+                        },
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {"file": {"$ref": "#/components/schemas/CloudFile"}},
+                                        "required": ["file"],
+                                    }
+                                }
+                            },
+                        },
+                        "400": {
+                            "description": "Bad request",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+                        },
+                        "401": {
+                            "description": "Unauthorized",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+                        },
+                        "502": {
+                            "description": "Azure upload failed",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+                        },
+                    },
+                }
+            },
             "/v1/files/init-upload": {
                 "post": {
                     "summary": "Init upload (allocate metadata + get Azure SAS PUT URL)",
@@ -309,6 +359,34 @@ def _openapi_spec(*, base_url: str) -> dict:
                             "content": {
                                 "application/json": {"schema": {"$ref": "#/components/schemas/Error"}}
                             },
+                        },
+                    },
+                }
+            },
+            "/v1/files/{file_id}/content": {
+                "get": {
+                    "summary": "Download file bytes via backend (no SAS)",
+                    "parameters": [
+                        {
+                            "name": "file_id",
+                            "in": "path",
+                            "required": True,
+                            "schema": {"type": "string", "format": "uuid"},
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "OK"},
+                        "401": {
+                            "description": "Unauthorized",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+                        },
+                        "404": {
+                            "description": "Not found",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
+                        },
+                        "502": {
+                            "description": "Azure download failed",
+                            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}},
                         },
                     },
                 }
