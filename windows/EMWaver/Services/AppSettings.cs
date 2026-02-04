@@ -13,19 +13,35 @@ internal sealed class AppSettings
     {
         get
         {
-            var ls = ApplicationData.Current.LocalSettings;
-            if (ls.Values.TryGetValue(KeyUseMonaco, out var v) && v is bool b)
+            try
             {
-                return b;
-            }
+                var ls = ApplicationData.Current.LocalSettings;
+                if (ls.Values.TryGetValue(KeyUseMonaco, out var v) && v is bool b)
+                {
+                    return b;
+                }
 
-            // Default ON: Monaco is preferred, but the user can switch back to the simple editor.
-            return true;
+                // Default ON: Monaco is preferred, but the user can switch back to the simple editor.
+                return true;
+            }
+            catch
+            {
+                // If LocalSettings is unavailable for any reason (rare WinRT init issues),
+                // fail safe to the simple editor.
+                return false;
+            }
         }
         set
         {
-            var ls = ApplicationData.Current.LocalSettings;
-            ls.Values[KeyUseMonaco] = value;
+            try
+            {
+                var ls = ApplicationData.Current.LocalSettings;
+                ls.Values[KeyUseMonaco] = value;
+            }
+            catch
+            {
+                // Ignore write failures; caller can still proceed.
+            }
             Changed?.Invoke();
         }
     }
