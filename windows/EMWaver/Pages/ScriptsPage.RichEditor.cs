@@ -81,13 +81,26 @@ public sealed partial class ScriptsPage
     private void SetRichEditorText(string text)
     {
         _suppressRichChanged = true;
+        var prevReadOnly = RichEditor.IsReadOnly;
         try
         {
+            if (prevReadOnly)
+            {
+                // RichEditTextDocument.SetText can throw UnauthorizedAccessException when read-only.
+                RichEditor.IsReadOnly = false;
+            }
+
             RichEditor.Document.SetText(TextSetOptions.None, text ?? string.Empty);
+            _richTextCache = text ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine("[EMWaver][Windows][RichEdit] SetText failed: " + ex.Message);
             _richTextCache = text ?? string.Empty;
         }
         finally
         {
+            try { RichEditor.IsReadOnly = prevReadOnly; } catch { }
             _suppressRichChanged = false;
         }
     }
