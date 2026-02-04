@@ -5,6 +5,7 @@ using EMWaver.Services;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.Web.WebView2.Core;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -195,7 +196,7 @@ public sealed partial class ScriptsPage : Page
         MonacoView.PostWebMessageAsJson(json);
     }
 
-    private void OnMonacoWebMessage(WebView2 sender, WebView2WebMessageReceivedEventArgs args)
+    private void OnMonacoWebMessage(WebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
     {
         try
         {
