@@ -444,6 +444,11 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarRefresh();
     }
 
+    private void OnScriptSyncClick(object sender, RoutedEventArgs e)
+    {
+        _scriptsPage?.HandleToolbarSync();
+    }
+
     private void OnScriptAgentToggleClick(object sender, RoutedEventArgs e)
     {
         _scriptsPage?.HandleToolbarAgentToggle(ScriptAgentToggleButton.IsChecked == true);

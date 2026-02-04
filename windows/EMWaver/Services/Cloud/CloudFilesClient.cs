@@ -11,6 +11,15 @@ namespace EMWaver.Services.Cloud;
 
 internal sealed class CloudFilesClient
 {
+    internal sealed class CloudFilesClientError : Exception
+    {
+        internal int StatusCode { get; }
+        internal CloudFilesClientError(int statusCode, string message) : base(message)
+        {
+            StatusCode = statusCode;
+        }
+    }
+
     internal sealed record FileMetadata(
         string Id,
         string Name,
@@ -18,7 +27,8 @@ internal sealed class CloudFilesClient
         string Kind,
         string Etag,
         long SizeBytes,
-        string? ContentType);
+        string? ContentType,
+        string? Sha256);
 
     internal sealed record CloudFile(FileMetadata Metadata, string Provider, string Container, string BlobKey);
 
@@ -33,27 +43,46 @@ internal sealed class CloudFilesClient
         _auth = auth;
     }
 
-    private async Task<HttpRequestMessage> AuthedAsync(HttpMethod method, string path, CancellationToken ct)
+    private async Task<HttpRequestMessage> MakeRequestAsync(HttpMethod method, string path, string? accessToken, CancellationToken ct)
     {
-        var token = await _auth.EnsureSignedInAsync(ct);
+        var token = accessToken;
+        if (token == null)
+        {
+            token = await _auth.EnsureSignedInAsync(ct);
+        }
+
         var req = new HttpRequestMessage(method, _cfg.BackendBaseUrl + path);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
+        }
         return req;
     }
 
-    internal async Task<IReadOnlyList<CloudFile>> ListAsync(string? kind, string? ext, CancellationToken ct)
+    private static async Task EnsureSuccessAsync(HttpResponseMessage res, CancellationToken ct, string op)
+    {
+        if (res.IsSuccessStatusCode)
+        {
+            return;
+        }
+
+        var body = await res.Content.ReadAsStringAsync(ct);
+        throw new CloudFilesClientError((int)res.StatusCode, $"{op} failed: {body}");
+    }
+
+    internal async Task<IReadOnlyList<CloudFile>> ListAsync(string? kind, string? ext, string? accessToken, CancellationToken ct)
     {
         var qs = new List<string>();
         if (!string.IsNullOrWhiteSpace(kind)) qs.Add("kind=" + Uri.EscapeDataString(kind));
         if (!string.IsNullOrWhiteSpace(ext)) qs.Add("ext=" + Uri.EscapeDataString(ext));
         var path = "/v1/files" + (qs.Count > 0 ? ("?" + string.Join("&", qs)) : "");
 
-        using var req = await AuthedAsync(HttpMethod.Get, path, ct);
+        using var req = await MakeRequestAsync(HttpMethod.Get, path, accessToken, ct);
         using var res = await _http.SendAsync(req, ct);
         var json = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException("List files failed: " + json);
+            throw new CloudFilesClientError((int)res.StatusCode, "List files failed: " + json);
         }
 
         using var doc = JsonDocument.Parse(json);
@@ -72,7 +101,7 @@ internal sealed class CloudFilesClient
 
     internal sealed record InitUploadResult(CloudFile File, string UploadUrl);
 
-    internal async Task<InitUploadResult> InitUploadAsync(string name, string kind, string? contentType, long sizeBytes, CancellationToken ct)
+    internal async Task<InitUploadResult> InitUploadAsync(string name, string kind, string? contentType, long sizeBytes, string? accessToken, CancellationToken ct)
     {
         var payload = new
         {
@@ -83,14 +112,14 @@ internal sealed class CloudFilesClient
         };
 
         var body = JsonSerializer.Serialize(payload);
-        using var req = await AuthedAsync(HttpMethod.Post, "/v1/files/init-upload", ct);
+        using var req = await MakeRequestAsync(HttpMethod.Post, "/v1/files/init-upload", accessToken, ct);
         req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
         using var res = await _http.SendAsync(req, ct);
         var json = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException("Init upload failed: " + json);
+            throw new CloudFilesClientError((int)res.StatusCode, "Init upload failed: " + json);
         }
 
         using var doc = JsonDocument.Parse(json);
@@ -105,7 +134,7 @@ internal sealed class CloudFilesClient
         return new InitUploadResult(file, uploadUrl!);
     }
 
-    internal async Task CommitUploadAsync(string fileId, string expectedEtag, long sizeBytes, CancellationToken ct)
+    internal async Task CommitUploadAsync(string fileId, string expectedEtag, long sizeBytes, string? accessToken, CancellationToken ct)
     {
         var payload = new
         {
@@ -114,25 +143,25 @@ internal sealed class CloudFilesClient
         };
 
         var body = JsonSerializer.Serialize(payload);
-        using var req = await AuthedAsync(HttpMethod.Post, $"/v1/files/{Uri.EscapeDataString(fileId)}/commit-upload", ct);
+        using var req = await MakeRequestAsync(HttpMethod.Post, $"/v1/files/{Uri.EscapeDataString(fileId)}/commit-upload", accessToken, ct);
         req.Content = new StringContent(body, Encoding.UTF8, "application/json");
 
         using var res = await _http.SendAsync(req, ct);
         var json = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException("Commit upload failed: " + json);
+            throw new CloudFilesClientError((int)res.StatusCode, "Commit upload failed: " + json);
         }
     }
 
-    internal async Task<string> GetDownloadUrlAsync(string fileId, CancellationToken ct)
+    internal async Task<string> GetDownloadUrlAsync(string fileId, string? accessToken, CancellationToken ct)
     {
-        using var req = await AuthedAsync(HttpMethod.Get, $"/v1/files/{Uri.EscapeDataString(fileId)}/download", ct);
+        using var req = await MakeRequestAsync(HttpMethod.Get, $"/v1/files/{Uri.EscapeDataString(fileId)}/download", accessToken, ct);
         using var res = await _http.SendAsync(req, ct);
         var json = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException("Download URL failed: " + json);
+            throw new CloudFilesClientError((int)res.StatusCode, "Download URL failed: " + json);
         }
 
         using var doc = JsonDocument.Parse(json);
@@ -157,9 +186,51 @@ internal sealed class CloudFilesClient
         var body = await res.Content.ReadAsStringAsync(ct);
         if (!res.IsSuccessStatusCode)
         {
-            throw new InvalidOperationException("Blob upload failed: " + body);
+            throw new CloudFilesClientError((int)res.StatusCode, "Blob upload failed: " + body);
         }
     }
+
+    internal async Task<CloudFileMetadata> UploadViaBackendAsync(Uri baseUrl, string accessToken, string kind, string name, string contentType, byte[] bytes, CancellationToken ct)
+    {
+        // POST /v1/files/upload { kind, name, content_type, data_base64, size_bytes }
+        var payload = new
+        {
+            kind = kind,
+            name = name,
+            content_type = contentType,
+            data_base64 = Convert.ToBase64String(bytes),
+            size_bytes = (long)bytes.Length,
+        };
+
+        var body = JsonSerializer.Serialize(payload);
+        using var req = await MakeRequestAsync(HttpMethod.Post, "/v1/files/upload", accessToken, ct);
+        req.Content = new StringContent(body, Encoding.UTF8, "application/json");
+
+        using var res = await _http.SendAsync(req, ct);
+        var json = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            throw new CloudFilesClientError((int)res.StatusCode, "Upload via backend failed: " + json);
+        }
+
+        using var doc = JsonDocument.Parse(json);
+        var file = ParseFile(doc.RootElement.GetProperty("file"));
+        return new CloudFileMetadata(file.Metadata);
+    }
+
+    internal async Task<byte[]> DownloadContentViaBackendAsync(Uri baseUrl, string accessToken, string fileId, CancellationToken ct)
+    {
+        using var req = await MakeRequestAsync(HttpMethod.Get, $"/v1/files/{Uri.EscapeDataString(fileId)}/content", accessToken, ct);
+        using var res = await _http.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            throw new CloudFilesClientError((int)res.StatusCode, "Download content failed: " + body);
+        }
+        return await res.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    internal sealed record CloudFileMetadata(FileMetadata Metadata);
 
     private static CloudFile ParseFile(JsonElement el)
     {
@@ -169,11 +240,12 @@ internal sealed class CloudFilesClient
         var meta = new FileMetadata(
             Id: md.GetProperty("id").GetString() ?? "",
             Name: md.GetProperty("name").GetString() ?? "",
-            Extension: md.GetProperty("extension").GetString() ?? "",
+            Extension: md.TryGetProperty("extension", out var ex) ? (ex.GetString() ?? "") : "",
             Kind: md.GetProperty("kind").GetString() ?? "",
-            Etag: md.GetProperty("etag").GetString() ?? "",
+            Etag: md.TryGetProperty("etag", out var et) ? (et.GetString() ?? "") : "",
             SizeBytes: md.TryGetProperty("size_bytes", out var sb) ? sb.GetInt64() : 0,
-            ContentType: md.TryGetProperty("content_type", out var ct) ? ct.GetString() : null
+            ContentType: md.TryGetProperty("content_type", out var ct) ? ct.GetString() : null,
+            Sha256: md.TryGetProperty("sha256", out var sh) ? sh.GetString() : null
         );
 
         return new CloudFile(

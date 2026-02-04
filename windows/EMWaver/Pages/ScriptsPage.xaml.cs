@@ -2,6 +2,8 @@ using EMWaver.Models;
 using EMWaver.Scripting;
 using EMWaver.Scripting.Render;
 using EMWaver.Services;
+using EMWaver.Services.Cloud;
+using System.IO;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -525,6 +527,7 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarRename() => OnRenameClick(this, new RoutedEventArgs());
     internal void HandleToolbarDelete() => OnDeleteClick(this, new RoutedEventArgs());
     internal void HandleToolbarRefresh() => OnRefreshClick(this, new RoutedEventArgs());
+    internal void HandleToolbarSync() => _ = SyncNowAsync();
     internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
 
@@ -547,6 +550,99 @@ public sealed partial class ScriptsPage : Page
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         await RefreshAsync();
+    }
+
+    private bool _syncInProgress;
+
+    private async Task SyncNowAsync()
+    {
+        if (_syncInProgress)
+        {
+            return;
+        }
+
+        _syncInProgress = true;
+        try
+        {
+            var allowAnonSync = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
+
+            var baseRaw = (AppServices.CloudConfig.BackendBaseUrl ?? "").Trim();
+            if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))
+            {
+                await ShowInfoAsync("Sync", "Backend URL is not configured (EMWAVER_BACKEND_URL).");
+                return;
+            }
+
+            string accessToken;
+            if (AppServices.CloudAuth.IsSignedIn)
+            {
+                var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+                accessToken = await AppServices.CloudAuth.EnsureSignedInAsync(cts.Token);
+            }
+            else if (allowAnonSync)
+            {
+                accessToken = "";
+            }
+            else
+            {
+                await ShowInfoAsync("Sync", "Sign in first (Settings → Sign In) to sync with cloud.");
+                return;
+            }
+
+            // Scripts live in LocalAppData/EMWaver/Scripts (ScriptRepository)
+            var scriptsDir = AppServices.Scripts.LocalScriptsDir;
+
+            // Signals live in LocalAppData/EMWaver/Signals (parity with Apple signals dir concept).
+            var signalsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "EMWaver",
+                "Signals"
+            );
+
+            var engine = new CloudSyncEngine(AppServices.CloudFiles);
+            var cts2 = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+
+            var s1 = await engine.SyncAsync(
+                baseUrl: baseUrl,
+                accessToken: accessToken,
+                storageDir: scriptsDir,
+                kinds: new[]
+                {
+                    new CloudSyncEngine.FileKindSpec(Kind: "script", Ext: ".emw", ContentType: "text/plain"),
+                },
+                policy: CloudSyncPolicy.PreferLocal,
+                ct: cts2.Token
+            );
+
+            var s2 = await engine.SyncAsync(
+                baseUrl: baseUrl,
+                accessToken: accessToken,
+                storageDir: signalsDir,
+                kinds: new[]
+                {
+                    new CloudSyncEngine.FileKindSpec(Kind: "signal_raw", Ext: ".raw", ContentType: "application/octet-stream"),
+                    new CloudSyncEngine.FileKindSpec(Kind: "signal_text", Ext: ".txt", ContentType: "text/plain"),
+                },
+                policy: CloudSyncPolicy.PreferLocal,
+                ct: cts2.Token
+            );
+
+            var total = s1.Add(s2);
+            await RefreshAsync(selectFullPath: _current?.FullPath);
+
+            await ShowInfoAsync(
+                "Sync complete",
+                $"Uploaded: {total.Uploaded}, Downloaded: {total.Downloaded}, Conflicts: {total.Conflicts}"
+            );
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("Sync", ex.Message);
+        }
+        finally
+        {
+            _syncInProgress = false;
+        }
     }
 
     private void OnMakeCopyBannerClick(object sender, RoutedEventArgs e)
