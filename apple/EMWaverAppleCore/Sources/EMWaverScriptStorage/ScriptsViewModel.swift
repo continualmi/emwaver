@@ -131,13 +131,13 @@ public final class ScriptsViewModel: ObservableObject {
 
         let debug = true
         if debug {
-            print("[Sync] begin baseURL=\(baseURL.absoluteString) tokenLen=\(accessToken.count)")
+            NSLog("[Sync] begin baseURL=%@ tokenLen=%d", baseURL.absoluteString, accessToken.count)
         }
 
         do {
             // Scripts live in Documents/scripts
             let scriptsDir = fileService.storageDirectoryURL()
-            if debug { print("[Sync] scriptsDir=\(scriptsDir.path)") }
+            if debug { NSLog("[Sync] scriptsDir=%@", scriptsDir.path) }
             let s1 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -150,7 +150,7 @@ public final class ScriptsViewModel: ObservableObject {
 
             // Signals live in Application Support/signals
             let signalsDir = fileService.signalsDirectoryURL()
-            if debug { print("[Sync] signalsDir=\(signalsDir.path)") }
+            if debug { NSLog("[Sync] signalsDir=%@", signalsDir.path) }
             let s2 = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,
@@ -164,7 +164,7 @@ public final class ScriptsViewModel: ObservableObject {
 
             await loadScripts()
             if debug {
-                print("[Sync] done uploaded=\(s1.uploaded + s2.uploaded) downloaded=\(s1.downloaded + s2.downloaded) conflicts=\(s1.conflicts + s2.conflicts)")
+                NSLog("[Sync] done uploaded=%d downloaded=%d conflicts=%d", (s1.uploaded + s2.uploaded), (s1.downloaded + s2.downloaded), (s1.conflicts + s2.conflicts))
             }
             showInfo(
                 title: "Sync complete",
@@ -172,7 +172,7 @@ public final class ScriptsViewModel: ObservableObject {
             )
         } catch {
             if debug {
-                print("[Sync] error: \(error)")
+                NSLog("[Sync] error: %@", String(describing: error))
             }
             showError(message: error.localizedDescription)
         }

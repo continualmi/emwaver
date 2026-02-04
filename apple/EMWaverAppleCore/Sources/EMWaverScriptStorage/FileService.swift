@@ -32,7 +32,7 @@ public final class FileService {
 
     private static func debug(_ msg: String) {
         guard debugEnabled() else { return }
-        print("[FileService] \(msg)")
+        NSLog("[FileService] %@", msg)
     }
 
     private let storageDir: URL
