@@ -122,16 +122,33 @@ public struct EmwCodeEditor: NSViewRepresentable {
             textView.isEditable = isEditable
             textView.isSelectable = true
 
+            // Robust scroll-view sizing (prevents "blank but selectable" rendering when width=0).
+            textView.minSize = NSSize(width: 0, height: 0)
+            let maxSize = CGFloat(Double.greatestFiniteMagnitude)
+            textView.maxSize = NSSize(width: maxSize, height: maxSize)
+            textView.isVerticallyResizable = true
+
             // Wrapping behavior.
             textView.textContainer?.widthTracksTextView = wrapLines
             textView.isHorizontallyResizable = !wrapLines
-            let maxSize = CGFloat(Double.greatestFiniteMagnitude)
-            textView.maxSize = NSSize(width: maxSize, height: maxSize)
-            let wrapWidth = Swift.max(200, textView.bounds.width)
+            textView.autoresizingMask = wrapLines ? [.width] : []
+
+            let contentWidth = textView.enclosingScrollView?.contentSize.width ?? textView.bounds.width
+            let wrapWidth = Swift.max(200, contentWidth)
+
             textView.textContainer?.containerSize = NSSize(
                 width: wrapLines ? wrapWidth : maxSize,
                 height: maxSize
             )
+
+            if wrapLines {
+                // Ensure the view itself has a sensible width early in layout.
+                var f = textView.frame
+                if f.size.width < wrapWidth {
+                    f.size.width = wrapWidth
+                    textView.frame = f
+                }
+            }
         }
 
         func setTextIfNeeded(_ newText: String) {
