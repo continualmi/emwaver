@@ -45,7 +45,7 @@
             <!-- Editor (native, embedded; no popup HWND) -->
             <Border Grid.Column="1" Margin="12,0,0,0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <Grid>
-                    <RichEditBox
+                    <TextBox
                         x:Name="EditorBox"
                         BorderThickness="0"
                         Background="#1E1E1E"
@@ -53,9 +53,12 @@
                         FontFamily="Consolas"
                         FontSize="13"
                         TextWrapping="NoWrap"
+                        AcceptsReturn="True"
+                        AcceptsTab="True"
                         IsSpellCheckEnabled="False"
                         IsTextPredictionEnabled="False"
-                        SelectionHighlightColor="#264F78"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Auto"
                         TextChanged="OnEditorTextChanged" />
 
                     <TextBlock

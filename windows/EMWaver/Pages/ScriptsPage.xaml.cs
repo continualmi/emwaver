@@ -2,7 +2,6 @@ using EMWaver.Models;
 using EMWaver.Scripting;
 using EMWaver.Services;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -56,7 +55,7 @@ public sealed partial class ScriptsPage : Page
         // Default: editor-first.
         EmptyHint.Visibility = Visibility.Visible;
         EditorBox.IsReadOnly = true;
-        EditorBox.Document.SetText(TextSetOptions.None, string.Empty);
+        EditorBox.Text = string.Empty;
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -170,7 +169,7 @@ public sealed partial class ScriptsPage : Page
 
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = script.IsBundled;
-            EditorBox.Document.SetText(TextSetOptions.None, text ?? string.Empty);
+            EditorBox.Text = text ?? string.Empty;
             _suppressEditorChanged = false;
 
             EmptyHint.Visibility = Visibility.Collapsed;
@@ -193,7 +192,7 @@ public sealed partial class ScriptsPage : Page
         {
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = true;
-            EditorBox.Document.SetText(TextSetOptions.None, string.Empty);
+            EditorBox.Text = string.Empty;
             _suppressEditorChanged = false;
 
             EmptyHint.Visibility = Visibility.Visible;
@@ -225,7 +224,7 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextNormalized()
     {
-        EditorBox.Document.GetText(TextGetOptions.None, out var raw);
+        var raw = EditorBox.Text ?? string.Empty;
         return NormalizeLineEndings(raw).TrimEnd('\n');
     }
 
