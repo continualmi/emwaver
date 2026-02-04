@@ -53,11 +53,27 @@ public final class FileService {
         includeContent: Bool,
         accessToken: String
     ) async throws -> [UserFileData] {
+        try await listFiles(in: storageDir, withExtension: fileExtension, includeContent: includeContent)
+    }
+
+    public func listSignalFiles(
+        withExtension fileExtension: String?,
+        includeContent: Bool,
+        accessToken: String
+    ) async throws -> [UserFileData] {
+        try await listFiles(in: signalsDir, withExtension: fileExtension, includeContent: includeContent)
+    }
+
+    private func listFiles(
+        in dir: URL,
+        withExtension fileExtension: String?,
+        includeContent: Bool
+    ) async throws -> [UserFileData] {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let files = try self.fileManager.contentsOfDirectory(
-                        at: self.storageDir,
+                        at: dir,
                         includingPropertiesForKeys: [.fileSizeKey, .contentModificationDateKey]
                     )
 
