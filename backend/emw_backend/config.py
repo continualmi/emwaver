@@ -25,11 +25,7 @@ class Config:
     azure_storage_key: str
     azure_blob_container: str
 
-    # Agent
-    openrouter_api_key: str
-    openrouter_model: str
-
-    # OpenAI-compatible upstream (for /v1/chat/completions proxy)
+    # Agent (OpenAI-compatible upstream)
     openai_base_url: str
     openai_api_key: str
     openai_model: str
@@ -51,9 +47,7 @@ class Config:
             azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),
             azure_storage_key=_env("AZURE_STORAGE_KEY", ""),
             azure_blob_container=_env("AZURE_BLOB_CONTAINER", "emwaver-user-files"),
-            openrouter_api_key=_env("OPENROUTER_API_KEY", ""),
-            openrouter_model=_env("OPENROUTER_MODEL", "x-ai/grok-4.1-fast"),
-            openai_base_url=_env("OPENAI_BASE_URL", ""),
+            openai_base_url=_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_api_key=_env("OPENAI_API_KEY", ""),
-            openai_model=_env("OPENAI_MODEL", ""),
+            openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
         )
