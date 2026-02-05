@@ -373,9 +373,42 @@ Web dashboard (fast feedback loop):
 - Dashboard scope (v1): **account** (Firebase login/logout), **file management** (list/view/upload/delete/edit text), and (next) an **agent panel**.
 - This dashboard is explicitly a developer/ops surface for now, used to validate backend behavior and speed UI iterations.
 
-### Phase 6 — In-app AI Agent (monetizable layer)
+### Phase 6 — Remote Sessions + Web UI Runtime + Agents (control plane)
 
-Goal: the agent is the primary “CLI replacement” and drives exploration.
+Goal: make EMWaver a **control plane** where humans and agents can control hardware **locally or from anywhere**.
+
+Core vision:
+
+- Any EMWaver app instance (macOS / Windows / Android / iOS) can act as a **Host Session** for a user account.
+  - A Host Session is simply “an app that is signed in and currently running”.
+  - If a USB device is attached, that session can bridge **real hardware**.
+- Any other surface can connect to that account and drive that Host Session:
+  - another desktop app (host→host)
+  - a mobile app
+  - and later the **web dashboard**
+
+The unifying interface is **scripts + script UIs**:
+
+- The “API” is exposed through **EMWaver scripts** and their **UI trees**.
+- Humans interact with the UI.
+- Agents interact with the same UI (and the same script runtime), via the same events.
+
+Web direction (next):
+
+- The **frontend will render script UI** (web-native styling; functional equivalence is the goal).
+- The frontend will talk to the backend via **WebSocket**, and the backend will route to the selected Host Session under the same account.
+- Events (button presses / slider updates / etc) are beamed to the Host, and UI updates/events can be streamed back.
+
+Agent placement (layered):
+
+- **Cloud agent** (high power) can drive Host Sessions via the same surfaces.
+- **Local-on-host agent** (smaller model) can run on the host machine for low-latency / offline workflows.
+- Both agents must operate through the same “run script + UI events + logs/artifacts” contract.
+
+Long-term hardware product direction:
+
+- Next product likely: **EMArm** — a machine that an agent can control remotely.
+- We are explicitly bridging **high-power hosts + cloud connectivity** to **low-level electronics** (modules, sensors, actuators) via USB-connected EMWaver devices.
 
 Agent capabilities (minimum):
 - Read device status/version
