@@ -50,8 +50,7 @@ struct ContentView: View {
                     // Treat "preview showing" as "script running" on macOS.
                     hostSessions.setScriptStatus(running: running, activeScriptName: name)
                 }
-            ) {
-            }
+            )
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
