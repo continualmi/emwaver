@@ -1038,7 +1038,7 @@ public class ScriptsFragment extends Fragment {
             return;
         }
 
-        if (scripts.isEmpty()) {
+        if (assetScripts.isEmpty() && customScripts.isEmpty()) {
             if (binding != null) {
                 String content = null;
                 boolean dirty = false;
@@ -1068,8 +1068,12 @@ public class ScriptsFragment extends Fragment {
                 target = findScriptById(lastId);
             }
         }
-        if (target == null && !scripts.isEmpty()) {
-            target = scripts.get(0);
+        if (target == null) {
+            if (!assetScripts.isEmpty()) {
+                target = assetScripts.get(0);
+            } else if (!customScripts.isEmpty()) {
+                target = customScripts.get(0);
+            }
         }
         if (target != null) {
             loadScript(target);
@@ -1080,8 +1084,12 @@ public class ScriptsFragment extends Fragment {
         if (id == null) {
             return null;
         }
-        // Check unified list
-        for (ScriptMetadata scriptMetadata : scripts) {
+        for (ScriptMetadata scriptMetadata : assetScripts) {
+            if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
+                return scriptMetadata;
+            }
+        }
+        for (ScriptMetadata scriptMetadata : customScripts) {
             if (scriptMetadata != null && TextUtils.equals(id, scriptMetadata.getId())) {
                 return scriptMetadata;
             }
