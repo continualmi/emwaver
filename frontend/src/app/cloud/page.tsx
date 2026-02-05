@@ -204,29 +204,9 @@ export default function CloudPage() {
         </div>
 
         <div className="grid gap-4 md:grid-cols-[340px_1fr]">
-          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-            <div className="text-sm font-semibold text-[color:var(--ink)]">Example Scripts</div>
-            <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--line)]">
-              <ul className="divide-y divide-[color:var(--line)]">
-                {exampleEmwScripts.map((s) => (
-                  <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
-                    <button
-                      type="button"
-                      onClick={() => openExample(s.name, s.source)}
-                      className="w-full p-3 text-left"
-                    >
-                      <div className="font-semibold text-[color:var(--ink)]">{s.name}</div>
-                      <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">Bundled example</div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </section>
-
-          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+          <aside className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Files</div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Scripts</div>
               <button
                 disabled={!idToken || isBusy}
                 onClick={() => idToken && refresh(idToken)}
@@ -251,6 +231,28 @@ export default function CloudPage() {
             </div>
 
             <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--line)]">
+              <div className="border-b border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                Example Scripts
+              </div>
+              <ul className="divide-y divide-[color:var(--line)]">
+                {exampleEmwScripts.map((s) => (
+                  <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
+                    <button
+                      type="button"
+                      onClick={() => openExample(s.name, s.source)}
+                      className="w-full p-3 text-left"
+                    >
+                      <div className="font-semibold text-[color:var(--ink)]">{s.name}</div>
+                      <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">Bundled example</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+
+              <div className="border-y border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                Cloud Files
+              </div>
+
               {files.length === 0 ? (
                 <div className="p-3 text-sm text-[color:var(--ink-dim)]">
                   No files indexed yet. First sync/upload will populate Postgres.
@@ -266,10 +268,7 @@ export default function CloudPage() {
                           disabled={!idToken || isBusy}
                         >
                           <div className="font-semibold text-[color:var(--ink)]">{f.name}</div>
-                          <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">
-                            {(f.size_bytes ?? 0).toLocaleString()} bytes
-                            {typeof f.mtime_ms === "number" ? ` • ${new Date(f.mtime_ms).toLocaleString()}` : ""}
-                          </div>
+                          <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">{(f.size_bytes ?? 0).toLocaleString()} bytes</div>
                         </button>
                         <button
                           disabled={!idToken || isBusy}
@@ -286,9 +285,9 @@ export default function CloudPage() {
             </div>
 
             {error ? <div className="mt-3 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
-          </section>
+          </aside>
 
-          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+<section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="text-sm font-semibold text-[color:var(--ink)]">{selected ? selected : "Viewer"}</div>
               <div className="flex items-center gap-2">
