@@ -1,0 +1,54 @@
+name: Deploy Backend (Azure Container Apps)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - backend/**
+      - requirements*.txt
+      - .github/workflows/deploy-azure-backend.yml
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Azure Login (OIDC)
+      # Requires GitHub → Azure federated credentials (see docs)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy to Azure Container Apps
+        uses: azure/container-apps-deploy-action@v2
+        with:
+          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
+          containerAppName: ${{ secrets.AZURE_BACKEND_APP_NAME }}
+          registryUrl: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
+          registryUsername: ${{ secrets.AZURE_ACR_USERNAME }}
+          registryPassword: ${{ secrets.AZURE_ACR_PASSWORD }}
+          imageToBuild: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ secrets.AZURE_BACKEND_IMAGE_NAME }}:${{ github.sha }}
+          dockerfilePath: backend/Dockerfile
+          buildContextPath: .
+          # Set runtime env vars on the Container App
+          environmentVariables: |
+            EMWAVER_AUTH_MODE=${{ secrets.EMWAVER_AUTH_MODE }}
+            EMWAVER_ALLOW_ANON_SYNC=${{ secrets.EMWAVER_ALLOW_ANON_SYNC }}
+            DATABASE_URL=${{ secrets.DATABASE_URL }}
+            AZURE_STORAGE_CONNECTION_STRING=${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}
+            AZURE_STORAGE_CONTAINER=${{ secrets.AZURE_STORAGE_CONTAINER }}
+            FIREBASE_PROJECT_ID=${{ secrets.FIREBASE_PROJECT_ID }}
+            FIREBASE_SERVICE_ACCOUNT_JSON=${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
