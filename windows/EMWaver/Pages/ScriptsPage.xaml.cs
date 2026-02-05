@@ -45,10 +45,11 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private readonly ObservableCollection<ScriptInfo> _scripts = new();
+    private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
     private readonly ObservableCollection<string> _agentMessages = new();
 
     private ScriptInfo? _current;
+    private Models.SignalFileInfo? _currentSignal;
     private string _loadedTextNormalized = string.Empty;
     private bool _isDirty;
     private bool _suppressSelectionChange;
@@ -71,7 +72,15 @@ public sealed partial class ScriptsPage : Page
     {
         InitializeComponent();
 
-        ScriptsList.ItemsSource = _scripts;
+        // Grouped list (Examples / Your Scripts / Signals)
+        var cvs = new Microsoft.UI.Xaml.Data.CollectionViewSource
+        {
+            IsSourceGrouped = true,
+            Source = _sections,
+            ItemsPath = new Microsoft.UI.Xaml.PropertyPath("Items"),
+        };
+        ScriptsList.ItemsSource = cvs.View;
+
         AgentMessagesList.ItemsSource = _agentMessages;
 
         _editorMode = AppServices.Settings.EditorMode;
@@ -113,6 +122,12 @@ public sealed partial class ScriptsPage : Page
         PreviewHost.Children.Clear();
         EditorBox.IsReadOnly = true;
         EditorBox.Text = string.Empty;
+
+        // Sections bootstrap
+        _sections.Clear();
+        _sections.Add(new Models.ScriptListSection("Examples"));
+        _sections.Add(new Models.ScriptListSection("Your Scripts"));
+        _sections.Add(new Models.ScriptListSection("Signals"));
     }
 
     private async void OnLoaded(object sender, RoutedEventArgs e)
@@ -195,23 +210,67 @@ public sealed partial class ScriptsPage : Page
             await AppServices.Scripts.EnsureBootstrappedAsync();
             var scripts = await AppServices.Scripts.ListScriptsAsync();
 
+            // Signals directory (synced)
+            var signalsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "EMWaver",
+                "Signals"
+            );
+
+            var signals = new List<Models.SignalFileInfo>();
+            try
+            {
+                if (Directory.Exists(signalsDir))
+                {
+                    foreach (var p in Directory.EnumerateFiles(signalsDir, "*", SearchOption.TopDirectoryOnly))
+                    {
+                        var ext = Path.GetExtension(p) ?? "";
+                        if (!string.Equals(ext, ".raw", StringComparison.OrdinalIgnoreCase) &&
+                            !string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        signals.Add(new Models.SignalFileInfo(
+                            Name: Path.GetFileNameWithoutExtension(p) ?? "signal",
+                            FullPath: p,
+                            Extension: ext
+                        ));
+                    }
+                }
+            }
+            catch { /* best-effort */ }
+
             await RunOnUiAsync(async () =>
             {
                 _suppressSelectionChange = true;
                 try
                 {
-                    _scripts.Clear();
+                    var examples = _sections.First(s => s.Title == "Examples");
+                    var yours = _sections.First(s => s.Title == "Your Scripts");
+                    var sigSection = _sections.First(s => s.Title == "Signals");
+
+                    examples.Items.Clear();
+                    yours.Items.Clear();
+                    sigSection.Items.Clear();
+
                     foreach (var s in scripts)
                     {
-                        _scripts.Add(s);
+                        if (s.IsBundled) examples.Items.Add(s);
+                        else yours.Items.Add(s);
                     }
 
-                    // Force ListView to notice collection refresh even if called from odd contexts.
+                    foreach (var sig in signals.OrderBy(s => s.FileName, StringComparer.OrdinalIgnoreCase))
+                    {
+                        sigSection.Items.Add(sig);
+                    }
+
+                    // Force ListView to notice refresh
                     ScriptsList.UpdateLayout();
 
                     if (selectFullPath != null)
                     {
-                        var match = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
+                        var match = scripts.FirstOrDefault(s => string.Equals(s.FullPath, selectFullPath, StringComparison.OrdinalIgnoreCase));
                         if (match != null)
                         {
                             ScriptsList.SelectedItem = match;
@@ -222,7 +281,7 @@ public sealed partial class ScriptsPage : Page
 
                     if (_current != null)
                     {
-                        var stillThere = _scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
+                        var stillThere = scripts.FirstOrDefault(s => string.Equals(s.FullPath, _current.FullPath, StringComparison.OrdinalIgnoreCase));
                         if (stillThere != null)
                         {
                             ScriptsList.SelectedItem = stillThere;
@@ -268,8 +327,11 @@ public sealed partial class ScriptsPage : Page
 
             if (!discard)
             {
+                // Restore selection to whatever we had open.
+                object? prev = _currentSignal ?? (object?)_current;
+
                 _suppressSelectionChange = true;
-                ScriptsList.SelectedItem = _current;
+                ScriptsList.SelectedItem = prev;
                 _suppressSelectionChange = false;
                 return;
             }
@@ -277,10 +339,18 @@ public sealed partial class ScriptsPage : Page
 
         if (ScriptsList.SelectedItem is ScriptInfo script)
         {
+            _currentSignal = null;
             await OpenScriptAsync(script);
+        }
+        else if (ScriptsList.SelectedItem is Models.SignalFileInfo sig)
+        {
+            _current = null;
+            await OpenSignalAsync(sig);
         }
         else
         {
+            _current = null;
+            _currentSignal = null;
             ClearEditor();
         }
     }
@@ -288,6 +358,7 @@ public sealed partial class ScriptsPage : Page
     private async Task OpenScriptAsync(ScriptInfo script)
     {
         _current = script;
+        _currentSignal = null;
 
         string text;
         try
@@ -357,6 +428,55 @@ public sealed partial class ScriptsPage : Page
         });
 
         // Do NOT auto-run on open. Rendering should only happen when the user presses Run.
+    }
+
+    private async Task OpenSignalAsync(Models.SignalFileInfo sig)
+    {
+        _currentSignal = sig;
+        _current = null;
+
+        // Signals are read-only artifacts for now.
+        SetPreviewMode(false);
+
+        string text;
+        try
+        {
+            if (string.Equals(sig.Extension, ".raw", StringComparison.OrdinalIgnoreCase))
+            {
+                text = "(Binary signal .raw)";
+            }
+            else
+            {
+                text = await File.ReadAllTextAsync(sig.FullPath);
+            }
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("Open signal", ex.Message);
+            ClearEditor();
+            return;
+        }
+
+        await RunOnUiAsync(async () =>
+        {
+            _loadedTextNormalized = NormalizeLineEndings(text).TrimEnd('\n');
+            _isDirty = false;
+
+            ReadOnlyBanner.Visibility = Visibility.Collapsed;
+
+            _suppressEditorChanged = true;
+            EditorBox.IsReadOnly = true;
+            EditorBox.Text = text;
+            _suppressEditorChanged = false;
+
+            SetRichEditorText(text);
+            RichEditor.IsReadOnly = true;
+
+            EmptyHint.Visibility = Visibility.Collapsed;
+
+            UpdateCommandStates();
+            await Task.CompletedTask;
+        });
     }
 
     private void ClearEditor()
@@ -553,6 +673,69 @@ public sealed partial class ScriptsPage : Page
     }
 
     private bool _syncInProgress;
+    private ContentDialog? _syncDialog;
+    private ProgressBar? _syncProgress;
+    private TextBlock? _syncStatus;
+
+    private async Task ShowSyncProgressAsync(string status)
+    {
+        await RunOnUiAsync(async () =>
+        {
+            if (_syncDialog == null)
+            {
+                _syncProgress = new ProgressBar
+                {
+                    IsIndeterminate = true,
+                    Height = 6,
+                    MinWidth = 260,
+                };
+
+                _syncStatus = new TextBlock
+                {
+                    Text = status,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 10, 0, 0),
+                };
+
+                var panel = new StackPanel();
+                panel.Children.Add(_syncProgress);
+                panel.Children.Add(_syncStatus);
+
+                _syncDialog = new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = "Sync",
+                    Content = panel,
+                    PrimaryButtonText = string.Empty,
+                    CloseButtonText = string.Empty,
+                    DefaultButton = ContentDialogButton.None,
+                };
+
+                // ShowAsync is modeless-ish; we don't await it so sync can run.
+                _ = _syncDialog.ShowAsync();
+            }
+
+            if (_syncStatus != null)
+            {
+                _syncStatus.Text = status;
+            }
+
+            await Task.CompletedTask;
+        });
+    }
+
+    private async Task HideSyncProgressAsync()
+    {
+        await RunOnUiAsync(async () =>
+        {
+            try { _syncDialog?.Hide(); }
+            catch { }
+            _syncDialog = null;
+            _syncProgress = null;
+            _syncStatus = null;
+            await Task.CompletedTask;
+        });
+    }
 
     private async Task SyncNowAsync()
     {
@@ -567,6 +750,7 @@ public sealed partial class ScriptsPage : Page
         _syncInProgress = true;
         try
         {
+            await ShowSyncProgressAsync("Preparing sync…");
             var allowAnonSync = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
 
             var baseRaw = (AppServices.CloudConfig.BackendBaseUrl ?? "").Trim();
@@ -608,6 +792,7 @@ public sealed partial class ScriptsPage : Page
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] baseUrl={baseUrl} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] scriptsDir={scriptsDir}");
 
+            await ShowSyncProgressAsync("Syncing scripts…");
             var s1 = await engine.SyncAsync(
                 baseUrl: baseUrl,
                 accessToken: accessToken,
@@ -620,6 +805,7 @@ public sealed partial class ScriptsPage : Page
                 ct: cts2.Token
             );
 
+            await ShowSyncProgressAsync("Syncing signals…");
             var s2 = await engine.SyncAsync(
                 baseUrl: baseUrl,
                 accessToken: accessToken,
@@ -636,6 +822,7 @@ public sealed partial class ScriptsPage : Page
             var total = s1.Add(s2);
             await RefreshAsync(selectFullPath: _current?.FullPath);
 
+            await HideSyncProgressAsync();
             await ShowInfoAsync(
                 "Sync complete",
                 $"Uploaded: {total.Uploaded}, Downloaded: {total.Downloaded}, Conflicts: {total.Conflicts}"
@@ -644,10 +831,12 @@ public sealed partial class ScriptsPage : Page
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] failed: " + ex);
+            await HideSyncProgressAsync();
             await ShowInfoAsync("Sync", ex.Message);
         }
         finally
         {
+            await HideSyncProgressAsync();
             _syncInProgress = false;
         }
     }

@@ -8,6 +8,7 @@
 
     <Page.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
+        <conv:ScriptListItemTemplateSelector x:Key="ScriptListTemplateSelector" />
     </Page.Resources>
 
     <Grid Padding="16" RowSpacing="12" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
@@ -21,8 +22,8 @@
             <!-- Scripts list -->
             <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged">
-                    <ListView.ItemTemplate>
-                        <DataTemplate>
+                    <ListView.Resources>
+                        <DataTemplate x:Key="ScriptItemTemplate">
                             <Grid ColumnSpacing="8">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -39,7 +40,35 @@
                                     Visibility="{Binding IsBundled, Converter={StaticResource BoolToVisibility}}" />
                             </Grid>
                         </DataTemplate>
-                    </ListView.ItemTemplate>
+
+                        <DataTemplate x:Key="SignalItemTemplate">
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <TextBlock Grid.Column="0" Text="{Binding FileName}" FontWeight="SemiBold" />
+                                <TextBlock Grid.Column="1" Text="signal" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.Resources>
+
+                    <ListView.ItemTemplateSelector>
+                        <conv:ScriptListItemTemplateSelector
+                            ScriptTemplate="{StaticResource ScriptItemTemplate}"
+                            SignalTemplate="{StaticResource SignalItemTemplate}" />
+                    </ListView.ItemTemplateSelector>
+
+                    <ListView.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Title}" Margin="6,12,6,6" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListView.GroupStyle>
                 </ListView>
             </Border>
 
