@@ -17,10 +17,25 @@ struct ScriptsContainerView: View {
     var body: some View {
         NavigationStack {
             ScriptsRootView(device: bleManager) {
-                guard let session = auth.session else { return nil }
-                let raw = UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? ""
-                guard let base = URL(string: raw), !session.idToken.isEmpty else { return nil }
-                return (baseURL: base, accessToken: session.idToken)
+                let env = ProcessInfo.processInfo.environment
+                let allowAnon = (env["EMWAVER_ALLOW_ANON_SYNC"] ?? "") == "1"
+
+                // Backend URL: env first (parity with macOS), then persisted setting.
+                let raw = (env["EMWAVER_BACKEND_URL"] ?? "").isEmpty
+                    ? (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
+                    : (env["EMWAVER_BACKEND_URL"] ?? "")
+
+                guard let base = URL(string: raw), !raw.isEmpty else { return nil }
+
+                if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
+                    return (baseURL: base, accessToken: token)
+                }
+
+                if allowAnon {
+                    return (baseURL: base, accessToken: "")
+                }
+
+                return nil
             }
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
