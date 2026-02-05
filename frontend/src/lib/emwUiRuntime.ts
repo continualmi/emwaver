@@ -10,7 +10,11 @@ export type EmwUiRenderResult = {
 };
 
 function node(type: string, props?: Record<string, any>): EmwUiNode {
-  const children = Array.isArray(props?.children) ? props.children : undefined;
+  const rawChildren = Array.isArray(props?.children) ? props.children : undefined;
+  const children = rawChildren
+    ? rawChildren.filter((c) => c !== null && c !== undefined && c !== false)
+    : undefined;
+
   const rest = { ...(props || {}) };
   if (rest.children !== undefined) delete rest.children;
   return { type, props: rest, children };
@@ -130,8 +134,15 @@ function ensureBootstrapGlobals() {
   if (g.OUTPUT === undefined) g.OUTPUT = 1;
 }
 
+function normalizeScriptSource(scriptSource: string): string {
+  // Some JS runtimes (notably older Safari) don't support numeric separators (e.g. 26_000_000).
+  // Our default scripts use them, so strip them for browser preview.
+  return String(scriptSource).replace(/(\d)_(?=\d)/g, "$1");
+}
+
 export function evalEmwUi(scriptSource: string): EmwUiRenderResult {
   ensureBootstrapGlobals();
+  scriptSource = normalizeScriptSource(scriptSource);
 
   let root: EmwUiNode | null = null;
 
