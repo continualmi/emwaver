@@ -83,3 +83,41 @@ class UserFileIndex(Base):
 
 
 Index("idx_user_files_uid_name", UserFileIndex.firebase_uid, UserFileIndex.name, unique=True)
+
+
+# --- Agent chat persistence ---
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+class AgentConversation(Base):
+    __tablename__ = "agent_conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+
+    title: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+Index("idx_agent_conversations_uid_updated", AgentConversation.firebase_uid, AgentConversation.updated_at_ms)
+
+
+class AgentMessage(Base):
+    __tablename__ = "agent_messages"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    conversation_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_conversations.id"), index=True)
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+
+    role: Mapped[str] = mapped_column(String(16))  # user|assistant|system
+    content: Mapped[str] = mapped_column(Text)
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+Index("idx_agent_messages_convo_created", AgentMessage.conversation_id, AgentMessage.created_at_ms)
