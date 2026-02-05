@@ -38,6 +38,12 @@ Notes:
 - `NEXT_PUBLIC_*` variables for the frontend are **build-time** (baked into the Next.js bundle). The deploy workflow passes them as Docker build arguments.
 - Backend runtime configuration is via Container App environment variables (DB/Blob/auth/etc.).
 
+### Azure CLI usage (agent)
+
+When helpful for Azure resource management and troubleshooting, the agent may run `az` (Azure CLI) commands in the dev environment to inspect/configure resources.
+- Prefer **read-only** commands by default.
+- For **destructive or security-sensitive** actions (deletes, role changes, key rotation, public exposure), get explicit user confirmation first.
+
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
 ---
