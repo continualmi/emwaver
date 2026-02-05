@@ -1,0 +1,141 @@
+// Bundled example scripts for the web dashboard.
+// Source-of-truth lives in assets/default-scripts/*.emw.
+// Keep this small and focused; expand as needed.
+
+export type ExampleEmwScript = {
+  name: string;
+  source: string;
+};
+
+export const exampleEmwScripts: ExampleEmwScript[] = [
+  {
+    name: "blink.emw",
+    source: `// Blink a pin using timers (setTimeout) + \`every()\`.
+
+let selectedPin = GDO0;
+let periodMs = 250;
+let isBlinking = false;
+let level = LOW;
+let loopHandle = null;
+
+const PINS = [
+  { label: "GDO0 (A2)", value: GDO0 },
+  { label: "GDO2 (A3)", value: GDO2 },
+  { label: "IR_RX (A0)", value: IR_RX },
+  { label: "IR_TX (A1)", value: IR_TX },
+  { label: "NSS (A4)", value: NSS },
+  { label: "SCK (A5)", value: SCK },
+  { label: "MISO (A6)", value: MISO },
+  { label: "MOSI (A7)", value: MOSI },
+  { label: "SWCLK (A13)", value: SWCLK },
+  { label: "SWDIO (A14)", value: SWDIO },
+  { label: "UART_TX (B6)", value: UART_TX },
+  { label: "UART_RX (B7)", value: UART_RX },
+];
+
+function stopBlink() {
+  if (loopHandle && typeof loopHandle.stop === "function") {
+    loopHandle.stop();
+  }
+  loopHandle = null;
+  isBlinking = false;
+  render();
+}
+
+function startBlink() {
+  stopBlink();
+
+  const period = Math.max(1, Math.floor(Number(periodMs) || 1));
+  periodMs = period;
+  level = LOW;
+  pinMode(selectedPin, OUTPUT);
+  digitalWrite(selectedPin, level);
+
+  isBlinking = true;
+  render();
+
+  loopHandle = every(periodMs, function () {
+    level = level === LOW ? HIGH : LOW;
+    digitalWrite(selectedPin, level);
+  });
+}
+
+function toggleBlink() {
+  if (isBlinking) {
+    stopBlink();
+    return;
+  }
+  startBlink();
+}
+
+function render() {
+  UI.render(
+    UI.column({
+      padding: 16,
+      spacing: 14,
+      children: [
+        UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
+
+        UI.picker({
+          id: "blink.pin",
+          style: "menu",
+          selected: String(selectedPin),
+          options: PINS,
+          onChange: function (value) {
+            selectedPin = String(value);
+            if (isBlinking) {
+              void startBlink();
+            } else {
+              render();
+            }
+          },
+        }),
+
+        UI.slider({
+          id: "blink.period",
+          value: Number(periodMs),
+          min: 1,
+          max: 2000,
+          step: 1,
+          onSubmit: function (value) {
+            periodMs = Math.max(1, Math.floor(Number(value) || 1));
+            if (isBlinking) {
+              void startBlink();
+            } else {
+              render();
+            }
+          },
+        }),
+
+        UI.button({
+          id: "blink.toggle",
+          label: isBlinking ? "Stop" : "Start",
+          backgroundColor: isBlinking ? "rgba(244, 63, 94, 0.18)" : "rgba(16, 185, 129, 0.18)",
+          foregroundColor: isBlinking ? "#FFE4E6" : "#D1FAE5",
+          onTap: toggleBlink,
+        }),
+      ],
+    }),
+  );
+}
+
+render();
+`,
+  },
+  {
+    name: "hello.emw",
+    source: `UI.render(
+  UI.column({
+    padding: 16,
+    spacing: 12,
+    children: [
+      UI.text({
+        text: "hello",
+        foregroundColor: "#E2E8F0",
+      }),
+    ],
+  })
+);
+`,
+  },
+];
