@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional
 
-import requests
 from flask import Blueprint, Response, current_app, jsonify, request
+from openai import OpenAI
 from sqlalchemy import desc, select
 
 from emw_backend.auth import verify_request_identity
@@ -13,8 +13,6 @@ from emw_backend.config import Config
 from emw_backend.db import SessionLocal
 from emw_backend.models import AgentConversation, AgentMessage
 
-
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 agent_bp = Blueprint("agent", __name__)
 
@@ -30,113 +28,13 @@ def _require_identity(config: Config):
     return ident, None
 
 
-def _openrouter_headers(config: Config) -> Dict[str, str]:
-    if not config.openrouter_api_key:
-        raise RuntimeError("Missing OPENROUTER_API_KEY")
-    return {
-        "Authorization": f"Bearer {config.openrouter_api_key}",
-        "X-Title": "EMWaver",
-        "User-Agent": "EMWaver/backend",
-    }
-
-
-def _openrouter_chat(
-    *,
-    config: Config,
-    model: Optional[str],
-    messages: List[Dict[str, Any]],
-    max_tokens: int = 512,
-    temperature: float = 0.2,
-) -> Tuple[str, str]:
-    """Returns (content, resolved_model)."""
-
-    resolved_model = (model or config.openrouter_model or "").strip()
-    if not resolved_model:
-        raise ValueError("Invalid 'model'")
-    if not isinstance(messages, list) or not messages:
-        raise ValueError("Invalid 'messages'")
-
-    req_body = {
-        "model": resolved_model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "stream": False,
-    }
-
-    resp = requests.post(
-        OPENROUTER_URL,
-        json=req_body,
-        headers=_openrouter_headers(config),
-        timeout=90,
-    )
-
-    if resp.status_code < 200 or resp.status_code >= 300:
-        raise RuntimeError(f"OpenRouter error ({resp.status_code}): {resp.text}")
-
-    data = resp.json()
-    content = None
-    try:
-        content = data.get("choices", [])[0].get("message", {}).get("content", "")
-        content = (content or "").strip()
-    except Exception:
-        content = None
-
-    if not content:
-        raise RuntimeError("OpenRouter response missing message content")
-
-    return content, (data.get("model") or resolved_model)
-
-
-def _openrouter_stream(
-    *,
-    config: Config,
-    model: Optional[str],
-    messages: List[Dict[str, Any]],
-    max_tokens: int = 512,
-    temperature: float = 0.2,
-) -> Iterable[str]:
-    """Yields OpenAI-style SSE lines (data: ...\n\n)."""
-
-    resolved_model = (model or config.openrouter_model or "").strip()
-    if not resolved_model:
-        raise ValueError("Invalid 'model'")
-    if not isinstance(messages, list) or not messages:
-        raise ValueError("Invalid 'messages'")
-
-    req_body = {
-        "model": resolved_model,
-        "messages": messages,
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-        "stream": True,
-    }
-
-    with requests.post(
-        OPENROUTER_URL,
-        json=req_body,
-        headers=_openrouter_headers(config),
-        timeout=90,
-        stream=True,
-    ) as resp:
-        if resp.status_code < 200 or resp.status_code >= 300:
-            # try to read some body for error context
-            try:
-                body = resp.text
-            except Exception:
-                body = ""
-            raise RuntimeError(f"OpenRouter error ({resp.status_code}): {body}")
-
-        # OpenRouter streams Server-Sent Events compatible with OpenAI.
-        for raw in resp.iter_lines(decode_unicode=True):
-            if raw is None:
-                continue
-            line = raw.strip("\r")
-            if not line:
-                continue
-            # pass through only data: lines to the client
-            if line.startswith("data:"):
-                yield line + "\n\n"
+def _require_openai(config: Config) -> OpenAI:
+    if not config.openai_base_url:
+        raise RuntimeError("Missing OPENAI_BASE_URL")
+    if not config.openai_model:
+        raise RuntimeError("Missing OPENAI_MODEL")
+    # OPENAI_API_KEY can be empty if you are pointing at a local OpenAI-compatible server.
+    return OpenAI(api_key=(config.openai_api_key or None), base_url=config.openai_base_url)
 
 
 def _sse(event: str, data: Any) -> str:
@@ -271,7 +169,11 @@ def _build_openai_messages_from_db(db, *, uid: str, conversation_id: str) -> Lis
 
 @agent_bp.post("/v1/agent/chat")
 def agent_chat():
-    """Non-streaming chat completion that persists user+assistant turns to Postgres."""
+    """Non-streaming chat completion that persists user+assistant turns to Postgres.
+
+    Upstream is OpenAI-compatible via OPENAI_BASE_URL / OPENAI_API_KEY.
+    Model is forced from OPENAI_MODEL.
+    """
 
     started = time.time()
     config: Config = current_app.config["EMWAVER_CONFIG"]
@@ -285,7 +187,6 @@ def agent_chat():
 
     conversation_id = payload.get("conversation_id")
     user_content = payload.get("message")
-    model = payload.get("model")
     max_tokens = int(payload.get("max_tokens", 512))
     temperature = float(payload.get("temperature", 0.2))
 
@@ -296,65 +197,73 @@ def agent_chat():
 
     now = _now_ms()
 
-    with SessionLocal() as db:
-        convo = db.get(AgentConversation, conversation_id)
-        if not convo or convo.firebase_uid != ident.uid:
-            return jsonify({"error": "Not found"}), 404
+    try:
+        client = _require_openai(config)
 
-        # persist user msg
-        umsg = AgentMessage(
-            conversation_id=conversation_id,
-            firebase_uid=ident.uid,
-            role="user",
-            content=user_content,
-            created_at_ms=now,
-        )
-        db.add(umsg)
-        db.commit()
+        with SessionLocal() as db:
+            convo = db.get(AgentConversation, conversation_id)
+            if not convo or convo.firebase_uid != ident.uid:
+                return jsonify({"error": "Not found"}), 404
 
-        # build full history -> completion
-        messages = _build_openai_messages_from_db(db, uid=ident.uid, conversation_id=conversation_id)
-
-        try:
-            assistant_content, resolved_model = _openrouter_chat(
-                config=config,
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
+            # persist user msg
+            umsg = AgentMessage(
+                conversation_id=conversation_id,
+                firebase_uid=ident.uid,
+                role="user",
+                content=user_content,
+                created_at_ms=now,
             )
-        except ValueError as e:
-            return jsonify({"error": str(e)}), 400
-        except requests.Timeout:
-            return jsonify({"error": "Upstream timeout"}), 504
-        except Exception as e:
-            return jsonify({"error": str(e)}), 500
+            db.add(umsg)
+            db.commit()
 
-        amsg = AgentMessage(
-            conversation_id=conversation_id,
-            firebase_uid=ident.uid,
-            role="assistant",
-            content=assistant_content,
-            created_at_ms=_now_ms(),
-        )
-        db.add(amsg)
-        convo.updated_at_ms = _now_ms()
-        db.add(convo)
-        db.commit()
-        db.refresh(amsg)
+            # build full history -> completion
+            messages = _build_openai_messages_from_db(db, uid=ident.uid, conversation_id=conversation_id)
 
-        return jsonify(
-            {
-                "message": {
-                    "id": amsg.id,
-                    "role": amsg.role,
-                    "content": amsg.content,
-                    "created_at_ms": amsg.created_at_ms,
-                },
-                "model": resolved_model,
-            }
+        resp = client.chat.completions.create(
+            model=config.openai_model,
+            messages=messages,
+            max_tokens=max_tokens,
+            temperature=temperature,
         )
-    # (timing omitted)
+
+        assistant_content = (resp.choices[0].message.content or "").strip()
+        if not assistant_content:
+            raise RuntimeError("Upstream response missing message content")
+
+        with SessionLocal() as db:
+            convo = db.get(AgentConversation, conversation_id)
+            if not convo or convo.firebase_uid != ident.uid:
+                return jsonify({"error": "Not found"}), 404
+
+            amsg = AgentMessage(
+                conversation_id=conversation_id,
+                firebase_uid=ident.uid,
+                role="assistant",
+                content=assistant_content,
+                created_at_ms=_now_ms(),
+            )
+            db.add(amsg)
+            convo.updated_at_ms = _now_ms()
+            db.add(convo)
+            db.commit()
+            db.refresh(amsg)
+
+            return jsonify(
+                {
+                    "message": {
+                        "id": amsg.id,
+                        "role": amsg.role,
+                        "content": amsg.content,
+                        "created_at_ms": amsg.created_at_ms,
+                    },
+                    "model": config.openai_model,
+                }
+            )
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+    finally:
+        _ = time.time() - started
 
 
 @agent_bp.post("/v1/agent/chat/stream")
@@ -378,7 +287,6 @@ def agent_chat_stream():
 
     conversation_id = payload.get("conversation_id")
     user_content = payload.get("message")
-    model = payload.get("model")
     max_tokens = int(payload.get("max_tokens", 512))
     temperature = float(payload.get("temperature", 0.2))
 
@@ -387,11 +295,12 @@ def agent_chat_stream():
     if not isinstance(user_content, str) or not user_content.strip():
         return jsonify({"error": "Missing 'message'"}), 400
 
-    def gen():
+    def gen() -> Iterable[str]:
         assistant_text_parts: List[str] = []
-        resolved_model: Optional[str] = None
 
         try:
+            client = _require_openai(config)
+
             now = _now_ms()
             with SessionLocal() as db:
                 convo = db.get(AgentConversation, conversation_id)
@@ -399,7 +308,6 @@ def agent_chat_stream():
                     yield _sse("error", {"error": "Not found"})
                     return
 
-                # persist user msg
                 umsg = AgentMessage(
                     conversation_id=conversation_id,
                     firebase_uid=ident.uid,
@@ -412,35 +320,19 @@ def agent_chat_stream():
 
                 messages = _build_openai_messages_from_db(db, uid=ident.uid, conversation_id=conversation_id)
 
-            # stream from OpenRouter outside the DB session.
-            for line in _openrouter_stream(
-                config=config,
-                model=model,
+            stream = client.chat.completions.create(
+                model=config.openai_model,
                 messages=messages,
                 max_tokens=max_tokens,
                 temperature=temperature,
-            ):
-                # line is like: data: {...}\n\n
-                data_part = line[len("data:") :].strip()
-                if data_part == "[DONE]":
-                    break
-                try:
-                    obj = json.loads(data_part)
-                except Exception:
-                    continue
+                stream=True,
+            )
 
-                if resolved_model is None:
-                    resolved_model = obj.get("model") or (model or config.openrouter_model)
-
+            for chunk in stream:
                 try:
-                    delta = (
-                        obj.get("choices", [])[0]
-                        .get("delta", {})
-                        .get("content")
-                    )
+                    delta = chunk.choices[0].delta.content
                 except Exception:
                     delta = None
-
                 if delta:
                     assistant_text_parts.append(str(delta))
                     yield _sse("delta", {"text": str(delta)})
@@ -478,14 +370,10 @@ def agent_chat_stream():
                             "content": amsg.content,
                             "created_at_ms": amsg.created_at_ms,
                         },
-                        "model": resolved_model,
+                        "model": config.openai_model,
                     },
                 )
 
-        except ValueError as e:
-            yield _sse("error", {"error": str(e)})
-        except requests.Timeout:
-            yield _sse("error", {"error": "Upstream timeout"})
         except Exception as e:
             yield _sse("error", {"error": str(e)})
 
