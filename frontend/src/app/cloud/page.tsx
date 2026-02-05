@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
+import { EmwUiPreview } from "@/components/EmwUiPreview";
+import { evalEmwUi } from "@/lib/emwUiRuntime";
 import { firebaseAuth, googleProvider } from "@/lib/firebase";
 import {
   deleteFile,
@@ -49,6 +51,7 @@ export default function CloudPage() {
   const [viewerText, setViewerText] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [uiError, setUiError] = useState<string | null>(null);
 
   async function refresh(token: string) {
     setError(null);
@@ -270,13 +273,51 @@ export default function CloudPage() {
 
             <textarea
               value={viewerText}
-              onChange={(e) => setViewerText(e.target.value)}
+              onChange={(e) => {
+                setViewerText(e.target.value);
+                setUiError(null);
+              }}
               readOnly={selected ? isRaw(selected) : true}
-              className="mt-3 h-[calc(100vh-240px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
+              className="mt-3 h-[calc(100vh-360px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
             />
 
             {selected && isRaw(selected) ? (
               <div className="mt-2 text-xs text-[color:var(--ink-dim)]">.raw is viewer-only for now.</div>
+            ) : null}
+
+            {selected && isEmw(selected) ? (
+              <div className="mt-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">UI preview</div>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]"
+                    onClick={() => {
+                      const r = evalEmwUi(viewerText);
+                      setUiError(r.error || null);
+                      // Force a re-render by setting viewerText to itself is unnecessary; preview uses eval inline below.
+                    }}
+                  >
+                    Render
+                  </button>
+                </div>
+
+                {uiError ? <div className="mt-2 whitespace-pre-wrap text-xs text-red-300">{uiError}</div> : null}
+
+                <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                  {(() => {
+                    const r = evalEmwUi(viewerText);
+                    if (!r.root) {
+                      return <div className="text-sm text-[color:var(--ink-dim)]">No UI.render(...) found.</div>;
+                    }
+                    return <EmwUiPreview root={r.root} />;
+                  })()}
+                </div>
+
+                <div className="mt-2 text-xs text-[color:var(--ink-dim)]">
+                  Preview mode: buttons are disabled and device APIs are stubbed.
+                </div>
+              </div>
             ) : null}
           </section>
         </div>
