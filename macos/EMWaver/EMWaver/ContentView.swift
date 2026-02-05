@@ -11,13 +11,17 @@ import EMWaverScriptsUI
 struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
+    @ObservedObject var hostSessions: HostSessionManager
     @EnvironmentObject private var auth: AuthenticationManager
 
     @State private var showingDeviceSheet: Bool = false
 
     var body: some View {
         NavigationStack {
-            ScriptsRootView(device: device) {
+            ScriptsRootView(device: device, hostStatusSink: { running, name in
+                // Treat "preview showing" as "script running" on macOS.
+                hostSessions.setScriptStatus(running: running, activeScriptName: name)
+            }) {
                 // Backend URL resolution order:
                 // 1) EMWAVER_BACKEND_URL env var (parity with Windows)
                 // 2) UserDefaults key emwaver.agent.backendURL
@@ -104,6 +108,6 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager())
+    ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager(), hostSessions: HostSessionManager())
         .environmentObject(AuthenticationManager())
 }

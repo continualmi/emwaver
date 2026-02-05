@@ -22,6 +22,7 @@ public struct ScriptsRootView: View {
 
     private let device: (any ScriptDevice)?
     private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
+    private let hostStatusSink: ((Bool, String?) -> Void)?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -53,10 +54,12 @@ public struct ScriptsRootView: View {
 
     public init(
         device: (any ScriptDevice)? = nil,
-        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil
+        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        hostStatusSink: ((Bool, String?) -> Void)? = nil
     ) {
         self.device = device
         self.syncProvider = syncProvider
+        self.hostStatusSink = hostStatusSink
     }
 
     public var body: some View {
@@ -166,6 +169,13 @@ public struct ScriptsRootView: View {
         .onAppear {
             previewManager.attach(device: device)
             loadScripts()
+            hostStatusSink?(showingPreview, previewManager.activeScriptName)
+        }
+        .onChange(of: showingPreview) { newValue in
+            hostStatusSink?(newValue, previewManager.activeScriptName)
+        }
+        .onChange(of: previewManager.activeScriptName) { newValue in
+            hostStatusSink?(showingPreview, newValue)
         }
     }
 
