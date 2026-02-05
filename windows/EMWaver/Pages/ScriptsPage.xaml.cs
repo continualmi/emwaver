@@ -556,8 +556,11 @@ public sealed partial class ScriptsPage : Page
 
     private async Task SyncNowAsync()
     {
+        System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] SyncNowAsync invoked");
+
         if (_syncInProgress)
         {
+            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] already in progress");
             return;
         }
 
@@ -601,6 +604,9 @@ public sealed partial class ScriptsPage : Page
 
             var engine = new CloudSyncEngine(AppServices.CloudFiles);
             var cts2 = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+
+            System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] baseUrl={baseUrl} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
+            System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] scriptsDir={scriptsDir}");
 
             var s1 = await engine.SyncAsync(
                 baseUrl: baseUrl,

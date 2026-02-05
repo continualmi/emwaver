@@ -5,6 +5,7 @@ using System.Linq;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
+using System.Diagnostics;
 using System.Threading.Tasks;
 
 namespace EMWaver.Services.Cloud;
@@ -27,6 +28,17 @@ internal sealed record CloudSyncSummary(int Uploaded, int Downloaded, int Confli
 
 internal sealed class CloudSyncEngine
 {
+    private static bool DebugEnabled()
+    {
+        return string.Equals(Environment.GetEnvironmentVariable("EMWAVER_SYNC_DEBUG")?.Trim(), "1", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static void DebugLog(string msg)
+    {
+        if (!DebugEnabled()) return;
+        System.Diagnostics.Debug.WriteLine("[EMWaver][CloudSync] " + msg);
+    }
+
     internal sealed record FileKindSpec(string Kind, string Ext, string ContentType);
 
     private sealed record IndexEntry(
@@ -61,6 +73,8 @@ internal sealed class CloudSyncEngine
 
         Directory.CreateDirectory(storageDir);
 
+        DebugLog($"sync start dir='{storageDir}' kinds={kinds.Count} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
+
         var summary = CloudSyncSummary.Empty;
         var index = await LoadIndexAsync(storageDir, ct);
 
@@ -69,11 +83,14 @@ internal sealed class CloudSyncEngine
             var cloud = await _api.ListAsync(kind: spec.Kind, ext: spec.Ext, accessToken: accessToken, ct: ct);
             var cloudByName = cloud.ToDictionary(f => f.Metadata.Name, f => f, StringComparer.OrdinalIgnoreCase);
 
+            DebugLog($"kind={spec.Kind} ext={spec.Ext} cloud={cloudByName.Count}");
+
             var localFiles = Directory
                 .EnumerateFiles(storageDir, "*" + spec.Ext, SearchOption.TopDirectoryOnly)
                 .Select(p => new FileInfo(p))
                 .Where(fi => fi.Exists)
                 .ToList();
+            DebugLog($"kind={spec.Kind} ext={spec.Ext} local={localFiles.Count}");
             var localByName = localFiles.ToDictionary(fi => fi.Name, fi => fi.FullName, StringComparer.OrdinalIgnoreCase);
 
             var names = new HashSet<string>(cloudByName.Keys, StringComparer.OrdinalIgnoreCase);
@@ -104,6 +121,7 @@ internal sealed class CloudSyncEngine
                 if (localPath == null && cloudFile != null)
                 {
                     // Cloud-only -> download.
+                    DebugLog($"download (cloud-only) kind={spec.Kind} name='{name}' id={cloudFile.Metadata.Id}");
                     await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, destPath: Path.Combine(storageDir, name), ct);
                     summary = summary with { Downloaded = summary.Downloaded + 1 };
 
@@ -120,6 +138,7 @@ internal sealed class CloudSyncEngine
                 if (localPath != null && cloudFile == null)
                 {
                     // Local-only -> upload.
+                    DebugLog($"upload (local-only) kind={spec.Kind} name='{name}' bytes={new FileInfo(localPath).Length}");
                     var bytes = await File.ReadAllBytesAsync(localPath, ct);
                     var uploaded = await _api.UploadViaBackendAsync(baseUrl, accessToken, spec.Kind, name, spec.ContentType, bytes, ct);
                     summary = summary with { Uploaded = summary.Uploaded + 1 };
@@ -188,9 +207,11 @@ internal sealed class CloudSyncEngine
 
                     if (treatAsConflict || (localChanged && cloudChanged))
                     {
+                        DebugLog($"conflict kind={spec.Kind} name='{name}' localChanged={localChanged} cloudChanged={cloudChanged} hasHistory={hasHistory}");
                         if (policy == CloudSyncPolicy.PreferLocal)
                         {
                             var conflictPath = Path.Combine(storageDir, MakeConflictName(name, suffix: "cloud"));
+                            DebugLog($"download (conflict copy) => '{conflictPath}'");
                             await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, conflictPath, ct);
                             summary = summary with
                             {
@@ -201,12 +222,14 @@ internal sealed class CloudSyncEngine
                     }
                     else if (localChanged && !cloudChanged)
                     {
+                        DebugLog($"upload (local-changed) kind={spec.Kind} name='{name}'");
                         var bytes = await File.ReadAllBytesAsync(localPath, ct);
                         _ = await _api.UploadViaBackendAsync(baseUrl, accessToken, spec.Kind, name, spec.ContentType, bytes, ct);
                         summary = summary with { Uploaded = summary.Uploaded + 1 };
                     }
                     else if (!localChanged && cloudChanged)
                     {
+                        DebugLog($"download (cloud-changed) kind={spec.Kind} name='{name}' id={cloudFile.Metadata.Id}");
                         try
                         {
                             await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, localPath, ct);
@@ -221,6 +244,7 @@ internal sealed class CloudSyncEngine
                         catch (CloudFilesClient.CloudFilesClientError ex) when (ex.StatusCode == 404 || ex.StatusCode == 502)
                         {
                             // Cloud metadata exists but blob is missing/corrupt: overwrite cloud from local.
+                            DebugLog($"download failed (HTTP {ex.StatusCode}) -> overwrite from local kind={spec.Kind} name='{name}'");
                             var bytes = await File.ReadAllBytesAsync(localPath, ct);
                             _ = await _api.UploadViaBackendAsync(baseUrl, accessToken, spec.Kind, name, spec.ContentType, bytes, ct);
                             summary = summary with { Uploaded = summary.Uploaded + 1 };
@@ -239,6 +263,7 @@ internal sealed class CloudSyncEngine
         }
 
         await SaveIndexAsync(index, storageDir, ct);
+        DebugLog($"sync done dir='{storageDir}' uploaded={summary.Uploaded} downloaded={summary.Downloaded} conflicts={summary.Conflicts}");
         return summary;
     }
 
