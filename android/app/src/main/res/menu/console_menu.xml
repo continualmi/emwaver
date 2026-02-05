@@ -25,6 +25,12 @@
         android:icon="@drawable/ai_play"
         android:title="Preview"
         app:showAsAction="ifRoom" />
+
+    <item
+        android:id="@+id/editor_sync"
+        android:icon="@drawable/ai_sync"
+        android:title="Sync"
+        app:showAsAction="ifRoom" />
     <item
         android:id="@+id/editor_rename"
         android:title="Rename"

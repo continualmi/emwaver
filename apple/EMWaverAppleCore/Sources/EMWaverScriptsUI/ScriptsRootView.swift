@@ -79,11 +79,19 @@ public struct ScriptsRootView: View {
             #endif
 
             if viewModel.isPerformingAction {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .padding(24)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .shadow(radius: 12)
+                VStack(spacing: 12) {
+                    ProgressView()
+                        .progressViewStyle(.circular)
+
+                    if let t = viewModel.performingActionText, !t.isEmpty {
+                        Text(t)
+                            .font(.subheadline)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .padding(24)
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(radius: 12)
             }
         }
         .navigationTitle(navigationTitleText)
