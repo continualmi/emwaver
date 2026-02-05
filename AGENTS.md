@@ -22,6 +22,22 @@ We do **not** publish direct-download installers for end users (`.dmg`, `.apk`, 
 GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
 We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
+### Infrastructure (current direction)
+
+We deploy **frontend + backend** to **Azure Container Apps**.
+
+- **Backend**: Flask API → Azure Container App (external ingress)
+- **Frontend**: Next.js (chat UI + streaming + websocket support) → Azure Container App (external ingress)
+- **Container Registry**: Azure Container Registry (ACR)
+
+CI/CD (GitHub Actions):
+- Backend deploy workflow: `.github/workflows/deploy-azure-backend.yml`
+- Frontend deploy workflow: `.github/workflows/deploy-azure-frontend.yml`
+
+Notes:
+- `NEXT_PUBLIC_*` variables for the frontend are **build-time** (baked into the Next.js bundle). The deploy workflow passes them as Docker build arguments.
+- Backend runtime configuration is via Container App environment variables (DB/Blob/auth/etc.).
+
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
 ---
