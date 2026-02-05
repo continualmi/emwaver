@@ -28,7 +28,8 @@ export function EmwUiPreview({ root }: { root: EmwUiNode }) {
   return <div className="space-y-2">{renderNode(root)}</div>;
 }
 
-function renderNode(n: EmwUiNode): React.ReactNode {
+function renderNode(n: EmwUiNode | null | undefined): React.ReactNode {
+  if (!n) return null;
   const props = n.props || {};
 
   switch (n.type) {
