@@ -643,6 +643,7 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] failed: " + ex);
             await ShowInfoAsync("Sync", ex.Message);
         }
         finally

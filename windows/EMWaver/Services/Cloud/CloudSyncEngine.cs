@@ -28,14 +28,8 @@ internal sealed record CloudSyncSummary(int Uploaded, int Downloaded, int Confli
 
 internal sealed class CloudSyncEngine
 {
-    private static bool DebugEnabled()
-    {
-        return string.Equals(Environment.GetEnvironmentVariable("EMWAVER_SYNC_DEBUG")?.Trim(), "1", StringComparison.OrdinalIgnoreCase);
-    }
-
     private static void DebugLog(string msg)
     {
-        if (!DebugEnabled()) return;
         System.Diagnostics.Debug.WriteLine("[EMWaver][CloudSync] " + msg);
     }
 
