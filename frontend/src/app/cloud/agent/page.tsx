@@ -6,7 +6,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
-import { firebaseAuth, googleProvider } from "@/lib/firebase";
+import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
   agentChatStream,
   createAgentConversation,
@@ -24,7 +24,7 @@ function formatTitle(c: AgentConversation) {
 }
 
 export default function AgentChatPage() {
-  const auth = useMemo(() => firebaseAuth(), []);
+  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
 
@@ -59,6 +59,7 @@ export default function AgentChatPage() {
   }
 
   useEffect(() => {
+    if (!auth) return;
     return onAuthStateChanged(auth, async (u) => {
       setError(null);
       if (!u) {
@@ -88,11 +89,18 @@ export default function AgentChatPage() {
 
   async function doSignIn() {
     setError(null);
+    if (!auth) {
+      setError(
+        "Firebase env is missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID"
+      );
+      return;
+    }
     await signInWithPopup(auth, googleProvider());
   }
 
   async function doSignOut() {
     setError(null);
+    if (!auth) return;
     await signOut(auth);
   }
 

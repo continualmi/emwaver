@@ -7,7 +7,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
 import { exampleEmwScripts } from "@/lib/exampleEmwScripts";
-import { firebaseAuth, googleProvider } from "@/lib/firebase";
+import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
   deleteFile,
   downloadFileContent,
@@ -44,7 +44,7 @@ function bytesToHexView(bytes: Uint8Array, limit = 256 * 1024) {
 }
 
 export default function CloudPage() {
-  const auth = useMemo(() => firebaseAuth(), []);
+  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
   const [files, setFiles] = useState<CloudUserFile[]>([]);
@@ -69,6 +69,7 @@ export default function CloudPage() {
   }
 
   useEffect(() => {
+    if (!auth) return;
     return onAuthStateChanged(auth, async (u) => {
       setError(null);
       if (!u) {
@@ -88,11 +89,18 @@ export default function CloudPage() {
 
   async function doSignIn() {
     setError(null);
+    if (!auth) {
+      setError(
+        "Firebase env is missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID"
+      );
+      return;
+    }
     await signInWithPopup(auth, googleProvider());
   }
 
   async function doSignOut() {
     setError(null);
+    if (!auth) return;
     await signOut(auth);
   }
 
