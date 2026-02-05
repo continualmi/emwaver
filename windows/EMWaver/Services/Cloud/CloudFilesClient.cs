@@ -220,7 +220,22 @@ internal sealed class CloudFilesClient
 
     internal async Task<byte[]> DownloadContentViaBackendAsync(Uri baseUrl, string accessToken, string fileId, CancellationToken ct)
     {
+        // Newer backend: GET /v1/files/<id>/content
         using var req = await MakeRequestAsync(HttpMethod.Get, $"/v1/files/{Uri.EscapeDataString(fileId)}/content", accessToken, ct);
+        using var res = await _http.SendAsync(req, ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            var body = await res.Content.ReadAsStringAsync(ct);
+            throw new CloudFilesClientError((int)res.StatusCode, "Download content failed: " + body);
+        }
+        return await res.Content.ReadAsByteArrayAsync(ct);
+    }
+
+    internal async Task<byte[]> DownloadContentByNameViaBackendAsync(Uri baseUrl, string accessToken, string name, CancellationToken ct)
+    {
+        // Legacy/simple backend: GET /v1/files/content?name=<filename>
+        var path = $"/v1/files/content?name={Uri.EscapeDataString(name)}";
+        using var req = await MakeRequestAsync(HttpMethod.Get, path, accessToken, ct);
         using var res = await _http.SendAsync(req, ct);
         if (!res.IsSuccessStatusCode)
         {
