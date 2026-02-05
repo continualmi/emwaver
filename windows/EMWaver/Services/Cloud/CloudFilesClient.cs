@@ -235,7 +235,10 @@ internal sealed class CloudFilesClient
     private static CloudFile ParseFile(JsonElement el)
     {
         var md = el.GetProperty("metadata");
-        var st = el.GetProperty("storage");
+
+        // Some backend endpoints (or older backend versions) may omit storage details.
+        // Windows sync only needs metadata, so tolerate missing storage.
+        el.TryGetProperty("storage", out var st);
 
         var meta = new FileMetadata(
             Id: md.GetProperty("id").GetString() ?? "",
@@ -248,11 +251,22 @@ internal sealed class CloudFilesClient
             Sha256: md.TryGetProperty("sha256", out var sh) ? sh.GetString() : null
         );
 
+        string provider = "";
+        string container = "";
+        string blobKey = "";
+
+        if (st.ValueKind == JsonValueKind.Object)
+        {
+            provider = st.TryGetProperty("provider", out var p) ? (p.GetString() ?? "") : "";
+            container = st.TryGetProperty("container", out var c) ? (c.GetString() ?? "") : "";
+            blobKey = st.TryGetProperty("blob_key", out var b) ? (b.GetString() ?? "") : "";
+        }
+
         return new CloudFile(
             Metadata: meta,
-            Provider: st.GetProperty("provider").GetString() ?? "",
-            Container: st.GetProperty("container").GetString() ?? "",
-            BlobKey: st.GetProperty("blob_key").GetString() ?? ""
+            Provider: provider,
+            Container: container,
+            BlobKey: blobKey
         );
     }
 }
