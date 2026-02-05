@@ -163,6 +163,29 @@ sudo apt -y install jq watch
 
 OpenCode is the primary assistant tool in this workflow.
 
+### OpenClaw (assistant gateway) — verbose by default
+
+If you're using OpenClaw and want **verbose** output enabled by default, edit your gateway config:
+
+- Config path: `~/.openclaw/openclaw.json`
+- Set:
+
+```json
+{
+  "agents": {
+    "defaults": {
+      "verboseDefault": "on"
+    }
+  }
+}
+```
+
+Apply it:
+
+```bash
+openclaw gateway restart
+```
+
 Model:
 - `openai/gpt-5.2` (GPT 5.2)
 
