@@ -29,6 +29,11 @@ class Config:
     openrouter_api_key: str
     openrouter_model: str
 
+    # OpenAI-compatible upstream (for /v1/chat/completions proxy)
+    openai_base_url: str
+    openai_api_key: str
+    openai_model: str
+
     @staticmethod
     def from_env() -> "Config":
         cors_raw = _env("CORS_ORIGINS", "*")
@@ -48,4 +53,7 @@ class Config:
             azure_blob_container=_env("AZURE_BLOB_CONTAINER", "emwaver-user-files"),
             openrouter_api_key=_env("OPENROUTER_API_KEY", ""),
             openrouter_model=_env("OPENROUTER_MODEL", "x-ai/grok-4.1-fast"),
+            openai_base_url=_env("OPENAI_BASE_URL", ""),
+            openai_api_key=_env("OPENAI_API_KEY", ""),
+            openai_model=_env("OPENAI_MODEL", ""),
         )

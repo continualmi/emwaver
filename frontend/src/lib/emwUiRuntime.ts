@@ -79,9 +79,6 @@ function createUiApi(setRoot: (n: EmwUiNode) => void) {
     spacer(props: any) {
       return node("spacer", props);
     },
-    divider(props: any) {
-      return node("divider", props);
-    },
     // More types later: toggle, textInput, list, etc.
   };
 }
