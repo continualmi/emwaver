@@ -18,34 +18,39 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            ScriptsRootView(device: device, hostStatusSink: { running, name in
-                // Treat "preview showing" as "script running" on macOS.
-                hostSessions.setScriptStatus(running: running, activeScriptName: name)
-            }) {
-                // Backend URL resolution order:
-                // 1) EMWAVER_BACKEND_URL env var (parity with Windows)
-                // 2) UserDefaults key emwaver.agent.backendURL
-                let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                let defaultsURL = (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            ScriptsRootView(
+                device: device,
+                syncProvider: {
+                    // Backend URL resolution order:
+                    // 1) EMWAVER_BACKEND_URL env var (parity with Windows)
+                    // 2) UserDefaults key emwaver.agent.backendURL
+                    let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
+                    let defaultsURL = (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
+                        .trimmingCharacters(in: .whitespacesAndNewlines)
 
-                let raw = !envURL.isEmpty ? envURL : defaultsURL
-                guard let base = URL(string: raw), !raw.isEmpty else { return nil }
+                    let raw = !envURL.isEmpty ? envURL : defaultsURL
+                    guard let base = URL(string: raw), !raw.isEmpty else { return nil }
 
-                // For local dev: allow sync without sign-in when backend auth is disabled.
-                // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
-                let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
+                    // For local dev: allow sync without sign-in when backend auth is disabled.
+                    // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
+                    let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
-                if let session = auth.session, !session.idToken.isEmpty {
-                    return (baseURL: base, accessToken: session.idToken)
+                    if let session = auth.session, !session.idToken.isEmpty {
+                        return (baseURL: base, accessToken: session.idToken)
+                    }
+
+                    if allowAnonSync {
+                        return (baseURL: base, accessToken: "")
+                    }
+
+                    return nil
+                },
+                hostStatusSink: { running, name in
+                    // Treat "preview showing" as "script running" on macOS.
+                    hostSessions.setScriptStatus(running: running, activeScriptName: name)
                 }
-
-                if allowAnonSync {
-                    return (baseURL: base, accessToken: "")
-                }
-
-                return nil
+            ) {
             }
         }
         .toolbar {
