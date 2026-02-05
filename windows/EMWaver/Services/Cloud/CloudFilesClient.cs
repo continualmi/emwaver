@@ -234,21 +234,52 @@ internal sealed class CloudFilesClient
 
     private static CloudFile ParseFile(JsonElement el)
     {
-        var md = el.GetProperty("metadata");
+        // Backend file JSON can be either:
+        // - { metadata: { ... }, storage: { ... } }
+        // - { id: ..., name: ..., ... } (metadata-only)
+        var md = el;
+        if (el.ValueKind == JsonValueKind.Object && el.TryGetProperty("metadata", out var wrappedMd) && wrappedMd.ValueKind == JsonValueKind.Object)
+        {
+            md = wrappedMd;
+        }
 
         // Some backend endpoints (or older backend versions) may omit storage details.
         // Windows sync only needs metadata, so tolerate missing storage.
         el.TryGetProperty("storage", out var st);
 
+        static string GetString(JsonElement obj, string prop)
+        {
+            return (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String)
+                ? (v.GetString() ?? "")
+                : "";
+        }
+
+        static string? GetStringOrNull(JsonElement obj, string prop)
+        {
+            return (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String)
+                ? v.GetString()
+                : null;
+        }
+
+        static long GetInt64(JsonElement obj, string prop)
+        {
+            if (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty(prop, out var v))
+            {
+                if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n)) return n;
+                if (v.ValueKind == JsonValueKind.String && long.TryParse(v.GetString(), out var s)) return s;
+            }
+            return 0;
+        }
+
         var meta = new FileMetadata(
-            Id: md.GetProperty("id").GetString() ?? "",
-            Name: md.GetProperty("name").GetString() ?? "",
-            Extension: md.TryGetProperty("extension", out var ex) ? (ex.GetString() ?? "") : "",
-            Kind: md.GetProperty("kind").GetString() ?? "",
-            Etag: md.TryGetProperty("etag", out var et) ? (et.GetString() ?? "") : "",
-            SizeBytes: md.TryGetProperty("size_bytes", out var sb) ? sb.GetInt64() : 0,
-            ContentType: md.TryGetProperty("content_type", out var ct) ? ct.GetString() : null,
-            Sha256: md.TryGetProperty("sha256", out var sh) ? sh.GetString() : null
+            Id: GetString(md, "id"),
+            Name: GetString(md, "name"),
+            Extension: GetString(md, "extension"),
+            Kind: GetString(md, "kind"),
+            Etag: GetString(md, "etag"),
+            SizeBytes: GetInt64(md, "size_bytes"),
+            ContentType: GetStringOrNull(md, "content_type"),
+            Sha256: GetStringOrNull(md, "sha256")
         );
 
         string provider = "";
