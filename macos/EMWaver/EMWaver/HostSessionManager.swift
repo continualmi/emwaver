@@ -1,7 +1,10 @@
+import Combine
 import Foundation
 
 @MainActor
 final class HostSessionManager: ObservableObject {
+    // ObservableObject conformance (we don't currently publish UI state, but SwiftUI's @StateObject requires it).
+    let objectWillChange = ObservableObjectPublisher()
     private let urlSession: URLSession
     private var timer: Timer?
 
