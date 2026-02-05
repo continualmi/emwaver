@@ -5,6 +5,9 @@ final class HostSessionManager: ObservableObject {
     private let urlSession: URLSession
     private var timer: Timer?
 
+    private var scriptRunning: Bool = false
+    private var activeScriptName: String = ""
+
     private let hostSessionIdKey = "emwaver.hostSessionId"
 
     private(set) var hostSessionId: String
@@ -19,6 +22,11 @@ final class HostSessionManager: ObservableObject {
             hostSessionId = newId
             UserDefaults.standard.set(newId, forKey: hostSessionIdKey)
         }
+    }
+
+    func setScriptStatus(running: Bool, activeScriptName: String?) {
+        self.scriptRunning = running
+        self.activeScriptName = (activeScriptName ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     func start(auth: AuthenticationManager, device: MacUSBManager) {
@@ -74,7 +82,9 @@ final class HostSessionManager: ObservableObject {
             ],
             "status": [
                 "usb_connected": device.isConnected,
-                "connected_port": device.connectedPortName ?? ""
+                "connected_port": device.connectedPortName ?? "",
+                "script_running": scriptRunning,
+                "active_script_name": activeScriptName
             ]
         ]
 

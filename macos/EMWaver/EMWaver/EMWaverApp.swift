@@ -16,7 +16,7 @@ struct EMWaverApp: App {
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions)
                 .environmentObject(auth)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
