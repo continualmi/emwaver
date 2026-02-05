@@ -7,6 +7,7 @@ from emw_backend.routes.agent import agent_bp
 from emw_backend.routes.files import files_bp
 from emw_backend.routes.health import health_bp
 from emw_backend.routes.docs import docs_bp
+from emw_backend.routes.hosts import hosts_bp
 
 
 def create_app() -> Flask:
@@ -21,6 +22,7 @@ def create_app() -> Flask:
     app.register_blueprint(health_bp)
     app.register_blueprint(agent_bp)
     app.register_blueprint(files_bp)
+    app.register_blueprint(hosts_bp)
     app.register_blueprint(docs_bp)
 
     return app

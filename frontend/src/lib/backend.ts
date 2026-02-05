@@ -141,6 +141,28 @@ export type AgentStreamEvent =
   | { type: "done"; message: AgentMessage; model?: string | null }
   | { type: "error"; error: string };
 
+// --- Host sessions ---
+
+export type HostSession = {
+  id: string;
+  platform: string;
+  device_name: string;
+  app_version: string;
+  capabilities: any;
+  status: any;
+  created_at_ms: number;
+  last_seen_at_ms: number;
+  online: boolean;
+};
+
+export async function listHostSessions(idToken: string): Promise<{ hosts: HostSession[]; now_ms: number }> {
+  const res = await backendFetch("/v1/hosts", idToken, { method: "GET" });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  const json = JSON.parse(text);
+  return { hosts: json.hosts || [], now_ms: json.now_ms || Date.now() };
+}
+
 export async function* agentChatStream(
   idToken: string,
   conversationId: string,

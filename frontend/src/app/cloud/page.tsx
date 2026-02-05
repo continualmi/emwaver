@@ -207,6 +207,12 @@ export default function CloudPage() {
               >
                 Agent
               </a>
+              <a
+                href="/cloud/hosts"
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+              >
+                Hosts
+              </a>
               <button
                 onClick={doSignOut}
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"

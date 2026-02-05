@@ -121,3 +121,28 @@ class AgentMessage(Base):
 
 
 Index("idx_agent_messages_convo_created", AgentMessage.conversation_id, AgentMessage.created_at_ms)
+
+
+# --- Host sessions (presence + status) ---
+
+
+class HostSession(Base):
+    __tablename__ = "host_sessions"
+
+    # Client-generated stable id (per-install recommended)
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+
+    platform: Mapped[str] = mapped_column(String(32), default="unknown")
+    device_name: Mapped[str] = mapped_column(String(128), default="")
+    app_version: Mapped[str] = mapped_column(String(64), default="")
+
+    # JSON strings to avoid dialect issues without JSONB.
+    capabilities_json: Mapped[str] = mapped_column(Text, default="{}")
+    status_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    last_seen_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+Index("idx_host_sessions_uid_last_seen", HostSession.firebase_uid, HostSession.last_seen_at_ms)
