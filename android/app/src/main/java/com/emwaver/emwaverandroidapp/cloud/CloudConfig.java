@@ -13,9 +13,9 @@ import android.content.SharedPreferences;
  * Minimal config for backend sync.
  *
  * Priority:
- *  1) env EMWAVER_BACKEND_URL
- *  2) SharedPreferences (emwaver.cloud.backend_url)
- *  3) default: http://10.0.2.2:8787 (Android emulator -> host localhost)
+ *  1) env EMWAVER_BACKEND_URL (optional)
+ *  2) SharedPreferences (emwaver.cloud.backend_url) (optional)
+ *  3) default: https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io
  */
 public final class CloudConfig {
     private static final String PREFS = "emwaver";
@@ -35,7 +35,7 @@ public final class CloudConfig {
             return v.trim();
         }
 
-        return "http://10.0.2.2:8787";
+        return "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
     }
 
     public static void setBackendBaseUrl(Context context, String url) {
@@ -47,7 +47,8 @@ public final class CloudConfig {
     }
 
     public static boolean allowAnonSync() {
-        String env = System.getenv("EMWAVER_ALLOW_ANON_SYNC");
-        return env != null && env.trim().equals("1");
+        // Android sign-in isn't wired yet; anon sync is the default dev behavior.
+        // Keeping this as an always-on toggle avoids requiring env flags on-device.
+        return true;
     }
 }
