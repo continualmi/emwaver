@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
+import { exampleEmwScripts } from "@/lib/exampleEmwScripts";
 import { firebaseAuth, googleProvider } from "@/lib/firebase";
 import {
   deleteFile,
@@ -48,10 +49,18 @@ export default function CloudPage() {
   const [idToken, setIdToken] = useState<string>("");
   const [files, setFiles] = useState<CloudUserFile[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [emwMode, setEmwMode] = useState<"editor" | "preview">("editor");
   const [viewerText, setViewerText] = useState<string>("");
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
+
+  function openExample(name: string, source: string) {
+    setSelected(name);
+    setViewerText(source);
+    setUiError(null);
+    setEmwMode("editor");
+  }
 
   async function refresh(token: string) {
     setError(null);
@@ -196,6 +205,26 @@ export default function CloudPage() {
 
         <div className="grid gap-4 md:grid-cols-[340px_1fr]">
           <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+            <div className="text-sm font-semibold text-[color:var(--ink)]">Example Scripts</div>
+            <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--line)]">
+              <ul className="divide-y divide-[color:var(--line)]">
+                {exampleEmwScripts.map((s) => (
+                  <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
+                    <button
+                      type="button"
+                      onClick={() => openExample(s.name, s.source)}
+                      className="w-full p-3 text-left"
+                    >
+                      <div className="font-semibold text-[color:var(--ink)]">{s.name}</div>
+                      <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">Bundled example</div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </section>
+
+          <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[color:var(--ink)]">Files</div>
               <button
@@ -262,63 +291,72 @@ export default function CloudPage() {
           <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="text-sm font-semibold text-[color:var(--ink)]">{selected ? selected : "Viewer"}</div>
-              <button
-                disabled={!selected || isBusy || !idToken}
-                onClick={saveCurrent}
-                className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)] disabled:opacity-50"
-              >
-                Save
-              </button>
+              <div className="flex items-center gap-2">
+                {selected && isEmw(selected) ? (
+                  <div className="mr-2 flex overflow-hidden rounded-lg border border-[color:var(--line)]">
+                    <button
+                      type="button"
+                      onClick={() => setEmwMode("editor")}
+                      className={`px-3 py-1.5 text-xs font-semibold ${emwMode === "editor" ? "bg-[color:var(--surface-2)] text-[color:var(--ink)]" : "bg-transparent text-[color:var(--ink-dim)]"}`}
+                    >
+                      Editor
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEmwMode("preview")}
+                      className={`px-3 py-1.5 text-xs font-semibold ${emwMode === "preview" ? "bg-[color:var(--surface-2)] text-[color:var(--ink)]" : "bg-transparent text-[color:var(--ink-dim)]"}`}
+                    >
+                      Preview
+                    </button>
+                  </div>
+                ) : null}
+
+                <button
+                  disabled={!selected || isBusy || !idToken}
+                  onClick={saveCurrent}
+                  className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)] disabled:opacity-50"
+                >
+                  Save
+                </button>
+              </div>
             </div>
 
-            <textarea
-              value={viewerText}
-              onChange={(e) => {
-                setViewerText(e.target.value);
-                setUiError(null);
-              }}
-              readOnly={selected ? isRaw(selected) : true}
-              className="mt-3 h-[calc(100vh-360px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
-            />
+            {selected && isEmw(selected) && emwMode === "preview" ? (
+              <div className="mt-3">
+                {(() => {
+                  const r = evalEmwUi(viewerText);
+                  if (r.error) {
+                    return <div className="whitespace-pre-wrap text-xs text-red-300">{r.error}</div>;
+                  }
+                  if (!r.root) {
+                    return <div className="text-sm text-[color:var(--ink-dim)]">No UI.render(...) found.</div>;
+                  }
+                  return (
+                    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                      <EmwUiPreview root={r.root} />
+                      <div className="mt-3 text-xs text-[color:var(--ink-dim)]">
+                        Preview mode: controls are disabled and device APIs are stubbed.
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              <textarea
+                value={viewerText}
+                onChange={(e) => {
+                  setViewerText(e.target.value);
+                  setUiError(null);
+                }}
+                readOnly={selected ? isRaw(selected) : true}
+                className="mt-3 h-[calc(100vh-360px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
+              />
+            )}
 
             {selected && isRaw(selected) ? (
               <div className="mt-2 text-xs text-[color:var(--ink-dim)]">.raw is viewer-only for now.</div>
             ) : null}
 
-            {selected && isEmw(selected) ? (
-              <div className="mt-4">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">UI preview</div>
-                  <button
-                    type="button"
-                    className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]"
-                    onClick={() => {
-                      const r = evalEmwUi(viewerText);
-                      setUiError(r.error || null);
-                      // Force a re-render by setting viewerText to itself is unnecessary; preview uses eval inline below.
-                    }}
-                  >
-                    Render
-                  </button>
-                </div>
-
-                {uiError ? <div className="mt-2 whitespace-pre-wrap text-xs text-red-300">{uiError}</div> : null}
-
-                <div className="mt-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-                  {(() => {
-                    const r = evalEmwUi(viewerText);
-                    if (!r.root) {
-                      return <div className="text-sm text-[color:var(--ink-dim)]">No UI.render(...) found.</div>;
-                    }
-                    return <EmwUiPreview root={r.root} />;
-                  })()}
-                </div>
-
-                <div className="mt-2 text-xs text-[color:var(--ink-dim)]">
-                  Preview mode: buttons are disabled and device APIs are stubbed.
-                </div>
-              </div>
-            ) : null}
           </section>
         </div>
       </main>

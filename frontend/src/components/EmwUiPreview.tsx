@@ -76,6 +76,51 @@ function renderNode(n: EmwUiNode): React.ReactNode {
         </button>
       );
 
+    case "picker": {
+      const options = Array.isArray(props.options) ? props.options : [];
+      return (
+        <div style={styleFromProps(props)} className="space-y-2">
+          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{props.id ?? "Picker"}</div>
+          <select
+            disabled
+            value={String(props.selected ?? "")}
+            className="w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-2 text-sm text-[color:var(--ink)]"
+            onChange={() => {}}
+          >
+            {options.map((o: any, i: number) => (
+              <option key={i} value={String(o?.value ?? "")}
+                >{String(o?.label ?? o?.value ?? "")}</option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    case "slider": {
+      const min = Number(props.min ?? 0);
+      const max = Number(props.max ?? 100);
+      const step = Number(props.step ?? 1);
+      const value = Number(props.value ?? min);
+      return (
+        <div style={styleFromProps(props)} className="space-y-2">
+          <div className="flex items-center justify-between">
+            <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{props.id ?? "Slider"}</div>
+            <div className="text-xs text-[color:var(--ink-dim)]">{String(value)}</div>
+          </div>
+          <input
+            type="range"
+            disabled
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            className="w-full"
+            onChange={() => {}}
+          />
+        </div>
+      );
+    }
+
     case "divider":
       return <div className="h-px w-full bg-[color:var(--line)]" />;
 

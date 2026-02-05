@@ -33,13 +33,19 @@ function createUiApi(setRoot: (n: EmwUiNode) => void) {
     button(props: any) {
       return node("button", props);
     },
+    picker(props: any) {
+      return node("picker", props);
+    },
+    slider(props: any) {
+      return node("slider", props);
+    },
     spacer(props: any) {
       return node("spacer", props);
     },
     divider(props: any) {
       return node("divider", props);
     },
-    // More types later: toggle, slider, textInput, list, etc.
+    // More types later: toggle, textInput, list, etc.
   };
 }
 
@@ -47,7 +53,53 @@ function createUiApi(setRoot: (n: EmwUiNode) => void) {
 // - Runs in the browser.
 // - Stubs hardware APIs so scripts can be evaluated without a device.
 // - Captures the last UI.render(root) call.
+function ensureBootstrapGlobals() {
+  const g: any = globalThis as any;
+
+  const pins = [
+    "A0",
+    "A1",
+    "A2",
+    "A3",
+    "A4",
+    "A5",
+    "A6",
+    "A7",
+    "A13",
+    "A14",
+    "B6",
+    "B7",
+    "IR_RX",
+    "IR_TX",
+    "GDO0",
+    "GDO2",
+    "NSS",
+    "SCK",
+    "MISO",
+    "MOSI",
+    "SWCLK",
+    "SWDIO",
+    "UART_TX",
+    "UART_RX",
+    "I2C_SCL",
+    "I2C_SDA",
+    "CC1101_CS",
+  ];
+
+  for (const k of pins) {
+    if (g[k] === undefined) g[k] = k;
+  }
+
+  // Common constants.
+  if (g.LOW === undefined) g.LOW = 0;
+  if (g.HIGH === undefined) g.HIGH = 1;
+  if (g.INPUT === undefined) g.INPUT = 0;
+  if (g.OUTPUT === undefined) g.OUTPUT = 1;
+}
+
 export function evalEmwUi(scriptSource: string): EmwUiRenderResult {
+  ensureBootstrapGlobals();
+
   let root: EmwUiNode | null = null;
 
   const UI = createUiApi((n) => {
