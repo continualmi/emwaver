@@ -34,9 +34,15 @@ CI/CD (GitHub Actions):
 - Backend deploy workflow: `.github/workflows/deploy-azure-backend.yml`
 - Frontend deploy workflow: `.github/workflows/deploy-azure-frontend.yml`
 
+Deployment mechanism (current):
+- GitHub Actions logs into Azure using **OIDC** (`azure/login@v2`)
+- Builds + pushes images using **`az acr build`** (build happens in Azure; images stored in ACR)
+- Updates the Container App revision using **`az containerapp update`**
+
 Notes:
-- `NEXT_PUBLIC_*` variables for the frontend are **build-time** (baked into the Next.js bundle). The deploy workflow passes them as Docker build arguments.
+- `NEXT_PUBLIC_*` variables for the frontend are **build-time** (baked into the Next.js bundle). The deploy workflow passes them as **Docker build args**.
 - Backend runtime configuration is via Container App environment variables (DB/Blob/auth/etc.).
+- We do **not** require ACR username/password GitHub secrets for deploy; ACR pushes happen via Azure auth.
 
 ### Azure CLI usage (agent)
 
