@@ -30,20 +30,23 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Deploy to Azure Container Apps
-        uses: azure/container-apps-deploy-action@v2
-        with:
-          resourceGroup: ${{ secrets.AZURE_RESOURCE_GROUP }}
-          containerAppName: ${{ secrets.AZURE_FRONTEND_APP_NAME }}
-          registryUrl: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}
-          registryUsername: ${{ secrets.AZURE_ACR_USERNAME }}
-          registryPassword: ${{ secrets.AZURE_ACR_PASSWORD }}
-          imageToBuild: ${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ secrets.AZURE_FRONTEND_IMAGE_NAME }}:${{ github.sha }}
-          dockerfilePath: frontend/Dockerfile
-          buildContextPath: .
-          buildArguments: |
-            NEXT_PUBLIC_EMWAVER_BACKEND_URL=${{ secrets.NEXT_PUBLIC_EMWAVER_BACKEND_URL }}
-            NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
-            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-            NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+      - name: Build & push image to ACR (az acr build)
+        run: |
+          az acr build \
+            --registry "${{ secrets.AZURE_ACR_NAME }}" \
+            --image "${{ secrets.AZURE_FRONTEND_IMAGE_NAME }}:${{ github.sha }}" \
+            --file frontend/Dockerfile \
+            --build-arg NEXT_PUBLIC_EMWAVER_BACKEND_URL='${{ secrets.NEXT_PUBLIC_EMWAVER_BACKEND_URL }}' \
+            --build-arg NEXT_PUBLIC_FIREBASE_API_KEY='${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}' \
+            --build-arg NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN='${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}' \
+            --build-arg NEXT_PUBLIC_FIREBASE_PROJECT_ID='${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}' \
+            --build-arg NEXT_PUBLIC_FIREBASE_APP_ID='${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}' \
+            .
+
+      - name: Deploy revision (az containerapp update)
+        run: |
+          IMAGE="${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${{ secrets.AZURE_FRONTEND_IMAGE_NAME }}:${{ github.sha }}"
+          az containerapp update \
+            --name "${{ secrets.AZURE_FRONTEND_APP_NAME }}" \
+            --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
+            --image "$IMAGE"
