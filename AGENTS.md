@@ -215,253 +215,108 @@ Fast “where is X?” index:
 - **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverTransport/UsbMidiSysex.swift`
 - **Shared buffer/framing core** → `crates/emwaver-buffer-core/`
 
-## Transition Plan: App-First Execution + In-App Agent (Remove REPL/CLI/Git)
+## Product Spec & Goals (No Phases)
 
-This is the intended migration from today’s “multiple execution modes + CLI + Git integrations” toward a single product model:
+This section is the **current EMWaver spec**. It replaces the old “phase plan” framing.
 
-- The **EMWaver app is the product** (Android / iOS / Desktop).
-- Users explore hardware via **scripts + UI** inside the app.
-- The only first-class execution primitive is: **“Run a `.emw` script against the connected device.”**
-- The “AI agent” lives **inside the app** and drives that same primitive.
+### Primary Product Goal
 
-### Target End State (what we’re converging to)
+EMWaver is a **script-first hardware exploration control plane**.
 
-User-visible:
-- **No REPL**.
-- **No `-c "..."` string execution mode**.
-- **No user-facing CLI** (keep only minimal internal/dev tooling like build/flash).
-- **No Git/GitHub inside apps**.
-- Local-first scripts/projects, with optional **cloud sync**.
+- Users explore hardware by writing/running **`.emw` scripts**.
+- A script defines both:
+  - device/hardware interactions, and
+  - a UI that makes the script usable/repeatable.
 
-Still allowed internally (dev/manufacturing/CI only):
-- A headless runner or harness for automated tests / factory checks.
-- Minimal debug tooling that does not become a supported user workflow.
+The product is not “a firmware IDE” and not “a user-facing MCU toolchain wrapper”.
 
-### Principles / Guardrails
+### Execution Contract (the only first-class primitive)
 
-- Do not describe EMWaver as offline-first.
-- **Cloud is value-add, not a dependency.** Sync/sharing/AI can require network; basic exploration cannot.
-- **One script format, one engine, parity across platforms.** `.emw` is the unit of work.
-- **Minimize surface area.** Every “mode” and “integration” multiplies support burden.
+- **Run a `.emw` file** against a connected device.
+- Scripts own the UI via `UI.*` + `UI.render(...)`.
+- Script output is surfaced through UI/log components and saved artifacts (signals, files).
 
----
+We intentionally avoid extra modes:
+- No REPL.
+- No string-eval execution (`-c`).
+- No user-facing CLI workflows.
 
-## Phase Plan (recommended order)
+### Storage Model (Local-first + Optional Cloud)
 
-Current status (as of 2026-01-28):
-- CLI REPL and `-c` execution removed; CLI reduced to `emwaver build` and `emwaver flash`.
-- Desktop Git UI/commands removed.
-- Android GitHub integration + Git screen removed.
-- iOS GitHub integration + Git tab removed.
-- Desktop Home “emwaver shell” removed (no embedded device shell on Home).
+- **Local-first always**:
+  - scripts are stored locally,
+  - signals/artifacts are stored locally.
+- **Sign-in is optional**.
+- When signed in, the app performs **sync/backup** to cloud.
 
-### Phase 0 — Decide the contracts (1–2 days)
+### Cloud Sync (Files)
 
-Write down (and keep stable):
-- The **single execution contract**: “run `.emw` file” + standard hooks (device I/O, UI render, logging).
-- A small **Script API surface** that the in-app agent will use (load/save/run/list scripts).
-- A **project storage model**: local repo of scripts + assets; signals/state model.
+**Auth contract (backend):**
+- Clients call authenticated endpoints with `Authorization: Bearer <firebase_id_token>`.
+- Backend verifies Firebase ID tokens and scopes all access by `uid`.
 
-Deliverables:
-- Documented “Run Script” contract (inputs/outputs/errors) per platform.
-- A canonical script entrypoint convention (e.g. `export default async function(ctx) { ... }`).
+**Storage architecture (shipping direction):**
+- **Azure Blob Storage** stores the file bytes.
+- **Postgres** stores the authoritative file index + metadata (`user_files`).
+  - blob key, filename, `mtime_ms`, `size_bytes`.
 
-### Phase 1 — Remove REPL (first user-visible simplification)
+**Sync policy (v1, intentionally simple):**
+- List everything every time.
+- Compare by filename + modification timestamp.
+- **Newer wins**.
+- No backcompat/versioning.
+- No one-off migrations; cloud starts empty from the client’s perspective.
 
-Goal: stop supporting a stateful interactive shell.
+### Web Dashboard (Fast Feedback Loop)
 
-Steps:
-- Remove REPL codepaths entirely.
+We maintain a **Next.js Dashboard** (`/cloud`) as a first-class development surface:
+- Account (Firebase login/logout)
+- File management (list/view/upload/delete/edit)
+- Script UX iteration (web preview/runtime)
+- (next) agent + remote sessions surfaces
 
-Replacement UX:
-- In-app **Scratchpad Script** (ephemeral) with Run/Stop + logs.
-- Optional “Create script from selection” in editor.
+This dashboard exists to speed iteration without waiting on native app rebuild/release cycles.
 
-Definition of done:
-- No REPL in releases.
-- All “REPL use cases” are served by scratch script execution in-app.
+### Remote Sessions (Control From Anywhere)
 
-### Phase 2 — Deprecate `-c` and converge on “run file” 
+Core idea: **any running EMWaver app instance can be a Host Session**.
 
-Goal: eliminate string-eval execution modes (harder to secure, harder to reproduce).
+- A Host Session is an app that is signed in and running.
+- If a USB EMWaver device is attached to that host, it can bridge real hardware.
+- Other surfaces can drive a Host Session under the same account:
+  - host → host (desktop app controlling another desktop app)
+  - mobile → host
+  - and later web → host
 
-Steps:
-- Remove `-c` entirely.
-- Ensure “run this file” can be called programmatically by the in-app agent.
+**Transport direction:**
+- WebSocket from clients to backend.
+- Backend routes messages to Host Sessions for the same `uid`.
 
-Definition of done:
-- The supported contract is “run `.emw` file” only.
+### Web UI Runtime (Browser-rendered Script UI)
 
-### Phase 3 — Make the Desktop app the sole USB owner (formalize)
+Direction: the frontend will be able to **render EMWaver script UI in the browser**.
 
-(You already trend this way: CLI should not own USB.)
+- Styling is web-native; **functional equivalence** is the goal.
+- The same script UI/events contract is used by humans and agents.
+- Later, device I/O and UI events can be routed over Remote Sessions.
 
-Steps:
-- Tighten Desktop↔CLI bridge so the desktop app owns device I/O.
-- If a headless runner is needed, implement it as a **desktop backend mode** (same codepath) rather than a separate transport stack.
+### Agents (Layered)
 
-Definition of done:
-- One transport implementation per platform.
-- No duplicate “USB stack” split between app and CLI.
+Agents are not a separate control path; they operate through the same primitives:
+- run scripts
+- observe UI + logs + artifacts
+- emit UI events / parameter changes
 
-### Phase 4 — Remove Git/GitHub from apps (replace with product-native versioning)
+Placement is layered:
+- **Cloud agent** (high power models) for heavy reasoning and automation.
+- **Local-on-host agent** (smaller model) for low latency, offline, privacy-sensitive work.
 
-Goal: delete the highest-maintenance integration.
+### Long-term Hardware Direction: EMArm
 
-Steps:
-- Android: remove `github/` usage and UI entry points.
-- iOS: remove GitHub OAuth + GitService from user-facing flows.
-- Desktop: remove Git UI flows.
-
-Replace with:
-- **Script version history** (linear revisions + restore).
-- **Share links / templates** (copy/fork model).
-- Optional “Publish script” library.
-
-Definition of done:
-- No Git auth tokens in apps.
-- No Git UX in the product.
-
-### Phase 5 — Introduce Cloud Sync (scripts + settings + signals)
-
-Goal: users can move between phone/desktop seamlessly.
-
-Scope (start small):
-- Script files + assets
-- App settings
-- Script “signals” or state snapshots (define what is sync-worthy)
-
-Rules:
-- Offline writes go to local store; sync is eventual.
-- Conflict handling must be simple (timestamp-based + “keep both” option).
-
-Definition of done:
-- Sign-in optional.
-- Sync never blocks running scripts.
-
-#### Cloud Sync + Auth Implementation Notes (updated 2026-02-04)
-
-Decisions (shipping direction):
-
-- **Login is optional**: EMWaver must remain usable without sign-in.
-- **Local-first always**: scripts/signals are always stored locally; when signed in, the app syncs/backs up to cloud.
-- **No backcompat / no versioning / no one-off migrations**: cloud “starts empty” from the sync client’s perspective; we do not attempt to reindex legacy blobs.
-- **Sync policy (v1)**: list everything every sync; compare by filename + modification timestamp; **newer wins**. No checksum negotiation and no historical conflict naming (`conflict_upload_...`) in the product direction.
-
-Auth (macOS + backend contract):
-
-- **Auth provider**: Firebase Authentication (Google sign-in only in v1).
-- **macOS login flow**: `ASWebAuthenticationSession` + PKCE (Google OAuth) → Firebase Identity Toolkit `accounts:signInWithIdp` → obtain Firebase `idToken`.
-- **Backend auth contract**: clients call authenticated endpoints with `Authorization: Bearer <firebase_id_token>`; backend verifies and scopes by `uid`.
-
-Cloud storage architecture (hybrid, authoritative index):
-
-- **Bytes live in Azure Blob Storage** (keyed as `u/<uid>/<name>`).
-- **Authoritative file index lives in Postgres** (`user_files`): per-user filename, `mtime_ms`, `size_bytes`, and the blob key.
-- Rationale: fast listing/sync, simpler server-side authorization, and avoids “list blobs” being the source of truth.
-
-Backend API (implemented, v1):
-
-- `GET /v1/files` → list files for the current user **from Postgres index**.
-- `POST /v1/files/upload` → upload bytes to blob storage + upsert index row.
-- `GET /v1/files/content?name=<filename>` → look up blob key in Postgres + stream bytes from Azure.
-- `DELETE /v1/files?name=<filename>` → delete blob + best-effort delete index row.
-
-Web dashboard (fast feedback loop):
-
-- We maintain a **Next.js Dashboard** (`/cloud`) for rapid iteration without rebuilding native apps.
-- Dashboard scope (v1): **account** (Firebase login/logout), **file management** (list/view/upload/delete/edit text), and (next) an **agent panel**.
-- This dashboard is explicitly a developer/ops surface for now, used to validate backend behavior and speed UI iterations.
-
-### Phase 6 — Remote Sessions + Web UI Runtime + Agents (control plane)
-
-Goal: make EMWaver a **control plane** where humans and agents can control hardware **locally or from anywhere**.
-
-Core vision:
-
-- Any EMWaver app instance (macOS / Windows / Android / iOS) can act as a **Host Session** for a user account.
-  - A Host Session is simply “an app that is signed in and currently running”.
-  - If a USB device is attached, that session can bridge **real hardware**.
-- Any other surface can connect to that account and drive that Host Session:
-  - another desktop app (host→host)
-  - a mobile app
-  - and later the **web dashboard**
-
-The unifying interface is **scripts + script UIs**:
-
-- The “API” is exposed through **EMWaver scripts** and their **UI trees**.
-- Humans interact with the UI.
-- Agents interact with the same UI (and the same script runtime), via the same events.
-
-Web direction (next):
-
-- The **frontend will render script UI** (web-native styling; functional equivalence is the goal).
-- The frontend will talk to the backend via **WebSocket**, and the backend will route to the selected Host Session under the same account.
-- Events (button presses / slider updates / etc) are beamed to the Host, and UI updates/events can be streamed back.
-
-Agent placement (layered):
-
-- **Cloud agent** (high power) can drive Host Sessions via the same surfaces.
-- **Local-on-host agent** (smaller model) can run on the host machine for low-latency / offline workflows.
-- Both agents must operate through the same “run script + UI events + logs/artifacts” contract.
-
-Long-term hardware product direction:
-
-- Next product likely: **EMArm** — a machine that an agent can control remotely.
-- We are explicitly bridging **high-power hosts + cloud connectivity** to **low-level electronics** (modules, sensors, actuators) via USB-connected EMWaver devices.
-
-Agent capabilities (minimum):
-- Read device status/version
-- Create/edit scripts
-- Run scripts and observe logs/captures
-- Save results as scripts/projects
-
-Security:
-- Clear boundaries: agent can run scripts, but cannot exfiltrate data silently.
-- Make network use explicit when it matters.
-
-Definition of done:
-- A user can plug device in, ask for an experiment, and the agent iterates via scripts.
-
-### Phase 7 — Optional cloud “services” (only if they add real value)
-
-Be cautious about pushing latency-sensitive primitives into cloud.
-
-Good candidates:
-- Shared script library / marketplace
-- Hosted examples + learning content
-- Optional AI features (summaries, auto-documentation)
-
-Questionable candidates (prefer local-first):
-- IR encode/decode compute (usually cheap locally; cloud adds latency/offline failure)
-
----
-
-## What to Keep (even if CLI disappears)
-
-To avoid losing engineering leverage, keep a **non-user-facing** automation surface:
-- A **test harness** that can run scripts headlessly against a simulated or real device.
-- Manufacturing sanity check scripts (“run suite, print pass/fail”).
-
-Rule: it must reuse the same ScriptEngine/runtime and transport code as the apps.
-
----
-
-## Repo Impact Checklist (when executing this plan)
-
-- Removed:
-  - CLI REPL (removed; scripts are run via the apps)
-  - CLI `-c` code paths (string eval)
-  - Android GitHub package and UI entry points
-  - iOS Git/GitHub managers/models/views and UI entry points
-  - Desktop Git UI + backend commands
-
-- Strengthen:
-  - Script storage abstraction (local-first + sync-ready)
-  - Script execution API (run file; deterministic; logs/captures are first-class)
-  - Script UI parity across Desktop/Android/iOS
-
----
+We expect a next product tentatively called **EMArm**:
+- a machine/rig that an agent can control remotely
+- explicitly bridging **high-power hosts + cloud connectivity** to **low-level electronics**
+  (modules, sensors, actuators) via USB-connected EMWaver devices.
 
 ## Project Structure & Module Organization
 
