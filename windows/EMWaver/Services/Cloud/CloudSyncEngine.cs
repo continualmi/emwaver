@@ -116,7 +116,7 @@ internal sealed class CloudSyncEngine
                 {
                     // Cloud-only -> download.
                     DebugLog($"download (cloud-only) kind={spec.Kind} name='{name}' id={cloudFile.Metadata.Id}");
-                    await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, destPath: Path.Combine(storageDir, name), ct);
+                    await DownloadAsync(baseUrl, accessToken, cloudName: name, cloudId: cloudFile.Metadata.Id, destPath: Path.Combine(storageDir, name), ct);
                     summary = summary with { Downloaded = summary.Downloaded + 1 };
 
                     var dest = Path.Combine(storageDir, name);
@@ -206,7 +206,7 @@ internal sealed class CloudSyncEngine
                         {
                             var conflictPath = Path.Combine(storageDir, MakeConflictName(name, suffix: "cloud"));
                             DebugLog($"download (conflict copy) => '{conflictPath}'");
-                            await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, conflictPath, ct);
+                            await DownloadAsync(baseUrl, accessToken, cloudName: name, cloudId: cloudFile.Metadata.Id, conflictPath, ct);
                             summary = summary with
                             {
                                 Conflicts = summary.Conflicts + 1,
@@ -226,7 +226,7 @@ internal sealed class CloudSyncEngine
                         DebugLog($"download (cloud-changed) kind={spec.Kind} name='{name}' id={cloudFile.Metadata.Id}");
                         try
                         {
-                            await DownloadAsync(baseUrl, accessToken, cloudFile.Metadata.Id, localPath, ct);
+                            await DownloadAsync(baseUrl, accessToken, cloudName: name, cloudId: cloudFile.Metadata.Id, localPath, ct);
                             summary = summary with { Downloaded = summary.Downloaded + 1 };
 
                             index = UpdateIndexAfterSync(index, spec.Kind, name,
@@ -291,9 +291,18 @@ internal sealed class CloudSyncEngine
         }
     }
 
-    private async Task DownloadAsync(Uri baseUrl, string accessToken, string fileId, string destPath, CancellationToken ct)
+    private async Task DownloadAsync(Uri baseUrl, string accessToken, string cloudName, string cloudId, string destPath, CancellationToken ct)
     {
-        var bytes = await _api.DownloadContentViaBackendAsync(baseUrl, accessToken, fileId, ct);
+        // Prefer legacy name-based endpoint when id is missing (older backend).
+        byte[] bytes;
+        if (string.IsNullOrWhiteSpace(cloudId))
+        {
+            bytes = await _api.DownloadContentByNameViaBackendAsync(baseUrl, accessToken, cloudName, ct);
+        }
+        else
+        {
+            bytes = await _api.DownloadContentViaBackendAsync(baseUrl, accessToken, cloudId, ct);
+        }
 
         Directory.CreateDirectory(Path.GetDirectoryName(destPath) ?? ".");
 
