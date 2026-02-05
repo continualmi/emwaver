@@ -107,16 +107,105 @@ function renderNode(n: EmwUiNode): React.ReactNode {
             <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{props.id ?? "Slider"}</div>
             <div className="text-xs text-[color:var(--ink-dim)]">{String(value)}</div>
           </div>
+          <input type="range" disabled min={min} max={max} step={step} value={value} className="w-full" onChange={() => {}} />
+        </div>
+      );
+    }
+
+    case "textField": {
+      return (
+        <div style={styleFromProps(props)} className="space-y-2">
+          {props.label ? <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{String(props.label)}</div> : null}
           <input
-            type="range"
+            type="text"
             disabled
-            min={min}
-            max={max}
-            step={step}
-            value={value}
-            className="w-full"
+            value={String(props.value ?? props.text ?? "")}
+            placeholder={props.placeholder ? String(props.placeholder) : ""}
+            className="w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-2 text-sm text-[color:var(--ink)]"
             onChange={() => {}}
           />
+        </div>
+      );
+    }
+
+    case "textEditor": {
+      return (
+        <div style={styleFromProps(props)} className="space-y-2">
+          {props.label ? <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{String(props.label)}</div> : null}
+          <textarea
+            disabled
+            value={String(props.value ?? props.text ?? "")}
+            className="h-40 w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-2 font-mono text-xs text-[color:var(--ink)]"
+            onChange={() => {}}
+          />
+        </div>
+      );
+    }
+
+    case "scroll": {
+      return (
+        <div
+          style={{ ...styleFromProps(props), maxHeight: px(props.maxHeight ?? 420), overflow: "auto" }}
+          className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)] p-2"
+        >
+          {(n.children || []).map((c, i) => (
+            <div key={i}>{renderNode(c)}</div>
+          ))}
+        </div>
+      );
+    }
+
+    case "tile":
+    case "card": {
+      return (
+        <div style={styleFromProps(props)} className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+          {(n.children || []).map((c, i) => (
+            <div key={i}>{renderNode(c)}</div>
+          ))}
+        </div>
+      );
+    }
+
+    case "grid": {
+      const cols = Number(props.columns ?? 2);
+      const gap = px(props.spacing ?? 12) ?? "12px";
+      return (
+        <div style={{ ...styleFromProps(props), display: "grid", gridTemplateColumns: `repeat(${isFinite(cols) && cols > 0 ? cols : 2}, minmax(0, 1fr))`, gap }}>
+          {(n.children || []).map((c, i) => (
+            <div key={i}>{renderNode(c)}</div>
+          ))}
+        </div>
+      );
+    }
+
+    case "logViewer": {
+      const text = String(props.text ?? props.value ?? "");
+      return (
+        <pre style={styleFromProps(props)} className="whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs text-[color:var(--ink)]">
+          {text}
+        </pre>
+      );
+    }
+
+    case "buffer":
+    case "plot": {
+      return (
+        <div style={styleFromProps(props)} className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] p-3 text-xs text-[color:var(--ink-dim)]">
+          {n.type} (preview stub)
+        </div>
+      );
+    }
+
+    case "progress": {
+      const value = Number(props.value ?? 0);
+      const max = Number(props.max ?? 100);
+      const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+      return (
+        <div style={styleFromProps(props)} className="space-y-2">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+            <div className="h-full bg-[color:var(--aqua)]" style={{ width: `${pct * 100}%` }} />
+          </div>
+          <div className="text-xs text-[color:var(--ink-dim)]">{Math.round(pct * 100)}%</div>
         </div>
       );
     }
