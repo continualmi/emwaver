@@ -132,7 +132,11 @@ def openapi_json():
 @docs_bp.get("/docs")
 def swagger_ui():
     # Minimal Swagger UI bootstrap.
-    html = f"""<!doctype html>
+    spec_url = f"{request.host_url.rstrip('/')}/openapi.json"
+
+    # NOTE: Don't use raw `{`/`}` in an f-string without escaping; JS objects would be parsed as
+    # Python f-string interpolation.
+    html = """<!doctype html>
 <html>
   <head>
     <meta charset='utf-8' />
@@ -144,13 +148,14 @@ def swagger_ui():
     <div id='swagger-ui'></div>
     <script src='https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js'></script>
     <script>
-      window.ui = SwaggerUIBundle({
-        url: '{request.host_url.rstrip('/')}/openapi.json',
+      window.ui = SwaggerUIBundle({{
+        url: '{spec_url}',
         dom_id: '#swagger-ui',
         presets: [SwaggerUIBundle.presets.apis],
         layout: 'BaseLayout'
-      });
+      }});
     </script>
   </body>
-</html>"""
+</html>""".format(spec_url=spec_url)
+
     return Response(html, mimetype="text/html")
