@@ -39,6 +39,39 @@ function createUiApi(setRoot: (n: EmwUiNode) => void) {
     slider(props: any) {
       return node("slider", props);
     },
+    textField(props: any) {
+      return node("textField", props);
+    },
+    textEditor(props: any) {
+      return node("textEditor", props);
+    },
+    scroll(props: any) {
+      return node("scroll", props);
+    },
+    tile(props: any) {
+      return node("tile", props);
+    },
+    card(props: any) {
+      return node("card", props);
+    },
+    grid(props: any) {
+      return node("grid", props);
+    },
+    divider(props: any) {
+      return node("divider", props);
+    },
+    logViewer(props: any) {
+      return node("logViewer", props);
+    },
+    buffer(props: any) {
+      return node("buffer", props);
+    },
+    plot(props: any) {
+      return node("plot", props);
+    },
+    progress(props: any) {
+      return node("progress", props);
+    },
     spacer(props: any) {
       return node("spacer", props);
     },
@@ -122,12 +155,42 @@ export function evalEmwUi(scriptSource: string): EmwUiRenderResult {
 
   // Intentionally no-op timing/hardware helpers for now.
   const every = (_ms: number, _fn: Function) => {
-    // no-op in UI preview
+    return { stop() {} };
   };
 
+  const delay = (_ms: number) => {};
+  const sleep = (_ms: number) => {};
+
+  // Hardware stubs (no-op / dummy values).
   const pinMode = () => {};
   const digitalWrite = () => {};
   const digitalRead = () => 0;
+  const analogRead = () => 0;
+  const analogReadTemp = () => 0;
+  const analogReadVrefint = () => 0;
+  const analogReadVbat = () => 0;
+
+  const i2cOpen = () => {};
+  const i2cClose = () => {};
+  const i2cWrite = () => {};
+  const i2cRead = () => new Uint8Array();
+
+  const uartOpen = () => {};
+  const uartClose = () => {};
+  const uartWrite = () => {};
+  const uartRead = () => new Uint8Array();
+
+  const spiXfer = () => new Uint8Array();
+
+  const samplerStart = () => {};
+  const samplerStop = () => {};
+
+  const pwmSetFrequency = () => {};
+  const pwmWrite = () => {};
+  const pwmStop = () => {};
+
+  const transmitStart = () => {};
+  const transmitStop = () => {};
 
   // Common constants used in scripts.
   const LOW = 0;
@@ -141,19 +204,72 @@ export function evalEmwUi(scriptSource: string): EmwUiRenderResult {
       "UI",
       "Signals",
       "every",
+      "delay",
+      "sleep",
       "pinMode",
       "digitalWrite",
       "digitalRead",
+      "analogRead",
+      "analogReadTemp",
+      "analogReadVrefint",
+      "analogReadVbat",
+      "i2cOpen",
+      "i2cClose",
+      "i2cWrite",
+      "i2cRead",
+      "uartOpen",
+      "uartClose",
+      "uartWrite",
+      "uartRead",
+      "spiXfer",
+      "samplerStart",
+      "samplerStop",
+      "pwmSetFrequency",
+      "pwmWrite",
+      "pwmStop",
+      "transmitStart",
+      "transmitStop",
       "LOW",
       "HIGH",
       "INPUT",
       "OUTPUT",
-      // Allow scripts to refer to pin names without crashing (they'll be undefined otherwise).
-      // Users can still preview UI even if the rest errors.
       scriptSource
     );
 
-    fn(UI, Signals, every, pinMode, digitalWrite, digitalRead, LOW, HIGH, INPUT, OUTPUT);
+    fn(
+      UI,
+      Signals,
+      every,
+      delay,
+      sleep,
+      pinMode,
+      digitalWrite,
+      digitalRead,
+      analogRead,
+      analogReadTemp,
+      analogReadVrefint,
+      analogReadVbat,
+      i2cOpen,
+      i2cClose,
+      i2cWrite,
+      i2cRead,
+      uartOpen,
+      uartClose,
+      uartWrite,
+      uartRead,
+      spiXfer,
+      samplerStart,
+      samplerStop,
+      pwmSetFrequency,
+      pwmWrite,
+      pwmStop,
+      transmitStart,
+      transmitStop,
+      LOW,
+      HIGH,
+      INPUT,
+      OUTPUT
+    );
 
     return { root };
   } catch (e: any) {
