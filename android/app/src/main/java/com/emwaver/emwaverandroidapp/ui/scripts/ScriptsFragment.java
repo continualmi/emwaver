@@ -64,6 +64,9 @@ import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ui.scripts.ScriptMetadata;
+import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
+import com.emwaver.emwaverandroidapp.cloud.CloudFilesApi;
+import com.emwaver.emwaverandroidapp.cloud.CloudSyncEngine;
 import com.emwaver.emwaverandroidapp.scripts.ScriptEngine;
 import com.emwaver.emwaverandroidapp.scripts.ScriptDeviceConnection;
 import com.emwaver.emwaverandroidapp.scripts.ScriptRenderView;
@@ -85,6 +88,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
+import okhttp3.OkHttpClient;
+
 public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
@@ -93,10 +98,16 @@ public class ScriptsFragment extends Fragment {
     private static final String ASSET_SCRIPT_EXTENSION = ".emw";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
+    private static final String SIGNALS_DIR_NAME = "signals";
+    private static final String SIGNAL_RAW_EXTENSION = ".raw";
+    private static final String SIGNAL_TEXT_EXTENSION = ".txt";
+
     private FragmentScriptsBinding binding;
     private final List<ScriptMetadata> assetScripts = new ArrayList<>();
     private final List<ScriptMetadata> customScripts = new ArrayList<>();
-    private final List<ScriptMetadata> scripts = new ArrayList<>();
+    private final List<SignalMetadata> signalFiles = new ArrayList<>();
+
+    private final List<ListEntry> scripts = new ArrayList<>();
     private ScriptListAdapter scriptAdapter;
     private ScriptMetadata currentScriptMetadata;
     private String currentScriptName;
@@ -296,6 +307,9 @@ public class ScriptsFragment extends Fragment {
                 } else if (itemId == R.id.editor_preview) {
                     previewEditorContent();
                     return true;
+                } else if (itemId == R.id.editor_sync) {
+                    runCloudSyncNow();
+                    return true;
                 } else if (itemId == R.id.editor_rename) {
                     if (currentScriptMetadata != null && currentScriptMetadata.isCustomScript()) {
                         showNameInputDialog(
@@ -329,6 +343,79 @@ public class ScriptsFragment extends Fragment {
         }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
     }
 
+    private void runCloudSyncNow() {
+        if (!isAdded()) {
+            return;
+        }
+
+        // Android auth is not wired yet; support anon dev like Windows/macOS.
+        if (!CloudConfig.allowAnonSync()) {
+            showToast("Sign-in sync not wired on Android yet. Set EMWAVER_ALLOW_ANON_SYNC=1 for dev.");
+            return;
+        }
+
+        final String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
+        if (baseUrl == null || baseUrl.trim().isEmpty()) {
+            showToast("Backend URL not configured (EMWAVER_BACKEND_URL)");
+            return;
+        }
+
+        showLoadingDialog("Preparing sync…");
+
+        new Thread(() -> {
+            try {
+                OkHttpClient http = new OkHttpClient.Builder().build();
+                CloudFilesApi api = new CloudFilesApi(http);
+                CloudSyncEngine engine = new CloudSyncEngine(api);
+
+                java.io.File scriptsDir = new java.io.File(requireContext().getFilesDir(), "scripts");
+                java.io.File signalsDir = getSignalsDir();
+
+                java.util.Map<String, String> ct = new java.util.HashMap<>();
+                ct.put(".emw", "text/plain");
+                ct.put(".txt", "text/plain");
+                ct.put(".raw", "application/octet-stream");
+
+                runOnUiThreadSafe(() -> showLoadingDialog("Syncing scripts…"));
+                CloudSyncEngine.Summary s1 = engine.syncFolder(
+                        baseUrl,
+                        "", // anon
+                        scriptsDir,
+                        new String[]{".emw"},
+                        ct,
+                        true,
+                        status -> runOnUiThreadSafe(() -> showLoadingDialog(status))
+                );
+
+                runOnUiThreadSafe(() -> showLoadingDialog("Syncing signals…"));
+                CloudSyncEngine.Summary s2 = engine.syncFolder(
+                        baseUrl,
+                        "", // anon
+                        signalsDir,
+                        new String[]{".raw", ".txt"},
+                        ct,
+                        true,
+                        status -> runOnUiThreadSafe(() -> showLoadingDialog(status))
+                );
+
+                CloudSyncEngine.Summary total = s1.add(s2);
+
+                runOnUiThreadSafe(() -> {
+                    hideLoadingDialog();
+                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded + ", Conflicts: " + total.conflicts);
+                    loadScriptsFromCloud();
+                });
+            } catch (Exception e) {
+                android.util.Log.e(TAG, "Sync failed", e);
+                String msg = e.getMessage();
+                runOnUiThreadSafe(() -> {
+                    hideLoadingDialog();
+                    showToast(msg != null ? msg : "Sync failed");
+                });
+            }
+        }).start();
+    }
+
     private void setupFileLaunchers() {
         openFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
             if (uri != null) {
@@ -343,8 +430,17 @@ public class ScriptsFragment extends Fragment {
         binding.scriptsListView.setAdapter(scriptAdapter);
 
         binding.scriptsListView.setOnItemClickListener((parent, view, position, id) -> {
-            if (position >= 0 && position < scripts.size()) {
-                previewScript(scripts.get(position));
+            if (position < 0 || position >= scripts.size()) {
+                return;
+            }
+            ListEntry entry = scripts.get(position);
+            if (entry == null || entry.type == ListEntry.Type.HEADER) {
+                return;
+            }
+            if (entry.type == ListEntry.Type.SCRIPT) {
+                previewScript(entry.script);
+            } else if (entry.type == ListEntry.Type.SIGNAL) {
+                openSignal(entry.signal);
             }
         });
 
@@ -352,12 +448,20 @@ public class ScriptsFragment extends Fragment {
             if (position < 0 || position >= scripts.size()) {
                 return true;
             }
-            ScriptMetadata meta = scripts.get(position);
-            if (meta != null && meta.isCustomScript()) {
-                showScriptOptionsDialog(meta);
+            ListEntry entry = scripts.get(position);
+            if (entry == null || entry.type == ListEntry.Type.HEADER) {
                 return true;
             }
-            showToast("Asset scripts are read-only. Create a copy to edit.");
+            if (entry.type == ListEntry.Type.SCRIPT) {
+                ScriptMetadata meta = entry.script;
+                if (meta != null && meta.isCustomScript()) {
+                    showScriptOptionsDialog(meta);
+                    return true;
+                }
+                showToast("Asset scripts are read-only. Create a copy to edit.");
+                return true;
+            }
+            // Signals: no long-press actions yet.
             return true;
         });
     }
@@ -492,25 +596,98 @@ public class ScriptsFragment extends Fragment {
         loadScript(scriptMetadata);
     }
 
-    private class ScriptListAdapter extends ArrayAdapter<ScriptMetadata> {
-        private final List<ScriptMetadata> scripts;
-        
-        ScriptListAdapter(List<ScriptMetadata> scripts) {
+    private static final class SignalMetadata {
+        final String name;
+        final java.io.File file;
+        final String extension;
+
+        SignalMetadata(String name, java.io.File file, String extension) {
+            this.name = name;
+            this.file = file;
+            this.extension = extension;
+        }
+
+        String displayName() {
+            return name + extension;
+        }
+    }
+
+    private static final class ListEntry {
+        enum Type { HEADER, SCRIPT, SIGNAL }
+        final Type type;
+        final String headerTitle;
+        final ScriptMetadata script;
+        final SignalMetadata signal;
+
+        private ListEntry(Type type, String headerTitle, ScriptMetadata script, SignalMetadata signal) {
+            this.type = type;
+            this.headerTitle = headerTitle;
+            this.script = script;
+            this.signal = signal;
+        }
+
+        static ListEntry header(String title) { return new ListEntry(Type.HEADER, title, null, null); }
+        static ListEntry script(ScriptMetadata s) { return new ListEntry(Type.SCRIPT, null, s, null); }
+        static ListEntry signal(SignalMetadata s) { return new ListEntry(Type.SIGNAL, null, null, s); }
+    }
+
+    private class ScriptListAdapter extends ArrayAdapter<ListEntry> {
+        ScriptListAdapter(List<ListEntry> scripts) {
             super(requireContext(), 0, scripts);
-            this.scripts = scripts;
+        }
+
+        @Override
+        public int getItemViewType(int position) {
+            ListEntry e = getItem(position);
+            if (e == null) return 0;
+            if (e.type == ListEntry.Type.HEADER) return 0;
+            return 1;
+        }
+
+        @Override
+        public int getViewTypeCount() {
+            return 2;
+        }
+
+        @Override
+        public boolean isEnabled(int position) {
+            ListEntry e = getItem(position);
+            return e != null && e.type != ListEntry.Type.HEADER;
         }
 
         @NonNull
         @Override
         public View getView(int position, @Nullable View convertView, @NonNull ViewGroup parent) {
+            ListEntry entry = getItem(position);
+            if (entry == null) {
+                View v = convertView;
+                if (v == null) v = LayoutInflater.from(getContext()).inflate(R.layout.item_script_entry, parent, false);
+                TextView nameView = v.findViewById(R.id.script_name);
+                ImageButton editButton = v.findViewById(R.id.script_edit_button);
+                nameView.setText("-");
+                editButton.setVisibility(View.GONE);
+                return v;
+            }
+
+            if (entry.type == ListEntry.Type.HEADER) {
+                View v = convertView;
+                if (v == null) {
+                    v = LayoutInflater.from(getContext()).inflate(R.layout.item_script_header, parent, false);
+                }
+                TextView title = v.findViewById(R.id.header_title);
+                title.setText(entry.headerTitle);
+                return v;
+            }
+
             View view = convertView;
             if (view == null) {
                 view = LayoutInflater.from(getContext()).inflate(R.layout.item_script_entry, parent, false);
             }
             TextView nameView = view.findViewById(R.id.script_name);
             ImageButton editButton = view.findViewById(R.id.script_edit_button);
-            ScriptMetadata scriptMetadata = getItem(position);
-            if (scriptMetadata != null) {
+
+            if (entry.type == ListEntry.Type.SCRIPT) {
+                ScriptMetadata scriptMetadata = entry.script;
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
                 if (scriptMetadata.isAssetScript()) {
                     editButton.setVisibility(View.VISIBLE);
@@ -533,10 +710,21 @@ public class ScriptsFragment extends Fragment {
                         showScriptEditorDialog(scriptMetadata);
                     });
                 }
-            } else {
-                nameView.setText("-");
-                editButton.setVisibility(View.GONE);
+                return view;
             }
+
+            // SIGNAL
+            SignalMetadata sig = entry.signal;
+            nameView.setText(sig.displayName());
+            editButton.setVisibility(View.VISIBLE);
+            editButton.setEnabled(true);
+            editButton.setAlpha(1.0f);
+            editButton.setImageResource(R.drawable.ic_visibility);
+            editButton.setContentDescription(getString(R.string.view));
+            editButton.setOnClickListener(v -> {
+                v.setPressed(false);
+                openSignal(sig);
+            });
             return view;
         }
     }
@@ -558,6 +746,74 @@ public class ScriptsFragment extends Fragment {
             Log.e(TAG, "Failed to read asset: " + filename, e);
             return "";
         }
+    }
+
+    private java.io.File getSignalsDir() {
+        return new java.io.File(requireContext().getFilesDir(), SIGNALS_DIR_NAME);
+    }
+
+    private void loadSignalFiles() {
+        signalFiles.clear();
+        java.io.File dir = getSignalsDir();
+        if (!dir.exists()) {
+            return;
+        }
+        java.io.File[] files = dir.listFiles();
+        if (files == null) {
+            return;
+        }
+        for (java.io.File f : files) {
+            if (!f.isFile()) continue;
+            String n = f.getName();
+            String lower = n.toLowerCase(Locale.US);
+            if (!(lower.endsWith(SIGNAL_RAW_EXTENSION) || lower.endsWith(SIGNAL_TEXT_EXTENSION))) {
+                continue;
+            }
+            String ext = lower.endsWith(SIGNAL_RAW_EXTENSION) ? SIGNAL_RAW_EXTENSION : SIGNAL_TEXT_EXTENSION;
+            String base = n.substring(0, n.length() - ext.length());
+            signalFiles.add(new SignalMetadata(base, f, ext));
+        }
+        Collections.sort(signalFiles, (a, b) -> a.displayName().compareToIgnoreCase(b.displayName()));
+    }
+
+    private void openSignal(@NonNull SignalMetadata sig) {
+        if (!isAdded() || sig == null) {
+            return;
+        }
+        showLoadingDialog("Loading signal...");
+        new Thread(() -> {
+            String content;
+            try {
+                if (SIGNAL_RAW_EXTENSION.equalsIgnoreCase(sig.extension)) {
+                    content = "(Binary signal .raw)";
+                } else {
+                    byte[] bytes = java.nio.file.Files.readAllBytes(sig.file.toPath());
+                    content = new String(bytes, StandardCharsets.UTF_8);
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Failed to open signal", e);
+                String msg = e.getMessage();
+                runOnUiThreadSafe(() -> {
+                    hideLoadingDialog();
+                    showToast(msg != null ? msg : "Failed to open signal");
+                });
+                return;
+            }
+
+            runOnUiThreadSafe(() -> {
+                hideLoadingDialog();
+                currentScriptMetadata = null;
+                currentScriptName = sig.displayName();
+                currentScriptEtag = null;
+                currentDraftContent = content;
+                setEditorText(content);
+                applyEditorReadOnly(true);
+                showingEditor = true;
+                showingPreview = false;
+                updateViewMode();
+                applySyntaxHighlightNow();
+            });
+        }).start();
     }
 
     private void loadScriptsFromCloud() {
@@ -599,9 +855,15 @@ public class ScriptsFragment extends Fragment {
                 
                 // Sort custom scripts alphabetically
                 Collections.sort(customScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
-                
+
+                loadSignalFiles();
                 rebuildCombinedScripts();
-                primeScriptCache(new ArrayList<>(scripts), ScriptsFragment.this::handlePostListLoad);
+
+                // Prime cache for scripts only (skip headers/signals)
+                List<ScriptMetadata> toPrime = new ArrayList<>();
+                toPrime.addAll(assetScripts);
+                toPrime.addAll(customScripts);
+                primeScriptCache(toPrime, ScriptsFragment.this::handlePostListLoad);
             }
 
             @Override
@@ -617,9 +879,24 @@ public class ScriptsFragment extends Fragment {
 
     private void rebuildCombinedScripts() {
         scripts.clear();
-        scripts.addAll(assetScripts);
-        scripts.addAll(customScripts);
-        Collections.sort(scripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+
+        if (!assetScripts.isEmpty()) {
+            scripts.add(ListEntry.header("Examples"));
+            for (ScriptMetadata s : assetScripts) {
+                scripts.add(ListEntry.script(s));
+            }
+        }
+
+        scripts.add(ListEntry.header("Your Scripts"));
+        for (ScriptMetadata s : customScripts) {
+            scripts.add(ListEntry.script(s));
+        }
+
+        scripts.add(ListEntry.header("Signals"));
+        for (SignalMetadata s : signalFiles) {
+            scripts.add(ListEntry.signal(s));
+        }
+
         refreshScriptList();
     }
     

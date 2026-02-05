@@ -87,6 +87,7 @@ public final class ScriptsViewModel: ObservableObject {
     @Published public var notice: Notice?
     @Published public var isLoading = false
     @Published public var isPerformingAction = false
+    @Published public var performingActionText: String? = nil
 
     private var records: [String: ScriptRecord] = [:]
     private var assetRecords: [String: AssetRecord] = [:]
@@ -157,7 +158,11 @@ public final class ScriptsViewModel: ObservableObject {
 
     public func sync(baseURL: URL, accessToken: String) async {
         isPerformingAction = true
-        defer { isPerformingAction = false }
+        performingActionText = "Preparing sync…"
+        defer {
+            isPerformingAction = false
+            performingActionText = nil
+        }
 
         let debug = true
         if debug {
@@ -169,6 +174,7 @@ public final class ScriptsViewModel: ObservableObject {
             let scriptsDir = fileService.storageDirectoryURL()
             if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] dir=\(scriptsDir.path)") }
 
+            performingActionText = "Syncing scripts…"
             let s = try await syncEngine.sync(
                 baseURL: baseURL,
                 accessToken: accessToken,

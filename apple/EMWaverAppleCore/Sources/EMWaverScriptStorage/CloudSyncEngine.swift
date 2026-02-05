@@ -33,10 +33,8 @@ public final class CloudSyncEngine {
         storageDir: URL
     ) async throws -> CloudSyncSummary {
         Self.debug("sync begin dir=\(storageDir.path) tokenLen=\(accessToken.count)")
-        guard !accessToken.isEmpty else {
-            Self.debug("sync aborted: empty access token")
-            return CloudSyncSummary()
-        }
+        // Allow empty accessToken for dev when backend permits anon sync.
+        // (Authorization header is only attached when token is non-empty in CloudFilesAPI.)
 
         let cloudFiles = try await api.listFiles(baseURL: baseURL, accessToken: accessToken)
         // Backend should de-dupe, but be defensive.
