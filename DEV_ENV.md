@@ -202,6 +202,31 @@ az login --use-device-code
 az account show
 ```
 
+### GitHub CLI (gh)
+
+macOS:
+
+```bash
+brew update
+brew install gh
+gh --version
+```
+
+Linux (Ubuntu/Debian):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y gh
+gh --version
+```
+
+Login:
+
+```bash
+gh auth login
+gh auth status
+```
+
 ### OpenClaw (assistant gateway) — verbose by default
 
 If you're using OpenClaw and want **verbose** output enabled by default, edit your gateway config:

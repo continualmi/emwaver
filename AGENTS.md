@@ -44,6 +44,15 @@ When helpful for Azure resource management and troubleshooting, the agent may ru
 - Prefer **read-only** commands by default.
 - For **destructive or security-sensitive** actions (deletes, role changes, key rotation, public exposure), get explicit user confirmation first.
 
+### GitHub CLI usage (agent)
+
+When helpful for repository management, the agent may use `gh` (GitHub CLI) to perform actions like:
+- setting GitHub Actions secrets/variables
+- viewing workflow runs and logs
+- triggering workflows
+
+For sensitive operations (secrets, permissions, destructive actions), get explicit user confirmation first.
+
 > Engineering note: this repo is still the engineering mono-repo, but the *product* is intentionally not “clone repo → toolchain setup → build/flash”.
 
 ---
