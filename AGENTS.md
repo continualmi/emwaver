@@ -11,6 +11,18 @@ EMWaver is now focused on shipping a **single, solid platform**:
 - **Core UX:** **Script-centered** hardware exploration (script + UI together, fast iteration, no reflashing)
 - **Surface area shipped:** Android app, iOS app, macOS app, Windows app
 
+### EMWaver device (board) capabilities (important)
+
+The shipped EMWaver board is intentionally a general-purpose hardware exploration target:
+
+- **Infrared on-board:** **IR receiver + IR transmitter** (so scripts can learn/capture and **emulate remotes**).
+- **GPIO + common peripherals:** exposed pins intended for typical low-level hacking modules and buses:
+  - **SPI / I2C / UART**
+  - **ADC** inputs
+  - **PWM / timers**
+  - plus the usual digital GPIO modes (in/out, pull-ups, etc.)
+- **External modules are expected:** e.g. **CC1101**, **MFRC522**, and similar “plug-on” hardware via SPI/I2C/UART/GPIO.
+
 Store distribution (apps)
 
 - **Apple App Store**: iOS + macOS
@@ -460,6 +472,11 @@ We will add a set of **LLM tools** that let an agent control a Host Session the 
 #### Proposed tool surface (v1)
 
 Tools are conceptual here; implementation can live in the backend agent runtime or host-local agent, but the wire protocol is the same.
+
+0) `web.fetch(url, options?)`
+- Fetches a URL and returns extracted, readable content (text/markdown) + metadata.
+- Primary goal: let the agent pull **online hardware databases** (especially **IR remote code databases**) and transform them into fresh, runnable `.emw` scripts (e.g. “emulate this specific remote”).
+- Keep it standard and safe: follow redirects conservatively, cap response size, and prefer text extraction over arbitrary binary downloads.
 
 1) `hosts.list`
 - Returns available hosts (`hostSessionId`, name, platform, lastSeen, status).
