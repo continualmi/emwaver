@@ -1,39 +1,133 @@
 # EMWaver Current Hardware Test Suite
 
-This document tracks the current manual tests we run today. It intentionally includes only the existing tests.
+This document tracks only the active manual tests.
 
-## `001_BLINK_LED_HOST_DEVICE_COMMS` `blink.emw` LED Blink
+Status legend: `[x]` = passed, `[ ]` = pending.
 
-- Steps: connect the EMWaver board over USB, open `blink.emw`, and run it.
-- Tests: host-device communication path and basic script runtime hardware execution.
-- Expected: board LED blinks as defined by the script, with no communication stalls or run failures.
+## Test Code Index
 
-## `002_CC1101_INIT_AND_REGISTER_READBACK` CC1101 Settings + Register Readback (`cc1101.emw` + `ism.emw`)
+| Code | Status |
+| --- | --- |
+| `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` |
+| `002_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |
+| `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |
+| `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |
+| `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |
+| `001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS` | `[x]` |
+| `002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` |
+| `003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |
+| `004R_REMOTE_SERVO_PWM_POSITION_CONTROL` | `[ ]` |
+| `005R_REMOTE_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |
+| `006R_REMOTE_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |
 
-- Steps: open `cc1101.emw`, click `initRx` or `initTx`, then open `ism.emw`, press `Initialize`, and read back all CC1101 registers.
-- Tests: SPI communication with CC1101, RX/TX initialization path, and register write/readback integrity.
-- Expected: configuration shows `115000` baud, `433.92 MHz`, and `ASK/OOK`, with no repeated-init garbage.
+## Remote Case Matrix
 
-## `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` Sampler Capture + Retransmit Integrity (`sampler.emw` + `cc1101.emw`)
+- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Frontend web controller.
+- Controller -> host cases used by all remote variants: `MW`, `MI`, `MA`, `WM`, `WI`, `WA`, `IM`, `IW`, `IA`, `AM`, `AW`, `AI`, `FM`, `FW`, `FI`, `FA`.
+- Rule: frontend is controller-only (never host).
 
-- Steps: in `cc1101.emw` press `initRx`; in `sampler.emw` record a real 433 MHz signal (for example a garage remote) and confirm the chart captures it continuously; in `cc1101.emw` press `initTx`; in `sampler.emw` press `Retransmit`; verify real receiver behavior matches pressing the original remote.
-- Tests: sampler capture integrity, uninterrupted recording, CC1101 TX replay path, retransmit flow control, and end-to-end signal integrity.
-- Expected: recording is uninterrupted, retransmit causes the same effect as the real remote, and optional RTL-SDR verification shows pulse widths within about 5-10 us margin for the sampler resolution setting.
+| Case | Controller | Host | `001R` | `002R` | `003R` | `004R` | `005R` | `006R` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `MW` | macOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `MI` | macOS | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `MA` | macOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WM` | Windows | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WI` | Windows | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WA` | Windows | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IM` | iOS | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IW` | iOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IA` | iOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AM` | Android | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AW` | Android | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AI` | Android | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FM` | Frontend | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 
-## `004_SERVO_PWM_POSITION_CONTROL` Servo PWM Position Control (`pwm.emw`)
+## `001_BLINK_LED_HOST_DEVICE_COMMS`
 
-- Steps: connect a hobby servo signal line to the selected PWM pin, power the servo from external 5V, and share ground with EMWaver; open `pwm.emw`; press `Min`, `Center`, and `Max`; then use the slider and press `Move Slider Position` to test freeform position control.
-- Tests: PWM output at servo control frequency, preset position control, and freeform pulse-width based position control on real servo hardware.
-- Expected: servo moves to three distinct preset positions and tracks slider-selected positions consistently without stalled or ignored moves.
+### Local
 
-## `005_AGENT_MFRC522_UID_FULL_CYCLE` Agent Full Cycle for MFRC522 UID Read (`mfrc522_read_uid.emw`)
+- Script: `blink.emw`
+- Steps: connect board over USB and run `blink.emw`.
+- Tests: host-device comms and basic script runtime execution.
+- Expected: LED blinks as defined, with no stalls/failures.
 
-- Steps: wire MFRC522 (RC522) module to EMWaver over SPI, power it correctly, and place a valid RFID/NFC card near the reader; from Agent chat, run the full cycle (web fetch MFRC522 docs, generate script, run script, inspect results, iterate until stable); use this prompt in setup: `Use web fetch to read MFRC522 documentation, create mfrc522_read_uid.emw, run and iterate until the UI reliably reads and displays the card UID.`
-- Tests: end-to-end agent workflow (research -> script generation -> execution -> iteration), web fetch usage for technical docs, SPI interaction with MFRC522, and reliable UID read path.
-- Expected: agent produces `mfrc522_read_uid.emw`, script runs on device, card UID is read and shown in the script UI, and repeated reads are stable.
+### Remote (`001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS`)
 
-## `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` Agent Full Cycle for MFRC522 Block Write + Verify
+- Steps: run the same blink flow through remote host control across the full remote case matrix.
+- Expected: matches local `001` in all cases.
 
-- Steps: keep the same RC522 wiring and valid card setup; starting from `mfrc522_read_uid.emw`, run Agent chat full cycle again (web fetch MFRC522 datasheet/protocol details, add key selection + block number + write flow, execute and iterate until write/verify succeeds); use this prompt in setup: `Using mfrc522_read_uid.emw as base, fetch MFRC522 docs again and build a script that selects key and block, writes data, then reads back and verifies the same block value.`
-- Tests: advanced agent workflow over multiple iterations, MFRC522 authentication flow, block write path, readback verification, and script UX for key/block selection.
-- Expected: script can select key and block, write block data, and confirm by readback that written content matches expected value.
+## `002_CC1101_INIT_AND_REGISTER_READBACK`
+
+### Local
+
+- Scripts: `cc1101.emw` + `ism.emw`
+- Steps: in `cc1101.emw` press `initRx` or `initTx`; in `ism.emw` press `Initialize` and read all registers.
+- Tests: SPI path, CC1101 init path, register write/readback integrity.
+- Expected: `115000` baud, `433.92 MHz`, `ASK/OOK`, and no repeated-init garbage.
+
+### Remote (`002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK`)
+
+- Steps: run the same CC1101 init/readback flow through remote host control across the full remote case matrix.
+- Expected: matches local `002` in all cases.
+
+## `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY`
+
+### Local
+
+- Scripts: `sampler.emw` + `cc1101.emw`
+- Steps: in `cc1101.emw` press `initRx`; capture a real 433 MHz signal in `sampler.emw`; confirm chart capture is continuous; switch to `initTx`; press `Retransmit`.
+- Tests: sampler capture integrity, uninterrupted recording, TX replay, flow-control retransmit path.
+- Expected: retransmit causes same real-world effect as original remote; optional RTL-SDR check within about 5-10 us pulse-width margin for current sampler resolution.
+
+### Remote (`003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY`)
+
+- Steps: run the same sampler capture/retransmit flow through remote host control across the full remote case matrix.
+- Expected: matches local `003` in all cases.
+
+## `004_SERVO_PWM_POSITION_CONTROL`
+
+### Local
+
+- Script: `pwm.emw`
+- Steps: connect servo signal to selected PWM pin, power servo from external 5V, share GND with EMWaver; run `pwm.emw`; test `Min`, `Center`, `Max`, then slider + `Move Slider Position`.
+- Tests: PWM servo control on real hardware, preset positions, freeform position setting.
+- Expected: servo reaches distinct Min/Center/Max positions and tracks slider-selected positions consistently.
+
+### Remote (`004R_REMOTE_SERVO_PWM_POSITION_CONTROL`)
+
+- Steps: run the same servo PWM flow through remote host control across the full remote case matrix.
+- Expected: matches local `004` in all cases.
+
+## `005_AGENT_MFRC522_UID_FULL_CYCLE`
+
+### Local
+
+- Script output target: `mfrc522_read_uid.emw`
+- Setup: wire MFRC522 (RC522) to EMWaver over SPI, place valid RFID/NFC card near reader.
+- Prompt: `Use web fetch to read MFRC522 documentation, create mfrc522_read_uid.emw, run and iterate until the UI reliably reads and displays the card UID.`
+- Tests: full agent loop (research -> code -> run -> iterate), web fetch for docs, MFRC522 UID read path.
+- Expected: generated `mfrc522_read_uid.emw` reads and displays UID reliably across repeated reads.
+
+### Remote (`005R_REMOTE_AGENT_MFRC522_UID_FULL_CYCLE`)
+
+- Steps: run the same MFRC522 UID full cycle through remote host control across the full remote case matrix.
+- Expected: matches local `005` in all cases.
+
+## `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE`
+
+### Local
+
+- Script base/target: evolve from `mfrc522_read_uid.emw` to block write + verify flow.
+- Setup: same MFRC522 + card setup as `005`.
+- Prompt: `Using mfrc522_read_uid.emw as base, fetch MFRC522 docs again and build a script that selects key and block, writes data, then reads back and verifies the same block value.`
+- Tests: full advanced agent loop, MFRC522 key selection/auth, block write, readback verification.
+- Expected: selected block is written and readback confirms exact written value.
+
+### Remote (`006R_REMOTE_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE`)
+
+- Steps: run the same MFRC522 block write + verify cycle through remote host control across the full remote case matrix.
+- Expected: matches local `006` in all cases.

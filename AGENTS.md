@@ -176,17 +176,10 @@ Notes on dev environment docs:
 - Use the macOS or Windows section depending on the platform.
 
 Current test suite reference:
-- `TESTS.md` is the source of truth for the current manual hardware validation tests (`blink.emw`, CC1101 init/readback with `ism.emw`, sampler capture/retransmit, and servo PWM position control with `pwm.emw`).
+- `TESTS.md` is the source of truth for the current manual hardware validation tests (`blink.emw`, CC1101 init/readback with `ism.emw`, sampler capture/retransmit, servo PWM position control with `pwm.emw`, and MFRC522 agent-driven full-cycle tests).
+- `TESTS.md` also defines remote host-controller layer variants for each current test (`001R` to `006R`) with controller-host case codes.
+- `TESTS.md` contains the authoritative status tables (test code index + per-variant remote case matrix); do not duplicate status tables in this file.
 - Keep `TESTS.md` focused on currently active tests only unless explicitly asked to expand scope.
-
-Current test code index (set Status to `PASSED` when validated, otherwise leave empty):
-
-| Code | Status |
-| --- | --- |
-| `001_BLINK_LED_HOST_DEVICE_COMMS` | `PASSED` |
-| `002_CC1101_INIT_AND_REGISTER_READBACK` | |
-| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | |
-| `004_SERVO_PWM_POSITION_CONTROL` | |
 
 ## Repository Code Map (curated)
 
