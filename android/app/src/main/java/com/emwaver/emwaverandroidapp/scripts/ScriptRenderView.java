@@ -54,12 +54,23 @@ public final class ScriptRenderView extends FrameLayout {
         void onEvent(String handlerToken, List<Object> arguments);
     }
 
+    /**
+     * Remote UI event dispatch (v1).
+     *
+     * When attached to a remote host, we dispatch UI events by (nodeId,eventType,value)
+     * and let the host resolve handler tokens against its own active ScriptTree.
+     */
+    public interface RemoteEventListener {
+        void onRemoteEvent(@NonNull String targetNodeId, @NonNull ScriptEventType eventType, @Nullable Object value);
+    }
+
     private enum Orientation {
         VERTICAL,
         HORIZONTAL
     }
 
     private EventListener eventListener;
+    private RemoteEventListener remoteEventListener;
     private final float density;
     public ScriptRenderView(@NonNull Context context) {
         this(context, null);
@@ -73,6 +84,10 @@ public final class ScriptRenderView extends FrameLayout {
 
     public void setEventListener(@Nullable EventListener listener) {
         this.eventListener = listener;
+    }
+
+    public void setRemoteEventListener(@Nullable RemoteEventListener listener) {
+        this.remoteEventListener = listener;
     }
 
     public void clear() {
@@ -194,7 +209,13 @@ public final class ScriptRenderView extends FrameLayout {
 
         String token = props.getHandlerToken(ScriptEventType.TAP);
         if (token != null) {
-            button.setOnClickListener(v -> dispatchEvent(token, Collections.emptyList()));
+            button.setOnClickListener(v -> {
+                if (remoteEventListener != null) {
+                    remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.TAP, null);
+                } else {
+                    dispatchEvent(token, Collections.emptyList());
+                }
+            });
         }
 
         applyCommonStyles(button, props);
@@ -227,7 +248,12 @@ public final class ScriptRenderView extends FrameLayout {
         String token = props.getHandlerToken(ScriptEventType.CHANGE);
         if (token != null) {
             slider.addOnChangeListener((s, v, fromUser) -> {
-                if (fromUser) {
+                if (!fromUser) {
+                    return;
+                }
+                if (remoteEventListener != null) {
+                    remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, (double) v);
+                } else {
                     dispatchEvent(token, Collections.singletonList((double) v));
                 }
             });
@@ -336,7 +362,11 @@ public final class ScriptRenderView extends FrameLayout {
             editText.addTextChangedListener(new FocusAwareTextWatcher(editText) {
                 @Override
                 public void onTextChanged(String value) {
-                    dispatchEvent(changeToken, Collections.singletonList(value));
+                    if (remoteEventListener != null) {
+                        remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, value);
+                    } else {
+                        dispatchEvent(changeToken, Collections.singletonList(value));
+                    }
                 }
             });
         }
@@ -344,7 +374,12 @@ public final class ScriptRenderView extends FrameLayout {
         String submitToken = props.getHandlerToken(ScriptEventType.SUBMIT);
         if (submitToken != null) {
             editText.setOnEditorActionListener((v, actionId, event) -> {
-                dispatchEvent(submitToken, Collections.singletonList(v.getText() != null ? v.getText().toString() : ""));
+                String value = v.getText() != null ? v.getText().toString() : "";
+                if (remoteEventListener != null) {
+                    remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.SUBMIT, value);
+                } else {
+                    dispatchEvent(submitToken, Collections.singletonList(value));
+                }
                 return false;
             });
         }
@@ -384,7 +419,11 @@ public final class ScriptRenderView extends FrameLayout {
             editText.addTextChangedListener(new FocusAwareTextWatcher(editText) {
                 @Override
                 public void onTextChanged(String value) {
-                    dispatchEvent(changeToken, Collections.singletonList(value));
+                    if (remoteEventListener != null) {
+                        remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, value);
+                    } else {
+                        dispatchEvent(changeToken, Collections.singletonList(value));
+                    }
                 }
             });
         }
@@ -430,7 +469,12 @@ public final class ScriptRenderView extends FrameLayout {
                     View checkedButton = toggleGroup.findViewById(checkedId);
                     if (checkedButton != null) {
                         Object tag = checkedButton.getTag();
-                        dispatchEvent(token, Collections.singletonList(tag != null ? tag : ""));
+                        Object value = tag != null ? tag : "";
+                        if (remoteEventListener != null) {
+                            remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, value);
+                        } else {
+                            dispatchEvent(token, Collections.singletonList(value));
+                        }
                     }
                 });
             }
@@ -463,7 +507,12 @@ public final class ScriptRenderView extends FrameLayout {
                                 return;
                             }
                         }
-                        dispatchEvent(token, Collections.singletonList(options.get(position).value));
+                        Object value = options.get(position).value;
+                        if (remoteEventListener != null) {
+                            remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, value);
+                        } else {
+                            dispatchEvent(token, Collections.singletonList(value));
+                        }
                     }
                 });
             }
