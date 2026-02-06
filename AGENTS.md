@@ -397,9 +397,19 @@ Auth:
 - Uses `Authorization: Bearer <firebase_id_token>`.
 - If not signed in, chat should prompt for sign-in (no anon chat).
 
-Apple UI placement (macOS):
-- Agent chat lives in the **right-side drawer panel** inside `ScriptsRootView` (icon: `sparkles`).
-- Do **not** open Agent chat as a separate modal on macOS.
+Backend URL config:
+- Uses the same backend base URL config as Cloud Sync (`EMWAVER_BACKEND_URL` and platform-specific persisted overrides).
+
+Conversation persistence:
+- Apple (macOS/iOS): `UserDefaults` key `emwaver.agent.conversationId`
+- Android: `SharedPreferences` key `emwaver.agent.conversationId`
+- Windows: `ApplicationData.Current.LocalSettings["emwaver.agent.conversationId"]`
+
+UI placement (by platform):
+- **macOS:** Agent chat lives in the **right-side drawer panel** inside `ScriptsRootView` (icon: `sparkles`). Do **not** open Agent chat as a modal.
+- **iOS:** Agent chat is presented as a sheet (`sparkles` toolbar button) showing the shared `AgentChatPanelView`.
+- **Android:** Agent chat is a bottom sheet (top menu → Agent).
+- **Windows:** Agent chat is the right-side Agent pane in `ScriptsPage` (toggled from the toolbar).
 
 ### Long-term Hardware Direction: EMArm
 
