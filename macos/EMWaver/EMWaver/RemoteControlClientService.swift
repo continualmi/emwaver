@@ -48,6 +48,7 @@ final class RemoteControlClientService: ObservableObject {
         remoteActiveScriptName = nil
         remoteScriptInstanceId = nil
         uiRev = 0
+        tokenIndex = [:]
 
         targetHostSessionId = hostSessionId
         reconnectTask?.cancel()
@@ -238,6 +239,21 @@ final class RemoteControlClientService: ObservableObject {
 
     // MARK: - Decode
 
+    private var tokenIndex: [String: (nodeId: String, event: ScriptEventType)] = [:]
+
+    func invokeToken(token: String, args: [Any]) {
+        guard let hostId = attachedHostSessionId else { return }
+        guard let scriptInstanceId = remoteScriptInstanceId else { return }
+        guard let target = tokenIndex[token] else { return }
+
+        var value: Any? = nil
+        if (target.event == .change || target.event == .select || target.event == .submit), let first = args.first {
+            value = first
+        }
+
+        sendUiEvent(targetNodeId: target.nodeId, event: target.event, value: value)
+    }
+
     private func decodeNode(_ any: Any) -> ScriptNode? {
         guard let d = any as? [String: Any] else { return nil }
         let id = (d["id"] as? String) ?? ""
@@ -251,6 +267,7 @@ final class RemoteControlClientService: ObservableObject {
                 guard let ev = ScriptEventType(rawValue: k) else { continue }
                 if let s = v as? String {
                     handlers[ev] = s
+                    tokenIndex[s] = (nodeId: id, event: ev)
                 }
             }
         }

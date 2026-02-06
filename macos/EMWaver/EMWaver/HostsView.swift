@@ -29,13 +29,17 @@ struct HostsView: View {
                     .padding(.vertical, 8)
                 } else {
                     ForEach(directory.hosts) { h in
-                        HostRow(host: h)
-                            .contextMenu {
-                                Button("Copy Host ID") {
-                                    NSPasteboard.general.clearContents()
-                                    NSPasteboard.general.setString(h.id, forType: .string)
-                                }
+                        NavigationLink {
+                            RemoteHostControlView(host: h)
+                        } label: {
+                            HostRow(host: h)
+                        }
+                        .contextMenu {
+                            Button("Copy Host ID") {
+                                NSPasteboard.general.clearContents()
+                                NSPasteboard.general.setString(h.id, forType: .string)
                             }
+                        }
                     }
                 }
             } header: {

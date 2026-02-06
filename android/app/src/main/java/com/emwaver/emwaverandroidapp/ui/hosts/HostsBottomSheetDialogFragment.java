@@ -24,6 +24,7 @@ import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
 import com.emwaver.emwaverandroidapp.cloud.CloudHostsApi;
 import com.emwaver.emwaverandroidapp.cloud.HostSession;
 import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
+import com.emwaver.emwaverandroidapp.ui.hosts.RemoteHostControlActivity;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 
 import java.util.ArrayList;
@@ -131,6 +132,14 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
         @Override
         public void onBindViewHolder(@NonNull VH h, int position) {
             HostSession s = hosts.get(position);
+
+            h.itemView.setOnClickListener(v -> {
+                try {
+                    if (!(v.getContext() instanceof android.app.Activity)) return;
+                    android.app.Activity a = (android.app.Activity) v.getContext();
+                    RemoteHostControlActivity.start(a, s.id);
+                } catch (Exception ignored) {}
+            });
             h.title.setText(s.title());
             h.subtitle.setText(s.subtitle());
             h.dot.setBackgroundResource(s.online ? R.drawable.host_dot_green : R.drawable.host_dot_gray);
