@@ -20,7 +20,7 @@ public final class AgentChatViewModel: ObservableObject {
     public typealias ConfigProvider = () -> (baseURL: URL, accessToken: String)?
 
     private let api: AgentBackendAPI
-    private let configProvider: ConfigProvider?
+    private var configProvider: ConfigProvider?
 
     private let conversationIdDefaultsKey = "emwaver.agent.conversationId"
 
@@ -41,6 +41,10 @@ public final class AgentChatViewModel: ObservableObject {
     public init(configProvider: ConfigProvider? = nil, urlSession: URLSession = .shared) {
         self.api = AgentBackendAPI(urlSession: urlSession)
         self.configProvider = configProvider
+    }
+
+    public func setConfigProvider(_ provider: ConfigProvider?) {
+        self.configProvider = provider
     }
 
     public func clear() {

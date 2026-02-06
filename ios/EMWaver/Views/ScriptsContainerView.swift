@@ -122,6 +122,18 @@ struct ScriptsContainerView: View {
                 }
         }
         .sheet(isPresented: $showingAgentChat) {
+            // Ensure the shared agent view model knows how to resolve backend URL + auth token.
+            agentViewModel.setConfigProvider {
+                guard let base = CloudConfig.backendBaseURL() else { return nil }
+
+                if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
+                    return (baseURL: base, accessToken: token)
+                }
+
+                // No anon chat.
+                return nil
+            }
+
             NavigationStack {
                 AgentChatPanelView(viewModel: agentViewModel)
                     .navigationTitle("Agent")
