@@ -11,6 +11,7 @@ import EMWaverScriptRuntime
 struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
     @EnvironmentObject private var auth: AuthenticationManager
+    @EnvironmentObject private var hostSessions: HostSessionManager
     @StateObject private var agentViewModel = AgentChatViewModel()
     @State private var showingAgentChat = false
     @State private var showingCloudSettings = false
@@ -18,19 +19,26 @@ struct ScriptsContainerView: View {
 
     var body: some View {
         NavigationStack {
-            ScriptsRootView(device: bleManager) {
-                guard let base = CloudConfig.backendBaseURL() else { return nil }
+            ScriptsRootView(
+                device: bleManager,
+                syncProvider: {
+                    guard let base = CloudConfig.backendBaseURL() else { return nil }
 
-                if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
-                    return (baseURL: base, accessToken: token)
+                    if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
+                        return (baseURL: base, accessToken: token)
+                    }
+
+                    if CloudConfig.allowAnonSync() {
+                        return (baseURL: base, accessToken: "")
+                    }
+
+                    return nil
+                },
+                hostStatusSink: { running, name in
+                    // Treat preview showing as script running on iOS.
+                    hostSessions.setScriptStatus(running: running, activeScriptName: name)
                 }
-
-                if CloudConfig.allowAnonSync() {
-                    return (baseURL: base, accessToken: "")
-                }
-
-                return nil
-            }
+            )
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Menu {

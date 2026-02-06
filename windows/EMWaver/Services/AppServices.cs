@@ -21,4 +21,16 @@ internal static class AppServices
     );
     internal static readonly CloudFilesClient CloudFiles = new(Http, CloudConfig, CloudAuth);
     internal static readonly CloudHostsClient CloudHosts = new(Http, CloudConfig, CloudAuth);
+
+    internal static readonly HostSessionManager HostSession = new(
+        Http,
+        CloudConfig,
+        CloudAuth,
+        statusProvider: () => (
+            usbConnected: Device.IsConnected,
+            portName: Device.ConnectedPort?.DisplayName ?? "",
+            scriptRunning: false,
+            scriptName: ""
+        )
+    );
 }

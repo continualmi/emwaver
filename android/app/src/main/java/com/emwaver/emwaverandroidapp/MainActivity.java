@@ -140,6 +140,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Initialize DeviceConnectionManager
         connectionManager = DeviceConnectionManager.getInstance(this);
+
+        // Best-effort host session heartbeat.
+        com.emwaver.emwaverandroidapp.cloud.CloudHostSessionManager.getInstance().start(this, connectionManager);
         
         // Request ALL necessary permissions at startup
         requestAllRequiredPermissions();
