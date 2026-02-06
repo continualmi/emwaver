@@ -1858,7 +1858,8 @@ public class ScriptsFragment extends Fragment {
                             api.deleteViaBackend(baseUrl, accessToken, f.getName());
                             runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + f.getName()));
                         } catch (Exception e) {
-                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + f.getName()));
+                            String em = e != null ? e.getMessage() : null;
+                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + f.getName() + (em != null ? " (" + em + ")" : "")));
                         }
                     }).start();
                 }
@@ -1998,7 +1999,8 @@ public class ScriptsFragment extends Fragment {
                             api.deleteViaBackend(baseUrl, accessToken, metadata.getName());
                             runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + metadata.getName()));
                         } catch (Exception e) {
-                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + metadata.getName()));
+                            String em = e != null ? e.getMessage() : null;
+                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + metadata.getName() + (em != null ? " (" + em + ")" : "")));
                         }
                     }).start();
                 }
