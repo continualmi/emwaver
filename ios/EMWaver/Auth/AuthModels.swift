@@ -5,6 +5,9 @@ struct AuthSession: Equatable {
     let email: String?
     let displayName: String?
     let idToken: String
+
+    // Stored in Keychain for session restore.
+    let refreshToken: String
 }
 
 enum AuthError: LocalizedError {
@@ -23,3 +26,4 @@ enum AuthError: LocalizedError {
         }
     }
 }
+
