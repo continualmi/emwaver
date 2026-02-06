@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "834211675695",
+    "project_id": "emwaver-64527",
+    "storage_bucket": "emwaver-64527.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834211675695:android:4378b5a3151d74a4e3d0da",
+        "android_client_info": {
+          "package_name": "com.emwaver.emwaver"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "834211675695-fe38c3deg3lnv9a9227h7bauvgj4c4dr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGbtCCbrSAbHQlrCqMzPwXeYBtdC7-6y4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "834211675695-fe38c3deg3lnv9a9227h7bauvgj4c4dr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:834211675695:android:67b083e92c0e853fe3d0da",
+        "android_client_info": {
+          "package_name": "com.emwaver.emwaverandroidapp"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "834211675695-fe38c3deg3lnv9a9227h7bauvgj4c4dr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAGbtCCbrSAbHQlrCqMzPwXeYBtdC7-6y4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "834211675695-fe38c3deg3lnv9a9227h7bauvgj4c4dr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
