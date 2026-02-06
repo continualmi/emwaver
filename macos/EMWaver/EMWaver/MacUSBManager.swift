@@ -64,8 +64,14 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     init() {
         midiQueue.setSpecific(key: midiQueueKey, value: ())
+
+        // Important: create the CoreMIDI client/ports on the main thread.
+        // Creating the MIDI client on a GCD worker thread can result in missed
+        // hot-plug notifications on some macOS setups (no runloop attached).
+        // The rest of the I/O work is still serialized on `midiQueue`.
+        self.ensureClient()
+
         midiQueue.async {
-            self.ensureClient()
             self.refreshPortsInternal()
             self.autoConnectIfNeededInternal()
         }
