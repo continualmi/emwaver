@@ -84,11 +84,11 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
             try {
                 OkHttpClient http = new OkHttpClient.Builder().build();
                 CloudHostsApi api = new CloudHostsApi(http);
-                List<HostSession> hosts = api.listHosts(baseUrl, accessToken);
+                final List<HostSession> hostsRaw = api.listHosts(baseUrl, accessToken);
+                final List<HostSession> hosts = (hostsRaw != null) ? hostsRaw : new ArrayList<>();
 
                 requireActivity().runOnUiThread(() -> {
                     progress.setVisibility(View.GONE);
-                    if (hosts == null) hosts = new ArrayList<>();
                     adapter.setHosts(hosts);
                     status.setText(hosts.isEmpty() ? "No host sessions detected" : "");
                 });
