@@ -26,19 +26,24 @@ public final class CloudSyncEngine {
     public static final class Summary {
         public int uploaded;
         public int downloaded;
+        /** Count of items where cloud had a newer version and we did not overwrite (preferLocal=true). */
         public int conflicts;
+        /** Filenames where cloud is newer and we skipped to avoid destructive behavior. */
+        public final java.util.List<String> cloudNewerFiles = new java.util.ArrayList<>();
 
         public Summary add(Summary other) {
             Summary s = new Summary();
             s.uploaded = this.uploaded + other.uploaded;
             s.downloaded = this.downloaded + other.downloaded;
             s.conflicts = this.conflicts + other.conflicts;
+            s.cloudNewerFiles.addAll(this.cloudNewerFiles);
+            s.cloudNewerFiles.addAll(other.cloudNewerFiles);
             return s;
         }
     }
 
     public interface Progress {
-        void onStatus(String status);
+        void onProgress(int done, int total, String status);
     }
 
     private final CloudFilesApi api;
@@ -58,7 +63,7 @@ public final class CloudSyncEngine {
     ) throws IOException {
 
         if (progress != null) {
-            progress.onStatus("Listing cloud…");
+            progress.onProgress(0, 0, "Listing cloud…");
         }
 
         if (DEBUG_LISTING) {
@@ -109,9 +114,15 @@ public final class CloudSyncEngine {
         names.addAll(localByName.keySet());
         names.addAll(cloudByName.keySet());
 
+        java.util.List<String> orderedNames = new java.util.ArrayList<>(names);
+        java.util.Collections.sort(orderedNames, String::compareToIgnoreCase);
+
         Summary summary = new Summary();
 
-        for (String name : names) {
+        int done = 0;
+        int total = orderedNames.size();
+
+        for (String name : orderedNames) {
             File local = localByName.get(name);
             CloudUserFile cloud = cloudByName.get(name);
 
@@ -122,7 +133,7 @@ public final class CloudSyncEngine {
             if (local == null) {
                 // Cloud-only -> download
                 if (DEBUG_LISTING) Log.d(TAG, "decision: download (cloud-only) name=" + name);
-                if (progress != null) progress.onStatus("Downloading " + name + "…");
+                if (progress != null) progress.onProgress(done, total, "Downloading " + name + "…");
                 byte[] bytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                 File dest = new File(storageDir, name);
                 writeFile(dest, bytes);
@@ -132,18 +143,22 @@ public final class CloudSyncEngine {
                     dest.setLastModified(cloud.mtimeMs);
                 }
                 summary.downloaded += 1;
+                done += 1;
+                if (progress != null) progress.onProgress(done, total, "Synced " + name);
                 continue;
             }
 
             if (cloud == null) {
                 // Local-only -> upload
                 if (DEBUG_LISTING) Log.d(TAG, "decision: upload (local-only) name=" + name);
-                if (progress != null) progress.onStatus("Uploading " + name + "…");
+                if (progress != null) progress.onProgress(done, total, "Uploading " + name + "…");
                 byte[] bytes = readFile(local);
                 long mtime = local.lastModified();
                 String ct = guessContentType(name, contentTypesByExt);
                 api.uploadViaBackend(baseUrl, accessToken, name, ct, bytes, mtime);
                 summary.uploaded += 1;
+                done += 1;
+                if (progress != null) progress.onProgress(done, total, "Synced " + name);
                 continue;
             }
 
@@ -154,54 +169,53 @@ public final class CloudSyncEngine {
             if (localMtime > 0 && cloudMtime > 0) {
                 if (localMtime == cloudMtime) {
                     if (DEBUG_LISTING) Log.d(TAG, "decision: skip (mtime equal) name=" + name + " mtime=" + localMtime);
+                    done += 1;
+                    if (progress != null) progress.onProgress(done, total, "Up to date: " + name);
                     continue;
                 }
                 if (localMtime > cloudMtime) {
                     if (DEBUG_LISTING) Log.d(TAG, "decision: upload (local newer) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
-                    if (progress != null) progress.onStatus("Uploading " + name + "…");
+                    if (progress != null) progress.onProgress(done, total, "Uploading " + name + "…");
                     byte[] bytes = readFile(local);
                     String ct = guessContentType(name, contentTypesByExt);
                     api.uploadViaBackend(baseUrl, accessToken, name, ct, bytes, localMtime);
                     summary.uploaded += 1;
+                    done += 1;
+                    if (progress != null) progress.onProgress(done, total, "Synced " + name);
                     continue;
                 }
 
                 // cloud newer
                 if (preferLocal) {
                     if (DEBUG_LISTING) Log.d(TAG, "decision: conflict (cloud newer but preferLocal) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
-                    // conflict: keep local, save cloud as conflict file
-                    if (progress != null) progress.onStatus("Conflict " + name + "…");
-                    byte[] cloudBytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
-                    String conflictName = makeCloudConflictName(name, System.currentTimeMillis());
-                    File conflictDest = new File(storageDir, conflictName);
-                    writeFile(conflictDest, cloudBytes);
-                    //noinspection ResultOfMethodCallIgnored
-                    conflictDest.setLastModified(cloudMtime);
+                    // Don't create sidecar conflict files. Just record that cloud is newer.
                     summary.conflicts += 1;
-                    // and upload local as canonical
-                    byte[] localBytes = readFile(local);
-                    String ct = guessContentType(name, contentTypesByExt);
-                    api.uploadViaBackend(baseUrl, accessToken, name, ct, localBytes, localMtime);
-                    summary.uploaded += 1;
+                    summary.cloudNewerFiles.add(name);
+                    done += 1;
+                    if (progress != null) progress.onProgress(done, total, "Cloud newer: " + name);
                 } else {
                     if (DEBUG_LISTING) Log.d(TAG, "decision: download (cloud newer) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
-                    if (progress != null) progress.onStatus("Downloading " + name + "…");
+                    if (progress != null) progress.onProgress(done, total, "Downloading " + name + "…");
                     byte[] bytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                     writeFile(local, bytes);
                     //noinspection ResultOfMethodCallIgnored
                     local.setLastModified(cloudMtime);
                     summary.downloaded += 1;
+                    done += 1;
+                    if (progress != null) progress.onProgress(done, total, "Synced " + name);
                 }
                 continue;
             }
 
             // Missing mtime on one side: prefer local to avoid destructive overwrite.
             if (DEBUG_LISTING) Log.d(TAG, "decision: upload (missing mtime on one side) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
-            if (progress != null) progress.onStatus("Uploading " + name + "…");
+            if (progress != null) progress.onProgress(done, total, "Uploading " + name + "…");
             byte[] bytes = readFile(local);
             String ct = guessContentType(name, contentTypesByExt);
             api.uploadViaBackend(baseUrl, accessToken, name, ct, bytes, localMtime > 0 ? localMtime : System.currentTimeMillis());
             summary.uploaded += 1;
+            done += 1;
+            if (progress != null) progress.onProgress(done, total, "Synced " + name);
         }
 
         return summary;
