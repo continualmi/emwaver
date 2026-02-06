@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
@@ -11,8 +12,9 @@ import { downloadFileContent, listFiles } from "@/lib/backend";
 import { backendWsUrl, type RemoteIncomingMessage, wsSend } from "@/lib/remoteSessions";
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 
-export default function RemoteHostPage({ params }: { params: { hostId: string } }) {
-  const hostId = String((params as any)?.hostId || "");
+export default function RemoteHostPage() {
+  const params = useParams<{ hostId?: string }>();
+  const hostId = String(params?.hostId || "");
 
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
