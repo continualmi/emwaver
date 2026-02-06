@@ -37,6 +37,8 @@ public final class CloudSyncEngine {
         // (Authorization header is only attached when token is non-empty in CloudFilesAPI.)
 
         let cloudFiles = try await api.listFiles(baseURL: baseURL, accessToken: accessToken)
+            .filter { $0.name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "script_bootstrap.emw" }
+
         // Backend should de-dupe, but be defensive.
         let cloudByName: [String: CloudUserFile] = Dictionary(cloudFiles.map { ($0.name, $0) }, uniquingKeysWith: { a, b in
             // Prefer the one with mtime (if only one has it); otherwise keep the larger one.
@@ -48,6 +50,7 @@ public final class CloudSyncEngine {
         })
 
         let localURLs = try localFiles(in: storageDir)
+            .filter { $0.lastPathComponent.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() != "script_bootstrap.emw" }
         let localByName: [String: URL] = Dictionary(uniqueKeysWithValues: localURLs.map { ($0.lastPathComponent, $0) })
 
         Self.debug("local=\(localByName.count) cloud=\(cloudByName.count)")
@@ -59,6 +62,9 @@ public final class CloudSyncEngine {
         let names = Set(localByName.keys).union(cloudByName.keys)
 
         for name in names.sorted() {
+            if name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "script_bootstrap.emw" {
+                continue
+            }
             let localURL = localByName[name]
             let cloud = cloudByName[name]
 

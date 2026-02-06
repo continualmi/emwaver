@@ -137,6 +137,12 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **macOS App (defacto):** `macos/` (SwiftUI)
 - **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
 - **Shared assets:** `assets/` (default scripts, etc.)
+
+### Script sharing / cloud sync safety
+
+- `script_bootstrap.emw` is **INTERNAL** and must **never** be treated as a user/custom script, uploaded to the cloud, or synced/shared between devices.
+  - It contains internal EMWaver protocol + script engine bootstrap logic.
+  - Only regular user scripts (non-bootstrap) are allowed to be shared/synced.
 - **Bundled firmware payload:** `firmware/` (e.g. `firmware/emwaver.bin`) + per-platform copies:
   - Android: `android/app/src/main/assets/firmware/emwaver.bin`
   - iOS: `ios/EMWaver/firmware/emwaver.bin`

@@ -25,7 +25,13 @@ import java.util.concurrent.Executors;
 public final class FileRepositoryLocal {
 
     private static final String TAG = "FileRepositoryLocal";
+    private static final String INTERNAL_BOOTSTRAP_NAME = "script_bootstrap.emw";
     private static FileRepositoryLocal instance;
+
+    private static boolean isReservedInternalName(String name) {
+        if (name == null) return false;
+        return INTERNAL_BOOTSTRAP_NAME.equalsIgnoreCase(name.trim());
+    }
 
     private final Context appContext;
     private final ExecutorService executor;
@@ -59,6 +65,9 @@ public final class FileRepositoryLocal {
                     for (File file : files) {
                         if (file.isFile()) {
                             String name = file.getName();
+                            if (isReservedInternalName(name)) {
+                                continue;
+                            }
                             if (extension == null || name.endsWith(extension)) {
                                 String id = name;
                                 long size = file.length();
@@ -90,6 +99,9 @@ public final class FileRepositoryLocal {
                     for (File file : files) {
                         if (file.isFile()) {
                             String name = file.getName();
+                            if (isReservedInternalName(name)) {
+                                continue;
+                            }
                             if (extension == null || name.endsWith(extension)) {
                                 String id = name;
                                 long size = file.length();
@@ -151,6 +163,10 @@ public final class FileRepositoryLocal {
     public void createTextFile(String name, String content, RepositoryCallback<UserFileMetadata> callback) {
         executor.execute(() -> {
             try {
+                if (isReservedInternalName(name)) {
+                    mainHandler.post(() -> callback.onError("Reserved internal filename"));
+                    return;
+                }
                 File file = new File(storageDir, name);
                 writeFile(file, content.getBytes(StandardCharsets.UTF_8));
                 
@@ -175,6 +191,10 @@ public final class FileRepositoryLocal {
     public void createBinaryFile(String name, byte[] data, RepositoryCallback<UserFileMetadata> callback) {
         executor.execute(() -> {
             try {
+                if (isReservedInternalName(name)) {
+                    mainHandler.post(() -> callback.onError("Reserved internal filename"));
+                    return;
+                }
                 File file = new File(storageDir, name);
                 writeFile(file, data);
                 
@@ -207,6 +227,10 @@ public final class FileRepositoryLocal {
     public void renameFile(String fileId, String newName, RepositoryCallback<UserFileMetadata> callback) {
         executor.execute(() -> {
             try {
+                if (isReservedInternalName(newName)) {
+                    mainHandler.post(() -> callback.onError("Reserved internal filename"));
+                    return;
+                }
                 File oldFile = new File(storageDir, fileId);
                 File newFile = new File(storageDir, newName);
                 

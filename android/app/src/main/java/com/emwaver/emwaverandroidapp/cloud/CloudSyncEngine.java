@@ -78,6 +78,13 @@ public final class CloudSyncEngine {
         List<CloudUserFile> cloudFiles = api.listFiles(baseUrl, accessToken);
         Map<String, CloudUserFile> cloudByName = new HashMap<>();
         for (CloudUserFile f : cloudFiles) {
+            if (f == null || f.name == null) {
+                continue;
+            }
+            // Never sync internal runtime bootstrap.
+            if ("script_bootstrap.emw".equalsIgnoreCase(f.name.trim())) {
+                continue;
+            }
             cloudByName.put(f.name, f);
         }
 
@@ -100,6 +107,10 @@ public final class CloudSyncEngine {
             for (File f : localFiles) {
                 if (!f.isFile()) continue;
                 String name = f.getName();
+                // Never sync internal runtime bootstrap.
+                if (name != null && "script_bootstrap.emw".equalsIgnoreCase(name.trim())) {
+                    continue;
+                }
                 if (!matchesExt(name, allowedExtensions)) continue;
                 localByName.put(name, f);
             }
@@ -126,6 +137,10 @@ public final class CloudSyncEngine {
         int total = orderedNames.size();
 
         for (String name : orderedNames) {
+            // Never sync internal runtime bootstrap.
+            if (name != null && "script_bootstrap.emw".equalsIgnoreCase(name.trim())) {
+                continue;
+            }
             File local = localByName.get(name);
             CloudUserFile cloud = cloudByName.get(name);
 
