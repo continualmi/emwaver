@@ -48,7 +48,9 @@ Notes:
 
 **Cloudflare DNS (proxied/orange-cloud):**
 - `app.emwavers.com` (CNAME) → Azure Container App FQDN for **emwaver-frontend**
+  - `emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io`
 - `api.emwavers.com` (CNAME) → Azure Container App FQDN for **emwaver-backend**
+  - `emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io`
 - Apex `emwavers.com` (CNAME) → `app.emwavers.com` (so root lands on the frontend)
 - `www.emwavers.com` (CNAME) → `emwavers.com`
 
