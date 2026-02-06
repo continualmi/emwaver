@@ -16,6 +16,13 @@
             <TextBlock x:Name="StatusText" Text="" Opacity="0.75" TextWrapping="Wrap" />
 
             <ListView x:Name="HostsList" SelectionMode="None">
+                <ListView.ItemContainerStyle>
+                    <Style TargetType="ListViewItem">
+                        <Setter Property="Padding" Value="0" />
+                        <Setter Property="Margin" Value="0" />
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    </Style>
+                </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate>
                         <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -25,6 +32,10 @@
                                 Margin="0,0,0,10"
                                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                             <StackPanel Spacing="6">
+                                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                    <Button Content="Control" Click="OnControlClick" Tag="{Binding HostSessionId}" />
+                                </StackPanel>
+
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                     <Ellipse Width="8" Height="8">
                                         <Ellipse.Fill>

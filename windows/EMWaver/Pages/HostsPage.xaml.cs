@@ -13,6 +13,7 @@ namespace EMWaver.Pages;
 public sealed partial class HostsPage : Page
 {
     private sealed record HostRow(
+        string HostSessionId,
         string Title,
         string Subtitle,
         string UsbLabel,
@@ -58,6 +59,7 @@ public sealed partial class HostsPage : Page
             var rows = await AppServices.CloudHosts.ListAsync(accessToken: allowAnon ? tok : tok, ct: cts.Token);
 
             var list = rows.Select(h => new HostRow(
+                HostSessionId: h.Id,
                 Title: !string.IsNullOrWhiteSpace(h.DeviceName) ? h.DeviceName : h.Id,
                 Subtitle: string.Join(" · ", new[] { h.Platform, string.IsNullOrWhiteSpace(h.AppVersion) ? null : ("v" + h.AppVersion) }.Where(x => !string.IsNullOrWhiteSpace(x))),
                 UsbLabel: h.UsbConnected ? "USB" : "No USB",
@@ -73,6 +75,21 @@ public sealed partial class HostsPage : Page
         catch (Exception ex)
         {
             StatusText.Text = ex.Message;
+        }
+    }
+
+    private void OnControlClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            if (sender is not Button b) return;
+            var hostId = b.Tag as string ?? "";
+            if (string.IsNullOrWhiteSpace(hostId)) return;
+
+            Frame.Navigate(typeof(RemoteHostControlPage), hostId);
+        }
+        catch
+        {
         }
     }
 }
