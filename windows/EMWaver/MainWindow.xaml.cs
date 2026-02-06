@@ -45,6 +45,9 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
+        // Best-effort host session heartbeat.
+        AppServices.HostSession.Start();
+
         // Initial UI state.
         RunOnUi(() =>
         {
