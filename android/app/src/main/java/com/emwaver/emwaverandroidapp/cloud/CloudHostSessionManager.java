@@ -69,7 +69,8 @@ public final class CloudHostSessionManager {
         tick = new Runnable() {
             @Override
             public void run() {
-                sendHeartbeat(app, conn);
+                // Do all work off the UI thread (token fetch can block).
+                new Thread(() -> sendHeartbeat(app, conn)).start();
                 handler.postDelayed(this, 10_000);
             }
         };
@@ -88,11 +89,9 @@ public final class CloudHostSessionManager {
             CloudAuthManager auth = CloudAuthManager.getInstance();
             auth.ensureInitialized(context);
 
-            String allowAnon = System.getenv("EMWAVER_ALLOW_ANON_SYNC");
-            boolean anon = allowAnon != null && allowAnon.trim().equals("1");
-
             String tok = auth.getIdTokenBlocking();
-            if ((tok == null || tok.trim().isEmpty()) && !anon) {
+            // Backend requires auth; if we can't fetch an ID token, skip the heartbeat.
+            if (tok == null || tok.trim().isEmpty()) {
                 return;
             }
 
