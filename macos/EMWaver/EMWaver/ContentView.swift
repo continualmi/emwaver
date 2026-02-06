@@ -10,6 +10,8 @@ import EMWaverScriptsUI
 import EMWaverScriptSwiftUI
 import EMWaverScriptModel
 
+// Remote overlay UI renders ScriptTree using ScriptRenderView
+
 struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
@@ -20,13 +22,16 @@ struct ContentView: View {
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
-    @State private var showingRemotePreview: Bool = false
+
+    // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
+    @State private var showingRemoteOverlay: Bool = false
 
     var body: some View {
         NavigationStack {
-            ScriptsRootView(
-                device: device,
-                syncProvider: {
+            ZStack {
+                ScriptsRootView(
+                    device: device,
+                    syncProvider: {
                     // Backend URL resolution order:
                     // 1) EMWAVER_BACKEND_URL env var (parity with Windows)
                     // 2) UserDefaults key emwaver.agent.backendURL
@@ -52,11 +57,58 @@ struct ContentView: View {
 
                     return nil
                 },
-                hostStatusSink: { running, name in
-                    // Treat "preview showing" as "script running" on macOS.
-                    hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                    hostStatusSink: { running, name in
+                        // Treat "preview showing" as "script running" on macOS.
+                        hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                    }
+                )
+
+                if showingRemoteOverlay {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Label("Remote Control", systemImage: "antenna.radiowaves.left.and.right")
+                                .font(.headline)
+
+                            Spacer()
+
+                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
+                                Text(n)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Button("Done") {
+                                showingRemoteOverlay = false
+                            }
+                            .keyboardShortcut(.escape, modifiers: [])
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial)
+
+                        Divider()
+
+                        if let tree = remoteControlHost.remoteScriptTree {
+                            ScriptRenderView(tree: tree) { _, _ in
+                                // View-only for now.
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                            .background(Color.black.opacity(0.12))
+                        } else {
+                            VStack(spacing: 10) {
+                                ProgressView()
+                                Text("Remote control is active, waiting for UI…")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.thinMaterial)
+                    .transition(.opacity)
                 }
-            )
+            }
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
@@ -94,7 +146,7 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 if remoteControlHost.isRemoteControlled {
                     Button {
-                        showingRemotePreview = true
+                        showingRemoteOverlay = true
                     } label: {
                         HStack(spacing: 8) {
                             Label("Remote", systemImage: "antenna.radiowaves.left.and.right")
@@ -105,7 +157,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .help("This host is being controlled remotely. Click to view the remote script UI.")
+                    .help("This host is being controlled remotely. Click to open the remote script UI.")
                 }
             }
 
@@ -154,30 +206,7 @@ struct ContentView: View {
             }
             .frame(minWidth: 560, minHeight: 520)
         }
-        .sheet(isPresented: $showingRemotePreview) {
-            NavigationStack {
-                VStack(spacing: 12) {
-                    if let tree = remoteControlHost.remoteScriptTree {
-                        ScriptRenderView(tree: tree) { token, args in
-                            // Remote preview is view-only for now.
-                            // (We can optionally enable local interaction later.)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    } else {
-                        Text("Remote control is active, but no UI snapshot has been received yet.")
-                            .foregroundStyle(.secondary)
-                            .padding(20)
-                    }
-                }
-                .navigationTitle("Remote Control")
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { showingRemotePreview = false }
-                    }
-                }
-            }
-            .frame(minWidth: 680, minHeight: 520)
-        }
+        // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
 
     }
