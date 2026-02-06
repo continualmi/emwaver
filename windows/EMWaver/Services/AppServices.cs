@@ -20,4 +20,5 @@ internal static class AppServices
         firebase: new FirebaseAuthService(Http)
     );
     internal static readonly CloudFilesClient CloudFiles = new(Http, CloudConfig, CloudAuth);
+    internal static readonly CloudHostsClient CloudHosts = new(Http, CloudConfig, CloudAuth);
 }
