@@ -21,7 +21,8 @@ import java.util.List;
 import java.util.Locale;
 
 public final class ScriptSignalStore {
-    private static final String SIGNALS_DIR = "signals";
+    // Keep everything in a single local folder; treat signals as files distinguished by extension.
+    private static final String SIGNALS_DIR = "scripts";
 
     private final File signalsDir;
 

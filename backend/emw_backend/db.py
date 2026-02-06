@@ -35,11 +35,10 @@ def init_db(database_url: str) -> None:
 
         insp = inspect(_ENGINE)
 
-        # Legacy table: add missing columns.
-        cols = {c["name"] for c in insp.get_columns("files")}
-        if "content_sha256" not in cols:
+        # Drop legacy table if it exists.
+        if insp.has_table("files"):
             with _ENGINE.begin() as conn:
-                conn.execute(text("ALTER TABLE files ADD COLUMN content_sha256 VARCHAR(64)"))
+                conn.execute(text("DROP TABLE files"))
 
         # New index table: ensure BIGINT for ms timestamps and sizes.
         if insp.has_table("user_files"):

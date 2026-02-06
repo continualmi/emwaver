@@ -313,16 +313,23 @@ We intentionally avoid extra modes:
 - Backend verifies Firebase ID tokens and scopes all access by `uid`.
 
 **Storage architecture (shipping direction):**
-- **Azure Blob Storage** stores the file bytes.
-- **Postgres** stores the authoritative file index + metadata (`user_files`).
-  - blob key, filename, `mtime_ms`, `size_bytes`.
+- **Azure Blob Storage** stores the file bytes at: `u/<firebase_uid>/<name>`.
+- **Postgres** stores the authoritative file index + metadata in `user_files`.
+  - `firebase_uid`, `name`, `blob_key`, `mtime_ms`, `size_bytes`, `content_type`, `etag`.
+- **Flat namespace:** `name` must not contain `/` (no folders/prefixes in v1).
+- **Legacy:** the old `files` table is deprecated and should not exist in new DBs.
+
+**Client storage (shipping direction):**
+- Android stores *all* user files in a single local folder (`filesDir/scripts/`).
+- UI views filter by extension:
+  - scripts: `.emw`
+  - signals/artifacts: `.raw`, `.txt`
 
 **Sync policy (v1, intentionally simple):**
 - List everything every time.
-- Compare by filename + modification timestamp.
+- Compare by filename + `mtime_ms`.
 - **Newer wins**.
 - No backcompat/versioning.
-- No one-off migrations; cloud starts empty from the client’s perspective.
 
 ### Web Dashboard (Fast Feedback Loop)
 
