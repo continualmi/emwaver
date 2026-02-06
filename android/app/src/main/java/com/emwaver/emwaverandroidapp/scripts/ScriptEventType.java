@@ -17,7 +17,7 @@ public enum ScriptEventType {
         this.rawValue = rawValue;
     }
 
-    static ScriptEventType fromRaw(String raw) {
+    public static ScriptEventType fromRaw(String raw) {
         if (raw == null) {
             return null;
         }
@@ -29,7 +29,7 @@ public enum ScriptEventType {
         return null;
     }
 
-    String getRawValue() {
+    public String getRawValue() {
         return rawValue;
     }
 }
