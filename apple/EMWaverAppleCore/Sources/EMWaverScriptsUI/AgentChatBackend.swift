@@ -104,6 +104,7 @@ final class AgentBackendAPI {
     enum StreamEvent {
         case delta(String)
         case done(message: AgentMessageDTO, model: String?)
+        case tool(String)
         case error(String)
     }
 
@@ -195,6 +196,20 @@ final class AgentBackendAPI {
             struct DoneBody: Decodable { let message: AgentMessageDTO; let model: String? }
             if let decoded = try? JSONDecoder().decode(DoneBody.self, from: data) {
                 return .done(message: decoded.message, model: decoded.model)
+            }
+        }
+
+        if ev == "tool" {
+            // We keep this as a simple, human-readable system line.
+            if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                let name = String(obj["name"] as? String ?? "tool")
+                if let args = obj["arguments"] {
+                    return .tool("[tool] \(name) args=\(args)")
+                }
+                if let res = obj["result"] {
+                    return .tool("[tool] \(name) result=\(res)")
+                }
+                return .tool("[tool] \(name)")
             }
         }
 
