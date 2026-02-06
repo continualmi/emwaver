@@ -175,6 +175,18 @@ Notes on dev environment docs:
 - `DEV_ENV.md` is a developer-only setup checklist (not end-user/product documentation).
 - Use the macOS or Windows section depending on the platform.
 
+Current test suite reference:
+- `TESTS.md` is the source of truth for the current manual hardware validation tests (`blink.emw`, CC1101 init/readback with `ism.emw`, and sampler capture/retransmit).
+- Keep `TESTS.md` focused on currently active tests only unless explicitly asked to expand scope.
+
+Current test code index (set Status to `PASSED` when validated, otherwise leave empty):
+
+| Code | Status |
+| --- | --- |
+| `001_BLINK_LED_HOST_DEVICE_COMMS` | `PASSED` |
+| `002_CC1101_INIT_AND_REGISTER_READBACK` | |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | |
+
 ## Repository Code Map (curated)
 
 This section is a **manual navigation map**. It intentionally omits the full directory tree and only calls out the places you actually jump to when making changes.
