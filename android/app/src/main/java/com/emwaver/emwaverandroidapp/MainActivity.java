@@ -112,8 +112,21 @@ public class MainActivity extends AppCompatActivity {
                     return true;
                 }
                 if (menuItem.getItemId() == R.id.action_sign_in) {
-                    SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
-                    dialog.show(getSupportFragmentManager(), "SignIn");
+                    com.emwaver.emwaverandroidapp.cloud.CloudAuthManager auth = com.emwaver.emwaverandroidapp.cloud.CloudAuthManager.getInstance();
+                    auth.ensureInitialized(MainActivity.this);
+
+                    if (auth.isSignedIn()) {
+                        String email = auth.getSignedInEmail();
+                        new AlertDialog.Builder(MainActivity.this)
+                                .setTitle("Account")
+                                .setMessage(email != null && !email.isEmpty() ? email : "Signed in")
+                                .setPositiveButton("Sign out", (d, w) -> auth.signOut())
+                                .setNegativeButton("Close", null)
+                                .show();
+                    } else {
+                        SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
+                        dialog.show(getSupportFragmentManager(), "SignIn");
+                    }
                     return true;
                 }
                 return false;

@@ -64,9 +64,11 @@ import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ui.scripts.ScriptMetadata;
+import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
 import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
 import com.emwaver.emwaverandroidapp.cloud.CloudFilesApi;
 import com.emwaver.emwaverandroidapp.cloud.CloudSyncEngine;
+import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
 import com.emwaver.emwaverandroidapp.scripts.ScriptEngine;
 import com.emwaver.emwaverandroidapp.scripts.ScriptDeviceConnection;
 import com.emwaver.emwaverandroidapp.scripts.ScriptRenderView;
@@ -199,6 +201,18 @@ public class ScriptsFragment extends Fragment {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(ScriptsViewModel.class);
         fileRepository = FileRepositoryLocal.getInstance(requireContext());
+
+        // Allow SignInBottomSheetDialogFragment to notify us and we can retry sync.
+        getParentFragmentManager().setFragmentResultListener(
+                SignInBottomSheetDialogFragment.FRAGMENT_RESULT_KEY,
+                this,
+                (requestKey, bundle) -> {
+                    boolean ok = bundle != null && bundle.getBoolean("success", false);
+                    if (ok) {
+                        runCloudSyncNow();
+                    }
+                }
+        );
         
         backPressedCallback = new OnBackPressedCallback(false) {
             @Override
@@ -348,12 +362,6 @@ public class ScriptsFragment extends Fragment {
             return;
         }
 
-        // Android auth is not wired yet; support anon dev like Windows/macOS.
-        if (!CloudConfig.allowAnonSync()) {
-            showToast("Sign-in sync not wired on Android yet. Set EMWAVER_ALLOW_ANON_SYNC=1 for dev.");
-            return;
-        }
-
         final String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
         if (baseUrl == null || baseUrl.trim().isEmpty()) {
             showToast("Backend URL not configured (EMWAVER_BACKEND_URL)");
@@ -377,9 +385,21 @@ public class ScriptsFragment extends Fragment {
                 ct.put(".raw", "application/octet-stream");
 
                 runOnUiThreadSafe(() -> showLoadingDialog("Syncing scripts…"));
+                // Require auth for cloud calls.
+                String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
+                if (accessToken == null || accessToken.trim().isEmpty()) {
+                    runOnUiThreadSafe(() -> {
+                        hideLoadingDialog();
+                        showToast("Please sign in to sync.");
+                        SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
+                        dialog.show(getParentFragmentManager(), "SignIn");
+                    });
+                    return;
+                }
+
                 CloudSyncEngine.Summary s1 = engine.syncFolder(
                         baseUrl,
-                        "", // anon
+                        accessToken,
                         scriptsDir,
                         new String[]{".emw"},
                         ct,
@@ -390,7 +410,7 @@ public class ScriptsFragment extends Fragment {
                 runOnUiThreadSafe(() -> showLoadingDialog("Syncing signals…"));
                 CloudSyncEngine.Summary s2 = engine.syncFolder(
                         baseUrl,
-                        "", // anon
+                        accessToken,
                         signalsDir,
                         new String[]{".raw", ".txt"},
                         ct,
