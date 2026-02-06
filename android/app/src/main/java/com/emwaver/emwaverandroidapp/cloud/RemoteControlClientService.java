@@ -53,6 +53,18 @@ import okhttp3.WebSocketListener;
  */
 public final class RemoteControlClientService {
 
+    private static final class TokenTarget {
+        final String nodeId;
+        final ScriptEventType eventType;
+
+        TokenTarget(String nodeId, ScriptEventType eventType) {
+            this.nodeId = nodeId;
+            this.eventType = eventType;
+        }
+    }
+
+    private final Map<String, TokenTarget> tokenIndex = new HashMap<>();
+
     public interface Delegate {
         void onStatus(@NonNull String status);
 
@@ -95,6 +107,23 @@ public final class RemoteControlClientService {
         // Keep it simple: one socket, re-connect on demand.
         stop();
         new Thread(() -> connectOnce(app, hostSessionId)).start();
+    }
+
+    /**
+     * Helper for UI renderers that dispatch by handler token (e.g. ScriptRenderView).
+     * Translates token -> (nodeId,eventType) and sends ui.event.
+     */
+    public void invokeToken(@Nullable String scriptInstanceId, int baseRev, @NonNull String token, @Nullable List<Object> arguments) {
+        if (token == null || token.trim().isEmpty()) return;
+        TokenTarget t = tokenIndex.get(token);
+        if (t == null) return;
+
+        Object value = null;
+        if (arguments != null && !arguments.isEmpty()) {
+            value = arguments.get(0);
+        }
+
+        sendUiEvent(scriptInstanceId != null ? scriptInstanceId : "", baseRev, t.nodeId, t.eventType, value);
     }
 
     public void stop() {
@@ -244,6 +273,9 @@ public final class RemoteControlClientService {
                 String scriptId = msg.optString("scriptInstanceId", "");
                 int rev = msg.optInt("rev", 0);
 
+                // Rebuild token index per snapshot.
+                tokenIndex.clear();
+
                 ScriptTree tree = null;
                 JSONObject root = msg.optJSONObject("root");
                 if (root != null) {
@@ -289,6 +321,7 @@ public final class RemoteControlClientService {
                         String token = h.optString(k, null);
                         if (token != null) {
                             handlers.put(ev, token);
+                            tokenIndex.put(token, new TokenTarget(id, ev));
                         }
                     }
                 }
