@@ -6,6 +6,8 @@
 
 package com.emwaver.emwaverandroidapp.cloud;
 
+import android.util.Log;
+
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -17,6 +19,9 @@ import java.util.Map;
 import java.util.Set;
 
 public final class CloudSyncEngine {
+
+    private static final String TAG = "CloudSyncEngine";
+    private static final boolean DEBUG_LISTING = true;
 
     public static final class Summary {
         public int uploaded;
@@ -56,13 +61,28 @@ public final class CloudSyncEngine {
             progress.onStatus("Listing cloud…");
         }
 
+        if (DEBUG_LISTING) {
+            Log.d(TAG, "syncFolder storageDir=" + storageDir.getAbsolutePath());
+            Log.d(TAG, "syncFolder allowedExtensions=" + java.util.Arrays.toString(allowedExtensions));
+            Log.d(TAG, "syncFolder preferLocal=" + preferLocal);
+        }
+
         List<CloudUserFile> cloudFiles = api.listFiles(baseUrl, accessToken);
         Map<String, CloudUserFile> cloudByName = new HashMap<>();
         for (CloudUserFile f : cloudFiles) {
             cloudByName.put(f.name, f);
         }
 
+        if (DEBUG_LISTING) {
+            Log.d(TAG, "cloudFiles count=" + cloudFiles.size());
+            for (CloudUserFile f : cloudFiles) {
+                if (f == null) continue;
+                Log.d(TAG, "cloud: name=" + f.name + " mtimeMs=" + f.mtimeMs + " size=" + f.sizeBytes + " etag=" + f.etag);
+            }
+        }
+
         if (!storageDir.exists()) {
+            //noinspection ResultOfMethodCallIgnored
             storageDir.mkdirs();
         }
 
@@ -74,6 +94,14 @@ public final class CloudSyncEngine {
                 String name = f.getName();
                 if (!matchesExt(name, allowedExtensions)) continue;
                 localByName.put(name, f);
+            }
+        }
+
+        if (DEBUG_LISTING) {
+            Log.d(TAG, "localFiles matched count=" + localByName.size());
+            for (Map.Entry<String, File> e : localByName.entrySet()) {
+                File f = e.getValue();
+                Log.d(TAG, "local: name=" + e.getKey() + " mtime=" + (f != null ? f.lastModified() : 0) + " size=" + (f != null ? f.length() : 0));
             }
         }
 
@@ -93,12 +121,14 @@ public final class CloudSyncEngine {
 
             if (local == null) {
                 // Cloud-only -> download
+                if (DEBUG_LISTING) Log.d(TAG, "decision: download (cloud-only) name=" + name);
                 if (progress != null) progress.onStatus("Downloading " + name + "…");
                 byte[] bytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                 File dest = new File(storageDir, name);
                 writeFile(dest, bytes);
                 if (cloud.mtimeMs > 0) {
                     // best-effort
+                    //noinspection ResultOfMethodCallIgnored
                     dest.setLastModified(cloud.mtimeMs);
                 }
                 summary.downloaded += 1;
@@ -107,6 +137,7 @@ public final class CloudSyncEngine {
 
             if (cloud == null) {
                 // Local-only -> upload
+                if (DEBUG_LISTING) Log.d(TAG, "decision: upload (local-only) name=" + name);
                 if (progress != null) progress.onStatus("Uploading " + name + "…");
                 byte[] bytes = readFile(local);
                 long mtime = local.lastModified();
@@ -122,9 +153,11 @@ public final class CloudSyncEngine {
 
             if (localMtime > 0 && cloudMtime > 0) {
                 if (localMtime == cloudMtime) {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: skip (mtime equal) name=" + name + " mtime=" + localMtime);
                     continue;
                 }
                 if (localMtime > cloudMtime) {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: upload (local newer) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                     if (progress != null) progress.onStatus("Uploading " + name + "…");
                     byte[] bytes = readFile(local);
                     String ct = guessContentType(name, contentTypesByExt);
@@ -135,12 +168,14 @@ public final class CloudSyncEngine {
 
                 // cloud newer
                 if (preferLocal) {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: conflict (cloud newer but preferLocal) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                     // conflict: keep local, save cloud as conflict file
                     if (progress != null) progress.onStatus("Conflict " + name + "…");
                     byte[] cloudBytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                     String conflictName = makeCloudConflictName(name, System.currentTimeMillis());
                     File conflictDest = new File(storageDir, conflictName);
                     writeFile(conflictDest, cloudBytes);
+                    //noinspection ResultOfMethodCallIgnored
                     conflictDest.setLastModified(cloudMtime);
                     summary.conflicts += 1;
                     // and upload local as canonical
@@ -149,9 +184,11 @@ public final class CloudSyncEngine {
                     api.uploadViaBackend(baseUrl, accessToken, name, ct, localBytes, localMtime);
                     summary.uploaded += 1;
                 } else {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: download (cloud newer) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                     if (progress != null) progress.onStatus("Downloading " + name + "…");
                     byte[] bytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                     writeFile(local, bytes);
+                    //noinspection ResultOfMethodCallIgnored
                     local.setLastModified(cloudMtime);
                     summary.downloaded += 1;
                 }
@@ -159,6 +196,7 @@ public final class CloudSyncEngine {
             }
 
             // Missing mtime on one side: prefer local to avoid destructive overwrite.
+            if (DEBUG_LISTING) Log.d(TAG, "decision: upload (missing mtime on one side) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
             if (progress != null) progress.onStatus("Uploading " + name + "…");
             byte[] bytes = readFile(local);
             String ct = guessContentType(name, contentTypesByExt);
