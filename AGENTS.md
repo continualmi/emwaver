@@ -706,9 +706,9 @@ Removed (scripts are run via the apps).
 
 ## Agent Workflow Guardrails
 
-- Prefer making changes in working tree first and showing a diff/summary.
-- **After significant changes, you MUST `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to.
-- For small or speculative tweaks, ask before committing/pushing.
+- Prefer making changes in the working tree first and showing a diff/summary.
+- **Do not run builds/tests on your own** (e.g. `./gradlew`, Android Studio builds, `xcodebuild`, MSBuild) unless the user explicitly asks. This environment often can’t build anyway.
+- **If you change code, always `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to push (or asks you to keep changes uncommitted).
 ├─ crates/                                   # Shared Rust crates (dev/internal only)
 │  ├─ emwaver-dfu/                            # DFU/update helpers (used by internal CLI)
 │  └─ emwaver-dfu-helper/                     # DFU helper binary (bundled in macOS app as `emwaver-dfu-helper`)
