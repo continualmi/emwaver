@@ -13,6 +13,7 @@ struct ScriptsContainerView: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @StateObject private var agentViewModel = AgentChatViewModel()
     @State private var showingAgentChat = false
+    @State private var showingCloudSettings = false
 
     var body: some View {
         NavigationStack {
@@ -71,27 +72,30 @@ struct ScriptsContainerView: View {
                     }
 
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        if auth.isSignedIn {
-                            Menu {
+                        Menu {
+                            if auth.isSignedIn {
                                 if let email = auth.session?.email, !email.isEmpty {
                                     Text(email)
                                         .foregroundStyle(.secondary)
                                 }
-
                                 Divider()
-
+                                Button("Cloud Settings") {
+                                    showingCloudSettings = true
+                                }
+                                Divider()
                                 Button("Sign Out") {
                                     Task { await auth.signOut() }
                                 }
-                            } label: {
-                                Image(systemName: "person.crop.circle")
+                            } else {
+                                Button("Sign In") {
+                                    auth.isSignInSheetPresented = true
+                                }
+                                Button("Cloud Settings") {
+                                    showingCloudSettings = true
+                                }
                             }
-                        } else {
-                            Button {
-                                auth.isSignInSheetPresented = true
-                            } label: {
-                                Image(systemName: "person.crop.circle.badge.plus")
-                            }
+                        } label: {
+                            Image(systemName: auth.isSignedIn ? "person.crop.circle" : "person.crop.circle.badge.plus")
                         }
 
                         Button {
@@ -120,6 +124,11 @@ struct ScriptsContainerView: View {
             SignInSheet()
                 .environmentObject(auth)
                 .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingCloudSettings) {
+            CloudSettingsSheet()
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }
