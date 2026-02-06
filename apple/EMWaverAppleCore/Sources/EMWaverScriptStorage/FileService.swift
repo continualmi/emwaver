@@ -27,6 +27,12 @@ public enum FileServiceError: LocalizedError {
 public final class FileService {
     public static let shared = FileService()
 
+    private static let internalBootstrapName = "script_bootstrap.emw"
+
+    private static func isReservedInternalName(_ name: String) -> Bool {
+        name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == internalBootstrapName
+    }
+
     private static let log = OSLog(subsystem: "com.emwaver", category: "FileService")
 
     private static func debugEnabled() -> Bool {
@@ -98,6 +104,9 @@ public final class FileService {
                     for fileURL in files {
                         guard fileURL.isFileURL else { continue }
                         let fileName = fileURL.lastPathComponent
+                        if Self.isReservedInternalName(fileName) {
+                            continue
+                        }
                         if let ext = fileExtension, !fileName.hasSuffix(ext) {
                             continue
                         }
@@ -180,11 +189,17 @@ public final class FileService {
     }
 
     public func createTextFile(name: String, content: String, accessToken: String) async throws -> UserFileMetadata {
-        try await createFile(name: name, data: content.data(using: .utf8) ?? Data(), contentType: "text/plain")
+        if Self.isReservedInternalName(name) {
+            throw FileServiceError.invalidResponse
+        }
+        return try await createFile(name: name, data: content.data(using: .utf8) ?? Data(), contentType: "text/plain")
     }
 
     public func renameFile(id: String, name: String, accessToken: String) async throws -> UserFileMetadata {
-        try await withCheckedThrowingContinuation { continuation in
+        if Self.isReservedInternalName(name) {
+            throw FileServiceError.invalidResponse
+        }
+        return try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
                     let oldURL = self.storageDir.appendingPathComponent(id)
@@ -220,7 +235,10 @@ public final class FileService {
     }
 
     public func updateTextFile(id: String, etag: String, content: String, accessToken: String) async throws -> UserFileMetadata {
-        try await createFile(name: id, data: content.data(using: .utf8) ?? Data(), contentType: "text/plain", overwrite: true)
+        if Self.isReservedInternalName(id) {
+            throw FileServiceError.invalidResponse
+        }
+        return try await createFile(name: id, data: content.data(using: .utf8) ?? Data(), contentType: "text/plain", overwrite: true)
     }
 
     public func deleteFile(id: String, etag: String?, accessToken: String) async throws {
