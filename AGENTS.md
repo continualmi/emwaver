@@ -350,7 +350,7 @@ Goal: allow the web dashboard to **fully drive** scripts running on a Host Sessi
 - **Multiplexing**: messages carry `hostSessionId` and `scriptInstanceId` so one WS can control multiple hosts/scripts.
 - **Versioning**: first message is `hello`/`capabilities` to negotiate protocol version and optional features.
 
-##### Current Implementation (v1: Web + macOS + Android)
+##### Current Implementation (v1: Web + macOS + Android + iOS + Windows)
 Implemented now (frontend ⇄ backend ⇄ native host):
 - **Backend WS endpoint:** `GET /v1/ws`
   - Browser auth uses `?token=<firebase_id_token>` because the browser WS API cannot set `Authorization` headers.
@@ -374,7 +374,9 @@ Implemented now (frontend ⇄ backend ⇄ native host):
 ##### Host UX (Remote Control Indicator)
 Native hosts should make it obvious when remote control is active:
 - macOS: show a small `Remote` toolbar indicator when `host.attach` has been received; clicking it opens the remote-controlled script UI **in-app** (overlay, not a modal).
+- iOS: show a small toolbar indicator when remote control is active; tapping opens an in-app overlay showing the remote-controlled script UI.
 - Android: show a small banner on the Scripts preview surface when remote control is active.
+- Windows: show a small banner over the Preview pane when remote control is active.
 - Hosts persist best-effort: `active_script_name` in heartbeat status, and a local "remote active script name" for quick UX restore.
 
 ##### UI State (Host → Remote)
