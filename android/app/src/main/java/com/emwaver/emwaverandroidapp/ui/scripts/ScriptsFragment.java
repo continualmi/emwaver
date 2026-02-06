@@ -587,7 +587,13 @@ public class ScriptsFragment extends Fragment {
                 showToast("Asset scripts are read-only. Create a copy to edit.");
                 return true;
             }
-            // Signals: no long-press actions yet.
+            if (entry.type == ListEntry.Type.SIGNAL) {
+                SignalMetadata sig = entry.signal;
+                if (sig != null) {
+                    showDeleteSignalConfirmationDialog(sig);
+                }
+                return true;
+            }
             return true;
         });
     }
@@ -1769,6 +1775,97 @@ public class ScriptsFragment extends Fragment {
             .show();
     }
     
+    private void showDeleteSignalConfirmationDialog(@NonNull SignalMetadata signalMetadata) {
+        if (!isAdded() || signalMetadata == null) {
+            return;
+        }
+
+        final android.widget.CheckBox alsoCloud = new android.widget.CheckBox(requireContext());
+        alsoCloud.setText("Also delete from cloud");
+        boolean signedIn = CloudAuthManager.getInstance().isSignedIn();
+        alsoCloud.setChecked(signedIn); // default ON when signed in
+        alsoCloud.setEnabled(signedIn);
+        if (!signedIn) {
+            alsoCloud.setAlpha(0.6f);
+        }
+
+        new AlertDialog.Builder(requireContext())
+            .setTitle("Delete Signal")
+            .setMessage("Are you sure you want to delete " + signalMetadata.displayName() + "?")
+            .setView(alsoCloud)
+            .setPositiveButton("Delete", (dialog, which) -> deleteSignal(signalMetadata, alsoCloud.isChecked()))
+            .setNegativeButton("Cancel", null)
+            .show();
+    }
+
+    private void deleteSignal(@NonNull SignalMetadata signalMetadata, boolean alsoDeleteFromCloud) {
+        if (!isAdded() || signalMetadata == null) {
+            return;
+        }
+
+        java.io.File f = signalMetadata.file;
+        if (f == null || !f.exists()) {
+            showToast("Signal not found");
+            return;
+        }
+
+        showLoadingDialog("Deleting signal...");
+
+        new Thread(() -> {
+            boolean ok = false;
+            try {
+                ok = f.delete();
+            } catch (Exception ignored) {
+                ok = false;
+            }
+
+            final boolean deleted = ok;
+            runOnUiThreadSafe(() -> {
+                hideLoadingDialog();
+                if (!deleted) {
+                    showToast("Failed to delete signal");
+                    return;
+                }
+
+                // If currently viewing this signal, clear editor.
+                if (TextUtils.equals(currentScriptName, signalMetadata.displayName())) {
+                    currentScriptMetadata = null;
+                    currentScriptName = null;
+                    currentScriptEtag = null;
+                    setEditorText("");
+                    updateDraftState("", false);
+                    showingEditor = false;
+                    showingPreview = true;
+                    updateViewMode();
+                }
+
+                loadSignalFiles();
+                rebuildCombinedScripts();
+                showToast("Signal deleted: " + signalMetadata.displayName());
+
+                if (alsoDeleteFromCloud) {
+                    // Best-effort cloud delete.
+                    new Thread(() -> {
+                        try {
+                            String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
+                            String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
+                            if (baseUrl == null || baseUrl.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
+                                runOnUiThreadSafe(() -> showToast("Cloud delete skipped (not signed in)"));
+                                return;
+                            }
+                            OkHttpClient http = new OkHttpClient.Builder().build();
+                            CloudFilesApi api = new CloudFilesApi(http);
+                            api.deleteViaBackend(baseUrl, accessToken, f.getName());
+                            runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + f.getName()));
+                        } catch (Exception e) {
+                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + f.getName()));
+                        }
+                    }).start();
+                }
+            });
+        }).start();
+    }
+
     private void showResetDefaultsConfirmationDialog() {
         if (!isAdded()) {
             return;
