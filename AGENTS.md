@@ -157,98 +157,69 @@ Notes on dev environment docs:
 - `DEV_ENV.md` is a developer-only setup checklist (not end-user/product documentation).
 - Use the macOS or Windows section depending on the platform.
 
-## Repository Code Map (Deep Tree)
+## Repository Code Map (curated)
 
-This map is intentionally **code-focused** (so you can find “where the thing lives” quickly). It avoids listing non-code/ops `.md` files and calls out the *actual implementation* locations for the major subsystems (USB transport, buffer core, script engine + UI renderer, DFU, Git, etc.).
+This section is a **manual navigation map**. It intentionally omits the full directory tree and only calls out the places you actually jump to when making changes.
 
-> Convention: paths shown here refer to **source-of-truth** locations. Build outputs and vendored deps are called out separately so you don’t go spelunking in `target/`, `node_modules/`, etc.
+### Apple shared (iOS + macOS) — script runtime + shared UI
 
-```text
-.
-├─ .github/
-│  └─ workflows/
-├─ .vscode/
-├─ android/
-│  ├─ .settings/
-│  ├─ app/
-│  │  ├─ .settings/
-│  │  └─ src/main/
-│  │     ├─ assets/{firmware,ota}/
-│  │     ├─ java/com/emwaver/emwaverandroidapp/
-│  │     │  ├─ cloud/
-│  │     │  │  └─ agent/                      # Agent chat backend client (SSE)
-│  │     │  ├─ files/
-│  │     │  ├─ scripts/
-│  │     │  └─ ui/{agent,auth,emwaver,flash,hosts,scripts}/
-│  │     └─ res/{layout,drawable,menu,navigation,values,...}/
-│  └─ gradle/wrapper/
-├─ apple/
-│  └─ EMWaverAppleCore/
-│     ├─ Resources/Firmware/
-│     └─ Sources/
-│        ├─ EMWaverScriptModel/
-│        ├─ EMWaverScriptRuntime/
-│        ├─ EMWaverScriptStorage/
-│        ├─ EMWaverScriptSwiftUI/
-│        ├─ EMWaverScriptsUI/                  # Shared Agent chat panel + backend API
-│        └─ EMWaverTransport/
-├─ assets/default-scripts/
-├─ backend/
-│  └─ emw_backend/routes/
-├─ cli/
-│  ├─ installers/
-│  ├─ resources/ota/
-│  └─ src/
-├─ crates/
-│  ├─ emwaver-buffer-android-jni/src/
-│  ├─ emwaver-buffer-core/src/
-│  ├─ emwaver-buffer-ios-ffi/{include,src}/
-│  ├─ emwaver-buffer-windows-ffi/{include,src}/
-│  ├─ emwaver-dfu/src/
-│  ├─ emwaver-dfu-helper/src/
-│  └─ regress/{.github,src,tests/common}/
-├─ firmware/
-├─ frontend/
-│  ├─ legacy-static/{assets/images,badges,logos,news/{assets,posts}}/
-│  ├─ public/{assets/images,badges,javascripts,logos,styles}/
-│  ├─ src/
-│  │  ├─ app/
-│  │  │  ├─ cloud/{agent,hosts}/
-│  │  │  ├─ docs/{[...slug],hardware/{device,pinout},install,scripts}/
-│  │  │  ├─ {device,hardware,install,news,order,pinout,scripts}/
-│  │  │  └─ news/posts/[...slug]/
-│  │  ├─ components/{docs,news}/
-│  │  └─ lib/
-│  └─ web/
-├─ ios/
-│  ├─ EMWaver/
-│  │  ├─ Assets.xcassets/...
-│  │  ├─ Auth/                                # Google OAuth + Firebase token exchange
-│  │  ├─ Managers/
-│  │  ├─ Native/
-│  │  ├─ Views/
-│  │  ├─ firmware/
-│  │  └─ ota/
-│  └─ EMWaver.xcodeproj/{project.xcworkspace,xcshareddata/xcschemes}/
-├─ macos/
-│  └─ EMWaver/
-│     ├─ EMWaver/{Assets.xcassets,Auth}/
-│     ├─ EMWaver.xcodeproj/{project.xcworkspace,xcshareddata/xcschemes}/
-│     ├─ Native/
-│     └─ Tools/
-├─ scripts/
-├─ stm/emwaver-firmware/
-│  ├─ Core/{Inc,Src,Startup}/
-│  ├─ Drivers/{CMSIS,STM32F0xx_HAL_Driver}/
-│  ├─ Middlewares/ST/STM32_USB_Device_Library/Core/{Inc,Src}/
-│  └─ USB_DEVICE/{App,Target}/
-└─ windows/
-   └─ EMWaver/
-      ├─ Assets/{DefaultScripts,Firmware}/
-      ├─ {Converters,Dialogs,Interop,Models,Pages,Properties}/
-      ├─ Scripting/Render/
-      └─ Services/{Agent,Cloud}/
-```
+- Script runtime core: `apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/`
+  - Entry: `ScriptEngine.swift`
+- Script SwiftUI renderer: `apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI/`
+- USB transport: `apple/EMWaverAppleCore/Sources/EMWaverTransport/`
+  - USB MIDI SysEx: `UsbMidiSysex.swift`
+- Agent chat (shared): `apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/`
+  - Backend API (conversations + SSE): `AgentChatBackend.swift`
+  - State/UI: `AgentChatViewModel.swift`, `AgentChatPanelView.swift`
+  - macOS right-drawer integration: `ScriptsRootView.swift`
+
+### iOS app
+
+- Auth (Google OAuth + Firebase token exchange, no Firebase SDK): `ios/EMWaver/Auth/`
+- Cloud config (backend URL + anon sync gate): `ios/EMWaver/Managers/CloudConfig.swift`
+- Main scripts surface (Agent sheet lives here): `ios/EMWaver/Views/ScriptsContainerView.swift`
+- Bundled firmware payload: `ios/EMWaver/firmware/emwaver.bin`
+
+### macOS app
+
+- Main scripts surface: `macos/EMWaver/EMWaver/ContentView.swift`
+- Auth UI: `macos/EMWaver/EMWaver/Auth/`
+- Agent chat UI is shared in AppleCore (do not re-add a modal-only macOS implementation).
+
+### Android app
+
+- Script engine + renderer: `android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/`
+- Cloud (sync/hosts/auth): `android/app/src/main/java/com/emwaver/emwaverandroidapp/cloud/`
+- Agent chat (backend client + UI):
+  - Backend API (conversations + SSE): `android/.../cloud/agent/AgentBackendApi.java`
+  - UI + state: `android/.../ui/agent/`
+
+### Windows app
+
+- Scripts surface (contains right-side Agent pane): `windows/EMWaver/Pages/ScriptsPage.xaml(.cs)`
+- Cloud auth/config (Firebase token source): `windows/EMWaver/Services/Cloud/`
+- Agent chat backend client + SSE parsing: `windows/EMWaver/Services/Agent/AgentApi.cs`
+
+### Backend (Flask)
+
+- API routes: `backend/emw_backend/routes/`
+  - Agent endpoints live under the agent routes file(s) here.
+
+### Firmware (STM32)
+
+- USB MIDI SysEx tunnel glue: `stm/emwaver-firmware/USB_DEVICE/App/usbd_midi_if.c`
+- Main firmware logic: `stm/emwaver-firmware/Core/Src/`
+
+### Frontend (Next.js)
+
+- Agent + cloud UI: `frontend/src/app/cloud/`
+- Backend client helpers / SSE parsing reference: `frontend/src/lib/`
+
+Web dev (Next.js):
+- `cd frontend && npm run dev`
+
+Generated / not-source-of-truth (common):
+- `**/target/`, `**/node_modules/`, `android/app/.cxx/`, `stm/**/Debug/`, `stm/**/Release/`
 
 Web dev (Next.js):
 - `cd frontend && npm run dev`
