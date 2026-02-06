@@ -319,9 +319,11 @@ Core idea: **any running EMWaver app instance can be a Host Session**.
 - A Host Session is an app that is signed in and running.
 - If a USB EMWaver device is attached to that host, it can bridge real hardware.
 - Other surfaces can drive a Host Session under the same account:
-  - host → host (desktop app controlling another desktop app)
+  - host → host (desktop app controlling another host app)
   - mobile → host
-  - and later web → host
+  - web → host
+
+**Note:** hosts can also act as controllers (a host controlling other hosts) by opening an additional WS connection as `role=web` and attaching to another `hostSessionId`.
 
 **Current implementation status (presence + discovery):**
 - Backend supports presence via `POST /v1/hosts/heartbeat` and listing via `GET /v1/hosts`.
@@ -333,7 +335,7 @@ Core idea: **any running EMWaver app instance can be a Host Session**.
 - WebSocket from clients to backend.
 - Backend routes messages to Host Sessions for the same `uid`.
 
-#### Remote Script Control (Web ↔ Host) — Initial Architecture
+#### Remote Script Control (Controller ↔ Host) — Initial Architecture
 
 Goal: allow the web dashboard to **fully drive** scripts running on a Host Session with minimal limitations vs native UI.
 
@@ -351,7 +353,12 @@ Goal: allow the web dashboard to **fully drive** scripts running on a Host Sessi
 - **Versioning**: first message is `hello`/`capabilities` to negotiate protocol version and optional features.
 
 ##### Current Implementation (v1: Web + macOS + Android + iOS + Windows)
-Implemented now (frontend ⇄ backend ⇄ native host):
+Implemented now (controller ⇄ backend ⇄ native host):
+- Web dashboard controller ✅
+- macOS controller ✅ (RemoteControlClientService.swift)
+- Android controller ✅ (RemoteControlClientService.java)
+- iOS controller ⏳ (planned)
+- Windows controller ⏳ (planned)
 - **Backend WS endpoint:** `GET /v1/ws`
   - Browser auth uses `?token=<firebase_id_token>` because the browser WS API cannot set `Authorization` headers.
   - Host sessions also connect outbound to this endpoint.
@@ -426,15 +433,106 @@ To preserve “native-feeling” interactions, host may include per-node geometr
 Direction: the frontend will be able to **render EMWaver script UI in the browser**.
 
 - Styling is web-native; **functional equivalence** is the goal.
-- The same script UI/events contract is used by humans and agents.
+- The same script UI/events contract is used by humans, hosts-as-controllers, and agents.
 - Later, device I/O and UI events can be routed over Remote Sessions.
 
-### Agents (Layered)
+### Agent-Controlled Hosts (Tools Plan)
 
-Agents are not a separate control path; they operate through the same primitives:
+We will add a set of **LLM tools** that let an agent control a Host Session the same way a human does:
+
+#### Core idea
+
+- The agent attaches to a host session (controller role).
+- The host runs scripts and publishes UI state (`ui.snapshot` now, `ui.patch` later).
+- The agent reads the UI tree, decides what to do, and sends `ui.event` messages.
+- This loop continues until a goal is achieved (e.g. “measure a waveform”, “sweep a register”, “dump memory”).
+
+#### Why UI-driven tools (instead of a separate agent API)
+
+- **One contract**: everything funnels through Script UI + events.
+- **Human reproducibility**: you can replay what the agent did by performing the same UI interactions.
+- **Cross-platform**: same protocol works for web/macOS/Android/iOS/Windows.
+- **Safety**: host retains authority (can prompt / deny / require local confirmation for dangerous actions).
+
+#### Proposed tool surface (v1)
+
+Tools are conceptual here; implementation can live in the backend agent runtime or host-local agent, but the wire protocol is the same.
+
+1) `hosts.list`
+- Returns available hosts (`hostSessionId`, name, platform, lastSeen, status).
+
+2) `remote.attach(hostSessionId)`
+- Establish a controller WS connection and attach.
+- Returns an `attachmentId` (multiplex key) and current connection status.
+
+3) `remote.runScript(attachmentId, name, source | cloudFileName)`
+- Starts script on host.
+- Returns `scriptInstanceId`.
+
+4) `remote.waitForUi(attachmentId, scriptInstanceId, minRev?)`
+- Blocks until a new `ui.snapshot` (or patch) arrives.
+- Returns `{rev, root, metadata}`.
+
+5) `remote.sendUiEvent(attachmentId, scriptInstanceId, targetNodeId, eventName, payload, baseRev)`
+- Sends UI event.
+- Returns an ack/result (v1 may just return “sent”; later add explicit `ui.event.ack`).
+
+6) `remote.stopScript(attachmentId, scriptInstanceId)` (optional)
+
+#### UI tree interpretation (agent)
+
+The agent needs a *stable, inspectable representation* of the UI:
+- node `id`, `type`, and `props` are the primary semantic surface.
+- `handlers` existence is a hint that an element is interactive.
+- The agent should not rely on pixel geometry; it should navigate by structure and labels.
+
+We should provide helper utilities:
+- `ui.find(root, {type?, label?, text?, propEquals?}) -> nodeId`
+- `ui.describe(root) -> compact natural-language summary` (for model context)
+
+#### Event policy
+
+- Prefer **semantic events**: `tap`, `change`, `submit`, `select`.
+- Reserve low-level pointer/keyboard events for later.
+- Always include `baseRev` so hosts can reject/force resync when stale.
+
+#### Streaming / logs / artifacts
+
+To truly bridge to low-level hardware, the agent will also need observability:
+- script log output (structured log stream)
+- emitted artifacts (files/signals) and a way to fetch them
+
+Plan:
+- add `log.append` frames over WS or reuse existing backend agent endpoints
+- add `artifact.created` frames with blob keys
+
+#### Safety & authorization (must-have)
+
+- Backend enforces same `uid` and that the controller is allowed to attach.
+- Host can advertise a capability: `allowRemoteControl: true/false`.
+- Host can require a local confirmation policy for dangerous actions:
+  - e.g. “hardware write”, “DFU flash”, “GPIO drive”, “high voltage enable”.
+
+#### Multi-host orchestration
+
+Agents will frequently coordinate:
+- one host connected to hardware ("lab rig")
+- another host providing UI/log capture
+- plus cloud compute for reasoning
+
+The protocol must support multiple concurrent attachments (multiplexed by hostSessionId and scriptInstanceId).
+
+### Agents as Remote Controllers (UI-driven)
+
+EMWaver’s “final form” is: **an agent can operate real hardware by driving the same script UI that humans drive**.
+
+Agents are **not a separate control path**. They must use the same primitives and transport surfaces humans use:
+- attach to a host session
 - run scripts
 - observe UI + logs + artifacts
 - emit UI events / parameter changes
+
+This keeps the system debuggable (you can always reproduce an agent action by doing the same UI interactions yourself) and prevents a parallel, untestable “agent-only” API.
 
 Placement is layered:
 - **Cloud agent** (high power models) for heavy reasoning and automation.
