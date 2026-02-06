@@ -130,7 +130,15 @@ export default function CloudPage() {
       );
       return;
     }
-    await signInWithPopup(auth, googleProvider());
+    try {
+      await signInWithPopup(auth, googleProvider());
+    } catch (e: any) {
+      const code = e?.code ? String(e.code) : "";
+      const msg = e?.message ? String(e.message) : String(e);
+      // Common in prod when the deployed domain isn't whitelisted in Firebase Auth.
+      // Shows up as auth/unauthorized-domain.
+      setError(code ? `${code}: ${msg}` : msg);
+    }
   }
 
   async function doSignOut() {
