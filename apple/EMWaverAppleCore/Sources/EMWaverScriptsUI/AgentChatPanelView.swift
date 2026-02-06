@@ -27,6 +27,9 @@ public struct AgentChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
+        .onAppear {
+            viewModel.bootstrapIfPossible()
+        }
     }
 
     private var header: some View {
@@ -37,13 +40,19 @@ public struct AgentChatPanelView: View {
 
                 Spacer()
 
-                Button {
-                    viewModel.clear()
+                Menu {
+                    Button("New Chat") {
+                        viewModel.newConversation()
+                    }
+
+                    Button("Clear Messages") {
+                        viewModel.clear()
+                    }
                 } label: {
-                    Image(systemName: "trash")
+                    Image(systemName: "ellipsis.circle")
                 }
                 .buttonStyle(.plain)
-                .help("Clear conversation")
+                .help("Chat options")
             }
         }
         .padding(12)
