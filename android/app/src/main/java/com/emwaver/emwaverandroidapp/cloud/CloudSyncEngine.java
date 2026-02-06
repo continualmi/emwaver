@@ -173,13 +173,18 @@ public final class CloudSyncEngine {
             long cloudMtime = cloud.mtimeMs;
 
             if (localMtime > 0 && cloudMtime > 0) {
-                if (localMtime == cloudMtime) {
-                    if (DEBUG_LISTING) Log.d(TAG, "decision: skip (mtime equal) name=" + name + " mtime=" + localMtime);
+                // Many filesystems only store mtimes with 1s resolution. Cloud mtimes can be ms-precise.
+                // Treat "same second" as equal to avoid endless cloud-newer prompts.
+                long localSec = localMtime / 1000;
+                long cloudSec = cloudMtime / 1000;
+
+                if (localSec == cloudSec) {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: skip (mtime equal, sec) name=" + name + " local=" + localMtime + " cloud=" + cloudMtime);
                     done += 1;
                     if (progress != null) progress.onProgress(done, total, "Up to date: " + name);
                     continue;
                 }
-                if (localMtime > cloudMtime) {
+                if (localSec > cloudSec) {
                     if (!uploadLocalNewer) {
                         if (DEBUG_LISTING) Log.d(TAG, "decision: skip (local newer; awaiting confirmation) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                         summary.localNewerFiles.add(name);
