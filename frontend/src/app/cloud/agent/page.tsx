@@ -95,7 +95,13 @@ export default function AgentChatPage() {
       );
       return;
     }
-    await signInWithPopup(auth, googleProvider());
+    try {
+      await signInWithPopup(auth, googleProvider());
+    } catch (e: any) {
+      const code = e?.code ? String(e.code) : "";
+      const msg = e?.message ? String(e.message) : String(e);
+      setError(code ? `${code}: ${msg}` : msg);
+    }
   }
 
   async function doSignOut() {
