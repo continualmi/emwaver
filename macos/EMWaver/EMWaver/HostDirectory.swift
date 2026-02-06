@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 
 // Mirrors backend/emw_backend/routes/hosts.py response schema.
 struct HostSession: Identifiable, Codable, Hashable {
