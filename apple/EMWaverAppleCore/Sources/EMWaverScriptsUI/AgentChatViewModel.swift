@@ -37,8 +37,8 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    public init(api: AgentBackendAPI = AgentBackendAPI(), configProvider: ConfigProvider? = nil) {
-        self.api = api
+    public init(configProvider: ConfigProvider? = nil, urlSession: URLSession = .shared) {
+        self.api = AgentBackendAPI(urlSession: urlSession)
         self.configProvider = configProvider
     }
 
