@@ -454,6 +454,12 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarAgentToggle(ScriptAgentToggleButton.IsChecked == true);
     }
 
+    private void OnHostsClick(object sender, RoutedEventArgs e)
+    {
+        ContentFrame.Navigate(typeof(HostsPage));
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
     private void OnCloudSignInClick(object sender, RoutedEventArgs e)
     {
         // Keep toolbar buttons as shortcuts; route to Settings.
