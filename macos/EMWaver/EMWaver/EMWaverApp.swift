@@ -13,17 +13,19 @@ struct EMWaverApp: App {
     @StateObject private var firmwareUpdater = FirmwareUpdateManager()
     @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
+    @StateObject private var hostDirectory = HostDirectory()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory)
                 .environmentObject(auth)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
                 }
                 .task {
-                    // Best-effort background heartbeat.
+                    // Best-effort background heartbeat + host discovery.
                     hostSessions.start(auth: auth, device: device)
+                    hostDirectory.start(auth: auth)
                 }
         }
         .commands {

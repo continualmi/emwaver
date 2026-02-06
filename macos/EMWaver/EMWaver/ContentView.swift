@@ -12,6 +12,7 @@ struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
+    @ObservedObject var hostDirectory: HostDirectory
     @EnvironmentObject private var auth: AuthenticationManager
 
     @State private var showingDeviceSheet: Bool = false
@@ -77,6 +78,17 @@ struct ContentView: View {
             }
 
             ToolbarItem(placement: .automatic) {
+                NavigationLink {
+                    HostsView(directory: hostDirectory) {
+                        await hostDirectory.refresh(auth: auth)
+                    }
+                } label: {
+                    Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
+                }
+                .help("View host sessions on this account")
+            }
+
+            ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
                         if let email = auth.session?.email, !email.isEmpty {
@@ -112,6 +124,11 @@ struct ContentView: View {
 }
 
 #Preview {
-    ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager(), hostSessions: HostSessionManager())
-        .environmentObject(AuthenticationManager())
+    ContentView(
+        device: MacUSBManager(),
+        firmwareUpdater: FirmwareUpdateManager(),
+        hostSessions: HostSessionManager(),
+        hostDirectory: HostDirectory()
+    )
+    .environmentObject(AuthenticationManager())
 }
