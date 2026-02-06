@@ -350,8 +350,8 @@ Goal: allow the web dashboard to **fully drive** scripts running on a Host Sessi
 - **Multiplexing**: messages carry `hostSessionId` and `scriptInstanceId` so one WS can control multiple hosts/scripts.
 - **Versioning**: first message is `hello`/`capabilities` to negotiate protocol version and optional features.
 
-##### Current Implementation (v1: Web + macOS)
-Implemented now (frontend ⇄ backend ⇄ macOS host):
+##### Current Implementation (v1: Web + macOS + Android)
+Implemented now (frontend ⇄ backend ⇄ native host):
 - **Backend WS endpoint:** `GET /v1/ws`
   - Browser auth uses `?token=<firebase_id_token>` because the browser WS API cannot set `Authorization` headers.
   - Host sessions also connect outbound to this endpoint.
@@ -363,12 +363,19 @@ Implemented now (frontend ⇄ backend ⇄ macOS host):
   - Host: `{type:"hello", role:"host", protocolVersion:1, hostSessionId}`
 - **Attach/subscribe:** web sends `host.attach {hostSessionId}` (backend acks `host.attached` and forwards attach to host).
 - **Run scripts (temporary v1 API):** web sends `script.run {hostSessionId, name, source}`
-  - Host runs the script via `ScriptPreviewManager` and emits `script.started {scriptInstanceId}`.
+  - macOS runs via `ScriptPreviewManager` and emits `script.started {scriptInstanceId}`.
+  - Android runs via the existing `ScriptsFragment` ScriptEngine path and emits `script.started {scriptInstanceId}`.
   - Note: v1 runs **script source pushed from web** (downloaded from cloud files) instead of referencing host-local script names.
 - **UI state (v1):** host emits **`ui.snapshot` only** on each ScriptTree update (rev increments).
   - `ui.patch` / `ui.ack` are planned but not implemented yet.
 - **UI events (v1):** web emits `ui.event {scriptInstanceId, targetNodeId, name, payload}`.
   - Host maps `name` to `ScriptEventType` and dispatches to the handler token found on the targeted node.
+
+##### Host UX (Remote Control Indicator)
+Native hosts should make it obvious when remote control is active:
+- macOS: show a small `Remote` toolbar indicator when `host.attach` has been received; clicking it opens the remote-controlled script UI **in-app** (overlay, not a modal).
+- Android: show a small banner on the Scripts preview surface when remote control is active.
+- Hosts persist best-effort: `active_script_name` in heartbeat status, and a local "remote active script name" for quick UX restore.
 
 ##### UI State (Host → Remote)
 - `ui.snapshot`: full ScriptTree + `rev` (authoritative revision).
