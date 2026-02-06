@@ -178,6 +178,16 @@ export default function HostsPage() {
               <div className="mt-3 text-sm text-[color:var(--ink-dim)]">Select a host session.</div>
             ) : (
               <div className="mt-3 grid gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/cloud/hosts/${encodeURIComponent(selected.id)}/remote`}
+                    className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
+                  >
+                    Remote control
+                  </Link>
+                  <div className="text-xs text-[color:var(--ink-dim)]">Control scripts + UI over WebSocket</div>
+                </div>
+
                 <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] p-3">
                   <div className="text-xs font-semibold text-[color:var(--ink-dim)]">ID</div>
                   <div className="mt-1 font-mono text-xs text-[color:var(--ink)]">{selected.id}</div>
