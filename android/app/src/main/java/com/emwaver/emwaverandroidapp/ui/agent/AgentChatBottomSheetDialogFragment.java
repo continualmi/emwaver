@@ -36,6 +36,9 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
     private EditText input;
     private ImageButton sendButton;
     private MaterialButton clearButton;
+    private MaterialButton conversationsButton;
+    private MaterialButton newButton;
+    private android.widget.TextView status;
 
     private MessagesAdapter adapter;
 
@@ -59,6 +62,9 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         input = view.findViewById(R.id.agent_chat_input);
         sendButton = view.findViewById(R.id.agent_chat_send);
         clearButton = view.findViewById(R.id.agent_chat_clear);
+        conversationsButton = view.findViewById(R.id.agent_chat_conversations);
+        newButton = view.findViewById(R.id.agent_chat_new);
+        status = view.findViewById(R.id.agent_chat_status);
 
         adapter = new MessagesAdapter();
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -68,6 +74,34 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
             adapter.setMessages(messages);
             if (messages != null && !messages.isEmpty()) {
                 recyclerView.scrollToPosition(messages.size() - 1);
+            }
+        });
+
+        viewModel.getLastError().observe(getViewLifecycleOwner(), err -> {
+            if (status != null) {
+                status.setText(err != null ? err : "");
+            }
+        });
+
+        viewModel.getIsSending().observe(getViewLifecycleOwner(), sending -> {
+            boolean isSending = sending != null && sending;
+            if (sendButton != null) sendButton.setEnabled(!isSending);
+            if (input != null) input.setEnabled(!isSending);
+        });
+
+        viewModel.getConversations().observe(getViewLifecycleOwner(), list -> {
+            if (conversationsButton != null) {
+                String label = "Chats";
+                String cid = viewModel.getConversationId();
+                if (cid != null && list != null) {
+                    for (com.emwaver.emwaverandroidapp.cloud.agent.AgentBackendApi.Conversation c : list) {
+                        if (cid.equals(c.id)) {
+                            label = c.displayTitle();
+                            break;
+                        }
+                    }
+                }
+                conversationsButton.setText(label);
             }
         });
 
@@ -86,6 +120,39 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         if (clearButton != null) {
             clearButton.setOnClickListener(v -> viewModel.clear());
         }
+        if (newButton != null) {
+            newButton.setOnClickListener(v -> viewModel.newChat());
+        }
+        if (conversationsButton != null) {
+            conversationsButton.setOnClickListener(v -> showConversationsPicker());
+        }
+
+        viewModel.bootstrap();
+    }
+
+    private void showConversationsPicker() {
+        List<com.emwaver.emwaverandroidapp.cloud.agent.AgentBackendApi.Conversation> list =
+                viewModel.getConversations().getValue();
+        if (list == null || list.isEmpty()) {
+            viewModel.refreshConversations();
+            return;
+        }
+
+        String[] items = new String[list.size()];
+        for (int i = 0; i < list.size(); i++) {
+            items[i] = list.get(i).displayTitle();
+        }
+
+        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Conversations")
+                .setItems(items, (d, which) -> {
+                    if (which >= 0 && which < list.size()) {
+                        viewModel.selectConversation(list.get(which).id);
+                    }
+                })
+                .setPositiveButton("Refresh", (d, w) -> viewModel.refreshConversations())
+                .setNegativeButton("Close", null)
+                .show();
     }
 
     private void sendNow() {
