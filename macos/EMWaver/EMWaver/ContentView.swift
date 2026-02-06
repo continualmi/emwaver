@@ -12,12 +12,9 @@ struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
-    @ObservedObject var hostDirectory: HostDirectory
     @EnvironmentObject private var auth: AuthenticationManager
 
     @State private var showingDeviceSheet: Bool = false
-    @State private var showingAgentChat: Bool = false
-    @State private var showingHosts: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -79,20 +76,7 @@ struct ContentView: View {
                 .help("Device / connection options")
             }
 
-            ToolbarItemGroup(placement: .automatic) {
-                Button {
-                    showingHosts = true
-                } label: {
-                    Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
-                }
-                .help("View host sessions on this account")
-
-                Button {
-                    showingAgentChat = true
-                } label: {
-                    Label("Agent", systemImage: "sparkles")
-                }
-
+            ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
                         if let email = auth.session?.email, !email.isEmpty {
@@ -124,40 +108,12 @@ struct ContentView: View {
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
         }
-        .sheet(isPresented: $showingHosts) {
-            NavigationStack {
-                HostsView(directory: hostDirectory) {
-                    await hostDirectory.refresh(auth: auth)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { showingHosts = false }
-                    }
-                }
-            }
-            .frame(minWidth: 560, minHeight: 520)
-        }
-        .sheet(isPresented: $showingAgentChat) {
-            NavigationStack {
-                MacAgentChatSheet(auth: auth)
-                    .navigationTitle("Agent")
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { showingAgentChat = false }
-                        }
-                    }
-            }
-            .frame(minWidth: 560, minHeight: 520)
-        }
+        // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
+
     }
 }
 
 #Preview {
-    ContentView(
-        device: MacUSBManager(),
-        firmwareUpdater: FirmwareUpdateManager(),
-        hostSessions: HostSessionManager(),
-        hostDirectory: HostDirectory()
-    )
-    .environmentObject(AuthenticationManager())
+    ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager(), hostSessions: HostSessionManager())
+        .environmentObject(AuthenticationManager())
 }

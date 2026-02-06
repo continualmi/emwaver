@@ -1,8 +1,12 @@
+/*
+ * EMWaver
+ * Copyright (c) 2026 Luis Marnoto
+ * All rights reserved.
+ */
+
 import Foundation
 
-// Mirrors frontend/src/lib/backend.ts agent types.
-
-enum AgentAPIError: Error, LocalizedError {
+enum AgentBackendError: Error, LocalizedError {
     case invalidBaseURL
     case invalidResponse
     case serverError(String)
@@ -32,7 +36,7 @@ struct AgentMessageDTO: Decodable {
     let created_at_ms: Int64
 }
 
-final class AgentAPI {
+final class AgentBackendAPI {
     private let urlSession: URLSession
 
     init(urlSession: URLSession = .shared) {
@@ -50,10 +54,12 @@ final class AgentAPI {
         if !idToken.isEmpty {
             req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
         }
+
         let payload: [String: Any] = ["title": (title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)]
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (data, res) = try await urlSession.data(for: req)
+
         struct Body: Decodable { let conversation: AgentConversationDTO }
         let body: Body = try decode(data: data, res: res)
         return body.conversation
@@ -73,19 +79,23 @@ final class AgentAPI {
         }
 
         let (data, res) = try await urlSession.data(for: req)
-
         struct Body: Decodable { let messages: [AgentMessageDTO] }
         let body: Body = try decode(data: data, res: res)
         return body.messages
     }
 
-    // SSE stream yields delta text and then done with final message.
+    enum StreamEvent {
+        case delta(String)
+        case done(message: AgentMessageDTO, model: String?)
+        case error(String)
+    }
+
     func chatStream(
         baseURL: URL,
         idToken: String,
         conversationId: String,
         message: String,
-        onEvent: @escaping (AgentStreamEvent) -> Void
+        onEvent: @escaping (StreamEvent) -> Void
     ) async throws {
         var url = baseURL
         url.appendPathComponent("v1/agent/chat/stream")
@@ -105,23 +115,22 @@ final class AgentAPI {
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
         let (bytes, res) = try await urlSession.bytes(for: req)
-        guard let http = res as? HTTPURLResponse else { throw AgentAPIError.invalidResponse }
-        if http.statusCode == 401 { throw AgentAPIError.unauthorized }
+        guard let http = res as? HTTPURLResponse else { throw AgentBackendError.invalidResponse }
+        if http.statusCode == 401 { throw AgentBackendError.unauthorized }
         guard (200...299).contains(http.statusCode) else {
             // Drain body for error details.
             var data = Data()
-            for try await b in bytes {
-                data.append(b)
+            for try await b in bytes { data.append(b) }
+            if let obj = try? JSONDecoder().decode([String: String].self, from: data), let err = obj["error"], !err.isEmpty {
+                throw AgentBackendError.serverError(err)
             }
             let msg = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-            throw AgentAPIError.serverError(msg)
+            throw AgentBackendError.serverError(msg)
         }
 
         var buffer = ""
         for try await line in bytes.lines {
-            // URLSession.AsyncBytes.lines strips newlines.
             if line.isEmpty {
-                // blank line => dispatch block
                 if let ev = Self.parseSSEBlock(buffer) {
                     onEvent(ev)
                 }
@@ -132,21 +141,12 @@ final class AgentAPI {
             }
         }
 
-        // flush trailing
         if let ev = Self.parseSSEBlock(buffer) {
             onEvent(ev)
         }
     }
 
-    // MARK: - SSE parsing
-
-    enum AgentStreamEvent {
-        case delta(String)
-        case done(message: AgentMessageDTO, model: String?)
-        case error(String)
-    }
-
-    private static func parseSSEBlock(_ block: String) -> AgentStreamEvent? {
+    private static func parseSSEBlock(_ block: String) -> StreamEvent? {
         let trimmed = block.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return nil }
 
@@ -167,7 +167,6 @@ final class AgentAPI {
         let dataRaw = dataLines.joined(separator: "\n")
         guard let data = dataRaw.data(using: .utf8), !dataRaw.isEmpty else { return nil }
 
-        // The backend always sends JSON.
         if ev == "delta" {
             if let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
                 return .delta(String(obj["text"] as? String ?? ""))
@@ -190,22 +189,19 @@ final class AgentAPI {
         return nil
     }
 
-    // MARK: - Decode helpers
-
     private func decode<T: Decodable>(data: Data, res: URLResponse) throws -> T {
-        guard let http = res as? HTTPURLResponse else { throw AgentAPIError.invalidResponse }
-        if http.statusCode == 401 { throw AgentAPIError.unauthorized }
+        guard let http = res as? HTTPURLResponse else { throw AgentBackendError.invalidResponse }
+        if http.statusCode == 401 { throw AgentBackendError.unauthorized }
         guard (200...299).contains(http.statusCode) else {
             if let obj = try? JSONDecoder().decode([String: String].self, from: data), let err = obj["error"], !err.isEmpty {
-                throw AgentAPIError.serverError(err)
+                throw AgentBackendError.serverError(err)
             }
             let msg = String(data: data, encoding: .utf8) ?? ""
-            throw AgentAPIError.serverError(msg.isEmpty ? "HTTP \(http.statusCode)" : msg)
+            throw AgentBackendError.serverError(msg.isEmpty ? "HTTP \(http.statusCode)" : msg)
         }
         guard let decoded = try? JSONDecoder().decode(T.self, from: data) else {
-            throw AgentAPIError.invalidResponse
+            throw AgentBackendError.invalidResponse
         }
         return decoded
     }
-
 }

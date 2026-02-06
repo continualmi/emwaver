@@ -18,7 +18,7 @@ import AppKit
 public struct ScriptsRootView: View {
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager = ScriptPreviewManager()
-    @StateObject private var agentViewModel = AgentChatViewModel()
+    @StateObject private var agentViewModel: AgentChatViewModel
 
     private let device: (any ScriptDevice)?
     private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
@@ -60,6 +60,7 @@ public struct ScriptsRootView: View {
         self.device = device
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
+        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(configProvider: syncProvider))
     }
 
     public var body: some View {
@@ -662,7 +663,7 @@ public struct ScriptsRootView: View {
             Button {
                 showingAgentPanel.toggle()
             } label: {
-                Image(systemName: "sidebar.right")
+                Image(systemName: "sparkles")
             }
             .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
         }
