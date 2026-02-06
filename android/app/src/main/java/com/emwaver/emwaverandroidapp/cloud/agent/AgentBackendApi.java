@@ -149,6 +149,21 @@ public final class AgentBackendApi {
         }
     }
 
+    public void deleteConversation(@NonNull String baseUrl, @NonNull String idToken, @NonNull String conversationId) throws Exception {
+        String url = joinUrl(baseUrl, "/v1/agent/conversations/" + conversationId);
+        Request req = auth(new Request.Builder()
+                        .url(url)
+                        .delete()
+                        .header("Accept", "application/json"),
+                idToken).build();
+
+        try (Response res = http.newCall(req).execute()) {
+            String body = res.body() != null ? res.body().string() : "";
+            if (res.code() == 401) throw new UnauthorizedException();
+            if (!res.isSuccessful()) throw new ServerErrorException(extractError(body, res.code()));
+        }
+    }
+
     @NonNull
     public List<Message> listMessages(@NonNull String baseUrl, @NonNull String idToken, @NonNull String conversationId) throws Exception {
         String url = joinUrl(baseUrl, "/v1/agent/conversations/" + conversationId + "/messages");
