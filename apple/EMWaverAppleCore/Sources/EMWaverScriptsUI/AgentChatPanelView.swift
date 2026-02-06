@@ -49,6 +49,12 @@ public struct AgentChatPanelView: View {
                             let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                             Text(t.isEmpty ? c.id : t)
                         }
+
+                        Button(role: .destructive) {
+                            viewModel.deleteConversation(c.id)
+                        } label: {
+                            Text("Delete: \((c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? c.id : (c.title ?? ""))")
+                        }
                     }
                 } label: {
                     HStack(spacing: 6) {

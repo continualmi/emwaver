@@ -107,6 +107,19 @@ internal sealed class AgentApi
         );
     }
 
+    internal async Task DeleteConversationAsync(string conversationId, CancellationToken ct)
+    {
+        var tok = RequireIdToken();
+        using var req = new HttpRequestMessage(HttpMethod.Delete, Build($"/v1/agent/conversations/{conversationId}"));
+        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
+
+        using var res = await _http.SendAsync(req, ct);
+        var body = await res.Content.ReadAsStringAsync(ct);
+        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
+        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
+    }
+
     internal async Task<List<Message>> ListMessagesAsync(string conversationId, CancellationToken ct)
     {
         var tok = RequireIdToken();

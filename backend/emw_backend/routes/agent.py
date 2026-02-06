@@ -161,6 +161,30 @@ def list_messages(conversation_id: str):
         )
 
 
+@agent_bp.delete("/v1/agent/conversations/<conversation_id>")
+def delete_conversation(conversation_id: str):
+    """Delete a conversation and all its messages (owned by the authenticated user)."""
+
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    with SessionLocal() as db:
+        convo = db.get(AgentConversation, conversation_id)
+        if not convo or convo.firebase_uid != ident.uid:
+            return jsonify({"error": "Not found"}), 404
+
+        # Delete messages first (FK may not be cascade).
+        db.execute(
+            AgentMessage.__table__.delete().where(AgentMessage.conversation_id == conversation_id).where(AgentMessage.firebase_uid == ident.uid)
+        )
+        db.delete(convo)
+        db.commit()
+
+    return jsonify({"ok": True})
+
+
 # --- Chat completions (persisted) ---
 
 

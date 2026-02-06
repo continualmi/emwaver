@@ -101,6 +101,24 @@ final class AgentBackendAPI {
         return body.messages
     }
 
+    func deleteConversation(baseURL: URL, idToken: String, conversationId: String) async throws {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/conversations")
+        url.appendPathComponent(conversationId)
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        // decode() validates status codes; body is {ok:true}.
+        struct Body: Decodable { let ok: Bool }
+        let (data, res) = try await urlSession.data(for: req)
+        _ = try decode(data: data, res: res) as Body
+    }
+
     enum StreamEvent {
         case delta(String)
         case done(message: AgentMessageDTO, model: String?)

@@ -100,6 +100,30 @@ public final class AgentChatViewModel: ObservableObject {
         Task { await loadConversation(conversationId: trimmed) }
     }
 
+    public func deleteConversation(_ id: String) {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else { return }
+
+        Task {
+            do {
+                try await api.deleteConversation(baseURL: cfg.baseURL, idToken: cfg.accessToken, conversationId: trimmed)
+                await refreshConversations()
+                await MainActor.run {
+                    if self.conversationId == trimmed {
+                        self.conversationId = nil
+                        self.clear()
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
     public func loadConversation(conversationId: String) async {
         guard let cfg = configProvider?() else { return }
         guard !cfg.accessToken.isEmpty else { return }
