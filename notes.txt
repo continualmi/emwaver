@@ -4,12 +4,9 @@
 If we add internet API, we can for instance fetch all kinds of things that might be userufl when writing scripts and so on. we can even fetch remotes from IRDB, for example.
 In fact, for infrared remote control generation this is the ideal interface: let the agent access the internet. Instead of thinking about which database is most useful, let the agent figure that out for you and fetch the remote data and build the remote .emw file complete with the buttons and so on.
 
-3) Scripts runtime and agent: allow agent to fetch the UI and apply button clicks and interactions
-This will allow the agent to test fucntiality, eliminating the need for a human in the loop once the hardware is connected to the device.
-
 4) Error handling/debugging
 We need good error handling for when we run scripts and they have problems, ideally telling us the line , etc, the code part. on a modal probably after we try to run it.
 
-5) windows: match UI on macos
-currently windows UI is different: we show both the script list adn the preview/edit area on the side. change that to the macos style: show only the scripts list. pressing on the script opens the priview. then we can go back. etc. same for edit, same flow
+----- Tests -----
 
+1) 
