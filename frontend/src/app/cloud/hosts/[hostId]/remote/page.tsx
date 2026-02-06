@@ -12,7 +12,7 @@ import { backendWsUrl, type RemoteIncomingMessage, wsSend } from "@/lib/remoteSe
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 
 export default function RemoteHostPage({ params }: { params: { hostId: string } }) {
-  const hostId = String(params.hostId || "");
+  const hostId = String((params as any)?.hostId || "");
 
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -59,6 +59,10 @@ export default function RemoteHostPage({ params }: { params: { hostId: string } 
 
   function connectWs(tok: string) {
     if (!tok) return;
+    if (!hostId) {
+      setError("Missing hostId in route. Open this page via /cloud/hosts and click 'Remote control' on a host.");
+      return;
+    }
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return;
 
     setWsStatus("connecting");
@@ -67,9 +71,11 @@ export default function RemoteHostPage({ params }: { params: { hostId: string } 
 
     ws.onopen = () => {
       setWsStatus("open");
-      appendLog("WS open");
+      appendLog(`WS open (hostId=${hostId || "(missing)"})`);
       wsSend(ws, { type: "hello", role: "web", protocolVersion: 1 });
-      wsSend(ws, { type: "host.attach", hostSessionId: hostId });
+      if (hostId) {
+        wsSend(ws, { type: "host.attach", hostSessionId: hostId });
+      }
     };
 
     ws.onmessage = (ev) => {
