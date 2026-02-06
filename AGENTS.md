@@ -601,6 +601,7 @@ Native interop
 - Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use (not shipped).
 - Shared Rust core lives under `crates/`:
   - `crates/emwaver-dfu` (DFU/update helpers)
+  - `crates/emwaver-dfu-helper` (macOS bundled helper executable used by the macOS app’s DFU flow)
 - Current scope: firmware `build` and DFU `flash` only.
 
 #### Script REPL
@@ -624,4 +625,5 @@ Removed (scripts are run via the apps).
 - **After significant changes, you MUST `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to.
 - For small or speculative tweaks, ask before committing/pushing.
 ├─ crates/                                   # Shared Rust crates (dev/internal only)
-│  └─ emwaver-dfu/                            # DFU/update helpers (used by internal CLI)
+│  ├─ emwaver-dfu/                            # DFU/update helpers (used by internal CLI)
+│  └─ emwaver-dfu-helper/                     # DFU helper binary (bundled in macOS app as `emwaver-dfu-helper`)
