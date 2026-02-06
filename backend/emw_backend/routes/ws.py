@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 # (no dataclasses)
 from typing import Any, Dict, Optional, Set
 
@@ -107,6 +108,12 @@ class RemoteSessionRouter:
         self._webs: Dict[str, Set[_Conn]] = {}  # uid -> conns
         self._subs: Dict[_Conn, Set[str]] = {}  # web conn -> host_session_ids
 
+        # Best-effort observability for non-WS controllers (e.g. backend agent tools).
+        # Single-worker assumption: this lives in memory only.
+        self._latest_script_started: Dict[tuple[str, str], Dict[str, Any]] = {}  # (uid,hid) -> msg
+        self._latest_ui_snapshot: Dict[tuple[str, str], Dict[str, Any]] = {}  # (uid,hid) -> msg
+        self._cond = threading.Condition(self._lock)
+
     def register_host(self, c: _Conn) -> None:
         assert c.host_session_id
         with self._lock:
@@ -145,7 +152,17 @@ class RemoteSessionRouter:
             return False
 
     def forward_to_web_subscribers(self, uid: str, host_session_id: str, msg: Dict[str, Any]) -> None:
+        # Record best-effort latest state for agent tools.
         with self._lock:
+            k = (uid, host_session_id)
+            mtype = str(msg.get("type") or "")
+            if mtype == "script.started":
+                self._latest_script_started[k] = dict(msg)
+                self._cond.notify_all()
+            if mtype == "ui.snapshot":
+                self._latest_ui_snapshot[k] = dict(msg)
+                self._cond.notify_all()
+
             webs = list(self._webs.get(uid, set()))
             subs_map = {w: set(self._subs.get(w, set())) for w in webs}
 
@@ -157,6 +174,32 @@ class RemoteSessionRouter:
             except Exception:
                 # Connection cleanup happens on disconnect.
                 pass
+
+    def get_latest_script_started(self, uid: str, host_session_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self._latest_script_started.get((uid, host_session_id))
+
+    def get_latest_ui_snapshot(self, uid: str, host_session_id: str) -> Optional[Dict[str, Any]]:
+        with self._lock:
+            return self._latest_ui_snapshot.get((uid, host_session_id))
+
+    def wait_for_ui_snapshot(self, uid: str, host_session_id: str, *, min_rev: int = 0, timeout_s: float = 10.0) -> Optional[Dict[str, Any]]:
+        deadline = time.time() + float(timeout_s)
+        with self._lock:
+            while True:
+                snap = self._latest_ui_snapshot.get((uid, host_session_id))
+                if snap is not None:
+                    try:
+                        rev = int(snap.get("rev") or 0)
+                    except Exception:
+                        rev = 0
+                    if rev >= int(min_rev):
+                        return dict(snap)
+
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return None
+                self._cond.wait(timeout=remaining)
 
 
 _router = RemoteSessionRouter()

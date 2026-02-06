@@ -438,6 +438,9 @@ Direction: the frontend will be able to **render EMWaver script UI in the browse
 
 ### Agent-Controlled Hosts (Tools Plan)
 
+Repo-wide agent prompt (source of truth):
+- `AGENT_SYSTEM_PROMPT.md` (used by backend and, later, all host surfaces)
+
 We will add a set of **LLM tools** that let an agent control a Host Session the same way a human does:
 
 #### Core idea
