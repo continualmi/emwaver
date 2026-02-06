@@ -359,6 +359,52 @@ public class ScriptsFragment extends Fragment {
         }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
     }
 
+    private AlertDialog syncDialog;
+    private ProgressBar syncProgressBar;
+    private TextView syncProgressText;
+
+    private void showSyncProgressDialog() {
+        if (!isAdded()) return;
+        if (syncDialog != null && syncDialog.isShowing()) return;
+
+        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_sync_progress, null);
+        syncProgressBar = view.findViewById(R.id.sync_progress_bar);
+        syncProgressText = view.findViewById(R.id.sync_progress_text);
+
+        syncDialog = new AlertDialog.Builder(requireContext())
+            .setView(view)
+            .setCancelable(false)
+            .create();
+        syncDialog.show();
+
+        updateSyncProgress(0, 0, "Preparing…");
+    }
+
+    private void updateSyncProgress(int done, int total, String status) {
+        if (!isAdded()) return;
+        if (syncProgressText != null) {
+            syncProgressText.setText(status != null ? status : "Syncing…");
+        }
+        if (syncProgressBar != null) {
+            if (total <= 0) {
+                syncProgressBar.setIndeterminate(true);
+            } else {
+                syncProgressBar.setIndeterminate(false);
+                syncProgressBar.setMax(total);
+                syncProgressBar.setProgress(Math.max(0, Math.min(done, total)));
+            }
+        }
+    }
+
+    private void hideSyncProgressDialog() {
+        if (syncDialog != null) {
+            if (syncDialog.isShowing()) syncDialog.dismiss();
+            syncDialog = null;
+        }
+        syncProgressBar = null;
+        syncProgressText = null;
+    }
+
     private void runCloudSyncNow() {
         if (!isAdded()) {
             return;
@@ -370,7 +416,7 @@ public class ScriptsFragment extends Fragment {
             return;
         }
 
-        showLoadingDialog("Preparing sync…");
+        showSyncProgressDialog();
 
         new Thread(() -> {
             try {
@@ -385,12 +431,11 @@ public class ScriptsFragment extends Fragment {
                 ct.put(".txt", "text/plain");
                 ct.put(".raw", "application/octet-stream");
 
-                runOnUiThreadSafe(() -> showLoadingDialog("Syncing files…"));
                 // Require auth for cloud calls.
                 String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
                 if (accessToken == null || accessToken.trim().isEmpty()) {
                     runOnUiThreadSafe(() -> {
-                        hideLoadingDialog();
+                        hideSyncProgressDialog();
                         showToast("Please sign in to sync.");
                         SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
                         dialog.show(getParentFragmentManager(), "SignIn");
@@ -405,19 +450,32 @@ public class ScriptsFragment extends Fragment {
                         new String[]{".emw", ".raw", ".txt"},
                         ct,
                         true,
-                        status -> runOnUiThreadSafe(() -> showLoadingDialog(status))
+                        (done, all, status) -> runOnUiThreadSafe(() -> updateSyncProgress(done, all, status))
                 );
 
                 runOnUiThreadSafe(() -> {
-                    hideLoadingDialog();
-                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded + ", Conflicts: " + total.conflicts);
+                    hideSyncProgressDialog();
+                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded + ", Cloud newer: " + total.conflicts);
                     loadScriptsFromCloud();
+
+                    if (total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) {
+                        StringBuilder msg = new StringBuilder();
+                        msg.append("Cloud has newer versions of these files. Local was kept (no overwrite):\n\n");
+                        for (String n : total.cloudNewerFiles) {
+                            msg.append("• ").append(n).append("\n");
+                        }
+                        new AlertDialog.Builder(requireContext())
+                            .setTitle("Cloud newer")
+                            .setMessage(msg.toString())
+                            .setPositiveButton("OK", null)
+                            .show();
+                    }
                 });
             } catch (Exception e) {
                 android.util.Log.e(TAG, "Sync failed", e);
                 String msg = e.getMessage();
                 runOnUiThreadSafe(() -> {
-                    hideLoadingDialog();
+                    hideSyncProgressDialog();
                     showToast(msg != null ? msg : "Sync failed");
                 });
             }
