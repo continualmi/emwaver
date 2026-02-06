@@ -15,6 +15,12 @@
         app:showAsAction="always" />
 
     <item
+        android:id="@+id/action_hosts"
+        android:icon="@drawable/ic_host"
+        android:title="Hosts"
+        app:showAsAction="always" />
+
+    <item
         android:id="@+id/action_sign_in"
         android:icon="@drawable/ai_account"
         android:title="Sign In"
