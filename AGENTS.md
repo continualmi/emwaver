@@ -165,101 +165,89 @@ This map is intentionally **code-focused** (so you can find “where the thing l
 
 ```text
 .
-├─ stm/
-│  └─ emwaver-firmware/                      # THE firmware project (STM32)
-│     ├─ Core/
-│     │  ├─ Inc/
-│     │  │  ├─ emw_proto.h                   # Firmware protocol types/opcodes
-│     │  │  ├─ emwaver_usb_io.h              # USB I/O interface used by app logic
-│     │  │  ├─ main.h                        # CubeMX main header + user glue
-│     │  │  ├─ stm32f0xx_it.h                # IRQ handler declarations
-│     │  │  └─ stm32f0xx_hal_conf.h          # HAL config
-│     │  ├─ Src/
-│     │  │  ├─ main.c                        # Main firmware entry + app loop
-│     │  │  ├─ stm32f0xx_it.c                # IRQ handlers
-│     │  │  ├─ stm32f0xx_hal_msp.c           # HAL MSP init
-│     │  │  ├─ system_stm32f0xx.c            # System clock init
-│     │  │  └─ syscalls.c / sysmem.c         # Newlib stubs
-│     │  └─ Startup/
-│     │     └─ startup_stm32f042g6ux.s       # Startup assembly
-│     ├─ USB_DEVICE/
-│     │  ├─ App/
-│     │  │  ├─ usb_device.c/.h               # USB device init/registration
-│     │  │  ├─ usbd_desc.c/.h                # USB descriptors
-│     │  │  ├─ usbd_midi.c/.h                # USB MIDI class implementation
-│     │  │  └─ usbd_midi_if.c/.h             # MIDI interface glue (SysEx tunnel)
-│     │  └─ Target/
-│     │     └─ usbd_conf.c/.h                # USB low-level config/hooks
-│     ├─ Drivers/                            # STM32 HAL + CMSIS (vendored)
-│     ├─ Middlewares/                        # ST USB Device library (vendored)
-│     ├─ Debug/ Release/                     # Build output dirs (generated)
-│     └─ *.ioc / .settings/                  # CubeMX/CubeIDE project metadata
-│
-├─ assets/
-│  └─ default-scripts/                        # Canonical built-in .emw scripts
-├─ cli/                                       # Internal CLI (build + flash)
-├─ firmware/                                  # Bundled firmware payloads (e.g. emwaver.bin)
-
+├─ .github/
+│  └─ workflows/
+├─ .vscode/
 ├─ android/
-│  └─ app/src/main/
-│     ├─ assets/firmware/                     # Bundled firmware payload (emwaver.bin)
-│     ├─ java/com/emwaver/emwaverandroidapp/
-│     │  ├─ MainActivity.java / WelcomeActivity.java
-│     │  ├─ DeviceConnectionManager.java / DeviceConnectionService.java
-│     │  ├─ USBService.java                  # Background USB service
-│     │  ├─ UsbMidiSysex.java                # USB MIDI SysEx tunnel
-│     │  ├─ NativeBuffer.java                # JNI bridge to Rust buffer core
-│     │  ├─ files/                           # Local file repository (scripts/assets)
-│     │  ├─ scripts/                          # Script runtime + UI tree + renderer
-│     │  │  ├─ ScriptEngine.java             # JS runtime + DSL injection
-│     │  │  ├─ ScriptRenderView.java         # ScriptTree → Android Views
-│     │  │  ├─ ScriptTree.java               # Root UI tree
-│     │  │  ├─ ScriptNode.java               # UI node model
-│     │  │  ├─ ScriptNodeType.java           # Node type enum
-│     │  │  └─ ScriptSignalStore.java        # Reactive signals/state
-│     │  └─ ui/                               # Screens/fragments
-│     │     ├─ sampler/ / packetmode/ / scripts/
-│     │     ├─ emwaver/ / ism/ / rfid/
-│     │     └─ flash/                         # DFU/flash UI
-│     ├─ res/                                 # Layouts/drawables/navigation/etc.
-│     ├─ assets/ota/                           # OTA payload(s)
-│     └─ jniLibs/                              # Prebuilt native libs (if shipped)
-│
+│  ├─ .settings/
+│  ├─ app/
+│  │  ├─ .settings/
+│  │  └─ src/main/
+│  │     ├─ assets/{firmware,ota}/
+│  │     ├─ java/com/emwaver/emwaverandroidapp/
+│  │     │  ├─ cloud/
+│  │     │  │  └─ agent/                      # Agent chat backend client (SSE)
+│  │     │  ├─ files/
+│  │     │  ├─ scripts/
+│  │     │  └─ ui/{agent,auth,emwaver,flash,hosts,scripts}/
+│  │     └─ res/{layout,drawable,menu,navigation,values,...}/
+│  └─ gradle/wrapper/
+├─ apple/
+│  └─ EMWaverAppleCore/
+│     ├─ Resources/Firmware/
+│     └─ Sources/
+│        ├─ EMWaverScriptModel/
+│        ├─ EMWaverScriptRuntime/
+│        ├─ EMWaverScriptStorage/
+│        ├─ EMWaverScriptSwiftUI/
+│        ├─ EMWaverScriptsUI/                  # Shared Agent chat panel + backend API
+│        └─ EMWaverTransport/
+├─ assets/default-scripts/
+├─ backend/
+│  └─ emw_backend/routes/
+├─ cli/
+│  ├─ installers/
+│  ├─ resources/ota/
+│  └─ src/
+├─ crates/
+│  ├─ emwaver-buffer-android-jni/src/
+│  ├─ emwaver-buffer-core/src/
+│  ├─ emwaver-buffer-ios-ffi/{include,src}/
+│  ├─ emwaver-buffer-windows-ffi/{include,src}/
+│  ├─ emwaver-dfu/src/
+│  ├─ emwaver-dfu-helper/src/
+│  └─ regress/{.github,src,tests/common}/
+├─ firmware/
+├─ frontend/
+│  ├─ legacy-static/{assets/images,badges,logos,news/{assets,posts}}/
+│  ├─ public/{assets/images,badges,javascripts,logos,styles}/
+│  ├─ src/
+│  │  ├─ app/
+│  │  │  ├─ cloud/{agent,hosts}/
+│  │  │  ├─ docs/{[...slug],hardware/{device,pinout},install,scripts}/
+│  │  │  ├─ {device,hardware,install,news,order,pinout,scripts}/
+│  │  │  └─ news/posts/[...slug]/
+│  │  ├─ components/{docs,news}/
+│  │  └─ lib/
+│  └─ web/
 ├─ ios/
+│  ├─ EMWaver/
+│  │  ├─ Assets.xcassets/...
+│  │  ├─ Auth/                                # Google OAuth + Firebase token exchange
+│  │  ├─ Managers/
+│  │  ├─ Native/
+│  │  ├─ Views/
+│  │  ├─ firmware/
+│  │  └─ ota/
+│  └─ EMWaver.xcodeproj/{project.xcworkspace,xcshareddata/xcschemes}/
+├─ macos/
 │  └─ EMWaver/
-│     ├─ firmware/                            # Bundled firmware payload (emwaver.bin)
-│     ├─ EMWaverApp.swift / ContentView.swift # SwiftUI bootstrap
-│     ├─ JavaScriptEngine.swift               # Lower-level JS runtime wrapper
-│     ├─ Managers/
-│     │  ├─ USBManager.swift                  # USB lifecycle
-│     │  ├─ UsbMidiSysex.swift                # USB MIDI SysEx tunnel
-│     │  ├─ NativeBufferRust.swift            # Bridge to Rust buffer core
-│     │  └─ FileService.swift / SettingsManager.swift / etc.
-│     ├─ Scripts/
-│     │  ├─ ScriptEngine.swift                # iOS ScriptEngine (DSL + host bridges)
-│     │  ├─ ScriptRenderView.swift            # ScriptTree → SwiftUI views
-│     │  ├─ ScriptTypes.swift                 # ScriptTree/Node types
-│     │  └─ ScriptPreviewManager.swift        # Preview/orchestration
-│     ├─ Views/                               # SwiftUI screens
-│     ├─ ViewModels/                          # View models
-│     ├─ Models/                              # Data models
-│     ├─ Native/                              # Helper scripts/build glue for Rust core
-│     ├─ DefaultScripts/                      # Bundled starter scripts
-│     └─ ota/                                 # OTA payload(s)
-│
-├─ apple/                                     # Shared Apple code (iOS + macOS)
-│  └─ EMWaverAppleCore/                        # SwiftPM: transport + script UI model/renderer
-│     └─ Resources/Firmware/                   # Bundled firmware payload (emwaver.bin)
-│
-├─ macos/                                     # macOS native app (SwiftUI)
-│  └─ EMWaver/                                # Xcode project
-│
-├─ third_party/coremidi/                      # iOS CoreMIDI third-party bits
-├─ scripts/align_emwaver_images.py            # Repo helper script(s)
-└─ frontend/                                  # Web site (Next.js) + legacy static assets
-   ├─ public/                                 # Web static assets
-   ├─ src/                                    # Next.js source (app router)
-   └─ legacy-static/                          # Old static site (archived)
+│     ├─ EMWaver/{Assets.xcassets,Auth}/
+│     ├─ EMWaver.xcodeproj/{project.xcworkspace,xcshareddata/xcschemes}/
+│     ├─ Native/
+│     └─ Tools/
+├─ scripts/
+├─ stm/emwaver-firmware/
+│  ├─ Core/{Inc,Src,Startup}/
+│  ├─ Drivers/{CMSIS,STM32F0xx_HAL_Driver}/
+│  ├─ Middlewares/ST/STM32_USB_Device_Library/Core/{Inc,Src}/
+│  └─ USB_DEVICE/{App,Target}/
+└─ windows/
+   └─ EMWaver/
+      ├─ Assets/{DefaultScripts,Firmware}/
+      ├─ {Converters,Dialogs,Interop,Models,Pages,Properties}/
+      ├─ Scripting/Render/
+      └─ Services/{Agent,Cloud}/
 ```
 
 Web dev (Next.js):
