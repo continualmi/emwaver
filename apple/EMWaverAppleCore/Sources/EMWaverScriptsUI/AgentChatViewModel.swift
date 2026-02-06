@@ -57,6 +57,10 @@ public final class AgentChatViewModel: ObservableObject {
         conversationId = nil
     }
 
+    public var selectedConversationId: String? {
+        conversationId
+    }
+
     public var selectedConversationTitle: String {
         guard let id = conversationId else { return "New chat" }
         if let c = conversations.first(where: { $0.id == id }) {

@@ -49,12 +49,6 @@ public struct AgentChatPanelView: View {
                             let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                             Text(t.isEmpty ? c.id : t)
                         }
-
-                        Button(role: .destructive) {
-                            viewModel.deleteConversation(c.id)
-                        } label: {
-                            Text("Delete: \((c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? c.id : (c.title ?? ""))")
-                        }
                     }
                 } label: {
                     HStack(spacing: 6) {
@@ -77,6 +71,29 @@ public struct AgentChatPanelView: View {
 
                     Button("Clear Messages") {
                         viewModel.clear()
+                    }
+
+                    Divider()
+
+                    if let id = viewModel.selectedConversationId {
+                        Button(role: .destructive) {
+                            viewModel.deleteConversation(id)
+                        } label: {
+                            Text("Delete Conversation")
+                        }
+                    }
+
+                    Menu {
+                        ForEach(viewModel.conversations, id: \.id) { c in
+                            Button(role: .destructive) {
+                                viewModel.deleteConversation(c.id)
+                            } label: {
+                                let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                                Text(t.isEmpty ? c.id : t)
+                            }
+                        }
+                    } label: {
+                        Text("Delete…")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")
