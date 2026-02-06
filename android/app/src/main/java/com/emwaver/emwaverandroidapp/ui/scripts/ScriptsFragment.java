@@ -100,7 +100,9 @@ public class ScriptsFragment extends Fragment {
     private static final String ASSET_SCRIPT_EXTENSION = ".emw";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
-    private static final String SIGNALS_DIR_NAME = "signals";
+    // Cloud/user files live in a single flat namespace locally.
+    // UI decides what to show based on extension (.emw scripts vs .raw/.txt signals).
+    private static final String SIGNALS_DIR_NAME = "scripts";
     private static final String SIGNAL_RAW_EXTENSION = ".raw";
     private static final String SIGNAL_TEXT_EXTENSION = ".txt";
 
@@ -376,15 +378,14 @@ public class ScriptsFragment extends Fragment {
                 CloudFilesApi api = new CloudFilesApi(http);
                 CloudSyncEngine engine = new CloudSyncEngine(api);
 
-                java.io.File scriptsDir = new java.io.File(requireContext().getFilesDir(), "scripts");
-                java.io.File signalsDir = getSignalsDir();
+                java.io.File filesDir = new java.io.File(requireContext().getFilesDir(), "scripts");
 
                 java.util.Map<String, String> ct = new java.util.HashMap<>();
                 ct.put(".emw", "text/plain");
                 ct.put(".txt", "text/plain");
                 ct.put(".raw", "application/octet-stream");
 
-                runOnUiThreadSafe(() -> showLoadingDialog("Syncing scripts…"));
+                runOnUiThreadSafe(() -> showLoadingDialog("Syncing files…"));
                 // Require auth for cloud calls.
                 String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
                 if (accessToken == null || accessToken.trim().isEmpty()) {
@@ -397,28 +398,15 @@ public class ScriptsFragment extends Fragment {
                     return;
                 }
 
-                CloudSyncEngine.Summary s1 = engine.syncFolder(
+                CloudSyncEngine.Summary total = engine.syncFolder(
                         baseUrl,
                         accessToken,
-                        scriptsDir,
-                        new String[]{".emw"},
+                        filesDir,
+                        new String[]{".emw", ".raw", ".txt"},
                         ct,
                         true,
                         status -> runOnUiThreadSafe(() -> showLoadingDialog(status))
                 );
-
-                runOnUiThreadSafe(() -> showLoadingDialog("Syncing signals…"));
-                CloudSyncEngine.Summary s2 = engine.syncFolder(
-                        baseUrl,
-                        accessToken,
-                        signalsDir,
-                        new String[]{".raw", ".txt"},
-                        ct,
-                        true,
-                        status -> runOnUiThreadSafe(() -> showLoadingDialog(status))
-                );
-
-                CloudSyncEngine.Summary total = s1.add(s2);
 
                 runOnUiThreadSafe(() -> {
                     hideLoadingDialog();
