@@ -35,14 +35,38 @@ public struct AgentChatPanelView: View {
     private var header: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
-                Label("Agent", systemImage: "sparkles")
-                    .font(.headline)
+                Menu {
+                    Button("New Chat") {
+                        viewModel.newConversation()
+                    }
+
+                    Divider()
+
+                    ForEach(viewModel.conversations, id: \.id) { c in
+                        Button {
+                            viewModel.selectConversation(c.id)
+                        } label: {
+                            let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                            Text(t.isEmpty ? c.id : t)
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "sparkles")
+                        Text(viewModel.selectedConversationTitle)
+                            .font(.headline)
+                        Image(systemName: "chevron.down")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .menuStyle(.borderlessButton)
 
                 Spacer()
 
                 Menu {
-                    Button("New Chat") {
-                        viewModel.newConversation()
+                    Button("Refresh") {
+                        Task { await viewModel.refreshConversations() }
                     }
 
                     Button("Clear Messages") {

@@ -14,6 +14,7 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var draft: String = ""
     @Published public var isSending: Bool = false
     @Published public var lastError: String?
+    @Published public private(set) var conversations: [AgentConversationDTO] = []
 
     // Backend config is provided by the host app (usually the same config used for cloud sync).
     public typealias ConfigProvider = () -> (baseURL: URL, accessToken: String)?
@@ -52,23 +53,63 @@ public final class AgentChatViewModel: ObservableObject {
         conversationId = nil
     }
 
+    public var selectedConversationTitle: String {
+        guard let id = conversationId else { return "New chat" }
+        if let c = conversations.first(where: { $0.id == id }) {
+            let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.isEmpty ? "Conversation" : t
+        }
+        return "Conversation"
+    }
+
     public func bootstrapIfPossible() {
         guard let cfg = configProvider?() else { return }
         guard !cfg.accessToken.isEmpty else { return }
-        guard let convoId = conversationId else { return }
 
         Task {
-            do {
-                let remote = try await api.listMessages(baseURL: cfg.baseURL, idToken: cfg.accessToken, conversationId: convoId)
-                await MainActor.run {
-                    self.messages = remote.map { dto in
-                        let role = AgentChatRole(rawValue: dto.role) ?? .assistant
-                        return AgentChatMessage(id: UUID(), role: role, text: dto.content)
-                    }
-                }
-            } catch {
-                // Non-fatal.
+            await refreshConversations()
+            if let convoId = conversationId {
+                await loadConversation(conversationId: convoId)
             }
+        }
+    }
+
+    public func refreshConversations() async {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else { return }
+
+        do {
+            let list = try await api.listConversations(baseURL: cfg.baseURL, idToken: cfg.accessToken)
+            await MainActor.run {
+                self.conversations = list
+            }
+        } catch {
+            // Best-effort; keep UI usable.
+        }
+    }
+
+    public func selectConversation(_ id: String) {
+        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        conversationId = trimmed
+        clear()
+        Task { await loadConversation(conversationId: trimmed) }
+    }
+
+    public func loadConversation(conversationId: String) async {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else { return }
+
+        do {
+            let remote = try await api.listMessages(baseURL: cfg.baseURL, idToken: cfg.accessToken, conversationId: conversationId)
+            await MainActor.run {
+                self.messages = remote.map { dto in
+                    let role = AgentChatRole(rawValue: dto.role) ?? .assistant
+                    return AgentChatMessage(id: UUID(), role: role, text: dto.content)
+                }
+            }
+        } catch {
+            // Best-effort.
         }
     }
 

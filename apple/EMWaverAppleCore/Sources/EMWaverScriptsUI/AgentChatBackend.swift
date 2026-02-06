@@ -43,6 +43,23 @@ final class AgentBackendAPI {
         self.urlSession = urlSession
     }
 
+    func listConversations(baseURL: URL, idToken: String) async throws -> [AgentConversationDTO] {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/conversations")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, res) = try await urlSession.data(for: req)
+        struct Body: Decodable { let conversations: [AgentConversationDTO] }
+        let body: Body = try decode(data: data, res: res)
+        return body.conversations
+    }
+
     func createConversation(baseURL: URL, idToken: String, title: String?) async throws -> AgentConversationDTO {
         var url = baseURL
         url.appendPathComponent("v1/agent/conversations")
