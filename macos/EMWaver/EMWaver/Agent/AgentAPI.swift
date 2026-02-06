@@ -108,7 +108,11 @@ final class AgentAPI {
         guard let http = res as? HTTPURLResponse else { throw AgentAPIError.invalidResponse }
         if http.statusCode == 401 { throw AgentAPIError.unauthorized }
         guard (200...299).contains(http.statusCode) else {
-            let data = try await Data(bytes)
+            // Drain body for error details.
+            var data = Data()
+            for try await b in bytes {
+                data.append(b)
+            }
             let msg = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
             throw AgentAPIError.serverError(msg)
         }
