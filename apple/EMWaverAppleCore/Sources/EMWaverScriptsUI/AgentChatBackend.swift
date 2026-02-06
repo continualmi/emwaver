@@ -115,7 +115,8 @@ final class AgentBackendAPI {
         onEvent: @escaping (StreamEvent) -> Void
     ) async throws {
         var url = baseURL
-        url.appendPathComponent("v1/agent/chat/stream")
+        // Tool-capable endpoint (server-side tool loop).
+        url.appendPathComponent("v1/agent/chat/stream_tools")
 
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
