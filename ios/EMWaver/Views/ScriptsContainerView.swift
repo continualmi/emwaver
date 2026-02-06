@@ -14,6 +14,7 @@ struct ScriptsContainerView: View {
     @StateObject private var agentViewModel = AgentChatViewModel()
     @State private var showingAgentChat = false
     @State private var showingCloudSettings = false
+    @State private var showingHosts = false
 
     var body: some View {
         NavigationStack {
@@ -72,6 +73,12 @@ struct ScriptsContainerView: View {
                     }
 
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
+                        Button {
+                            showingHosts = true
+                        } label: {
+                            Image(systemName: "dot.radiowaves.left.and.right")
+                        }
+
                         Menu {
                             if auth.isSignedIn {
                                 if let email = auth.session?.email, !email.isEmpty {
@@ -128,6 +135,12 @@ struct ScriptsContainerView: View {
         }
         .sheet(isPresented: $showingCloudSettings) {
             CloudSettingsSheet()
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $showingHosts) {
+            HostsSheet()
+                .environmentObject(auth)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }

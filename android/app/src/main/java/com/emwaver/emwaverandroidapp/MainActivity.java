@@ -111,6 +111,11 @@ public class MainActivity extends AppCompatActivity {
                     dialog.show(getSupportFragmentManager(), "AgentChat");
                     return true;
                 }
+                if (menuItem.getItemId() == R.id.action_hosts) {
+                    com.emwaver.emwaverandroidapp.ui.hosts.HostsBottomSheetDialogFragment dialog = new com.emwaver.emwaverandroidapp.ui.hosts.HostsBottomSheetDialogFragment();
+                    dialog.show(getSupportFragmentManager(), "Hosts");
+                    return true;
+                }
                 if (menuItem.getItemId() == R.id.action_sign_in) {
                     com.emwaver.emwaverandroidapp.cloud.CloudAuthManager auth = com.emwaver.emwaverandroidapp.cloud.CloudAuthManager.getInstance();
                     auth.ensureInitialized(MainActivity.this);
