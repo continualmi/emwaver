@@ -17,6 +17,7 @@ struct ContentView: View {
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingAgentChat: Bool = false
+    @State private var showingHosts: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -79,10 +80,8 @@ struct ContentView: View {
             }
 
             ToolbarItemGroup(placement: .automatic) {
-                NavigationLink {
-                    HostsView(directory: hostDirectory) {
-                        await hostDirectory.refresh(auth: auth)
-                    }
+                Button {
+                    showingHosts = true
                 } label: {
                     Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
                 }
@@ -124,6 +123,19 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
+        }
+        .sheet(isPresented: $showingHosts) {
+            NavigationStack {
+                HostsView(directory: hostDirectory) {
+                    await hostDirectory.refresh(auth: auth)
+                }
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showingHosts = false }
+                    }
+                }
+            }
+            .frame(minWidth: 560, minHeight: 520)
         }
         .sheet(isPresented: $showingAgentChat) {
             NavigationStack {
