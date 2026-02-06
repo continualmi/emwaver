@@ -14,6 +14,7 @@ struct EMWaverApp: App {
     @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
     @StateObject private var hostDirectory = HostDirectory()
+    @StateObject private var remoteControlHost = RemoteControlHostService()
 
     var body: some Scene {
         WindowGroup {
@@ -26,6 +27,9 @@ struct EMWaverApp: App {
                     // Best-effort background heartbeat + host discovery.
                     hostSessions.start(auth: auth, device: device)
                     hostDirectory.start(auth: auth)
+
+                    // Remote control host WS (web can attach + drive scripts/UI).
+                    remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions)
                 }
         }
         .commands {
