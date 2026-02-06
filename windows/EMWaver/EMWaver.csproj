@@ -40,6 +40,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Page Include="Pages\RemoteHostControlPage.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
     <None Include="Native\*.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <!-- Place native DLLs in the app root so DllImport can find them. -->
