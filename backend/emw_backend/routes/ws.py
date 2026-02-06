@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import threading
-from dataclasses import dataclass
+# (no dataclasses)
 from typing import Any, Dict, Optional, Set
 
 from flask import current_app, request
@@ -78,12 +78,26 @@ def verify_ws_identity(config: Config) -> Optional[VerifiedIdentity]:
     )
 
 
-@dataclass
 class _Conn:
-    ws: Any
-    uid: str
-    role: str  # 'host' | 'web'
-    host_session_id: Optional[str] = None
+    """A single WS connection.
+
+    NOTE: Instances must be hashable because we store them in sets/maps.
+    We intentionally hash by a stable per-connection id, not by the underlying
+    ws object (which may not be hashable).
+    """
+
+    def __init__(self, *, ws: Any, uid: str, role: str, host_session_id: Optional[str] = None):
+        self.ws = ws
+        self.uid = uid
+        self.role = role  # 'host' | 'web'
+        self.host_session_id = host_session_id
+        self.conn_id = id(ws)
+
+    def __hash__(self) -> int:  # allow use in set/dict
+        return int(self.conn_id)
+
+    def __eq__(self, other: object) -> bool:
+        return isinstance(other, _Conn) and self.conn_id == other.conn_id
 
 
 class RemoteSessionRouter:
