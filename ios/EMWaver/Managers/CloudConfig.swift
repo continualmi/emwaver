@@ -31,12 +31,10 @@ enum CloudConfig {
     }
 
     static func allowAnonSync() -> Bool {
+        // Parity with macOS/Windows: anon sync is only enabled explicitly.
         let env = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] ?? "")
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        if env == "1" { return true }
-        if env == "0" { return false }
-
-        // Default behavior for now: allow anon sync (dev-friendly), backend can still reject.
-        return true
+        return env == "1"
     }
 }
+
