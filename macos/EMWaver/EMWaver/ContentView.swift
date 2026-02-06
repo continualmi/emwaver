@@ -12,10 +12,10 @@ struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
-    @ObservedObject var hostDirectory: HostDirectory
     @EnvironmentObject private var auth: AuthenticationManager
 
     @State private var showingDeviceSheet: Bool = false
+    @State private var showingAgentChat: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -77,18 +77,13 @@ struct ContentView: View {
                 .help("Device / connection options")
             }
 
-            ToolbarItem(placement: .automatic) {
-                NavigationLink {
-                    HostsView(directory: hostDirectory) {
-                        await hostDirectory.refresh(auth: auth)
-                    }
+            ToolbarItemGroup(placement: .automatic) {
+                Button {
+                    showingAgentChat = true
                 } label: {
-                    Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
+                    Label("Agent", systemImage: "sparkles")
                 }
-                .help("View host sessions on this account")
-            }
 
-            ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
                         if let email = auth.session?.email, !email.isEmpty {
@@ -120,15 +115,23 @@ struct ContentView: View {
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
         }
+        .sheet(isPresented: $showingAgentChat) {
+            NavigationStack {
+                MacAgentChatSheet(auth: auth)
+                    .navigationTitle("Agent")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { showingAgentChat = false }
+                        }
+                    }
+            }
+            .frame(minWidth: 560, minHeight: 520)
+        }
     }
 }
 
 #Preview {
-    ContentView(
-        device: MacUSBManager(),
-        firmwareUpdater: FirmwareUpdateManager(),
-        hostSessions: HostSessionManager(),
-        hostDirectory: HostDirectory()
-    )
-    .environmentObject(AuthenticationManager())
+    ContentView(device: MacUSBManager(), firmwareUpdater: FirmwareUpdateManager(), hostSessions: HostSessionManager())
+        .environmentObject(AuthenticationManager())
 }
