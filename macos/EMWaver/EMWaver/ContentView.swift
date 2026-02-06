@@ -119,7 +119,6 @@ struct ContentView: View {
             NavigationStack {
                 MacAgentChatSheet(auth: auth)
                     .navigationTitle("Agent")
-                    .navigationBarTitleDisplayMode(.inline)
                     .toolbar {
                         ToolbarItem(placement: .cancellationAction) {
                             Button("Done") { showingAgentChat = false }
