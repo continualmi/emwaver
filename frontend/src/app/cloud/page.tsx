@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
+import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
 import { exampleEmwScripts } from "@/lib/exampleEmwScripts";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
@@ -12,9 +13,13 @@ import {
   deleteFile,
   downloadFileContent,
   listFiles,
+  listHostSessions,
   type CloudUserFile,
+  type HostSession,
   uploadFile,
 } from "@/lib/backend";
+import { backendWsUrl, type RemoteIncomingMessage, wsSend } from "@/lib/remoteSessions";
+import { loadSelectedHostId, saveSelectedHostId } from "@/lib/hostPrefs";
 
 function isRaw(name: string) {
   return name.toLowerCase().endsWith(".raw");
@@ -51,6 +56,17 @@ export default function CloudPage() {
   const [selected, setSelected] = useState<string | null>(null);
   const [emwMode, setEmwMode] = useState<"editor" | "preview">("editor");
   const [viewerText, setViewerText] = useState<string>("");
+
+  // Remote host attachment (web becomes a "host dashboard")
+  const [hosts, setHosts] = useState<HostSession[]>([]);
+  const [selectedHostId, setSelectedHostId] = useState<string>(""); // empty => preview-only
+  const [wsStatus, setWsStatus] = useState<"disconnected" | "connecting" | "open" | "error" | "closed">("disconnected");
+  const wsRef = useRef<WebSocket | null>(null);
+  const [attachedHostId, setAttachedHostId] = useState<string>("");
+  const [scriptInstanceId, setScriptInstanceId] = useState<string>("");
+  const [uiRev, setUiRev] = useState<number>(0);
+  const [remoteUiRoot, setRemoteUiRoot] = useState<any>(null);
+
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
@@ -64,9 +80,15 @@ export default function CloudPage() {
 
   async function refresh(token: string) {
     setError(null);
-    const f = await listFiles(token);
+    const [f, h] = await Promise.all([listFiles(token), listHostSessions(token)]);
     setFiles(f);
+    setHosts(h.hosts || []);
   }
+
+  useEffect(() => {
+    // Restore last host selection.
+    setSelectedHostId(loadSelectedHostId());
+  }, []);
 
   useEffect(() => {
     if (!auth) return;
@@ -76,6 +98,19 @@ export default function CloudPage() {
         setUserEmail(null);
         setIdToken("");
         setFiles([]);
+        setHosts([]);
+        setSelectedHostId("");
+        saveSelectedHostId("");
+        setAttachedHostId("");
+        setScriptInstanceId("");
+        setUiRev(0);
+        setRemoteUiRoot(null);
+        try {
+          wsRef.current?.close();
+        } catch {}
+        wsRef.current = null;
+        setWsStatus("disconnected");
+
         setSelected(null);
         setViewerText("");
         return;
@@ -103,6 +138,108 @@ export default function CloudPage() {
     if (!auth) return;
     await signOut(auth);
   }
+
+  function disconnectHost() {
+    saveSelectedHostId("");
+    setSelectedHostId("");
+    setAttachedHostId("");
+    setScriptInstanceId("");
+    setUiRev(0);
+    setRemoteUiRoot(null);
+    try {
+      wsRef.current?.close();
+    } catch {}
+    wsRef.current = null;
+    setWsStatus("disconnected");
+  }
+
+  function connectToHost(tok: string, hostSessionId: string) {
+    if (!tok || !hostSessionId) return;
+
+    // Reset any previous session.
+    try {
+      wsRef.current?.close();
+    } catch {}
+    wsRef.current = null;
+
+    setWsStatus("connecting");
+    setAttachedHostId("");
+    setScriptInstanceId("");
+    setUiRev(0);
+    setRemoteUiRoot(null);
+
+    const ws = new WebSocket(backendWsUrl(tok));
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setWsStatus("open");
+      wsSend(ws, { type: "hello", role: "web", protocolVersion: 1 });
+      wsSend(ws, { type: "host.attach", hostSessionId });
+    };
+
+    ws.onclose = () => {
+      setWsStatus("closed");
+      setAttachedHostId("");
+    };
+
+    ws.onerror = () => {
+      setWsStatus("error");
+    };
+
+    ws.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(String(ev.data || "{}")) as RemoteIncomingMessage;
+        if (!msg || typeof msg.type !== "string") return;
+
+        if (msg.type === "host.attached") {
+          setAttachedHostId(msg.hostSessionId);
+          return;
+        }
+        if (msg.type === "host.error") {
+          setError(`host error: ${msg.error}`);
+          setAttachedHostId("");
+          return;
+        }
+        if (msg.type === "script.started") {
+          setScriptInstanceId(msg.scriptInstanceId);
+          return;
+        }
+        if (msg.type === "ui.snapshot") {
+          setScriptInstanceId(msg.scriptInstanceId);
+          setUiRev(msg.rev);
+          setRemoteUiRoot(msg.root);
+          return;
+        }
+        if (msg.type === "script.error") {
+          setError(`script error: ${msg.error}`);
+          return;
+        }
+        if (msg.type === "error") {
+          setError(String((msg as any).error || "error"));
+          return;
+        }
+      } catch {
+        // ignore
+      }
+    };
+  }
+
+  useEffect(() => {
+    // Auto-attach when a host is selected.
+    if (!idToken) return;
+    if (!selectedHostId) return;
+
+    // If the host disappeared (offline), keep selection but don't connect.
+    const h = hosts.find((x) => x.id === selectedHostId);
+    if (!h || !h.online) {
+      setAttachedHostId("");
+      return;
+    }
+
+    saveSelectedHostId(selectedHostId);
+    connectToHost(idToken, selectedHostId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idToken, selectedHostId]);
 
   async function openFile(name: string) {
     if (!idToken) return;
@@ -199,8 +336,50 @@ export default function CloudPage() {
               Sign in with Google
             </button>
           ) : (
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center justify-end gap-3">
               <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
+
+              <div className="flex items-center gap-2">
+                <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Host</div>
+                <select
+                  disabled={!idToken}
+                  value={selectedHostId}
+                  onChange={(e) => {
+                    const next = String(e.target.value || "");
+                    setSelectedHostId(next);
+                    if (!next) disconnectHost();
+                    else saveSelectedHostId(next);
+                  }}
+                  className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)] disabled:opacity-50"
+                  title="Select a host to enable live script control (otherwise preview-only)"
+                >
+                  <option value="">None (Preview)</option>
+                  {hosts.map((h) => (
+                    <option key={h.id} value={h.id}>
+                      {(h.device_name || h.platform || "Host") + (h.online ? "" : " (offline)")}
+                    </option>
+                  ))}
+                </select>
+
+                <div
+                  className={`rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${attachedHostId ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
+                  title={attachedHostId ? `Attached to ${attachedHostId}` : "Preview-only (no host attached)"}
+                >
+                  {attachedHostId ? "Live" : "Preview"}
+                </div>
+
+                {selectedHostId ? (
+                  <button
+                    type="button"
+                    onClick={disconnectHost}
+                    className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+                    title="Disconnect from host"
+                  >
+                    Disconnect
+                  </button>
+                ) : null}
+              </div>
+
               <a
                 href="/cloud/agent"
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
@@ -341,24 +520,88 @@ export default function CloudPage() {
             </div>
 
             {selected && isEmw(selected) && emwMode === "preview" ? (
-              <div className="mt-3">
-                {(() => {
-                  const r = evalEmwUi(viewerText);
-                  if (r.error) {
-                    return <div className="whitespace-pre-wrap text-xs text-red-300">{r.error}</div>;
-                  }
-                  if (!r.root) {
-                    return <div className="text-sm text-[color:var(--ink-dim)]">No UI.render(...) found.</div>;
-                  }
-                  return (
-                    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-                      <EmwUiPreview root={r.root} />
-                      <div className="mt-3 text-xs text-[color:var(--ink-dim)]">
-                        Preview mode: controls are disabled and device APIs are stubbed.
-                      </div>
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)] p-3">
+                  <div>
+                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Mode</div>
+                    <div className="text-sm font-semibold text-[color:var(--ink)]">
+                      {attachedHostId ? "Live host" : "Preview"}
                     </div>
-                  );
-                })()}
+                    <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">
+                      {attachedHostId ? `Attached: ${attachedHostId} • WS: ${wsStatus}` : "Connect to a host to enable interaction"}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!attachedHostId || !idToken || !selected}
+                      onClick={() => {
+                        const ws = wsRef.current;
+                        if (!ws || ws.readyState !== WebSocket.OPEN) {
+                          setError("WebSocket not connected yet");
+                          return;
+                        }
+                        // Run the currently open script on the host.
+                        wsSend(ws, {
+                          type: "script.run",
+                          hostSessionId: attachedHostId,
+                          name: selected,
+                          source: viewerText,
+                        });
+                      }}
+                      className="rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] disabled:opacity-50"
+                      title={attachedHostId ? "Run this script on the attached host" : "Attach to a host first"}
+                    >
+                      Run on Host
+                    </button>
+
+                    <div className="text-xs text-[color:var(--ink-dim)]">scriptInstanceId: {scriptInstanceId || "(none)"}</div>
+                  </div>
+                </div>
+
+                {attachedHostId && remoteUiRoot ? (
+                  <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                    <RemoteEmwUi
+                      root={remoteUiRoot}
+                      onEvent={(targetId, name, payload) => {
+                        const ws = wsRef.current;
+                        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                        if (!scriptInstanceId) return;
+                        wsSend(ws, {
+                          type: "ui.event",
+                          hostSessionId: attachedHostId,
+                          scriptInstanceId,
+                          baseRev: uiRev,
+                          targetNodeId: targetId,
+                          name,
+                          payload: payload || {},
+                        });
+                      }}
+                    />
+                    <div className="mt-3 text-xs text-[color:var(--ink-dim)]">Live mode: UI and interactions are running on the host.</div>
+                  </div>
+                ) : (
+                  <div>
+                    {(() => {
+                      const r = evalEmwUi(viewerText);
+                      if (r.error) {
+                        return <div className="whitespace-pre-wrap text-xs text-red-300">{r.error}</div>;
+                      }
+                      if (!r.root) {
+                        return <div className="text-sm text-[color:var(--ink-dim)]">No UI.render(...) found.</div>;
+                      }
+                      return (
+                        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                          <EmwUiPreview root={r.root} />
+                          <div className="mt-3 text-xs text-[color:var(--ink-dim)]">
+                            Preview mode: controls are disabled and device APIs are stubbed.
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             ) : (
               <textarea
