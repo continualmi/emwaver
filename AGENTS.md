@@ -333,6 +333,65 @@ Core idea: **any running EMWaver app instance can be a Host Session**.
 - WebSocket from clients to backend.
 - Backend routes messages to Host Sessions for the same `uid`.
 
+#### Remote Script Control (Web ↔ Host) — Initial Architecture
+
+Goal: allow the web dashboard to **fully drive** scripts running on a Host Session with minimal limitations vs native UI.
+
+**Core principle:** the WS transports the **same Script UI contract** used locally:
+- Host publishes **UI state changes** (snapshot + incremental patches).
+- Remote client publishes **UI interaction events** (generic primitives), addressed to stable node ids.
+
+##### Topology
+- `frontend (Next.js)` ⇄ `backend (Flask)` ⇄ `host session (native app)`
+- Backend is a **router + authz gate** (no UI semantics). It validates session ownership and forwards frames.
+
+##### WS Concepts
+- **Connection**: one WS per signed-in client.
+- **Multiplexing**: messages carry `hostSessionId` and `scriptInstanceId` so one WS can control multiple hosts/scripts.
+- **Versioning**: first message is `hello`/`capabilities` to negotiate protocol version and optional features.
+
+##### UI State (Host → Remote)
+- `ui.snapshot`: full ScriptTree + `rev` (authoritative revision).
+- `ui.patch`: incremental updates from `rev` → `rev+1` (replace props, insert/remove/move children, update signal-bound values).
+- Remote sends `ui.ack {rev}` so host can drop old deltas / decide to resync.
+
+**Requirements:**
+- Every node has a **stable `nodeId`** for the lifetime of a `scriptInstanceId`.
+- Patches must be **orderable** and **idempotent** (safe to reapply / ignore if already applied).
+- If remote is behind (gap in `rev`), host sends a new `ui.snapshot`.
+
+##### UI Events (Remote → Host)
+Remote does **not** send “buttonClicked” only. It sends a small set of **generic interaction primitives** so the transport is not limiting:
+- pointer: `pointerDown` / `pointerMove` / `pointerUp` (+ pointerId, buttons, x/y in element-local space)
+- scroll: `scroll` (+ dx/dy)
+- keyboard: `keyDown` / `keyUp` (+ key, code, modifiers, repeat)
+- text: `textInput` plus IME composition (`compositionStart/Update/End`) + selection ranges
+- focus: `focus` / `blur`
+- semantic helpers (optional): `activate`, `valueChange`
+
+Event envelope:
+- `targetNodeId` (required)
+- `baseRev` (remote’s last applied UI rev)
+- `payload` (event-specific)
+
+Host dispatch:
+- Events are injected into the **same ScriptEngine/ScriptSignalStore dispatch path** used by native renderers.
+- If `baseRev` is stale, host may best-effort dispatch or request resync (host is authoritative).
+
+##### Optional Geometry (Parity for drags/sliders/canvas)
+To preserve “native-feeling” interactions, host may include per-node geometry for interactive nodes:
+- `bounds` (x,y,w,h) for hit-testing / coordinate mapping
+- geometry is advisory; UI state remains authoritative
+
+##### Reliability / Backpressure
+- Throttle high-frequency events (`pointerMove`) client-side.
+- Host may respond with `rateLimit` / `busy`.
+- Add `ping/pong` and track RTT for UX.
+
+##### Security
+- Backend enforces: same `uid`, hostSession ownership, and “allow remote control” (host opt-in).
+- Strict schema validation; reject unknown message types; cap message sizes.
+
 ### Web UI Runtime (Browser-rendered Script UI)
 
 Direction: the frontend will be able to **render EMWaver script UI in the browser**.
