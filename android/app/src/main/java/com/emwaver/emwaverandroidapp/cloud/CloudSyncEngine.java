@@ -142,8 +142,11 @@ public final class CloudSyncEngine {
                 writeFile(dest, bytes);
                 if (cloud.mtimeMs > 0) {
                     // best-effort
-                    //noinspection ResultOfMethodCallIgnored
-                    dest.setLastModified(cloud.mtimeMs);
+                    boolean lmOk = dest.setLastModified(cloud.mtimeMs);
+                    long after = dest.lastModified();
+                    if (DEBUG_LISTING) {
+                        Log.d(TAG, "setLastModified(" + cloud.mtimeMs + ") ok=" + lmOk + " after=" + after + " name=" + name);
+                    }
                 }
                 summary.downloaded += 1;
                 done += 1;
@@ -206,8 +209,11 @@ public final class CloudSyncEngine {
                     if (progress != null) progress.onProgress(done, total, "Downloading " + name + "…");
                     byte[] bytes = api.downloadContentViaBackend(baseUrl, accessToken, cloud.name);
                     writeFile(local, bytes);
-                    //noinspection ResultOfMethodCallIgnored
-                    local.setLastModified(cloudMtime);
+                    boolean lmOk = local.setLastModified(cloudMtime);
+                    long after = local.lastModified();
+                    if (DEBUG_LISTING) {
+                        Log.d(TAG, "setLastModified(" + cloudMtime + ") ok=" + lmOk + " after=" + after + " name=" + name);
+                    }
                     summary.downloaded += 1;
                     done += 1;
                     if (progress != null) progress.onProgress(done, total, "Synced " + name);
