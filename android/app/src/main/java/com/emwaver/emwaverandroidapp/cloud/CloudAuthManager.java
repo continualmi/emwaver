@@ -75,7 +75,8 @@ public final class CloudAuthManager {
             return "";
         }
         try {
-            return Tasks.await(u.getIdToken(false)).getToken();
+            // Force refresh to avoid returning an empty/expired token when user is signed in.
+            return Tasks.await(u.getIdToken(true)).getToken();
         } catch (Exception e) {
             return "";
         }

@@ -64,6 +64,12 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
 
         String accessToken = auth.getIdTokenBlocking();
         if (accessToken == null || accessToken.trim().isEmpty()) {
+            // If Firebase thinks we're signed in but token fetch failed, don't loop the user back to sign-in.
+            if (auth.isSignedIn()) {
+                status.setText("Signed in, but failed to fetch Firebase ID token. Try again in a moment.");
+                return;
+            }
+
             // Same UX pattern as cloud sync: prompt sign-in.
             status.setText("Please sign in to view hosts.");
             SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
