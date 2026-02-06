@@ -361,16 +361,15 @@ public class ScriptsFragment extends Fragment {
     }
 
     private AlertDialog syncDialog;
-    private ProgressBar syncProgressBar;
     private TextView syncProgressText;
 
     private void showSyncProgressDialog() {
         if (!isAdded()) return;
         if (syncDialog != null && syncDialog.isShowing()) return;
 
-        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_sync_progress, null);
-        syncProgressBar = view.findViewById(R.id.sync_progress_bar);
-        syncProgressText = view.findViewById(R.id.sync_progress_text);
+        // Use the standard spinner dialog.
+        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_loading, null);
+        syncProgressText = view.findViewById(R.id.loading_message);
 
         syncDialog = new AlertDialog.Builder(requireContext())
             .setView(view)
@@ -384,15 +383,10 @@ public class ScriptsFragment extends Fragment {
     private void updateSyncProgress(int done, int total, String status) {
         if (!isAdded()) return;
         if (syncProgressText != null) {
-            syncProgressText.setText(status != null ? status : "Syncing…");
-        }
-        if (syncProgressBar != null) {
-            if (total <= 0) {
-                syncProgressBar.setIndeterminate(true);
+            if (total > 0) {
+                syncProgressText.setText((status != null ? status : "Syncing…") + " (" + done + "/" + total + ")");
             } else {
-                syncProgressBar.setIndeterminate(false);
-                syncProgressBar.setMax(total);
-                syncProgressBar.setProgress(Math.max(0, Math.min(done, total)));
+                syncProgressText.setText(status != null ? status : "Syncing…");
             }
         }
     }
@@ -402,8 +396,52 @@ public class ScriptsFragment extends Fragment {
             if (syncDialog.isShowing()) syncDialog.dismiss();
             syncDialog = null;
         }
-        syncProgressBar = null;
         syncProgressText = null;
+    }
+
+    private void runCloudSyncApply(
+            String baseUrl,
+            java.io.File filesDir,
+            java.util.Map<String, String> ct,
+            String accessToken,
+            boolean uploadLocalNewer,
+            boolean downloadCloudNewer
+    ) {
+        if (!isAdded()) return;
+
+        showSyncProgressDialog();
+
+        new Thread(() -> {
+            try {
+                OkHttpClient http = new OkHttpClient.Builder().build();
+                CloudFilesApi api = new CloudFilesApi(http);
+                CloudSyncEngine engine = new CloudSyncEngine(api);
+
+                CloudSyncEngine.Summary total = engine.syncFolder(
+                        baseUrl,
+                        accessToken,
+                        filesDir,
+                        new String[]{".emw", ".raw", ".txt"},
+                        ct,
+                        uploadLocalNewer,
+                        downloadCloudNewer,
+                        (done, all, status) -> runOnUiThreadSafe(() -> updateSyncProgress(done, all, status))
+                );
+
+                runOnUiThreadSafe(() -> {
+                    hideSyncProgressDialog();
+                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded);
+                    loadScriptsFromCloud();
+                });
+            } catch (Exception e) {
+                android.util.Log.e(TAG, "Sync apply failed", e);
+                String msg = e.getMessage();
+                runOnUiThreadSafe(() -> {
+                    hideSyncProgressDialog();
+                    showToast(msg != null ? msg : "Sync failed");
+                });
+            }
+        }).start();
     }
 
     private void runCloudSyncNow() {
@@ -444,32 +482,53 @@ public class ScriptsFragment extends Fragment {
                     return;
                 }
 
+                // First pass: sync cloud-only/local-only, but do NOT overwrite when one side is newer.
                 CloudSyncEngine.Summary total = engine.syncFolder(
                         baseUrl,
                         accessToken,
                         filesDir,
                         new String[]{".emw", ".raw", ".txt"},
                         ct,
-                        true,
+                        false,
+                        false,
                         (done, all, status) -> runOnUiThreadSafe(() -> updateSyncProgress(done, all, status))
                 );
 
                 runOnUiThreadSafe(() -> {
                     hideSyncProgressDialog();
-                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded + ", Cloud newer: " + total.conflicts);
                     loadScriptsFromCloud();
 
-                    if (total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) {
+                    // If there are newer versions on either side, ask once what to overwrite.
+                    if ((total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) || (total.localNewerFiles != null && !total.localNewerFiles.isEmpty())) {
                         StringBuilder msg = new StringBuilder();
-                        msg.append("Cloud has newer versions of these files. Local was kept (no overwrite):\n\n");
-                        for (String n : total.cloudNewerFiles) {
-                            msg.append("• ").append(n).append("\n");
+                        if (total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) {
+                            msg.append("Cloud newer (overwrite local?)\n");
+                            for (String n : total.cloudNewerFiles) msg.append("• ").append(n).append("\n");
+                            msg.append("\n");
                         }
+                        if (total.localNewerFiles != null && !total.localNewerFiles.isEmpty()) {
+                            msg.append("Local newer (overwrite cloud?)\n");
+                            for (String n : total.localNewerFiles) msg.append("• ").append(n).append("\n");
+                        }
+
+                        final boolean hasCloudNewer = total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty();
+                        final boolean hasLocalNewer = total.localNewerFiles != null && !total.localNewerFiles.isEmpty();
+
                         new AlertDialog.Builder(requireContext())
-                            .setTitle("Cloud newer")
+                            .setTitle("Sync decisions")
                             .setMessage(msg.toString())
-                            .setPositiveButton("OK", null)
+                            .setNegativeButton("Keep both (no overwrite)", null)
+                            .setNeutralButton(hasLocalNewer ? "Overwrite cloud" : "OK", (d, w) -> {
+                                if (!hasLocalNewer) return;
+                                runCloudSyncApply(baseUrl, filesDir, ct, accessToken, true, false);
+                            })
+                            .setPositiveButton(hasCloudNewer ? "Overwrite local" : "OK", (d, w) -> {
+                                if (!hasCloudNewer) return;
+                                runCloudSyncApply(baseUrl, filesDir, ct, accessToken, false, true);
+                            })
                             .show();
+                    } else {
+                        showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded);
                     }
                 });
             } catch (Exception e) {

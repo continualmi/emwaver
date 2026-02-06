@@ -26,18 +26,19 @@ public final class CloudSyncEngine {
     public static final class Summary {
         public int uploaded;
         public int downloaded;
-        /** Count of items where cloud had a newer version and we did not overwrite (preferLocal=true). */
-        public int conflicts;
-        /** Filenames where cloud is newer and we skipped to avoid destructive behavior. */
+        /** Filenames where cloud is newer than local. */
         public final java.util.List<String> cloudNewerFiles = new java.util.ArrayList<>();
+        /** Filenames where local is newer than cloud. */
+        public final java.util.List<String> localNewerFiles = new java.util.ArrayList<>();
 
         public Summary add(Summary other) {
             Summary s = new Summary();
             s.uploaded = this.uploaded + other.uploaded;
             s.downloaded = this.downloaded + other.downloaded;
-            s.conflicts = this.conflicts + other.conflicts;
             s.cloudNewerFiles.addAll(this.cloudNewerFiles);
             s.cloudNewerFiles.addAll(other.cloudNewerFiles);
+            s.localNewerFiles.addAll(this.localNewerFiles);
+            s.localNewerFiles.addAll(other.localNewerFiles);
             return s;
         }
     }
@@ -58,7 +59,8 @@ public final class CloudSyncEngine {
             File storageDir,
             String[] allowedExtensions,
             Map<String, String> contentTypesByExt,
-            boolean preferLocal,
+            boolean uploadLocalNewer,
+            boolean downloadCloudNewer,
             Progress progress
     ) throws IOException {
 
@@ -69,7 +71,8 @@ public final class CloudSyncEngine {
         if (DEBUG_LISTING) {
             Log.d(TAG, "syncFolder storageDir=" + storageDir.getAbsolutePath());
             Log.d(TAG, "syncFolder allowedExtensions=" + java.util.Arrays.toString(allowedExtensions));
-            Log.d(TAG, "syncFolder preferLocal=" + preferLocal);
+            Log.d(TAG, "syncFolder uploadLocalNewer=" + uploadLocalNewer);
+            Log.d(TAG, "syncFolder downloadCloudNewer=" + downloadCloudNewer);
         }
 
         List<CloudUserFile> cloudFiles = api.listFiles(baseUrl, accessToken);
@@ -174,6 +177,13 @@ public final class CloudSyncEngine {
                     continue;
                 }
                 if (localMtime > cloudMtime) {
+                    if (!uploadLocalNewer) {
+                        if (DEBUG_LISTING) Log.d(TAG, "decision: skip (local newer; awaiting confirmation) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
+                        summary.localNewerFiles.add(name);
+                        done += 1;
+                        if (progress != null) progress.onProgress(done, total, "Local newer: " + name);
+                        continue;
+                    }
                     if (DEBUG_LISTING) Log.d(TAG, "decision: upload (local newer) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                     if (progress != null) progress.onProgress(done, total, "Uploading " + name + "…");
                     byte[] bytes = readFile(local);
@@ -186,10 +196,8 @@ public final class CloudSyncEngine {
                 }
 
                 // cloud newer
-                if (preferLocal) {
-                    if (DEBUG_LISTING) Log.d(TAG, "decision: conflict (cloud newer but preferLocal) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
-                    // Don't create sidecar conflict files. Just record that cloud is newer.
-                    summary.conflicts += 1;
+                if (!downloadCloudNewer) {
+                    if (DEBUG_LISTING) Log.d(TAG, "decision: skip (cloud newer; awaiting confirmation) name=" + name + " localMtime=" + localMtime + " cloudMtime=" + cloudMtime);
                     summary.cloudNewerFiles.add(name);
                     done += 1;
                     if (progress != null) progress.onProgress(done, total, "Cloud newer: " + name);
