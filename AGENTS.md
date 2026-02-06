@@ -354,7 +354,13 @@ Core idea: **any running EMWaver app instance can be a Host Session**.
   - mobile → host
   - and later web → host
 
-**Transport direction:**
+**Current implementation status (presence + discovery):**
+- Backend supports presence via `POST /v1/hosts/heartbeat` and listing via `GET /v1/hosts`.
+- **Heartbeats (host presence):** macOS ✅, iOS ✅, Android ✅, Windows ✅.
+- **Host list UI:** Web dashboard ✅, macOS ✅, iOS ✅, Android ✅, Windows ✅.
+- Frontend/web can **list/manage** hosts, but does **not** act as a host session (no heartbeat).
+
+**Transport direction (control plane):**
 - WebSocket from clients to backend.
 - Backend routes messages to Host Sessions for the same `uid`.
 
@@ -600,12 +606,16 @@ Firmware update / DFU
 - Update orchestration/state: `windows/EMWaver/Services/FirmwareUpdateManager.cs`
 - UI: `windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml`, `windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs`
 
-Cloud (auth + files)
+Cloud (auth + files + hosts)
 
 - Cloud feature wiring: `windows/EMWaver/Services/Cloud/CloudAuthManager.cs`, `windows/EMWaver/Services/Cloud/CloudConfig.cs`
 - Firebase auth: `windows/EMWaver/Services/Cloud/FirebaseAuthService.cs`
 - Google OAuth (PKCE): `windows/EMWaver/Services/Cloud/GoogleOAuthPkce.cs`, `windows/EMWaver/Services/Cloud/PkceUtil.cs`
 - Files client: `windows/EMWaver/Services/Cloud/CloudFilesClient.cs`
+- Host sessions (presence + list):
+  - Heartbeat sender: `windows/EMWaver/Services/Cloud/HostSessionManager.cs`
+  - Hosts API client: `windows/EMWaver/Services/Cloud/CloudHostsClient.cs`
+  - Hosts UI page: `windows/EMWaver/Pages/HostsPage.xaml`, `windows/EMWaver/Pages/HostsPage.xaml.cs`
 
 Native interop
 
