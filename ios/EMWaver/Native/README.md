@@ -5,13 +5,13 @@ This directory is reserved for iOS-native artifacts; the Rust buffer core is bui
 ## How it links
 
 The `EMWaver` Xcode target runs a `Build Rust Buffer Core` script phase which:
-- builds `crates/emwaver-buffer-ios-ffi` for the active platform/arch
+- (Removed) Rust buffer-core build step; iOS buffer logic is implemented in Swift
 - writes `$(TARGET_TEMP_DIR)/libemwaver_buffer_ios.a`
 - links it via `OTHER_LDFLAGS`
 
 If Rust isn't installed (or the iOS targets aren't available), Xcode will fail with a clear error during that script phase.
 
-The script phase invokes `EMWaver/Native/build-rust-buffer-core.sh`.
+(Removed) Rust buffer-core build script; buffer logic is now pure Swift.
 
 ## Prereqs
 
@@ -23,7 +23,7 @@ The script phase invokes `EMWaver/Native/build-rust-buffer-core.sh`.
 If you ever want a standalone XCFramework (e.g. for distribution), run:
 
 ```bash
-cd crates/emwaver-buffer-ios-ffi
+# (Rust buffer-core crate removed)
 chmod +x build-xcframework.sh
 ./build-xcframework.sh
 ```

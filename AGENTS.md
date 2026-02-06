@@ -231,7 +231,7 @@ Fast “where is X?” index:
 - **Script engines** → Android: `.../scripts/ScriptEngine.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift`
 - **Script UI renderers** → Android: `.../scripts/ScriptRenderView.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI/ScriptRenderView.swift`
 - **USB MIDI SysEx tunnel** → Firmware: `stm/.../USB_DEVICE/App/usbd_midi_if.c`; Android: `.../UsbMidiSysex.java`; Apple (iOS + macOS): `apple/EMWaverAppleCore/Sources/EMWaverTransport/UsbMidiSysex.swift`
-- **Shared buffer/framing core** → `crates/emwaver-buffer-core/`
+- **Shared buffer/framing core** → implemented natively per-platform (Swift/Java/C#), keep on-wire semantics stable
 
 ## Product Spec & Goals (No Phases)
 
@@ -389,7 +389,7 @@ Apps live under `android/`, `ios/`, and `macos/`.
 
 ## Transport / Buffer Model
 
-EMWaver uses **fixed 64-byte framing** over a USB MIDI SysEx tunnel, with an append-only RX capture and cursor parsing model implemented in `crates/emwaver-buffer-core/`.
+EMWaver uses **fixed 64-byte framing** over a USB MIDI SysEx tunnel, with an append-only RX capture and cursor parsing model implemented **natively per-platform** (Swift/Java/C#).
 
 Keep on-wire semantics stable:
 
@@ -475,7 +475,7 @@ Windows target architecture (mirrors Android/iOS/macOS):
 - **One process**: WinUI 3 renderer + embedded script runtime + Windows MIDI transport in-process.
 - **UI thread owns UI**: UI updates remain on the WinUI dispatcher thread.
 - **Script worker**: scripts execute off-UI-thread; only UI events/state deltas are marshaled onto the UI thread.
-- **Shared Rust buffer core**: reuse `crates/emwaver-buffer-core` via a Windows FFI DLL (C ABI) so buffering/status/sampler compression and TX pacing policy stay identical across platforms.
+- **Buffer core implementation**: kept native per-platform; align behavior with comments + tests (TX pacing, `BS` status parsing, sampler bit compression)
 - **Transport remains native**: USB MIDI SysEx I/O is implemented with Windows APIs; Rust is used for pure logic only.
 
 ## Cross-Cutting Practices
@@ -526,7 +526,7 @@ Use CubeMX only when you intentionally need to change clocks/pins/peripheral con
 
 - Native Windows 11 app (WinUI 3).
 - Keep the same `.emw` script semantics as Android/iOS/macOS (sync-only).
-- USB MIDI SysEx transport is native Windows; shared buffering/compression/pacing uses `crates/emwaver-buffer-core` via `crates/emwaver-buffer-windows-ffi`.
+- USB MIDI SysEx transport is native Windows; buffering/compression/pacing is implemented in managed code.
 
 Windows code map (navigate fast)
 
@@ -592,28 +592,15 @@ Cloud (auth + files + hosts)
 
 Native interop
 
-- Rust buffer DLL bridge: `windows/EMWaver/Interop/NativeBufferRust.cs`, `windows/EMWaver/Interop/EmwBufferNative.cs`
-  - Generated DLL (do not commit): `windows/EMWaver/Native/emwaver_buffer_windows.dll`
 - Legacy/unused (do not use as product dependency): `windows/EMWaver/Interop/ScintillaWin32.cs`
 
 > **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
-
-Windows dev prerequisites (Rust buffer core)
-
-- The WinUI app can do basic device comms without Rust, but buffer monitor/sampler parity requires the Rust DLL.
-- Install Rust (via rustup) + MSVC C++ build tools so `cargo` can build a Windows `cdylib`.
-- Build + copy the DLL into the app with:
-  - `powershell -ExecutionPolicy Bypass -File windows/build-rust-buffer-core.ps1 -Configuration Debug -Target x86_64-pc-windows-msvc`
-- Output location: `windows/EMWaver/Native/emwaver_buffer_windows.dll` (generated; do not commit).
 
 ### CLI (`/cli`)
 
 - Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use (not shipped).
 - Shared Rust core lives under `crates/`:
-  - `crates/emwaver-buffer-core` (fixed-size lanes, append-only RX capture, cursor parsing, `BS` status parsing, sampler viewport compression)
-  - `crates/emwaver-buffer-ios-ffi` (iOS)
-  - `crates/emwaver-buffer-android-jni` (Android)
-  - `crates/emwaver-buffer-windows-ffi` (Windows)
+  - `crates/emwaver-dfu` (DFU/update helpers)
 - Current scope: firmware `build` and DFU `flash` only.
 
 #### Script REPL
@@ -636,18 +623,5 @@ Removed (scripts are run via the apps).
 - Prefer making changes in working tree first and showing a diff/summary.
 - **After significant changes, you MUST `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to.
 - For small or speculative tweaks, ask before committing/pushing.
-├─ crates/                                   # Shared Rust crates (used by apps)
-│  ├─ emwaver-buffer-core/                    # 64B framing + RX capture + cursor parsing
-│  │  └─ src/{packet,buffer,status,sampler,tx}.rs
-│  ├─ emwaver-dfu/                            # DFU/update helpers
-│  ├─ emwaver-dfu-helper/                     # DFU helper binary (used by macOS app)
-│  ├─ emwaver-buffer-ios-ffi/                 # iOS FFI wrapper (staticlib)
-│  │  ├─ include/emwaver_buffer_ios.h
-│  │  └─ src/lib.rs
-│  ├─ emwaver-buffer-android-jni/             # Android JNI wrapper (cdylib)
-│  │  └─ src/lib.rs
-│  ├─ emwaver-buffer-windows-ffi/             # Windows FFI wrapper (cdylib)
-│  │  ├─ include/emwaver_buffer_windows.h
-│  │  └─ src/lib.rs
-│  
-│  └─ regress/                                # Regex engine crate (used/benchmarked internally)
+├─ crates/                                   # Shared Rust crates (dev/internal only)
+│  └─ emwaver-dfu/                            # DFU/update helpers (used by internal CLI)
