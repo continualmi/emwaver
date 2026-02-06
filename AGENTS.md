@@ -44,6 +44,26 @@ Notes:
 - Backend runtime configuration is via Container App environment variables (DB/Blob/auth/etc.).
 - We do **not** require ACR username/password GitHub secrets for deploy; ACR pushes happen via Azure auth.
 
+#### Domains & routing (emwavers.com)
+
+**Cloudflare DNS (proxied/orange-cloud):**
+- `app.emwavers.com` (CNAME) → Azure Container App FQDN for **emwaver-frontend**
+- `api.emwavers.com` (CNAME) → Azure Container App FQDN for **emwaver-backend**
+- Apex `emwavers.com` (CNAME) → `app.emwavers.com` (so root lands on the frontend)
+- `www.emwavers.com` (CNAME) → `emwavers.com`
+
+**Azure Container Apps custom domains:**
+- `emwaver-frontend` should have custom hostname `app.emwavers.com` bound with a managed certificate.
+- `emwaver-backend` should have custom hostname `api.emwavers.com` bound with a managed certificate.
+
+**Important:** Cloudflare will return **HTTP 525** if Azure is not serving a certificate for the requested hostname (SNI mismatch). This means the Azure custom domain + cert binding is required before Cloudflare proxying will work reliably.
+
+**Azure domain verification (TXT):**
+- Azure Container Apps environment uses a verification id exposed as `customDomainVerificationId`.
+- Cloudflare TXT records used:
+  - `asuid.app` + `asuid.api` → `<customDomainVerificationId>`
+  - `_acme-challenge.app` + `_acme-challenge.api` → Azure managed cert `validationToken` values
+
 ### Azure CLI usage (agent)
 
 When helpful for Azure resource management and troubleshooting, the agent may run `az` (Azure CLI) commands in the dev environment to inspect/configure resources.
