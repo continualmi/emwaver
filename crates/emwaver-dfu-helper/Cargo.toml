@@ -1,7 +1,0 @@
-[package]
-name = "emwaver-dfu-helper"
-version = "1.0.0"
-edition = "2021"
-
-[dependencies]
-emwaver-dfu = { path = "../emwaver-dfu" }

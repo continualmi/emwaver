@@ -6,7 +6,7 @@ Goals
 
 - Windows-only (Windows 11).
 - Native UI (WinUI 3) with excellent performance.
-- Reuse shared Rust logic (`crates/emwaver-buffer-core`) via a small Windows FFI DLL.
+- (Legacy) Rust buffer-core FFI is removed; buffering/compression/pacing is implemented in managed code.
 
 Prereqs (Windows dev machine)
 
@@ -21,7 +21,7 @@ Prereqs (Windows dev machine)
 
 Build/run (Windows)
 
-1) Build the Rust DLL (to be added): `crates/emwaver-buffer-windows-ffi`
+1) (Removed) Rust buffer-core DLL build step (no longer used)
 2) Copy the DLL next to the app binary (dev path), then run from Visual Studio.
 
 Notes

@@ -61,7 +61,7 @@ Windows app (WinUI 3):
 - Build/copy the Rust DLL:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File windows\build-rust-buffer-core.ps1 -Configuration Debug -Target x86_64-pc-windows-msvc
+# (Removed) windows\\build-rust-buffer-core.ps1 — Rust buffer-core DLL no longer used
 ```
 
 ## 1) Base System
@@ -529,7 +529,7 @@ cargo install --path cli --bin emwaver --force
 ```
 
 Windows app note:
-- The WinUI app uses a Windows MSVC-built DLL (`emwaver_buffer_windows.dll`). Build it from Windows using the PowerShell script in Quick Start.
+- (Removed) Rust buffer-core DLL: Windows buffering is now implemented in managed code; no Rust build step required.
 
 ### Python (backend)
 
