@@ -12,29 +12,37 @@
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
-        <TextView
-            android:layout_width="0dp"
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/agent_chat_conversations"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Agent"
-            android:textStyle="bold"
-            android:textSize="18sp"
-            android:textColor="@color/textPrimary" />
+            android:text="Chats" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/agent_chat_new"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="New" />
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/agent_chat_clear"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
             android:text="Clear" />
 
     </LinearLayout>
 
     <TextView
+        android:id="@+id/agent_chat_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="6dp"
-        android:text="This is the Android Agent panel UI. Next: connect it to script actions + model."
+        android:text=""
         android:textColor="@color/textSecondary"
         android:textSize="12sp" />
 
