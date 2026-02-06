@@ -22,18 +22,18 @@ enum AgentBackendError: Error, LocalizedError {
     }
 }
 
-struct AgentConversationDTO: Decodable {
-    let id: String
-    let title: String?
-    let created_at_ms: Int64
-    let updated_at_ms: Int64
+public struct AgentConversationDTO: Decodable, Identifiable {
+    public let id: String
+    public let title: String?
+    public let created_at_ms: Int64
+    public let updated_at_ms: Int64
 }
 
-struct AgentMessageDTO: Decodable {
-    let id: String
-    let role: String
-    let content: String
-    let created_at_ms: Int64
+public struct AgentMessageDTO: Decodable, Identifiable {
+    public let id: String
+    public let role: String
+    public let content: String
+    public let created_at_ms: Int64
 }
 
 final class AgentBackendAPI {
