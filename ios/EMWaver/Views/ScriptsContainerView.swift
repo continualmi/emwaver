@@ -7,21 +7,27 @@
 import SwiftUI
 import EMWaverScriptsUI
 import EMWaverScriptRuntime
+import EMWaverScriptSwiftUI
+import EMWaverScriptModel
 
 struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
+    @EnvironmentObject private var remoteControlHost: RemoteControlHostService
     @StateObject private var agentViewModel = AgentChatViewModel()
     @State private var showingAgentChat = false
     @State private var showingCloudSettings = false
     @State private var showingHosts = false
 
+    @State private var showingRemoteOverlay = false
+
     var body: some View {
         NavigationStack {
-            ScriptsRootView(
-                device: bleManager,
-                syncProvider: {
+            ZStack {
+                ScriptsRootView(
+                    device: bleManager,
+                    syncProvider: {
                     guard let base = CloudConfig.backendBaseURL() else { return nil }
 
                     if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
@@ -34,12 +40,54 @@ struct ScriptsContainerView: View {
 
                     return nil
                 },
-                hostStatusSink: { running, name in
-                    // Treat preview showing as script running on iOS.
-                    hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                    hostStatusSink: { running, name in
+                        // Treat preview showing as script running on iOS.
+                        hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                    }
+                )
+
+                if showingRemoteOverlay {
+                    VStack(spacing: 0) {
+                        HStack {
+                            Label("Remote Control", systemImage: "antenna.radiowaves.left.and.right")
+                                .font(.headline)
+
+                            Spacer()
+
+                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
+                                Text(n)
+                                    .font(.subheadline)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Button("Done") { showingRemoteOverlay = false }
+                        }
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .background(.ultraThinMaterial)
+
+                        Divider()
+
+                        if let tree = remoteControlHost.remoteScriptTree {
+                            ScriptRenderView(tree: tree) { _, _ in
+                                // View-only overlay for now.
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        } else {
+                            VStack(spacing: 10) {
+                                ProgressView()
+                                Text("Remote control is active, waiting for UI…")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(.thinMaterial)
                 }
-            )
-                .toolbar {
+            }
+            .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Menu {
                             Button("Refresh Ports") {
@@ -85,6 +133,15 @@ struct ScriptsContainerView: View {
                             showingHosts = true
                         } label: {
                             Image(systemName: "dot.radiowaves.left.and.right")
+                        }
+
+                        if remoteControlHost.isRemoteControlled {
+                            Button {
+                                showingRemoteOverlay = true
+                            } label: {
+                                Image(systemName: "antenna.radiowaves.left.and.right")
+                            }
+                            .accessibilityLabel("Remote control active")
                         }
 
                         Menu {

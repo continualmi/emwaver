@@ -48,6 +48,9 @@ public sealed partial class MainWindow : Window
         // Best-effort host session heartbeat.
         AppServices.HostSession.Start();
 
+        // Remote control host WS (web can attach + drive scripts/UI).
+        AppServices.RemoteControlHost.Start();
+
         // Initial UI state.
         RunOnUi(() =>
         {

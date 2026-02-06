@@ -86,6 +86,9 @@ public sealed partial class ScriptsPage : Page
     {
         InitializeComponent();
 
+        // Remote control host delegate (so this page can run scripts + publish UI snapshots).
+        AppServices.RemoteControlHost.Delegate = new RemoteControlDelegate(this);
+
         // Grouped list (Examples / Your Scripts / Signals)
         var cvs = new Microsoft.UI.Xaml.Data.CollectionViewSource
         {
@@ -644,6 +647,9 @@ public sealed partial class ScriptsPage : Page
         PreviewHost.Children.Clear();
         PreviewHost.Children.Add(_scriptRenderer.Render(tree));
         PreviewHint.Visibility = Visibility.Collapsed;
+
+        // Mirror to remote controller (snapshot-only v1).
+        RenderPreviewWithRemoteMirror(tree);
     }
 
     private void UpdateCommandStates()

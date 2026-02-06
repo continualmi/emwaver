@@ -157,6 +157,20 @@
                                     <StackPanel x:Name="PreviewHost" />
                                 </ScrollViewer>
 
+                                <Border
+                                    x:Name="RemoteControlBanner"
+                                    CornerRadius="12"
+                                    Background="#242424"
+                                    BorderBrush="#3A3A3A"
+                                    BorderThickness="1"
+                                    Padding="10"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Top"
+                                    Margin="10"
+                                    Visibility="Collapsed">
+                                    <TextBlock Text="Remote control active" Foreground="{ThemeResource TextFillColorPrimaryBrush}" FontSize="12" />
+                                </Border>
+
                                 <TextBlock
                                     x:Name="PreviewHint"
                                     Text="Run the script to render its UI."
