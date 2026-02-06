@@ -377,6 +377,24 @@ Placement is layered:
 - **Cloud agent** (high power models) for heavy reasoning and automation.
 - **Local-on-host agent** (smaller model) for low latency, offline, privacy-sensitive work.
 
+#### Agent Chat (Backend-backed)
+
+We ship a **basic Agent chat** UI that talks to the backend (same behavior across surfaces):
+
+Backend endpoints (persisted per-user conversations):
+- `GET  /v1/agent/conversations`
+- `POST /v1/agent/conversations`
+- `GET  /v1/agent/conversations/<conversation_id>/messages`
+- `POST /v1/agent/chat/stream` (SSE streaming; emits `delta`/`done`/`error` events)
+
+Auth:
+- Uses `Authorization: Bearer <firebase_id_token>`.
+- If not signed in, chat should prompt for sign-in (no anon chat).
+
+Apple UI placement (macOS):
+- Agent chat lives in the **right-side drawer panel** inside `ScriptsRootView` (icon: `sparkles`).
+- Do **not** open Agent chat as a separate modal on macOS.
+
 ### Long-term Hardware Direction: EMArm
 
 We expect a next product tentatively called **EMArm**:
