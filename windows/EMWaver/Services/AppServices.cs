@@ -36,4 +36,5 @@ internal static class AppServices
 
     // Remote control host WS (web can attach + drive scripts/UI).
     internal static readonly RemoteControlHostService RemoteControlHost = new(CloudConfig, CloudAuth);
+    internal static readonly RemoteControlClientService RemoteControlClient = new(CloudConfig, CloudAuth);
 }

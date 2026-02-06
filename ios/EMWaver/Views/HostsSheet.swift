@@ -58,7 +58,10 @@ private struct HostsListView: View {
         let host: HostSession
 
         var body: some View {
-            VStack(alignment: .leading, spacing: 6) {
+            NavigationLink {
+                RemoteHostControlView(host: host)
+            } label: {
+                VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 10) {
                     Circle()
                         .fill(host.online ? Color.green : Color.gray)
@@ -88,6 +91,8 @@ private struct HostsListView: View {
                 }
             }
             .padding(.vertical, 4)
+                }
+            }
         }
     }
 }
