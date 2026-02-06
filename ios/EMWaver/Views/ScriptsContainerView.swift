@@ -17,21 +17,13 @@ struct ScriptsContainerView: View {
     var body: some View {
         NavigationStack {
             ScriptsRootView(device: bleManager) {
-                let env = ProcessInfo.processInfo.environment
-                let allowAnon = (env["EMWAVER_ALLOW_ANON_SYNC"] ?? "") == "1"
-
-                // Backend URL: env first (parity with macOS), then persisted setting.
-                let raw = (env["EMWAVER_BACKEND_URL"] ?? "").isEmpty
-                    ? (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
-                    : (env["EMWAVER_BACKEND_URL"] ?? "")
-
-                guard let base = URL(string: raw), !raw.isEmpty else { return nil }
+                guard let base = CloudConfig.backendBaseURL() else { return nil }
 
                 if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
                     return (baseURL: base, accessToken: token)
                 }
 
-                if allowAnon {
+                if CloudConfig.allowAnonSync() {
                     return (baseURL: base, accessToken: "")
                 }
 
