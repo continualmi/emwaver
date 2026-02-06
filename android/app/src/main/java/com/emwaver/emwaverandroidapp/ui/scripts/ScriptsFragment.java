@@ -1749,10 +1749,22 @@ public class ScriptsFragment extends Fragment {
             return;
         }
         UserFileMetadata metadata = scriptMetadata.getMetadata();
+
+        // Modal with "also delete from cloud" checkbox.
+        final android.widget.CheckBox alsoCloud = new android.widget.CheckBox(requireContext());
+        alsoCloud.setText("Also delete from cloud");
+        boolean signedIn = CloudAuthManager.getInstance().isSignedIn();
+        alsoCloud.setChecked(signedIn); // default ON when signed in
+        alsoCloud.setEnabled(signedIn);
+        if (!signedIn) {
+            alsoCloud.setAlpha(0.6f);
+        }
+
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Script")
             .setMessage("Are you sure you want to delete " + metadata.getName() + "?")
-            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptMetadata))
+            .setView(alsoCloud)
+            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptMetadata, alsoCloud.isChecked()))
             .setNegativeButton("Cancel", null)
             .show();
     }
@@ -1833,6 +1845,10 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void deleteScript(ScriptMetadata scriptMetadata) {
+        deleteScript(scriptMetadata, false);
+    }
+
+    private void deleteScript(ScriptMetadata scriptMetadata, boolean alsoDeleteFromCloud) {
         if (fileRepository == null || scriptMetadata == null) {
             return;
         }
@@ -1869,6 +1885,26 @@ public class ScriptsFragment extends Fragment {
                 }
                 handlePostListLoad();
                 showToast("Script deleted: " + metadata.getName());
+
+                if (alsoDeleteFromCloud) {
+                    // Best-effort cloud delete (local deletion already happened).
+                    new Thread(() -> {
+                        try {
+                            String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
+                            String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
+                            if (baseUrl == null || baseUrl.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
+                                runOnUiThreadSafe(() -> showToast("Cloud delete skipped (not signed in)") );
+                                return;
+                            }
+                            OkHttpClient http = new OkHttpClient.Builder().build();
+                            CloudFilesApi api = new CloudFilesApi(http);
+                            api.deleteViaBackend(baseUrl, accessToken, metadata.getName());
+                            runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + metadata.getName()));
+                        } catch (Exception e) {
+                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + metadata.getName()));
+                        }
+                    }).start();
+                }
             }
 
             @Override
