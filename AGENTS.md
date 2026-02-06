@@ -330,7 +330,11 @@ We intentionally avoid extra modes:
 **Sync policy (v1, intentionally simple):**
 - List everything every time.
 - Compare by filename + `mtime_ms`.
-- **Newer wins**.
+- **Important:** on-device filesystem mtimes may be 1s-resolution. Treat "same second" as equal to avoid endless "cloud newer" prompts.
+- Overwrites are **confirmed by the user** (no silent overwrite when both sides changed).
+  - if cloud newer → prompt to overwrite local
+  - if local newer → prompt to overwrite cloud
+- Deletes are **manual** (user-driven): delete modal includes "Also delete from cloud" (default ON when signed in).
 - No backcompat/versioning.
 
 ### Web Dashboard (Fast Feedback Loop)
