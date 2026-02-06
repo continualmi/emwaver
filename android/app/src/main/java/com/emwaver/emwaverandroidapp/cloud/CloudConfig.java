@@ -15,7 +15,7 @@ import android.content.SharedPreferences;
  * Priority:
  *  1) env EMWAVER_BACKEND_URL (optional)
  *  2) SharedPreferences (emwaver.cloud.backend_url) (optional)
- *  3) default: https://api.emwavers.com
+ *  3) default: https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io
  */
 public final class CloudConfig {
     private static final String PREFS = "emwaver";
@@ -35,7 +35,7 @@ public final class CloudConfig {
             return v.trim();
         }
 
-        return "https://api.emwavers.com";
+        return "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
     }
 
     public static void setBackendBaseUrl(Context context, String url) {
