@@ -42,6 +42,23 @@
         app:layout_constraintEnd_toEndOf="parent">
 
         <TextView
+            android:id="@+id/remote_control_banner"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="10dp"
+            android:paddingLeft="12dp"
+            android:paddingRight="12dp"
+            android:paddingTop="6dp"
+            android:paddingBottom="6dp"
+            android:text="Remote control active"
+            android:textSize="12sp"
+            android:textColor="@color/textPrimary"
+            android:backgroundTint="@color/surfaceCard"
+            android:background="@drawable/rounded_background"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/script_empty_state"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"

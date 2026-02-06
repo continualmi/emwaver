@@ -7,16 +7,20 @@
 
 import SwiftUI
 import EMWaverScriptsUI
+import EMWaverScriptSwiftUI
+import EMWaverScriptModel
 
 struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
     @ObservedObject var hostDirectory: HostDirectory
+    @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
+    @State private var showingRemotePreview: Bool = false
 
     var body: some View {
         NavigationStack {
@@ -88,6 +92,24 @@ struct ContentView: View {
             }
 
             ToolbarItem(placement: .automatic) {
+                if remoteControlHost.isRemoteControlled {
+                    Button {
+                        showingRemotePreview = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            Label("Remote", systemImage: "antenna.radiowaves.left.and.right")
+                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
+                                Text(n)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                        }
+                    }
+                    .help("This host is being controlled remotely. Click to view the remote script UI.")
+                }
+            }
+
+            ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
                         if let email = auth.session?.email, !email.isEmpty {
@@ -132,6 +154,30 @@ struct ContentView: View {
             }
             .frame(minWidth: 560, minHeight: 520)
         }
+        .sheet(isPresented: $showingRemotePreview) {
+            NavigationStack {
+                VStack(spacing: 12) {
+                    if let tree = remoteControlHost.remoteScriptTree {
+                        ScriptRenderView(tree: tree) { token, args in
+                            // Remote preview is view-only for now.
+                            // (We can optionally enable local interaction later.)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    } else {
+                        Text("Remote control is active, but no UI snapshot has been received yet.")
+                            .foregroundStyle(.secondary)
+                            .padding(20)
+                    }
+                }
+                .navigationTitle("Remote Control")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Done") { showingRemotePreview = false }
+                    }
+                }
+            }
+            .frame(minWidth: 680, minHeight: 520)
+        }
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
 
     }
@@ -142,7 +188,8 @@ struct ContentView: View {
         device: MacUSBManager(),
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
-        hostDirectory: HostDirectory()
+        hostDirectory: HostDirectory(),
+        remoteControlHost: RemoteControlHostService()
     )
     .environmentObject(AuthenticationManager())
 }

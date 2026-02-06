@@ -143,6 +143,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Best-effort host session heartbeat.
         com.emwaver.emwaverandroidapp.cloud.CloudHostSessionManager.getInstance().start(this, connectionManager);
+
+        // Remote control host WS (web can attach + drive scripts/UI).
+        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().start(this);
         
         // Request ALL necessary permissions at startup
         requestAllRequiredPermissions();
