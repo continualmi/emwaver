@@ -62,15 +62,7 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
         CloudAuthManager auth = CloudAuthManager.getInstance();
         auth.ensureInitialized(requireContext());
 
-        String accessToken = auth.getIdTokenBlocking();
-        if (accessToken == null || accessToken.trim().isEmpty()) {
-            // If Firebase thinks we're signed in but token fetch failed, don't loop the user back to sign-in.
-            if (auth.isSignedIn()) {
-                status.setText("Signed in, but failed to fetch Firebase ID token. Try again in a moment.");
-                return;
-            }
-
-            // Same UX pattern as cloud sync: prompt sign-in.
+        if (!auth.isSignedIn()) {
             status.setText("Please sign in to view hosts.");
             SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
             dialog.show(getParentFragmentManager(), "SignIn");
@@ -88,6 +80,17 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
 
         new Thread(() -> {
             try {
+                // IMPORTANT: token fetch can require network / binder work. Do it off the UI thread.
+                String accessToken = auth.getIdTokenBlocking();
+                if (accessToken == null || accessToken.trim().isEmpty()) {
+                    requireActivity().runOnUiThread(() -> {
+                        progress.setVisibility(View.GONE);
+                        status.setText("Signed in, but failed to fetch Firebase ID token. Try again in a moment.");
+                        adapter.setHosts(new ArrayList<>());
+                    });
+                    return;
+                }
+
                 OkHttpClient http = new OkHttpClient.Builder().build();
                 CloudHostsApi api = new CloudHostsApi(http);
                 final List<HostSession> hostsRaw = api.listHosts(baseUrl, accessToken);
