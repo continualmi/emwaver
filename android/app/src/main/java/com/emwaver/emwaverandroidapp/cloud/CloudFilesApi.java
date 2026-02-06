@@ -126,4 +126,17 @@ public final class CloudFilesApi {
             return bytes;
         }
     }
+
+    public void deleteViaBackend(String baseUrl, String accessToken, String name) throws IOException {
+        String url = baseUrl + "/v1/files?name=" + java.net.URLEncoder.encode(name, "UTF-8");
+        Request.Builder b = new Request.Builder().url(url).delete().header("Accept", "application/json");
+        addAuthHeader(b, accessToken);
+
+        try (Response res = http.newCall(b.build()).execute()) {
+            String body = res.body() != null ? res.body().string() : "";
+            if (!res.isSuccessful()) {
+                throw new IOException("Delete failed: HTTP " + res.code() + " " + body);
+            }
+        }
+    }
 }
