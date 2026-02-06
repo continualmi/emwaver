@@ -496,15 +496,17 @@ We should provide helper utilities:
 - Reserve low-level pointer/keyboard events for later.
 - Always include `baseRev` so hosts can reject/force resync when stale.
 
-#### Streaming / logs / artifacts
+#### Observability (UI-only by default)
 
-To truly bridge to low-level hardware, the agent will also need observability:
-- script log output (structured log stream)
-- emitted artifacts (files/signals) and a way to fetch them
+We intentionally avoid introducing a separate “console/log/monitor” side-channel for agents.
 
-Plan:
-- add `log.append` frames over WS or reuse existing backend agent endpoints
-- add `artifact.created` frames with blob keys
+**Rule:** the agent observes *only what a human would see*:
+- the Script UI tree (via `ui.snapshot` / `ui.patch`)
+- lifecycle/errors (`script.started`, `script.stopped`, `script.error`)
+
+If a script needs to communicate progress, measurements, or outputs, it should do so through **UI nodes** (text/logViewer/plot/etc.) rendered in the normal Script UI.
+
+(We can add richer streaming later if absolutely necessary, but it should still be representable as UI state to keep the model and product coherent.)
 
 #### Safety & authorization (must-have)
 
@@ -529,7 +531,7 @@ EMWaver’s “final form” is: **an agent can operate real hardware by driving
 Agents are **not a separate control path**. They must use the same primitives and transport surfaces humans use:
 - attach to a host session
 - run scripts
-- observe UI + logs + artifacts
+- observe UI + script lifecycle/errors
 - emit UI events / parameter changes
 
 This keeps the system debuggable (you can always reproduce an agent action by doing the same UI interactions yourself) and prevents a parallel, untestable “agent-only” API.
