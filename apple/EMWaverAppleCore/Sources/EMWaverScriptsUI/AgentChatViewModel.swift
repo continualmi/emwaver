@@ -168,6 +168,9 @@ public final class AgentChatViewModel: ObservableObject {
                                 if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
                                     self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: msg.content)
                                 }
+                            case .tool(let line):
+                                // Show tool calls/results as system messages so users can see what the agent did.
+                                self.messages.append(AgentChatMessage(role: .system, text: line))
                             case .error(let e):
                                 self.lastError = e
                             }

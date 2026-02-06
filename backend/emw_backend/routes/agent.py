@@ -389,7 +389,10 @@ def agent_chat_stream():
         except Exception as e:
             yield _sse("error", {"error": str(e)})
 
-    return Response(gen(), mimetype="text/event-stream")
+    resp = Response(gen(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
 
 
 @agent_bp.post("/v1/agent/chat/stream_tools")
@@ -458,6 +461,9 @@ def agent_chat_stream_tools():
             tools = tool_schemas_v1()
 
             # Tool loop (non-streaming per step).
+            # Emit an initial event so the client UI shows activity even while the model thinks.
+            yield ": connected\n\n"
+
             tool_iterations = 0
             assistant_text: str = ""
 
@@ -505,6 +511,9 @@ def agent_chat_stream_tools():
                     tool_name = tc.function.name
                     args_json = tc.function.arguments
 
+                    # Emit tool call event for UI visibility.
+                    yield _sse("tool", {"name": tool_name, "arguments": args_json})
+
                     try:
                         if tool_name == "hosts_list":
                             out = hosts_list(uid=ident.uid)
@@ -548,6 +557,9 @@ def agent_chat_stream_tools():
                         out = {"error": te.message}
                     except Exception as e:
                         out = {"error": str(e)}
+
+                    # Emit tool result event for UI visibility.
+                    yield _sse("tool", {"name": tool_name, "result": out})
 
                     messages.append(
                         {
@@ -605,4 +617,7 @@ def agent_chat_stream_tools():
         except Exception as e:
             yield _sse("error", {"error": str(e)})
 
-    return Response(gen(), mimetype="text/event-stream")
+    resp = Response(gen(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
