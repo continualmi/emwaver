@@ -2,24 +2,24 @@
 
 This document tracks only the active manual tests.
 
-Status legend: `[x]` = passed, `[ ]` = pending.
+Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for fully passed test codes.
 
 ## Test Code Index
 
-| Code | Status |
-| --- | --- |
-| `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` |
-| `002_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` |
-| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |
-| `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |
-| `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |
-| `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |
-| `001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS` | `[x]` |
-| `002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` |
-| `003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |
-| `004R_REMOTE_SERVO_PWM_POSITION_CONTROL` | `[ ]` |
-| `005R_REMOTE_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |
-| `006R_REMOTE_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |
+| Code | Status | Passed Date |
+| --- | --- | --- |
+| `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | `2026-02-06` |
+| `002_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` | |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | |
+| `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` | |
+| `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` | |
+| `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` | |
+| `001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS` | `[ ]` | |
+| `002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` | |
+| `003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | |
+| `004R_REMOTE_SERVO_PWM_POSITION_CONTROL` | `[ ]` | |
+| `005R_REMOTE_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` | |
+| `006R_REMOTE_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` | |
 
 ## Remote Case Matrix
 
@@ -41,7 +41,7 @@ Status legend: `[x]` = passed, `[ ]` = pending.
 | `AM` | Android | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `AW` | Android | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `AI` | Android | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FM` | Frontend | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FM` | Frontend | macOS | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
