@@ -93,7 +93,19 @@ import java.util.function.Consumer;
 
 import okhttp3.OkHttpClient;
 
+import org.json.JSONObject;
+
 public class ScriptsFragment extends Fragment {
+
+    private String getHostSessionId() {
+        try {
+            if (!isAdded()) return "";
+            return requireContext().getSharedPreferences("emwaver", Context.MODE_PRIVATE)
+                    .getString("emwaver.hostSessionId", "");
+        } catch (Exception ignored) {
+            return "";
+        }
+    }
 
     private static final String TAG = "ScriptsFragment";
     private static final String SCRIPT_EXTENSION = ".emw";
@@ -200,6 +212,55 @@ public class ScriptsFragment extends Fragment {
     private OnBackPressedCallback backPressedCallback;
 
     @Override
+    public void onStart() {
+        super.onStart();
+
+        // Attach as delegate for remote control so we can run scripts + dispatch events.
+        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().setDelegate(new com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.Delegate() {
+            @Override
+            public void onRemoteControlActiveChanged(boolean active) {
+                if (!isAdded() || binding == null || binding.remoteControlBanner == null) return;
+                binding.remoteControlBanner.setVisibility(active ? View.VISIBLE : View.GONE);
+            }
+
+            @Override
+            public void runRemoteScript(@NonNull String source, @Nullable String name, @NonNull String scriptInstanceId) {
+                // Show preview surface and run the provided source.
+                currentScriptName = name != null ? name : "Remote Script";
+                currentScriptMetadata = null;
+                renderScript(source);
+            }
+
+            @Override
+            public void dispatchRemoteUiEvent(@NonNull String scriptInstanceId, @NonNull String targetNodeId, @NonNull String eventName, @NonNull JSONObject payload) {
+                if (scriptEngine == null || activeScriptTree == null) return;
+                com.emwaver.emwaverandroidapp.scripts.ScriptEventType ev = com.emwaver.emwaverandroidapp.scripts.ScriptEventType.fromRaw(eventName);
+                if (ev == null) return;
+
+                com.emwaver.emwaverandroidapp.scripts.ScriptNode node = findNodeById(activeScriptTree.getRoot(), targetNodeId);
+                if (node == null || node.getProps() == null) return;
+
+                String token = node.getProps().getHandlerToken(ev);
+                if (token == null || token.trim().isEmpty()) return;
+
+                java.util.List<Object> args = new java.util.ArrayList<>();
+                if (ev == com.emwaver.emwaverandroidapp.scripts.ScriptEventType.CHANGE || ev == com.emwaver.emwaverandroidapp.scripts.ScriptEventType.SUBMIT) {
+                    if (payload.has("value")) {
+                        Object v = payload.opt("value");
+                        args.add(v);
+                    }
+                }
+                scriptEngine.invoke(token, args);
+            }
+
+            @Override
+            public Object getActiveScriptTree() {
+                return activeScriptTree;
+            }
+        });
+    }
+
+    @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(ScriptsViewModel.class);
@@ -239,6 +300,11 @@ public class ScriptsFragment extends Fragment {
         binding = FragmentScriptsBinding.inflate(inflater, container, false);
         View root = binding.getRoot();
 
+        // Remote control indicator (best-effort)
+        if (binding.remoteControlBanner != null) {
+            binding.remoteControlBanner.setVisibility(View.GONE);
+        }
+
         setupMenu();
         setupFileLaunchers();
         setupScriptList();
@@ -255,6 +321,9 @@ public class ScriptsFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
+        // Detach remote control delegate.
+        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().setDelegate(null);
+
         persistStateToViewModel();
         if (scriptEngine != null) {
             scriptEngine.shutdown();
@@ -2192,6 +2261,19 @@ public class ScriptsFragment extends Fragment {
         }
     }
 
+    private com.emwaver.emwaverandroidapp.scripts.ScriptNode findNodeById(com.emwaver.emwaverandroidapp.scripts.ScriptNode node, String id) {
+        if (node == null || id == null) return null;
+        if (id.equals(node.getId())) return node;
+        java.util.List<com.emwaver.emwaverandroidapp.scripts.ScriptNode> kids = node.getChildren();
+        if (kids != null) {
+            for (com.emwaver.emwaverandroidapp.scripts.ScriptNode c : kids) {
+                com.emwaver.emwaverandroidapp.scripts.ScriptNode found = findNodeById(c, id);
+                if (found != null) return found;
+            }
+        }
+        return null;
+    }
+
     private void handleScriptTree(ScriptTree tree) {
         if (!isAdded() || binding == null) {
             return;
@@ -2206,6 +2288,17 @@ public class ScriptsFragment extends Fragment {
         activeScriptTree = tree;
         isRenderingScript = false;
         renderScriptTree(tree);
+
+        // If remote control is active, publish a snapshot for the web UI.
+        try {
+            if (tree != null && tree.getRoot() != null && com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().isRemoteControlled()) {
+                String hostId = getHostSessionId();
+                if (hostId != null && !hostId.trim().isEmpty()) {
+                    com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().publishUiSnapshot(hostId.trim(), tree.getRoot());
+                }
+            }
+        } catch (Exception ignored) {
+        }
     }
 
     private void ensureScriptRenderView() {

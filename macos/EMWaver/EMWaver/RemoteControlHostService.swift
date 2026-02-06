@@ -6,6 +6,9 @@ import EMWaverScriptModel
 
 @MainActor
 final class RemoteControlHostService: ObservableObject {
+    @Published private(set) var isRemoteControlled: Bool = false
+    @Published private(set) var remoteScriptTree: ScriptTree?
+    @Published private(set) var remoteActiveScriptName: String?
     private let urlSession: URLSession
 
     private weak var auth: AuthenticationManager?
@@ -37,6 +40,8 @@ final class RemoteControlHostService: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] tree in
                 guard let self else { return }
+                self.remoteScriptTree = tree
+                self.remoteActiveScriptName = self.previewManager.activeScriptName
                 guard let scriptId = self.activeScriptInstanceId else { return }
                 self.uiRev += 1
                 self.sendJson([
@@ -147,6 +152,7 @@ final class RemoteControlHostService: ObservableObject {
         // If receive loop exits, close and retry.
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+        isRemoteControlled = false
     }
 
     private func receiveLoop() async {
@@ -178,7 +184,8 @@ final class RemoteControlHostService: ObservableObject {
 
         switch type {
         case "host.attach":
-            // No-op for now (backend already acks to web). We could send capabilities here.
+            // Mark host as being remotely controlled (used for local UX).
+            isRemoteControlled = true
             return
 
         case "script.run":
@@ -191,6 +198,13 @@ final class RemoteControlHostService: ObservableObject {
             let instanceId = UUID().uuidString
             activeScriptInstanceId = instanceId
             uiRev = 0
+
+            // Persist the currently remote-controlled script name for UX (best-effort).
+            if let name, !name.isEmpty {
+                UserDefaults.standard.set(name, forKey: "emwaver.remote.activeScriptName")
+            } else {
+                UserDefaults.standard.removeObject(forKey: "emwaver.remote.activeScriptName")
+            }
 
             previewManager.render(script: source, name: name, moduleSources: [:])
 
