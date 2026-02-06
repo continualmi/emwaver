@@ -12,10 +12,12 @@ using System.Diagnostics;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
+using Windows.Storage;
 
 namespace EMWaver.Pages;
 
@@ -46,7 +48,19 @@ public sealed partial class ScriptsPage : Page
     }
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
-    private readonly ObservableCollection<string> _agentMessages = new();
+    private sealed record AgentMessageRow(string Role, string Text)
+    {
+        public override string ToString() => $"{Role}: {Text}";
+    }
+
+    private readonly ObservableCollection<AgentMessageRow> _agentMessages = new();
+    private readonly ObservableCollection<EMWaver.Services.Agent.AgentApi.Conversation> _agentConversations = new();
+
+    private readonly EMWaver.Services.Agent.AgentApi _agentApi = new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
+
+    private string? _agentConversationId;
+    private CancellationTokenSource? _agentStreamCts;
+
 
     private ScriptInfo? _current;
     private Models.SignalFileInfo? _currentSignal;
@@ -82,6 +96,9 @@ public sealed partial class ScriptsPage : Page
         ScriptsList.ItemsSource = cvs.View;
 
         AgentMessagesList.ItemsSource = _agentMessages;
+        AgentConversationsCombo.ItemsSource = _agentConversations;
+
+        _agentConversationId = LoadAgentConversationId();
 
         _editorMode = AppServices.Settings.EditorMode;
         AppServices.Settings.Changed += OnSettingsChanged;
@@ -655,21 +672,228 @@ public sealed partial class ScriptsPage : Page
     {
         AgentPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         AgentColumn.Width = show ? new GridLength(380) : new GridLength(0);
+
+        if (show)
+        {
+            _ = BootstrapAgentAsync();
+        }
+        else
+        {
+            CancelAgentStream();
+        }
     }
 
-    private void OnAgentSendClick(object sender, RoutedEventArgs e)
+    private async void OnAgentSendClick(object sender, RoutedEventArgs e)
     {
-        var text = AgentInput.Text?.Trim();
+        var text = AgentInput.Text?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(text)) return;
 
-        _agentMessages.Add("You: " + text);
-        _agentMessages.Add("Agent: (not wired up on Windows yet)");
         AgentInput.Text = string.Empty;
+        AgentStatusText.Text = "";
+
+        _agentMessages.Add(new AgentMessageRow("You", text));
+
+        // Placeholder row for streaming.
+        var placeholder = new AgentMessageRow("Agent", "");
+        _agentMessages.Add(placeholder);
+
+        try
+        {
+            var convoId = _agentConversationId;
+            if (string.IsNullOrWhiteSpace(convoId))
+            {
+                var title = text.Split('\n').FirstOrDefault() ?? "";
+                var convo = await _agentApi.CreateConversationAsync(title, CancellationToken.None);
+                convoId = convo.Id;
+                _agentConversationId = convoId;
+                SaveAgentConversationId(convoId);
+                await RefreshAgentConversationsAsync();
+            }
+
+            var accum = new StringBuilder();
+
+            CancelAgentStream();
+            _agentStreamCts = new CancellationTokenSource();
+
+            SetAgentSending(true);
+
+            await _agentApi.ChatStreamAsync(convoId!, text, ev =>
+            {
+                _ = DispatcherQueue.TryEnqueue(() =>
+                {
+                    switch (ev.Kind)
+                    {
+                        case EMWaver.Services.Agent.AgentApi.StreamEventKind.Delta:
+                            if (!string.IsNullOrEmpty(ev.Text))
+                            {
+                                accum.Append(ev.Text);
+                                ReplaceLastAgentMessage(accum.ToString());
+                            }
+                            break;
+
+                        case EMWaver.Services.Agent.AgentApi.StreamEventKind.Done:
+                            ReplaceLastAgentMessage(ev.DoneMessage?.Content ?? accum.ToString());
+                            SetAgentSending(false);
+                            break;
+
+                        case EMWaver.Services.Agent.AgentApi.StreamEventKind.Error:
+                            AgentStatusText.Text = ev.Text;
+                            SetAgentSending(false);
+                            break;
+                    }
+                });
+            }, _agentStreamCts.Token);
+        }
+        catch (Exception ex)
+        {
+            AgentStatusText.Text = ex.Message;
+            SetAgentSending(false);
+        }
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)
     {
         await RefreshAsync();
+    }
+
+    private async Task BootstrapAgentAsync()
+    {
+        try
+        {
+            await RefreshAgentConversationsAsync();
+
+            // Restore selection if we have a persisted conversation.
+            if (!string.IsNullOrWhiteSpace(_agentConversationId))
+            {
+                var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
+                if (match != null)
+                {
+                    AgentConversationsCombo.SelectedItem = match;
+                    await LoadAgentConversationAsync(match.Id);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            AgentStatusText.Text = ex.Message;
+        }
+    }
+
+    private async Task RefreshAgentConversationsAsync()
+    {
+        AgentStatusText.Text = "";
+        var list = await _agentApi.ListConversationsAsync(CancellationToken.None);
+
+        _agentConversations.Clear();
+        foreach (var c in list)
+        {
+            _agentConversations.Add(c);
+        }
+
+        if (!string.IsNullOrWhiteSpace(_agentConversationId))
+        {
+            var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
+            if (match != null)
+            {
+                AgentConversationsCombo.SelectedItem = match;
+            }
+        }
+    }
+
+    private async Task LoadAgentConversationAsync(string id)
+    {
+        AgentStatusText.Text = "";
+
+        var msgs = await _agentApi.ListMessagesAsync(id, CancellationToken.None);
+        _agentMessages.Clear();
+        foreach (var m in msgs)
+        {
+            var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "Agent";
+            _agentMessages.Add(new AgentMessageRow(role, m.Content));
+        }
+    }
+
+    private void ReplaceLastAgentMessage(string text)
+    {
+        for (var i = _agentMessages.Count - 1; i >= 0; i--)
+        {
+            if (_agentMessages[i].Role == "Agent")
+            {
+                _agentMessages[i] = new AgentMessageRow("Agent", text);
+                return;
+            }
+        }
+    }
+
+    private void SetAgentSending(bool sending)
+    {
+        AgentInput.IsEnabled = !sending;
+    }
+
+    private void CancelAgentStream()
+    {
+        try { _agentStreamCts?.Cancel(); } catch { }
+        try { _agentStreamCts?.Dispose(); } catch { }
+        _agentStreamCts = null;
+    }
+
+    private static string? LoadAgentConversationId()
+    {
+        try
+        {
+            var v = ApplicationData.Current.LocalSettings.Values["emwaver.agent.conversationId"] as string;
+            v = (v ?? "").Trim();
+            return string.IsNullOrWhiteSpace(v) ? null : v;
+        }
+        catch { return null; }
+    }
+
+    private static void SaveAgentConversationId(string? id)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                ApplicationData.Current.LocalSettings.Values.Remove("emwaver.agent.conversationId");
+            }
+            else
+            {
+                ApplicationData.Current.LocalSettings.Values["emwaver.agent.conversationId"] = id.Trim();
+            }
+        }
+        catch { }
+    }
+
+    private async void OnAgentRefreshConversationsClick(object sender, RoutedEventArgs e)
+    {
+        try { await RefreshAgentConversationsAsync(); }
+        catch (Exception ex) { AgentStatusText.Text = ex.Message; }
+    }
+
+    private void OnAgentNewChatClick(object sender, RoutedEventArgs e)
+    {
+        _agentConversationId = null;
+        SaveAgentConversationId(null);
+        _agentMessages.Clear();
+        AgentStatusText.Text = "";
+        AgentConversationsCombo.SelectedItem = null;
+    }
+
+    private void OnAgentClearClick(object sender, RoutedEventArgs e)
+    {
+        _agentMessages.Clear();
+        AgentStatusText.Text = "";
+    }
+
+    private async void OnAgentConversationChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (AgentConversationsCombo.SelectedItem is not EMWaver.Services.Agent.AgentApi.Conversation c) return;
+
+        _agentConversationId = c.Id;
+        SaveAgentConversationId(c.Id);
+
+        try { await LoadAgentConversationAsync(c.Id); }
+        catch (Exception ex) { AgentStatusText.Text = ex.Message; }
     }
 
     private bool _syncInProgress;
