@@ -45,6 +45,33 @@ public struct AgentChatPanelView: View {
                         viewModel.newConversation()
                     }
 
+                    if !viewModel.conversations.isEmpty {
+                        Divider()
+
+                        ForEach(viewModel.conversations) { conv in
+                            Button {
+                                viewModel.selectConversation(conv.id)
+                            } label: {
+                                HStack {
+                                    Text(conv.title)
+                                    if viewModel.selectedConversationId == conv.id {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+
+                        if let selected = viewModel.selectedConversationId {
+                            Divider()
+                            Button(role: .destructive) {
+                                viewModel.deleteConversation(selected)
+                            } label: {
+                                Text("Delete This Chat")
+                            }
+                        }
+                    }
+
                     Divider()
 
                     if viewModel.isChatGPTConnected {
