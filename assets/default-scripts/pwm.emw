@@ -111,6 +111,30 @@ function setMax() {
   applyServoPulse(bounds.maxUs, "Max");
 }
 
+function stopPwm() {
+  const pin = Number(selectedPin) | 0;
+  const hz = parsedHz();
+  lastAction = "analogWrite(" + String(pin) + ", 0, { hz: " + String(hz) + " }) // stop";
+  pushLog(lastAction);
+  statusText = "Stopping...";
+  render();
+
+  const res = analogWrite(pin, 0, { hz: hz, timeout: 1500 });
+  const done = function () {
+    statusText = "Stopped";
+    render();
+  };
+  const fail = function (e) {
+    statusText = "Error: " + String(e && e.message ? e.message : e);
+    render();
+  };
+  if (res && typeof res.then === "function") {
+    res.then(done).catch(fail);
+  } else {
+    done();
+  }
+}
+
 function setSlider() {
   applyServoPulse(sliderPulseUs, "Slider");
 }
@@ -198,6 +222,7 @@ function render() {
             UI.button({ label: "Min", onTap: setMin }),
             UI.button({ label: "Center", onTap: setCenter }),
             UI.button({ label: "Max", onTap: setMax }),
+            UI.button({ label: "Stop", onTap: stopPwm }),
           ],
         }),
 
