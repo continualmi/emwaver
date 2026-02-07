@@ -23,6 +23,10 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
+        static let sample: UInt8 = 0x60
+
+        static let sampleStart: UInt8 = 0x00
+        static let sampleStop: UInt8 = 0x01
     }
 
     @Published var isConnected: Bool = false
@@ -56,6 +60,10 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private var captureBuffer = Data()
     private var rxPackets: [Data] = []
+
+    // When sampling is active, we must keep *all* stream lanes, including all-zero lanes.
+    // Otherwise the buffer appears to "stall" until an actual signal produces nonzero bytes.
+    private var isSamplerStreamingActive = false
 
     private var waitingForResponse = false
     private var responseSemaphore: DispatchSemaphore? = nil
@@ -171,6 +179,19 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             guard let packet = Self.makePacket(data) else {
                 self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.laneSizeBytes))")
                 return
+            }
+
+            // Track sampler mode so we don't drop all-zero stream lanes while sampling.
+            if data.count >= 2 {
+                let opcode = data[data.startIndex]
+                if opcode == EmwOpcode.sample {
+                    let sub = data[data.startIndex.advanced(by: 1)]
+                    if sub == EmwOpcode.sampleStart {
+                        self.isSamplerStreamingActive = true
+                    } else if sub == EmwOpcode.sampleStop {
+                        self.isSamplerStreamingActive = false
+                    }
+                }
             }
 
             let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
@@ -554,7 +575,12 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             let streamEmpty = streamLane.allSatisfy { $0 == 0 }
 
             if !cmdEmpty { storeRxLane(cmdLane) }
-            if !streamEmpty { storeRxLane(streamLane) }
+
+            // In sampler streaming mode, stream lanes can legitimately be all zeros (idle-low).
+            // Dropping them makes the capture look like it "stalls" until a real signal arrives.
+            if !streamEmpty || isSamplerStreamingActive {
+                storeRxLane(streamLane)
+            }
         }
     }
 
