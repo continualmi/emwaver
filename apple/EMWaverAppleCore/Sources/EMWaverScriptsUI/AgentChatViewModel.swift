@@ -8,6 +8,17 @@ import Foundation
 
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
+    public static let allowedModelIds: [String] = [
+        "gpt-5.1-codex-max",
+        "gpt-5.1-codex-mini",
+        "gpt-5.1-codex",
+        "gpt-5.2",
+        "gpt-5.2-codex",
+        "gpt-5.3-codex",
+    ]
+
+    public static let defaultModelId = "gpt-5.3-codex"
+
     @Published public private(set) var messages: [AgentChatMessage] = []
     @Published public private(set) var conversations: [ConversationInfo] = []
     @Published public private(set) var selectedConversationId: UUID?
@@ -45,6 +56,7 @@ public final class AgentChatViewModel: ObservableObject {
             conv.messages = []
             conv.codexInputItemsJSON = []
             conv.sessionId = UUID().uuidString
+            conv.modelId = Self.defaultModelId
             conv.updatedAt = Date()
         }
         persistState()
@@ -58,6 +70,7 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
+            modelId: Self.defaultModelId,
             messages: [],
             codexInputItemsJSON: []
         )
@@ -70,6 +83,22 @@ public final class AgentChatViewModel: ObservableObject {
         selectedConversationId = id
         messages = conversation(id: id)?.messages ?? []
         persistState()
+    }
+
+    public func setModelForSelectedConversation(_ modelId: String) {
+        guard let id = selectedConversationId else { return }
+        guard Self.allowedModelIds.contains(modelId) else { return }
+        updateConversation(id: id) { conv in
+            conv.modelId = modelId
+            conv.updatedAt = Date()
+        }
+        persistState()
+    }
+
+    public var selectedModelId: String {
+        guard let id = selectedConversationId,
+              let conv = conversation(id: id) else { return Self.defaultModelId }
+        return conv.modelId
     }
 
     public func deleteConversation(_ id: UUID) {
@@ -191,7 +220,7 @@ public final class AgentChatViewModel: ObservableObject {
             let inputItems = currentCodexInputItems()
 
             let resp = try await codex.send(
-                model: "gpt-5.3-codex",
+                model: selectedModelId,
                 instructions: instructions,
                 input: inputItems,
                 tools: tools,
@@ -424,6 +453,7 @@ public final class AgentChatViewModel: ObservableObject {
         let createdAt: Date
         var updatedAt: Date
         var sessionId: String
+        var modelId: String
         var messages: [AgentChatMessage]
 
         // Host-local canonical prompt state for Codex Responses API.
@@ -519,6 +549,7 @@ public final class AgentChatViewModel: ObservableObject {
                     createdAt: Date(),
                     updatedAt: Date(),
                     sessionId: UUID().uuidString,
+                    modelId: Self.defaultModelId,
                     messages: msgs,
                     codexInputItemsJSON: []
                 )
