@@ -31,14 +31,10 @@ public final class ScriptEngine {
     }
 
     private func appDataRootURL() -> URL? {
-        #if canImport(AppKit)
-        // macOS: keep signals alongside scripts for simpler UX.
-        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
-        return docs?.appendingPathComponent("scripts", isDirectory: true)
-        #else
-        // iOS: keep existing convention (Application Support).
+        // Scripts use FS.appDataDir() as a stable, sandbox-safe location for local artifacts
+        // (e.g. sampler.emw stores signals under appDataDir()/signals).
+        // Keep this on Application Support across Apple platforms so we don't strand existing data.
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-        #endif
     }
 
     private func installHostPrimitives(into context: JSContext) {
