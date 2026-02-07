@@ -14,12 +14,6 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
 | `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |  | |
 | `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |  | |
-| `001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS` | `[ ]` |  | |
-| `002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK` | `[ ]` |  | |
-| `003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |  | |
-| `004R_REMOTE_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
-| `005R_REMOTE_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |  | |
-| `006R_REMOTE_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |  | |
 
 ## Remote Case Matrix
 
