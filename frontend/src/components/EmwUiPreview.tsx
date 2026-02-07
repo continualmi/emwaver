@@ -1,17 +1,38 @@
 "use client";
 
+import React from "react";
 import type { EmwUiNode } from "@/lib/emwUiRuntime";
 
 function px(n: any): string | undefined {
-  if (typeof n === "number") return `${n}px`;
+  if (typeof n === "number" && isFinite(n)) return `${n}px`;
   return undefined;
+}
+
+function paddingToCss(padding: any): React.CSSProperties {
+  // Supports:
+  // - number: uniform padding
+  // - object: { top, bottom, leading, trailing } or { top, bottom, left, right }
+  if (typeof padding === "number") return { padding: px(padding) };
+  if (!padding || typeof padding !== "object") return {};
+
+  const top = px(padding.top);
+  const bottom = px(padding.bottom);
+  const left = px(padding.leading ?? padding.left);
+  const right = px(padding.trailing ?? padding.right);
+
+  const out: React.CSSProperties = {};
+  if (top) out.paddingTop = top;
+  if (bottom) out.paddingBottom = bottom;
+  if (left) out.paddingLeft = left;
+  if (right) out.paddingRight = right;
+  return out;
 }
 
 function styleFromProps(props: Record<string, any> | undefined): React.CSSProperties {
   const p = props || {};
   const s: React.CSSProperties = {};
 
-  if (p.padding !== undefined) s.padding = px(p.padding);
+  if (p.padding !== undefined) Object.assign(s, paddingToCss(p.padding));
   if (p.spacing !== undefined) s.gap = px(p.spacing);
 
   if (p.backgroundColor) s.backgroundColor = p.backgroundColor;
@@ -35,24 +56,18 @@ function renderNode(n: EmwUiNode | null | undefined): React.ReactNode {
   switch (n.type) {
     case "column":
       return (
-        <div
-          style={styleFromProps(props)}
-          className="flex flex-col rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)]"
-        >
+        <div style={{ display: "flex", flexDirection: "column", ...styleFromProps(props) }}>
           {(n.children || []).map((c, i) => (
-            <div key={i}>{renderNode(c)}</div>
+            <React.Fragment key={i}>{renderNode(c)}</React.Fragment>
           ))}
         </div>
       );
 
     case "row":
       return (
-        <div
-          style={styleFromProps(props)}
-          className="flex flex-row items-center rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)]"
-        >
+        <div style={{ display: "flex", flexDirection: "row", alignItems: "center", flexWrap: "wrap", ...styleFromProps(props) }}>
           {(n.children || []).map((c, i) => (
-            <div key={i}>{renderNode(c)}</div>
+            <React.Fragment key={i}>{renderNode(c)}</React.Fragment>
           ))}
         </div>
       );
@@ -144,13 +159,14 @@ function renderNode(n: EmwUiNode | null | undefined): React.ReactNode {
     }
 
     case "scroll": {
+      const gap = px(props.spacing ?? 12) ?? "12px";
       return (
         <div
-          style={{ ...styleFromProps(props), maxHeight: px(props.maxHeight ?? 420), overflow: "auto" }}
-          className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)] p-2"
+          style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props), maxHeight: px(props.maxHeight ?? 420), overflow: "auto" }}
+          className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)]"
         >
           {(n.children || []).map((c, i) => (
-            <div key={i}>{renderNode(c)}</div>
+            <React.Fragment key={i}>{renderNode(c)}</React.Fragment>
           ))}
         </div>
       );
@@ -158,10 +174,14 @@ function renderNode(n: EmwUiNode | null | undefined): React.ReactNode {
 
     case "tile":
     case "card": {
+      const gap = px(props.spacing ?? 12) ?? "12px";
       return (
-        <div style={styleFromProps(props)} className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+        <div
+          style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props) }}
+          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]"
+        >
           {(n.children || []).map((c, i) => (
-            <div key={i}>{renderNode(c)}</div>
+            <React.Fragment key={i}>{renderNode(c)}</React.Fragment>
           ))}
         </div>
       );
