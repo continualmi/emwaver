@@ -388,7 +388,14 @@ function render() {
             UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
             UI.button({ label: 'Stop', onTap: stop }),
             UI.button({ label: 'Clear', onTap: clearBuffer }),
-            UI.button({ label: 'Refresh', onTap: function () { refreshPlot(); render(); } }),
+            UI.button({ label: 'Refresh', onTap: function () {
+              refreshPlot();
+              // Reset viewport to the full buffer range.
+              var maxBits = Math.max(0, bufLen * 8);
+              xMin = 0;
+              xMax = maxBits > 0 ? maxBits : 10000;
+              render();
+            } }),
           ],
         }),
 
