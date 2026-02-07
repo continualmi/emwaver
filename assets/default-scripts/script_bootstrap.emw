@@ -595,8 +595,11 @@ Sampler.__scriptShim = true;
     var doneToken = null;
     if (typeof onDone === 'function') {
       doneToken = '__tx_done:' + String(Date.now()) + ':' + Math.random().toString(16).slice(2);
-      // Use the same callback registry used by UI events.
-      if (typeof globalThis.__scriptCallbacks === 'object' && globalThis.__scriptCallbacks) {
+      // Register in the host callback registry so native hosts can invoke by token.
+      if (typeof _scriptRegisterCallback === 'function') {
+        _scriptRegisterCallback(doneToken, onDone);
+      } else if (typeof globalThis.__scriptCallbacks === 'object' && globalThis.__scriptCallbacks) {
+        // Fallback for older hosts.
         globalThis.__scriptCallbacks[doneToken] = onDone;
       }
     }

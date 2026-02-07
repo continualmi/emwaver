@@ -53,6 +53,10 @@ var samplePeriodUsText = '10';
 var maxBytesText = '393216';
 var binsText = '400';
 
+// Retransmit (TX) settings.
+var txDutyText = '50';
+var txPwmHzText = '38000';
+
 var bufLen = 0;
 var xMin = 0;
 var xMax = 10000;
@@ -219,7 +223,8 @@ function retransmit() {
 
     Sampler.transmitBufferStart(bytes, {
       pin: Number(txPin) || 1,
-      dutyPercent: 100,
+      dutyPercent: clamp(i(txDutyText, 50), 1, 100),
+      freqHz: clamp(i(txPwmHzText, 38000), 0, 200000),
       tickUs: periodUs,
       onDone: function () {
         status = 'Retransmit done.';
@@ -528,6 +533,36 @@ function render() {
                   placeholder: '400',
                   onChange: function (v) { binsText = String(v); },
                   onSubmit: function () { refreshPlot(); render(); },
+                }),
+              ],
+            }),
+          ],
+        }),
+
+        UI.row({
+          spacing: 10,
+          children: [
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'TX PWM Hz', font: 'caption', fontWeight: 'medium' }),
+                UI.textField({
+                  value: txPwmHzText,
+                  placeholder: '38000',
+                  onChange: function (v) { txPwmHzText = String(v); },
+                  onSubmit: function () { render(); },
+                }),
+              ],
+            }),
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.text({ text: 'TX duty %', font: 'caption', fontWeight: 'medium' }),
+                UI.textField({
+                  value: txDutyText,
+                  placeholder: '50',
+                  onChange: function (v) { txDutyText = String(v); },
+                  onSubmit: function () { render(); },
                 }),
               ],
             }),
