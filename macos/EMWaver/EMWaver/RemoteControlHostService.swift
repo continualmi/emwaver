@@ -228,6 +228,17 @@ final class RemoteControlHostService: ObservableObject {
         }
     }
 
+    /// Invoke a handler token coming from a locally-rendered ScriptRenderView.
+    ///
+    /// This is used for the in-app “Remote Control” overlay so the host can
+    /// interact with the remotely-running script UI while the web client is also
+    /// attached.
+    func invokeRemoteHandler(token: String, arguments: [Any]) {
+        // Only allow invoking when a remote script is actually running.
+        guard activeScriptInstanceId != nil else { return }
+        previewManager.invoke(token: token, arguments: arguments)
+    }
+
     private func dispatchUiEvent(targetNodeId: String, name: String, payload: [String: Any]) {
         guard let tree = previewManager.scriptTree else { return }
 
