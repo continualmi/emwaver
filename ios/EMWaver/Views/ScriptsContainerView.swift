@@ -70,8 +70,8 @@ struct ScriptsContainerView: View {
                         Divider()
 
                         if let tree = remoteControlHost.remoteScriptTree {
-                            ScriptRenderView(tree: tree) { _, _ in
-                                // View-only overlay for now.
+                            ScriptRenderView(tree: tree) { token, args in
+                                remoteControlHost.invokeRemoteHandler(token: token, arguments: args)
                             }
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         } else {
