@@ -160,7 +160,7 @@ internal sealed class RemoteControlClientService
             if (type == "host.attached")
             {
                 _attachedHostId = root.TryGetProperty("hostSessionId", out var hid) ? hid.GetString() : _attachedHostId;
-                Delegate?.OnAttached(_attachedHostId ?? hostSessionId: "");
+                Delegate?.OnAttached(_attachedHostId ?? "");
                 return;
             }
 
