@@ -28,6 +28,66 @@ export function RemoteEmwUi({ root, onEvent }: { root: RemoteUiNode; onEvent: (t
   return <div className="space-y-2">{renderNode(root, onEvent)}</div>;
 }
 
+function clamp(n: number, lo: number, hi: number) {
+  if (!isFinite(n)) return lo;
+  if (!isFinite(lo) || !isFinite(hi)) return n;
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function SliderNode({ n, onEvent }: { n: RemoteUiNode; onEvent: (targetId: string, name: string, payload: any) => void }) {
+  const props = n.props || {};
+
+  const hasChange = hasHandler(n, "change");
+  const hasSubmit = hasHandler(n, "submit");
+  const enabled = hasChange || hasSubmit;
+
+  const min = Number(props.min ?? 0);
+  const max = Number(props.max ?? 100);
+  const step = Number(props.step ?? 1);
+  const remoteValue = clamp(Number(props.value ?? min), min, max);
+
+  // If submit is supported, we keep local drag state and only send when released.
+  const [localValue, setLocalValue] = React.useState<number>(remoteValue);
+  const [isDragging, setIsDragging] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (!isDragging) setLocalValue(remoteValue);
+  }, [remoteValue, isDragging]);
+
+  const displayValue = hasSubmit ? localValue : remoteValue;
+
+  return (
+    <div style={styleFromProps(props)} className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{props.id ?? "Slider"}</div>
+        <div className="text-xs text-[color:var(--ink-dim)]">{String(displayValue)}</div>
+      </div>
+      <input
+        type="range"
+        disabled={!enabled}
+        min={min}
+        max={max}
+        step={step}
+        value={displayValue}
+        className="w-full disabled:opacity-50"
+        onPointerDown={() => setIsDragging(true)}
+        onPointerUp={(e) => {
+          setIsDragging(false);
+          if (hasSubmit) onEvent(n.id, "submit", { value: Number((e.target as HTMLInputElement).value) });
+        }}
+        onChange={(e) => {
+          const v = Number(e.target.value);
+          if (hasSubmit) {
+            setLocalValue(v);
+            return;
+          }
+          if (hasChange) onEvent(n.id, "change", { value: v });
+        }}
+      />
+    </div>
+  );
+}
+
 function hasHandler(n: RemoteUiNode, ev: string): boolean {
   return !!(n.handlers && typeof n.handlers[ev] === "string" && n.handlers[ev]);
 }
@@ -104,45 +164,8 @@ function renderNode(n: RemoteUiNode | null | undefined, onEvent: (targetId: stri
       );
     }
 
-    case "slider": {
-      // Some scripts (e.g. blink.emw) use onSubmit for sliders instead of onChange.
-      // Support both so the control isn’t locked.
-      const hasChange = hasHandler(n, "change");
-      const hasSubmit = hasHandler(n, "submit");
-      const enabled = hasChange || hasSubmit;
-
-      const min = Number(props.min ?? 0);
-      const max = Number(props.max ?? 100);
-      const step = Number(props.step ?? 1);
-      const value = Number(props.value ?? min);
-
-      const sendName = hasChange ? "change" : hasSubmit ? "submit" : "change";
-
-      return (
-        <div style={styleFromProps(props)} className="space-y-2">
-          <div className="flex items-center justify-between">
-            <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{props.id ?? "Slider"}</div>
-            <div className="text-xs text-[color:var(--ink-dim)]">{String(value)}</div>
-          </div>
-          <input
-            type="range"
-            disabled={!enabled}
-            min={min}
-            max={max}
-            step={step}
-            value={value}
-            className="w-full disabled:opacity-50"
-            onChange={(e) => onEvent(n.id, sendName, { value: Number(e.target.value) })}
-            onMouseUp={(e) => {
-              if (hasSubmit) onEvent(n.id, "submit", { value: Number((e.target as HTMLInputElement).value) });
-            }}
-            onTouchEnd={(e) => {
-              if (hasSubmit) onEvent(n.id, "submit", { value: Number((e.target as HTMLInputElement).value) });
-            }}
-          />
-        </div>
-      );
-    }
+    case "slider":
+      return <SliderNode n={n} onEvent={onEvent} />;
 
     case "textField": {
       const enabled = hasHandler(n, "change") || hasHandler(n, "submit");
