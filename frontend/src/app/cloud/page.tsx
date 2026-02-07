@@ -84,6 +84,7 @@ export default function CloudPage() {
   const [uiRev, setUiRev] = useState<number>(0);
   const [remoteUiRoot, setRemoteUiRoot] = useState<any>(null);
   const [plotDataByNodeId, setPlotDataByNodeId] = useState<Record<string, any>>({});
+  const lastPlotViewportReqRef = useRef<Record<string, string>>({});
   const [lastAutoRunKey, setLastAutoRunKey] = useState<string>("");
 
   const [isBusy, setIsBusy] = useState(false);
@@ -329,10 +330,51 @@ export default function CloudPage() {
           setPlotDataByNodeId({});
           return;
         }
+        function walkNodes(n: any, out: any[]) {
+          if (!n || typeof n !== "object") return;
+          out.push(n);
+          const kids = Array.isArray(n.children) ? n.children : [];
+          for (const c of kids) walkNodes(c, out);
+        }
+
         if (msg.type === "ui.snapshot") {
           setScriptInstanceId(msg.scriptInstanceId);
           setUiRev(msg.rev);
           setRemoteUiRoot(msg.root);
+
+          // Ensure the plot viewport data matches whatever the host UI is showing.
+          // (macOS can change the viewport locally; those changes flow via ui.snapshot.)
+          try {
+            const ws = wsRef.current;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+              const nodes: any[] = [];
+              walkNodes((msg as any).root, nodes);
+              for (const n of nodes) {
+                if (n?.type !== "plot") continue;
+                const nodeId = String(n?.id || "");
+                if (!nodeId) continue;
+                const p = (n?.props || {}) as any;
+                const min = Number(p.xMin ?? p.xDomainMin ?? p.xBoundsMin ?? 0);
+                const max = Number(p.xMax ?? p.xDomainMax ?? p.xBoundsMax ?? (min + 1));
+                if (!isFinite(min) || !isFinite(max) || max <= min) continue;
+                const key = `${min}:${max}`;
+                if (lastPlotViewportReqRef.current[nodeId] === key) continue;
+                lastPlotViewportReqRef.current[nodeId] = key;
+                wsSend(ws, {
+                  type: "ui.event",
+                  hostSessionId: attachedRef.current,
+                  scriptInstanceId: (msg as any).scriptInstanceId,
+                  baseRev: (msg as any).rev,
+                  targetNodeId: nodeId,
+                  name: "viewport",
+                  payload: { min, max, bins: 400 },
+                });
+              }
+            }
+          } catch {
+            // ignore
+          }
+
           return;
         }
         if (msg.type === "plot.data") {

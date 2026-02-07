@@ -225,9 +225,13 @@ final class RemoteControlHostService: ObservableObject {
             // Special-case plot viewport requests: the web controller does not hold the plot buffer,
             // so it asks the host to compute a compressed viewport and send back points.
             if name == "viewport" {
+                // First, let the script handle it (if it has a handler) so the host UI stays in sync.
+                // Then, also compute the compressed viewport for the web renderer.
+                dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
                 if handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload) {
                     return
                 }
+                return
             }
 
             dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)

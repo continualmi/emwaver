@@ -55,6 +55,21 @@ function styleFromProps(props: Record<string, any> | undefined): React.CSSProper
   if (p.width !== undefined) s.width = px(p.width);
   if (p.height !== undefined) s.height = px(p.height);
 
+  if (p.minWidth !== undefined) s.minWidth = px(p.minWidth);
+  if (p.maxWidth !== undefined) s.maxWidth = px(p.maxWidth);
+  if (p.minHeight !== undefined) s.minHeight = px(p.minHeight);
+  if (p.maxHeight !== undefined) s.maxHeight = px(p.maxHeight);
+
+  // Common script layout hint: fillsWidth=true means stretch.
+  if (p.fillsWidth === true) {
+    s.maxWidth = "100%";
+    s.width = s.width ?? "100%";
+  }
+
+  if (p.cornerRadius !== undefined && typeof p.cornerRadius === "number" && isFinite(p.cornerRadius)) {
+    s.borderRadius = `${p.cornerRadius}px`;
+  }
+
   return s;
 }
 
@@ -121,7 +136,9 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
   }
 
   function onWheel(e: React.WheelEvent) {
+    // Prevent the parent page/scroll containers from also scrolling.
     e.preventDefault();
+    e.stopPropagation();
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -144,6 +161,8 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
   }
 
   function onMouseDown(e: React.MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
     const el = ref.current;
     if (!el) return;
     drag.current = { down: true, x0: e.clientX, startMin: view.min, startMax: view.max };
@@ -151,6 +170,8 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
 
   function onMouseMove(e: React.MouseEvent) {
     if (!drag.current.down) return;
+    e.preventDefault();
+    e.stopPropagation();
     const el = ref.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
@@ -161,6 +182,35 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
   }
 
   function onMouseUp() {
+    drag.current.down = false;
+  }
+
+  function onTouchStart(e: React.TouchEvent) {
+    e.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    drag.current = { down: true, x0: t.clientX, startMin: view.min, startMax: view.max };
+  }
+
+  function onTouchMove(e: React.TouchEvent) {
+    if (!drag.current.down) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const t = e.touches && e.touches[0];
+    if (!t) return;
+    const dxPx = t.clientX - drag.current.x0;
+    const span = domainSpan({ min: drag.current.startMin, max: drag.current.startMax });
+    const delta = (-dxPx / Math.max(1, rect.width)) * span;
+    emitViewportSoon({ min: drag.current.startMin + delta, max: drag.current.startMax + delta });
+  }
+
+  function onTouchEnd(e: React.TouchEvent) {
+    e.stopPropagation();
     drag.current.down = false;
   }
 
@@ -191,13 +241,17 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
 
       <div
         ref={ref}
-        style={{ height }}
+        style={{ height, width: "100%", maxWidth: "100%", overscrollBehavior: "contain", touchAction: "none" as any }}
         className="w-full select-none overflow-hidden rounded-lg border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)]"
         onWheel={onWheel}
+        onWheelCapture={onWheel}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
       >
         <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-full w-full">
           {hasData ? (
@@ -405,9 +459,10 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
 
     case "scroll": {
       const gap = px(props.spacing ?? 12) ?? "12px";
+      const maxH = px(props.maxHeight);
       return (
         <div
-          style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props), maxHeight: px(props.maxHeight ?? 420), overflow: "auto" }}
+          style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props), ...(maxH ? { maxHeight: maxH, overflow: "auto" } : {}) }}
           className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)]"
         >
           {children.map((c, i) => (
