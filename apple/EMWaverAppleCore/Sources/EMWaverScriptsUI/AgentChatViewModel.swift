@@ -193,7 +193,6 @@ public final class AgentChatViewModel: ObservableObject {
                 instructions: instructions,
                 messages: msgs,
                 tools: tools,
-                maxTokens: 1200,
                 sessionId: sessionId
             )
 

@@ -57,7 +57,6 @@ final class AgentCodexClient {
         instructions: String,
         messages: [[String: Any]],
         tools: [ToolSpec],
-        maxTokens: Int,
         sessionId: String?
     ) async throws -> [String: Any] {
         let access = try await validAccessToken()
@@ -82,7 +81,6 @@ final class AgentCodexClient {
             "model": model,
             "instructions": instructions,
             "input": input,
-            "max_tokens": maxTokens,
             // Codex endpoint requirements.
             "store": false,
             "stream": true,
