@@ -63,9 +63,10 @@ public struct ScriptsRootView: View {
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
         let pm = ScriptPreviewManager()
+        let host = DefaultAgentHost(previewManager: pm)
         self._previewManager = StateObject(wrappedValue: pm)
-        self.agentHost = DefaultAgentHost(previewManager: pm)
-        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: self.agentHost))
+        self.agentHost = host
+        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: host))
     }
 
     public var body: some View {
