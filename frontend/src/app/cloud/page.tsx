@@ -608,7 +608,7 @@ export default function CloudPage() {
             {selected && isEmw(selected) && emwMode === "preview" ? (
               <div className="mt-3 space-y-3">
 
-                {attachedHostId && remoteUiRoot ?? (
+                {attachedHostId && remoteUiRoot ? (
                   <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
                     <RemoteEmwUi
                       root={remoteUiRoot}
