@@ -227,7 +227,7 @@ public final class AgentChatViewModel: ObservableObject {
             let nodeId = (args["targetNodeId"] as? String) ?? ""
             let ev = (args["name"] as? String) ?? "tap"
             let payload = (args["payload"] as? [String: Any]) ?? [:]
-            host.invokeUIEvent(targetNodeId: nodeId, name: ev, payload: payload)
+            try host.invokeUIEvent(targetNodeId: nodeId, name: ev, payload: payload)
             return ["ok": true]
 
         default:
