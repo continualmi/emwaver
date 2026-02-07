@@ -1,0 +1,25 @@
+[package]
+name = "emwaver-host"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Async runtime
+ tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal"] }
+
+# Websocket client
+ tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+url = "2"
+
+# HTTP client (for heartbeat / auth flows later)
+reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+
+# JS engine (QuickJS)
+rquickjs = { version = "0.9", features = ["loader", "macro"] }

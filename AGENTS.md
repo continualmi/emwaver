@@ -66,6 +66,9 @@ Distribution/UX constraints (Linux):
 Status:
 - Treat as **beta** / experimental scope; keep it minimal and aligned with the existing remote host protocol.
 
+Later goals:
+- Allow the **Agent** to operate against a Linux host as well (same agent UX as desktop/controller apps), so a Raspberry Pi host can be explored and driven with agent help.
+
 GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
 We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
