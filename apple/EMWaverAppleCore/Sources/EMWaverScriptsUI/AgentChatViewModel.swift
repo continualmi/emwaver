@@ -778,13 +778,15 @@ public final class AgentChatViewModel: ObservableObject {
 
         return conv.codexInputItemsJSON.compactMap { s in
             guard let data = s.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-            return scrubItemReferences(obj)
+                  let objAny = try? JSONSerialization.jsonObject(with: data) else { return nil }
+            guard let scrubbedAny = scrubItemReferencesDeep(objAny) else { return nil }
+            return scrubbedAny as? [String: Any]
         }
     }
 
     private func appendCodexItemToCurrentConversation(_ item: [String: Any]) {
-        guard let scrubbed = scrubItemReferences(item) else { return }
+        guard let scrubbedAny = scrubItemReferencesDeep(item) else { return }
+        guard let scrubbed = scrubbedAny as? [String: Any] else { return }
 
         guard let id = selectedConversationId else { return }
         updateConversation(id: id) { conv in
@@ -794,25 +796,29 @@ public final class AgentChatViewModel: ObservableObject {
         persistState()
     }
 
-    /// Removes any Codex `item_reference` items that rely on server persistence.
+    /// Removes any Codex `item_reference` objects (even nested) that rely on server persistence.
     /// When `store=false`, these references will fail on the next request.
-    private func scrubItemReferences(_ item: [String: Any]) -> [String: Any]? {
-        if let t = item["type"] as? String, t == "item_reference" {
-            return nil
-        }
-
-        // Some Codex outputs can embed item references in message content.
-        if let t = item["type"] as? String, t == "message", var content = item["content"] as? [Any] {
-            content = content.filter { partAny in
-                guard let part = partAny as? [String: Any] else { return true }
-                return (part["type"] as? String) != "item_reference"
+    private func scrubItemReferencesDeep(_ any: Any) -> Any? {
+        if let dict = any as? [String: Any] {
+            if (dict["type"] as? String) == "item_reference" {
+                return nil
             }
-            var out = item
-            out["content"] = content
+            var out: [String: Any] = [:]
+            out.reserveCapacity(dict.count)
+            for (k, v) in dict {
+                if let scrubbed = scrubItemReferencesDeep(v) {
+                    out[k] = scrubbed
+                }
+            }
             return out
         }
 
-        return item
+        if let arr = any as? [Any] {
+            return arr.compactMap { scrubItemReferencesDeep($0) }
+        }
+
+        // Scalars
+        return any
     }
 }
 
