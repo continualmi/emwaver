@@ -627,6 +627,28 @@ UI placement (by platform):
 - **Android:** Agent chat is a bottom sheet (top menu → Agent).
 - **Windows:** Agent chat is the right-side Agent pane in `ScriptsPage` (toggled from the toolbar).
 
+#### Agent LLM providers (v1)
+
+We support *two* authentication / billing modes for the Agent backend. The user selects this in the client UI.
+
+1) **ChatGPT Plus/Pro login (Codex via ChatGPT subscription)** — *recommended default*
+
+- User signs in with OpenAI in the client (browser OAuth flow / device-code flow).
+- The client obtains **refresh_token** + **access_token** (short-lived) and a **ChatGPT Account/Org id** when available.
+- The backend stores credentials **user-scoped** (per Firebase `uid`) and refreshes access tokens as needed.
+- Agent requests are sent to the **ChatGPT Codex Responses** endpoint:
+  - `https://chatgpt.com/backend-api/codex/responses`
+  - Header: `Authorization: Bearer <access_token>`
+  - Optional header for org/workspace subscriptions: `ChatGPT-Account-Id: <accountId>`
+- Pricing/cost to EMWaver is treated as **0** (the user’s ChatGPT subscription covers model access). This is a key product advantage.
+
+2) **OpenAI Platform API key (usage-based)** — *supported, but not the product’s long-term default*
+
+- Backend calls OpenAI via the normal OpenAI SDK (`api.openai.com`) using a project API key.
+- This is useful for development, CI, and as a fallback when ChatGPT login is unavailable.
+
+**Future direction:** we expect the “paid” path to become **EMWaver-hosted / EMWaver-billed models** (not Codex), with richer product guarantees (latency, retention policy, tool permissions, eval gating, etc.). The ChatGPT login path remains available because it’s frictionless for users already paying for ChatGPT.
+
 ### Long-term Hardware Direction: EMArm
 
 We expect a next product tentatively called **EMArm**:
