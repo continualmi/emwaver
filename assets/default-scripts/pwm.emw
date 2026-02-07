@@ -13,7 +13,14 @@ const SERVO_PINS = [
   { label: "A0 / TIM2_CH1 (pin 0)", value: "0" },
   { label: "A1 / TIM2_CH2 (pin 1)", value: "1" },
   { label: "A2 / TIM2_CH3 (pin 2)", value: "2" },
-  { label: "A3 / TIM2_CH4 (pin 3)", value: "3" },
+  { label: "A3 (TIM3) - not supported", value: "3", disabled: true },
+  { label: "A4 / TIM14_CH1 (pin 4)", value: "4" },
+  { label: "A5 / TIM2_CH1 (pin 5, shared w/ A0)", value: "5" },
+  { label: "A6 / TIM16_CH1 (pin 6)", value: "6" },
+  { label: "A7 / TIM17_CH1 (pin 7)", value: "7" },
+  { label: "B6 / TIM16_CH1N (pin 22)", value: "22" },
+  { label: "B7 / TIM17_CH1N (pin 23)", value: "23" },
+  { label: "B8 / TIM16_CH1 (pin 24)", value: "24" },
 ];
 
 function clampInt(v, min, max) {
@@ -152,6 +159,7 @@ function render() {
       children: [
         UI.text({ text: "PWM Servo Control", font: "title2", fontWeight: "semibold" }),
         UI.text({ text: "Use a real servo module. Power servo from external 5V and share GND with EMWaver.", foregroundColor: "#6B7280" }),
+        UI.text({ text: "Note: A3 is TIM3-based and intentionally disabled (TIM3 is reserved for sampling/transmit timing).", foregroundColor: "#6B7280" }),
 
         UI.text({ text: "PWM Pin", fontWeight: "medium" }),
         UI.picker({
