@@ -75,6 +75,52 @@ public struct AgentChatPanelView: View {
 
                     Divider()
 
+                    // Provider / auth
+                    if let st = viewModel.llmProviderStatus {
+                        Text("LLM Provider")
+                        Button {
+                            viewModel.setLLMProvider("chatgpt")
+                        } label: {
+                            if st.llm_provider == "chatgpt" {
+                                Text("✓ ChatGPT Plus/Pro (Codex)")
+                            } else {
+                                Text("ChatGPT Plus/Pro (Codex)")
+                            }
+                        }
+                        Button {
+                            viewModel.setLLMProvider("platform")
+                        } label: {
+                            if st.llm_provider == "platform" {
+                                Text("✓ OpenAI Platform (API key)")
+                            } else {
+                                Text("OpenAI Platform (API key)")
+                            }
+                        }
+
+                        Divider()
+
+                        if st.chatgpt_connected {
+                            Button(role: .destructive) {
+                                viewModel.disconnectChatGPT()
+                            } label: {
+                                Text("Disconnect ChatGPT")
+                            }
+                        } else {
+                            Button {
+                                viewModel.connectChatGPTViaBrowser()
+                            } label: {
+                                Text("Connect ChatGPT (Browser)")
+                            }
+                        }
+
+                        Divider()
+                    } else {
+                        Button("Refresh Provider Status") {
+                            Task { await viewModel.refreshLLMProviderStatus() }
+                        }
+                        Divider()
+                    }
+
                     if let id = viewModel.selectedConversationId {
                         Button(role: .destructive) {
                             viewModel.deleteConversation(id)

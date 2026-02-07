@@ -23,7 +23,7 @@ from sqlalchemy import desc, select
 from emw_backend.auth import verify_request_identity
 from emw_backend.config import Config
 from emw_backend.db import SessionLocal
-from emw_backend.models import AgentConversation, AgentMessage
+from emw_backend.models import AgentChatGptCredential, AgentConversation, AgentMessage, AgentUserSettings
 
 
 agent_bp = Blueprint("agent", __name__)
@@ -51,6 +51,149 @@ def _require_openai(config: Config) -> OpenAI:
 
 def _sse(event: str, data: Any) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+# --- Agent provider settings ---
+
+
+@agent_bp.get("/v1/agent/llm_provider")
+def get_llm_provider():
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    with SessionLocal() as db:
+        settings = db.get(AgentUserSettings, ident.uid)
+        if not settings:
+            settings = AgentUserSettings(firebase_uid=ident.uid, llm_provider="chatgpt", created_at_ms=_now_ms(), updated_at_ms=_now_ms())
+            db.add(settings)
+            db.commit()
+
+        cred = db.get(AgentChatGptCredential, ident.uid)
+        chatgpt_connected = bool(cred and cred.refresh_token)
+
+        return jsonify(
+            {
+                "llm_provider": settings.llm_provider,
+                "chatgpt_connected": chatgpt_connected,
+                # Best-effort hints for the UI.
+                "chatgpt_account_id": (cred.chatgpt_account_id if cred else None),
+            }
+        )
+
+
+@agent_bp.post("/v1/agent/llm_provider")
+def set_llm_provider():
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    payload = request.get_json(force=True, silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    provider = payload.get("llm_provider")
+    if provider not in ("chatgpt", "platform"):
+        return jsonify({"error": "Invalid 'llm_provider' (expected 'chatgpt' or 'platform')"}), 400
+
+    now = _now_ms()
+    with SessionLocal() as db:
+        settings = db.get(AgentUserSettings, ident.uid)
+        if not settings:
+            settings = AgentUserSettings(firebase_uid=ident.uid, llm_provider=provider, created_at_ms=now, updated_at_ms=now)
+        else:
+            settings.llm_provider = provider
+            settings.updated_at_ms = now
+        db.add(settings)
+        db.commit()
+
+    return jsonify({"ok": True, "llm_provider": provider})
+
+
+@agent_bp.post("/v1/agent/chatgpt_oauth")
+def set_chatgpt_oauth_tokens():
+    """Store ChatGPT/Codex OAuth tokens for the authenticated user.
+
+    The client performs the OAuth flow (browser/device) and sends the resulting tokens here.
+    The backend persists the refresh token and can refresh access tokens as needed.
+    """
+
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    payload = request.get_json(force=True, silent=False)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    refresh_token = payload.get("refresh_token")
+    access_token = payload.get("access_token")
+    expires_at_ms = payload.get("expires_at_ms")
+    chatgpt_account_id = payload.get("chatgpt_account_id")
+
+    if not isinstance(refresh_token, str) or not refresh_token:
+        return jsonify({"error": "Missing 'refresh_token'"}), 400
+
+    if access_token is not None and not isinstance(access_token, str):
+        return jsonify({"error": "Invalid 'access_token'"}), 400
+    if expires_at_ms is not None and not isinstance(expires_at_ms, int):
+        return jsonify({"error": "Invalid 'expires_at_ms'"}), 400
+    if chatgpt_account_id is not None and not isinstance(chatgpt_account_id, str):
+        return jsonify({"error": "Invalid 'chatgpt_account_id'"}), 400
+
+    now = _now_ms()
+
+    with SessionLocal() as db:
+        cred = db.get(AgentChatGptCredential, ident.uid)
+        if not cred:
+            cred = AgentChatGptCredential(
+                firebase_uid=ident.uid,
+                refresh_token=refresh_token,
+                access_token=(access_token or None),
+                expires_at_ms=expires_at_ms,
+                chatgpt_account_id=(chatgpt_account_id or None),
+                created_at_ms=now,
+                updated_at_ms=now,
+            )
+        else:
+            cred.refresh_token = refresh_token
+            cred.access_token = (access_token or None)
+            cred.expires_at_ms = expires_at_ms
+            cred.chatgpt_account_id = (chatgpt_account_id or None)
+            cred.updated_at_ms = now
+
+        db.add(cred)
+
+        # Ensure settings row exists; default to chatgpt when tokens are set.
+        settings = db.get(AgentUserSettings, ident.uid)
+        if not settings:
+            settings = AgentUserSettings(firebase_uid=ident.uid, llm_provider="chatgpt", created_at_ms=now, updated_at_ms=now)
+        else:
+            settings.updated_at_ms = now
+        db.add(settings)
+
+        db.commit()
+
+    return jsonify({"ok": True})
+
+
+@agent_bp.delete("/v1/agent/chatgpt_oauth")
+def delete_chatgpt_oauth_tokens():
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    with SessionLocal() as db:
+        cred = db.get(AgentChatGptCredential, ident.uid)
+        if cred:
+            db.delete(cred)
+            db.commit()
+
+    return jsonify({"ok": True})
 
 
 # --- Conversations ---

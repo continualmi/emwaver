@@ -92,6 +92,41 @@ class AgentMessage(Base):
 Index("idx_agent_messages_convo_created", AgentMessage.conversation_id, AgentMessage.created_at_ms)
 
 
+# --- Agent provider settings / credentials ---
+
+
+class AgentUserSettings(Base):
+    __tablename__ = "agent_user_settings"
+
+    # One row per user.
+    firebase_uid: Mapped[str] = mapped_column(String(128), primary_key=True)
+
+    # "chatgpt" (Codex via ChatGPT subscription) | "platform" (OpenAI Platform API key)
+    llm_provider: Mapped[str] = mapped_column(String(32), default="chatgpt")
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+class AgentChatGptCredential(Base):
+    __tablename__ = "agent_chatgpt_credentials"
+
+    # One row per user.
+    firebase_uid: Mapped[str] = mapped_column(String(128), primary_key=True)
+
+    # OAuth tokens from auth.openai.com (Codex / ChatGPT subscription access).
+    # NOTE: Stored as plaintext in DB for now (no secrets manager integration yet).
+    refresh_token: Mapped[str] = mapped_column(Text)
+    access_token: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    expires_at_ms: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    # Optional header for org/workspace subscriptions.
+    chatgpt_account_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
 # --- Host sessions (presence + status) ---
 
 
