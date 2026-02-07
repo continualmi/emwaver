@@ -237,6 +237,8 @@ This section is a **manual navigation map**. It intentionally omits the full dir
 ### Frontend (Next.js)
 
 - Agent + cloud UI: `frontend/src/app/cloud/`
+  - **Remote host control UI is integrated into `/cloud`** (single dashboard).
+  - Legacy routes `/cloud/hosts` and `/cloud/hosts/[hostId]/remote` now redirect to `/cloud`.
 - Backend client helpers / SSE parsing reference: `frontend/src/lib/`
 
 Web dev (Next.js):
@@ -372,11 +374,11 @@ Goal: allow the web dashboard to **fully drive** scripts running on a Host Sessi
 
 ##### Current Implementation (v1: Web + macOS + Android + iOS + Windows)
 Implemented now (controller ⇄ backend ⇄ native host):
-- Web dashboard controller ✅
+- Web dashboard controller ✅ (integrated into `/cloud`)
 - macOS controller ✅ (RemoteControlClientService.swift)
 - Android controller ✅ (RemoteControlClientService.java)
-- iOS controller ⏳ (planned)
-- Windows controller ⏳ (planned)
+- iOS controller ✅ (RemoteControlClientService.swift)
+- Windows controller ✅ (RemoteControlClientService.cs)
 - **Backend WS endpoint:** `GET /v1/ws`
   - Browser auth uses `?token=<firebase_id_token>` because the browser WS API cannot set `Authorization` headers.
   - Host sessions also connect outbound to this endpoint.
@@ -393,8 +395,11 @@ Implemented now (controller ⇄ backend ⇄ native host):
   - Note: v1 runs **script source pushed from web** (downloaded from cloud files) instead of referencing host-local script names.
 - **UI state (v1):** host emits **`ui.snapshot` only** on each ScriptTree update (rev increments).
   - `ui.patch` / `ui.ack` are planned but not implemented yet.
-- **UI events (v1):** web emits `ui.event {scriptInstanceId, targetNodeId, name, payload}`.
+- **UI events (v1):** controller emits `ui.event {scriptInstanceId, targetNodeId, name, payload}`.
   - Host maps `name` to `ScriptEventType` and dispatches to the handler token found on the targeted node.
+  - **Slider semantics:**
+    - `change` may stream while dragging.
+    - `submit` is fired **once on release** (used by `blink.emw` period slider).
 
 ##### Host UX (Remote Control Indicator)
 Native hosts should make it obvious when remote control is active:
