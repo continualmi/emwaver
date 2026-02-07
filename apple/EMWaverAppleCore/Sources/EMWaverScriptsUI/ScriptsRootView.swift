@@ -72,18 +72,18 @@ public struct ScriptsRootView: View {
     public var body: some View {
         ZStack {
             #if os(macOS)
-            HStack(spacing: 0) {
-                primaryContent
-                    .frame(minWidth: 520)
+            if showingAgentPanel {
+                HSplitView {
+                    primaryContent
+                        .frame(minWidth: 520)
 
-                if showingAgentPanel {
-                    Divider()
                     AgentChatPanelView(viewModel: agentViewModel)
-                        .frame(width: 380)
-                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
                 }
+                .transition(.opacity)
+            } else {
+                primaryContent
             }
-            .animation(.easeInOut(duration: 0.22), value: showingAgentPanel)
             #else
             primaryContent
             #endif

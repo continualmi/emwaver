@@ -219,9 +219,15 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func runToolLoop(userPrompt: String) async throws -> String {
         // Provide a light instruction prompt so Codex knows it is operating the host.
-        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown. Use bullet lists and code blocks when appropriate, and include blank lines between paragraphs."
+        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
 
         let tools = toolSpecs()
+
+        // Fast local answer for a common question: don't ask the model to enumerate its own tool schema.
+        // This avoids formatting glitches and keeps the response consistent across providers.
+        if Self.isToolListingPrompt(userPrompt) {
+            return Self.localToolHelpMarkdown(tools)
+        }
 
         var iterations = 0
         var lastAssistantText = ""
@@ -518,6 +524,27 @@ public final class AgentChatViewModel: ObservableObject {
         ]
     }
 
+    // MARK: - Local canned answers
+
+    private static func isToolListingPrompt(_ s: String) -> Bool {
+        let t = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if t.contains("what tools") { return true }
+        if t.contains("which tools") { return true }
+        if t.contains("tools do you have") { return true }
+        if t == "tools" { return true }
+        return false
+    }
+
+    private static func localToolHelpMarkdown(_ tools: [AgentCodexClient.ToolSpec]) -> String {
+        // Keep this user-facing (not tool ids), but include ids in backticks so power users can see them.
+        var out: [String] = []
+        out.append("I can use the following tools:\n")
+        for t in tools {
+            out.append("- **\(t.name)** — \(t.description)")
+        }
+        return out.joined(separator: "\n")
+    }
+
     // MARK: - Responses helpers (aligned with anomalyco/opencode)
 
     private static func extractResponsesOutputItems(_ resp: [String: Any]) -> [[String: Any]] {
@@ -538,7 +565,8 @@ public final class AgentChatViewModel: ObservableObject {
                 parts.append(t)
             }
         }
-        return parts.joined(separator: "\n")
+        // Join blocks with a blank line to preserve paragraphs.
+        return parts.joined(separator: "\n\n")
     }
 
     private func parseArgs(_ raw: Any?) -> [String: Any] {
