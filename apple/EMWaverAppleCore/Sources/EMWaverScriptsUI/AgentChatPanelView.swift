@@ -9,6 +9,9 @@ import SwiftUI
 public struct AgentChatPanelView: View {
     @ObservedObject private var viewModel: AgentChatViewModel
 
+    @State private var showingOpenRouterConnect = false
+    @State private var openRouterApiKeyDraft = ""
+
     public init(viewModel: AgentChatViewModel) {
         self.viewModel = viewModel
     }
@@ -27,6 +30,37 @@ public struct AgentChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
+        .sheet(isPresented: $showingOpenRouterConnect) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Connect OpenRouter")
+                    .font(.headline)
+
+                Text("Paste your OpenRouter API key. It will be stored locally in the macOS Keychain.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                SecureField("OpenRouter API key", text: $openRouterApiKeyDraft)
+                    .textFieldStyle(.roundedBorder)
+
+                HStack {
+                    Button("Cancel") {
+                        openRouterApiKeyDraft = ""
+                        showingOpenRouterConnect = false
+                    }
+
+                    Spacer()
+
+                    Button("Save") {
+                        viewModel.setOpenRouterApiKey(openRouterApiKeyDraft)
+                        openRouterApiKeyDraft = ""
+                        showingOpenRouterConnect = false
+                    }
+                    .disabled(openRouterApiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(16)
+            .frame(width: 420)
+        }
     }
 
     private var header: some View {
@@ -75,21 +109,51 @@ public struct AgentChatPanelView: View {
                     Divider()
 
                     Menu {
-                        ForEach(AgentChatViewModel.allowedModelIds, id: \.self) { mid in
+                        Section("Provider") {
                             Button {
-                                viewModel.setModelForSelectedConversation(mid)
+                                viewModel.setProviderForSelectedConversation(.chatgptCodex)
                             } label: {
                                 HStack {
-                                    Text(mid)
-                                    if viewModel.selectedModelId == mid {
+                                    Text("ChatGPT (Codex)")
+                                    if viewModel.selectedProviderId == .chatgptCodex {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+
+                            Button {
+                                viewModel.setProviderForSelectedConversation(.openrouter)
+                            } label: {
+                                HStack {
+                                    Text("OpenRouter")
+                                    if viewModel.selectedProviderId == .openrouter {
                                         Spacer()
                                         Image(systemName: "checkmark")
                                     }
                                 }
                             }
                         }
+
+                        Divider()
+
+                        Section("Model") {
+                            ForEach(viewModel.allowedModelsForSelectedProvider, id: \.self) { mid in
+                                Button {
+                                    viewModel.setModelForSelectedConversation(mid)
+                                } label: {
+                                    HStack {
+                                        Text(mid)
+                                        if viewModel.selectedModelId == mid {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     } label: {
-                        Text("Model: \(viewModel.selectedModelId)")
+                        Text("\(viewModel.selectedProviderId == .openrouter ? "OpenRouter" : "ChatGPT") • \(viewModel.selectedModelId)")
                     }
 
                     Divider()
@@ -105,6 +169,22 @@ public struct AgentChatPanelView: View {
                             viewModel.connectChatGPTViaBrowser()
                         } label: {
                             Text("Connect ChatGPT (Plus/Pro)")
+                        }
+                    }
+
+                    Divider()
+
+                    if viewModel.isOpenRouterConnected {
+                        Button(role: .destructive) {
+                            viewModel.disconnectOpenRouter()
+                        } label: {
+                            Text("Disconnect OpenRouter")
+                        }
+                    } else {
+                        Button {
+                            showingOpenRouterConnect = true
+                        } label: {
+                            Text("Connect OpenRouter (API key)")
                         }
                     }
 

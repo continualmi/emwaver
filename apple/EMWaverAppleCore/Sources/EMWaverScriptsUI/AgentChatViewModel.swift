@@ -14,7 +14,12 @@ public final class AgentChatViewModel: ObservableObject {
         os_log("%{public}@", log: Self.log, type: .debug, "[AgentChat] \(msg)")
     }
 
-    public static let allowedModelIds: [String] = [
+    public enum ProviderId: String, Codable, CaseIterable {
+        case chatgptCodex = "chatgpt_codex"
+        case openrouter = "openrouter"
+    }
+
+    public static let allowedCodexModelIds: [String] = [
         "gpt-5.1-codex-max",
         "gpt-5.1-codex-mini",
         "gpt-5.1-codex",
@@ -23,6 +28,12 @@ public final class AgentChatViewModel: ObservableObject {
         "gpt-5.3-codex",
     ]
 
+    public static let allowedOpenRouterModelIds: [String] = [
+        "qwen/qwen3-coder-next",
+        "x-ai/grok-4.1-fast",
+    ]
+
+    public static let defaultProviderId: ProviderId = .chatgptCodex
     public static let defaultModelId = "gpt-5.3-codex"
 
     @Published public private(set) var messages: [AgentChatMessage] = []
@@ -37,20 +48,54 @@ public final class AgentChatViewModel: ObservableObject {
     public let host: AgentHost
 
     private let codex = AgentCodexClient()
+    private let openRouter = AgentOpenRouterClient()
 
     private let legacyDefaultsKey = "emwaver.agent.local.conversation"
 
     private let conversationsKey = "emwaver.agent.local.conversations.v1"
     private let selectedConversationKey = "emwaver.agent.local.selected_conversation_id"
     private let preferredModelKey = "emwaver.agent.local.preferred_model_id"
+    private let preferredProviderKey = "emwaver.agent.local.preferred_provider_id"
 
     public init(host: AgentHost) {
         self.host = host
         loadPersistedState()
     }
 
+    private let keychainService = "com.emwaver.agent"
+    private let openRouterKeyAccount = "openrouter_api_key"
+
     public var isChatGPTConnected: Bool {
         codex.isConnected()
+    }
+
+    public var isOpenRouterConnected: Bool {
+        (try? KeychainStore.get(service: keychainService, account: openRouterKeyAccount)) != nil
+    }
+
+    public func setOpenRouterApiKey(_ key: String) {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        do {
+            try KeychainStore.set(service: keychainService, account: openRouterKeyAccount, data: Data(trimmed.utf8))
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    public func disconnectOpenRouter() {
+        do {
+            try KeychainStore.delete(service: keychainService, account: openRouterKeyAccount)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    private func getOpenRouterApiKey() throws -> String {
+        guard let data = try KeychainStore.get(service: keychainService, account: openRouterKeyAccount) else {
+            throw AgentBackendError.serverError("OpenRouter is not connected")
+        }
+        return String(data: data, encoding: .utf8) ?? ""
     }
 
     public func clear() {
@@ -64,8 +109,10 @@ public final class AgentChatViewModel: ObservableObject {
         updateConversation(id: id) { conv in
             conv.messages = []
             conv.codexInputItemsJSON = []
+            conv.openRouterMessagesJSON = []
             conv.sessionId = UUID().uuidString
             conv.modelId = Self.defaultModelId
+            conv.providerId = Self.defaultProviderId
             conv.updatedAt = Date()
         }
         persistState()
@@ -79,9 +126,11 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
+            providerId: preferredProviderId(),
             modelId: preferredModelId(),
             messages: [],
-            codexInputItemsJSON: []
+            codexInputItemsJSON: [],
+            openRouterMessagesJSON: []
         )
         upsertConversation(conv)
         selectConversation(id)
@@ -96,20 +145,49 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func setModelForSelectedConversation(_ modelId: String) {
         guard let id = selectedConversationId else { return }
-        guard Self.allowedModelIds.contains(modelId) else { return }
+        guard let conv = conversation(id: id) else { return }
+        let allowed = allowedModels(for: conv.providerId)
+        guard allowed.contains(modelId) else { return }
         UserDefaults.standard.set(modelId, forKey: preferredModelKey)
         updateConversation(id: id) { conv in
             conv.modelId = modelId
             conv.updatedAt = Date()
         }
         persistState()
-        dbg("set model conv=\(id) model=\(modelId)")
+        dbg("set model conv=\(id) provider=\(conv.providerId.rawValue) model=\(modelId)")
+    }
+
+    public var selectedProviderId: ProviderId {
+        guard let id = selectedConversationId,
+              let conv = conversation(id: id) else { return preferredProviderId() }
+        return conv.providerId
     }
 
     public var selectedModelId: String {
         guard let id = selectedConversationId,
               let conv = conversation(id: id) else { return preferredModelId() }
         return conv.modelId
+    }
+
+    public var allowedModelsForSelectedProvider: [String] {
+        allowedModels(for: selectedProviderId)
+    }
+
+    public func setProviderForSelectedConversation(_ provider: ProviderId) {
+        guard let id = selectedConversationId else { return }
+        UserDefaults.standard.set(provider.rawValue, forKey: preferredProviderKey)
+
+        // If current model isn't valid for this provider, switch to provider default.
+        let allowed = allowedModels(for: provider)
+        let nextModel = allowed.contains(selectedModelId) ? selectedModelId : (allowed.first ?? Self.defaultModelId)
+
+        updateConversation(id: id) { conv in
+            conv.providerId = provider
+            conv.modelId = nextModel
+            conv.updatedAt = Date()
+        }
+        persistState()
+        dbg("set provider conv=\(id) provider=\(provider.rawValue) model=\(nextModel)")
     }
 
     public func deleteConversation(_ id: UUID) {
@@ -156,22 +234,34 @@ public final class AgentChatViewModel: ObservableObject {
         lastError = nil
         draft = ""
 
-        guard isChatGPTConnected else {
-            lastError = "Connect ChatGPT (Plus/Pro) first."
-            return
+        // Provider-specific connection checks
+        switch selectedProviderId {
+        case .chatgptCodex:
+            guard isChatGPTConnected else {
+                lastError = "Connect ChatGPT (Plus/Pro) first."
+                return
+            }
+        case .openrouter:
+            guard isOpenRouterConnected else {
+                lastError = "Connect OpenRouter (API key) first."
+                return
+            }
         }
 
         messages.append(AgentChatMessage(role: .user, text: text))
 
         if let id = selectedConversationId {
-            let userItem: [String: Any] = [
-                "role": "user",
-                "content": [["type": "input_text", "text": text]],
-            ]
             updateConversation(id: id) { conv in
                 conv.messages = self.messages
-                conv.codexInputItemsJSON.append(jsonString(userItem))
                 conv.updatedAt = Date()
+                switch conv.providerId {
+                case .chatgptCodex:
+                    // Codex input history is built inside runToolLoop now.
+                    break
+                case .openrouter:
+                    let msg: [String: Any] = ["role": "user", "content": text]
+                    conv.openRouterMessagesJSON.append(jsonString(msg))
+                }
             }
         }
         persistState()
@@ -187,7 +277,13 @@ public final class AgentChatViewModel: ObservableObject {
                     self.messages.append(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
-                let reply = try await runToolLoop(userPrompt: text)
+                let reply: String
+                switch self.selectedProviderId {
+                case .chatgptCodex:
+                    reply = try await self.runToolLoop(userPrompt: text)
+                case .openrouter:
+                    reply = try await self.runOpenRouterToolLoop(userPrompt: text)
+                }
 
                 await MainActor.run {
                     if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
@@ -215,7 +311,7 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Tool loop
+    // MARK: - Tool loop (Codex Responses)
 
     private func runToolLoop(userPrompt: String) async throws -> String {
         // Provide a light instruction prompt so Codex knows it is operating the host.
@@ -311,6 +407,88 @@ public final class AgentChatViewModel: ObservableObject {
         let trimmed = lastAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
             throw AgentBackendError.serverError("Codex produced no text")
+        }
+        return trimmed
+    }
+
+    // MARK: - Tool loop (OpenRouter Chat Completions)
+
+    private func runOpenRouterToolLoop(userPrompt: String) async throws -> String {
+        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
+
+        // Local tool listing
+        if Self.isToolListingPrompt(userPrompt) {
+            return Self.localToolHelpMarkdown(toolSpecs())
+        }
+
+        let apiKey = try getOpenRouterApiKey()
+        let tools = toolSpecs().map { AgentOpenRouterClient.ToolSpec(name: $0.name, description: $0.description, parameters: $0.parameters) }
+
+        // Ensure system message exists once per conversation.
+        if let id = selectedConversationId {
+            updateConversation(id: id) { conv in
+                if conv.openRouterMessagesJSON.isEmpty {
+                    let sys: [String: Any] = ["role": "system", "content": instructions]
+                    conv.openRouterMessagesJSON.append(self.jsonString(sys))
+                }
+            }
+            persistState()
+        }
+
+        var iterations = 0
+        var lastAssistantText = ""
+
+        while iterations < 10 {
+            iterations += 1
+
+            let history = currentOpenRouterMessages()
+            dbg("openrouter loop iter=\(iterations) model=\(selectedModelId) msgs=\(history.count)")
+
+            let assistantMsg = try await openRouter.sendStream(
+                apiKey: apiKey,
+                model: selectedModelId,
+                messages: history,
+                tools: tools
+            )
+
+            appendOpenRouterMessageToCurrentConversation(assistantMsg)
+
+            let assistantText = (assistantMsg["content"] as? String) ?? ""
+            if !assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lastAssistantText = assistantText
+            }
+
+            guard let toolCalls = assistantMsg["tool_calls"] as? [Any], !toolCalls.isEmpty else {
+                break
+            }
+
+            for tcAny in toolCalls {
+                guard let tc = tcAny as? [String: Any] else { continue }
+                let callId = (tc["id"] as? String) ?? ""
+                guard let fn = tc["function"] as? [String: Any] else { continue }
+                let name = (fn["name"] as? String) ?? ""
+                let argsStr = (fn["arguments"] as? String) ?? "{}"
+                if name.isEmpty { continue }
+
+                await MainActor.run {
+                    self.appendSystemToolBubble(name: name)
+                }
+
+                let argsObj = parseArgs(argsStr)
+                let result = try await executeTool(name: name, args: argsObj)
+
+                let toolMsg: [String: Any] = [
+                    "role": "tool",
+                    "tool_call_id": callId,
+                    "content": jsonString(result),
+                ]
+                appendOpenRouterMessageToCurrentConversation(toolMsg)
+            }
+        }
+
+        let trimmed = lastAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            throw AgentBackendError.serverError("OpenRouter produced no text")
         }
         return trimmed
     }
@@ -638,6 +816,7 @@ public final class AgentChatViewModel: ObservableObject {
         let createdAt: Date
         var updatedAt: Date
         var sessionId: String
+        var providerId: ProviderId
         var modelId: String
         var messages: [AgentChatMessage]
 
@@ -648,6 +827,10 @@ public final class AgentChatViewModel: ObservableObject {
         // {"type":"function_call_output","call_id":"...","output":"{...}"}
         var codexInputItemsJSON: [String]
 
+        // Host-local canonical prompt state for OpenRouter Chat Completions.
+        // Each entry is a JSON-encoded chat message dict (role/content, plus tool_calls/tool_call_id).
+        var openRouterMessagesJSON: [String]
+
         // Codable migration: tolerate older stored conversations.
         init(
             id: UUID,
@@ -655,18 +838,22 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt: Date,
             updatedAt: Date,
             sessionId: String,
+            providerId: ProviderId,
             modelId: String,
             messages: [AgentChatMessage],
-            codexInputItemsJSON: [String]
+            codexInputItemsJSON: [String],
+            openRouterMessagesJSON: [String]
         ) {
             self.id = id
             self.title = title
             self.createdAt = createdAt
             self.updatedAt = updatedAt
             self.sessionId = sessionId
+            self.providerId = providerId
             self.modelId = modelId
             self.messages = messages
             self.codexInputItemsJSON = codexInputItemsJSON
+            self.openRouterMessagesJSON = openRouterMessagesJSON
         }
 
         init(from decoder: Decoder) throws {
@@ -676,9 +863,11 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
             updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? UUID().uuidString
+            providerId = try c.decodeIfPresent(ProviderId.self, forKey: .providerId) ?? AgentChatViewModel.defaultProviderId
             modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? AgentChatViewModel.defaultModelId
             messages = try c.decodeIfPresent([AgentChatMessage].self, forKey: .messages) ?? []
             codexInputItemsJSON = try c.decodeIfPresent([String].self, forKey: .codexInputItemsJSON) ?? []
+            openRouterMessagesJSON = try c.decodeIfPresent([String].self, forKey: .openRouterMessagesJSON) ?? []
         }
     }
 
@@ -755,9 +944,24 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
+    private func allowedModels(for provider: ProviderId) -> [String] {
+        switch provider {
+        case .chatgptCodex: return Self.allowedCodexModelIds
+        case .openrouter: return Self.allowedOpenRouterModelIds
+        }
+    }
+
+    private func preferredProviderId() -> ProviderId {
+        let raw = UserDefaults.standard.string(forKey: preferredProviderKey)
+        return ProviderId(rawValue: raw ?? "") ?? Self.defaultProviderId
+    }
+
     private func preferredModelId() -> String {
-        let m = UserDefaults.standard.string(forKey: preferredModelKey) ?? Self.defaultModelId
-        return Self.allowedModelIds.contains(m) ? m : Self.defaultModelId
+        let provider = preferredProviderId()
+        let allowed = allowedModels(for: provider)
+        let fallback = allowed.first ?? Self.defaultModelId
+        let m = UserDefaults.standard.string(forKey: preferredModelKey) ?? fallback
+        return allowed.contains(m) ? m : fallback
     }
 
     private func loadPersistedState() {
@@ -772,9 +976,11 @@ public final class AgentChatViewModel: ObservableObject {
                     createdAt: Date(),
                     updatedAt: Date(),
                     sessionId: UUID().uuidString,
+                    providerId: Self.defaultProviderId,
                     modelId: Self.defaultModelId,
                     messages: msgs,
-                    codexInputItemsJSON: []
+                    codexInputItemsJSON: [],
+                    openRouterMessagesJSON: []
                 )
                 upsertConversation(conv)
                 UserDefaults.standard.removeObject(forKey: legacyDefaultsKey)
@@ -818,6 +1024,17 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
+    private func currentOpenRouterMessages() -> [[String: Any]] {
+        guard let id = selectedConversationId,
+              let conv = conversation(id: id) else { return [] }
+
+        return conv.openRouterMessagesJSON.compactMap { s in
+            guard let data = s.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return obj
+        }
+    }
+
     private func appendCodexItemToCurrentConversation(_ item: [String: Any]) {
         guard let scrubbedAny = scrubItemReferencesDeep(item) else { return }
         guard let scrubbed = scrubbedAny as? [String: Any] else { return }
@@ -825,6 +1042,15 @@ public final class AgentChatViewModel: ObservableObject {
         guard let id = selectedConversationId else { return }
         updateConversation(id: id) { conv in
             conv.codexInputItemsJSON.append(jsonString(scrubbed))
+            conv.updatedAt = Date()
+        }
+        persistState()
+    }
+
+    private func appendOpenRouterMessageToCurrentConversation(_ msg: [String: Any]) {
+        guard let id = selectedConversationId else { return }
+        updateConversation(id: id) { conv in
+            conv.openRouterMessagesJSON.append(jsonString(msg))
             conv.updatedAt = Date()
         }
         persistState()
