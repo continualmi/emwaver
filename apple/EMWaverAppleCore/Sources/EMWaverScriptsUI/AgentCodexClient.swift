@@ -57,7 +57,7 @@ final class AgentCodexClient {
         instructions: String,
         messages: [[String: Any]],
         tools: [ToolSpec],
-        maxOutputTokens: Int,
+        maxTokens: Int,
         temperature: Double,
         sessionId: String?
     ) async throws -> [String: Any] {
@@ -83,7 +83,7 @@ final class AgentCodexClient {
             "model": model,
             "instructions": instructions,
             "input": input,
-            "max_output_tokens": maxOutputTokens,
+            "max_tokens": maxTokens,
             "temperature": temperature,
             // Codex endpoint requirements.
             "store": false,

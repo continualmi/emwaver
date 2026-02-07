@@ -193,7 +193,7 @@ public final class AgentChatViewModel: ObservableObject {
                 instructions: instructions,
                 messages: msgs,
                 tools: tools,
-                maxOutputTokens: 1200,
+                maxTokens: 1200,
                 temperature: 0.2,
                 sessionId: sessionId
             )
