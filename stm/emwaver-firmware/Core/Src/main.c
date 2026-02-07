@@ -441,7 +441,7 @@ static void enable_gpio_clock(GPIO_TypeDef *port)
     }
 }
 
-static void configurePin(GPIO_TypeDef *port, uint16_t pin, uint32_t mode, uint32_t pull)
+static void configurePin(GPIO_TypeDef *port, uint16_t pin, uint32_t mode, uint32_t pull, uint8_t alternate)
 {
     GPIO_InitTypeDef GPIO_InitStruct = {0};
 
@@ -451,7 +451,7 @@ static void configurePin(GPIO_TypeDef *port, uint16_t pin, uint32_t mode, uint32
     GPIO_InitStruct.Pull = pull;
     GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
     if (mode == GPIO_MODE_AF_PP) {
-        GPIO_InitStruct.Alternate = GPIO_AF2_TIM2;
+        GPIO_InitStruct.Alternate = alternate;
     }
     HAL_GPIO_Init(port, &GPIO_InitStruct);
 }
@@ -486,22 +486,74 @@ static void setDutyCycle_TIM2(uint32_t channel, uint8_t percentage)
 // PWM (analogWrite) support
 // -----------------------------------------------------------------------------
 
-static bool tim2_channel_from_pin(GPIO_TypeDef *port, uint8_t pin_index, uint32_t *out_channel)
+typedef enum {
+    PWM_TIMER_NONE = 0,
+    PWM_TIMER_TIM2 = 2,
+    PWM_TIMER_TIM14 = 14,
+    PWM_TIMER_TIM16 = 16,
+    PWM_TIMER_TIM17 = 17,
+} pwm_timer_id_t;
+
+typedef struct {
+    pwm_timer_id_t timer_id;
+    uint32_t channel;      // TIM_CHANNEL_x (TIM2 only uses 1..4; others use CH1)
+    uint8_t is_complement; // 1 => CH1N
+    uint8_t af;            // GPIO_AFx_* value
+} pwm_route_t;
+
+static bool pwm_route_from_pin(GPIO_TypeDef *port, uint8_t pin_index, pwm_route_t *out)
 {
-    if (!out_channel) {
-        return false;
-    }
-    if (port != GPIOA) {
+    if (!out) {
         return false;
     }
 
-    switch (pin_index) {
-        case 0: *out_channel = TIM_CHANNEL_1; return true;
-        case 1: *out_channel = TIM_CHANNEL_2; return true;
-        case 2: *out_channel = TIM_CHANNEL_3; return true;
-        case 3: *out_channel = TIM_CHANNEL_4; return true;
-        default: return false;
+    // NOTE: We intentionally exclude TIM3-based PWM routes to avoid conflicts
+    // with the sampler/retransmit tick ISR.
+
+    // Defaults.
+    out->timer_id = PWM_TIMER_NONE;
+    out->channel = 0;
+    out->is_complement = 0;
+    out->af = 0;
+
+    if (port == GPIOA) {
+        switch (pin_index) {
+            case 0: out->timer_id = PWM_TIMER_TIM2; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF2_TIM2; return true; // A0
+            case 1: out->timer_id = PWM_TIMER_TIM2; out->channel = TIM_CHANNEL_2; out->af = GPIO_AF2_TIM2; return true; // A1
+            case 2: out->timer_id = PWM_TIMER_TIM2; out->channel = TIM_CHANNEL_3; out->af = GPIO_AF2_TIM2; return true; // A2
+            // A3 is TIM3_CH4 (excluded)
+            case 4: out->timer_id = PWM_TIMER_TIM14; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF4_TIM14; return true; // A4
+            case 5: out->timer_id = PWM_TIMER_TIM2; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF2_TIM2; return true; // A5 (shares with A0)
+            case 6: out->timer_id = PWM_TIMER_TIM16; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF5_TIM16; return true; // A6
+            case 7: out->timer_id = PWM_TIMER_TIM17; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF5_TIM17; return true; // A7
+            default: break;
+        }
+    } else if (port == GPIOB) {
+        switch (pin_index) {
+            case 6: out->timer_id = PWM_TIMER_TIM16; out->channel = TIM_CHANNEL_1; out->is_complement = 1; out->af = GPIO_AF2_TIM16; return true; // B6 CH1N
+            case 7: out->timer_id = PWM_TIMER_TIM17; out->channel = TIM_CHANNEL_1; out->is_complement = 1; out->af = GPIO_AF2_TIM17; return true; // B7 CH1N
+            case 8: out->timer_id = PWM_TIMER_TIM16; out->channel = TIM_CHANNEL_1; out->af = GPIO_AF2_TIM16; return true; // B8
+            default: break;
+        }
     }
+
+    return false;
+}
+
+static bool tim2_channel_from_pin(GPIO_TypeDef *port, uint8_t pin_index, uint32_t *out_channel)
+{
+    pwm_route_t r = {0};
+    if (!out_channel) {
+        return false;
+    }
+    if (!pwm_route_from_pin(port, pin_index, &r)) {
+        return false;
+    }
+    if (r.timer_id != PWM_TIMER_TIM2) {
+        return false;
+    }
+    *out_channel = r.channel;
+    return true;
 }
 
 static uint16_t tim2_ccer_mask_from_channel(uint32_t channel)
@@ -565,6 +617,148 @@ static bool tim2_set_pwm_hz(uint32_t hz)
     TIM2->ARR = ticks - 1u;
     TIM2->EGR = TIM_EGR_UG;
     return true;
+}
+
+static bool tim16_17_set_pwm_hz(TIM_TypeDef *tim, uint32_t hz)
+{
+    if (!tim || hz < 1u) {
+        return false;
+    }
+
+    uint32_t timclk = HAL_RCC_GetHCLKFreq();
+    if (timclk == 0u) {
+        timclk = 48000000u;
+    }
+
+    uint32_t ticks = timclk / hz;
+    if (ticks < 2u) {
+        ticks = 2u;
+    }
+
+    // 16-bit timer: choose PSC so ARR fits.
+    uint32_t psc = 0u;
+    if (ticks > 0x10000u) {
+        psc = (ticks + 0xFFFFu) / 0x10000u;
+        if (psc > 0u) {
+            psc -= 1u;
+        }
+        if (psc > 0xFFFFu) {
+            psc = 0xFFFFu;
+        }
+    }
+
+    uint32_t div = psc + 1u;
+    uint32_t arr = (ticks / div);
+    if (arr < 2u) {
+        arr = 2u;
+    }
+    if (arr > 0x10000u) {
+        arr = 0x10000u;
+    }
+
+    tim->PSC = (uint16_t)psc;
+    tim->ARR = (uint16_t)(arr - 1u);
+    tim->EGR = TIM_EGR_UG;
+    return true;
+}
+
+static bool tim14_set_pwm_hz(uint32_t hz)
+{
+    return tim16_17_set_pwm_hz(TIM14, hz);
+}
+
+static void tim14_16_17_set_ccr_from_u12(TIM_TypeDef *tim, uint16_t value_u12)
+{
+    if (!tim) {
+        return;
+    }
+
+    uint32_t arr = (uint32_t)tim->ARR;
+    uint32_t period = arr + 1u;
+
+    uint32_t ccr = (period * (uint32_t)value_u12 + 2047u) / 4095u;
+    if (ccr > arr) {
+        ccr = arr;
+    }
+
+    tim->CCR1 = (uint16_t)ccr;
+}
+
+static void pwm_timer_enable_once(pwm_timer_id_t id)
+{
+    if (id == PWM_TIMER_TIM14) {
+        __HAL_RCC_TIM14_CLK_ENABLE();
+        // PWM mode 1 on CH1.
+        TIM14->CR1 |= TIM_CR1_ARPE;
+        TIM14->CCMR1 = (TIM14->CCMR1 & (uint16_t)~TIM_CCMR1_OC1M) | (uint16_t)(6u << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE;
+        return;
+    }
+    if (id == PWM_TIMER_TIM16) {
+        __HAL_RCC_TIM16_CLK_ENABLE();
+        TIM16->CR1 |= TIM_CR1_ARPE;
+        TIM16->CCMR1 = (TIM16->CCMR1 & (uint16_t)~TIM_CCMR1_OC1M) | (uint16_t)(6u << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE;
+        TIM16->BDTR |= TIM_BDTR_MOE;
+        return;
+    }
+    if (id == PWM_TIMER_TIM17) {
+        __HAL_RCC_TIM17_CLK_ENABLE();
+        TIM17->CR1 |= TIM_CR1_ARPE;
+        TIM17->CCMR1 = (TIM17->CCMR1 & (uint16_t)~TIM_CCMR1_OC1M) | (uint16_t)(6u << TIM_CCMR1_OC1M_Pos) | TIM_CCMR1_OC1PE;
+        TIM17->BDTR |= TIM_BDTR_MOE;
+        return;
+    }
+}
+
+static void pwm_start_route(const pwm_route_t *r)
+{
+    if (!r) {
+        return;
+    }
+
+    if (r->timer_id == PWM_TIMER_TIM2) {
+        startPWM_TIM2(r->channel);
+        (void)HAL_TIM_PWM_Start(&htim2, r->channel);
+        return;
+    }
+
+    pwm_timer_enable_once(r->timer_id);
+
+    TIM_TypeDef *tim = NULL;
+    if (r->timer_id == PWM_TIMER_TIM14) tim = TIM14;
+    if (r->timer_id == PWM_TIMER_TIM16) tim = TIM16;
+    if (r->timer_id == PWM_TIMER_TIM17) tim = TIM17;
+    if (!tim) return;
+
+    tim->CR1 |= TIM_CR1_CEN;
+    if (r->is_complement) {
+        tim->CCER |= TIM_CCER_CC1NE;
+    } else {
+        tim->CCER |= TIM_CCER_CC1E;
+    }
+}
+
+static void pwm_stop_route(const pwm_route_t *r)
+{
+    if (!r) {
+        return;
+    }
+
+    if (r->timer_id == PWM_TIMER_TIM2) {
+        tim2_stop_pwm_channel(r->channel);
+        return;
+    }
+
+    TIM_TypeDef *tim = NULL;
+    if (r->timer_id == PWM_TIMER_TIM14) tim = TIM14;
+    if (r->timer_id == PWM_TIMER_TIM16) tim = TIM16;
+    if (r->timer_id == PWM_TIMER_TIM17) tim = TIM17;
+    if (!tim) return;
+
+    if (r->is_complement) {
+        tim->CCER &= (uint16_t)~TIM_CCER_CC1NE;
+    } else {
+        tim->CCER &= (uint16_t)~TIM_CCER_CC1E;
+    }
 }
 
 static void stop_sampling(void)
@@ -718,7 +912,8 @@ static void gpio_set_mode(GPIO_TypeDef *port, uint16_t pin_mask, uint32_t mode, 
     }
     enable_gpio_clock(port);
     HAL_GPIO_DeInit(port, pin_mask);
-    configurePin(port, pin_mask, mode, pull);
+    // Generic pin-mode helper does not know which AF to use; leave at AF0.
+    configurePin(port, pin_mask, mode, pull, 0);
 }
 
 // -----------------------------------------------------------------------------
@@ -1915,7 +2110,7 @@ adc_done_bin:
 
               enable_gpio_clock(cs_port);
               gpio_write_latch(cs_port, cs_pin_mask, true);
-              configurePin(cs_port, cs_pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
+              configurePin(cs_port, cs_pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL, 0);
               HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_SET);
 
               HAL_GPIO_WritePin(cs_port, cs_pin_mask, GPIO_PIN_RESET);
@@ -1947,7 +2142,7 @@ adc_done_bin:
                       break;
                   }
                   uint32_t pull = (port == GPIOA && pin_mask == GPIO_PIN_1) ? GPIO_NOPULL : GPIO_PULLDOWN;
-                  configurePin(port, pin_mask, GPIO_MODE_INPUT, pull);
+                  configurePin(port, pin_mask, GPIO_MODE_INPUT, pull, 0);
                   samplerPort = port;
                   samplerPin = pin_mask;
 
@@ -2007,11 +2202,13 @@ adc_done_bin:
                       break;
                   }
                   uint32_t channel = 0;
-                  if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                  pwm_route_t r = {0};
+                  if (!pwm_route_from_pin(port, pin_index, &r)) {
                       command_send_err(NULL);
                       break;
                   }
-                  tim2_stop_pwm_channel(channel);
+                  // TIM3 routes are intentionally excluded (see pwm_route_from_pin).
+                  pwm_stop_route(&r);
                   gpio_write_latch(port, pin_mask, false);
                   gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                   HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
@@ -2036,33 +2233,43 @@ adc_done_bin:
                       command_send_err(NULL);
                       break;
                   }
-                  uint32_t channel = 0;
-                  if (!tim2_channel_from_pin(port, pin_index, &channel)) {
+                  pwm_route_t r = {0};
+                  if (!pwm_route_from_pin(port, pin_index, &r)) {
                       command_send_err(NULL);
                       break;
                   }
+
                   if (hz != 0u) {
-                      if (!tim2_set_pwm_hz(hz)) {
+                      bool ok = false;
+                      if (r.timer_id == PWM_TIMER_TIM2) ok = tim2_set_pwm_hz(hz);
+                      else if (r.timer_id == PWM_TIMER_TIM14) ok = tim14_set_pwm_hz(hz);
+                      else if (r.timer_id == PWM_TIMER_TIM16) ok = tim16_17_set_pwm_hz(TIM16, hz);
+                      else if (r.timer_id == PWM_TIMER_TIM17) ok = tim16_17_set_pwm_hz(TIM17, hz);
+                      if (!ok) {
                           command_send_err(NULL);
                           break;
                       }
                   }
 
                   if (value == 0u) {
-                      tim2_stop_pwm_channel(channel);
+                      pwm_stop_route(&r);
                       gpio_write_latch(port, pin_mask, false);
                       gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                       HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_RESET);
                   } else if (value >= 4095u) {
-                      tim2_stop_pwm_channel(channel);
+                      pwm_stop_route(&r);
                       gpio_write_latch(port, pin_mask, true);
                       gpio_set_mode(port, pin_mask, GPIO_MODE_OUTPUT_PP, GPIO_NOPULL);
                       HAL_GPIO_WritePin(port, pin_mask, GPIO_PIN_SET);
                   } else {
-                      configurePin(port, pin_mask, GPIO_MODE_AF_PP, GPIO_NOPULL);
-                      tim2_set_ccr_from_u12(channel, value);
-                      startPWM_TIM2(channel);
-                      (void)HAL_TIM_PWM_Start(&htim2, channel);
+                      configurePin(port, pin_mask, GPIO_MODE_AF_PP, GPIO_NOPULL, r.af);
+                      if (r.timer_id == PWM_TIMER_TIM2) {
+                          tim2_set_ccr_from_u12(r.channel, value);
+                      } else {
+                          TIM_TypeDef *tim = (r.timer_id == PWM_TIMER_TIM14) ? TIM14 : (r.timer_id == PWM_TIMER_TIM16) ? TIM16 : TIM17;
+                          tim14_16_17_set_ccr_from_u12(tim, value);
+                      }
+                      pwm_start_route(&r);
                   }
                   command_send_ok(NULL, 0);
                   break;
@@ -2107,7 +2314,7 @@ adc_done_bin:
                   case 3: tim_channel = TIM_CHANNEL_4; gpio_pin = GPIO_PIN_3; break;
               }
 
-              configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN);
+              configurePin(GPIOA, gpio_pin, GPIO_MODE_AF_PP, GPIO_PULLDOWN, GPIO_AF2_TIM2);
 
               if (pwm_hz != 0u) {
                   (void)tim2_set_pwm_hz(pwm_hz);
