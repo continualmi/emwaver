@@ -9,21 +9,20 @@ use tokio_tungstenite::tungstenite::Message;
 use tracing::{info, warn};
 use url::Url;
 
+mod config;
+mod device;
 mod engine;
+mod heartbeat;
 mod protocol;
 mod ui_tree;
 
+use config::Config;
+use device::Device;
 use engine::Engine;
+use heartbeat::heartbeat_once;
 
 // Linux host (Model 1): headless script runtime + UI tree state machine.
 // Matches the existing remote host protocol (`/v1/ws`) used by macOS.
-
-#[derive(Debug, Clone)]
-struct Config {
-    backend_base_url: String,
-    id_token: Option<String>,
-    host_session_id: String,
-}
 
 #[derive(Debug, Deserialize)]
 struct Incoming {
@@ -110,7 +109,12 @@ async fn main() -> Result<()> {
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {bootstrap_path}"))?;
 
-    let engine = Engine::new(&bootstrap)?;
+    let device = Device::new();
+    // Auto-connect to the EMWaver USB-MIDI port (best-effort).
+    // If no ports are present yet, this will error and the process will exit.
+    device.connect_auto()?;
+
+    let engine = Engine::new(&bootstrap, device)?;
 
     loop {
         if let Err(e) = connect_once(&cfg, &engine).await {
@@ -121,6 +125,9 @@ async fn main() -> Result<()> {
 }
 
 async fn connect_once(cfg: &Config, engine: &Engine) -> Result<()> {
+    // Ensure presence exists before WS connect (backend requires hostSessionId to be heartbeated).
+    heartbeat_once(cfg).await?;
+
     let url = ws_url(cfg)?;
     info!("connecting ws: {url}");
 
@@ -137,6 +144,9 @@ async fn connect_once(cfg: &Config, engine: &Engine) -> Result<()> {
 
     // TODO: heartbeat loop to /v1/hosts/heartbeat
 
+    let mut ui_rev: i32 = 0;
+    let mut last_snapshot: String = String::new();
+
     while let Some(msg) = ws.next().await {
         let msg = msg?;
         match msg {
@@ -151,18 +161,22 @@ async fn connect_once(cfg: &Config, engine: &Engine) -> Result<()> {
             _ => {}
         }
 
-        // Best-effort: if script called UI.render since last loop, stream snapshot.
-        // TODO: add rev tracking and only send on changes.
+        // Stream UI snapshots on changes (Model 1 parity with macOS host).
         if let Some(root) = engine.latest_tree.lock().unwrap().clone() {
-            let out = json!({
+            let snap_obj = json!({
                 "type": "ui.snapshot",
                 "hostSessionId": cfg.host_session_id,
                 "scriptInstanceId": "linux-script-1",
-                "rev": 1,
+                "rev": ui_rev + 1,
                 "root": root,
                 "metadata": {},
             });
-            ws.send(Message::Text(out.to_string())).await?;
+            let snap = snap_obj.to_string();
+            if snap != last_snapshot {
+                ui_rev += 1;
+                last_snapshot = snap.clone();
+                ws.send(Message::Text(snap)).await?;
+            }
         }
     }
 
@@ -217,8 +231,30 @@ async fn handle_incoming(
             ws.send(Message::Text(out.to_string())).await?;
         }
         "ui.event" => {
-            // TODO: translate ui.event -> handler token, then invoke callback.
-            info!("ui.event (todo)");
+            let script_instance_id = inc.rest.get("scriptInstanceId").and_then(|v| v.as_str()).unwrap_or("");
+            if script_instance_id != "linux-script-1" {
+                return Ok(());
+            }
+            let target_node_id = inc.rest.get("targetNodeId").and_then(|v| v.as_str()).unwrap_or("");
+            let name = inc.rest.get("name").and_then(|v| v.as_str()).unwrap_or("");
+            if target_node_id.is_empty() || name.is_empty() {
+                return Ok(());
+            }
+
+            let tree_opt = engine.latest_tree.lock().unwrap().clone();
+            let Some(tree) = tree_opt else { return Ok(()); };
+            let Some(node) = tree.find_node(target_node_id) else { return Ok(()); };
+            let Some(token) = node.handler_token(name) else { return Ok(()); };
+
+            let payload = inc.rest.get("payload").cloned().unwrap_or(serde_json::Value::Null);
+            let mut args: Vec<serde_json::Value> = vec![];
+            if matches!(name, "change" | "select" | "submit") {
+                if let Some(v) = payload.get("value") {
+                    args.push(v.clone());
+                }
+            }
+
+            let _ = engine.dispatch_ui_event(token, args);
         }
         other => {
             warn!("unknown msg type={other}");

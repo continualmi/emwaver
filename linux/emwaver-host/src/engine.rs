@@ -5,10 +5,11 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::{error, info};
 
+use crate::device::Device;
 use crate::ui_tree::UiNode;
 
 pub struct Engine {
-    rt: Runtime,
+    _rt: Runtime,
     ctx: JsContext,
 
     callbacks: Arc<Mutex<HashMap<String, Function<'static>>>>,
@@ -18,7 +19,7 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(bootstrap_source: &str) -> Result<Self> {
+    pub fn new(bootstrap_source: &str, device: Arc<Device>) -> Result<Self> {
         let rt = Runtime::new()?;
         let ctx = JsContext::full(&rt)?;
 
@@ -57,12 +58,17 @@ impl Engine {
             });
             globals.set("_scriptSleep", sleep_fn)?;
 
-            // _scriptSendPacket(bytes, timeoutMs)
-            // TODO: bind to USB device transport.
-            let send_packet = rquickjs::Func::new("_scriptSendPacket", move |_bytes: JsValue, _timeout_ms: i32| {
-                // For now: always return an ERR status (0x81).
-                // Bootstrap expects synchronous return.
-                vec![0x81u8]
+            // _scriptSendPacket(bytes, timeoutMs) -> Uint8Array (synchronous)
+            let dev = device.clone();
+            let send_packet = rquickjs::Func::new("_scriptSendPacket", move |bytes: rquickjs::TypedArray<u8>, timeout_ms: i32| {
+                let cmd: Vec<u8> = bytes.as_bytes().to_vec();
+                let timeout = (timeout_ms.max(1) as u64).min(10_000);
+
+                match dev.send_command(&cmd, timeout) {
+                    Ok(Some(resp)) => resp,
+                    Ok(None) => Vec::<u8>::new(),
+                    Err(_) => vec![0x81u8],
+                }
             });
             globals.set("_scriptSendPacket", send_packet)?;
         }
@@ -72,7 +78,7 @@ impl Engine {
             .context("failed to eval script_bootstrap.emw")?;
 
         Ok(Self {
-            rt,
+            _rt: rt,
             ctx,
             callbacks,
             latest_tree,
