@@ -39,9 +39,6 @@
     <Manifest Include="app.manifest" />
   </ItemGroup>
 
-  <ItemGroup>
-    <Page Include="Pages\RemoteHostControlPage.xaml" />
-  </ItemGroup>
 
   <ItemGroup>
     <None Include="Native\*.dll">
