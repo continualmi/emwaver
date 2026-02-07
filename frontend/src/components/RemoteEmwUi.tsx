@@ -70,8 +70,13 @@ function SliderNode({ n, onEvent }: { n: RemoteUiNode; onEvent: (targetId: strin
         step={step}
         value={displayValue}
         className="w-full disabled:opacity-50"
-        onPointerDown={() => setIsDragging(true)}
-        onPointerUp={(e) => {
+        onMouseDown={() => setIsDragging(true)}
+        onMouseUp={(e) => {
+          setIsDragging(false);
+          if (hasSubmit) onEvent(n.id, "submit", { value: Number((e.target as HTMLInputElement).value) });
+        }}
+        onTouchStart={() => setIsDragging(true)}
+        onTouchEnd={(e) => {
           setIsDragging(false);
           if (hasSubmit) onEvent(n.id, "submit", { value: Number((e.target as HTMLInputElement).value) });
         }}
