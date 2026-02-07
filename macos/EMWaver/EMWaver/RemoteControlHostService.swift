@@ -221,6 +221,15 @@ final class RemoteControlHostService: ObservableObject {
             guard let targetNodeId = obj["targetNodeId"] as? String else { return }
             guard let name = obj["name"] as? String else { return }
             let payload = obj["payload"] as? [String: Any] ?? [:]
+
+            // Special-case plot viewport requests: the web controller does not hold the plot buffer,
+            // so it asks the host to compute a compressed viewport and send back points.
+            if name == "viewport" {
+                if handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload) {
+                    return
+                }
+            }
+
             dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
 
         default:
@@ -251,9 +260,235 @@ final class RemoteControlHostService: ObservableObject {
             if let v = payload["value"] {
                 args = [v]
             }
+        } else if ev == .viewport {
+            // Viewport payloads are forwarded as-is (dictionary).
+            if let v = payload["value"] {
+                args = [v]
+            } else if !payload.isEmpty {
+                args = [payload]
+            }
         }
 
         previewManager.invoke(token: token, arguments: args)
+    }
+
+    /// Handle a web plot viewport request by computing a compressed viewport on the host.
+    /// Returns true if the request was understood and handled.
+    private func handlePlotViewportRequest(targetNodeId: String, payload: [String: Any]) -> Bool {
+        guard let scriptInstanceId = activeScriptInstanceId else { return false }
+        guard let tree = previewManager.scriptTree else { return false }
+        guard let node = findNode(in: tree.root, id: targetNodeId) else { return false }
+        guard node.type == .plot else { return false }
+
+        let raw = node.props.raw
+        guard let sourceId = extractPlotSourceId(raw["source"]) else {
+            sendJson([
+                "type": "plot.data",
+                "scriptInstanceId": scriptInstanceId,
+                "targetNodeId": targetNodeId,
+                "error": "missing_source",
+            ])
+            return true
+        }
+
+        let bytes = PlotBufferStore.shared.getBytes(id: sourceId)
+        let totalBits = max(0, bytes.count * 8)
+        if totalBits <= 0 {
+            sendJson([
+                "type": "plot.data",
+                "scriptInstanceId": scriptInstanceId,
+                "targetNodeId": targetNodeId,
+                "xBoundsMin": 0,
+                "xBoundsMax": 0,
+                "xMin": 0,
+                "xMax": 0,
+                "dataX": [],
+                "dataY": [],
+            ])
+            return true
+        }
+
+        let bounds = extractPlotBounds(raw) ?? (0.0...Double(totalBits))
+
+        let reqMin = extractDouble(payload["min"]) ?? extractDouble(payload["xMin"]) ?? bounds.lowerBound
+        let reqMax = extractDouble(payload["max"]) ?? extractDouble(payload["xMax"]) ?? bounds.upperBound
+        var xMin = min(reqMin, reqMax)
+        var xMax = max(reqMin, reqMax)
+
+        // Clamp to bounds.
+        xMin = max(bounds.lowerBound, min(bounds.upperBound, xMin))
+        xMax = max(bounds.lowerBound, min(bounds.upperBound, xMax))
+        if xMax <= xMin {
+            xMax = min(bounds.upperBound, xMin + 1)
+        }
+
+        let defaultBins = 400
+        let requestedBins = extractInt(payload["bins"]) ?? defaultBins
+        let bins = max(16, min(12_000, requestedBins))
+
+        let startBit = max(0, min(totalBits, Int(floor(xMin))))
+        let endBit = max(startBit, min(totalBits, Int(ceil(xMax))))
+        let span = max(0, endBit - startBit)
+
+        if span <= 0 {
+            sendJson([
+                "type": "plot.data",
+                "scriptInstanceId": scriptInstanceId,
+                "targetNodeId": targetNodeId,
+                "xBoundsMin": bounds.lowerBound,
+                "xBoundsMax": bounds.upperBound,
+                "xMin": xMin,
+                "xMax": xMax,
+                "dataX": [],
+                "dataY": [],
+            ])
+            return true
+        }
+
+        let clampedBins = max(1, min(bins, span))
+        let (xs, ys) = compressBits(bytes: bytes, startBit: startBit, endBit: endBit, bins: clampedBins)
+
+        sendJson([
+            "type": "plot.data",
+            "scriptInstanceId": scriptInstanceId,
+            "targetNodeId": targetNodeId,
+            "xBoundsMin": bounds.lowerBound,
+            "xBoundsMax": bounds.upperBound,
+            "xMin": xMin,
+            "xMax": xMax,
+            "bins": clampedBins,
+            "dataX": xs,
+            "dataY": ys,
+        ])
+
+        return true
+    }
+
+    private func extractPlotSourceId(_ value: Any?) -> String? {
+        if let s = value as? String {
+            let trimmed = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        if let dict = value as? [String: Any] {
+            if let kind = dict["kind"] as? String {
+                if kind == "samplerBits" {
+                    return "samplerBits"
+                }
+                if kind == "buffer" {
+                    if let id = dict["id"] as? String {
+                        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+                        return trimmed.isEmpty ? nil : trimmed
+                    }
+                }
+            }
+            if let id = dict["id"] as? String {
+                let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty ? nil : trimmed
+            }
+        }
+        return nil
+    }
+
+    private func extractPlotBounds(_ raw: [String: Any]) -> ClosedRange<Double>? {
+        let minV = extractDouble(raw["xBoundsMin"]) ?? extractDouble(raw["xDomainMin"])
+        let maxV = extractDouble(raw["xBoundsMax"]) ?? extractDouble(raw["xDomainMax"])
+        guard let minV, let maxV, minV.isFinite, maxV.isFinite, maxV > minV else {
+            return nil
+        }
+        return minV...maxV
+    }
+
+    private func extractDouble(_ value: Any?) -> Double? {
+        if let n = value as? NSNumber { return n.doubleValue }
+        if let d = value as? Double { return d }
+        if let i = value as? Int { return Double(i) }
+        if let s = value as? String { return Double(s) }
+        return nil
+    }
+
+    private func extractInt(_ value: Any?) -> Int? {
+        if let n = value as? NSNumber { return n.intValue }
+        if let i = value as? Int { return i }
+        if let s = value as? String { return Int(s.trimmingCharacters(in: .whitespacesAndNewlines)) }
+        return nil
+    }
+
+    private func compressBits(bytes: Data, startBit: Int, endBit: Int, bins: Int) -> ([Double], [Double]) {
+        let span = max(0, endBit - startBit)
+        if span <= 0 {
+            return ([], [])
+        }
+
+        func bitAt(_ idx: Int) -> Int {
+            let byteIndex = idx >> 3
+            let bitIndex = idx & 7
+            guard byteIndex >= 0, byteIndex < bytes.count else { return 0 }
+            let byte = bytes[bytes.index(bytes.startIndex, offsetBy: byteIndex)]
+            return ((byte >> bitIndex) & 1) == 1 ? 1 : 0
+        }
+
+        var timeValues: [Double] = []
+        var dataValues: [Double] = []
+
+        if span <= bins * 2 {
+            timeValues.reserveCapacity(span)
+            dataValues.reserveCapacity(span)
+            for i in startBit..<endBit {
+                timeValues.append(Double(i))
+                dataValues.append(bitAt(i) == 1 ? 255.0 : 0.0)
+            }
+            return (timeValues, dataValues)
+        }
+
+        let binWidth = Double(span) / Double(bins)
+        timeValues.reserveCapacity(bins * 2)
+        dataValues.reserveCapacity(bins * 2)
+
+        for bin in 0..<bins {
+            let binStart = Int(floor(Double(startBit) + Double(bin) * binWidth))
+            var binEnd = Int(floor(Double(binStart) + binWidth))
+            if binEnd > endBit { binEnd = endBit }
+            if binEnd <= binStart { continue }
+
+            var hasLow = false
+            var hasHigh = false
+
+            var i = binStart
+            while i < binEnd {
+                let byteIndex = i >> 3
+                if byteIndex >= bytes.count { break }
+
+                if (i & 7) == 0, i + 8 <= binEnd {
+                    let byte = bytes[bytes.index(bytes.startIndex, offsetBy: byteIndex)]
+                    if byte == 0 {
+                        hasLow = true
+                    } else if byte == 255 {
+                        hasHigh = true
+                    } else {
+                        hasLow = true
+                        hasHigh = true
+                    }
+                    i += 8
+                } else {
+                    if bitAt(i) == 1 {
+                        hasHigh = true
+                    } else {
+                        hasLow = true
+                    }
+                    i += 1
+                }
+
+                if hasLow, hasHigh { break }
+            }
+
+            if hasLow || hasHigh {
+                timeValues.append(Double(binStart))
+                dataValues.append(hasLow ? 0.0 : 255.0)
+                timeValues.append(Double(max(binStart, binEnd - 1)))
+                dataValues.append(hasHigh ? 255.0 : 0.0)
+            }
+        }
+        return (timeValues, dataValues)
     }
 
     private func findNode(in node: ScriptNode, id: String) -> ScriptNode? {

@@ -24,6 +24,21 @@ export type RemoteUiNode = {
   children?: RemoteUiNode[];
 };
 
+export type RemotePlotData = {
+  type: "plot.data";
+  hostSessionId: string;
+  scriptInstanceId: string;
+  targetNodeId: string;
+  xBoundsMin?: number;
+  xBoundsMax?: number;
+  xMin?: number;
+  xMax?: number;
+  bins?: number;
+  dataX?: number[];
+  dataY?: number[];
+  error?: string;
+};
+
 export type RemoteIncomingMessage =
   | RemoteHelloAck
   | RemoteHostAttached
@@ -32,6 +47,7 @@ export type RemoteIncomingMessage =
   | RemoteScriptStopped
   | RemoteScriptError
   | RemoteUiSnapshot
+  | RemotePlotData
   | { type: string; [k: string]: any };
 
 export function backendWsUrl(idToken: string): string {

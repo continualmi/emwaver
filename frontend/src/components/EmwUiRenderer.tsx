@@ -64,6 +64,166 @@ function clamp(n: number, lo: number, hi: number) {
   return Math.max(lo, Math.min(hi, n));
 }
 
+function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> }) {
+  const props = a.getProps(n) || {};
+  const plot = (props.__plotData as any) || null;
+
+  const yMin = Number(props.yMin ?? -128);
+  const yMax = Number(props.yMax ?? 384);
+
+  const xMin = Number(plot?.xMin ?? props.xMin ?? 0);
+  const xMax = Number(plot?.xMax ?? props.xMax ?? 1);
+
+  const dataX: number[] = Array.isArray(plot?.dataX) ? plot.dataX.map((v: any) => Number(v)).filter((v: number) => isFinite(v)) : [];
+  const dataY: number[] = Array.isArray(plot?.dataY) ? plot.dataY.map((v: any) => Number(v)).filter((v: number) => isFinite(v)) : [];
+
+  const height = typeof props.height === "number" && isFinite(props.height) ? `${props.height}px` : "400px";
+
+  const [view, setView] = React.useState<{ min: number; max: number }>({
+    min: isFinite(xMin) ? xMin : 0,
+    max: isFinite(xMax) && xMax > xMin ? xMax : (isFinite(xMin) ? xMin + 1 : 1),
+  });
+
+  // Keep local view in sync with host responses.
+  React.useEffect(() => {
+    if (!isFinite(xMin) || !isFinite(xMax) || xMax <= xMin) return;
+    setView({ min: xMin, max: xMax });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plot?.xMin, plot?.xMax, props.xMin, props.xMax]);
+
+  // Request initial viewport if we don't have any data yet.
+  React.useEffect(() => {
+    if (dataX.length > 0 && dataY.length > 0) return;
+    a.onEvent(n, "viewport", { min: view.min, max: view.max, bins: 400 });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pendingTimer = React.useRef<any>(null);
+  function emitViewportSoon(next: { min: number; max: number }) {
+    setView(next);
+    if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    pendingTimer.current = setTimeout(() => {
+      a.onEvent(n, "viewport", { min: next.min, max: next.max, bins: 400 });
+      pendingTimer.current = null;
+    }, 120);
+  }
+
+  const ref = React.useRef<HTMLDivElement | null>(null);
+  const drag = React.useRef<{ down: boolean; x0: number; startMin: number; startMax: number }>({
+    down: false,
+    x0: 0,
+    startMin: view.min,
+    startMax: view.max,
+  });
+
+  function domainSpan(v: { min: number; max: number }) {
+    return Math.max(1e-9, v.max - v.min);
+  }
+
+  function onWheel(e: React.WheelEvent) {
+    e.preventDefault();
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const t = (e.clientX - rect.left) / Math.max(1, rect.width);
+
+    const span = domainSpan(view);
+    const dy = Number(e.deltaY);
+    if (!isFinite(dy) || dy === 0) return;
+
+    // Match macOS: scrolling up should zoom out.
+    const z = Math.exp(-dy * 0.002);
+    const nextSpan = Math.max(1, span * z);
+    const anchor = view.min + t * span;
+    const nextMin = anchor - t * nextSpan;
+    const nextMax = nextMin + nextSpan;
+
+    if (isFinite(nextMin) && isFinite(nextMax) && nextMax > nextMin) {
+      emitViewportSoon({ min: nextMin, max: nextMax });
+    }
+  }
+
+  function onMouseDown(e: React.MouseEvent) {
+    const el = ref.current;
+    if (!el) return;
+    drag.current = { down: true, x0: e.clientX, startMin: view.min, startMax: view.max };
+  }
+
+  function onMouseMove(e: React.MouseEvent) {
+    if (!drag.current.down) return;
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const dxPx = e.clientX - drag.current.x0;
+    const span = domainSpan({ min: drag.current.startMin, max: drag.current.startMax });
+    const delta = (-dxPx / Math.max(1, rect.width)) * span;
+    emitViewportSoon({ min: drag.current.startMin + delta, max: drag.current.startMax + delta });
+  }
+
+  function onMouseUp() {
+    drag.current.down = false;
+  }
+
+  const w = 1000;
+  const h = 200;
+  const ptsCount = Math.min(dataX.length, dataY.length);
+  const poly: string[] = [];
+  for (let i = 0; i < ptsCount; i++) {
+    const x = dataX[i];
+    const y = dataY[i];
+    if (!isFinite(x) || !isFinite(y)) continue;
+    const tx = (x - view.min) / domainSpan(view);
+    const ty = (y - yMin) / Math.max(1e-9, yMax - yMin);
+    const pxX = tx * w;
+    const pxY = (1 - ty) * h;
+    if (!isFinite(pxX) || !isFinite(pxY)) continue;
+    poly.push(`${pxX.toFixed(2)},${pxY.toFixed(2)}`);
+  }
+
+  const hasData = poly.length > 1;
+
+  return (
+    <div style={{ ...styleFromProps(props) }} className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] p-3">
+      <div className="mb-2 flex items-center justify-between text-xs font-semibold text-[color:var(--ink-dim)]">
+        <div>{String(props.title ?? props.id ?? "Plot")}</div>
+        <div className="font-mono">x [{Math.round(view.min)} .. {Math.round(view.max)}]</div>
+      </div>
+
+      <div
+        ref={ref}
+        style={{ height }}
+        className="w-full select-none overflow-hidden rounded-lg border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)]"
+        onWheel={onWheel}
+        onMouseDown={onMouseDown}
+        onMouseMove={onMouseMove}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseUp}
+      >
+        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-full w-full">
+          {hasData ? (
+            <polyline
+              fill="none"
+              stroke="rgba(255,255,255,0.9)"
+              strokeWidth="2"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              points={poly.join(" ")}
+            />
+          ) : (
+            <text x="20" y="40" fill="rgba(255,255,255,0.6)" fontSize="24">
+              waiting for data…
+            </text>
+          )}
+        </svg>
+      </div>
+
+      <div className="mt-2 text-[11px] text-[color:var(--ink-dim)]">
+        Drag to pan • Wheel to zoom • Data stays on host (viewport is compressed to ~400 bins)
+      </div>
+    </div>
+  );
+}
+
 function SliderNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> }) {
   const props = a.getProps(n) || {};
 
@@ -373,6 +533,9 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
         </div>
       );
     }
+
+    case "plot":
+      return <PlotNode n={n} a={a} />;
 
     default:
       return (
