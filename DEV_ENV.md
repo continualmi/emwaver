@@ -119,15 +119,10 @@ npm install
 npm run dev
 ```
 
-Firmware (internal CLI, macOS only today):
+Firmware (tooling TBD):
 
-```bash
-# Builds stm/emwaver-firmware/Release and updates firmware/emwaver.bin
-emwaver build
-
-# Flash firmware/emwaver.bin to a device in DFU mode
-emwaver flash
-```
+- Firmware is built via STM32CubeIDE today.
+- The legacy internal `emwaver` CLI has been removed; we'll reintroduce firmware tooling as needed.
 
 Windows app (WinUI 3):
 - Open `windows/EMWaver.sln` in Visual Studio 2022 and press Run.
