@@ -367,8 +367,9 @@ function render() {
           bins: clamp(i(binsText, 900), 64, 6000),
           xMin: xMin,
           xMax: xMax,
-          yMin: 0,
-          yMax: 255,
+          // Expand Y domain slightly so a constant-low (0) signal is still visible (not glued to border).
+          yMin: -10,
+          yMax: 265,
           errorText: chartErr,
           onViewportChange: function (r) {
             var range = __parseViewportRange(r);
