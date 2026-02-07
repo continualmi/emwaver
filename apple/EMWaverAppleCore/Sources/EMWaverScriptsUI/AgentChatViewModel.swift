@@ -462,6 +462,39 @@ public final class AgentChatViewModel: ObservableObject {
         // {"type":"function_call","call_id":"...","name":"web_fetch","arguments":"{...}"}
         // {"type":"function_call_output","call_id":"...","output":"{...}"}
         var codexInputItemsJSON: [String]
+
+        // Codable migration: tolerate older stored conversations.
+        init(
+            id: UUID,
+            title: String?,
+            createdAt: Date,
+            updatedAt: Date,
+            sessionId: String,
+            modelId: String,
+            messages: [AgentChatMessage],
+            codexInputItemsJSON: [String]
+        ) {
+            self.id = id
+            self.title = title
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+            self.sessionId = sessionId
+            self.modelId = modelId
+            self.messages = messages
+            self.codexInputItemsJSON = codexInputItemsJSON
+        }
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            id = try c.decode(UUID.self, forKey: .id)
+            title = try c.decodeIfPresent(String.self, forKey: .title)
+            createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+            updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+            sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? UUID().uuidString
+            modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? AgentChatViewModel.defaultModelId
+            messages = try c.decodeIfPresent([AgentChatMessage].self, forKey: .messages) ?? []
+            codexInputItemsJSON = try c.decodeIfPresent([String].self, forKey: .codexInputItemsJSON) ?? []
+        }
     }
 
     private func conversation(id: UUID) -> Conversation? {
@@ -590,25 +623,39 @@ public final class AgentChatViewModel: ObservableObject {
         return conv.codexInputItemsJSON.compactMap { s in
             guard let data = s.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
-            if let t = obj["type"] as? String, t == "item_reference" {
-                return nil
-            }
-            return obj
+            return scrubItemReferences(obj)
         }
     }
 
     private func appendCodexItemToCurrentConversation(_ item: [String: Any]) {
-        // When `store=false`, the API does not persist items server-side, so `item_reference`
-        // objects will fail on the next request. Opencode only uses item references when store=true.
-        if let t = item["type"] as? String, t == "item_reference" {
-            return
-        }
+        guard let scrubbed = scrubItemReferences(item) else { return }
 
         guard let id = selectedConversationId else { return }
         updateConversation(id: id) { conv in
-            conv.codexInputItemsJSON.append(jsonString(item))
+            conv.codexInputItemsJSON.append(jsonString(scrubbed))
             conv.updatedAt = Date()
         }
         persistState()
+    }
+
+    /// Removes any Codex `item_reference` items that rely on server persistence.
+    /// When `store=false`, these references will fail on the next request.
+    private func scrubItemReferences(_ item: [String: Any]) -> [String: Any]? {
+        if let t = item["type"] as? String, t == "item_reference" {
+            return nil
+        }
+
+        // Some Codex outputs can embed item references in message content.
+        if let t = item["type"] as? String, t == "message", var content = item["content"] as? [Any] {
+            content = content.filter { partAny in
+                guard let part = partAny as? [String: Any] else { return true }
+                return (part["type"] as? String) != "item_reference"
+            }
+            var out = item
+            out["content"] = content
+            return out
+        }
+
+        return item
     }
 }
