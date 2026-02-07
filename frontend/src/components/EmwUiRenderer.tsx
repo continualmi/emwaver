@@ -148,8 +148,10 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
     const dy = Number(e.deltaY);
     if (!isFinite(dy) || dy === 0) return;
 
-    // Match macOS: scrolling up should zoom out.
-    const z = Math.exp(-dy * 0.002);
+    // Match macOS feel: wheel direction should match the native chart.
+    // (In practice browsers/devices disagree on deltaY sign, so we use the direction
+    // that matches observed behavior in EMWaver's frontend.)
+    const z = Math.exp(dy * 0.002);
     const nextSpan = Math.max(1, span * z);
     const anchor = view.min + t * span;
     const nextMin = anchor - t * nextSpan;
@@ -516,7 +518,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
             ...(pad !== undefined ? { padding: px(pad) } : {}),
             ...styleFromProps(props),
           }}
-          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]"
+          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] overflow-hidden"
         >
           {title || subtitle ? (
             <div className="space-y-1">
