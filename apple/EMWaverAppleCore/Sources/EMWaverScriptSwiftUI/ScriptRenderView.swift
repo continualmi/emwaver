@@ -321,15 +321,28 @@ private struct ScriptSliderView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
-            Slider(value: Binding(
-                get: { value },
-                set: { newValue in
-                    value = newValue
-                    if let token = node.props.handlerId(for: .change) {
-                        invokeHandler(token, [newValue])
+            let hasChange = node.props.handlerId(for: .change) != nil
+            let submitToken = node.props.handlerId(for: .submit)
+
+            Slider(
+                value: Binding(
+                    get: { value },
+                    set: { newValue in
+                        value = newValue
+                        // If a script provided onChange, stream changes.
+                        if hasChange, let token = node.props.handlerId(for: .change) {
+                            invokeHandler(token, [newValue])
+                        }
+                    }
+                ),
+                in: node.props.sliderRange,
+                onEditingChanged: { editing in
+                    // If a script provided onSubmit, only fire when the user releases.
+                    if !editing, let token = submitToken {
+                        invokeHandler(token, [value])
                     }
                 }
-            ), in: node.props.sliderRange)
+            )
         }
         .modifier(ScriptOnChange(value: node.props.sliderValue) { newValue in
             if abs(newValue - value) > .ulpOfOne {
