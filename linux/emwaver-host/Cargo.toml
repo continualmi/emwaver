@@ -21,6 +21,7 @@ url = "2"
 
 # HTTP client (for heartbeat / auth flows later)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+hostname = "0.4"
 
 # JS engine (QuickJS)
 rquickjs = { version = "0.9", features = ["loader", "macro"] }
