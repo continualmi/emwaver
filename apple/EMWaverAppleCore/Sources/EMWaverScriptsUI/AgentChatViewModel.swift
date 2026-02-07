@@ -5,9 +5,15 @@
  */
 
 import Foundation
+import os
 
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
+    private static let log = OSLog(subsystem: "com.emwaver", category: "AgentChat")
+    private func dbg(_ msg: String) {
+        os_log("%{public}@", log: Self.log, type: .debug, "[AgentChat] \(msg)")
+    }
+
     public static let allowedModelIds: [String] = [
         "gpt-5.1-codex-max",
         "gpt-5.1-codex-mini",
@@ -218,6 +224,7 @@ public final class AgentChatViewModel: ObservableObject {
             iterations += 1
 
             let inputItems = currentCodexInputItems()
+            dbg("loop iter=\(iterations) model=\(selectedModelId) session=\(sessionId) input_items=\(inputItems.count)")
 
             let resp = try await codex.send(
                 model: selectedModelId,
@@ -228,6 +235,7 @@ public final class AgentChatViewModel: ObservableObject {
             )
 
             let outputItems = Self.extractResponsesOutputItems(resp)
+            dbg("resp output_items=\(outputItems.count)")
 
             // First: persist the assistant output items into conversation state (so the next call has full context).
             // We also extract any visible assistant text.
@@ -244,6 +252,7 @@ public final class AgentChatViewModel: ObservableObject {
                     let name = (item["name"] as? String) ?? ""
                     let args = (item["arguments"] as? String) ?? "{}"
                     if !callId.isEmpty, !name.isEmpty {
+                        dbg("tool_call name=\(name) call_id=\(callId) args_len=\(args.count)")
                         functionCalls.append((callId: callId, name: name, arguments: args))
                     }
                 }
@@ -269,6 +278,7 @@ public final class AgentChatViewModel: ObservableObject {
 
                 let argsObj = parseArgs(call.arguments)
                 let result = try await executeTool(name: call.name, args: argsObj)
+                dbg("tool_result name=\(call.name) call_id=\(call.callId) keys=\((result as NSDictionary).allKeys.count)")
 
                 let outItem: [String: Any] = [
                     "type": "function_call_output",
@@ -305,6 +315,7 @@ public final class AgentChatViewModel: ObservableObject {
             let dir = host.fileService.storageDirectoryURL()
             let fileURL = dir.appendingPathComponent(name)
             try Data(source.utf8).write(to: fileURL, options: .atomic)
+            dbg("write_script name=\(name) bytes=\(source.utf8.count)")
             return ["ok": true, "path": fileURL.lastPathComponent]
 
         case "run_script":
@@ -317,7 +328,42 @@ public final class AgentChatViewModel: ObservableObject {
             return ["ok": true]
 
         case "ui_snapshot":
-            return host.uiSnapshot()
+            let snap = host.uiSnapshot()
+            dbg("ui_snapshot keys=\((snap as NSDictionary).allKeys.count)")
+            return snap
+
+        case "list_scripts":
+            // list local scripts (Documents/scripts)
+            let ext = (args["extension"] as? String) // e.g. ".emw" or nil
+            let files = try await host.fileService.listFiles(withExtension: ext, includeContent: false, accessToken: "")
+            let items = files.map { f in
+                [
+                    "id": f.metadata.id,
+                    "name": f.metadata.name,
+                    "ext": f.metadata.fileExtension,
+                    "size": f.metadata.sizeBytes,
+                    "etag": f.metadata.etag,
+                    "kind": f.metadata.kind,
+                ] as [String: Any]
+            }
+            dbg("list_scripts ext=\(ext ?? "<any>") count=\(items.count)")
+            return ["count": items.count, "items": items]
+
+        case "list_signal_files":
+            let ext = (args["extension"] as? String) // e.g. ".raw" or ".txt" or nil
+            let files = try await host.fileService.listSignalFiles(withExtension: ext, includeContent: false, accessToken: "")
+            let items = files.map { f in
+                [
+                    "id": f.metadata.id,
+                    "name": f.metadata.name,
+                    "ext": f.metadata.fileExtension,
+                    "size": f.metadata.sizeBytes,
+                    "etag": f.metadata.etag,
+                    "kind": f.metadata.kind,
+                ] as [String: Any]
+            }
+            dbg("list_signal_files ext=\(ext ?? "<any>") count=\(items.count)")
+            return ["count": items.count, "items": items]
 
         case "ui_event":
             let nodeId = (args["targetNodeId"] as? String) ?? ""
@@ -389,6 +435,28 @@ public final class AgentChatViewModel: ObservableObject {
                         "payload": ["type": "object"],
                     ],
                     "required": ["targetNodeId", "name"],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "list_scripts",
+                description: "List local scripts in the host scripts folder.",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "extension": ["type": "string", "description": "Optional suffix filter like .emw"],
+                    ],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "list_signal_files",
+                description: "List local signal files in the host signals folder.",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "extension": ["type": "string", "description": "Optional suffix filter like .raw or .txt"],
+                    ],
                     "additionalProperties": false,
                 ]
             ),

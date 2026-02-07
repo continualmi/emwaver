@@ -5,12 +5,18 @@
  */
 
 import Foundation
+import os
 
 /// Minimal client for ChatGPT Codex responses API.
 ///
 /// This runs locally in the host app. Tokens are stored in Keychain.
 @MainActor
 final class AgentCodexClient {
+    private static let log = OSLog(subsystem: "com.emwaver", category: "AgentCodexClient")
+    private func dbg(_ msg: String) {
+        os_log("%{public}@", log: Self.log, type: .debug, "[CodexClient] \(msg)")
+    }
+
     private static let issuer = URL(string: "https://auth.openai.com")!
     private static let clientId = "app_EMoamEEZ73f0CkXaXp7hrann"
     private static let codexResponsesURL = URL(string: "https://chatgpt.com/backend-api/codex/responses")!
@@ -100,6 +106,8 @@ final class AgentCodexClient {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
+        dbg("POST /codex/responses model=\(model) session_id=\(sessionId ?? "<none>") tools=\(tools.count) input_items=\(input.count)")
+
         // Codex expects streaming (SSE). We don't surface partial deltas yet,
         // but we do consume the stream and return the final aggregated response.
         let (bytes, res) = try await URLSession.shared.bytes(for: req)
@@ -111,6 +119,7 @@ final class AgentCodexClient {
         }
 
         var lastJSON: [String: Any]?
+        var sseEventCount = 0
 
         for try await line in bytes.lines {
             let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -119,6 +128,8 @@ final class AgentCodexClient {
             if payloadStr == "[DONE]" { break }
             guard let data = payloadStr.data(using: .utf8) else { continue }
             guard let obj = try? JSONSerialization.jsonObject(with: data) else { continue }
+
+            sseEventCount += 1
 
             if let dict = obj as? [String: Any] {
                 // Some streams wrap the actual response under `response`.
@@ -131,8 +142,12 @@ final class AgentCodexClient {
         }
 
         guard let lastJSON else {
+            dbg("SSE complete: no JSON received events=\(sseEventCount)")
             throw AgentBackendError.serverError("No response received")
         }
+
+        let outputCount = (lastJSON["output"] as? [Any])?.count ?? 0
+        dbg("SSE complete events=\(sseEventCount) output_items=\(outputCount)")
         return lastJSON
     }
 
