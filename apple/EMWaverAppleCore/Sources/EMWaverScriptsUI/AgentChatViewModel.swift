@@ -536,11 +536,11 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     private static func localToolHelpMarkdown(_ tools: [AgentCodexClient.ToolSpec]) -> String {
-        // Keep this user-facing (not tool ids), but include ids in backticks so power users can see them.
         var out: [String] = []
         out.append("I can use the following tools:\n")
+        out.append("") // blank line so Markdown list renders reliably
         for t in tools {
-            out.append("- **\(t.name)** — \(t.description)")
+            out.append("- `\(t.name)` — \(t.description)")
         }
         return out.joined(separator: "\n")
     }
