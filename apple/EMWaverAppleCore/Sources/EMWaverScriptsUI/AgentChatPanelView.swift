@@ -74,6 +74,26 @@ public struct AgentChatPanelView: View {
 
                     Divider()
 
+                    Menu {
+                        ForEach(AgentChatViewModel.allowedModelIds, id: \.self) { mid in
+                            Button {
+                                viewModel.setModelForSelectedConversation(mid)
+                            } label: {
+                                HStack {
+                                    Text(mid)
+                                    if viewModel.selectedModelId == mid {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Text("Model: \(viewModel.selectedModelId)")
+                    }
+
+                    Divider()
+
                     if viewModel.isChatGPTConnected {
                         Button(role: .destructive) {
                             viewModel.disconnectChatGPT()
