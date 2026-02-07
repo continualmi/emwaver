@@ -20,7 +20,7 @@ public sealed partial class HostsPage : Page
         string PortLine,
         string ScriptLine,
         string IdLine,
-        Microsoft.UI.Color OnlineColor);
+        Windows.UI.Color OnlineColor);
 
     public HostsPage()
     {
