@@ -10,7 +10,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | --- | --- | --- | --- |
 | `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` |
 | `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
-| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` |  | |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[x]` | macOS | `2026-02-07` |
 | `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
 | `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |  | |
 | `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |  | |
