@@ -85,8 +85,9 @@ final class AgentCodexClient {
             "input": input,
             "max_output_tokens": maxOutputTokens,
             "temperature": temperature,
-            // Codex endpoint requirement: must not store server-side.
+            // Codex endpoint requirements.
             "store": false,
+            "stream": true,
         ]
         if !tools.isEmpty {
             // Responses API tool format.
@@ -103,6 +104,7 @@ final class AgentCodexClient {
         var req = URLRequest(url: Self.codexResponsesURL)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
         req.setValue("Bearer \(access)", forHTTPHeaderField: "Authorization")
         req.setValue("emwaver", forHTTPHeaderField: "originator")
         req.setValue("emwaver-macos", forHTTPHeaderField: "User-Agent")
@@ -115,14 +117,40 @@ final class AgentCodexClient {
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
-        let (data, res) = try await URLSession.shared.data(for: req)
+        // Codex expects streaming (SSE). We don't surface partial deltas yet,
+        // but we do consume the stream and return the final aggregated response.
+        let (bytes, res) = try await URLSession.shared.bytes(for: req)
         guard let http = res as? HTTPURLResponse else { throw AgentBackendError.invalidResponse }
         guard (200...299).contains(http.statusCode) else {
-            let msg = String(data: data, encoding: .utf8) ?? "HTTP \(http.statusCode)"
-            throw AgentBackendError.serverError(msg)
+            // Best-effort read of body
+            let body = try? await bytesToString(bytes)
+            throw AgentBackendError.serverError(body ?? "HTTP \(http.statusCode)")
         }
 
-        return (try JSONSerialization.jsonObject(with: data) as? [String: Any]) ?? [:]
+        var lastJSON: [String: Any]?
+
+        for try await line in bytes.lines {
+            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard trimmed.hasPrefix("data:") else { continue }
+            let payloadStr = trimmed.dropFirst("data:".count).trimmingCharacters(in: .whitespaces)
+            if payloadStr == "[DONE]" { break }
+            guard let data = payloadStr.data(using: .utf8) else { continue }
+            guard let obj = try? JSONSerialization.jsonObject(with: data) else { continue }
+
+            if let dict = obj as? [String: Any] {
+                // Some streams wrap the actual response under `response`.
+                if let resp = dict["response"] as? [String: Any] {
+                    lastJSON = resp
+                } else {
+                    lastJSON = dict
+                }
+            }
+        }
+
+        guard let lastJSON else {
+            throw AgentBackendError.serverError("No response received")
+        }
+        return lastJSON
     }
 
     // MARK: - Token storage/refresh
@@ -204,6 +232,14 @@ final class AgentCodexClient {
         }
 
         return access
+    }
+
+    private func bytesToString(_ bytes: URLSession.AsyncBytes) async throws -> String {
+        var chunks: [String] = []
+        for try await line in bytes.lines {
+            chunks.append(line)
+        }
+        return chunks.joined(separator: "\n")
     }
 
     private func formEncode(_ dict: [String: String]) -> Data {
