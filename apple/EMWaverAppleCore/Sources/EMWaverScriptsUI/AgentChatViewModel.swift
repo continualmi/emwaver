@@ -42,6 +42,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private let conversationsKey = "emwaver.agent.local.conversations.v1"
     private let selectedConversationKey = "emwaver.agent.local.selected_conversation_id"
+    private let preferredModelKey = "emwaver.agent.local.preferred_model_id"
 
     public init(host: AgentHost) {
         self.host = host
@@ -78,7 +79,7 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
-            modelId: Self.defaultModelId,
+            modelId: preferredModelId(),
             messages: [],
             codexInputItemsJSON: []
         )
@@ -96,16 +97,18 @@ public final class AgentChatViewModel: ObservableObject {
     public func setModelForSelectedConversation(_ modelId: String) {
         guard let id = selectedConversationId else { return }
         guard Self.allowedModelIds.contains(modelId) else { return }
+        UserDefaults.standard.set(modelId, forKey: preferredModelKey)
         updateConversation(id: id) { conv in
             conv.modelId = modelId
             conv.updatedAt = Date()
         }
         persistState()
+        dbg("set model conv=\(id) model=\(modelId)")
     }
 
     public var selectedModelId: String {
         guard let id = selectedConversationId,
-              let conv = conversation(id: id) else { return Self.defaultModelId }
+              let conv = conversation(id: id) else { return preferredModelId() }
         return conv.modelId
     }
 
@@ -688,6 +691,11 @@ public final class AgentChatViewModel: ObservableObject {
                 conv.updatedAt = Date()
             }
         }
+    }
+
+    private func preferredModelId() -> String {
+        let m = UserDefaults.standard.string(forKey: preferredModelKey) ?? Self.defaultModelId
+        return Self.allowedModelIds.contains(m) ? m : Self.defaultModelId
     }
 
     private func loadPersistedState() {
