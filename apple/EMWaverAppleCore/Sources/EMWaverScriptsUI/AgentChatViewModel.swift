@@ -345,6 +345,19 @@ public final class AgentChatViewModel: ObservableObject {
             dbg("write_script name=\(name) bytes=\(source.utf8.count)")
             return ["ok": true, "path": fileURL.lastPathComponent]
 
+        case "apply_patch":
+            let patchText = (args["patchText"] as? String) ?? ""
+            if patchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return ["error": "empty_patch"]
+            }
+            let baseDir = host.fileService.storageDirectoryURL()
+            let result = try PatchApplier.apply(patchText: patchText, baseDir: baseDir)
+            dbg("apply_patch files=\(result.files.count)")
+            return [
+                "ok": true,
+                "files": result.files,
+            ]
+
         case "run_script":
             let name = (args["name"] as? String) ?? "agent_run.emw"
             let source = (args["source"] as? String) ?? ""
@@ -418,7 +431,7 @@ public final class AgentChatViewModel: ObservableObject {
             ),
             .init(
                 name: "write_script",
-                description: "Write a .emw script into the EMWaver scripts folder.",
+                description: "Write a .emw script into the EMWaver scripts folder (creates or overwrites a file).",
                 parameters: [
                     "type": "object",
                     "properties": [
@@ -426,6 +439,18 @@ public final class AgentChatViewModel: ObservableObject {
                         "source": ["type": "string"],
                     ],
                     "required": ["name", "source"],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "apply_patch",
+                description: "Edit files using opencode-style patchText (*** Begin Patch / *** Update File / @@ hunks).",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "patchText": ["type": "string"],
+                    ],
+                    "required": ["patchText"],
                     "additionalProperties": false,
                 ]
             ),
@@ -752,5 +777,229 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         return item
+    }
+}
+
+// MARK: - apply_patch (opencode-style)
+
+private enum PatchApplier {
+    struct ApplyResult {
+        let files: [[String: Any]]
+    }
+
+    enum PatchError: LocalizedError {
+        case invalidPatch(String)
+        case invalidPath(String)
+        case fileNotFound(String)
+        case hunkFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidPatch(let s): return s
+            case .invalidPath(let s): return s
+            case .fileNotFound(let s): return s
+            case .hunkFailed(let s): return s
+            }
+        }
+    }
+
+    static func apply(patchText: String, baseDir: URL) throws -> ApplyResult {
+        let normalized = patchText.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+
+        guard lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) == "*** Begin Patch" else {
+            throw PatchError.invalidPatch("apply_patch: missing *** Begin Patch")
+        }
+        guard lines.last?.trimmingCharacters(in: .whitespacesAndNewlines) == "*** End Patch" else {
+            throw PatchError.invalidPatch("apply_patch: missing *** End Patch")
+        }
+
+        var i = 1
+        var results: [[String: Any]] = []
+
+        func safeRelativePath(_ raw: String) throws -> String {
+            let p = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if p.isEmpty { throw PatchError.invalidPath("empty path") }
+            if p.hasPrefix("/") { throw PatchError.invalidPath("absolute paths not allowed: \(p)") }
+            if p.contains("..") { throw PatchError.invalidPath("parent traversal not allowed: \(p)") }
+            return p
+        }
+
+        while i < lines.count - 1 {
+            let line = lines[i]
+            if line.hasPrefix("*** Add File: ") {
+                let rel = try safeRelativePath(String(line.dropFirst("*** Add File: ".count)))
+                i += 1
+                var newLines: [String] = []
+                while i < lines.count - 1, !lines[i].hasPrefix("*** ") {
+                    let l = lines[i]
+                    guard l.hasPrefix("+") else {
+                        throw PatchError.invalidPatch("Add File contents must be prefixed with +")
+                    }
+                    newLines.append(String(l.dropFirst(1)))
+                    i += 1
+                }
+                let url = baseDir.appendingPathComponent(rel)
+                try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+                let out = newLines.joined(separator: "\n") + "\n"
+                try out.write(to: url, atomically: true, encoding: .utf8)
+                results.append(["path": rel, "op": "add", "bytes": out.utf8.count])
+                continue
+            }
+
+            if line.hasPrefix("*** Delete File: ") {
+                let rel = try safeRelativePath(String(line.dropFirst("*** Delete File: ".count)))
+                let url = baseDir.appendingPathComponent(rel)
+                guard FileManager.default.fileExists(atPath: url.path) else {
+                    throw PatchError.fileNotFound(rel)
+                }
+                try FileManager.default.removeItem(at: url)
+                results.append(["path": rel, "op": "delete"]) 
+                i += 1
+                continue
+            }
+
+            if line.hasPrefix("*** Update File: ") {
+                let rel = try safeRelativePath(String(line.dropFirst("*** Update File: ".count)))
+                i += 1
+
+                var moveTo: String?
+                if i < lines.count - 1, lines[i].hasPrefix("*** Move to: ") {
+                    moveTo = try safeRelativePath(String(lines[i].dropFirst("*** Move to: ".count)))
+                    i += 1
+                }
+
+                let srcURL = baseDir.appendingPathComponent(rel)
+                guard FileManager.default.fileExists(atPath: srcURL.path) else {
+                    throw PatchError.fileNotFound(rel)
+                }
+
+                let oldText = (try? String(contentsOf: srcURL, encoding: .utf8)) ?? ""
+                var fileLines = oldText.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+
+                // Parse hunks until next *** header.
+                while i < lines.count - 1, !lines[i].hasPrefix("*** ") {
+                    let h = lines[i]
+                    guard h.hasPrefix("@@") else {
+                        throw PatchError.invalidPatch("Update File expected @@ hunk header, got: \(h)")
+                    }
+                    // @@ -oldStart,oldCount +newStart,newCount @@
+                    let nums = parseUnifiedHeader(h)
+                    i += 1
+                    var hunkLines: [String] = []
+                    while i < lines.count - 1, !lines[i].hasPrefix("@@") && !lines[i].hasPrefix("*** ") {
+                        hunkLines.append(lines[i])
+                        i += 1
+                    }
+                    fileLines = try applyHunk(fileLines: fileLines, oldStart1: nums.oldStart, hunkLines: hunkLines, filePath: rel)
+                }
+
+                let newText = fileLines.joined(separator: "\n") + "\n"
+
+                let destRel = moveTo ?? rel
+                let destURL = baseDir.appendingPathComponent(destRel)
+                try FileManager.default.createDirectory(at: destURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+                try newText.write(to: destURL, atomically: true, encoding: .utf8)
+
+                if let moveTo {
+                    try FileManager.default.removeItem(at: srcURL)
+                    results.append(["path": rel, "op": "move", "to": moveTo])
+                } else {
+                    results.append(["path": rel, "op": "update", "bytes": newText.utf8.count])
+                }
+                continue
+            }
+
+            // Skip blanks between sections
+            if line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                i += 1
+                continue
+            }
+
+            throw PatchError.invalidPatch("Unknown patch directive: \(line)")
+        }
+
+        return ApplyResult(files: results)
+    }
+
+    private struct UnifiedHeaderNums {
+        let oldStart: Int
+    }
+
+    private static func parseUnifiedHeader(_ header: String) -> UnifiedHeaderNums {
+        // very small parser; if it fails, just fall back to 1
+        // format: @@ -a,b +c,d @@
+        let parts = header.split(separator: " ")
+        for p in parts {
+            if p.hasPrefix("-") {
+                let nums = p.dropFirst().split(separator: ",")
+                if let a = Int(nums.first ?? "") {
+                    return UnifiedHeaderNums(oldStart: a)
+                }
+            }
+        }
+        return UnifiedHeaderNums(oldStart: 1)
+    }
+
+    private static func applyHunk(fileLines: [String], oldStart1: Int, hunkLines: [String], filePath: String) throws -> [String] {
+        var out = fileLines
+        let startIdx = max(0, oldStart1 - 1)
+
+        func matches(at idx: Int) -> Bool {
+            var fi = idx
+            for hl in hunkLines {
+                if hl.hasPrefix("+") { continue }
+                guard fi < out.count else { return false }
+                let expected = String(hl.dropFirst(1))
+                let prefix = hl.prefix(1)
+                if prefix == " " || prefix == "-" {
+                    if out[fi] != expected { return false }
+                    fi += 1
+                }
+            }
+            return true
+        }
+
+        var applyAt: Int? = nil
+        if startIdx <= out.count, matches(at: startIdx) {
+            applyAt = startIdx
+        } else {
+            // fallback search
+            for idx in 0...max(0, out.count) {
+                if matches(at: idx) {
+                    applyAt = idx
+                    break
+                }
+            }
+        }
+
+        guard let idx0 = applyAt else {
+            throw PatchError.hunkFailed("Failed to apply hunk to \(filePath)")
+        }
+
+        var fi = idx0
+        var newBlock: [String] = []
+        var consumed = 0
+
+        for hl in hunkLines {
+            guard let first = hl.first else { continue }
+            let rest = String(hl.dropFirst(1))
+            switch first {
+            case " ":
+                newBlock.append(rest)
+                fi += 1
+                consumed += 1
+            case "-":
+                fi += 1
+                consumed += 1
+            case "+":
+                newBlock.append(rest)
+            default:
+                throw PatchError.invalidPatch("Invalid hunk line: \(hl)")
+            }
+        }
+
+        out.replaceSubrange(idx0..<(idx0 + consumed), with: newBlock)
+        return out
     }
 }
