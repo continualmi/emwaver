@@ -72,6 +72,20 @@ Later goals:
 GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
 We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
+### Business model (direction)
+
+We may offer a subscription tier (e.g. **EMWaver Pro**) that bundles **Cloud features** which incur recurring costs per active user.
+
+Core separation (important):
+- **Cloud / infrastructure** (EMWaver Pro): remote host control, file sync, hosted storage, relay bandwidth, auth, observability/support burden.
+- **AI inference** (Agent): initially **BYO-provider** (user connects their own ChatGPT/OpenAI/etc.) so we are not reselling tokens / "charging a wrapper".
+  - Later, once we have **EMWaver-owned model weights** (EMWaver-specific models for hardware control), it becomes appropriate to offer a bundled "EMWaver Agent" with usage limits/credits.
+
+Platform rules-of-thumb:
+- Pro subscription should clearly communicate it's paying for **EMWaver Cloud**, not for access to third-party models.
+- Keep a sensible **free/local** mode that does not require cloud (local USB scripting), while cloud-dependent features are gated.
+- App Store constraints likely apply for iOS/macOS digital subscriptions (plan tiers accordingly).
+
 ### Infrastructure (current direction)
 
 We deploy **frontend + backend** to **Azure Container Apps**.
