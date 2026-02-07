@@ -335,7 +335,7 @@ function removeSelected() {
 
 function render() {
   var maxBits = Math.max(0, bufLen * 8);
-  var picker = [{ label: '(none)', value: '' }].concat(
+  var picker = [{ label: 'New signal', value: '' }].concat(
     files.map(function (n) { return { label: n, value: n }; })
   );
 
@@ -417,6 +417,11 @@ function render() {
                   options: picker,
                   onChange: function (v) {
                     selectedFile = String(v || '');
+                    if (!selectedFile) {
+                      // "New signal": reset to an empty buffer.
+                      clearBuffer();
+                      return;
+                    }
                     loadSelected();
                   },
                 }),
