@@ -73,6 +73,12 @@ export default function CloudPage() {
   const [selectedHostId, setSelectedHostId] = useState<string>(""); // empty => preview-only
   const [wsStatus, setWsStatus] = useState<"disconnected" | "connecting" | "open" | "error" | "closed">("disconnected");
   const wsRef = useRef<WebSocket | null>(null);
+  const attachedRef = useRef<string>("");
+  const manualDisconnectRef = useRef<boolean>(false);
+  const reconnectTimerRef = useRef<any>(null);
+  const attachRetryTimerRef = useRef<any>(null);
+  const selectedHostIdRef = useRef<string>("");
+  const idTokenRef = useRef<string>("");
   const [attachedHostId, setAttachedHostId] = useState<string>("");
   const [scriptInstanceId, setScriptInstanceId] = useState<string>("");
   const [uiRev, setUiRev] = useState<number>(0);
@@ -101,6 +107,14 @@ export default function CloudPage() {
     // Restore last host selection.
     setSelectedHostId(loadSelectedHostId());
   }, []);
+
+  useEffect(() => {
+    selectedHostIdRef.current = selectedHostId;
+  }, [selectedHostId]);
+
+  useEffect(() => {
+    idTokenRef.current = idToken;
+  }, [idToken]);
 
   useEffect(() => {
     if (!auth) return;
@@ -190,10 +204,25 @@ export default function CloudPage() {
     await signOut(auth);
   }
 
+  function clearTimers() {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+    if (attachRetryTimerRef.current) {
+      clearTimeout(attachRetryTimerRef.current);
+      attachRetryTimerRef.current = null;
+    }
+  }
+
   function disconnectHost() {
+    manualDisconnectRef.current = true;
+    clearTimers();
+
     saveSelectedHostId("");
     setSelectedHostId("");
     setAttachedHostId("");
+    attachedRef.current = "";
     setScriptInstanceId("");
     setUiRev(0);
     setRemoteUiRoot(null);
@@ -207,6 +236,9 @@ export default function CloudPage() {
   function connectToHost(tok: string, hostSessionId: string) {
     if (!tok || !hostSessionId) return;
 
+    manualDisconnectRef.current = false;
+    clearTimers();
+
     // Reset any previous session.
     try {
       wsRef.current?.close();
@@ -215,6 +247,7 @@ export default function CloudPage() {
 
     setWsStatus("connecting");
     setAttachedHostId("");
+    attachedRef.current = "";
     setScriptInstanceId("");
     setUiRev(0);
     setRemoteUiRoot(null);
@@ -222,19 +255,52 @@ export default function CloudPage() {
     const ws = new WebSocket(backendWsUrl(tok));
     wsRef.current = ws;
 
+    const sendAttach = () => {
+      try {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        if (attachedRef.current) return;
+        wsSend(ws, { type: "host.attach", hostSessionId });
+      } catch {
+        // ignore
+      }
+    };
+
     ws.onopen = () => {
       setWsStatus("open");
       wsSend(ws, { type: "hello", role: "web", protocolVersion: 1 });
-      wsSend(ws, { type: "host.attach", hostSessionId });
+      sendAttach();
+
+      // If we don't get host.attached (lost message, backend hiccup), retry attach a few times.
+      const tick = () => {
+        if (attachedRef.current) return;
+        if (ws.readyState !== WebSocket.OPEN) return;
+        sendAttach();
+        attachRetryTimerRef.current = setTimeout(tick, 1000);
+      };
+      attachRetryTimerRef.current = setTimeout(tick, 1000);
     };
 
     ws.onclose = () => {
       setWsStatus("closed");
       setAttachedHostId("");
+      attachedRef.current = "";
+
+      // Auto-reconnect if a host is selected and user didn't explicitly disconnect.
+      if (manualDisconnectRef.current) return;
+      const desired = selectedHostIdRef.current;
+      const tokNow = idTokenRef.current;
+      if (!desired || !tokNow) return;
+
+      reconnectTimerRef.current = setTimeout(() => {
+        // Only reconnect if selection is unchanged.
+        if (selectedHostIdRef.current !== desired) return;
+        connectToHost(tokNow, desired);
+      }, 800);
     };
 
     ws.onerror = () => {
       setWsStatus("error");
+      // onclose will handle reconnect.
     };
 
     ws.onmessage = (ev) => {
@@ -244,11 +310,14 @@ export default function CloudPage() {
 
         if (msg.type === "host.attached") {
           setAttachedHostId(msg.hostSessionId);
+          attachedRef.current = msg.hostSessionId;
+          clearTimers();
           return;
         }
         if (msg.type === "host.error") {
           setError(`host error: ${msg.error}`);
           setAttachedHostId("");
+          attachedRef.current = "";
           return;
         }
         if (msg.type === "script.started") {
@@ -460,16 +529,6 @@ export default function CloudPage() {
                   );
                 })()}
 
-                {selectedHostId ? (
-                  <button
-                    type="button"
-                    onClick={disconnectHost}
-                    className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-                    title="Disconnect from host"
-                  >
-                    Disconnect
-                  </button>
-                ) : null}
               </div>
 
               <a
