@@ -16,6 +16,8 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var lastError: String?
     @Published public private(set) var conversations: [AgentConversationDTO] = []
 
+    @Published public private(set) var llmProviderStatus: AgentLLMProviderStatusDTO?
+
     // Backend config is provided by the host app (usually the same config used for cloud sync).
     public typealias ConfigProvider = () -> (baseURL: URL, accessToken: String)?
 
@@ -75,9 +77,90 @@ public final class AgentChatViewModel: ObservableObject {
         guard !cfg.accessToken.isEmpty else { return }
 
         Task {
+            await refreshLLMProviderStatus()
             await refreshConversations()
             if let convoId = conversationId {
                 await loadConversation(conversationId: convoId)
+            }
+        }
+    }
+
+    public func refreshLLMProviderStatus() async {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else { return }
+
+        do {
+            let st = try await api.getLLMProviderStatus(baseURL: cfg.baseURL, idToken: cfg.accessToken)
+            await MainActor.run {
+                self.llmProviderStatus = st
+            }
+        } catch {
+            // Best-effort.
+        }
+    }
+
+    public func setLLMProvider(_ provider: String) {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else {
+            lastError = "Please sign in to chat."
+            return
+        }
+
+        Task {
+            do {
+                try await api.setLLMProvider(baseURL: cfg.baseURL, idToken: cfg.accessToken, llmProvider: provider)
+                await refreshLLMProviderStatus()
+            } catch {
+                await MainActor.run {
+                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
+    /// Starts ChatGPT Plus/Pro login using the browser-based OAuth flow, then sends tokens to the backend.
+    @MainActor
+    public func connectChatGPTViaBrowser() {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else {
+            lastError = "Please sign in to chat."
+            return
+        }
+
+        Task {
+            do {
+                let tokens = try await ChatGPTOAuth.loginBrowser()
+                try await api.setChatGPTOAuthTokens(
+                    baseURL: cfg.baseURL,
+                    idToken: cfg.accessToken,
+                    refreshToken: tokens.refreshToken,
+                    accessToken: tokens.accessToken,
+                    expiresAtMs: tokens.expiresAtMs,
+                    chatgptAccountId: tokens.accountId
+                )
+                try await api.setLLMProvider(baseURL: cfg.baseURL, idToken: cfg.accessToken, llmProvider: "chatgpt")
+                await refreshLLMProviderStatus()
+            } catch {
+                await MainActor.run {
+                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
+            }
+        }
+    }
+
+    @MainActor
+    public func disconnectChatGPT() {
+        guard let cfg = configProvider?() else { return }
+        guard !cfg.accessToken.isEmpty else { return }
+
+        Task {
+            do {
+                try await api.deleteChatGPTOAuthTokens(baseURL: cfg.baseURL, idToken: cfg.accessToken)
+                await refreshLLMProviderStatus()
+            } catch {
+                await MainActor.run {
+                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                }
             }
         }
     }

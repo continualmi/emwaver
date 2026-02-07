@@ -36,6 +36,12 @@ public struct AgentMessageDTO: Decodable, Identifiable {
     public let created_at_ms: Int64
 }
 
+public struct AgentLLMProviderStatusDTO: Decodable {
+    public let llm_provider: String
+    public let chatgpt_connected: Bool
+    public let chatgpt_account_id: String?
+}
+
 final class AgentBackendAPI {
     private let urlSession: URLSession
 
@@ -99,6 +105,91 @@ final class AgentBackendAPI {
         struct Body: Decodable { let messages: [AgentMessageDTO] }
         let body: Body = try decode(data: data, res: res)
         return body.messages
+    }
+
+    func getLLMProviderStatus(baseURL: URL, idToken: String) async throws -> AgentLLMProviderStatusDTO {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/llm_provider")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, res) = try await urlSession.data(for: req)
+        let body: AgentLLMProviderStatusDTO = try decode(data: data, res: res)
+        return body
+    }
+
+    func setLLMProvider(baseURL: URL, idToken: String, llmProvider: String) async throws {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/llm_provider")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let payload: [String: Any] = ["llm_provider": llmProvider]
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, res) = try await urlSession.data(for: req)
+        struct Body: Decodable { let ok: Bool }
+        _ = try decode(data: data, res: res) as Body
+    }
+
+    func setChatGPTOAuthTokens(
+        baseURL: URL,
+        idToken: String,
+        refreshToken: String,
+        accessToken: String?,
+        expiresAtMs: Int64?,
+        chatgptAccountId: String?
+    ) async throws {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/chatgpt_oauth")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        var payload: [String: Any] = [
+            "refresh_token": refreshToken,
+        ]
+        if let accessToken { payload["access_token"] = accessToken }
+        if let expiresAtMs { payload["expires_at_ms"] = expiresAtMs }
+        if let chatgptAccountId { payload["chatgpt_account_id"] = chatgptAccountId }
+
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, res) = try await urlSession.data(for: req)
+        struct Body: Decodable { let ok: Bool }
+        _ = try decode(data: data, res: res) as Body
+    }
+
+    func deleteChatGPTOAuthTokens(baseURL: URL, idToken: String) async throws {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/chatgpt_oauth")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if !idToken.isEmpty {
+            req.setValue("Bearer \(idToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let (data, res) = try await urlSession.data(for: req)
+        struct Body: Decodable { let ok: Bool }
+        _ = try decode(data: data, res: res) as Body
     }
 
     func deleteConversation(baseURL: URL, idToken: String, conversationId: String) async throws {
