@@ -12,10 +12,11 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Async runtime
- tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal", "sync"] }
 
 # Websocket client
- tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+futures-util = "0.3"
 url = "2"
 
 # HTTP client (for heartbeat / auth flows later)
@@ -23,3 +24,6 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 
 # JS engine (QuickJS)
 rquickjs = { version = "0.9", features = ["loader", "macro"] }
+
+# USB MIDI (Linux host)
+midir = "0.10"
