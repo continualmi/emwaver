@@ -9,6 +9,8 @@ import Foundation
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
     @Published public private(set) var messages: [AgentChatMessage] = []
+    @Published public private(set) var conversations: [ConversationInfo] = []
+    @Published public private(set) var selectedConversationId: UUID?
     @Published public var draft: String = ""
     @Published public var isSending: Bool = false
     @Published public var lastError: String?
@@ -17,12 +19,14 @@ public final class AgentChatViewModel: ObservableObject {
 
     private let codex = AgentCodexClient()
 
-    private let defaultsKey = "emwaver.agent.local.conversation"
-    private let defaultsSessionKey = "emwaver.agent.local.session_id"
+    private let legacyDefaultsKey = "emwaver.agent.local.conversation"
+
+    private let conversationsKey = "emwaver.agent.local.conversations.v1"
+    private let selectedConversationKey = "emwaver.agent.local.selected_conversation_id"
 
     public init(host: AgentHost) {
         self.host = host
-        loadPersistedConversation()
+        loadPersistedState()
     }
 
     public var isChatGPTConnected: Bool {
@@ -32,13 +36,52 @@ public final class AgentChatViewModel: ObservableObject {
     public func clear() {
         messages.removeAll()
         lastError = nil
-        // Start a new Codex session.
-        UserDefaults.standard.removeObject(forKey: defaultsSessionKey)
-        persistConversation()
+
+        guard let id = selectedConversationId else {
+            persistState()
+            return
+        }
+        updateConversation(id: id) { conv in
+            conv.messages = []
+            conv.sessionId = UUID().uuidString
+            conv.updatedAt = Date()
+        }
+        persistState()
     }
 
     public func newConversation() {
-        clear()
+        let id = UUID()
+        let conv = Conversation(
+            id: id,
+            title: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            sessionId: UUID().uuidString,
+            messages: []
+        )
+        upsertConversation(conv)
+        selectConversation(id)
+        persistState()
+    }
+
+    public func selectConversation(_ id: UUID) {
+        selectedConversationId = id
+        messages = conversation(id: id)?.messages ?? []
+        persistState()
+    }
+
+    public func deleteConversation(_ id: UUID) {
+        removeConversation(id)
+        if selectedConversationId == id {
+            if let next = conversations.first?.id {
+                selectConversation(next)
+            } else {
+                selectedConversationId = nil
+                messages = []
+                newConversation()
+            }
+        }
+        persistState()
     }
 
     public func connectChatGPTViaBrowser() {
@@ -77,7 +120,13 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         messages.append(AgentChatMessage(role: .user, text: text))
-        persistConversation()
+        if let id = selectedConversationId {
+            updateConversation(id: id) { conv in
+                conv.messages = self.messages
+                conv.updatedAt = Date()
+            }
+        }
+        persistState()
 
         isSending = true
 
@@ -98,7 +147,13 @@ public final class AgentChatViewModel: ObservableObject {
                         self.messages.append(AgentChatMessage(role: .assistant, text: reply))
                     }
                     self.isSending = false
-                    self.persistConversation()
+                    if let id = self.selectedConversationId {
+                        self.updateConversation(id: id) { conv in
+                            conv.messages = self.messages
+                            conv.updatedAt = Date()
+                        }
+                    }
+                    self.persistState()
                 }
             } catch {
                 await MainActor.run {
@@ -128,7 +183,7 @@ public final class AgentChatViewModel: ObservableObject {
         var iterations = 0
         var lastAssistantText = ""
 
-        let sessionId = ensureSessionId()
+        let sessionId = currentSessionId()
 
         while iterations < 10 {
             iterations += 1
@@ -407,29 +462,137 @@ public final class AgentChatViewModel: ObservableObject {
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    // MARK: - Local persistence
+    // MARK: - Local persistence (multiple conversations)
 
-    private func persistConversation() {
-        let enc = JSONEncoder()
-        if let data = try? enc.encode(messages) {
-            UserDefaults.standard.set(data, forKey: defaultsKey)
-        }
+    public struct ConversationInfo: Identifiable, Equatable {
+        public let id: UUID
+        public let title: String
+        public let updatedAt: Date
     }
 
-    private func loadPersistedConversation() {
-        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return }
+    private struct Conversation: Identifiable, Codable, Equatable {
+        let id: UUID
+        var title: String?
+        let createdAt: Date
+        var updatedAt: Date
+        var sessionId: String
+        var messages: [AgentChatMessage]
+    }
+
+    private func conversation(id: UUID) -> Conversation? {
+        loadAllConversations().first(where: { $0.id == id })
+    }
+
+    private func loadAllConversations() -> [Conversation] {
+        guard let data = UserDefaults.standard.data(forKey: conversationsKey) else { return [] }
         let dec = JSONDecoder()
-        if let decoded = try? dec.decode([AgentChatMessage].self, from: data) {
-            messages = decoded
+        return (try? dec.decode([Conversation].self, from: data)) ?? []
+    }
+
+    private func saveAllConversations(_ all: [Conversation]) {
+        let enc = JSONEncoder()
+        if let data = try? enc.encode(all) {
+            UserDefaults.standard.set(data, forKey: conversationsKey)
         }
     }
 
-    private func ensureSessionId() -> String {
-        if let existing = UserDefaults.standard.string(forKey: defaultsSessionKey), !existing.isEmpty {
-            return existing
+    private func upsertConversation(_ conv: Conversation) {
+        var all = loadAllConversations()
+        if let idx = all.firstIndex(where: { $0.id == conv.id }) {
+            all[idx] = conv
+        } else {
+            all.append(conv)
         }
-        let s = UUID().uuidString
-        UserDefaults.standard.set(s, forKey: defaultsSessionKey)
-        return s
+        // Keep most-recent first.
+        all.sort { $0.updatedAt > $1.updatedAt }
+        saveAllConversations(all)
+        refreshConversationInfos(from: all)
+    }
+
+    private func removeConversation(_ id: UUID) {
+        var all = loadAllConversations()
+        all.removeAll { $0.id == id }
+        saveAllConversations(all)
+        refreshConversationInfos(from: all)
+    }
+
+    private func updateConversation(id: UUID, mutate: (inout Conversation) -> Void) {
+        var all = loadAllConversations()
+        guard let idx = all.firstIndex(where: { $0.id == id }) else { return }
+        var c = all[idx]
+        mutate(&c)
+        all[idx] = c
+        all.sort { $0.updatedAt > $1.updatedAt }
+        saveAllConversations(all)
+        refreshConversationInfos(from: all)
+    }
+
+    private func refreshConversationInfos(from all: [Conversation]? = nil) {
+        let all = all ?? loadAllConversations()
+        conversations = all.map {
+            ConversationInfo(
+                id: $0.id,
+                title: $0.title ?? "Chat",
+                updatedAt: $0.updatedAt
+            )
+        }
+    }
+
+    private func persistState() {
+        if let selectedConversationId {
+            UserDefaults.standard.set(selectedConversationId.uuidString, forKey: selectedConversationKey)
+        }
+
+        // Messages are persisted as part of each conversation record.
+        if let id = selectedConversationId {
+            updateConversation(id: id) { conv in
+                conv.messages = self.messages
+                conv.updatedAt = Date()
+            }
+        }
+    }
+
+    private func loadPersistedState() {
+        // Migrate legacy single-conversation storage if present.
+        if let legacy = UserDefaults.standard.data(forKey: legacyDefaultsKey) {
+            let dec = JSONDecoder()
+            if let msgs = try? dec.decode([AgentChatMessage].self, from: legacy) {
+                let id = UUID()
+                let conv = Conversation(
+                    id: id,
+                    title: nil,
+                    createdAt: Date(),
+                    updatedAt: Date(),
+                    sessionId: UUID().uuidString,
+                    messages: msgs
+                )
+                upsertConversation(conv)
+                UserDefaults.standard.removeObject(forKey: legacyDefaultsKey)
+                selectedConversationId = id
+                messages = msgs
+            }
+        }
+
+        refreshConversationInfos()
+
+        if let s = UserDefaults.standard.string(forKey: selectedConversationKey),
+           let id = UUID(uuidString: s),
+           conversation(id: id) != nil {
+            selectedConversationId = id
+            messages = conversation(id: id)?.messages ?? []
+        } else if let first = conversations.first?.id {
+            selectedConversationId = first
+            messages = conversation(id: first)?.messages ?? []
+        } else {
+            newConversation()
+        }
+    }
+
+    private func currentSessionId() -> String {
+        guard let id = selectedConversationId,
+              let conv = conversation(id: id) else {
+            return UUID().uuidString
+        }
+        return conv.sessionId
     }
 }
