@@ -700,13 +700,10 @@ function render() {
                 UI.progress({ value: progressValue }),
                 UI.text({
                   text: String(loadingProgress) + " / " + String(totalLoadSteps),
-                  foregroundColor: "#94A3B8",
                   font: "caption",
                 }),
                 UI.button({
                   label: "Cancel",
-                  backgroundColor: "#1F2937",
-                  foregroundColor: "#CBD5E1",
                   onTap: function () {
                     abortRequested = true;
                     render();
@@ -738,14 +735,10 @@ function render() {
                   children: [
                     UI.button({
                       label: "Cancel",
-                      backgroundColor: "#111827",
-                      foregroundColor: "#CBD5E1",
                       onTap: cancelEdit,
                     }),
                     UI.button({
                       label: "OK",
-                      backgroundColor: "#2563EB",
-                      foregroundColor: "#FFFFFF",
                       onTap: applyEdit,
                     }),
                   ],
@@ -766,13 +759,10 @@ function render() {
                   children: [
                     UI.button({
                       label: "Initialize & Read",
-                      backgroundColor: "#2563EB",
-                      foregroundColor: "#FFFFFF",
                       onTap: startRefresh,
                     }),
                     UI.text({
                       text: "TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.",
-                      foregroundColor: "#94A3B8",
                       font: "caption",
                     }),
                     statusMessage ? UI.text({ text: statusMessage, foregroundColor: "#FBBF24", font: "caption" }) : null,
