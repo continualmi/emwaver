@@ -27,14 +27,19 @@ public struct AgentChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
-        .onAppear {
-            viewModel.bootstrapIfPossible()
-        }
     }
 
     private var header: some View {
         VStack(spacing: 10) {
             HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "sparkles")
+                    Text("Agent")
+                        .font(.headline)
+                }
+
+                Spacer()
+
                 Menu {
                     Button("New Chat") {
                         viewModel.newConversation()
@@ -42,104 +47,24 @@ public struct AgentChatPanelView: View {
 
                     Divider()
 
-                    ForEach(viewModel.conversations, id: \.id) { c in
-                        Button {
-                            viewModel.selectConversation(c.id)
+                    if viewModel.isChatGPTConnected {
+                        Button(role: .destructive) {
+                            viewModel.disconnectChatGPT()
                         } label: {
-                            let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                            Text(t.isEmpty ? c.id : t)
+                            Text("Disconnect ChatGPT")
                         }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                        Text(viewModel.selectedConversationTitle)
-                            .font(.headline)
-                        Image(systemName: "chevron.down")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .menuStyle(.borderlessButton)
-
-                Spacer()
-
-                Menu {
-                    Button("Refresh") {
-                        Task { await viewModel.refreshConversations() }
-                    }
-
-                    Button("Clear Messages") {
-                        viewModel.clear()
+                    } else {
+                        Button {
+                            viewModel.connectChatGPTViaBrowser()
+                        } label: {
+                            Text("Connect ChatGPT (Plus/Pro)")
+                        }
                     }
 
                     Divider()
 
-                    // Provider / auth
-                    if let st = viewModel.llmProviderStatus {
-                        Text("LLM Provider")
-                        Button {
-                            viewModel.setLLMProvider("chatgpt")
-                        } label: {
-                            if st.llm_provider == "chatgpt" {
-                                Text("✓ ChatGPT Plus/Pro (Codex)")
-                            } else {
-                                Text("ChatGPT Plus/Pro (Codex)")
-                            }
-                        }
-                        Button {
-                            viewModel.setLLMProvider("platform")
-                        } label: {
-                            if st.llm_provider == "platform" {
-                                Text("✓ OpenAI Platform (API key)")
-                            } else {
-                                Text("OpenAI Platform (API key)")
-                            }
-                        }
-
-                        Divider()
-
-                        if st.chatgpt_connected {
-                            Button(role: .destructive) {
-                                viewModel.disconnectChatGPT()
-                            } label: {
-                                Text("Disconnect ChatGPT")
-                            }
-                        } else {
-                            Button {
-                                viewModel.connectChatGPTViaBrowser()
-                            } label: {
-                                Text("Connect ChatGPT (Browser)")
-                            }
-                        }
-
-                        Divider()
-                    } else {
-                        Button("Refresh Provider Status") {
-                            Task { await viewModel.refreshLLMProviderStatus() }
-                        }
-                        Divider()
-                    }
-
-                    if let id = viewModel.selectedConversationId {
-                        Button(role: .destructive) {
-                            viewModel.deleteConversation(id)
-                        } label: {
-                            Text("Delete Conversation")
-                        }
-                    }
-
-                    Menu {
-                        ForEach(viewModel.conversations, id: \.id) { c in
-                            Button(role: .destructive) {
-                                viewModel.deleteConversation(c.id)
-                            } label: {
-                                let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                                Text(t.isEmpty ? c.id : t)
-                            }
-                        }
-                    } label: {
-                        Text("Delete…")
+                    Button("Clear Messages") {
+                        viewModel.clear()
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

@@ -17,11 +17,13 @@ import AppKit
 
 public struct ScriptsRootView: View {
     @StateObject private var viewModel = ScriptsViewModel()
-    @StateObject private var previewManager = ScriptPreviewManager()
+    @StateObject private var previewManager: ScriptPreviewManager
     @StateObject private var agentViewModel: AgentChatViewModel
 
     private let device: (any ScriptDevice)?
     private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
+    // Agent runs locally on the host.
+    private let agentHost: DefaultAgentHost
     private let hostStatusSink: ((Bool, String?) -> Void)?
 
     @State private var showingEditor = false
@@ -60,7 +62,10 @@ public struct ScriptsRootView: View {
         self.device = device
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
-        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(configProvider: syncProvider))
+        let pm = ScriptPreviewManager()
+        self._previewManager = StateObject(wrappedValue: pm)
+        self.agentHost = DefaultAgentHost(previewManager: pm)
+        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: self.agentHost))
     }
 
     public var body: some View {
