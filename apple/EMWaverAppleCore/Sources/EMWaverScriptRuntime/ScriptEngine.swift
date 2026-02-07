@@ -400,6 +400,53 @@ public final class ScriptEngine {
         }
         context.setObject(bufferSaveBytesFileBlock, forKeyedSubscript: "_scriptBufferSaveBytesFile" as NSString)
 
+        // Retransmit helper (sampler.emw): start TX and stream the buffer bytes.
+        // This is intentionally fire-and-forget: firmware completes and sends an OK lane later.
+        let deviceTransmitBufferStartBlock: @convention(block) (JSValue, JSValue, String?) -> Int = { [weak self] bytesValue, optsValue, doneToken in
+            guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
+            guard let data = self.dataFromJSBytes(bytesValue) else { return 0 }
+
+            var pin: UInt8 = 1 // default: A1 (IR_TX)
+            var duty: UInt8 = 100
+            var tickUs: UInt8 = 10
+            var pwmHz: UInt32 = 0
+
+            if let dict = optsValue.toDictionary() as? [String: Any] {
+                if let p = dict["pin"] as? NSNumber { pin = UInt8(clamping: p.intValue) }
+                if let p = dict["dutyPercent"] as? NSNumber { duty = UInt8(clamping: p.intValue) }
+                if let t = dict["tickUs"] as? NSNumber { tickUs = UInt8(clamping: t.intValue) }
+                if let h = dict["freqHz"] as? NSNumber { pwmHz = UInt32(clamping: h.intValue) }
+            }
+
+            if duty == 0 { duty = 50 }
+            if duty > 100 { duty = 100 }
+            if tickUs < 5 { tickUs = 5 }
+
+            // Build EMW_OP_TRANSMIT START packet (matches firmware `emw_proto.h`).
+            var pkt = Data(repeating: 0, count: 9)
+            pkt[0] = 0x80
+            pkt[1] = 0x00
+            pkt[2] = pin
+            pkt[3] = duty
+            pkt[4] = UInt8(pwmHz & 0xff)
+            pkt[5] = UInt8((pwmHz >> 8) & 0xff)
+            pkt[6] = UInt8((pwmHz >> 16) & 0xff)
+            pkt[7] = UInt8((pwmHz >> 24) & 0xff)
+            pkt[8] = tickUs
+
+            // Start TX, then stream bytes.
+            wrapper.sendPacket(pkt)
+            wrapper.loadBuffer(data: data)
+            wrapper.transmitBuffer()
+
+            if let token = doneToken, !token.isEmpty {
+                self.invoke(handler: token, arguments: [])
+            }
+
+            return data.count
+        }
+        context.setObject(deviceTransmitBufferStartBlock, forKeyedSubscript: "_scriptDeviceTransmitBufferStart" as NSString)
+
         let bufferBuildSignedRawTimingsBlock: @convention(block) (Int) -> String = { [weak self] samplePeriodUsRaw in
             guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return "" }
             let data = wrapper.getBuffer()
