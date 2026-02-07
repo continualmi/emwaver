@@ -32,6 +32,8 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var isSending: Bool = false
     @Published public var lastError: String?
 
+    private var assistantPlaceholderId: UUID?
+
     public let host: AgentHost
 
     private let codex = AgentCodexClient()
@@ -178,6 +180,7 @@ public final class AgentChatViewModel: ObservableObject {
                 // Placeholder assistant message for streaming-ish UI.
                 let placeholderId = UUID()
                 await MainActor.run {
+                    self.assistantPlaceholderId = placeholderId
                     self.messages.append(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
@@ -190,6 +193,7 @@ public final class AgentChatViewModel: ObservableObject {
                         self.messages.append(AgentChatMessage(role: .assistant, text: reply))
                     }
                     self.isSending = false
+                    self.assistantPlaceholderId = nil
                     if let id = self.selectedConversationId {
                         self.updateConversation(id: id) { conv in
                             conv.messages = self.messages
@@ -202,6 +206,7 @@ public final class AgentChatViewModel: ObservableObject {
                 await MainActor.run {
                     self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                     self.isSending = false
+                    self.assistantPlaceholderId = nil
                 }
             }
         }
@@ -273,7 +278,7 @@ public final class AgentChatViewModel: ObservableObject {
             // Execute tools and append function_call_output items.
             for call in functionCalls {
                 await MainActor.run {
-                    self.messages.append(AgentChatMessage(role: .system, text: "[tool] \(call.name)"))
+                    self.appendSystemToolBubble(name: call.name)
                 }
 
                 let argsObj = parseArgs(call.arguments)
@@ -294,6 +299,28 @@ public final class AgentChatViewModel: ObservableObject {
             throw AgentBackendError.serverError("Codex produced no text")
         }
         return trimmed
+    }
+
+    private func appendSystemToolBubble(name: String) {
+        let msg = AgentChatMessage(role: .system, text: "[tool] \(name)")
+
+        // If we currently have an assistant placeholder message (empty bubble) at the end,
+        // insert tool bubbles *before* it so the timeline reads naturally.
+        if let pid = assistantPlaceholderId,
+           let idx = messages.firstIndex(where: { $0.id == pid }) {
+            messages.insert(msg, at: idx)
+        } else {
+            messages.append(msg)
+        }
+
+        // Keep the selected conversation's persisted messages in sync (so Xcode reloads match).
+        if let id = selectedConversationId {
+            updateConversation(id: id) { conv in
+                conv.messages = self.messages
+                conv.updatedAt = Date()
+            }
+        }
+        persistState()
     }
 
     private func executeTool(name: String, args: [String: Any]) async throws -> [String: Any] {
