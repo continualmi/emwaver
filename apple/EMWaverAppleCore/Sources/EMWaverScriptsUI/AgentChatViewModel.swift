@@ -806,6 +806,11 @@ public final class AgentChatViewModel: ObservableObject {
             var out: [String: Any] = [:]
             out.reserveCapacity(dict.count)
             for (k, v) in dict {
+                // When store=false, server-side item IDs are not stable/persisted.
+                // Never replay them back; they can trigger "Item with id rs_... not found" errors.
+                if k == "id" || k == "response_id" {
+                    continue
+                }
                 if let scrubbed = scrubItemReferencesDeep(v) {
                     out[k] = scrubbed
                 }
