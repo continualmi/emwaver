@@ -361,12 +361,11 @@ export default function CloudPage() {
                 if (lastPlotViewportReqRef.current[nodeId] === key) continue;
                 lastPlotViewportReqRef.current[nodeId] = key;
                 wsSend(ws, {
-                  type: "ui.event",
+                  type: "plot.viewport",
                   hostSessionId: attachedRef.current,
                   scriptInstanceId: (msg as any).scriptInstanceId,
                   baseRev: (msg as any).rev,
                   targetNodeId: nodeId,
-                  name: "viewport",
                   payload: { min, max, bins: 400 },
                 });
               }

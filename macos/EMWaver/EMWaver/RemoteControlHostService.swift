@@ -228,13 +228,20 @@ final class RemoteControlHostService: ObservableObject {
                 // First, let the script handle it (if it has a handler) so the host UI stays in sync.
                 // Then, also compute the compressed viewport for the web renderer.
                 dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
-                if handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload) {
-                    return
-                }
+                _ = handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload)
                 return
             }
 
             dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
+
+        case "plot.viewport":
+            // Host-side plot viewport computation only (no script handler invocation).
+            guard let _ = obj["scriptInstanceId"] as? String else { return }
+            guard (obj["scriptInstanceId"] as? String) == activeScriptInstanceId else { return }
+            guard let targetNodeId = obj["targetNodeId"] as? String else { return }
+            let payload = obj["payload"] as? [String: Any] ?? [:]
+            _ = handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload)
+            return
 
         default:
             return
