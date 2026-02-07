@@ -234,6 +234,9 @@ public final class AgentChatViewModel: ObservableObject {
 
         let sessionId = currentSessionId()
 
+        // Persist user message into Codex input history (opencode-style: replay full state, no server ids).
+        appendCodexItemToCurrentConversation(Self.codexUserMessageItem(text: userPrompt))
+
         while iterations < 10 {
             iterations += 1
 
@@ -258,7 +261,11 @@ public final class AgentChatViewModel: ObservableObject {
 
             for item in outputItems {
                 if let type = item["type"] as? String, type == "message" {
-                    assistantTexts.append(Self.extractTextFromMessageItem(item))
+                    let t = Self.extractTextFromMessageItem(item)
+                    assistantTexts.append(t)
+                    if !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        appendCodexItemToCurrentConversation(Self.codexAssistantMessageItem(text: t))
+                    }
                 }
 
                 if let type = item["type"] as? String, type == "function_call" {
@@ -268,14 +275,12 @@ public final class AgentChatViewModel: ObservableObject {
                     if !callId.isEmpty, !name.isEmpty {
                         dbg("tool_call name=\(name) call_id=\(callId) args_len=\(args.count)")
                         functionCalls.append((callId: callId, name: name, arguments: args))
+                        appendCodexItemToCurrentConversation(Self.codexFunctionCallItem(callId: callId, name: name, arguments: args))
                     }
                 }
-
-                // Append every output item into our canonical input history.
-                appendCodexItemToCurrentConversation(item)
             }
 
-            let assistantText = assistantTexts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            let assistantText = assistantTexts.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
             if !assistantText.isEmpty {
                 lastAssistantText = assistantText
             }
@@ -567,6 +572,35 @@ public final class AgentChatViewModel: ObservableObject {
         }
         // Join blocks with a blank line to preserve paragraphs.
         return parts.joined(separator: "\n\n")
+    }
+
+    private static func codexUserMessageItem(text: String) -> [String: Any] {
+        [
+            "type": "message",
+            "role": "user",
+            "content": [
+                ["type": "input_text", "text": text],
+            ],
+        ]
+    }
+
+    private static func codexAssistantMessageItem(text: String) -> [String: Any] {
+        [
+            "type": "message",
+            "role": "assistant",
+            "content": [
+                ["type": "output_text", "text": text],
+            ],
+        ]
+    }
+
+    private static func codexFunctionCallItem(callId: String, name: String, arguments: String) -> [String: Any] {
+        [
+            "type": "function_call",
+            "call_id": callId,
+            "name": name,
+            "arguments": arguments,
+        ]
     }
 
     private func parseArgs(_ raw: Any?) -> [String: Any] {
