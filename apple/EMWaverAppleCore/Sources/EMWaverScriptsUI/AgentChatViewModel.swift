@@ -219,7 +219,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func runToolLoop(userPrompt: String) async throws -> String {
         // Provide a light instruction prompt so Codex knows it is operating the host.
-        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing."
+        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown. Use bullet lists and code blocks when appropriate, and include blank lines between paragraphs."
 
         let tools = toolSpecs()
 
@@ -538,7 +538,7 @@ public final class AgentChatViewModel: ObservableObject {
                 parts.append(t)
             }
         }
-        return parts.joined()
+        return parts.joined(separator: "\n")
     }
 
     private func parseArgs(_ raw: Any?) -> [String: Any] {
