@@ -94,7 +94,7 @@ stm/emwaver-firmware/Release/
 
 
 # Library crates don't need lockfiles
-cli/crates/**/Cargo.lock
+crates/**/Cargo.lock
 
 # Git worktrees (local developer checkouts)
 worktrees/

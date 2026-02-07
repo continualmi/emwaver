@@ -894,17 +894,13 @@ Native interop
 
 > **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
 
-### CLI (`/cli`)
+### Linux headless host (`/linux`) — beta
 
-- Rust crate/binary (`emw` → `emwaver`) kept intentionally minimal for internal/dev use (not shipped).
-- Shared Rust core lives under `crates/`:
-  - `crates/emwaver-dfu` (DFU/update helpers)
-  - `crates/emwaver-dfu-helper` (macOS bundled helper executable used by the macOS app’s DFU flow)
-- Current scope: firmware `build` and DFU `flash` only.
+- Headless host process intended for Raspberry Pi/Linux portable setups.
+- Runs the script runtime + UI state machine headlessly (no presented UI).
+- Streams `ui.snapshot` and accepts `ui.event` from remote controllers via the existing remote host protocol.
+- Packaging target: single-command installer + background service (likely `systemd`) + TUI pairing/sign-in flow.
 
-#### Script REPL
-
-Removed (scripts are run via the apps).
 
 ### Website (`/frontend`)
 
