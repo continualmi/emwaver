@@ -13,6 +13,10 @@ EMWaver is now focused on shipping a **single, solid platform**:
 
 ### EMWaver device (board) capabilities (important)
 
+**MCU note (do not forget):** current shipped board uses **STM32F042G6Ux**.
+- CubeMX/datasheet show many pins have timer alternate-functions (e.g. PB7 can expose TIM16/TIM17 complementary outputs on some configs), but **current firmware PWM support is limited to TIM2 on PA0–PA3** (see firmware `tim2_channel_from_pin`).
+- Expanding PWM to more pins will require firmware work: mapping additional timers/channels and carefully handling alternate-function selection and peripheral conflicts (I2C, etc.).
+
 The shipped EMWaver board is intentionally a general-purpose hardware exploration target:
 
 - **Infrared on-board:** **IR receiver + IR transmitter** (so scripts can learn/capture and **emulate remotes**).
