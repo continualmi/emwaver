@@ -311,13 +311,57 @@ private struct MarkdownText: View {
     let markdown: String
 
     var body: some View {
+        // AttributedString(markdown:) follows CommonMark semantics where single newlines
+        // inside a paragraph are treated as spaces. For chat, we want to preserve the
+        // model's line breaks, so we convert single newlines into Markdown hard-breaks.
+        let normalized = preserveSoftLineBreaks(markdown)
+
         if let attr = try? AttributedString(
-            markdown: markdown,
+            markdown: normalized,
             options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
         ) {
             Text(attr)
         } else {
             Text(markdown)
         }
+    }
+
+    private func preserveSoftLineBreaks(_ s: String) -> String {
+        let src = s.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        var out = ""
+        out.reserveCapacity(src.count + src.count / 8)
+
+        var inCodeFence = false
+        var i = src.startIndex
+        while i < src.endIndex {
+            // Toggle on fenced blocks.
+            if src[i...].hasPrefix("```") {
+                inCodeFence.toggle()
+                out.append("```")
+                i = src.index(i, offsetBy: 3)
+                continue
+            }
+
+            let ch = src[i]
+            if ch == "\n" {
+                if inCodeFence {
+                    out.append("\n")
+                } else {
+                    // If this is a blank line (previous char already newline), keep it as-is.
+                    if out.last == "\n" {
+                        out.append("\n")
+                    } else {
+                        out.append("  \n") // Markdown hard line break
+                    }
+                }
+                i = src.index(after: i)
+                continue
+            }
+
+            out.append(ch)
+            i = src.index(after: i)
+        }
+
+        return out
     }
 }
