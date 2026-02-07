@@ -231,7 +231,7 @@ private struct MessageRow: View {
                 }
 
                 if message.role == .assistant {
-                    MarkdownText(markdown: renderedText)
+                    ChatMarkdownView(markdown: renderedText)
                         .textSelection(.enabled)
                         .font(.callout)
                 } else {
@@ -307,61 +307,160 @@ private struct MessageRow: View {
     }
 }
 
-private struct MarkdownText: View {
+private struct ChatMarkdownView: View {
     let markdown: String
 
     var body: some View {
-        // AttributedString(markdown:) follows CommonMark semantics where single newlines
-        // inside a paragraph are treated as spaces. For chat, we want to preserve the
-        // model's line breaks, so we convert single newlines into Markdown hard-breaks.
-        let normalized = preserveSoftLineBreaks(markdown)
+        let src = markdown.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
+        let blocks = splitIntoBlocks(src)
 
-        if let attr = try? AttributedString(
-            markdown: normalized,
-            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
-        ) {
-            Text(attr)
-        } else {
-            Text(markdown)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                BlockView(block: block)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func splitIntoBlocks(_ s: String) -> [String] {
+        // Preserve explicit blank lines as paragraph boundaries.
+        // Also split around fenced code blocks (``` ... ```) so we can render them plainly.
+        var blocks: [String] = []
+        var current: [String] = []
+        var inFence = false
+
+        for line in s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init) {
+            if line.hasPrefix("```") {
+                if inFence {
+                    // closing fence
+                    current.append(line)
+                    blocks.append(current.joined(separator: "\n"))
+                    current.removeAll(keepingCapacity: true)
+                    inFence = false
+                } else {
+                    // opening fence
+                    if !current.isEmpty {
+                        blocks.append(current.joined(separator: "\n"))
+                        current.removeAll(keepingCapacity: true)
+                    }
+                    current.append(line)
+                    inFence = true
+                }
+                continue
+            }
+
+            if !inFence, line.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if !current.isEmpty {
+                    blocks.append(current.joined(separator: "\n"))
+                    current.removeAll(keepingCapacity: true)
+                }
+                continue
+            }
+
+            current.append(line)
+        }
+
+        if !current.isEmpty {
+            blocks.append(current.joined(separator: "\n"))
+        }
+        return blocks
+    }
+
+    private struct BlockView: View {
+        let block: String
+
+        var body: some View {
+            if isFencedCodeBlock(block) {
+                CodeBlockView(code: extractFencedCode(block))
+            } else if isBulletList(block) {
+                BulletListView(block: block)
+            } else {
+                ParagraphView(text: block)
+            }
+        }
+
+        private func isFencedCodeBlock(_ s: String) -> Bool {
+            let t = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.hasPrefix("```") && t.contains("\n```")
+        }
+
+        private func extractFencedCode(_ s: String) -> String {
+            // Drop the first and last fence lines.
+            let lines = s.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+            guard lines.count >= 2 else { return s }
+            // Remove opening fence (possibly with language id)
+            // Remove final closing fence
+            let inner = lines.dropFirst().dropLast()
+            return inner.joined(separator: "\n")
+        }
+
+        private func isBulletList(_ s: String) -> Bool {
+            let lines = s.split(separator: "\n", omittingEmptySubsequences: true)
+            guard !lines.isEmpty else { return false }
+            return lines.allSatisfy { $0.hasPrefix("- ") }
         }
     }
 
-    private func preserveSoftLineBreaks(_ s: String) -> String {
-        let src = s.replacingOccurrences(of: "\r\n", with: "\n").replacingOccurrences(of: "\r", with: "\n")
-        var out = ""
-        out.reserveCapacity(src.count + src.count / 8)
+    private struct ParagraphView: View {
+        let text: String
 
-        var inCodeFence = false
-        var i = src.startIndex
-        while i < src.endIndex {
-            // Toggle on fenced blocks.
-            if src[i...].hasPrefix("```") {
-                inCodeFence.toggle()
-                out.append("```")
-                i = src.index(i, offsetBy: 3)
-                continue
+        var body: some View {
+            if let attr = try? AttributedString(
+                markdown: text,
+                options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            ) {
+                Text(attr)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                Text(text)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
+        }
+    }
 
-            let ch = src[i]
-            if ch == "\n" {
-                if inCodeFence {
-                    out.append("\n")
-                } else {
-                    // If this is a blank line (previous char already newline), keep it as-is.
-                    if out.last == "\n" {
-                        out.append("\n")
-                    } else {
-                        out.append("  \n") // Markdown hard line break
+    private struct BulletListView: View {
+        let block: String
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(items, id: \.self) { item in
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text("•")
+                            .foregroundStyle(.secondary)
+                        if let attr = try? AttributedString(
+                            markdown: item,
+                            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+                        ) {
+                            Text(attr)
+                        } else {
+                            Text(item)
+                        }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                i = src.index(after: i)
-                continue
             }
-
-            out.append(ch)
-            i = src.index(after: i)
         }
 
-        return out
+        private var items: [String] {
+            block
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map(String.init)
+                .map { line in
+                    if line.hasPrefix("- ") { return String(line.dropFirst(2)) }
+                    return line
+                }
+        }
+    }
+
+    private struct CodeBlockView: View {
+        let code: String
+
+        var body: some View {
+            Text(code)
+                .font(.system(.callout, design: .monospaced))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Color.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
     }
 }
