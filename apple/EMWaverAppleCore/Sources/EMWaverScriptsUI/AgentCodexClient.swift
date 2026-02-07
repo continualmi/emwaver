@@ -123,14 +123,16 @@ final class AgentCodexClient {
 
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         let expiresAt: Int64? = {
-            guard let d = try? KeychainStore.get(service: Self.keychainService, account: Self.kcExpiresAt),
-                  let s = d.flatMap({ String(data: $0, encoding: .utf8) }),
+            guard let dataOpt = try? KeychainStore.get(service: Self.keychainService, account: Self.kcExpiresAt),
+                  let data = dataOpt,
+                  let s = String(data: data, encoding: .utf8),
                   let v = Int64(s) else { return nil }
             return v
         }()
 
-        if let accessData = try? KeychainStore.get(service: Self.keychainService, account: Self.kcAccess),
-           let access = accessData.flatMap({ String(data: $0, encoding: .utf8) }),
+        if let accessDataOpt = try? KeychainStore.get(service: Self.keychainService, account: Self.kcAccess),
+           let accessData = accessDataOpt,
+           let access = String(data: accessData, encoding: .utf8),
            !access.isEmpty,
            let expiresAt,
            expiresAt > (now + 3_000) {
