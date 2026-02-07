@@ -31,6 +31,17 @@ function isEmw(name: string) {
   return name.toLowerCase().endsWith(".emw");
 }
 
+
+function stableHash(s: string) {
+  // Tiny non-crypto hash for de-duping auto-run.
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0).toString(16);
+}
+
 function bytesToHexView(bytes: Uint8Array, limit = 256 * 1024) {
   const n = Math.min(bytes.length, limit);
   const lines: string[] = [];
@@ -66,6 +77,7 @@ export default function CloudPage() {
   const [scriptInstanceId, setScriptInstanceId] = useState<string>("");
   const [uiRev, setUiRev] = useState<number>(0);
   const [remoteUiRoot, setRemoteUiRoot] = useState<any>(null);
+  const [lastAutoRunKey, setLastAutoRunKey] = useState<string>("");
 
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -249,6 +261,33 @@ export default function CloudPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idToken, selectedHostId]);
 
+
+
+  // Auto-run currently open script on attached host when entering Preview mode.
+  // This removes the extra “Run on Host” step: selecting a host implies intent to run there.
+  useEffect(() => {
+    if (!idToken) return;
+    if (!attachedHostId) return;
+    if (!selected || !isEmw(selected)) return;
+    if (emwMode !== "preview") return;
+
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      // Don’t spam errors; connection may still be in progress.
+      return;
+    }
+
+    const key = `${attachedHostId}:${selected}:${stableHash(viewerText)}`;
+    if (key === lastAutoRunKey) return;
+    setLastAutoRunKey(key);
+
+    wsSend(ws, {
+      type: "script.run",
+      hostSessionId: attachedHostId,
+      name: selected,
+      source: viewerText,
+    });
+  }, [idToken, attachedHostId, emwMode, selected, lastAutoRunKey]);
   async function openFile(name: string) {
     if (!idToken) return;
     setIsBusy(true);
@@ -394,12 +433,6 @@ export default function CloudPage() {
               >
                 Agent
               </a>
-              <a
-                href="/cloud/hosts"
-                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-              >
-                Hosts
-              </a>
               <button
                 onClick={doSignOut}
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
@@ -541,29 +574,6 @@ export default function CloudPage() {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={!attachedHostId || !idToken || !selected}
-                      onClick={() => {
-                        const ws = wsRef.current;
-                        if (!ws || ws.readyState !== WebSocket.OPEN) {
-                          setError("WebSocket not connected yet");
-                          return;
-                        }
-                        // Run the currently open script on the host.
-                        wsSend(ws, {
-                          type: "script.run",
-                          hostSessionId: attachedHostId,
-                          name: selected,
-                          source: viewerText,
-                        });
-                      }}
-                      className="rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] disabled:opacity-50"
-                      title={attachedHostId ? "Run this script on the attached host" : "Attach to a host first"}
-                    >
-                      Run on Host
-                    </button>
-
                     <div className="text-xs text-[color:var(--ink-dim)]">scriptInstanceId: {scriptInstanceId || "(none)"}</div>
                   </div>
                 </div>
