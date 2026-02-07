@@ -590,11 +590,20 @@ public final class AgentChatViewModel: ObservableObject {
         return conv.codexInputItemsJSON.compactMap { s in
             guard let data = s.data(using: .utf8),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            if let t = obj["type"] as? String, t == "item_reference" {
+                return nil
+            }
             return obj
         }
     }
 
     private func appendCodexItemToCurrentConversation(_ item: [String: Any]) {
+        // When `store=false`, the API does not persist items server-side, so `item_reference`
+        // objects will fail on the next request. Opencode only uses item references when store=true.
+        if let t = item["type"] as? String, t == "item_reference" {
+            return
+        }
+
         guard let id = selectedConversationId else { return }
         updateConversation(id: id) { conv in
             conv.codexInputItemsJSON.append(jsonString(item))
