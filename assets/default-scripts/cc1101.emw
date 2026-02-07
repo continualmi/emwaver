@@ -44,7 +44,7 @@ const CC1101_STX = 0x35;
 const CC1101_SIDLE = 0x36;
 const CC1101_SFTX = 0x3b;
 
-const CC1101_F_XTAL_HZ = 26_000_000.0;
+const CC1101_F_XTAL_HZ = 26000000.0;
 const CC1101_PA_TABLE_SIZE = 8;
 const CC1101_MOD_ASK = 3;
 
@@ -225,7 +225,7 @@ function toggleCarrier() {
 function probe() {
   const part = cc1101ReadReg(CC1101_REG_PARTNUM);
   const ver = cc1101ReadReg(CC1101_REG_VERSION);
-  statusText = `Probe: PARTNUM=0x${toHexByte(part)} VERSION=0x${toHexByte(ver)}`;
+  statusText = "Probe: PARTNUM=0x" + toHexByte(part) + " VERSION=0x" + toHexByte(ver);
   render();
 }
 
