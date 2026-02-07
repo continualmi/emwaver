@@ -10,9 +10,11 @@ function hasHandler(n: RemoteUiNode, ev: string): boolean {
 export function RemoteEmwUi({
   root,
   onEvent,
+  plotDataByNodeId,
 }: {
   root: RemoteUiNode;
   onEvent: (targetId: string, name: string, payload: any) => void;
+  plotDataByNodeId?: Record<string, any>;
 }) {
   return (
     <EmwUiRenderer
@@ -20,7 +22,7 @@ export function RemoteEmwUi({
       adapter={{
         getKey: (n) => n.id,
         getType: (n) => n.type,
-        getProps: (n) => n.props || {},
+        getProps: (n) => ({ ...(n.props || {}), __plotData: plotDataByNodeId ? plotDataByNodeId[n.id] : null }),
         getChildren: (n) => (Array.isArray(n.children) ? (n.children as any) : []),
         isEnabled: (n, eventName) => hasHandler(n, eventName),
         onEvent: (n, eventName, payload) => onEvent(n.id, eventName, payload),

@@ -83,6 +83,7 @@ export default function CloudPage() {
   const [scriptInstanceId, setScriptInstanceId] = useState<string>("");
   const [uiRev, setUiRev] = useState<number>(0);
   const [remoteUiRoot, setRemoteUiRoot] = useState<any>(null);
+  const [plotDataByNodeId, setPlotDataByNodeId] = useState<Record<string, any>>({});
   const [lastAutoRunKey, setLastAutoRunKey] = useState<string>("");
 
   const [isBusy, setIsBusy] = useState(false);
@@ -131,6 +132,7 @@ export default function CloudPage() {
         setScriptInstanceId("");
         setUiRev(0);
         setRemoteUiRoot(null);
+        setPlotDataByNodeId({});
         try {
           wsRef.current?.close();
         } catch {}
@@ -226,6 +228,7 @@ export default function CloudPage() {
     setScriptInstanceId("");
     setUiRev(0);
     setRemoteUiRoot(null);
+    setPlotDataByNodeId({});
     try {
       wsRef.current?.close();
     } catch {}
@@ -251,6 +254,7 @@ export default function CloudPage() {
     setScriptInstanceId("");
     setUiRev(0);
     setRemoteUiRoot(null);
+    setPlotDataByNodeId({});
 
     const ws = new WebSocket(backendWsUrl(tok));
     wsRef.current = ws;
@@ -322,12 +326,19 @@ export default function CloudPage() {
         }
         if (msg.type === "script.started") {
           setScriptInstanceId(msg.scriptInstanceId);
+          setPlotDataByNodeId({});
           return;
         }
         if (msg.type === "ui.snapshot") {
           setScriptInstanceId(msg.scriptInstanceId);
           setUiRev(msg.rev);
           setRemoteUiRoot(msg.root);
+          return;
+        }
+        if (msg.type === "plot.data") {
+          const targetNodeId = String((msg as any).targetNodeId || "");
+          if (!targetNodeId) return;
+          setPlotDataByNodeId((prev) => ({ ...prev, [targetNodeId]: msg }));
           return;
         }
         if (msg.type === "script.error") {
@@ -671,6 +682,7 @@ export default function CloudPage() {
                   <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
                     <RemoteEmwUi
                       root={remoteUiRoot}
+                      plotDataByNodeId={plotDataByNodeId}
                       onEvent={(targetId, name, payload) => {
                         const ws = wsRef.current;
                         if (!ws || ws.readyState !== WebSocket.OPEN) return;
