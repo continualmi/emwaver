@@ -243,7 +243,7 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
 
       <div
         ref={ref}
-        style={{ height, width: "100%", maxWidth: "100%", overscrollBehavior: "contain", touchAction: "none" as any }}
+        style={{ height, width: "100%", maxWidth: "100%", overscrollBehavior: "contain", touchAction: "none" as any, position: "relative" }}
         className="w-full select-none overflow-hidden rounded-lg border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)]"
         onWheel={onWheel}
         onWheelCapture={onWheel}
@@ -255,7 +255,12 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
       >
-        <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none" className="h-full w-full">
+        <svg
+          viewBox={`0 0 ${w} ${h}`}
+          preserveAspectRatio="none"
+          style={{ display: "block", overflow: "hidden" }}
+          className="h-full w-full"
+        >
           {hasData ? (
             <polyline
               fill="none"
