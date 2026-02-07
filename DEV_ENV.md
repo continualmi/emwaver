@@ -39,6 +39,79 @@ export OPENROUTER_API_KEY=...   # only if you call /api/agent/chat
 python app.py
 ```
 
+### Windows-only backend dev (WSL2) reachable from other devices (macOS/iOS/Android)
+
+Goal: run the Flask backend in WSL2 on your Windows machine, and access it from other devices on your home LAN (e.g. iPhone/Android, or a macOS laptop).
+
+#### 1) Run Flask in WSL bound to all interfaces
+
+From WSL (repo root):
+
+```bash
+cd backend
+python -m pip install -r ../requirements.txt
+export EMWAVER_AUTH_MODE=disabled
+
+# IMPORTANT: point Flask at the real app module explicitly
+export FLASK_APP=emw_backend.app
+
+# Listen on all interfaces so Windows can forward and other devices can reach it
+flask run --host 0.0.0.0 --port 5000
+```
+
+Sanity check inside WSL:
+
+```bash
+curl -i http://127.0.0.1:5000/health
+```
+
+#### 2) Find your Windows LAN IP
+
+On Windows (PowerShell):
+
+```powershell
+ipconfig
+```
+
+Use the IPv4 for your active adapter (often `192.168.x.x`).
+
+#### 3) If needed: forward Windows port 5000 -> WSL (classic WSL2 NAT)
+
+WSL often has its own IP (e.g. `172.26.x.x`) that other LAN devices can’t route to directly. In that case, forward a port on Windows to the WSL IP.
+
+First, get the WSL IP (from WSL):
+
+```bash
+ip addr show eth0
+```
+
+Then, in **Admin PowerShell** on Windows (replace `<WSL_IP>`):
+
+```powershell
+netsh interface portproxy add v4tov4 listenaddress=0.0.0.0 listenport=5000 connectaddress=<WSL_IP> connectport=5000
+```
+
+Allow inbound traffic through Windows Firewall:
+
+```powershell
+New-NetFirewallRule -DisplayName "EMWaver backend 5000" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 5000
+```
+
+#### 4) Test from macOS (or any LAN device)
+
+From macOS:
+
+```bash
+curl -i http://<WINDOWS_LAN_IP>:5000/health
+```
+
+If that works, point your client app’s backend base URL to:
+- `http://<WINDOWS_LAN_IP>:5000`
+
+Notes:
+- iOS/macOS may block plain HTTP due to App Transport Security (ATS). For local dev, you may need a debug-only ATS exception or put HTTPS in front (e.g. Caddy).
+- If you change networks / reboot, the WSL IP may change; you may need to re-add/update the `portproxy` mapping.
+
 ```bash
 # Website (Next.js)
 cd frontend

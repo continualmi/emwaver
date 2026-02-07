@@ -48,6 +48,24 @@ Store distribution (apps)
 
 We do **not** publish direct-download installers for end users (`.dmg`, `.apk`, `.exe`).
 
+### Linux headless host (beta direction)
+
+We may add a **Linux headless “host” process** primarily to support **portable setups** (e.g. a Raspberry Pi that you can plug the EMWaver device into and control remotely).
+
+Key decisions:
+- **No Linux UI app**: Linux does **not** present UI.
+- **Model 1 (headless UI state machine)**: Linux runs the same script runtime + UI tree generation as a desktop “host”, but **only streams** `ui.snapshot` updates and accepts `ui.event` messages from a remote controller.
+  - The controller (web/macOS/Windows/iOS/Android) **renders** the UI and sends UI events.
+  - Linux keeps the authoritative script/UI state machine so handler tokens and event dispatch remain consistent.
+- **USB stays local to the host**: the Linux host owns the USB device connection and script execution; controllers attach remotely.
+
+Distribution/UX constraints (Linux):
+- There are no app stores on Linux for our distribution model; if we ship this, it should be installable via a **single command** (e.g. `curl ... | sh`) and run as a background service (likely `systemd`).
+- We still need a **good headless UX** for sign-in/pairing (e.g. TUI flow + device-code / browser-based OAuth) so the host can authenticate and appear as an attachable host session.
+
+Status:
+- Treat as **beta** / experimental scope; keep it minimal and aligned with the existing remote host protocol.
+
 GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
 We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
