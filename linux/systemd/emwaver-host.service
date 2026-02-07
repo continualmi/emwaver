@@ -1,0 +1,18 @@
+[Unit]
+Description=EMWaver headless host (beta)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/emwaver-host
+Restart=always
+RestartSec=2
+
+# Environment configuration (examples)
+# Environment=EMWAVER_BACKEND_URL=https://api.emwavers.com
+# Environment=EMWAVER_ID_TOKEN=...
+# Environment=EMWAVER_HOST_SESSION_ID=...
+
+[Install]
+WantedBy=multi-user.target
