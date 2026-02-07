@@ -117,14 +117,8 @@ public final class AgentChatViewModel: ObservableObject {
             ]
         }
 
-        // Provide a light system prompt so Codex knows it is operating the host.
-        msgs.insert(
-            [
-                "role": "system",
-                "content": "You are an EMWaver agent running *inside the macOS host app*. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.",
-            ],
-            at: 0
-        )
+        // Provide a light instruction prompt so Codex knows it is operating the host.
+        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing."
 
         let tools = toolSpecs()
 
@@ -136,32 +130,30 @@ public final class AgentChatViewModel: ObservableObject {
 
             let resp = try await codex.send(
                 model: "gpt-5.3-codex",
+                instructions: instructions,
                 messages: msgs,
                 tools: tools,
-                maxTokens: 1200,
+                maxOutputTokens: 1200,
                 temperature: 0.2
             )
 
-            let choice0 = (resp["choices"] as? [Any])?.first as? [String: Any]
-            let msg = choice0?["message"] as? [String: Any]
-
-            if let content = msg?["content"] as? String, !content.isEmpty {
-                lastAssistantText = content
+            let parsed = Self.parseCodexResponse(resp)
+            if !parsed.text.isEmpty {
+                lastAssistantText = parsed.text
             }
 
-            let toolCalls = msg?["tool_calls"] as? [[String: Any]]
-            if toolCalls == nil || toolCalls?.isEmpty == true {
+            if parsed.toolCalls.isEmpty {
                 break
             }
 
-            // Add assistant message with tool calls.
+            // Add assistant message with tool calls (for context).
             msgs.append([
                 "role": "assistant",
-                "content": msg?["content"] as? String ?? "",
-                "tool_calls": toolCalls ?? [],
+                "content": parsed.text,
+                "tool_calls": parsed.toolCalls,
             ])
 
-            for tc in toolCalls ?? [] {
+            for tc in parsed.toolCalls {
                 guard let callId = tc["id"] as? String else { continue }
                 let fn = tc["function"] as? [String: Any]
                 let name = fn?["name"] as? String ?? ""
@@ -297,6 +289,99 @@ public final class AgentChatViewModel: ObservableObject {
                 ]
             ),
         ]
+    }
+
+    private struct ParsedCodex {
+        let text: String
+        let toolCalls: [[String: Any]] // chat.completions-style tool_calls objects
+    }
+
+    private static func parseCodexResponse(_ resp: [String: Any]) -> ParsedCodex {
+        // Compatibility 1: chat.completions-like response.
+        if let choices = resp["choices"] as? [Any],
+           let choice0 = choices.first as? [String: Any],
+           let msg = choice0["message"] as? [String: Any] {
+            let text = (msg["content"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            let toolCalls = msg["tool_calls"] as? [[String: Any]] ?? []
+            return ParsedCodex(text: text, toolCalls: toolCalls)
+        }
+
+        // Compatibility 2: Responses API shape.
+        // Try `output_text` first.
+        if let outText = resp["output_text"] as? String {
+            return ParsedCodex(text: outText.trimmingCharacters(in: .whitespacesAndNewlines), toolCalls: extractToolCallsFromResponses(resp))
+        }
+
+        // Otherwise traverse `output`.
+        let text = extractTextFromResponses(resp)
+        let toolCalls = extractToolCallsFromResponses(resp)
+        return ParsedCodex(text: text, toolCalls: toolCalls)
+    }
+
+    private static func extractTextFromResponses(_ resp: [String: Any]) -> String {
+        guard let output = resp["output"] as? [Any] else { return "" }
+        var parts: [String] = []
+        for itemAny in output {
+            guard let item = itemAny as? [String: Any] else { continue }
+            if let type = item["type"] as? String, type == "message" {
+                if let content = item["content"] as? [Any] {
+                    for cAny in content {
+                        guard let c = cAny as? [String: Any] else { continue }
+                        if let text = c["text"] as? String, !text.isEmpty {
+                            parts.append(text)
+                        }
+                    }
+                }
+            }
+        }
+        return parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func extractToolCallsFromResponses(_ resp: [String: Any]) -> [[String: Any]] {
+        guard let output = resp["output"] as? [Any] else { return [] }
+        var out: [[String: Any]] = []
+        for itemAny in output {
+            guard let item = itemAny as? [String: Any] else { continue }
+            let type = (item["type"] as? String) ?? ""
+
+            // Some variants emit tool calls as top-level items.
+            if type == "tool_call" || type == "function_call" {
+                let id = (item["id"] as? String) ?? UUID().uuidString
+                let name = (item["name"] as? String) ?? (item["tool_name"] as? String) ?? ""
+                let args = item["arguments"] ?? item["input"] ?? "{}"
+                out.append([
+                    "id": id,
+                    "type": "function",
+                    "function": [
+                        "name": name,
+                        "arguments": args,
+                    ],
+                ])
+                continue
+            }
+
+            // Or nested under message content.
+            if type == "message", let content = item["content"] as? [Any] {
+                for cAny in content {
+                    guard let c = cAny as? [String: Any] else { continue }
+                    let ctype = (c["type"] as? String) ?? ""
+                    if ctype == "tool_call" || ctype == "function_call" {
+                        let id = (c["id"] as? String) ?? UUID().uuidString
+                        let name = (c["name"] as? String) ?? ""
+                        let args = c["arguments"] ?? c["input"] ?? "{}"
+                        out.append([
+                            "id": id,
+                            "type": "function",
+                            "function": [
+                                "name": name,
+                                "arguments": args,
+                            ],
+                        ])
+                    }
+                }
+            }
+        }
+        return out
     }
 
     private func parseArgs(_ raw: Any?) -> [String: Any] {

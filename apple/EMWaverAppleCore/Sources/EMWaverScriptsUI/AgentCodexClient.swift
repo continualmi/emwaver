@@ -49,31 +49,50 @@ final class AgentCodexClient {
         return s
     }
 
+    /// Calls the ChatGPT Codex Responses endpoint using a Responses-style payload.
+    ///
+    /// Note: The Codex endpoint requires top-level `instructions`.
     func send(
         model: String,
+        instructions: String,
         messages: [[String: Any]],
         tools: [ToolSpec],
-        maxTokens: Int,
+        maxOutputTokens: Int,
         temperature: Double
     ) async throws -> [String: Any] {
         let access = try await validAccessToken()
         let accountId = getAccountId()
 
+        // Convert chat-style messages -> Responses-style input.
+        let input: [[String: Any]] = messages.compactMap { m in
+            guard let role = m["role"] as? String else { return nil }
+            let content = (m["content"] as? String) ?? ""
+            return [
+                "role": role,
+                "content": [
+                    [
+                        "type": "input_text",
+                        "text": content,
+                    ],
+                ],
+            ]
+        }
+
         var payload: [String: Any] = [
             "model": model,
-            "messages": messages,
-            "max_tokens": maxTokens,
+            "instructions": instructions,
+            "input": input,
+            "max_output_tokens": maxOutputTokens,
             "temperature": temperature,
         ]
         if !tools.isEmpty {
+            // Responses API tool format.
             payload["tools"] = tools.map { spec in
                 [
                     "type": "function",
-                    "function": [
-                        "name": spec.name,
-                        "description": spec.description,
-                        "parameters": spec.parameters,
-                    ],
+                    "name": spec.name,
+                    "description": spec.description,
+                    "parameters": spec.parameters,
                 ]
             }
         }
