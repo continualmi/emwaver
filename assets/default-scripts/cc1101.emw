@@ -35,6 +35,9 @@ const CC1101_REG_TEST0 = 0x2e;
 const CC1101_REG_PATABLE = 0x3e;
 const CC1101_REG_FIFO = 0x3f;
 
+const CC1101_REG_PARTNUM = 0x30;
+const CC1101_REG_VERSION = 0x31;
+
 const CC1101_SRES = 0x30;
 const CC1101_SRX = 0x34;
 const CC1101_STX = 0x35;
@@ -47,6 +50,10 @@ const CC1101_MOD_ASK = 3;
 
 const CC1101_POWER_LEVELS_DBM = [-30, -20, -15, -10, 0, 5, 7, 10];
 const CC1101_POWER_SETTING_433MHZ = [0x12, 0x0e, 0x1d, 0x34, 0x60, 0x84, 0xc8, 0xc0];
+
+// ----------------------------------------------------------------------------
+// Low-level helpers
+// ----------------------------------------------------------------------------
 
 function cc1101Strobe(cmdByte) {
   SPI.transfer([cmdByte & 0xff], { cs: CC1101_CS });
@@ -157,41 +164,77 @@ function cc1101SetModulationAndPower(modulation, dbm) {
   cc1101WriteBurst(CC1101_REG_PATABLE, paTable);
 }
 
-function initRx() {
-  statusText = "Initializing RX...";
-  render();
+function cc1101Idle() {
+  cc1101Strobe(CC1101_SIDLE);
+}
+
+// ----------------------------------------------------------------------------
+// Presets
+// ----------------------------------------------------------------------------
+
+// NOTE on GDO0:
+// We configure IOCFG0 = 0x0D (“Serial Data In/Out”).
+// - RX preset: GDO0 becomes CC1101 modem output (host reads data).
+// - TX preset: GDO0 is used as modem input (host drives OOK/ASK).
+
+function applyCommonAsk43392_100k() {
   cc1101Reset();
   cc1101ApplyDefaults();
   cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
-  cc1101SetGdo(0x2e, 0x2e, 0x0d);
-  pinMode(GDO0, INPUT);
+  cc1101SetGdo(0x2e, 0x2e, 0x0d); // GDO0 = serial data
   cc1101SetFrequencyMHz(433.92);
   cc1101SetDataRate(100000);
   cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+}
+
+function initRxAsk433() {
+  statusText = "Init RX: 433.92MHz ASK/OOK 100kbps…";
+  render();
+  applyCommonAsk43392_100k();
+  pinMode(GDO0, INPUT);
   cc1101Strobe(CC1101_SRX);
-  statusText = "RX init complete";
+  statusText = "RX ready (GDO0 = modem out)";
+  txCarrierOn = false;
   render();
 }
 
-function initTx() {
-  statusText = "Initializing TX...";
+function initTxAsk433() {
+  statusText = "Init TX: 433.92MHz ASK/OOK 100kbps…";
   render();
-  cc1101Reset();
-  cc1101ApplyDefaults();
-  cc1101WriteReg(CC1101_REG_PKTCTRL0, 0x32);
-  cc1101SetGdo(0x2e, 0x2e, 0x0d);
-  // Hold the OOK/data line low so the radio doesn't output a continuous carrier after STX.
+  applyCommonAsk43392_100k();
+
+  // Keep OOK/data low so we don't accidentally output a continuous carrier.
   pinMode(GDO0, OUTPUT);
   digitalWrite(GDO0, LOW);
-  cc1101SetFrequencyMHz(433.92);
-  cc1101SetDataRate(100000);
-  cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+  txCarrierOn = false;
+
   cc1101Strobe(CC1101_STX);
-  statusText = "TX init complete";
+  statusText = "TX ready (GDO0 = modem in, carrier gated by GDO0)";
   render();
 }
 
+function toggleCarrier() {
+  // Only meaningful when in TX preset (GDO0 is OUTPUT).
+  txCarrierOn = !txCarrierOn;
+  pinMode(GDO0, OUTPUT);
+  digitalWrite(GDO0, txCarrierOn ? HIGH : LOW);
+  statusText = txCarrierOn ? "Carrier: ON (GDO0=HIGH)" : "Carrier: OFF (GDO0=LOW)";
+  render();
+}
+
+function probe() {
+  const part = cc1101ReadReg(CC1101_REG_PARTNUM);
+  const ver = cc1101ReadReg(CC1101_REG_VERSION);
+  statusText = `Probe: PARTNUM=0x${toHexByte(part)} VERSION=0x${toHexByte(ver)}`;
+  render();
+}
+
+// ----------------------------------------------------------------------------
+// Packet-mode helpers (kept for quick sanity TX)
+// ----------------------------------------------------------------------------
+
 var statusText = "Ready";
+var txCarrierOn = false;
 
 var packetCsPin = typeof CC1101_CS !== "undefined" ? CC1101_CS : 4;
 var packetFreqMHz = 433.92;
@@ -263,7 +306,7 @@ function packetSetDataRate(bps) {
 }
 
 function packetInitFixed() {
-  packetStatus = "Initializing...";
+  packetStatus = "Initializing…";
   render();
 
   var bytes = parseHexBytes(packetPayloadHex, 61);
@@ -283,7 +326,7 @@ function packetInitFixed() {
   packetSetDataRate(packetDataRateBps);
 
   packetPushLog(
-    "init packet mode fixed: len=" +
+    "init packet fixed: len=" +
       String(bytes.length) +
       " freq=" +
       String(packetFreqMHz) +
@@ -295,7 +338,7 @@ function packetInitFixed() {
 }
 
 function packetSend() {
-  packetStatus = "Sending...";
+  packetStatus = "Sending…";
   render();
 
   var bytes = parseHexBytes(packetPayloadHex, 61);
@@ -316,108 +359,126 @@ function packetSend() {
   render();
 }
 
+// ----------------------------------------------------------------------------
+// UI
+// ----------------------------------------------------------------------------
+
 function render() {
   UI.render(
     UI.scroll({
       padding: 16,
       spacing: 16,
       children: [
-        UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
-        UI.row({
-          spacing: 12,
+        UI.column({
+          spacing: 4,
           children: [
-            UI.button({ label: "InitRx", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: initRx }),
-            UI.button({ label: "InitTx", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: initTx }),
+            UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
+            UI.text({ text: "Quick init + sanity TX (native UI)", font: "caption", foregroundColor: "#94A3B8" }),
           ],
         }),
-        UI.text({ text: statusText, fontWeight: "medium" }),
 
-        UI.text({ text: "Packet Mode", fontWeight: "semibold" }),
-        UI.row({
-          spacing: 12,
+        UI.card({
+          title: "Presets",
+          subtitle: "Init RX/TX with known-good settings (test 002)",
           children: [
-            UI.textField({
-              value: String(packetCsPin),
-              placeholder: "CS pin (encoded, default 4=A4)",
-              onChange: function (v) {
-                var n = parseInt(String(v), 10);
-                packetCsPin = Number.isFinite(n) ? n : String(v);
-                render();
-              },
+            UI.row({
+              spacing: 12,
+              children: [
+                UI.button({ label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
+                UI.button({ label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
+              ],
             }),
-            UI.button({
-              label: "Init",
-              backgroundColor: "#2563EB",
-              foregroundColor: "#FFFFFF",
-              onTap: function () {
-                packetInitFixed();
-              },
+            UI.row({
+              spacing: 12,
+              children: [
+                UI.button({ label: txCarrierOn ? "Carrier OFF" : "Carrier ON", onTap: toggleCarrier }),
+                UI.button({ label: "IDLE", onTap: function () {
+                  cc1101Idle();
+                  statusText = "IDLE";
+                  txCarrierOn = false;
+                  render();
+                }}),
+                UI.button({ label: "Probe PART/VERSION", onTap: probe }),
+              ],
             }),
-            UI.button({
-              label: "Send",
-              backgroundColor: "#059669",
-              foregroundColor: "#FFFFFF",
-              onTap: function () {
-                packetSend();
-              },
+            UI.text({ text: statusText, fontWeight: "medium" }),
+            UI.text({
+              text: "GDO0 is set to Serial Data (IOCFG0=0x0D). RX: modem out. TX: modem in (drive GDO0 to gate carrier).",
+              font: "caption",
+              foregroundColor: "#94A3B8",
             }),
           ],
         }),
-        UI.row({
-          spacing: 12,
+
+        UI.card({
+          title: "Packet Mode (optional)",
+          subtitle: "Quick fixed-length packet TX to sanity check RF path",
           children: [
-            UI.textField({
-              value: String(packetFreqMHz),
-              placeholder: "Freq MHz (433.92)",
+            UI.row({
+              spacing: 12,
+              children: [
+                UI.textField({
+                  value: String(packetCsPin),
+                  placeholder: "CS pin (default 4=A4)",
+                  onChange: function (v) {
+                    var n = parseInt(String(v), 10);
+                    packetCsPin = Number.isFinite(n) ? n : String(v);
+                    render();
+                  },
+                }),
+                UI.button({ label: "Init", onTap: packetInitFixed }),
+                UI.button({ label: "Send", onTap: packetSend }),
+              ],
+            }),
+            UI.row({
+              spacing: 12,
+              children: [
+                UI.textField({
+                  value: String(packetFreqMHz),
+                  placeholder: "Freq MHz (433.92)",
+                  onChange: function (v) {
+                    var n = parseFloat(String(v));
+                    if (Number.isFinite(n)) packetFreqMHz = n;
+                    render();
+                  },
+                }),
+                UI.textField({
+                  value: String(packetDataRateBps),
+                  placeholder: "Data rate bps (100000)",
+                  onChange: function (v) {
+                    var n = parseInt(String(v), 10);
+                    if (Number.isFinite(n)) packetDataRateBps = n;
+                    render();
+                  },
+                }),
+              ],
+            }),
+            UI.text({ text: "Payload (hex, up to 61 bytes)", fontWeight: "medium" }),
+            UI.textEditor({
+              value: packetPayloadHex,
+              placeholder: "01 02 03 …",
               onChange: function (v) {
-                var n = parseFloat(String(v));
-                if (Number.isFinite(n)) packetFreqMHz = n;
+                packetPayloadHex = String(v);
                 render();
               },
+              minHeight: 72,
             }),
-            UI.textField({
-              value: String(packetDataRateBps),
-              placeholder: "Data rate bps (100000)",
-              onChange: function (v) {
-                var n = parseInt(String(v), 10);
-                if (Number.isFinite(n)) packetDataRateBps = n;
-                render();
-              },
+            packetStatus ? UI.text({ text: packetStatus, font: "caption" }) : null,
+            UI.row({
+              spacing: 12,
+              children: [
+                UI.button({
+                  label: "Clear Log",
+                  onTap: function () {
+                    packetLogLines = [];
+                    render();
+                  },
+                }),
+              ],
             }),
+            UI.logViewer({ text: packetLogLines.join("\n"), minHeight: 220 }),
           ],
         }),
-        UI.text({ text: "Payload (hex, up to 61 bytes)", fontWeight: "medium" }),
-        UI.textEditor({
-          value: packetPayloadHex,
-          placeholder: "01 02 03 ...",
-          onChange: function (v) {
-            packetPayloadHex = String(v);
-            render();
-          },
-          minHeight: 72,
-        }),
-        packetStatus
-          ? UI.text({
-              text: packetStatus,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
-              padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-              cornerRadius: 8,
-            })
-          : null,
-        UI.row({
-          spacing: 12,
-          children: [
-            UI.button({
-              label: "Clear Log",
-              onTap: function () {
-                packetLogLines = [];
-                render();
-              },
-            }),
-          ],
-        }),
-        UI.logViewer({ text: packetLogLines.join("\n"), minHeight: 240 }),
       ],
     }),
   );
