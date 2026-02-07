@@ -6,6 +6,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from flask import Blueprint, Response, current_app, jsonify, request
 from openai import OpenAI
+import requests
 
 from emw_backend.agent_prompt import load_repo_agent_system_prompt
 from emw_backend.agent_tool_schema import tool_schemas_v1
@@ -29,6 +30,13 @@ from emw_backend.models import AgentChatGptCredential, AgentConversation, AgentM
 agent_bp = Blueprint("agent", __name__)
 
 
+# ChatGPT Plus/Pro (Codex) OAuth + API endpoints (matches anomalyco/opencode).
+_CHATGPT_OAUTH_ISSUER = "https://auth.openai.com"
+_CHATGPT_OAUTH_CLIENT_ID = "app_EMoamEEZ73f0CkXaXp7hrann"
+_CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses"
+_CHATGPT_TOKEN_REFRESH_SAFETY_MARGIN_MS = 3000
+
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
 
@@ -47,6 +55,98 @@ def _require_openai(config: Config) -> OpenAI:
         raise RuntimeError("Missing OPENAI_MODEL")
     # OPENAI_API_KEY can be empty if you are pointing at a local OpenAI-compatible server.
     return OpenAI(api_key=(config.openai_api_key or None), base_url=config.openai_base_url)
+
+
+def _get_agent_llm_provider(db, *, uid: str) -> str:
+    settings = db.get(AgentUserSettings, uid)
+    if settings and settings.llm_provider in ("chatgpt", "platform"):
+        return settings.llm_provider
+    # Default to chatgpt when credentials exist; otherwise platform.
+    cred = db.get(AgentChatGptCredential, uid)
+    return "chatgpt" if (cred and cred.refresh_token) else "platform"
+
+
+def _refresh_chatgpt_access_token(*, refresh_token: str) -> dict:
+    # https://auth.openai.com/oauth/token
+    resp = requests.post(
+        f"{_CHATGPT_OAUTH_ISSUER}/oauth/token",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": _CHATGPT_OAUTH_CLIENT_ID,
+        },
+        timeout=30,
+    )
+    if resp.status_code // 100 != 2:
+        raise RuntimeError(f"ChatGPT token refresh failed (HTTP {resp.status_code}): {resp.text[:400]}")
+    return resp.json()
+
+
+def _chatgpt_get_valid_access_token(db, *, uid: str) -> tuple[str, str | None]:
+    cred = db.get(AgentChatGptCredential, uid)
+    if not cred or not cred.refresh_token:
+        raise RuntimeError("ChatGPT not connected")
+
+    now = _now_ms()
+    if cred.access_token and cred.expires_at_ms and cred.expires_at_ms > (now + _CHATGPT_TOKEN_REFRESH_SAFETY_MARGIN_MS):
+        return cred.access_token, cred.chatgpt_account_id
+
+    tok = _refresh_chatgpt_access_token(refresh_token=cred.refresh_token)
+
+    access = tok.get("access_token")
+    refresh = tok.get("refresh_token") or cred.refresh_token
+    expires_in = tok.get("expires_in")
+
+    if not isinstance(access, str) or not access:
+        raise RuntimeError("ChatGPT token refresh returned no access_token")
+
+    expires_at_ms = None
+    if isinstance(expires_in, (int, float)):
+        expires_at_ms = int(now + (float(expires_in) * 1000))
+
+    cred.access_token = access
+    cred.refresh_token = refresh
+    cred.expires_at_ms = expires_at_ms
+    cred.updated_at_ms = now
+    db.add(cred)
+    db.commit()
+
+    return access, cred.chatgpt_account_id
+
+
+def _chatgpt_codex_chat_completions_create(
+    *,
+    access_token: str,
+    account_id: str | None,
+    model: str,
+    messages: list[dict],
+    tools: list[dict] | None,
+    max_tokens: int,
+    temperature: float,
+) -> dict:
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json",
+        "User-Agent": "emwaver-backend",
+        "originator": "emwaver",
+    }
+    if account_id:
+        headers["ChatGPT-Account-Id"] = account_id
+
+    payload: dict = {
+        "model": model,
+        "messages": messages,
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+    }
+    if tools is not None:
+        payload["tools"] = tools
+
+    resp = requests.post(_CHATGPT_CODEX_RESPONSES_URL, headers=headers, json=payload, timeout=90)
+    if resp.status_code // 100 != 2:
+        raise RuntimeError(f"ChatGPT Codex request failed (HTTP {resp.status_code}): {resp.text[:400]}")
+    return resp.json()
 
 
 def _sse(event: str, data: Any) -> str:
@@ -599,14 +699,14 @@ def agent_chat_stream_tools():
         started = time.time()
 
         try:
-            client = _require_openai(config)
-
             now = _now_ms()
             with SessionLocal() as db:
                 convo = db.get(AgentConversation, conversation_id)
                 if not convo or convo.firebase_uid != ident.uid:
                     yield _sse("error", {"error": "Not found"})
                     return
+
+                provider = _get_agent_llm_provider(db, uid=ident.uid)
 
                 umsg = AgentMessage(
                     conversation_id=conversation_id,
@@ -619,6 +719,8 @@ def agent_chat_stream_tools():
                 db.commit()
 
                 messages = _build_openai_messages_from_db(db, uid=ident.uid, conversation_id=conversation_id)
+
+            client = _require_openai(config) if provider == "platform" else None
 
             # Prepend repo-wide system prompt if available.
             sys_prompt = load_repo_agent_system_prompt()
@@ -636,47 +738,92 @@ def agent_chat_stream_tools():
 
             while tool_iterations < 8:
                 tool_iterations += 1
-                resp = client.chat.completions.create(
-                    model=config.openai_model,
-                    messages=messages,
-                    max_tokens=max_tokens,
-                    temperature=temperature,
-                    tools=tools,
-                )
-
-                msg = resp.choices[0].message
-                tool_calls = getattr(msg, "tool_calls", None)
+                if provider == "platform":
+                    resp = client.chat.completions.create(
+                        model=config.openai_model,
+                        messages=messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                        tools=tools,
+                    )
+                    msg = resp.choices[0].message
+                    tool_calls = getattr(msg, "tool_calls", None)
+                else:
+                    with SessionLocal() as db:
+                        access, account_id = _chatgpt_get_valid_access_token(db, uid=ident.uid)
+                    resp = _chatgpt_codex_chat_completions_create(
+                        access_token=access,
+                        account_id=account_id,
+                        model=config.openai_model,
+                        messages=messages,
+                        tools=tools,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    choice0 = (resp.get("choices") or [{}])[0] if isinstance(resp, dict) else {}
+                    msg = choice0.get("message") if isinstance(choice0, dict) else None
+                    tool_calls = (msg or {}).get("tool_calls") if isinstance(msg, dict) else None
 
                 # If the model returned text, keep it (may be final or partial).
-                if getattr(msg, "content", None):
-                    assistant_text = str(msg.content)
+                if provider == "platform":
+                    if getattr(msg, "content", None):
+                        assistant_text = str(msg.content)
+                else:
+                    if isinstance(msg, dict) and msg.get("content"):
+                        assistant_text = str(msg.get("content") or "")
 
                 if not tool_calls:
                     break
 
-                # Append assistant tool call message.
+                # Normalize tool calls into plain dicts.
+                norm_tool_calls: List[Dict[str, Any]] = []
+                if provider == "platform":
+                    for tc in tool_calls:
+                        norm_tool_calls.append(
+                            {
+                                "id": tc.id,
+                                "name": tc.function.name,
+                                "arguments": tc.function.arguments,
+                            }
+                        )
+                else:
+                    if isinstance(tool_calls, list):
+                        for tc in tool_calls:
+                            if not isinstance(tc, dict):
+                                continue
+                            fn = tc.get("function") if isinstance(tc.get("function"), dict) else {}
+                            norm_tool_calls.append(
+                                {
+                                    "id": str(tc.get("id") or ""),
+                                    "name": str(fn.get("name") or ""),
+                                    "arguments": fn.get("arguments") if fn.get("arguments") is not None else "",
+                                }
+                            )
+
+                # Append assistant tool call message (OpenAI-compatible shape).
                 messages.append(
                     {
                         "role": "assistant",
-                        "content": msg.content or "",
+                        "content": (msg.content if provider == "platform" else (msg.get("content") if isinstance(msg, dict) else "")) or "",
                         "tool_calls": [
                             {
-                                "id": tc.id,
+                                "id": tc["id"],
                                 "type": "function",
                                 "function": {
-                                    "name": tc.function.name,
-                                    "arguments": tc.function.arguments,
+                                    "name": tc["name"],
+                                    "arguments": tc["arguments"],
                                 },
                             }
-                            for tc in tool_calls
+                            for tc in norm_tool_calls
                         ],
                     }
                 )
 
                 # Execute tools.
-                for tc in tool_calls:
-                    tool_name = tc.function.name
-                    args_json = tc.function.arguments
+                for tc in norm_tool_calls:
+                    tool_name = tc["name"]
+                    args_json = tc["arguments"]
+                    tool_call_id = tc["id"]
 
                     # Emit tool call event for UI visibility.
                     yield _sse("tool", {"name": tool_name, "arguments": args_json})
@@ -731,7 +878,7 @@ def agent_chat_stream_tools():
                     messages.append(
                         {
                             "role": "tool",
-                            "tool_call_id": tc.id,
+                            "tool_call_id": tool_call_id,
                             "content": json.dumps(out, ensure_ascii=False),
                         }
                     )
