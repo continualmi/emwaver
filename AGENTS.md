@@ -599,55 +599,34 @@ Placement is layered:
 - **Cloud agent** (high power models) for heavy reasoning and automation.
 - **Local-on-host agent** (smaller model) for low latency, offline, privacy-sensitive work.
 
-#### Agent Chat (Backend-backed)
+#### Agent Chat (Host-backed, macOS-first)
 
-We ship a **basic Agent chat** UI that talks to the backend (same behavior across surfaces):
+For `005`/`006` (agent loop) we treat the **host app as the backend**.
 
-Backend endpoints (persisted per-user conversations):
-- `GET  /v1/agent/conversations`
-- `POST /v1/agent/conversations`
-- `GET  /v1/agent/conversations/<conversation_id>/messages`
-- `POST /v1/agent/chat/stream` (SSE streaming; emits `delta`/`done`/`error` events)
+- The macOS app owns the full agent loop:
+  - ChatGPT/Codex OAuth login
+  - calling `https://chatgpt.com/backend-api/codex/responses`
+  - tool execution (run scripts, read UI, click UI)
+- The cloud backend is **not** in the loop for model calls or tool calls.
+  - This avoids storing long-lived OAuth credentials server-side.
+  - It also keeps the system coherent: EMWaver doesn’t do anything meaningful without a host.
 
-Auth:
-- Uses `Authorization: Bearer <firebase_id_token>`.
-- If not signed in, chat should prompt for sign-in (no anon chat).
-
-Backend URL config:
-- Uses the same backend base URL config as Cloud Sync (`EMWAVER_BACKEND_URL` and platform-specific persisted overrides).
+Credentials:
+- Store ChatGPT/Codex OAuth tokens in the **macOS Keychain** (EMWaver-owned storage).
+- Do **not** reuse/modify Codex CLI caches (we don’t depend on other programs’ state).
 
 Conversation persistence:
-- Apple (macOS/iOS): `UserDefaults` key `emwaver.agent.conversationId`
-- Android: `SharedPreferences` key `emwaver.agent.conversationId`
-- Windows: `ApplicationData.Current.LocalSettings["emwaver.agent.conversationId"]`
+- Persist agent conversations **locally on the host** (macOS) — no DB.
+- Remote controllers (frontend/other device) can request the conversation state directly from the host session once attached.
 
 UI placement (by platform):
 - **macOS:** Agent chat lives in the **right-side drawer panel** inside `ScriptsRootView` (icon: `sparkles`). Do **not** open Agent chat as a modal.
-- **iOS:** Agent chat is presented as a sheet (`sparkles` toolbar button) showing the shared `AgentChatPanelView`.
-- **Android:** Agent chat is a bottom sheet (top menu → Agent).
-- **Windows:** Agent chat is the right-side Agent pane in `ScriptsPage` (toggled from the toolbar).
+- Other platforms can get agent chat later via the same host-backed remote-control surfaces.
 
-#### Agent LLM providers (v1)
+#### Agent LLM provider (v1)
 
-We support *two* authentication / billing modes for the Agent backend. The user selects this in the client UI.
-
-1) **ChatGPT Plus/Pro login (Codex via ChatGPT subscription)** — *recommended default*
-
-- User signs in with OpenAI in the client (browser OAuth flow / device-code flow).
-- The client obtains **refresh_token** + **access_token** (short-lived) and a **ChatGPT Account/Org id** when available.
-- The backend stores credentials **user-scoped** (per Firebase `uid`) and refreshes access tokens as needed.
-- Agent requests are sent to the **ChatGPT Codex Responses** endpoint:
-  - `https://chatgpt.com/backend-api/codex/responses`
-  - Header: `Authorization: Bearer <access_token>`
-  - Optional header for org/workspace subscriptions: `ChatGPT-Account-Id: <accountId>`
-- Pricing/cost to EMWaver is treated as **0** (the user’s ChatGPT subscription covers model access). This is a key product advantage.
-
-2) **OpenAI Platform API key (usage-based)** — *supported, but not the product’s long-term default*
-
-- Backend calls OpenAI via the normal OpenAI SDK (`api.openai.com`) using a project API key.
-- This is useful for development, CI, and as a fallback when ChatGPT login is unavailable.
-
-**Future direction:** we expect the “paid” path to become **EMWaver-hosted / EMWaver-billed models** (not Codex), with richer product guarantees (latency, retention policy, tool permissions, eval gating, etc.). The ChatGPT login path remains available because it’s frictionless for users already paying for ChatGPT.
+- **ChatGPT Plus/Pro login (Codex via ChatGPT subscription)** is the primary path.
+- Future paid path: **EMWaver-hosted / EMWaver-billed models** (not Codex), with product guarantees (latency, retention policy, eval gating, etc.).
 
 ### Long-term Hardware Direction: EMArm
 
