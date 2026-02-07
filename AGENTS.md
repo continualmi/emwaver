@@ -619,6 +619,32 @@ Conversation persistence:
 - Persist agent conversations **locally on the host** (macOS) — no DB.
 - Remote controllers (frontend/other device) can request the conversation state directly from the host session once attached.
 
+#### Agent tool surface (cross-platform target)
+
+These are the **canonical tools** the EMWaver Agent should have across platforms.
+Today they are implemented macOS-first, but the goal is parity on iOS/Android/Windows.
+
+Tool IDs are stable (model-facing). UI may show friendlier names.
+
+- `web_fetch` — Fetch a URL and return best-effort text (for docs / quick reference).
+- `list_scripts` — List scripts in the local scripts folder.
+  - Optional filter: `extension` (e.g. `.emw`).
+- `list_signal_files` — List signal files in the local signals folder.
+  - Optional filter: `extension` (e.g. `.raw` / `.txt`).
+- `write_script` — Create/overwrite a script file (blunt write; prefer for new files).
+  - Params: `name`, `source`.
+- `apply_patch` — In-place edits using **opencode-style** `patchText`.
+  - Supports `*** Add File`, `*** Update File`, `*** Delete File`, optional `*** Move to`, plus `@@` hunks.
+  - Use for surgical edits and multi-file changes; do not use for generated files.
+- `run_script` — Run/render a script in the host app.
+  - Params: `name`, `source` (source-of-truth content to run).
+- `ui_snapshot` — Snapshot the currently rendered script UI tree (semantic structure).
+- `ui_event` — Send semantic UI events to nodes (e.g. `tap|change|submit|select|close`).
+
+Notes:
+- Tool execution is host-local whenever possible; avoid routing through cloud backend.
+- `script_bootstrap.emw` is internal and must never be surfaced as a user-editable/syncable file.
+
 UI placement (by platform):
 - **macOS:** Agent chat lives in the **right-side drawer panel** inside `ScriptsRootView` (icon: `sparkles`). Do **not** open Agent chat as a modal.
 - Other platforms can get agent chat later via the same host-backed remote-control surfaces.
