@@ -15,7 +15,20 @@ EMWaver is now focused on shipping a **single, solid platform**:
 
 **MCU note (do not forget):** current shipped board uses **STM32F042G6Ux**.
 - CubeMX/datasheet show many pins have timer alternate-functions (e.g. PB7 can expose TIM16/TIM17 complementary outputs on some configs), but **current firmware PWM support is limited to TIM2 on PA0–PA3** (see firmware `tim2_channel_from_pin`).
-- Expanding PWM to more pins will require firmware work: mapping additional timers/channels and carefully handling alternate-function selection and peripheral conflicts (I2C, etc.).
+- Expanding PWM to more pins requires firmware work: mapping additional timers/channels + correct AF selection + managing peripheral conflicts.
+
+**CubeMX pin→timer notes (from Luís, STM32F042G6Ux):**
+- A0 → TIM2 CH1
+- A1 → TIM2 CH2
+- A2 → TIM2 CH3
+- A3 → TIM3 CH4
+- A4 → TIM14 CH1
+- A5 → TIM2 CH1
+- A6 → TIM16 CH1, TIM3 CH1
+- A7 → TIM14 CH1, TIM17 CH1, TIM1 CH1N, TIM3 CH2
+- B6 → TIM16 CH1N
+- B7 → TIM17 CH1N
+- B8 → TIM16 CH1
 
 The shipped EMWaver board is intentionally a general-purpose hardware exploration target:
 
