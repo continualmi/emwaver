@@ -55,27 +55,14 @@ final class AgentCodexClient {
     func send(
         model: String,
         instructions: String,
-        messages: [[String: Any]],
+        input: [[String: Any]],
         tools: [ToolSpec],
         sessionId: String?
     ) async throws -> [String: Any] {
         let access = try await validAccessToken()
         let accountId = getAccountId()
 
-        // Convert chat-style messages -> Responses-style input.
-        let input: [[String: Any]] = messages.compactMap { m in
-            guard let role = m["role"] as? String else { return nil }
-            let content = (m["content"] as? String) ?? ""
-            return [
-                "role": role,
-                "content": [
-                    [
-                        "type": "input_text",
-                        "text": content,
-                    ],
-                ],
-            ]
-        }
+        // Caller provides Responses-style input items (see opencode convert-to-openai-responses-input.ts).
 
         var payload: [String: Any] = [
             "model": model,

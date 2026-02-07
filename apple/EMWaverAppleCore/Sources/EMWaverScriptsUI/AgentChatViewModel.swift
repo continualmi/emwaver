@@ -43,6 +43,7 @@ public final class AgentChatViewModel: ObservableObject {
         }
         updateConversation(id: id) { conv in
             conv.messages = []
+            conv.codexInputItemsJSON = []
             conv.sessionId = UUID().uuidString
             conv.updatedAt = Date()
         }
@@ -57,7 +58,8 @@ public final class AgentChatViewModel: ObservableObject {
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
-            messages: []
+            messages: [],
+            codexInputItemsJSON: []
         )
         upsertConversation(conv)
         selectConversation(id)
@@ -120,9 +122,15 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         messages.append(AgentChatMessage(role: .user, text: text))
+
         if let id = selectedConversationId {
+            let userItem: [String: Any] = [
+                "role": "user",
+                "content": [["type": "input_text", "text": text]],
+            ]
             updateConversation(id: id) { conv in
                 conv.messages = self.messages
+                conv.codexInputItemsJSON.append(jsonString(userItem))
                 conv.updatedAt = Date()
             }
         }
@@ -167,14 +175,6 @@ public final class AgentChatViewModel: ObservableObject {
     // MARK: - Tool loop
 
     private func runToolLoop(userPrompt: String) async throws -> String {
-        // Convert our chat messages into OpenAI-compatible messages.
-        var msgs: [[String: Any]] = messages.map { m in
-            [
-                "role": m.role.rawValue,
-                "content": m.text,
-            ]
-        }
-
         // Provide a light instruction prompt so Codex knows it is operating the host.
         let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing."
 
@@ -188,49 +188,65 @@ public final class AgentChatViewModel: ObservableObject {
         while iterations < 10 {
             iterations += 1
 
+            let inputItems = currentCodexInputItems()
+
             let resp = try await codex.send(
                 model: "gpt-5.3-codex",
                 instructions: instructions,
-                messages: msgs,
+                input: inputItems,
                 tools: tools,
                 sessionId: sessionId
             )
 
-            let parsed = Self.parseCodexResponse(resp)
-            if !parsed.text.isEmpty {
-                lastAssistantText = parsed.text
+            let outputItems = Self.extractResponsesOutputItems(resp)
+
+            // First: persist the assistant output items into conversation state (so the next call has full context).
+            // We also extract any visible assistant text.
+            var functionCalls: [(callId: String, name: String, arguments: String)] = []
+            var assistantTexts: [String] = []
+
+            for item in outputItems {
+                if let type = item["type"] as? String, type == "message" {
+                    assistantTexts.append(Self.extractTextFromMessageItem(item))
+                }
+
+                if let type = item["type"] as? String, type == "function_call" {
+                    let callId = (item["call_id"] as? String) ?? ""
+                    let name = (item["name"] as? String) ?? ""
+                    let args = (item["arguments"] as? String) ?? "{}"
+                    if !callId.isEmpty, !name.isEmpty {
+                        functionCalls.append((callId: callId, name: name, arguments: args))
+                    }
+                }
+
+                // Append every output item into our canonical input history.
+                appendCodexItemToCurrentConversation(item)
             }
 
-            if parsed.toolCalls.isEmpty {
+            let assistantText = assistantTexts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !assistantText.isEmpty {
+                lastAssistantText = assistantText
+            }
+
+            if functionCalls.isEmpty {
                 break
             }
 
-            // Add assistant message with tool calls (for context).
-            msgs.append([
-                "role": "assistant",
-                "content": parsed.text,
-                "tool_calls": parsed.toolCalls,
-            ])
-
-            for tc in parsed.toolCalls {
-                guard let callId = tc["id"] as? String else { continue }
-                let fn = tc["function"] as? [String: Any]
-                let name = fn?["name"] as? String ?? ""
-                let argsRaw = fn?["arguments"]
-                let argsJson: [String: Any] = parseArgs(argsRaw)
-
-                // Emit a visible system line.
+            // Execute tools and append function_call_output items.
+            for call in functionCalls {
                 await MainActor.run {
-                    self.messages.append(AgentChatMessage(role: .system, text: "[tool] \(name)"))
+                    self.messages.append(AgentChatMessage(role: .system, text: "[tool] \(call.name)"))
                 }
 
-                let result = try await executeTool(name: name, args: argsJson)
+                let argsObj = parseArgs(call.arguments)
+                let result = try await executeTool(name: call.name, args: argsObj)
 
-                msgs.append([
-                    "role": "tool",
-                    "tool_call_id": callId,
-                    "content": jsonString(result),
-                ])
+                let outItem: [String: Any] = [
+                    "type": "function_call_output",
+                    "call_id": call.callId,
+                    "output": jsonString(result),
+                ]
+                appendCodexItemToCurrentConversation(outItem)
             }
         }
 
@@ -350,108 +366,42 @@ public final class AgentChatViewModel: ObservableObject {
         ]
     }
 
-    private struct ParsedCodex {
-        let text: String
-        let toolCalls: [[String: Any]] // chat.completions-style tool_calls objects
-    }
+    // MARK: - Responses helpers (aligned with anomalyco/opencode)
 
-    private static func parseCodexResponse(_ resp: [String: Any]) -> ParsedCodex {
-        // Compatibility 1: chat.completions-like response.
-        if let choices = resp["choices"] as? [Any],
-           let choice0 = choices.first as? [String: Any],
-           let msg = choice0["message"] as? [String: Any] {
-            let text = (msg["content"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            let toolCalls = msg["tool_calls"] as? [[String: Any]] ?? []
-            return ParsedCodex(text: text, toolCalls: toolCalls)
-        }
-
-        // Compatibility 2: Responses API shape.
-        // Try `output_text` first.
-        if let outText = resp["output_text"] as? String {
-            return ParsedCodex(text: outText.trimmingCharacters(in: .whitespacesAndNewlines), toolCalls: extractToolCallsFromResponses(resp))
-        }
-
-        // Otherwise traverse `output`.
-        let text = extractTextFromResponses(resp)
-        let toolCalls = extractToolCallsFromResponses(resp)
-        return ParsedCodex(text: text, toolCalls: toolCalls)
-    }
-
-    private static func extractTextFromResponses(_ resp: [String: Any]) -> String {
-        guard let output = resp["output"] as? [Any] else { return "" }
-        var parts: [String] = []
-        for itemAny in output {
-            guard let item = itemAny as? [String: Any] else { continue }
-            if let type = item["type"] as? String, type == "message" {
-                if let content = item["content"] as? [Any] {
-                    for cAny in content {
-                        guard let c = cAny as? [String: Any] else { continue }
-                        if let text = c["text"] as? String, !text.isEmpty {
-                            parts.append(text)
-                        }
-                    }
-                }
-            }
-        }
-        return parts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    private static func extractToolCallsFromResponses(_ resp: [String: Any]) -> [[String: Any]] {
+    private static func extractResponsesOutputItems(_ resp: [String: Any]) -> [[String: Any]] {
         guard let output = resp["output"] as? [Any] else { return [] }
-        var out: [[String: Any]] = []
-        for itemAny in output {
-            guard let item = itemAny as? [String: Any] else { continue }
-            let type = (item["type"] as? String) ?? ""
+        return output.compactMap { $0 as? [String: Any] }
+    }
 
-            // Some variants emit tool calls as top-level items.
-            if type == "tool_call" || type == "function_call" {
-                let id = (item["id"] as? String) ?? UUID().uuidString
-                let name = (item["name"] as? String) ?? (item["tool_name"] as? String) ?? ""
-                let args = item["arguments"] ?? item["input"] ?? "{}"
-                out.append([
-                    "id": id,
-                    "type": "function",
-                    "function": [
-                        "name": name,
-                        "arguments": args,
-                    ],
-                ])
-                continue
-            }
-
-            // Or nested under message content.
-            if type == "message", let content = item["content"] as? [Any] {
-                for cAny in content {
-                    guard let c = cAny as? [String: Any] else { continue }
-                    let ctype = (c["type"] as? String) ?? ""
-                    if ctype == "tool_call" || ctype == "function_call" {
-                        let id = (c["id"] as? String) ?? UUID().uuidString
-                        let name = (c["name"] as? String) ?? ""
-                        let args = c["arguments"] ?? c["input"] ?? "{}"
-                        out.append([
-                            "id": id,
-                            "type": "function",
-                            "function": [
-                                "name": name,
-                                "arguments": args,
-                            ],
-                        ])
-                    }
-                }
+    private static func extractTextFromMessageItem(_ item: [String: Any]) -> String {
+        guard let content = item["content"] as? [Any] else { return "" }
+        var parts: [String] = []
+        for cAny in content {
+            guard let c = cAny as? [String: Any] else { continue }
+            let type = (c["type"] as? String) ?? ""
+            if type == "output_text" {
+                if let t = c["text"] as? String, !t.isEmpty { parts.append(t) }
+            } else if let t = c["text"] as? String, !t.isEmpty {
+                // best-effort fallback
+                parts.append(t)
             }
         }
-        return out
+        return parts.joined()
     }
 
     private func parseArgs(_ raw: Any?) -> [String: Any] {
         if let s = raw as? String {
-            if let data = s.data(using: .utf8),
-               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                return obj
-            }
-            return [:]
+            return parseArgs(s)
         }
         if let d = raw as? [String: Any] { return d }
+        return [:]
+    }
+
+    private func parseArgs(_ raw: String) -> [String: Any] {
+        if let data = raw.data(using: .utf8),
+           let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            return obj
+        }
         return [:]
     }
 
@@ -475,6 +425,13 @@ public final class AgentChatViewModel: ObservableObject {
         var updatedAt: Date
         var sessionId: String
         var messages: [AgentChatMessage]
+
+        // Host-local canonical prompt state for Codex Responses API.
+        // Each entry is a JSON-encoded input item, e.g.
+        // {"role":"user","content":[{"type":"input_text","text":"hi"}]}
+        // {"type":"function_call","call_id":"...","name":"web_fetch","arguments":"{...}"}
+        // {"type":"function_call_output","call_id":"...","output":"{...}"}
+        var codexInputItemsJSON: [String]
     }
 
     private func conversation(id: UUID) -> Conversation? {
@@ -562,7 +519,8 @@ public final class AgentChatViewModel: ObservableObject {
                     createdAt: Date(),
                     updatedAt: Date(),
                     sessionId: UUID().uuidString,
-                    messages: msgs
+                    messages: msgs,
+                    codexInputItemsJSON: []
                 )
                 upsertConversation(conv)
                 UserDefaults.standard.removeObject(forKey: legacyDefaultsKey)
@@ -592,5 +550,25 @@ public final class AgentChatViewModel: ObservableObject {
             return UUID().uuidString
         }
         return conv.sessionId
+    }
+
+    private func currentCodexInputItems() -> [[String: Any]] {
+        guard let id = selectedConversationId,
+              let conv = conversation(id: id) else { return [] }
+
+        return conv.codexInputItemsJSON.compactMap { s in
+            guard let data = s.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+            return obj
+        }
+    }
+
+    private func appendCodexItemToCurrentConversation(_ item: [String: Any]) {
+        guard let id = selectedConversationId else { return }
+        updateConversation(id: id) { conv in
+            conv.codexInputItemsJSON.append(jsonString(item))
+            conv.updatedAt = Date()
+        }
+        persistState()
     }
 }
