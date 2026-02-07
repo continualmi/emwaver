@@ -153,6 +153,37 @@ export default function CloudPage() {
     }
   }
 
+
+
+  function hostLabel(id: string): string {
+    const h = hosts.find((x) => x.id === id);
+    return (h?.device_name || h?.platform || "Host").trim();
+  }
+
+  function hostIsOnline(id: string): boolean {
+    const h = hosts.find((x) => x.id === id);
+    return !!h?.online;
+  }
+
+  function liveBadge(): { label: string; dotClass: string; title: string } {
+    if (!selectedHostId) {
+      return { label: "Preview", dotClass: "bg-[color:var(--line)]", title: "Preview-only (no host selected)" };
+    }
+    if (!hostIsOnline(selectedHostId)) {
+      return { label: "Offline", dotClass: "bg-red-400", title: "Selected host is offline" };
+    }
+    if (wsStatus === "error") {
+      return { label: "Error", dotClass: "bg-red-400", title: "WebSocket error" };
+    }
+    if (wsStatus === "connecting") {
+      return { label: "Connecting", dotClass: "bg-amber-300 animate-pulse", title: "Connecting to host…" };
+    }
+    if (attachedHostId) {
+      return { label: "Live", dotClass: "bg-[color:var(--aqua)] animate-pulse", title: "Connected" };
+    }
+    // Selected and online but not attached yet.
+    return { label: "Connecting", dotClass: "bg-amber-300 animate-pulse", title: "Connecting to host…" };
+  }
   async function doSignOut() {
     setError(null);
     if (!auth) return;
@@ -415,15 +446,19 @@ export default function CloudPage() {
                   ))}
                 </select>
 
-                <div
-                  className={`inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${attachedHostId ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
-                  title={attachedHostId ? "Connected to host" : "Preview-only (no host attached)"}
-                >
-                  <span
-                    className={`h-2 w-2 rounded-full ${attachedHostId ? "bg-[color:var(--aqua)] animate-pulse" : "bg-[color:var(--line)]"}`}
-                  />
-                  <span>{attachedHostId ? "Live" : "Preview"}</span>
-                </div>
+                {(() => {
+                  const b = liveBadge();
+                  const hostText = selectedHostId ? hostLabel(selectedHostId) : "";
+                  return (
+                    <div
+                      className={`inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${b.label === "Live" ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : b.label === "Connecting" ? "bg-[rgba(245,158,11,0.10)] text-[color:var(--ink)]" : b.label === "Offline" || b.label === "Error" ? "bg-[rgba(239,68,68,0.10)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
+                      title={b.title}
+                    >
+                      <span className={`h-2 w-2 rounded-full ${b.dotClass}`} />
+                      <span>{b.label}{hostText ? ` • ${hostText}` : ""}</span>
+                    </div>
+                  );
+                })()}
 
                 {selectedHostId ? (
                   <button
@@ -572,26 +607,8 @@ export default function CloudPage() {
 
             {selected && isEmw(selected) && emwMode === "preview" ? (
               <div className="mt-3 space-y-3">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)] p-3">
-                  <div className="text-sm font-semibold text-[color:var(--ink)]">
-                    {attachedHostId ? "Live" : "Preview"}
-                  </div>
 
-                  <div className="flex items-center gap-2">
-                    {attachedHostId ? (
-                      <button
-                        type="button"
-                        onClick={() => runOpenScriptOnHost("manual")}
-                        className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-                        title="Restart script on host"
-                      >
-                        Restart
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-
-                {attachedHostId && remoteUiRoot ? (
+                {attachedHostId && remoteUiRoot ?? (
                   <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
                     <RemoteEmwUi
                       root={remoteUiRoot}
