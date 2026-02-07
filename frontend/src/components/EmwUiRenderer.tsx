@@ -257,14 +257,59 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
       );
     }
 
-    case "tile":
+    case "tile": {
+      const enabled = a.isEnabled(n, "tap") && !props.disabled;
+      const title = props.title ?? props.label;
+      const value = props.value;
+      const mono = !!props.monospaceValue;
+      const pad = props.padding === undefined ? 12 : undefined;
+
+      return (
+        <button
+          type="button"
+          disabled={!enabled}
+          onClick={() => enabled && a.onEvent(n, "tap", {})}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap: "6px",
+            textAlign: "left",
+            width: "100%",
+            ...(pad !== undefined ? { padding: px(pad) } : {}),
+            ...styleFromProps(props),
+          }}
+          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] disabled:opacity-40"
+        >
+          {title !== undefined ? <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{String(title)}</div> : null}
+          <div className={mono ? "font-mono text-sm text-[color:var(--ink)]" : "text-sm text-[color:var(--ink)]"}>{String(value ?? "")}</div>
+        </button>
+      );
+    }
+
     case "card": {
       const gap = px(props.spacing ?? 12) ?? "12px";
+      const pad = props.padding === undefined ? 16 : undefined;
+      const title = props.title;
+      const subtitle = props.subtitle;
+
       return (
         <div
-          style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props) }}
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            gap,
+            ...(pad !== undefined ? { padding: px(pad) } : {}),
+            ...styleFromProps(props),
+          }}
           className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]"
         >
+          {title || subtitle ? (
+            <div className="space-y-1">
+              {title ? <div className="text-sm font-semibold text-[color:var(--ink)]">{String(title)}</div> : null}
+              {subtitle ? <div className="text-xs text-[color:var(--ink-dim)]">{String(subtitle)}</div> : null}
+            </div>
+          ) : null}
+
           {children.map((c, i) => (
             <React.Fragment key={a.getKey(c, i)}>{renderNode(c, a, i)}</React.Fragment>
           ))}
@@ -273,14 +318,20 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
     }
 
     case "grid": {
-      const cols = Number(props.columns ?? 2);
       const gap = px(props.spacing ?? 12) ?? "12px";
+      const minCol = px(props.minColumnWidth);
+      const cols = Number(props.columns ?? 0);
+
+      const gridTemplateColumns = minCol
+        ? `repeat(auto-fit, minmax(${minCol}, 1fr))`
+        : `repeat(${isFinite(cols) && cols > 0 ? cols : 2}, minmax(0, 1fr))`;
+
       return (
         <div
           style={{
             ...styleFromProps(props),
             display: "grid",
-            gridTemplateColumns: `repeat(${isFinite(cols) && cols > 0 ? cols : 2}, minmax(0, 1fr))`,
+            gridTemplateColumns,
             gap,
           }}
         >
