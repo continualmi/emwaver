@@ -261,21 +261,11 @@ export default function CloudPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idToken, selectedHostId]);
 
-
-
-  // Auto-run currently open script on attached host when entering Preview mode.
-  // This removes the extra “Run on Host” step: selecting a host implies intent to run there.
-  useEffect(() => {
-    if (!idToken) return;
+  function runOpenScriptOnHost(reason: string) {
     if (!attachedHostId) return;
     if (!selected || !isEmw(selected)) return;
-    if (emwMode !== "preview") return;
-
     const ws = wsRef.current;
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      // Don’t spam errors; connection may still be in progress.
-      return;
-    }
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     const key = `${attachedHostId}:${selected}:${stableHash(viewerText)}`;
     if (key === lastAutoRunKey) return;
@@ -286,8 +276,25 @@ export default function CloudPage() {
       hostSessionId: attachedHostId,
       name: selected,
       source: viewerText,
+      // debug hint (ignored by host/backends that don't care)
+      reason,
     });
-  }, [idToken, attachedHostId, emwMode, selected, lastAutoRunKey]);
+  }
+
+  // Auto-run currently open script on attached host when entering Preview mode.
+  // This removes the extra “Run on Host” step: selecting a host implies intent to run there.
+  useEffect(() => {
+    if (!idToken) return;
+    if (!attachedHostId) return;
+    if (emwMode !== "preview") return;
+    runOpenScriptOnHost("auto");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idToken, attachedHostId, emwMode, viewerText, selected, wsStatus]);
+
+  // If we disconnect (or switch hosts), allow auto-run again.
+  useEffect(() => {
+    if (!attachedHostId) setLastAutoRunKey("");
+  }, [attachedHostId]);
   async function openFile(name: string) {
     if (!idToken) return;
     setIsBusy(true);
@@ -409,10 +416,13 @@ export default function CloudPage() {
                 </select>
 
                 <div
-                  className={`rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${attachedHostId ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
-                  title={attachedHostId ? `Attached to ${attachedHostId}` : "Preview-only (no host attached)"}
+                  className={`inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${attachedHostId ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
+                  title={attachedHostId ? "Connected to host" : "Preview-only (no host attached)"}
                 >
-                  {attachedHostId ? "Live" : "Preview"}
+                  <span
+                    className={`h-2 w-2 rounded-full ${attachedHostId ? "bg-[color:var(--aqua)] animate-pulse" : "bg-[color:var(--line)]"}`}
+                  />
+                  <span>{attachedHostId ? "Live" : "Preview"}</span>
                 </div>
 
                 {selectedHostId ? (
@@ -563,18 +573,21 @@ export default function CloudPage() {
             {selected && isEmw(selected) && emwMode === "preview" ? (
               <div className="mt-3 space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)] p-3">
-                  <div>
-                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Mode</div>
-                    <div className="text-sm font-semibold text-[color:var(--ink)]">
-                      {attachedHostId ? "Live host" : "Preview"}
-                    </div>
-                    <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">
-                      {attachedHostId ? `Attached: ${attachedHostId} • WS: ${wsStatus}` : "Connect to a host to enable interaction"}
-                    </div>
+                  <div className="text-sm font-semibold text-[color:var(--ink)]">
+                    {attachedHostId ? "Live" : "Preview"}
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="text-xs text-[color:var(--ink-dim)]">scriptInstanceId: {scriptInstanceId || "(none)"}</div>
+                    {attachedHostId ? (
+                      <button
+                        type="button"
+                        onClick={() => runOpenScriptOnHost("manual")}
+                        className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+                        title="Restart script on host"
+                      >
+                        Restart
+                      </button>
+                    ) : null}
                   </div>
                 </div>
 
