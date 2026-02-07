@@ -241,6 +241,14 @@ This section is a **manual navigation map**. It intentionally omits the full dir
   - Legacy routes `/cloud/hosts` and `/cloud/hosts/[hostId]/remote` now redirect to `/cloud`.
 - Backend client helpers / SSE parsing reference: `frontend/src/lib/`
 
+Bundled example scripts (single source of truth)
+
+- Source of truth: `assets/default-scripts/*.emw`
+- Frontend consumes a generated TS module: `frontend/src/lib/exampleEmwScripts.ts`
+- Generator: `scripts/sync_frontend_example_scripts.js`
+  - Run it whenever `assets/default-scripts/` changes.
+  - This avoids stale copies and prevents browser-preview breakages (e.g. numeric separators, template literals) from reappearing.
+
 Web dev (Next.js):
 - `cd frontend && npm run dev`
 
@@ -307,7 +315,10 @@ We intentionally avoid extra modes:
 - **Legacy:** the old `files` table is deprecated and should not exist in new DBs.
 
 **Client storage (shipping direction):**
+- Treat user data as **just files in one local folder** (per platform).
 - Android stores *all* user files in a single local folder (`filesDir/scripts/`).
+- Apple (macOS/iOS) should keep scripts + signals together for predictable behavior.
+  - `sampler.emw` expects signals to be local files and lists `.raw`/`.txt` from the same folder.
 - UI views filter by extension:
   - scripts: `.emw`
   - signals/artifacts: `.raw`, `.txt`
