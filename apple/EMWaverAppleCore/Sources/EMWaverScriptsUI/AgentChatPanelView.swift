@@ -265,6 +265,7 @@ private struct MessageRow: View {
         case "list_signal_files": return "List signal files"
         case "web_fetch": return "Fetch web page"
         case "write_script": return "Write script"
+        case "apply_patch": return "Edit files"
         case "run_script": return "Run script"
         case "ui_snapshot": return "Snapshot UI"
         case "ui_event": return "UI action"
