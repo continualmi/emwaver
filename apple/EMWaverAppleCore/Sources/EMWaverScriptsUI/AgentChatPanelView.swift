@@ -230,10 +230,16 @@ private struct MessageRow: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Text(renderedText)
-                    .textSelection(.enabled)
-                    .font(isToolBubble ? .caption : .callout)
-                    .foregroundStyle(isToolBubble ? .secondary : .primary)
+                if message.role == .assistant {
+                    MarkdownText(markdown: renderedText)
+                        .textSelection(.enabled)
+                        .font(.callout)
+                } else {
+                    Text(renderedText)
+                        .textSelection(.enabled)
+                        .font(isToolBubble ? .caption : .callout)
+                        .foregroundStyle(isToolBubble ? .secondary : .primary)
+                }
             }
             .padding(isToolBubble ? 8 : 10)
             .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
@@ -253,10 +259,24 @@ private struct MessageRow: View {
         message.role == .system && message.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[tool]")
     }
 
+    private func friendlyToolName(_ toolId: String) -> String {
+        switch toolId {
+        case "list_scripts": return "List EMWaver scripts"
+        case "list_signal_files": return "List signal files"
+        case "web_fetch": return "Fetch web page"
+        case "write_script": return "Write script"
+        case "run_script": return "Run script"
+        case "ui_snapshot": return "Snapshot UI"
+        case "ui_event": return "UI action"
+        default: return toolId
+        }
+    }
+
     private var renderedText: String {
         if isToolBubble {
             let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            return t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
+            let raw = t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
+            return friendlyToolName(raw)
         }
         return message.text
     }
@@ -282,6 +302,21 @@ private struct MessageRow: View {
                 return AnyShapeStyle(Color.secondary.opacity(0.10))
             }
             return AnyShapeStyle(Color.orange.opacity(0.10))
+        }
+    }
+}
+
+private struct MarkdownText: View {
+    let markdown: String
+
+    var body: some View {
+        if let attr = try? AttributedString(
+            markdown: markdown,
+            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .full)
+        ) {
+            Text(attr)
+        } else {
+            Text(markdown)
         }
     }
 }
