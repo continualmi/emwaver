@@ -15,8 +15,6 @@ struct ScriptsContainerView: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
     @EnvironmentObject private var remoteControlHost: RemoteControlHostService
-    @StateObject private var agentViewModel = AgentChatViewModel()
-    @State private var showingAgentChat = false
     @State private var showingCloudSettings = false
     @State private var showingHosts = false
 
@@ -170,39 +168,8 @@ struct ScriptsContainerView: View {
                             Image(systemName: auth.isSignedIn ? "person.crop.circle" : "person.crop.circle.badge.plus")
                         }
 
-                        Button {
-                            showingAgentChat = true
-                        } label: {
-                            Image(systemName: "sparkles")
-                        }
                     }
                 }
-        }
-        .sheet(isPresented: $showingAgentChat) {
-            // Ensure the shared agent view model knows how to resolve backend URL + auth token.
-            agentViewModel.setConfigProvider {
-                guard let base = CloudConfig.backendBaseURL() else { return nil }
-
-                if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
-                    return (baseURL: base, accessToken: token)
-                }
-
-                // No anon chat.
-                return nil
-            }
-
-            NavigationStack {
-                AgentChatPanelView(viewModel: agentViewModel)
-                    .navigationTitle("Agent")
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar {
-                        ToolbarItem(placement: .cancellationAction) {
-                            Button("Done") { showingAgentChat = false }
-                        }
-                    }
-            }
-            .presentationDetents([.medium, .large])
-            .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()

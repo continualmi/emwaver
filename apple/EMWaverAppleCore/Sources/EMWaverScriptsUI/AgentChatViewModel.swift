@@ -4,9 +4,7 @@
  * All rights reserved.
  */
 
-import Combine
 import Foundation
-import SwiftUI
 
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
@@ -14,132 +12,41 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var draft: String = ""
     @Published public var isSending: Bool = false
     @Published public var lastError: String?
-    @Published public private(set) var conversations: [AgentConversationDTO] = []
 
-    @Published public private(set) var llmProviderStatus: AgentLLMProviderStatusDTO?
+    public let host: AgentHost
 
-    // Backend config is provided by the host app (usually the same config used for cloud sync).
-    public typealias ConfigProvider = () -> (baseURL: URL, accessToken: String)?
+    private let codex = AgentCodexClient()
 
-    private let api: AgentBackendAPI
-    private var configProvider: ConfigProvider?
+    private let defaultsKey = "emwaver.agent.local.conversation"
 
-    private let conversationIdDefaultsKey = "emwaver.agent.conversationId"
-
-    private var conversationId: String? {
-        get {
-            let raw = (UserDefaults.standard.string(forKey: conversationIdDefaultsKey) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return raw.isEmpty ? nil : raw
-        }
-        set {
-            if let v = newValue, !v.isEmpty {
-                UserDefaults.standard.set(v, forKey: conversationIdDefaultsKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: conversationIdDefaultsKey)
-            }
-        }
+    public init(host: AgentHost) {
+        self.host = host
+        loadPersistedConversation()
     }
 
-    public init(configProvider: ConfigProvider? = nil, urlSession: URLSession = .shared) {
-        self.api = AgentBackendAPI(urlSession: urlSession)
-        self.configProvider = configProvider
-    }
-
-    public func setConfigProvider(_ provider: ConfigProvider?) {
-        self.configProvider = provider
+    public var isChatGPTConnected: Bool {
+        codex.isConnected()
     }
 
     public func clear() {
         messages.removeAll()
         lastError = nil
+        persistConversation()
     }
 
     public func newConversation() {
         clear()
-        conversationId = nil
     }
 
-    public var selectedConversationId: String? {
-        conversationId
-    }
-
-    public var selectedConversationTitle: String {
-        guard let id = conversationId else { return "New chat" }
-        if let c = conversations.first(where: { $0.id == id }) {
-            let t = (c.title ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return t.isEmpty ? "Conversation" : t
-        }
-        return "Conversation"
-    }
-
-    public func bootstrapIfPossible() {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        Task {
-            await refreshLLMProviderStatus()
-            await refreshConversations()
-            if let convoId = conversationId {
-                await loadConversation(conversationId: convoId)
-            }
-        }
-    }
-
-    public func refreshLLMProviderStatus() async {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        do {
-            let st = try await api.getLLMProviderStatus(baseURL: cfg.baseURL, idToken: cfg.accessToken)
-            await MainActor.run {
-                self.llmProviderStatus = st
-            }
-        } catch {
-            // Best-effort.
-        }
-    }
-
-    public func setLLMProvider(_ provider: String) {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else {
-            lastError = "Please sign in to chat."
-            return
-        }
-
-        Task {
-            do {
-                try await api.setLLMProvider(baseURL: cfg.baseURL, idToken: cfg.accessToken, llmProvider: provider)
-                await refreshLLMProviderStatus()
-            } catch {
-                await MainActor.run {
-                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                }
-            }
-        }
-    }
-
-    /// Starts ChatGPT Plus/Pro login using the browser-based OAuth flow, then sends tokens to the backend.
-    @MainActor
     public func connectChatGPTViaBrowser() {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else {
-            lastError = "Please sign in to chat."
-            return
-        }
-
+        lastError = nil
         Task {
             do {
-                let tokens = try await ChatGPTOAuth.loginBrowser()
-                try await api.setChatGPTOAuthTokens(
-                    baseURL: cfg.baseURL,
-                    idToken: cfg.accessToken,
-                    refreshToken: tokens.refreshToken,
-                    accessToken: tokens.accessToken,
-                    expiresAtMs: tokens.expiresAtMs,
-                    chatgptAccountId: tokens.accountId
-                )
-                try await api.setLLMProvider(baseURL: cfg.baseURL, idToken: cfg.accessToken, llmProvider: "chatgpt")
-                await refreshLLMProviderStatus()
+                try await codex.connectViaBrowserOAuth()
+                await MainActor.run {
+                    self.lastError = nil
+                    self.objectWillChange.send()
+                }
             } catch {
                 await MainActor.run {
                     self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -148,84 +55,9 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    @MainActor
     public func disconnectChatGPT() {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        Task {
-            do {
-                try await api.deleteChatGPTOAuthTokens(baseURL: cfg.baseURL, idToken: cfg.accessToken)
-                await refreshLLMProviderStatus()
-            } catch {
-                await MainActor.run {
-                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                }
-            }
-        }
-    }
-
-    public func refreshConversations() async {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        do {
-            let list = try await api.listConversations(baseURL: cfg.baseURL, idToken: cfg.accessToken)
-            await MainActor.run {
-                self.conversations = list
-            }
-        } catch {
-            // Best-effort; keep UI usable.
-        }
-    }
-
-    public func selectConversation(_ id: String) {
-        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        conversationId = trimmed
-        clear()
-        Task { await loadConversation(conversationId: trimmed) }
-    }
-
-    public func deleteConversation(_ id: String) {
-        let trimmed = id.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        Task {
-            do {
-                try await api.deleteConversation(baseURL: cfg.baseURL, idToken: cfg.accessToken, conversationId: trimmed)
-                await refreshConversations()
-                await MainActor.run {
-                    if self.conversationId == trimmed {
-                        self.conversationId = nil
-                        self.clear()
-                    }
-                }
-            } catch {
-                await MainActor.run {
-                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                }
-            }
-        }
-    }
-
-    public func loadConversation(conversationId: String) async {
-        guard let cfg = configProvider?() else { return }
-        guard !cfg.accessToken.isEmpty else { return }
-
-        do {
-            let remote = try await api.listMessages(baseURL: cfg.baseURL, idToken: cfg.accessToken, conversationId: conversationId)
-            await MainActor.run {
-                self.messages = remote.map { dto in
-                    let role = AgentChatRole(rawValue: dto.role) ?? .assistant
-                    return AgentChatMessage(id: UUID(), role: role, text: dto.content)
-                }
-            }
-        } catch {
-            // Best-effort.
-        }
+        codex.disconnect()
+        objectWillChange.send()
     }
 
     public func send() {
@@ -236,61 +68,34 @@ public final class AgentChatViewModel: ObservableObject {
         lastError = nil
         draft = ""
 
-        guard let cfg = configProvider?() else {
-            lastError = "Backend URL not configured"
-            return
-        }
-
-        guard !cfg.accessToken.isEmpty else {
-            lastError = "Please sign in to chat."
+        guard isChatGPTConnected else {
+            lastError = "Connect ChatGPT (Plus/Pro) first."
             return
         }
 
         messages.append(AgentChatMessage(role: .user, text: text))
+        persistConversation()
+
         isSending = true
 
         Task {
             do {
-                let convoId = try await ensureConversation(baseURL: cfg.baseURL, accessToken: cfg.accessToken, firstUserMessage: text)
-
-                // Stream into a placeholder assistant message.
+                // Placeholder assistant message for streaming-ish UI.
                 let placeholderId = UUID()
                 await MainActor.run {
                     self.messages.append(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
-                var accumulated = ""
-
-                try await api.chatStream(
-                    baseURL: cfg.baseURL,
-                    idToken: cfg.accessToken,
-                    conversationId: convoId,
-                    message: text,
-                    onEvent: { [weak self] ev in
-                        guard let self else { return }
-                        Task { @MainActor in
-                            switch ev {
-                            case .delta(let d):
-                                accumulated += d
-                                if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                                    self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: accumulated)
-                                }
-                            case .done(let msg, _):
-                                if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                                    self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: msg.content)
-                                }
-                            case .tool(let line):
-                                // Show tool calls/results as system messages so users can see what the agent did.
-                                self.messages.append(AgentChatMessage(role: .system, text: line))
-                            case .error(let e):
-                                self.lastError = e
-                            }
-                        }
-                    }
-                )
+                let reply = try await runToolLoop(userPrompt: text)
 
                 await MainActor.run {
+                    if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
+                        self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
+                    } else {
+                        self.messages.append(AgentChatMessage(role: .assistant, text: reply))
+                    }
                     self.isSending = false
+                    self.persistConversation()
                 }
             } catch {
                 await MainActor.run {
@@ -301,23 +106,230 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    private func ensureConversation(baseURL: URL, accessToken: String, firstUserMessage: String) async throws -> String {
-        if let existing = conversationId { return existing }
+    // MARK: - Tool loop
 
-        let title = firstUserMessage
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: "\n")
-            .first
-            .map(String.init)
-
-        let convo = try await api.createConversation(baseURL: baseURL, idToken: accessToken, title: title)
-        let id = convo.id
-
-        await MainActor.run {
-            self.conversationId = id
+    private func runToolLoop(userPrompt: String) async throws -> String {
+        // Convert our chat messages into OpenAI-compatible messages.
+        var msgs: [[String: Any]] = messages.map { m in
+            [
+                "role": m.role.rawValue,
+                "content": m.text,
+            ]
         }
 
-        return id
+        // Provide a light system prompt so Codex knows it is operating the host.
+        msgs.insert(
+            [
+                "role": "system",
+                "content": "You are an EMWaver agent running *inside the macOS host app*. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.",
+            ],
+            at: 0
+        )
+
+        let tools = toolSpecs()
+
+        var iterations = 0
+        var lastAssistantText = ""
+
+        while iterations < 10 {
+            iterations += 1
+
+            let resp = try await codex.send(
+                model: "gpt-5.3-codex",
+                messages: msgs,
+                tools: tools,
+                maxTokens: 1200,
+                temperature: 0.2
+            )
+
+            let choice0 = (resp["choices"] as? [Any])?.first as? [String: Any]
+            let msg = choice0?["message"] as? [String: Any]
+
+            if let content = msg?["content"] as? String, !content.isEmpty {
+                lastAssistantText = content
+            }
+
+            let toolCalls = msg?["tool_calls"] as? [[String: Any]]
+            if toolCalls == nil || toolCalls?.isEmpty == true {
+                break
+            }
+
+            // Add assistant message with tool calls.
+            msgs.append([
+                "role": "assistant",
+                "content": msg?["content"] as? String ?? "",
+                "tool_calls": toolCalls ?? [],
+            ])
+
+            for tc in toolCalls ?? [] {
+                guard let callId = tc["id"] as? String else { continue }
+                let fn = tc["function"] as? [String: Any]
+                let name = fn?["name"] as? String ?? ""
+                let argsRaw = fn?["arguments"]
+                let argsJson: [String: Any] = parseArgs(argsRaw)
+
+                // Emit a visible system line.
+                await MainActor.run {
+                    self.messages.append(AgentChatMessage(role: .system, text: "[tool] \(name)"))
+                }
+
+                let result = try await executeTool(name: name, args: argsJson)
+
+                msgs.append([
+                    "role": "tool",
+                    "tool_call_id": callId,
+                    "content": jsonString(result),
+                ])
+            }
+        }
+
+        let trimmed = lastAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            throw AgentBackendError.serverError("Codex produced no text")
+        }
+        return trimmed
+    }
+
+    private func executeTool(name: String, args: [String: Any]) async throws -> [String: Any] {
+        switch name {
+        case "web_fetch":
+            let urlStr = (args["url"] as? String) ?? ""
+            guard let url = URL(string: urlStr), !urlStr.isEmpty else { return ["error": "invalid_url"] }
+            let (data, _) = try await URLSession.shared.data(from: url)
+            let text = String(data: data, encoding: .utf8) ?? ""
+            let clipped = String(text.prefix(40_000))
+            return ["url": urlStr, "text": clipped]
+
+        case "write_script":
+            let name = (args["name"] as? String) ?? "script.emw"
+            let source = (args["source"] as? String) ?? ""
+            if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return ["error": "empty_source"]
+            }
+            let dir = host.fileService.storageDirectoryURL()
+            let fileURL = dir.appendingPathComponent(name)
+            try Data(source.utf8).write(to: fileURL, options: .atomic)
+            return ["ok": true, "path": fileURL.lastPathComponent]
+
+        case "run_script":
+            let name = (args["name"] as? String) ?? "agent_run.emw"
+            let source = (args["source"] as? String) ?? ""
+            if source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return ["error": "empty_source"]
+            }
+            host.runScript(name: name, source: source)
+            return ["ok": true]
+
+        case "ui_snapshot":
+            return host.uiSnapshot()
+
+        case "ui_event":
+            let nodeId = (args["targetNodeId"] as? String) ?? ""
+            let ev = (args["name"] as? String) ?? "tap"
+            let payload = (args["payload"] as? [String: Any]) ?? [:]
+            host.invokeUIEvent(targetNodeId: nodeId, name: ev, payload: payload)
+            return ["ok": true]
+
+        default:
+            return ["error": "unknown_tool"]
+        }
+    }
+
+    private func toolSpecs() -> [AgentCodexClient.ToolSpec] {
+        return [
+            .init(
+                name: "web_fetch",
+                description: "Fetch a URL and return its text content (best-effort).",
+                parameters: [
+                    "type": "object",
+                    "properties": ["url": ["type": "string"]],
+                    "required": ["url"],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "write_script",
+                description: "Write a .emw script into the EMWaver scripts folder.",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "name": ["type": "string"],
+                        "source": ["type": "string"],
+                    ],
+                    "required": ["name", "source"],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "run_script",
+                description: "Run a script in the host app, rendering its UI.",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "name": ["type": "string"],
+                        "source": ["type": "string"],
+                    ],
+                    "required": ["name", "source"],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "ui_snapshot",
+                description: "Get the current rendered Script UI tree snapshot.",
+                parameters: [
+                    "type": "object",
+                    "properties": [:],
+                    "additionalProperties": false,
+                ]
+            ),
+            .init(
+                name: "ui_event",
+                description: "Send a semantic UI event to a target node id.",
+                parameters: [
+                    "type": "object",
+                    "properties": [
+                        "targetNodeId": ["type": "string"],
+                        "name": ["type": "string", "description": "tap|change|submit|select|close"],
+                        "payload": ["type": "object"],
+                    ],
+                    "required": ["targetNodeId", "name"],
+                    "additionalProperties": false,
+                ]
+            ),
+        ]
+    }
+
+    private func parseArgs(_ raw: Any?) -> [String: Any] {
+        if let s = raw as? String {
+            if let data = s.data(using: .utf8),
+               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                return obj
+            }
+            return [:]
+        }
+        if let d = raw as? [String: Any] { return d }
+        return [:]
+    }
+
+    private func jsonString(_ obj: Any) -> String {
+        let data = (try? JSONSerialization.data(withJSONObject: obj)) ?? Data("{}".utf8)
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    // MARK: - Local persistence
+
+    private func persistConversation() {
+        let enc = JSONEncoder()
+        if let data = try? enc.encode(messages) {
+            UserDefaults.standard.set(data, forKey: defaultsKey)
+        }
+    }
+
+    private func loadPersistedConversation() {
+        guard let data = UserDefaults.standard.data(forKey: defaultsKey) else { return }
+        let dec = JSONDecoder()
+        if let decoded = try? dec.decode([AgentChatMessage].self, from: data) {
+            messages = decoded
+        }
     }
 }
-
