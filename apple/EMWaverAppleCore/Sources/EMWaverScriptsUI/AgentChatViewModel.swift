@@ -18,6 +18,7 @@ public final class AgentChatViewModel: ObservableObject {
     private let codex = AgentCodexClient()
 
     private let defaultsKey = "emwaver.agent.local.conversation"
+    private let defaultsSessionKey = "emwaver.agent.local.session_id"
 
     public init(host: AgentHost) {
         self.host = host
@@ -31,6 +32,8 @@ public final class AgentChatViewModel: ObservableObject {
     public func clear() {
         messages.removeAll()
         lastError = nil
+        // Start a new Codex session.
+        UserDefaults.standard.removeObject(forKey: defaultsSessionKey)
         persistConversation()
     }
 
@@ -125,6 +128,8 @@ public final class AgentChatViewModel: ObservableObject {
         var iterations = 0
         var lastAssistantText = ""
 
+        let sessionId = ensureSessionId()
+
         while iterations < 10 {
             iterations += 1
 
@@ -134,7 +139,8 @@ public final class AgentChatViewModel: ObservableObject {
                 messages: msgs,
                 tools: tools,
                 maxOutputTokens: 1200,
-                temperature: 0.2
+                temperature: 0.2,
+                sessionId: sessionId
             )
 
             let parsed = Self.parseCodexResponse(resp)
@@ -416,5 +422,14 @@ public final class AgentChatViewModel: ObservableObject {
         if let decoded = try? dec.decode([AgentChatMessage].self, from: data) {
             messages = decoded
         }
+    }
+
+    private func ensureSessionId() -> String {
+        if let existing = UserDefaults.standard.string(forKey: defaultsSessionKey), !existing.isEmpty {
+            return existing
+        }
+        let s = UUID().uuidString
+        UserDefaults.standard.set(s, forKey: defaultsSessionKey)
+        return s
     }
 }

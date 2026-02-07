@@ -58,7 +58,8 @@ final class AgentCodexClient {
         messages: [[String: Any]],
         tools: [ToolSpec],
         maxOutputTokens: Int,
-        temperature: Double
+        temperature: Double,
+        sessionId: String?
     ) async throws -> [String: Any] {
         let access = try await validAccessToken()
         let accountId = getAccountId()
@@ -84,6 +85,8 @@ final class AgentCodexClient {
             "input": input,
             "max_output_tokens": maxOutputTokens,
             "temperature": temperature,
+            // Codex endpoint requirement: must not store server-side.
+            "store": false,
         ]
         if !tools.isEmpty {
             // Responses API tool format.
@@ -103,6 +106,10 @@ final class AgentCodexClient {
         req.setValue("Bearer \(access)", forHTTPHeaderField: "Authorization")
         req.setValue("emwaver", forHTTPHeaderField: "originator")
         req.setValue("emwaver-macos", forHTTPHeaderField: "User-Agent")
+        if let sessionId, !sessionId.isEmpty {
+            // Opencode uses this to keep Codex-side session context.
+            req.setValue(sessionId, forHTTPHeaderField: "session_id")
+        }
         if let accountId {
             req.setValue(accountId, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
