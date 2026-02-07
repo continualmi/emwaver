@@ -6,7 +6,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 ## Test Code Index
 
-| Code | Status | System | Passed Date |
+| Code | Status | Systems | Passed Date |
 | --- | --- | --- | --- |
 | `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` |
 | `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
