@@ -57,13 +57,14 @@ public sealed partial class ScriptsPage
                         _page.SetRichEditorText(source);
                     }
 
-                    // Best-effort: adjust current selection label (does not persist to repo).
-                    _page._current = new Models.ScriptInfo
-                    {
-                        Name = scriptName,
-                        FileName = scriptName,
-                        IsBundled = true,
-                    };
+                    // Best-effort: set current selection label (does not persist to repo).
+                    // ScriptInfo is a record with ctor args; FileName is derived from Name.
+                    _page._current = new Models.ScriptInfo(
+                        Name: scriptName,
+                        FullPath: "(remote)",
+                        IsBundled: true,
+                        ShadowsBundled: false
+                    );
 
                     // Execute.
                     _page._scriptEngine.Execute(source);
