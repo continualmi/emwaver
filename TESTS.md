@@ -17,9 +17,10 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 ## Remote Case Matrix
 
-- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Frontend web controller.
-- Controller -> host cases used by all remote variants: `MW`, `MI`, `MA`, `WM`, `WI`, `WA`, `IM`, `IW`, `IA`, `AM`, `AW`, `AI`, `FM`, `FW`, `FI`, `FA`.
+- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Frontend web controller, `L`=Linux headless host.
+- Controller -> host cases used by all remote variants: `MW`, `MI`, `MA`, `ML`, `WM`, `WI`, `WA`, `WL`, `IM`, `IW`, `IA`, `IL`, `AM`, `AW`, `AI`, `AL`, `FM`, `FW`, `FI`, `FA`, `FL`.
 - Rule: frontend is controller-only (never host).
+- Rule: Linux is host-only (never controller).
 
 | Case | Controller | Host | `001R` | `002R` | `003R` | `004R` | `005R` | `006R` |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -39,6 +40,11 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 | `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `ML` | macOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WL` | Windows | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IL` | iOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AL` | Android | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FL` | Frontend | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 
 ## `001_BLINK_LED_HOST_DEVICE_COMMS`
 
