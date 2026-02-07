@@ -209,22 +209,39 @@ private struct MessageRow: View {
                 Spacer(minLength: 24)
             }
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text(roleLabel)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    if message.role == .system && isToolBubble {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if message.role == .assistant {
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if message.role == .user {
+                        Image(systemName: "person.fill")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                Text(message.text)
+                    Text(roleLabel)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Text(renderedText)
                     .textSelection(.enabled)
-                    .font(.callout)
+                    .font(isToolBubble ? .caption : .callout)
+                    .foregroundStyle(isToolBubble ? .secondary : .primary)
             }
-            .padding(10)
+            .padding(isToolBubble ? 8 : 10)
             .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(.black.opacity(0.08))
             )
-            .frame(maxWidth: 520, alignment: .leading)
+            .frame(maxWidth: 520, alignment: message.role == .user ? .trailing : .leading)
 
             if message.role != .user {
                 Spacer(minLength: 24)
@@ -232,11 +249,25 @@ private struct MessageRow: View {
         }
     }
 
+    private var isToolBubble: Bool {
+        message.role == .system && message.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[tool]")
+    }
+
+    private var renderedText: String {
+        if isToolBubble {
+            let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            return t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
+        }
+        return message.text
+    }
+
     private var roleLabel: String {
         switch message.role {
         case .user: return "You"
         case .assistant: return "Agent"
-        case .system: return "System"
+        case .system:
+            if isToolBubble { return "Tool" }
+            return "System"
         }
     }
 
@@ -247,6 +278,9 @@ private struct MessageRow: View {
         case .assistant:
             return AnyShapeStyle(Color.gray.opacity(0.10))
         case .system:
+            if isToolBubble {
+                return AnyShapeStyle(Color.secondary.opacity(0.10))
+            }
             return AnyShapeStyle(Color.orange.opacity(0.10))
         }
     }
