@@ -600,7 +600,18 @@ Sampler.__scriptShim = true;
         globalThis.__scriptCallbacks[doneToken] = onDone;
       }
     }
-    return _scriptDeviceTransmitBufferStart(bytes, doneToken);
+
+    // Pass TX options through to the host primitive.
+    // Hosts may ignore unknown fields.
+    var txOpts = {
+      pin: options.pin,
+      dutyPercent: options.dutyPercent,
+      freqHz: options.freqHz,
+      tickUs: options.tickUs,
+    };
+
+    // Backcompat: hosts that only accept (bytes, doneToken) will ignore extra args.
+    return _scriptDeviceTransmitBufferStart(bytes, txOpts, doneToken);
   };
 
   Sampler.transmitStart = function (opts) {

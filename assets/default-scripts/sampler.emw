@@ -46,6 +46,9 @@ var rxPin = '0';
 var recording = false;
 var recordId = null;
 
+// TX pin used for retransmit (firmware transmit supports GPIOA 0..3).
+var txPin = '1'; // A1 (IR_TX)
+
 var samplePeriodUsText = '10';
 var maxBytesText = '393216';
 var binsText = '400';
@@ -189,6 +192,44 @@ function stop() {
   recording = false;
   recordId = null;
   refreshPlot();
+  render();
+}
+
+function retransmit() {
+  status = '';
+  chartErr = '';
+
+  // Stop recording first.
+  if (recording) {
+    try { Sampler.stop(recordId); } catch (e0) {}
+    recording = false;
+    recordId = null;
+  }
+
+  try {
+    var periodUs = clamp(i(samplePeriodUsText, 10), 5, 255);
+    var bytes = Sampler.getBytes();
+    if (!bytes || !bytes.length) {
+      status = 'No samples to retransmit.';
+      return render();
+    }
+
+    status = 'Retransmitting…';
+    render();
+
+    Sampler.transmitBufferStart(bytes, {
+      pin: Number(txPin) || 1,
+      dutyPercent: 100,
+      tickUs: periodUs,
+      onDone: function () {
+        status = 'Retransmit done.';
+        render();
+      },
+    });
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+
   render();
 }
 
@@ -388,6 +429,7 @@ function render() {
             UI.button({ label: recording ? 'Recording…' : 'Record', onTap: start }),
             UI.button({ label: 'Stop', onTap: stop }),
             UI.button({ label: 'Clear', onTap: clearBuffer }),
+            UI.button({ label: 'Retransmit', onTap: retransmit }),
             UI.button({ label: 'Refresh', onTap: function () {
               refreshPlot();
               // Reset viewport to the full buffer range.
@@ -399,7 +441,7 @@ function render() {
           ],
         }),
 
-        // Make the core pickers horizontal: Pin + Signal side-by-side.
+        // Make the core pickers horizontal: Pin + TX pin + Signal.
         UI.row({
           spacing: 12,
           children: [
@@ -412,6 +454,18 @@ function render() {
                   selected: String(rxPin),
                   options: PINS,
                   onChange: function (v) { rxPin = String(v); render(); },
+                }),
+              ],
+            }),
+            UI.column({
+              spacing: 6,
+              children: [
+                UI.picker({
+                  style: 'menu',
+                  label: 'TX Pin',
+                  selected: String(txPin),
+                  options: PINS,
+                  onChange: function (v) { txPin = String(v); render(); },
                 }),
               ],
             }),
@@ -487,13 +541,6 @@ function render() {
           spacing: 10,
           children: [
             UI.button({ label: 'Delete', onTap: removeSelected }),
-            UI.button({
-              label: 'Refresh list',
-              onTap: function () {
-                listFiles();
-                render();
-              },
-            }),
           ],
         }),
         UI.textField({
