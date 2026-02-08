@@ -19,24 +19,6 @@ Status legend: `[x]` = done/published, `[ ]` = pending.
 | `V009_REMOTE_HOSTS_OVERVIEW_AND_DEMO` | `[ ]` | Remote hosts: controller vs host + run a script remotely (blink demo) | Docs → Remote Hosts / Tutorials → Remote Hosts | `001R` (and concept for `002R–006R`) |  |
 | `V010_CLOUD_SYNC_AND_SHARING_RULES` | `[ ]` | Cloud sync basics + what *doesn’t* sync/share (bootstrap rules) | Docs → Cloud |  |  |
 
-## Frontend Placement Matrix
-
-Legend: `[x]` show by default, `[ ]` optional / not shown.
-
-| Frontend section | `V001` | `V002` | `V003` | `V004` | `V005` | `V006` | `V007` | `V008` | `V009` | `V010` |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Docs → Getting Started | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Docs → Scripting | `[x]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Docs → Troubleshooting | `[ ]` | `[ ]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Docs → Firmware | `[ ]` | `[ ]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Docs → Remote Hosts | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[ ]` |
-| Docs → Cloud | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` |
-| Tutorials → RF | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Tutorials → PWM/Servos | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Tutorials → Modules → CC1101 | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| Tutorials → Modules → MFRC522 | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[x]` | `[ ]` | `[ ]` |
-| Tutorials → Remote Hosts | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[ ]` |
-
 ## Notes / Requirements (for whoever implements the frontend)
 
 - Each video entry should be renderable from:
