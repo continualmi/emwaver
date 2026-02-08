@@ -222,7 +222,8 @@ struct ContentView: View {
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
         hostDirectory: HostDirectory(),
-        remoteControlHost: RemoteControlHostService()
+        remoteControlHost: RemoteControlHostService(),
+        previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())
 }
