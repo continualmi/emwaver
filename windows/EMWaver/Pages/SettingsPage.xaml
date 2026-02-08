@@ -40,7 +40,7 @@
                 <StackPanel Spacing="10">
                     <TextBlock Text="Editor" FontWeight="SemiBold" />
 
-                    <ComboBox x:Name="EditorModeCombo" SelectionChanged="OnEditorModeChanged" Width="260">
+                    <ComboBox x:Name="EditorModeCombo" SelectionChanged="OnEditorModeChanged" Width="260" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
                         <ComboBoxItem Content="Simple" Tag="simple" />
                         <ComboBoxItem Content="Code (JS)" Tag="code" />
                     </ComboBox>
@@ -64,7 +64,7 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <TextBlock Text="Mode:" />
-                        <ComboBox x:Name="BackendModeCombo" SelectionChanged="OnBackendModeChanged" Width="220">
+                        <ComboBox x:Name="BackendModeCombo" SelectionChanged="OnBackendModeChanged" Width="220" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
                             <ComboBoxItem Content="Azure (prod)" Tag="prod" />
                             <ComboBoxItem Content="Local" Tag="local" />
                         </ComboBox>
@@ -72,7 +72,7 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <TextBlock Text="Local URL:" />
-                        <TextBox x:Name="LocalBackendUrlBox" Width="320" TextChanged="OnLocalBackendUrlChanged" />
+                        <TextBox x:Name="LocalBackendUrlBox" Width="320" TextChanged="OnLocalBackendUrlChanged" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
                     </StackPanel>
 
                     <TextBlock Text="Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />

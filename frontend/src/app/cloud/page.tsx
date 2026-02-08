@@ -84,6 +84,7 @@ export default function CloudPage() {
   const attachedRef = useRef<string>("");
   const manualDisconnectRef = useRef<boolean>(false);
   const wsFatalRef = useRef<string>("");
+  const wsConnSeqRef = useRef<number>(0);
   const reconnectTimerRef = useRef<any>(null);
   const attachRetryTimerRef = useRef<any>(null);
   const selectedHostIdRef = useRef<string>("");
@@ -260,6 +261,8 @@ export default function CloudPage() {
     manualDisconnectRef.current = false;
     clearTimers();
 
+    const mySeq = ++wsConnSeqRef.current;
+
     // Reset any previous session.
     try {
       wsRef.current?.close();
@@ -289,6 +292,9 @@ export default function CloudPage() {
     };
 
     ws.onopen = () => {
+      if (wsRef.current !== ws) return;
+      if (wsConnSeqRef.current !== mySeq) return;
+
       setWsStatus("open");
       wsSend(ws, { type: "hello", role: "web", protocolVersion: 1 });
       sendAttach();
@@ -304,6 +310,9 @@ export default function CloudPage() {
     };
 
     ws.onclose = () => {
+      if (wsRef.current !== ws) return;
+      if (wsConnSeqRef.current !== mySeq) return;
+
       setWsStatus("closed");
       setAttachedHostId("");
       attachedRef.current = "";
@@ -326,11 +335,30 @@ export default function CloudPage() {
     };
 
     ws.onerror = () => {
+      if (wsRef.current !== ws) return;
+      if (wsConnSeqRef.current !== mySeq) return;
+
       setWsStatus("error");
-      // onclose will handle reconnect.
+
+      // Some failures don't reliably trigger onclose; kick the reconnect loop here too.
+      if (manualDisconnectRef.current) return;
+      if (wsFatalRef.current) return;
+
+      const desired = selectedHostIdRef.current;
+      const tokNow = idTokenRef.current;
+      if (!desired || !tokNow) return;
+
+      clearTimers();
+      reconnectTimerRef.current = setTimeout(() => {
+        if (selectedHostIdRef.current !== desired) return;
+        connectToHost(tokNow, desired);
+      }, 800);
     };
 
     ws.onmessage = (ev) => {
+      if (wsRef.current !== ws) return;
+      if (wsConnSeqRef.current !== mySeq) return;
+
       try {
         const msg = JSON.parse(String(ev.data || "{}")) as RemoteIncomingMessage;
         if (!msg || typeof msg.type !== "string") return;
@@ -345,6 +373,19 @@ export default function CloudPage() {
           setError(`host error: ${msg.error}`);
           setAttachedHostId("");
           attachedRef.current = "";
+
+          // Retry: host can transiently reject/timeout; reconnect to reattach.
+          if (!manualDisconnectRef.current && !wsFatalRef.current) {
+            clearTimers();
+            const desired = selectedHostIdRef.current;
+            const tokNow = idTokenRef.current;
+            if (desired && tokNow) {
+              reconnectTimerRef.current = setTimeout(() => {
+                if (selectedHostIdRef.current !== desired) return;
+                connectToHost(tokNow, desired);
+              }, 800);
+            }
+          }
           return;
         }
         if (msg.type === "script.started") {
