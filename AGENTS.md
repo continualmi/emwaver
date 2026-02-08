@@ -54,6 +54,9 @@ Goal: **discourage new hardware clones** by making genuine devices work seamless
 #### On-device storage & protection (STM32)
 
 - Flash the device private key + certificate into a reserved flash area during manufacturing.
+- Treat that reserved flash area as a **protected sector/page**:
+  - During firmware updates performed by official EMWaver apps, **do not mass-erase** the device.
+  - Instead, erase/reprogram only the firmware region and explicitly **preserve the key/cert page**.
 - After provisioning, enable **RDP Level 1 (RDP1)** to prevent normal flash readout over SWD/debug.
   - Note: RDP1 is treated as protecting secrecy (readout). It does not prevent mass-erase/reflash, so protocol-level authentication is still required.
 
