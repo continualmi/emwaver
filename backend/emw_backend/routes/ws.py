@@ -60,11 +60,20 @@ def verify_ws_identity(config: Config) -> Optional[VerifiedIdentity]:
     from google.oauth2 import id_token
 
     try:
-        info = id_token.verify_firebase_token(
-            token,
-            google_requests.Request(),
-            audience=config.firebase_project_id,
-        )
+        # Allow small local clock skew (common in dev). Keep fallback for older google-auth.
+        try:
+            info = id_token.verify_firebase_token(
+                token,
+                google_requests.Request(),
+                audience=config.firebase_project_id,
+                clock_skew_in_seconds=60,
+            )
+        except TypeError:
+            info = id_token.verify_firebase_token(
+                token,
+                google_requests.Request(),
+                audience=config.firebase_project_id,
+            )
     except Exception:
         return None
 
