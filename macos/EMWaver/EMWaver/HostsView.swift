@@ -5,6 +5,10 @@ struct HostsView: View {
     @ObservedObject var directory: HostDirectory
     let onRefresh: () async -> Void
 
+    // macOS List + NavigationLink inside a sheet can behave like a selection-only click.
+    // Use an explicit sheet for control so a single click always opens the controller.
+    @State private var controllingHost: HostSession?
+
     var body: some View {
         List {
             if !directory.lastErrorText.isEmpty {
@@ -29,11 +33,12 @@ struct HostsView: View {
                     .padding(.vertical, 8)
                 } else {
                     ForEach(directory.hosts) { h in
-                        NavigationLink {
-                            RemoteHostControlView(host: h)
+                        Button {
+                            controllingHost = h
                         } label: {
                             HostRow(host: h)
                         }
+                        .buttonStyle(.plain)
                         .contextMenu {
                             Button("Copy Host ID") {
                                 NSPasteboard.general.clearContents()
@@ -61,6 +66,17 @@ struct HostsView: View {
                     Task { await onRefresh() }
                 }
             }
+        }
+        .sheet(item: $controllingHost) { host in
+            NavigationStack {
+                RemoteHostControlView(host: host)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Done") { controllingHost = nil }
+                        }
+                    }
+            }
+            .frame(minWidth: 900, minHeight: 560)
         }
     }
 
