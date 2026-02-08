@@ -50,9 +50,10 @@ export type RemoteIncomingMessage =
   | RemotePlotData
   | { type: string; [k: string]: any };
 
+import { getBackendBaseUrl } from "./backendConfig";
+
 export function backendWsUrl(idToken: string): string {
-  const raw = (process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || "").trim();
-  if (!raw) throw new Error("Missing NEXT_PUBLIC_EMWAVER_BACKEND_URL");
+  const raw = getBackendBaseUrl();
   const u = new URL(raw);
   u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
   u.pathname = `/v1/ws`;
