@@ -1,28 +1,17 @@
 import SwiftUI
 
-/// macOS-only backend URL selector.
+/// macOS-only backend selector.
 ///
-/// Backend URL resolution order across the app:
-/// 1) EMWAVER_BACKEND_URL env var (if set in scheme)
-/// 2) UserDefaults key: emwaver.agent.backendURL
-///
-/// This view edits #2.
+/// This is an *actual switch* that overrides any scheme env var, so you can
+/// test production vs local without touching Xcode schemes.
 struct BackendSettingsView: View {
-    static let userDefaultsKey = "emwaver.agent.backendURL"
-    static let azureProductionUrl = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io"
-
     @Environment(\.dismiss) private var dismiss
 
-    @State private var urlText: String = UserDefaults.standard.string(forKey: userDefaultsKey) ?? ""
-
-    private var envUrl: String {
-        (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-    }
+    @State private var useProduction: Bool = UserDefaults.standard.bool(forKey: BackendUrl.keyUseProduction)
+    @State private var localUrlText: String = UserDefaults.standard.string(forKey: BackendUrl.keyLocalUrl) ?? ""
 
     private var effectiveUrl: String {
-        let raw = !envUrl.isEmpty ? envUrl : urlText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return raw
+        BackendUrl.effectiveString()
     }
 
     var body: some View {
@@ -30,12 +19,6 @@ struct BackendSettingsView: View {
             Text("Backend")
                 .font(.title3)
                 .fontWeight(.semibold)
-
-            if !envUrl.isEmpty {
-                Text("This build is using EMWAVER_BACKEND_URL from the environment. The setting below is saved, but will not take effect until that env var is removed.")
-                    .foregroundStyle(.secondary)
-                    .font(.callout)
-            }
 
             Group {
                 Text("Effective")
@@ -48,43 +31,69 @@ struct BackendSettingsView: View {
 
             Divider()
 
-            Text("Backend URL (saved)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            TextField("https://…", text: $urlText)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(.body, design: .monospaced))
-
-            HStack(spacing: 10) {
-                Button("Use Azure (prod)") {
-                    urlText = Self.azureProductionUrl
-                    save()
-                }
-
-                Button("Clear") {
-                    urlText = ""
-                    save()
-                }
-
-                Spacer()
-
-                Button("Done") {
-                    dismiss()
-                }
-                .keyboardShortcut(.defaultAction)
+            Picker("Mode", selection: $useProduction) {
+                Text("Local").tag(false)
+                Text("Azure (prod)").tag(true)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: useProduction) { _, _ in
+                save()
             }
 
-            Text("Note: changing backend may require signing in again.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Local backend URL")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                TextField("http://127.0.0.1:8787", text: $localUrlText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.body, design: .monospaced))
+                    .disabled(useProduction)
+
+                HStack(spacing: 10) {
+                    Button("Use localhost") {
+                        localUrlText = "http://127.0.0.1:8787"
+                        useProduction = false
+                        save()
+                    }
+                    .disabled(useProduction)
+
+                    Button("Use LAN IP") {
+                        // Fill manually if desired; this just makes it obvious.
+                        localUrlText = "http://192.168.1.130:8787"
+                        useProduction = false
+                        save()
+                    }
+                    .disabled(useProduction)
+
+                    Button("Clear") {
+                        localUrlText = ""
+                        useProduction = false
+                        save()
+                    }
+                    .disabled(useProduction)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            HStack {
+                Text("Note: changing backend may require signing in again.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
         }
         .padding(16)
-        .frame(width: 560)
+        .frame(width: 640)
     }
 
     private func save() {
-        UserDefaults.standard.set(urlText.trimmingCharacters(in: .whitespacesAndNewlines), forKey: Self.userDefaultsKey)
+        let d = UserDefaults.standard
+        d.set(useProduction, forKey: BackendUrl.keyUseProduction)
+        d.set(localUrlText.trimmingCharacters(in: .whitespacesAndNewlines), forKey: BackendUrl.keyLocalUrl)
     }
 }
 

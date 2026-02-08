@@ -74,14 +74,7 @@ final class RemoteControlHostService: ObservableObject {
         guard let auth else { return nil }
         guard let hostSessions else { return nil }
 
-        // Same resolution order as macOS ContentView.
-        let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultsURL = (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let raw = !envURL.isEmpty ? envURL : defaultsURL
-        guard !raw.isEmpty, var base = URL(string: raw) else { return nil }
+        guard var base = BackendUrl.resolve() else { return nil }
 
         // WebSocket endpoint.
         base.appendPathComponent("v1/ws")

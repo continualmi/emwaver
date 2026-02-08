@@ -49,13 +49,7 @@ final class HostSessionManager: ObservableObject {
 
     private func backendConfig(auth: AuthenticationManager) -> (baseURL: URL, accessToken: String)? {
         // Same resolution order as ContentView cloud config.
-        let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        let defaultsURL = (UserDefaults.standard.string(forKey: "emwaver.agent.backendURL") ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-
-        let raw = !envURL.isEmpty ? envURL : defaultsURL
-        guard !raw.isEmpty, let base = URL(string: raw) else { return nil }
+        guard let base = BackendUrl.resolve() else { return nil }
 
         let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
