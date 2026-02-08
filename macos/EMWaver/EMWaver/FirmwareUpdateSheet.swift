@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct FirmwareUpdateSheet: View {
+    @EnvironmentObject var auth: AuthenticationManager
     @ObservedObject var device: MacUSBManager
     @ObservedObject var updater: FirmwareUpdateManager
 
@@ -23,7 +24,7 @@ struct FirmwareUpdateSheet: View {
 
             if device.isConnected, !updater.updateDone {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Device connected in Run mode.")
+                    Text(device.isSecureConnected ? "Device connected (Secure)." : "Device connected (Not secure).")
                         .font(.subheadline.weight(.semibold))
 
                     if let v = device.deviceEmwaverVersion, !v.isEmpty {
@@ -32,9 +33,27 @@ struct FirmwareUpdateSheet: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Text("To update: EMWaver will switch the device into Update Mode automatically (no switch needed).")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if device.isSecureConnected {
+                        Text("To update: EMWaver will switch the device into Update Mode automatically (no switch needed).")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Firmware update is blocked until the device is secured.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if auth.isSignedIn {
+                            Button("Recover device identity") {
+                                updater.startRecovery(auth: auth, device: device)
+                            }
+                            .disabled(updater.isFlashing)
+                            .font(.caption)
+                        } else {
+                            Text("Sign in to recover a device identity.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
 
                     HStack {
                         Spacer()
@@ -136,7 +155,7 @@ struct FirmwareUpdateSheet: View {
                     Button("Update device") {
                         updater.startUpdate(device: device)
                     }
-                    .disabled((!device.isConnected && !updater.dfuConnected) || updater.isFlashing)
+                    .disabled((!device.isConnected && !updater.dfuConnected) || updater.isFlashing || (device.isConnected && !device.isSecureConnected))
                     .keyboardShortcut(.defaultAction)
                 }
             }

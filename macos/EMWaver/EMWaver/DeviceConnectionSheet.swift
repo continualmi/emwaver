@@ -33,6 +33,15 @@ struct DeviceConnectionSheet: View {
                             Text("• EMWaver \(v)")
                                 .foregroundStyle(.secondary)
                         }
+                        if device.isConnected {
+                            if device.isSecureConnected {
+                                Text("• Secure")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text("• Not secure")
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
                     }
                     .font(.subheadline)
                 }
