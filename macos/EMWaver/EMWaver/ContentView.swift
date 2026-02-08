@@ -25,6 +25,7 @@ struct ContentView: View {
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
+    @State private var showingBackendSettings: Bool = false
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -175,6 +176,12 @@ struct ContentView: View {
 
                         Divider()
 
+                        Button("Backend…") {
+                            showingBackendSettings = true
+                        }
+
+                        Divider()
+
                         Button("Sign Out") {
                             Task { await auth.signOut() }
                         }
@@ -209,6 +216,9 @@ struct ContentView: View {
                 }
             }
             .frame(minWidth: 560, minHeight: 520)
+        }
+        .sheet(isPresented: $showingBackendSettings) {
+            BackendSettingsView()
         }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
