@@ -53,6 +53,9 @@ let package = Package(
                 "EMWaverScriptStorage",
             ],
             path: "Sources/EMWaverScriptsUI",
+            resources: [
+                .process("Resources")
+            ],
             linkerSettings: []
         ),
     ]

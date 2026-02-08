@@ -316,7 +316,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func runToolLoop(userPrompt: String) async throws -> String {
         // Provide a light instruction prompt so Codex knows it is operating the host.
-        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
+        let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
 
         let tools = toolSpecs()
 
@@ -419,8 +419,23 @@ public final class AgentChatViewModel: ObservableObject {
 
     // MARK: - Tool loop (OpenRouter Chat Completions)
 
+    private func agentSystemPrompt() -> String {
+        // Source of truth lives in the repo at /AGENT_SYSTEM_PROMPT.md and is bundled into this SwiftPM
+        // target as a resource (EMWaverScriptsUI/Resources/AGENT_SYSTEM_PROMPT.md).
+        if let url = Bundle.module.url(forResource: "AGENT_SYSTEM_PROMPT", withExtension: "md"),
+           let text = try? String(contentsOf: url, encoding: .utf8) {
+            return text.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        // Fallback: keep this minimal; prefer editing the bundled MD file.
+        return "You are the EMWaver Agent."
+    }
+
+    private func agentFormattingRules() -> String {
+        return "Formatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
+    }
+
     private func runOpenRouterToolLoop(userPrompt: String) async throws -> String {
-        let instructions = "You are an EMWaver agent running inside the macOS host app. Use tools to write .emw scripts, run them, inspect UI snapshots, and interact with the UI to complete tasks. Prefer using tools over guessing.\n\nFormatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
+        let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
 
         // Local tool listing
         if Self.isToolListingPrompt(userPrompt) {
