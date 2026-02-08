@@ -20,6 +20,13 @@ import {
 } from "@/lib/backend";
 import { backendWsUrl, type RemoteIncomingMessage, wsSend } from "@/lib/remoteSessions";
 import { loadSelectedHostId, saveSelectedHostId } from "@/lib/hostPrefs";
+import {
+  clearBackendBaseUrlOverride,
+  defaultBackendBaseUrl,
+  getBackendBaseUrl,
+  getBackendOverrideRaw,
+  setBackendBaseUrlOverride,
+} from "@/lib/backendConfig";
 
 function isRaw(name: string) {
   return name.toLowerCase().endsWith(".raw");
@@ -91,6 +98,10 @@ export default function CloudPage() {
   const [error, setError] = useState<string | null>(null);
   const [uiError, setUiError] = useState<string | null>(null);
 
+  // Backend URL override (client-side setting).
+  const [backendOverrideDraft, setBackendOverrideDraft] = useState<string>("");
+  const [backendEffective, setBackendEffective] = useState<string>("");
+
   function openExample(name: string, source: string) {
     setSelected(name);
     setViewerText(source);
@@ -108,6 +119,10 @@ export default function CloudPage() {
   useEffect(() => {
     // Restore last host selection.
     setSelectedHostId(loadSelectedHostId());
+
+    // Restore backend override UI state.
+    setBackendOverrideDraft(getBackendOverrideRaw());
+    setBackendEffective(getBackendBaseUrl());
   }, []);
 
   useEffect(() => {
@@ -551,6 +566,55 @@ export default function CloudPage() {
           ) : (
             <div className="flex flex-wrap items-center justify-end gap-3">
               <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
+
+              <details className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2">
+                <summary className="cursor-pointer select-none text-sm font-semibold text-[color:var(--ink)]">
+                  Backend
+                </summary>
+                <div className="mt-2 space-y-2">
+                  <div className="text-xs text-[color:var(--ink-dim)]">
+                    Effective: <span className="font-mono text-[color:var(--ink)]">{backendEffective || ""}</span>
+                  </div>
+                  <div className="text-xs text-[color:var(--ink-dim)]">
+                    Default: <span className="font-mono">{defaultBackendBaseUrl()}</span>
+                  </div>
+                  <input
+                    value={backendOverrideDraft}
+                    onChange={(e) => setBackendOverrideDraft(String(e.target.value || ""))}
+                    placeholder="Override backend URL (leave blank to use default)"
+                    className="w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2 text-sm text-[color:var(--ink)]"
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setBackendBaseUrlOverride(backendOverrideDraft);
+                        setBackendEffective(getBackendBaseUrl());
+                        // Reset remote connection if active.
+                        disconnectHost();
+                      }}
+                      className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)]"
+                    >
+                      Apply
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearBackendBaseUrlOverride();
+                        setBackendOverrideDraft("");
+                        setBackendEffective(getBackendBaseUrl());
+                        disconnectHost();
+                      }}
+                      className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Use default
+                    </button>
+                  </div>
+                  <div className="text-[11px] text-[color:var(--ink-dim)]">
+                    Note: changing backend will disconnect remote control and requires signing in again if auth differs.
+                  </div>
+                </div>
+              </details>
 
               <div className="flex items-center gap-2">
                 <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Host</div>

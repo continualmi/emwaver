@@ -1,7 +1,7 @@
+import { getBackendBaseUrl } from "./backendConfig";
+
 export function backendBaseUrl(): string {
-  const raw = (process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || "").trim();
-  if (!raw) throw new Error("Missing NEXT_PUBLIC_EMWAVER_BACKEND_URL");
-  return raw.replace(/\/+$/, "");
+  return getBackendBaseUrl();
 }
 
 export async function backendFetch(path: string, idToken: string, init?: RequestInit) {
