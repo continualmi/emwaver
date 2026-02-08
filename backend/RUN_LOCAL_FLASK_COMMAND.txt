@@ -1,9 +1,24 @@
-Run the EMWaver backend (Flask dev server) bound to LAN:
+Run the EMWaver backend locally.
 
-  python -m flask --app emw_backend.app run --host 0.0.0.0 --port 8787 --debug
+IMPORTANT: Remote control uses WebSockets (/v1/ws). Flask's built-in dev server
+(Werkzeug) is not reliable for WebSockets, so prefer Gunicorn for remote control.
+
+A) HTTP-only dev (OK for /health + REST, NOT for remote control WS):
+
+  python app.py
+
+B) Full remote-control dev (HTTP + WebSockets):
+
+  # install once
+  python3.14 -m pip install gunicorn gevent gevent-websocket
+
+  # run
+  gunicorn -b 0.0.0.0:8787 \
+    -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    wsgi:app
 
 Notes:
 - Use http://<your-mac-ip>:8787 from Android (not https).
-- If you want auth debug logs:
+- If you want auth debug logs (applies to both):
 
-  EMWAVER_AUTH_DEBUG=1 python -m flask --app emw_backend.app run --host 0.0.0.0 --port 8787 --debug
+  EMWAVER_AUTH_DEBUG=1 ...
