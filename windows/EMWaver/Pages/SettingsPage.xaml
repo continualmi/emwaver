@@ -62,7 +62,20 @@
                         <TextBlock x:Name="BackendUrlText" Text="" />
                     </StackPanel>
 
-                    <TextBlock Text="Use Sync in Scripts to upload/download your scripts and signals." Opacity="0.75" TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Mode:" />
+                        <ComboBox x:Name="BackendModeCombo" SelectionChanged="OnBackendModeChanged" Width="220">
+                            <ComboBoxItem Content="Azure (prod)" Tag="prod" />
+                            <ComboBoxItem Content="Local" Tag="local" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Local URL:" />
+                        <TextBox x:Name="LocalBackendUrlBox" Width="320" TextChanged="OnLocalBackendUrlChanged" />
+                    </StackPanel>
+
+                    <TextBlock Text="Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

@@ -4,32 +4,6 @@
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
     <PreferenceCategory
-        android:title="Backend"
-        app:iconSpaceReserved="false">
-
-        <SwitchPreferenceCompat
-            android:key="emwaver.cloud.use_local_backend"
-            android:title="Use local backend"
-            android:summary="When enabled, the app will talk to the backend URL below (same Wi‑Fi/LAN)."
-            app:iconSpaceReserved="false" />
-
-        <EditTextPreference
-            android:key="emwaver.cloud.local_backend_url"
-            android:title="Local backend URL"
-            android:dialogTitle="Local backend URL"
-            android:summary="Not set (example: http://192.168.1.130:5000)"
-            app:useSimpleSummaryProvider="true"
-            app:iconSpaceReserved="false" />
-
-        <Preference
-            android:key="backend_note"
-            android:summary="Production backend is used when the local toggle is off."
-            android:selectable="false"
-            app:iconSpaceReserved="false" />
-
-    </PreferenceCategory>
-
-    <PreferenceCategory
         android:title="Support &amp; Information"
         app:iconSpaceReserved="false">
 
@@ -55,4 +29,4 @@
 
     </PreferenceCategory>
 
-</PreferenceScreen> 
+</PreferenceScreen>

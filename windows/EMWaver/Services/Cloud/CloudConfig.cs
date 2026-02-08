@@ -10,13 +10,8 @@ internal sealed record CloudConfig(
 {
     internal static CloudConfig FromEnvironment()
     {
-        // Keep env-based config for dev. In Store builds, you will likely hardcode
-        // the Firebase web api key + Google client id (or load from packaged config).
-        var backend = (Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL") ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(backend))
-        {
-            backend = "http://127.0.0.1:8787";
-        }
+        // Backend base URL is controlled by Settings (local vs Azure prod).
+        var backend = BackendUrl.Resolve().Trim();
 
         var firebaseKey = (Environment.GetEnvironmentVariable("EMWAVER_FIREBASE_WEB_API_KEY") ?? "").Trim();
         var googleClientId = (Environment.GetEnvironmentVariable("EMWAVER_GOOGLE_CLIENT_ID") ?? "").Trim();

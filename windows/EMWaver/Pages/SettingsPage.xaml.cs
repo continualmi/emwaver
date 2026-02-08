@@ -32,6 +32,21 @@ public sealed partial class SettingsPage : Page
 
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
 
+            // Backend mode
+            var prod = AppServices.Settings.UseProductionBackend;
+            var desiredTag = prod ? "prod" : "local";
+            foreach (var item in BackendModeCombo.Items)
+            {
+                if (item is ComboBoxItem cbi && (cbi.Tag as string) == desiredTag)
+                {
+                    BackendModeCombo.SelectedItem = cbi;
+                    break;
+                }
+            }
+
+            LocalBackendUrlBox.Text = AppServices.Settings.LocalBackendUrl;
+            LocalBackendUrlBox.IsEnabled = !prod;
+
             var mode = AppServices.Settings.EditorMode;
             var tag = mode switch
             {
@@ -97,5 +112,40 @@ public sealed partial class SettingsPage : Page
         AppServices.Settings.EditorMode = mode;
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode persisted => {AppServices.Settings.EditorMode}");
         RefreshUi("Editor setting updated.");
+    }
+
+    private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (BackendModeCombo.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var tag = (item.Tag as string) ?? "prod";
+        var useProd = tag != "local";
+
+        AppServices.Settings.UseProductionBackend = useProd;
+        LocalBackendUrlBox.IsEnabled = !useProd;
+
+        // Backend change: sign out + restart cloud stack.
+        AppServices.CloudAuth.SignOut();
+        AppServices.ReloadCloud();
+
+        RefreshUi("Backend updated.");
+    }
+
+    private void OnLocalBackendUrlChanged(object sender, TextChangedEventArgs e)
+    {
+        var v = (LocalBackendUrlBox.Text ?? "").Trim();
+        AppServices.Settings.LocalBackendUrl = v;
+
+        // If currently in local mode, restart cloud stack so new URL is used.
+        if (!AppServices.Settings.UseProductionBackend)
+        {
+            AppServices.CloudAuth.SignOut();
+            AppServices.ReloadCloud();
+        }
+
+        RefreshUi("Local backend URL updated.");
     }
 }
