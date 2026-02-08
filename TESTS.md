@@ -14,6 +14,8 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
 | `005_AGENT_MFRC522_UID_FULL_CYCLE` | `[ ]` |  | |
 | `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |  | |
+| `007_SECURE_DEVICE_CONNECTION` | `[ ]` | macOS, Windows, Android | |
+| `008_SECURE_DEVICE_FIRMWARE_UPDATE_GATING` | `[ ]` | macOS, Windows, Android | |
 
 ## Remote Case Matrix
 
@@ -131,3 +133,35 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 - Steps: run the same MFRC522 block write + verify cycle through remote host control across the full remote case matrix.
 - Expected: matches local `006` in all cases.
+
+## `007_SECURE_DEVICE_CONNECTION`
+
+### Local
+
+- Systems: macOS, Windows, Android.
+- Purpose: verify SecureWaver-minted devices connect as **secure**, and non-minted devices are rejected.
+
+Steps:
+
+1) Use **SecureWaver** to provision a device identity (DeviceID + Proof) onto a device.
+2) In the EMWaver app, connect that device.
+   - Expected: app performs identity read (`EMW_OP_IDENTITY_GET`) and verifies `Proof` against the embedded Root public key.
+   - Expected: app shows a **secure connected** badge/glyph.
+3) Connect an **unsecured** device (no DeviceID/Proof provisioned; or identity page erased).
+   - Expected: app rejects device (no secure badge; connection blocked or marked non-genuine).
+
+## `008_SECURE_DEVICE_FIRMWARE_UPDATE_GATING`
+
+### Local
+
+- Systems: macOS, Windows, Android.
+- Purpose: firmware updates are only offered/performed for **secured** devices.
+
+Steps:
+
+1) Use **SecureWaver** to provision a device identity (DeviceID + Proof) onto a device.
+2) In the EMWaver app, open firmware update.
+   - Expected: app checks device identity first.
+   - Expected: app offers and performs update for secured device.
+3) Connect an **unsecured** device (no DeviceID/Proof).
+   - Expected: firmware update is **not offered** (or is blocked with an explicit message).
