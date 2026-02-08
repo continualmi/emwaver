@@ -32,7 +32,7 @@ struct BackendSettingsView: View {
                 .fontWeight(.semibold)
 
             if !envUrl.isEmpty {
-                Text("This build is using EMWAVER_BACKEND_URL from the environment. The setting below is ignored until that env var is removed.")
+                Text("This build is using EMWAVER_BACKEND_URL from the environment. The setting below is saved, but will not take effect until that env var is removed.")
                     .foregroundStyle(.secondary)
                     .font(.callout)
             }
@@ -55,20 +55,17 @@ struct BackendSettingsView: View {
             TextField("https://…", text: $urlText)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
-                .disabled(!envUrl.isEmpty)
 
             HStack(spacing: 10) {
                 Button("Use Azure (prod)") {
                     urlText = Self.azureProductionUrl
                     save()
                 }
-                .disabled(!envUrl.isEmpty)
 
                 Button("Clear") {
                     urlText = ""
                     save()
                 }
-                .disabled(!envUrl.isEmpty)
 
                 Spacer()
 
