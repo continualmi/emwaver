@@ -83,6 +83,7 @@ export default function CloudPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const attachedRef = useRef<string>("");
   const manualDisconnectRef = useRef<boolean>(false);
+  const wsFatalRef = useRef<string>("");
   const reconnectTimerRef = useRef<any>(null);
   const attachRetryTimerRef = useRef<any>(null);
   const selectedHostIdRef = useRef<string>("");
@@ -265,6 +266,7 @@ export default function CloudPage() {
     } catch {}
     wsRef.current = null;
 
+    wsFatalRef.current = "";
     setWsStatus("connecting");
     setAttachedHostId("");
     attachedRef.current = "";
@@ -308,6 +310,10 @@ export default function CloudPage() {
 
       // Auto-reconnect if a host is selected and user didn't explicitly disconnect.
       if (manualDisconnectRef.current) return;
+
+      // Avoid reconnect loops on fatal/protocol/auth failures.
+      if (wsFatalRef.current) return;
+
       const desired = selectedHostIdRef.current;
       const tokNow = idTokenRef.current;
       if (!desired || !tokNow) return;
@@ -410,7 +416,20 @@ export default function CloudPage() {
           return;
         }
         if (msg.type === "error") {
-          setError(String((msg as any).error || "error"));
+          const errText = String((msg as any).error || "error");
+          setError(errText);
+
+          // If backend rejects WS auth/protocol, it will usually close immediately.
+          // Avoid an infinite reconnect loop in that case.
+          if (errText === "unauthorized" || errText === "expected_hello" || errText === "invalid_role") {
+            wsFatalRef.current = errText;
+            manualDisconnectRef.current = true;
+            clearTimers();
+            try {
+              wsRef.current?.close();
+            } catch {}
+            setWsStatus("error");
+          }
           return;
         }
       } catch {
