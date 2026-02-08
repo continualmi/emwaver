@@ -5,3 +5,4 @@ edition = "2021"
 
 [dependencies]
 emwaver-dfu = { path = "../emwaver-dfu" }
+base64 = "0.22"

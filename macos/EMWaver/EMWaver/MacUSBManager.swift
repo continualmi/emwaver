@@ -7,6 +7,7 @@
 import Combine
 import CoreMIDI
 import Foundation
+import CryptoKit
 
 import EMWaverScriptRuntime
 import EMWaverTransport
@@ -23,6 +24,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
+        static let identityGet: UInt8 = 0x07
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
@@ -41,6 +43,9 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             }
         }
     }
+
+    @Published var isSecureConnected: Bool = false
+    @Published var secureDeviceIdHex: String? = nil
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
@@ -386,17 +391,22 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.deviceEmwaverVersion = nil
         }
 
-        // Mirror the desktop app behavior: query the device version automatically on connect.
+        // Mirror the desktop app behavior: query the device version automatically on connect,
+        // then require a valid SecureWaver identity.
         DispatchQueue.global(qos: .userInitiated).async {
             var v = self.queryDeviceVersion(timeoutMs: 1500)
             if v == nil {
                 Thread.sleep(forTimeInterval: 0.25)
                 v = self.queryDeviceVersion(timeoutMs: 1500)
             }
+
+            let identityOk = (v != nil) ? self.verifySecureIdentity(timeoutMs: 1800) : false
+
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
-                if v == nil {
-                    self.lastErrorText = "Connected port did not respond like an EMWaver device"
+                self.isSecureConnected = identityOk
+                if !identityOk {
+                    self.lastErrorText = "Device is not secured (missing/invalid DeviceID proof)"
                     self.disconnect()
                 }
             }
@@ -414,6 +424,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.isConnected = false
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
+            self.isSecureConnected = false
+            self.secureDeviceIdHex = nil
         }
     }
 
@@ -434,6 +446,63 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         if resp[0] != 0x80 { return nil }
         if resp.dropFirst(4).contains(where: { $0 != 0 }) { return nil }
         return "\(resp[1]).\(resp[2])"
+    }
+
+    struct DeviceIdentity {
+        let deviceId: Data
+        let proof: Data
+
+        var deviceIdB64: String { deviceId.base64EncodedString() }
+        var proofB64: String { proof.base64EncodedString() }
+    }
+
+    func readDeviceIdentity(timeoutMs: Int) -> DeviceIdentity? {
+        // Read DeviceID.
+        guard let devLane = sendCommandInternal(
+            Data([EmwOpcode.identityGet, 0x00, 0x00]),
+            timeout: timeoutMs,
+            responsePredicate: { lane in lane.count >= 17 && lane[0] == 0x80 }
+        ) else { return nil }
+        if devLane[0] != 0x80 { return nil }
+        let deviceId = Data(devLane[1..<17])
+
+        // Read Proof in 4 chunks.
+        var proof = Data(capacity: 64)
+        for chunk in 0..<4 {
+            guard let lane = sendCommandInternal(
+                Data([EmwOpcode.identityGet, 0x01, UInt8(chunk)]),
+                timeout: timeoutMs,
+                responsePredicate: { lane in lane.count >= 17 && lane[0] == 0x80 }
+            ) else { return nil }
+            if lane[0] != 0x80 { return nil }
+            proof.append(contentsOf: lane[1..<17])
+        }
+        guard proof.count == 64 else { return nil }
+
+        return DeviceIdentity(deviceId: deviceId, proof: proof)
+    }
+
+    /// Reads DeviceID (16B) and Proof (64B) using EMW_OP_IDENTITY_GET and verifies Proof using the embedded Root public key.
+    private func verifySecureIdentity(timeoutMs: Int) -> Bool {
+        guard let pk = EmwaverRootKey.publicKey else {
+            // No embedded public key => treat as not secure.
+            return false
+        }
+
+        guard let ident = readDeviceIdentity(timeoutMs: timeoutMs) else { return false }
+        let deviceId = ident.deviceId
+        let proof = ident.proof
+
+        // Verify signature.
+        do {
+            if pk.isValidSignature(proof, for: deviceId) {
+                DispatchQueue.main.async {
+                    self.secureDeviceIdHex = deviceId.map { String(format: "%02x", $0) }.joined()
+                }
+                return true
+            }
+        }
+        return false
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {

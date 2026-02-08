@@ -2,6 +2,8 @@ import Foundation
 import Combine
 
 final class FirmwareUpdateManager: ObservableObject {
+    private var preservedIdentity: MacUSBManager.DeviceIdentity? = nil
+
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
     @Published var isFlashing: Bool = false
@@ -31,6 +33,7 @@ final class FirmwareUpdateManager: ObservableObject {
         updateDone = false
         progressPct = 0
         progressMessage = ""
+        preservedIdentity = nil
         isPresented = true
     }
 
@@ -48,6 +51,12 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
+        // Gate: only secured devices can be updated.
+        if device.isConnected && !device.isSecureConnected {
+            updateError = "Firmware update blocked: device is not secured."
+            return
+        }
+
         // If DFU is already present, flash immediately.
         if dfuConnected {
             do {
@@ -61,6 +70,9 @@ final class FirmwareUpdateManager: ObservableObject {
 
         // Otherwise, ask the connected device to enter DFU.
         if device.isConnected {
+            // Preserve identity so we can re-write it after DFU flashing (ROM DFU mass-erase wipes flash).
+            preservedIdentity = device.readDeviceIdentity(timeoutMs: 1800)
+
             progressMessage = "Switching device to Update Mode..."
             device.requestEnterUpdateMode()
             device.disconnect()
@@ -110,6 +122,95 @@ final class FirmwareUpdateManager: ObservableObject {
                 } catch {
                     self.updateError = String(describing: error)
                     self.isFlashing = false
+                }
+            }
+        }
+    }
+
+    func startRecovery(auth: AuthenticationManager, device: MacUSBManager) {
+        updateError = nil
+        updateDone = false
+        progressPct = 0
+        progressMessage = "Recovering device identity..."
+
+        guard let session = auth.session else {
+            updateError = "Sign in to recover device identity."
+            return
+        }
+        guard let baseURL = BackendUrl.resolve() else {
+            updateError = "Missing backend URL (configure backend first)."
+            return
+        }
+
+        // Step 1: request a new DeviceID+Proof.
+        struct MintResponse: Decodable {
+            let device_id_b64: String
+            let proof_b64: String
+        }
+
+        Task {
+            do {
+                let url = baseURL.appendingPathComponent("provisioning/mint")
+                var req = URLRequest(url: url)
+                req.httpMethod = "POST"
+                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+
+                let (data, res) = try await URLSession.shared.data(for: req)
+                let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+                if code < 200 || code >= 300 {
+                    let msg = String(data: data, encoding: .utf8) ?? ""
+                    throw NSError(domain: "FirmwareUpdateManager", code: code, userInfo: [NSLocalizedDescriptionKey: "Mint failed: \(msg)"])
+                }
+                let mint = try JSONDecoder().decode(MintResponse.self, from: data)
+
+                // Step 2: enter DFU and write only the identity page.
+                await MainActor.run {
+                    self.progressMessage = "Switching device to Update Mode..."
+                }
+
+                if device.isConnected {
+                    device.requestEnterUpdateMode()
+                    device.disconnect()
+                }
+
+                // Wait for DFU.
+                var detected = false
+                let deadline = Date().addingTimeInterval(8.0)
+                while Date() < deadline {
+                    let (code, _) = try self.runHelperAndWait(arguments: ["is-connected"])
+                    if code == 0 {
+                        detected = true
+                        break
+                    }
+                    try await Task.sleep(nanoseconds: 250_000_000)
+                }
+
+                if !detected {
+                    throw NSError(domain: "FirmwareUpdateManager", code: 1, userInfo: [NSLocalizedDescriptionKey: "DFU not detected"])
+                }
+
+                await MainActor.run {
+                    self.progressMessage = "Writing identity page..."
+                }
+
+                let (code2, stderr) = try self.runHelperAndWait(arguments: [
+                    "write-identity",
+                    "--device-id-b64",
+                    mint.device_id_b64,
+                    "--proof-b64",
+                    mint.proof_b64,
+                ])
+                if code2 != 0 {
+                    throw NSError(domain: "FirmwareUpdateManager", code: Int(code2), userInfo: [NSLocalizedDescriptionKey: stderr])
+                }
+
+                await MainActor.run {
+                    self.progressMessage = "Identity recovered. Reconnect device and retry update."
+                }
+            } catch {
+                await MainActor.run {
+                    self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    self.progressMessage = ""
                 }
             }
         }
@@ -247,6 +348,23 @@ final class FirmwareUpdateManager: ObservableObject {
 
                 let code = proc.terminationStatus
                 if code == 0 {
+                    // Restore identity page after DFU flash (ROM DFU mass erase wipes it).
+                    if let ident = self.preservedIdentity {
+                        do {
+                            self.progressMessage = "Restoring device identity..."
+                            try self.runHelperAndWait(arguments: [
+                                "write-identity",
+                                "--device-id-b64",
+                                ident.deviceIdB64,
+                                "--proof-b64",
+                                ident.proofB64
+                            ])
+                        } catch {
+                            self.updateError = "Firmware flashed, but failed to restore device identity: \(error)"
+                            return
+                        }
+                    }
+
                     self.progressPct = 100
                     self.updateDone = true
                 } else {
