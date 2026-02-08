@@ -12,10 +12,11 @@ fn main() {
     let code = match args.get(1).map(|s| s.as_str()) {
         Some("is-connected") => cmd_is_connected(),
         Some("flash") => cmd_flash(&args[2..]),
+        Some("read-identity") => cmd_read_identity(&args[2..]),
         Some("write-identity") => cmd_write_identity(&args[2..]),
         _ => {
             eprintln!(
-                "usage:\n  emwaver-dfu-helper is-connected\n  emwaver-dfu-helper flash --firmware <path> [--alt <n>] [--verbose]\n  emwaver-dfu-helper write-identity --device-id-b64 <b64> --proof-b64 <b64> [--addr <hex>] [--alt <n>] [--verbose]"
+                "usage:\n  emwaver-dfu-helper is-connected\n  emwaver-dfu-helper flash --firmware <path> [--alt <n>] [--verbose]\n  emwaver-dfu-helper read-identity [--addr <hex>] [--alt <n>] [--verbose]\n  emwaver-dfu-helper write-identity --device-id-b64 <b64> --proof-b64 <b64> [--addr <hex>] [--alt <n>] [--verbose]"
             );
             2
         }
@@ -132,6 +133,96 @@ fn build_identity_page(device_id: &[u8], proof: &[u8]) -> Result<Vec<u8>, String
     page[off..off + PROOF_LEN].copy_from_slice(proof);
 
     Ok(page)
+}
+
+fn cmd_read_identity(args: &[String]) -> i32 {
+    let mut addr: u32 = DEFAULT_IDENTITY_PAGE_ADDR;
+    let mut alt_setting: Option<u8> = None;
+    let mut verbose = false;
+
+    let mut i = 0;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--addr" => {
+                i += 1;
+                let raw = args.get(i).cloned().unwrap_or_default();
+                let raw = raw.trim_start_matches("0x");
+                addr = u32::from_str_radix(raw, 16).unwrap_or(DEFAULT_IDENTITY_PAGE_ADDR);
+            }
+            "--alt" => {
+                i += 1;
+                let v = args.get(i).and_then(|s| s.parse::<u8>().ok()).or(None);
+                alt_setting = v;
+            }
+            "--verbose" => {
+                verbose = true;
+            }
+            other => {
+                eprintln!("Unknown argument: {other}");
+                return 2;
+            }
+        }
+        i += 1;
+    }
+
+    let (mut device, _discovery) = match DfuDevice::open_with_options(
+        DEFAULT_USB_VENDOR_ID,
+        DEFAULT_USB_PRODUCT_ID,
+        DfuOpenOptions {
+            alt_setting,
+            verbose,
+        },
+    ) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("{e}");
+            return 2;
+        }
+    };
+
+    if let Err(e) = device.set_address_pointer(addr) {
+        eprintln!("{e}");
+        return 2;
+    }
+
+    let mut buf = vec![0u8; IDENTITY_PAGE_SIZE];
+    let n = match device.read_block(2, &mut buf) {
+        Ok(n) => n,
+        Err(e) => {
+            eprintln!("{e}");
+            return 2;
+        }
+    };
+
+    if n != IDENTITY_PAGE_SIZE {
+        eprintln!("Identity page read returned {n} bytes (expected {IDENTITY_PAGE_SIZE})");
+        return 2;
+    }
+
+    // Parse out DeviceID + Proof if header is present.
+    let magic_ok = buf.len() >= 16 && &buf[0..4] == b"EMID";
+    let ver_ok = magic_ok && buf[4] == 1;
+    let len_ok = ver_ok && buf[5] == DEVICE_ID_LEN as u8 && buf[6] == PROOF_LEN as u8;
+
+    println!("PAGE_ADDR=0x{addr:08x}");
+    println!("PAGE_B64={}", base64::engine::general_purpose::STANDARD.encode(&buf));
+    println!("HAS_HEADER={}", if len_ok { "1" } else { "0" });
+
+    if len_ok {
+        let device_id = &buf[16..(16 + DEVICE_ID_LEN)];
+        let proof_off = 16 + DEVICE_ID_LEN;
+        let proof = &buf[proof_off..(proof_off + PROOF_LEN)];
+        println!(
+            "DEVICE_ID_B64={}",
+            base64::engine::general_purpose::STANDARD.encode(device_id)
+        );
+        println!(
+            "PROOF_B64={}",
+            base64::engine::general_purpose::STANDARD.encode(proof)
+        );
+    }
+
+    0
 }
 
 fn cmd_write_identity(args: &[String]) -> i32 {
