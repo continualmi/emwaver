@@ -55,6 +55,7 @@ public struct ScriptsRootView: View {
     #endif
 
     public init(
+        previewManager: ScriptPreviewManager = ScriptPreviewManager(),
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil
@@ -62,9 +63,8 @@ public struct ScriptsRootView: View {
         self.device = device
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
-        let pm = ScriptPreviewManager()
-        let host = DefaultAgentHost(previewManager: pm)
-        self._previewManager = StateObject(wrappedValue: pm)
+        let host = DefaultAgentHost(previewManager: previewManager)
+        self._previewManager = StateObject(wrappedValue: previewManager)
         self.agentHost = host
         _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: host))
     }

@@ -18,20 +18,20 @@ final class RemoteControlHostService: ObservableObject {
     private var socket: URLSessionWebSocketTask?
     private var reconnectTask: Task<Void, Never>?
 
-    private let previewManager = ScriptPreviewManager()
+    private var previewManager: ScriptPreviewManager?
     private var treeCancellable: AnyCancellable?
 
-    private var activeScriptInstanceId: String?
     private var uiRev: Int = 0
 
     init(urlSession: URLSession = .shared) {
         self.urlSession = urlSession
     }
 
-    func start(auth: AuthenticationManager, device: MacUSBManager, hostSessions: HostSessionManager) {
+    func start(auth: AuthenticationManager, device: MacUSBManager, hostSessions: HostSessionManager, previewManager: ScriptPreviewManager) {
         self.auth = auth
         self.device = device
         self.hostSessions = hostSessions
+        self.previewManager = previewManager
 
         previewManager.attach(device: device)
 
@@ -41,8 +41,8 @@ final class RemoteControlHostService: ObservableObject {
             .sink { [weak self] tree in
                 guard let self else { return }
                 self.remoteScriptTree = tree
-                self.remoteActiveScriptName = self.previewManager.activeScriptName
-                guard let scriptId = self.activeScriptInstanceId else { return }
+                self.remoteActiveScriptName = previewManager.activeScriptName
+                guard let scriptId = previewManager.activeScriptInstanceId else { return }
                 self.uiRev += 1
                 self.sendJson([
                     "type": "ui.snapshot",
@@ -186,17 +186,42 @@ final class RemoteControlHostService: ObservableObject {
         case "host.attach":
             // Mark host as being remotely controlled (used for local UX).
             isRemoteControlled = true
+
+            // If a script is already running locally, tell the controller immediately.
+            if let pm = previewManager,
+               let sid = pm.activeScriptInstanceId,
+               !sid.isEmpty {
+                sendJson([
+                    "type": "script.started",
+                    "hostSessionId": hostSessions?.hostSessionId ?? "",
+                    "scriptInstanceId": sid,
+                    "name": pm.activeScriptName ?? "",
+                ])
+
+                // Also send the latest UI snapshot immediately (in case the UI is stable and
+                // the controller attached mid-run).
+                if let tree = pm.scriptTree {
+                    uiRev += 1
+                    sendJson([
+                        "type": "ui.snapshot",
+                        "hostSessionId": hostSessions?.hostSessionId ?? "",
+                        "scriptInstanceId": sid,
+                        "rev": uiRev,
+                        "root": self.encodeNode(tree.root),
+                        "metadata": tree.metadata,
+                    ])
+                }
+            }
             return
 
         case "script.run":
+            guard let previewManager else { return }
             guard let source = obj["source"] as? String else {
                 sendJson(["type": "script.error", "error": "missing_source", "hostSessionId": hostSessions?.hostSessionId ?? ""]) 
                 return
             }
             let name = (obj["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
 
-            let instanceId = UUID().uuidString
-            activeScriptInstanceId = instanceId
             uiRev = 0
 
             // Persist the currently remote-controlled script name for UX (best-effort).
@@ -211,13 +236,14 @@ final class RemoteControlHostService: ObservableObject {
             sendJson([
                 "type": "script.started",
                 "hostSessionId": hostSessions?.hostSessionId ?? "",
-                "scriptInstanceId": instanceId,
+                "scriptInstanceId": previewManager.activeScriptInstanceId ?? "",
                 "name": name ?? "",
             ])
 
         case "ui.event":
+            guard let previewManager else { return }
             guard let scriptInstanceId = obj["scriptInstanceId"] as? String else { return }
-            guard scriptInstanceId == activeScriptInstanceId else { return }
+            guard scriptInstanceId == previewManager.activeScriptInstanceId else { return }
             guard let targetNodeId = obj["targetNodeId"] as? String else { return }
             guard let name = obj["name"] as? String else { return }
             let payload = obj["payload"] as? [String: Any] ?? [:]
@@ -236,11 +262,26 @@ final class RemoteControlHostService: ObservableObject {
 
         case "plot.viewport":
             // Host-side plot viewport computation only (no script handler invocation).
+            guard let previewManager else { return }
             guard let _ = obj["scriptInstanceId"] as? String else { return }
-            guard (obj["scriptInstanceId"] as? String) == activeScriptInstanceId else { return }
+            guard (obj["scriptInstanceId"] as? String) == previewManager.activeScriptInstanceId else { return }
             guard let targetNodeId = obj["targetNodeId"] as? String else { return }
             let payload = obj["payload"] as? [String: Any] ?? [:]
             _ = handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload)
+            return
+
+        case "script.stop":
+            guard let previewManager else { return }
+            let currentId = previewManager.activeScriptInstanceId ?? ""
+            if !currentId.isEmpty {
+                previewManager.exitPreview()
+                sendJson([
+                    "type": "script.stopped",
+                    "hostSessionId": hostSessions?.hostSessionId ?? "",
+                    "scriptInstanceId": currentId,
+                    "reason": "stopped_by_controller",
+                ])
+            }
             return
 
         default:
@@ -254,12 +295,14 @@ final class RemoteControlHostService: ObservableObject {
     /// interact with the remotely-running script UI while the web client is also
     /// attached.
     func invokeRemoteHandler(token: String, arguments: [Any]) {
-        // Only allow invoking when a remote script is actually running.
-        guard activeScriptInstanceId != nil else { return }
+        guard let previewManager else { return }
+        // Only allow invoking when a script is actually running.
+        guard previewManager.activeScriptInstanceId != nil else { return }
         previewManager.invoke(token: token, arguments: arguments)
     }
 
     private func dispatchUiEvent(targetNodeId: String, name: String, payload: [String: Any]) {
+        guard let previewManager else { return }
         guard let tree = previewManager.scriptTree else { return }
 
         guard let ev = ScriptEventType(rawValue: name) else { return }
@@ -286,7 +329,8 @@ final class RemoteControlHostService: ObservableObject {
     /// Handle a web plot viewport request by computing a compressed viewport on the host.
     /// Returns true if the request was understood and handled.
     private func handlePlotViewportRequest(targetNodeId: String, payload: [String: Any]) -> Bool {
-        guard let scriptInstanceId = activeScriptInstanceId else { return false }
+        guard let previewManager else { return false }
+        guard let scriptInstanceId = previewManager.activeScriptInstanceId else { return false }
         guard let tree = previewManager.scriptTree else { return false }
         guard let node = findNode(in: tree.root, id: targetNodeId) else { return false }
         guard node.type == .plot else { return false }

@@ -330,6 +330,13 @@ export default function CloudPage() {
           setPlotDataByNodeId({});
           return;
         }
+        if (msg.type === "script.stopped") {
+          setScriptInstanceId("");
+          setRemoteUiRoot(null);
+          setUiRev(0);
+          setPlotDataByNodeId({});
+          return;
+        }
         function walkNodes(n: any, out: any[]) {
           if (!n || typeof n !== "object") return;
           out.push(n);
@@ -704,6 +711,24 @@ export default function CloudPage() {
                       Preview
                     </button>
                   </div>
+                ) : null}
+
+                {attachedHostId && scriptInstanceId ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const ws = wsRef.current;
+                      if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                      wsSend(ws, {
+                        type: "script.stop",
+                        hostSessionId: attachedHostId,
+                        scriptInstanceId,
+                      });
+                    }}
+                    className="rounded-lg border border-[color:var(--line)] bg-[rgba(244,63,94,0.12)] px-3 py-1.5 text-xs font-semibold text-[rgb(251,113,133)]"
+                  >
+                    Stop
+                  </button>
                 ) : null}
 
                 <button

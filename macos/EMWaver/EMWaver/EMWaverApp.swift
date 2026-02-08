@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import EMWaverScriptRuntime
 
 @main
 struct EMWaverApp: App {
@@ -15,10 +16,11 @@ struct EMWaverApp: App {
     @StateObject private var hostSessions = HostSessionManager()
     @StateObject private var hostDirectory = HostDirectory()
     @StateObject private var remoteControlHost = RemoteControlHostService()
+    @StateObject private var previewManager = ScriptPreviewManager()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory, remoteControlHost: remoteControlHost)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory, remoteControlHost: remoteControlHost, previewManager: previewManager)
                 .environmentObject(auth)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
@@ -29,7 +31,7 @@ struct EMWaverApp: App {
                     hostDirectory.start(auth: auth)
 
                     // Remote control host WS (web can attach + drive scripts/UI).
-                    remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions)
+                    remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)
                 }
         }
         .commands {

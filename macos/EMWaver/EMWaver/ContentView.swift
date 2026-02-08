@@ -9,6 +9,7 @@ import SwiftUI
 import EMWaverScriptsUI
 import EMWaverScriptSwiftUI
 import EMWaverScriptModel
+import EMWaverScriptRuntime
 
 // Remote overlay UI renders ScriptTree using ScriptRenderView
 
@@ -20,6 +21,8 @@ struct ContentView: View {
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
 
+    let previewManager: ScriptPreviewManager
+
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
 
@@ -30,6 +33,7 @@ struct ContentView: View {
         NavigationStack {
             ZStack {
                 ScriptsRootView(
+                    previewManager: previewManager,
                     device: device,
                     syncProvider: {
                     // Backend URL resolution order:
