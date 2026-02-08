@@ -44,6 +44,7 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var lastError: String?
 
     private var assistantPlaceholderId: UUID?
+    private var toolBubbleMessageIdByCallId: [String: UUID] = [:]
 
     public let host: AgentHost
 
@@ -387,13 +388,18 @@ public final class AgentChatViewModel: ObservableObject {
 
             // Execute tools and append function_call_output items.
             for call in functionCalls {
+                let argsObj = parseArgs(call.arguments)
+
                 await MainActor.run {
-                    self.appendSystemToolBubble(name: call.name)
+                    self.appendSystemToolBubble(callId: call.callId, name: call.name, args: argsObj)
                 }
 
-                let argsObj = parseArgs(call.arguments)
                 let result = try await executeTool(name: call.name, args: argsObj)
                 dbg("tool_result name=\(call.name) call_id=\(call.callId) keys=\((result as NSDictionary).allKeys.count)")
+
+                await MainActor.run {
+                    self.updateSystemToolBubble(callId: call.callId, name: call.name, args: argsObj, result: result)
+                }
 
                 let outItem: [String: Any] = [
                     "type": "function_call_output",
@@ -470,12 +476,17 @@ public final class AgentChatViewModel: ObservableObject {
                 let argsStr = (fn["arguments"] as? String) ?? "{}"
                 if name.isEmpty { continue }
 
+                let argsObj = parseArgs(argsStr)
+
                 await MainActor.run {
-                    self.appendSystemToolBubble(name: name)
+                    self.appendSystemToolBubble(callId: callId, name: name, args: argsObj)
                 }
 
-                let argsObj = parseArgs(argsStr)
                 let result = try await executeTool(name: name, args: argsObj)
+
+                await MainActor.run {
+                    self.updateSystemToolBubble(callId: callId, name: name, args: argsObj, result: result)
+                }
 
                 let toolMsg: [String: Any] = [
                     "role": "tool",
@@ -493,8 +504,21 @@ public final class AgentChatViewModel: ObservableObject {
         return trimmed
     }
 
-    private func appendSystemToolBubble(name: String) {
-        let msg = AgentChatMessage(role: .system, text: "[tool] \(name)")
+    private func makeToolBubbleText(name: String, args: [String: Any], fetchedURL: String? = nil) -> String {
+        if name == "web_fetch" {
+            // Show the URL directly in the tool bubble so users can audit what was fetched.
+            let requested = (args["url"] as? String) ?? ""
+            let urlToShow = (fetchedURL?.isEmpty == false) ? fetchedURL! : requested
+            if urlToShow.isEmpty {
+                return "[tool] \(name)"
+            }
+            return "[tool] \(name) \(urlToShow)"
+        }
+        return "[tool] \(name)"
+    }
+
+    private func appendSystemToolBubble(callId: String, name: String, args: [String: Any]) {
+        let msg = AgentChatMessage(role: .system, text: makeToolBubbleText(name: name, args: args))
 
         // If we currently have an assistant placeholder message (empty bubble) at the end,
         // insert tool bubbles *before* it so the timeline reads naturally.
@@ -505,7 +529,31 @@ public final class AgentChatViewModel: ObservableObject {
             messages.append(msg)
         }
 
+        if !callId.isEmpty {
+            toolBubbleMessageIdByCallId[callId] = msg.id
+        }
+
         // Keep the selected conversation's persisted messages in sync (so Xcode reloads match).
+        if let id = selectedConversationId {
+            updateConversation(id: id) { conv in
+                conv.messages = self.messages
+                conv.updatedAt = Date()
+            }
+        }
+        persistState()
+    }
+
+    private func updateSystemToolBubble(callId: String, name: String, args: [String: Any], result: [String: Any]) {
+        guard name == "web_fetch", !callId.isEmpty else { return }
+        guard let mid = toolBubbleMessageIdByCallId[callId] else { return }
+
+        let fetchedURL = (result["fetched_url"] as? String) ?? (result["url"] as? String)
+
+        if let idx = messages.firstIndex(where: { $0.id == mid }) {
+            let old = messages[idx]
+            messages[idx] = AgentChatMessage(id: old.id, role: .system, text: makeToolBubbleText(name: name, args: args, fetchedURL: fetchedURL), createdAt: old.createdAt)
+        }
+
         if let id = selectedConversationId {
             updateConversation(id: id) { conv in
                 conv.messages = self.messages
@@ -520,10 +568,17 @@ public final class AgentChatViewModel: ObservableObject {
         case "web_fetch":
             let urlStr = (args["url"] as? String) ?? ""
             guard let url = URL(string: urlStr), !urlStr.isEmpty else { return ["error": "invalid_url"] }
-            let (data, _) = try await URLSession.shared.data(from: url)
+
+            let (data, resp) = try await URLSession.shared.data(from: url)
+            let fetchedUrlStr = resp.url?.absoluteString ?? urlStr
+
             let text = String(data: data, encoding: .utf8) ?? ""
             let clipped = String(text.prefix(40_000))
-            return ["url": urlStr, "text": clipped]
+            return [
+                "requested_url": urlStr,
+                "fetched_url": fetchedUrlStr,
+                "text": clipped,
+            ]
 
         case "write_script":
             let name = (args["name"] as? String) ?? "script.emw"

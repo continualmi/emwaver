@@ -357,7 +357,18 @@ private struct MessageRow: View {
         if isToolBubble {
             let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
             let raw = t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
-            return friendlyToolName(raw)
+
+            // raw can be either:
+            //   "web_fetch"
+            // or
+            //   "web_fetch https://example.com"
+            let parts = raw.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+            let toolId = parts.first.map(String.init) ?? raw
+            let detail = (parts.count > 1) ? String(parts[1]) : ""
+
+            let title = friendlyToolName(toolId)
+            if detail.isEmpty { return title }
+            return title + "\n" + detail
         }
         return message.text
     }
