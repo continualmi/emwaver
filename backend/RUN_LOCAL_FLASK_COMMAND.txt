@@ -1,0 +1,9 @@
+Run the EMWaver backend (Flask dev server) bound to LAN:
+
+  python -m flask --app emw_backend.app run --host 0.0.0.0 --port 8787 --debug
+
+Notes:
+- Use http://<your-mac-ip>:8787 from Android (not https).
+- If you want auth debug logs:
+
+  EMWAVER_AUTH_DEBUG=1 python -m flask --app emw_backend.app run --host 0.0.0.0 --port 8787 --debug
