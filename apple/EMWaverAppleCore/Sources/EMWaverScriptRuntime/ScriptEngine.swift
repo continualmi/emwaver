@@ -23,6 +23,26 @@ public final class ScriptEngine {
 
     public init() {}
 
+    /// Hard reset of the JS engine: cancels scheduled timeouts, clears handlers, and discards the JSContext.
+    ///
+    /// This is used to implement a true "Stop script" action.
+    public func reset() {
+        executionQueue.async { [weak self] in
+            guard let self else { return }
+
+            // Cancel any pending timeouts.
+            for (_, item) in self.timeouts {
+                item.cancel()
+            }
+            self.timeouts.removeAll()
+            self.nextTimeoutId = 1
+
+            // Drop callbacks and context.
+            self.callbackRegistry.removeAll()
+            self.context = nil
+        }
+    }
+
     private func emitError(_ message: String) {
         guard let errorHandler else { return }
         DispatchQueue.main.async {

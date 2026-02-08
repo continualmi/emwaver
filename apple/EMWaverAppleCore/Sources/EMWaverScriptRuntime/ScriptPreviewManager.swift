@@ -22,6 +22,7 @@ public final class ScriptPreviewManager: ObservableObject {
     @Published public var scriptError: String?
     @Published public var dialog: Dialog?
     @Published public var activeScriptName: String?
+    @Published public var activeScriptInstanceId: String?
 
     private weak var device: (any ScriptDevice)?
     private var scriptEngine: ScriptEngine?
@@ -41,6 +42,7 @@ public final class ScriptPreviewManager: ObservableObject {
         guard let engine = scriptEngine else { return }
 
         activeScriptName = name
+        activeScriptInstanceId = UUID().uuidString
         isPreviewVisible = true
         isRendering = true
         scriptTree = nil
@@ -60,17 +62,24 @@ public final class ScriptPreviewManager: ObservableObject {
     public func hidePreview() {
         isPreviewVisible = false
         isRendering = false
-        // Intentionally keep: scriptTree, scriptError, activeScriptName
+        // Intentionally keep: scriptTree, scriptError, activeScriptName, activeScriptInstanceId
     }
 
-    /// Stop/exit the current preview session (clears visible state). Note: the underlying JS engine
-    /// is currently reused and may keep timers alive; this is best-effort UI state reset.
+    /// Stop/exit the current preview session (clears visible state).
     public func exitPreview() {
+        stopScript()
         isPreviewVisible = false
         isRendering = false
         scriptTree = nil
         scriptError = nil
         activeScriptName = nil
+        activeScriptInstanceId = nil
+    }
+
+    /// Hard-stop the currently running script (best-effort): cancels timers and clears the JS context.
+    public func stopScript() {
+        scriptEngine?.reset()
+        scriptEngine = nil
     }
 
     public func invoke(token: String, arguments: [Any]) {
