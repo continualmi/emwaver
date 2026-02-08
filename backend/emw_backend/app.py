@@ -17,6 +17,12 @@ def create_app() -> Flask:
     app = Flask(__name__)
     app.config["EMWAVER_CONFIG"] = config
 
+    # Optional auth debug logging.
+    if config.auth_debug:
+        import logging
+
+        logging.basicConfig(level=logging.INFO)
+
     CORS(app, resources={r"/*": {"origins": config.cors_origins}})
     init_db(config.database_url)
 
