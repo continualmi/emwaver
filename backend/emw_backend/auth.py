@@ -68,11 +68,21 @@ def verify_request_identity(request: Request, config: Config) -> Optional[Verifi
         return None
 
     try:
-        info = id_token.verify_firebase_token(
-            token,
-            google_requests.Request(),
-            audience=config.firebase_project_id,
-        )
+        # Allow small local clock skew (common on dev machines / phones).
+        # google-auth supports this kwarg; keep a fallback for older versions.
+        try:
+            info = id_token.verify_firebase_token(
+                token,
+                google_requests.Request(),
+                audience=config.firebase_project_id,
+                clock_skew_in_seconds=60,
+            )
+        except TypeError:
+            info = id_token.verify_firebase_token(
+                token,
+                google_requests.Request(),
+                audience=config.firebase_project_id,
+            )
     except Exception as e:
         if config.auth_debug:
             log.warning(
