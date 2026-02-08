@@ -53,6 +53,18 @@ public final class ScriptPreviewManager: ObservableObject {
         }
     }
 
+    /// Hide the preview UI while keeping the currently running script and its latest UI tree.
+    ///
+    /// This is important on macOS where users (and the Agent) may want to keep a script running
+    /// in the background while navigating elsewhere.
+    public func hidePreview() {
+        isPreviewVisible = false
+        isRendering = false
+        // Intentionally keep: scriptTree, scriptError, activeScriptName
+    }
+
+    /// Stop/exit the current preview session (clears visible state). Note: the underlying JS engine
+    /// is currently reused and may keep timers alive; this is best-effort UI state reset.
     public func exitPreview() {
         isPreviewVisible = false
         isRendering = false
