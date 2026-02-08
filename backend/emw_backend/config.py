@@ -19,6 +19,7 @@ class Config:
     # Auth
     auth_mode: str
     firebase_project_id: str
+    auth_debug: bool
 
     # Azure Blob storage
     azure_storage_account: str
@@ -44,6 +45,7 @@ class Config:
             cors_origins=cors_origins,
             auth_mode=_env("EMWAVER_AUTH_MODE", "firebase"),
             firebase_project_id=_env("FIREBASE_PROJECT_ID", ""),
+            auth_debug=_env("EMWAVER_AUTH_DEBUG", "0") in ("1", "true", "yes", "on"),
             azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),
             azure_storage_key=_env("AZURE_STORAGE_KEY", ""),
             azure_blob_container=_env("AZURE_BLOB_CONTAINER", "emwaver-user-files"),
