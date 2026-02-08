@@ -9,6 +9,10 @@ from typing import Any, Dict, Optional, Set
 from flask import current_app, request
 from flask_sock import Sock
 
+import logging
+
+log = logging.getLogger("emw_backend.ws")
+
 from emw_backend.auth import VerifiedIdentity
 from emw_backend.config import Config
 from emw_backend.db import SessionLocal
@@ -221,8 +225,30 @@ def init_ws(app) -> None:
 @sock.route("/v1/ws")
 def ws_handler(ws):
     config: Config = current_app.config["EMWAVER_CONFIG"]
+
+    # Debug: log handshake attempts (helpful when the browser shows "Invalid frame header").
+    try:
+        log.info(
+            "ws: handshake from %s ua=%r args=%s",
+            getattr(request, "remote_addr", ""),
+            (request.headers.get("User-Agent", "") or "")[:120],
+            list(request.args.keys()),
+        )
+    except Exception:
+        pass
+
     ident = verify_ws_identity(config)
     if not ident:
+        try:
+            log.warning(
+                "ws: unauthorized remote=%s has_auth_header=%s has_token_q=%s",
+                getattr(request, "remote_addr", ""),
+                bool((request.headers.get("Authorization", "") or "").strip()),
+                bool((request.args.get("token") or "").strip()),
+            )
+        except Exception:
+            pass
+
         try:
             _json_send(ws, {"type": "error", "error": "unauthorized"})
         except Exception:
