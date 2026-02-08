@@ -16,6 +16,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `006_AGENT_MFRC522_BLOCK_WRITE_VERIFY_FULL_CYCLE` | `[ ]` |  | |
 | `007_SECURE_DEVICE_CONNECTION` | `[ ]` | macOS, Windows, Android | |
 | `008_SECURE_DEVICE_FIRMWARE_UPDATE_GATING` | `[ ]` | macOS, Windows, Android | |
+| `009_DEVICE_IDENTITY_RECOVERY_REPROVISION` | `[ ]` | macOS, Windows, Android | |
 
 ## Remote Case Matrix
 
@@ -165,3 +166,23 @@ Steps:
    - Expected: app offers and performs update for secured device.
 3) Connect an **unsecured** device (no DeviceID/Proof).
    - Expected: firmware update is **not offered** (or is blocked with an explicit message).
+
+## `009_DEVICE_IDENTITY_RECOVERY_REPROVISION`
+
+### Local
+
+- Systems: macOS, Windows, Android.
+- Purpose: allow a legitimate owner to recover a device identity (DeviceID + Proof) from the backend when identity is missing/invalid, then retry the firmware update successfully.
+
+Steps:
+
+1) Sign into the EMWaver app.
+2) App checks backend that the account has an eligible **EMWaver purchase** / entitlement.
+3) Connect a device in a "needs recovery" state (missing/invalid identity page).
+4) Open the firmware update modal.
+   - Expected: app detects missing/invalid identity and offers **Recover device**.
+5) User triggers recovery.
+   - Expected: app requests a new `(DeviceID, Proof)` from backend for this account/device.
+   - Expected: app flashes **only the identity page** (DeviceID+Proof) onto the device.
+6) App prompts user to retry firmware update.
+   - Expected: update now proceeds normally (device passes identity verification).
