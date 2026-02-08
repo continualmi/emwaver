@@ -43,6 +43,8 @@ public class SettingsActivity extends AppCompatActivity {
     public static class SettingsFragment extends PreferenceFragmentCompat {
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
+            // Keep settings + CloudConfig in the same SharedPreferences file.
+            getPreferenceManager().setSharedPreferencesName("emwaver");
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
         }
     }
