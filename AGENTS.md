@@ -40,6 +40,39 @@ The shipped EMWaver board is intentionally a general-purpose hardware exploratio
   - plus the usual digital GPIO modes (in/out, pull-ups, etc.)
 - **External modules are expected:** e.g. **CC1101**, **MFRC522**, and similar “plug-on” hardware via SPI/I2C/UART/GPIO.
 
+### Hardware cloning deterrence & device authenticity (strategy)
+
+Goal: **discourage new hardware clones** by making genuine devices work seamlessly with official EMWaver apps (and cloud features), while clones require ongoing reverse-engineering and/or permanently lose access to cloud features.
+
+#### Root key / device keys
+
+- Maintain a single **global Root private key** (offline, kept by the owner in a safe). This Root key is **never shipped** in any app.
+- For each manufactured device, generate a **device private key** and derive/record its **device public key**.
+- Issue a **device certificate** by signing the device public key (and device identifier / version) with the Root private key.
+- Ship the **Root public key** in all official apps.
+
+#### On-device storage & protection (STM32)
+
+- Flash the device private key + certificate into a reserved flash area during manufacturing.
+- After provisioning, enable **RDP Level 1 (RDP1)** to prevent normal flash readout over SWD/debug.
+  - Note: RDP1 is treated as protecting secrecy (readout). It does not prevent mass-erase/reflash, so protocol-level authentication is still required.
+
+#### Local (offline) app ↔ device authenticity handshake
+
+- Device boots in a locked state (no privileged commands).
+- App performs a challenge-response handshake:
+  - App verifies the **device certificate** using the embedded **Root public key**.
+  - App sends a random nonce challenge; device proves possession of the device private key (signature).
+- On success, the app shows a **“secure connected”** badge/glyph and enables normal operation.
+
+#### Cloud feature gating (later / Pro)
+
+To enable any cloud features, the device acts as a hardware key:
+
+- Backend issues a challenge and verifies a device-signed response (or equivalent proof) based on the device certificate.
+- Cloud features are enabled only when the backend can verify the device is genuine.
+- This makes cloud features effectively inaccessible to cloned hardware that cannot present a valid device identity.
+
 Store distribution (apps)
 
 - **Apple App Store**: iOS + macOS
