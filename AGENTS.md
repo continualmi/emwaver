@@ -235,7 +235,7 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Internal tooling (not shipped):** `cli/` (firmware build + DFU flash)
+- **Provisioning (internal, not shipped):** `securewaver/` (device provisioning: keys/certs + DFU + RDP)
 - **Shared assets:** `assets/` (default scripts, etc.)
 
 ### Script sharing / cloud sync safety
