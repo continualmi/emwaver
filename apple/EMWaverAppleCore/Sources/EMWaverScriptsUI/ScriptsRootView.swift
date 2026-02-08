@@ -176,13 +176,13 @@ public struct ScriptsRootView: View {
         .onAppear {
             previewManager.attach(device: device)
             loadScripts()
-            hostStatusSink?(showingPreview, previewManager.activeScriptName)
+            hostStatusSink?(previewManager.activeScriptName != nil, previewManager.activeScriptName)
         }
-        .onChange(of: showingPreview) { newValue in
-            hostStatusSink?(newValue, previewManager.activeScriptName)
+        .onChange(of: showingPreview) { _ in
+            hostStatusSink?(previewManager.activeScriptName != nil, previewManager.activeScriptName)
         }
-        .onChange(of: previewManager.activeScriptName) { newValue in
-            hostStatusSink?(showingPreview, newValue)
+        .onChange(of: previewManager.activeScriptName) { _ in
+            hostStatusSink?(previewManager.activeScriptName != nil, previewManager.activeScriptName)
         }
     }
 
@@ -486,6 +486,8 @@ public struct ScriptsRootView: View {
     }
 
     private func exitPreview() {
+        // On macOS we want scripts to keep running in the background even if the user goes back
+        // to the main script list. That also allows the Agent to keep observing ui.snapshot.
         showingPreview = false
         // If launched from editor, go back to editor; otherwise go to main screen
         if previewLaunchedFromEditor {
@@ -494,7 +496,12 @@ public struct ScriptsRootView: View {
             currentScriptId = nil
         }
         previewLaunchedFromEditor = false
+
+        #if os(macOS)
+        previewManager.hidePreview()
+        #else
         previewManager.exitPreview()
+        #endif
     }
 
     private func saveCurrentScript() {
@@ -754,6 +761,32 @@ public struct ScriptsRootView: View {
                 }
             }
         } else {
+            // If a script is running but we're on the main menu, expose a quick way to return to it.
+            if let runningName = previewManager.activeScriptName, !runningName.isEmpty {
+                ToolbarItem(placement: .navigation) {
+                    Button {
+                        showingPreview = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "play.fill")
+                            Text(runningName)
+                                .lineLimit(1)
+                        }
+                    }
+                    .help("Return to running script")
+                }
+
+                ToolbarItem(placement: .primaryAction) {
+                    Button(role: .destructive) {
+                        // Best-effort stop: clears preview state. (Engine timers may still exist.)
+                        previewManager.exitPreview()
+                    } label: {
+                        Image(systemName: "stop.fill")
+                    }
+                    .help("Stop running script")
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 // Local dev convenience: allow sync without a token when backend auth is disabled.
                 let allowAnonSync = (
