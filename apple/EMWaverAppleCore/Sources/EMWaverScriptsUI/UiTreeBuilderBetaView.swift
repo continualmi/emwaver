@@ -265,8 +265,8 @@ public struct UiTreeBuilderBetaView: View {
 
     private func renderPreviewDebounced(force: Bool = false) {
         pendingRenderWorkItem?.cancel()
-        let work = DispatchWorkItem { [weak self] in
-            self?.renderPreview()
+        let work = DispatchWorkItem {
+            renderPreview()
         }
         pendingRenderWorkItem = work
 
