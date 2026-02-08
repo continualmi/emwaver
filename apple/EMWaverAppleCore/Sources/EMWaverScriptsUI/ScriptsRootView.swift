@@ -52,8 +52,6 @@ public struct ScriptsRootView: View {
 
     #if os(macOS)
     @State private var showingAgentPanel = false
-    @State private var showingUiBuilder = false
-    @State private var uiBuilderNotice: ScriptsViewModel.Notice?
     #endif
 
     @MainActor
@@ -124,17 +122,6 @@ public struct ScriptsRootView: View {
         .alert(item: $viewModel.notice) { notice in
             Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
         }
-        #if os(macOS)
-        .alert(item: $uiBuilderNotice) { notice in
-            Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("OK")))
-        }
-        .sheet(isPresented: $showingUiBuilder) {
-            UiTreeBuilderBetaView(source: $editorContent) {
-                showingUiBuilder = false
-            }
-            .frame(minWidth: 820, minHeight: 560)
-        }
-        #endif
         .alert(item: $previewManager.dialog) { dialog in
             Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
         }
@@ -724,24 +711,6 @@ public struct ScriptsRootView: View {
                         Image(systemName: "play.fill")
                     }
                     .disabled(editorContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                    #if os(macOS)
-                    Button {
-                        // Beta: only script UI tree editing (layout/props). No behavior editing.
-                        guard editorMode == .script else { return }
-                        if UiTreeBuilderBetaParser.canEdit(source: editorContent) {
-                            showingUiBuilder = true
-                        } else {
-                            uiBuilderNotice = ScriptsViewModel.Notice(
-                                title: "UI Builder (Beta)",
-                                message: "This script can't be edited visually yet.\n\nFor now, the UI Builder supports scripts with a UI.column({ children: [...] }) UI tree in render()."
-                            )
-                        }
-                    } label: {
-                        Image(systemName: "square.grid.2x2")
-                    }
-                    .help("UI Builder (Beta)")
-                    #endif
                 }
 
                 Menu {
