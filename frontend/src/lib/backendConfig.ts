@@ -1,5 +1,8 @@
 const KEY = "emwaver.cloud.backendUrlOverride";
 
+// Canonical production backend (Azure Container Apps).
+export const AZURE_PRODUCTION_BACKEND_URL = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
+
 export function defaultBackendBaseUrl(): string {
   // Prefer build-time injected URL (prod/deployed backend by default).
   const raw = (process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || process.env.EMWAVER_BACKEND_URL || "").trim();

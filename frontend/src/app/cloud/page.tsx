@@ -22,6 +22,7 @@ import { backendWsUrl, type RemoteIncomingMessage, wsSend } from "@/lib/remoteSe
 import { loadSelectedHostId, saveSelectedHostId } from "@/lib/hostPrefs";
 import {
   clearBackendBaseUrlOverride,
+  AZURE_PRODUCTION_BACKEND_URL,
   defaultBackendBaseUrl,
   getBackendBaseUrl,
   getBackendOverrideRaw,
@@ -584,7 +585,7 @@ export default function CloudPage() {
                     placeholder="Override backend URL (leave blank to use default)"
                     className="w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2 text-sm text-[color:var(--ink)]"
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -597,6 +598,21 @@ export default function CloudPage() {
                     >
                       Apply
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // One-click to the deployed Azure backend.
+                        setBackendBaseUrlOverride(AZURE_PRODUCTION_BACKEND_URL);
+                        setBackendOverrideDraft(AZURE_PRODUCTION_BACKEND_URL);
+                        setBackendEffective(getBackendBaseUrl());
+                        disconnectHost();
+                      }}
+                      className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)]"
+                    >
+                      Use Azure (prod)
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => {
