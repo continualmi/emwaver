@@ -12,6 +12,7 @@ ENV PORT=8787
 EXPOSE 8787
 
 # Use gunicorn for production (Azure-friendly).
-# NOTE: WebSockets require a WS-capable worker. We also keep workers=1 because
-# the remote-session router is in-memory (no cross-worker sharing).
-CMD ["gunicorn", "-b", "0.0.0.0:8787", "app:app", "-k", "geventwebsocket.gunicorn.workers.GeventWebSocketWorker", "--workers", "1", "--timeout", "90"]
+# NOTE: flask-sock (simple-websocket) works with the gevent worker; the
+# geventwebsocket worker can cause "Invalid frame header" in browsers.
+# We keep workers=1 because the remote-session router is in-memory.
+CMD ["gunicorn", "-b", "0.0.0.0:8787", "app:app", "-k", "gevent", "--workers", "1", "--timeout", "90"]
