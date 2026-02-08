@@ -42,39 +42,40 @@ The shipped EMWaver board is intentionally a general-purpose hardware exploratio
 
 ### Hardware cloning deterrence & device authenticity (strategy)
 
-Goal: **discourage new hardware clones** by making genuine devices work seamlessly with official EMWaver apps (and cloud features), while clones require ongoing reverse-engineering and/or permanently lose access to cloud features.
+Goal: **discourage new hardware clones** by making genuine devices work seamlessly with official EMWaver apps, while **cloud features** are gated to genuine devices (clones can run locally but lose Pro/cloud).
 
-#### Root key / device keys
+#### Root key / minting
 
 - Maintain a single **global Root private key** (offline, kept by the owner in a safe). This Root key is **never shipped** in any app.
-- For each manufactured device, generate a **device private key** and derive/record its **device public key**.
-- Issue a **device certificate** by signing the device public key (and device identifier / version) with the Root private key.
-- Ship the **Root public key** in all official apps.
+- Compute a **Root public key** and ship it in all official apps and on the backend.
 
-#### On-device storage & protection (STM32)
+#### Per-device identity (no on-device secrets)
 
-- Flash the device private key + certificate into a reserved flash area during manufacturing.
-- Treat that reserved flash area as a **protected sector/page**:
-  - During firmware updates performed by official EMWaver apps, **do not mass-erase** the device.
-  - Instead, erase/reprogram only the firmware region and explicitly **preserve the key/cert page**.
-- After provisioning, enable **RDP Level 1 (RDP1)** to prevent normal flash readout over SWD/debug.
-  - Note: RDP1 is treated as protecting secrecy (readout). It does not prevent mass-erase/reflash, so protocol-level authentication is still required.
+For each manufactured device, mint a public identity:
 
-#### Local (offline) app ↔ device authenticity handshake
+- Generate a random **DeviceID**.
+- Compute a fixed-size **Proof** by signing `DeviceID` with the Root private key.
+- Flash onto the device: `DeviceID` + `Proof`.
 
-- Device boots in a locked state (no privileged commands).
-- App performs a challenge-response handshake:
-  - App verifies the **device certificate** using the embedded **Root public key**.
-  - App sends a random nonce challenge; device proves possession of the device private key (signature).
-- On success, the app shows a **“secure connected”** badge/glyph and enables normal operation.
+No secret material is stored on the device for this scheme.
 
-#### Cloud feature gating (later / Pro)
+#### Local (offline) verification (app-only)
+
+- On connect, the device reports `DeviceID` + `Proof`.
+- The app verifies `Proof` using the embedded **Root public key**.
+  - If invalid: reject as non-genuine.
+  - If valid: show a **“secure connected”** badge/glyph.
+
+#### Cloud feature gating (Pro)
 
 To enable any cloud features, the device acts as a hardware key:
 
-- Backend issues a challenge and verifies a device-signed response (or equivalent proof) based on the device certificate.
-- Cloud features are enabled only when the backend can verify the device is genuine.
-- This makes cloud features effectively inaccessible to cloned hardware that cannot present a valid device identity.
+- App forwards `DeviceID` + `Proof` to the backend.
+- Backend repeats verification (never trust app alone) and enforces policy:
+  - detect mass-reuse / concurrency / abnormal patterns
+  - revoke `DeviceID` if abused
+- Backend issues a **session token bound to DeviceID**.
+- The app requires a valid server token for **cloud features / Pro** only.
 
 Store distribution (apps)
 
