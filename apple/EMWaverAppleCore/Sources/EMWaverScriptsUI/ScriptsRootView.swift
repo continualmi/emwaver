@@ -54,8 +54,9 @@ public struct ScriptsRootView: View {
     @State private var showingAgentPanel = false
     #endif
 
+    @MainActor
     public init(
-        previewManager: ScriptPreviewManager = ScriptPreviewManager(),
+        previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil
@@ -67,6 +68,15 @@ public struct ScriptsRootView: View {
         self._previewManager = StateObject(wrappedValue: previewManager)
         self.agentHost = host
         _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: host))
+    }
+
+    @MainActor
+    public init(
+        device: (any ScriptDevice)? = nil,
+        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        hostStatusSink: ((Bool, String?) -> Void)? = nil
+    ) {
+        self.init(previewManager: ScriptPreviewManager(), device: device, syncProvider: syncProvider, hostStatusSink: hostStatusSink)
     }
 
     public var body: some View {
