@@ -9,6 +9,7 @@ from emw_backend.routes.health import health_bp
 from emw_backend.routes.docs import docs_bp
 from emw_backend.routes.hosts import hosts_bp
 from emw_backend.routes.ws import init_ws
+from emw_backend.routes.provisioning import provisioning_bp
 
 
 def create_app() -> Flask:
@@ -31,6 +32,7 @@ def create_app() -> Flask:
     app.register_blueprint(files_bp)
     app.register_blueprint(hosts_bp)
     app.register_blueprint(docs_bp)
+    app.register_blueprint(provisioning_bp)
 
     # WebSocket endpoint for Remote Sessions.
     init_ws(app)

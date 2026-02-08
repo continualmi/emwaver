@@ -1,17 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
-import { open, save } from '@tauri-apps/plugin-dialog';
-import React, { useState } from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
+import React, { useEffect, useMemo, useState } from 'react';
+import { auth, googleProvider } from '../firebase';
+import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 
 type DfuInfo = {
   interface_number: number;
   alt_settings: { setting_number: number; description?: string | null }[];
   selected_alt_setting?: number | null;
-};
-
-type RootKeygenResult = {
-  root_public_key_b64: string;
-  root_private_key_path: string;
-  root_public_key_path: string;
 };
 
 type DeviceMintResult = {
@@ -31,11 +27,23 @@ type ProvisionResult = {
 export default function App() {
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
-  const [rootInfo, setRootInfo] = useState<RootKeygenResult | null>(null);
-  const [rootPrivateKeyPath, setRootPrivateKeyPath] = useState<string | null>(null);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+
+  const [user, setUser] = useState<User | null>(null);
+  const [backendUrl, setBackendUrl] = useState<string>(
+    (import.meta.env.VITE_BACKEND_URL as string) || 'https://api.emwavers.com'
+  );
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (u) => setUser(u));
+  }, []);
+
+  const userLabel = useMemo(() => {
+    if (!user) return '(not signed in)';
+    return user.email || user.uid;
+  }, [user]);
 
   async function probe() {
     setStatus('Probing DFU…');
@@ -49,49 +57,23 @@ export default function App() {
     }
   }
 
-  async function generateRoot() {
-    setStatus('Generating Root keypair…');
-    setRootInfo(null);
-
-    const privPath = await save({
-      title: 'Save EMWaver Root PRIVATE key',
-      defaultPath: 'emwaver_root_private.key'
-    });
-    if (!privPath) {
-      setStatus('Cancelled');
-      return;
-    }
-
-    const pubPath = await save({
-      title: 'Save EMWaver Root PUBLIC key',
-      defaultPath: 'emwaver_root_public.key'
-    });
-    if (!pubPath) {
-      setStatus('Cancelled');
-      return;
-    }
-
+  async function loginGoogle() {
+    setStatus('Signing in with Google…');
     try {
-      const info = await invoke<RootKeygenResult>('root_generate_and_save', {
-        rootPrivateKeyPath: privPath,
-        rootPublicKeyPath: pubPath
-      });
-      setRootInfo(info);
-      setRootPrivateKeyPath(privPath);
-      setStatus('Root keypair generated and saved');
+      await signInWithPopup(auth, googleProvider);
+      setStatus('Signed in');
     } catch (e: any) {
-      setStatus(`Root key generation failed: ${e}`);
+      setStatus(`Sign-in failed: ${e}`);
     }
   }
 
-  async function selectRootPrivateKey() {
-    const picked = await open({
-      title: 'Select EMWaver Root PRIVATE key',
-      multiple: false
-    });
-    if (!picked || Array.isArray(picked)) return;
-    setRootPrivateKeyPath(picked);
-    setStatus('Root private key selected');
+  async function logout() {
+    try {
+      await signOut(auth);
+      setStatus('Signed out');
+    } catch (e: any) {
+      setStatus(`Sign-out failed: ${e}`);
+    }
   }
 
   async function selectFirmware() {
@@ -104,11 +86,30 @@ export default function App() {
     setStatus('Firmware selected');
   }
 
+  async function mintFromBackend(): Promise<DeviceMintResult> {
+    if (!user) throw new Error('Not signed in');
+    const idToken = await user.getIdToken();
+
+    const url = `${backendUrl.replace(/\/$/, '')}/provisioning/mint`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${idToken}`
+      }
+    });
+    if (!res.ok) {
+      const txt = await res.text();
+      throw new Error(`Backend mint failed (${res.status}): ${txt}`);
+    }
+    return (await res.json()) as DeviceMintResult;
+  }
+
   async function mintAndProvision() {
     setProvisionResult(null);
+    setMinted(null);
 
-    if (!rootPrivateKeyPath) {
-      setStatus('Missing root private key');
+    if (!user) {
+      setStatus('Missing login');
       return;
     }
     if (!firmwarePath) {
@@ -117,10 +118,8 @@ export default function App() {
     }
 
     try {
-      setStatus('Minting DeviceID + Proof…');
-      const m = await invoke<DeviceMintResult>('mint_device', {
-        rootPrivateKeyPath
-      });
+      setStatus('Requesting DeviceID+Proof from backend…');
+      const m = await mintFromBackend();
       setMinted(m);
 
       setStatus('Provisioning via DFU (flash firmware + identity)…');
@@ -137,37 +136,44 @@ export default function App() {
   }
 
   return (
-    <div style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 900 }}>
+    <div style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 980 }}>
       <h1 style={{ marginTop: 0 }}>SecureWaver</h1>
       <p style={{ color: '#555' }}>
-        Internal EMWaver provisioning tool (DFU + DeviceID minting + Proof signing).
+        Internal provisioning tool (Google/Firebase auth + backend mint + DFU flash).
       </p>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        <button onClick={generateRoot}>Generate Root keypair…</button>
-        <button onClick={selectRootPrivateKey}>Select Root PRIVATE key…</button>
+        {!user ? (
+          <button onClick={loginGoogle}>Sign in with Google…</button>
+        ) : (
+          <button onClick={logout}>Sign out</button>
+        )}
+
         <button onClick={selectFirmware}>Select firmware…</button>
         <button onClick={probe}>Probe DFU device</button>
-        <button onClick={mintAndProvision}>Mint + Provision (DFU)</button>
-        <div><b>Status:</b> {status}</div>
+        <button onClick={mintAndProvision}>Mint (backend) + Provision (DFU)</button>
+
+        <div>
+          <b>Status:</b> {status}
+        </div>
       </div>
 
       <div style={{ marginTop: 10, color: '#555' }}>
-        <div><b>Root private key:</b> {rootPrivateKeyPath ?? '(not selected)'}</div>
-        <div><b>Firmware:</b> {firmwarePath ?? '(not selected)'}</div>
-      </div>
-
-      {rootInfo && (
-        <div style={{ marginTop: 16 }}>
-          <h2>Root keypair</h2>
-          <div style={{ color: '#555', marginBottom: 8 }}>
-            Root private key is saved to disk. Keep it offline (safe). Do not commit it.
-          </div>
-          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-            {JSON.stringify(rootInfo, null, 2)}
-          </pre>
+        <div>
+          <b>Signed in:</b> {userLabel}
         </div>
-      )}
+        <div>
+          <b>Backend:</b>{' '}
+          <input
+            value={backendUrl}
+            onChange={(e) => setBackendUrl(e.target.value)}
+            style={{ width: 420 }}
+          />
+        </div>
+        <div>
+          <b>Firmware:</b> {firmwarePath ?? '(not selected)'}
+        </div>
+      </div>
 
       {minted && (
         <div style={{ marginTop: 16 }}>
@@ -199,10 +205,9 @@ export default function App() {
       <hr style={{ margin: '24px 0' }} />
       <h2>Flow</h2>
       <ol>
-        <li>Generate Root keypair once (keep private key offline).</li>
-        <li>Select Root PRIVATE key + firmware.</li>
-        <li>Mint DeviceID + Proof (signature) and flash DeviceID+Proof to the device.</li>
-        <li>Apps verify offline; server verifies again for cloud feature gating.</li>
+        <li>Sign in with Google (Firebase). Backend allowlists a single email.</li>
+        <li>Backend mints DeviceID+Proof using the Root private key stored server-side.</li>
+        <li>SecureWaver flashes firmware and identity page via DFU.</li>
       </ol>
     </div>
   );

@@ -28,6 +28,9 @@ azure-storage-blob==12.19.0
 # Auth (Firebase ID token verification)
 google-auth==2.26.2
 
+# Crypto (provisioning mint endpoint uses Ed25519)
+cryptography==43.0.3
+
 # Dev-only utility deps
 google-genai
 pillow

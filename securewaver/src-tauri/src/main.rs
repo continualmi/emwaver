@@ -1,19 +1,24 @@
 // SecureWaver - internal EMWaver provisioning UI
+//
+// Tauri-side responsibilities:
+// - DFU probe
+// - Flash firmware via DFU
+// - Write identity page (DeviceID + Proof) via DFU
+//
+// Minting (DeviceID + Proof signing) happens on the backend.
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use ed25519_dalek::{Signer, SigningKey};
-use rand_core::{OsRng, RngCore};
 use serde::Serialize;
-use std::{fs, path::Path, time::{SystemTime, UNIX_EPOCH}};
-use zeroize::Zeroize;
+use std::fs;
 
 type AnyResult<T> = Result<T, String>;
 
 const DEVICE_ID_LEN: usize = 16;
-const PROOF_LEN: usize = 64; // Ed25519 signature
+const PROOF_LEN: usize = 64; // Ed25519 signature bytes
+
 // STM32F042 flash page size is 1KB; keep identity within a single page so it doesn't clobber other data.
 const IDENTITY_PAGE_SIZE: usize = 1024;
-const DEFAULT_IDENTITY_PAGE_ADDR: u32 = 0x0800_7800; // last 2KB page on STM32F042 (32KB flash)
+const DEFAULT_IDENTITY_PAGE_ADDR: u32 = 0x0800_7800; // last 1KB page on STM32F042 (32KB flash)
 
 #[derive(Debug, Clone, Serialize)]
 struct DfuAltSettingInfo {
@@ -54,130 +59,6 @@ fn dfu_probe() -> AnyResult<DfuDiscoveryInfo> {
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct RootKeygenResult {
-    root_public_key_b64: String,
-    root_private_key_path: String,
-    root_public_key_path: String,
-}
-
-fn write_new_file(path: &Path, contents: &[u8]) -> AnyResult<()> {
-    if path.exists() {
-        return Err(format!(
-            "Refusing to overwrite existing file: {}",
-            path.display()
-        ));
-    }
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory {}: {e}", parent.display()))?;
-    }
-    fs::write(path, contents)
-        .map_err(|e| format!("Failed to write {}: {e}", path.display()))?;
-    Ok(())
-}
-
-/// Generates a new Root keypair and writes it to disk.
-///
-/// - Private key: raw 32 bytes base64 (plus a small header) 
-/// - Public key: raw 32 bytes base64 (plus a small header)
-///
-/// The Root private key must be stored offline (safe).
-#[tauri::command]
-fn root_generate_and_save(root_private_key_path: String, root_public_key_path: String) -> AnyResult<RootKeygenResult> {
-    let mut csprng = OsRng;
-    let signing_key = SigningKey::generate(&mut csprng);
-    let verifying_key = signing_key.verifying_key();
-
-    let mut priv_bytes = signing_key.to_bytes();
-    let pub_bytes = verifying_key.to_bytes();
-
-    let priv_b64 = B64.encode(priv_bytes);
-    let pub_b64 = B64.encode(pub_bytes);
-
-    // Zeroize private key bytes as soon as we no longer need them.
-    priv_bytes.zeroize();
-
-    let priv_out = format!(
-        "EMWAVER_ROOT_PRIVATE_KEY_V1\nencoding: base64\nbytes: 32\nkey: {}\n",
-        priv_b64
-    );
-    let pub_out = format!(
-        "EMWAVER_ROOT_PUBLIC_KEY_V1\nencoding: base64\nbytes: 32\nkey: {}\n",
-        pub_b64
-    );
-
-    let priv_path = Path::new(&root_private_key_path);
-    let pub_path = Path::new(&root_public_key_path);
-
-    write_new_file(priv_path, priv_out.as_bytes())?;
-    write_new_file(pub_path, pub_out.as_bytes())?;
-
-    Ok(RootKeygenResult {
-        root_public_key_b64: pub_b64,
-        root_private_key_path,
-        root_public_key_path,
-    })
-}
-
-fn parse_root_private_key_file(path: &Path) -> AnyResult<SigningKey> {
-    let text = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read root private key file {}: {e}", path.display()))?;
-    if !text.starts_with("EMWAVER_ROOT_PRIVATE_KEY_V1") {
-        return Err("Unrecognized root private key file header".to_string());
-    }
-    let key_line = text
-        .lines()
-        .find(|l| l.trim_start().starts_with("key:"))
-        .ok_or_else(|| "Root private key file missing 'key:' line".to_string())?;
-    let b64 = key_line
-        .splitn(2, ':')
-        .nth(1)
-        .ok_or_else(|| "Invalid 'key:' line".to_string())?
-        .trim();
-
-    let bytes = B64
-        .decode(b64)
-        .map_err(|e| format!("Invalid base64 in root private key: {e}"))?;
-    if bytes.len() != 32 {
-        return Err(format!("Root private key must be 32 bytes, got {}", bytes.len()));
-    }
-    let mut sk = [0u8; 32];
-    sk.copy_from_slice(&bytes);
-    // bytes Vec can be dropped; we keep only the stack copy.
-    Ok(SigningKey::from_bytes(&sk))
-}
-
-#[derive(Debug, Clone, Serialize)]
-struct DeviceMintResult {
-    device_id_b64: String,
-    proof_b64: String,
-    algorithm: String,
-    device_id_len: u32,
-    proof_len: u32,
-}
-
-/// Mint a new DeviceID and Proof (signature) using the offline Root private key.
-#[tauri::command]
-fn mint_device(root_private_key_path: String) -> AnyResult<DeviceMintResult> {
-    let root_path = Path::new(&root_private_key_path);
-    let signing_key = parse_root_private_key_file(root_path)?;
-
-    let mut device_id = [0u8; DEVICE_ID_LEN];
-    let mut rng = OsRng;
-    rng.fill_bytes(&mut device_id);
-
-    let proof = signing_key.sign(&device_id);
-
-    Ok(DeviceMintResult {
-        device_id_b64: B64.encode(device_id),
-        proof_b64: B64.encode(proof.to_bytes()),
-        algorithm: "ed25519".to_string(),
-        device_id_len: DEVICE_ID_LEN as u32,
-        proof_len: PROOF_LEN as u32,
-    })
-}
-
 fn build_identity_page(device_id: &[u8], proof: &[u8]) -> AnyResult<Vec<u8>> {
     if device_id.len() != DEVICE_ID_LEN {
         return Err(format!("DeviceID must be {DEVICE_ID_LEN} bytes"));
@@ -186,7 +67,7 @@ fn build_identity_page(device_id: &[u8], proof: &[u8]) -> AnyResult<Vec<u8>> {
         return Err(format!("Proof must be {PROOF_LEN} bytes"));
     }
 
-    // Simple fixed layout in a full 2KB DFU block.
+    // Layout must match firmware expectations:
     // [0..4]  magic 'EMID'
     // [4]     version 1
     // [5]     device_id_len
@@ -203,15 +84,6 @@ fn build_identity_page(device_id: &[u8], proof: &[u8]) -> AnyResult<Vec<u8>> {
     page[off..off + DEVICE_ID_LEN].copy_from_slice(device_id);
     off += DEVICE_ID_LEN;
     page[off..off + PROOF_LEN].copy_from_slice(proof);
-
-    // Add a timestamp (best-effort) for debugging/provenance.
-    if let Ok(ms) = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as u64) {
-        let ts = ms.to_le_bytes();
-        let ts_off = off + PROOF_LEN;
-        if ts_off + ts.len() <= page.len() {
-            page[ts_off..ts_off + ts.len()].copy_from_slice(&ts);
-        }
-    }
 
     Ok(page)
 }
@@ -274,12 +146,7 @@ fn dfu_provision_device(
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![
-            dfu_probe,
-            root_generate_and_save,
-            mint_device,
-            dfu_provision_device
-        ])
+        .invoke_handler(tauri::generate_handler![dfu_probe, dfu_provision_device])
         .run(tauri::generate_context!())
         .expect("error while running SecureWaver");
 }

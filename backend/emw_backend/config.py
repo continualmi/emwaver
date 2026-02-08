@@ -16,6 +16,10 @@ class Config:
     database_url: str
     cors_origins: Union[List[str], str]
 
+    # Provisioning
+    provisioning_root_private_key_b64: str
+    provisioning_allowed_email: str
+
     # Auth
     auth_mode: str
     firebase_project_id: str
@@ -43,6 +47,11 @@ class Config:
         return Config(
             database_url=_env("DATABASE_URL", "sqlite:///./emwaver.db"),
             cors_origins=cors_origins,
+
+            # Provisioning
+            provisioning_root_private_key_b64=_env("EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64", ""),
+            provisioning_allowed_email=_env("EMWAVER_PROVISIONING_ALLOWED_EMAIL", "maarnotto@gmail.com"),
+
             auth_mode=_env("EMWAVER_AUTH_MODE", "firebase"),
             firebase_project_id=_env("FIREBASE_PROJECT_ID", ""),
             auth_debug=_env("EMWAVER_AUTH_DEBUG", "0") in ("1", "true", "yes", "on"),

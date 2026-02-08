@@ -14,11 +14,8 @@ serde_json = "1"
 # Tauri plugins
 tauri-plugin-dialog = "2"
 
-# Crypto
-ed25519-dalek = { version = "2", features = ["rand_core"] }
-rand_core = "0.6"
+# Encoding
 base64 = "0.22"
-zeroize = "1"
 
 # Internal DFU helper crate
 emwaver-dfu = { path = "../../crates/emwaver-dfu" }
