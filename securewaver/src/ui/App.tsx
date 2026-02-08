@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
-import { save } from '@tauri-apps/plugin-dialog';
+import { open, save } from '@tauri-apps/plugin-dialog';
 import React, { useState } from 'react';
 
 type DfuInfo = {
@@ -14,10 +14,28 @@ type RootKeygenResult = {
   root_public_key_path: string;
 };
 
+type DeviceMintResult = {
+  device_id_b64: string;
+  proof_b64: string;
+  algorithm: string;
+  device_id_len: number;
+  proof_len: number;
+};
+
+type ProvisionResult = {
+  identity_page_addr: number;
+  firmware_path: string;
+  wrote_identity: boolean;
+};
+
 export default function App() {
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
   const [rootInfo, setRootInfo] = useState<RootKeygenResult | null>(null);
+  const [rootPrivateKeyPath, setRootPrivateKeyPath] = useState<string | null>(null);
+  const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
+  const [minted, setMinted] = useState<DeviceMintResult | null>(null);
+  const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
 
   async function probe() {
     setStatus('Probing DFU…');
@@ -59,9 +77,62 @@ export default function App() {
         rootPublicKeyPath: pubPath
       });
       setRootInfo(info);
+      setRootPrivateKeyPath(privPath);
       setStatus('Root keypair generated and saved');
     } catch (e: any) {
       setStatus(`Root key generation failed: ${e}`);
+    }
+  }
+
+  async function selectRootPrivateKey() {
+    const picked = await open({
+      title: 'Select EMWaver Root PRIVATE key',
+      multiple: false
+    });
+    if (!picked || Array.isArray(picked)) return;
+    setRootPrivateKeyPath(picked);
+    setStatus('Root private key selected');
+  }
+
+  async function selectFirmware() {
+    const picked = await open({
+      title: 'Select firmware (.bin)',
+      multiple: false
+    });
+    if (!picked || Array.isArray(picked)) return;
+    setFirmwarePath(picked);
+    setStatus('Firmware selected');
+  }
+
+  async function mintAndProvision() {
+    setProvisionResult(null);
+
+    if (!rootPrivateKeyPath) {
+      setStatus('Missing root private key');
+      return;
+    }
+    if (!firmwarePath) {
+      setStatus('Missing firmware file');
+      return;
+    }
+
+    try {
+      setStatus('Minting DeviceID + Proof…');
+      const m = await invoke<DeviceMintResult>('mint_device', {
+        rootPrivateKeyPath
+      });
+      setMinted(m);
+
+      setStatus('Provisioning via DFU (flash firmware + identity)…');
+      const pr = await invoke<ProvisionResult>('dfu_provision_device', {
+        firmwarePath,
+        deviceIdB64: m.device_id_b64,
+        proofB64: m.proof_b64
+      });
+      setProvisionResult(pr);
+      setStatus('Provisioning complete');
+    } catch (e: any) {
+      setStatus(`Provisioning failed: ${e}`);
     }
   }
 
@@ -69,13 +140,21 @@ export default function App() {
     <div style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 900 }}>
       <h1 style={{ marginTop: 0 }}>SecureWaver</h1>
       <p style={{ color: '#555' }}>
-        Internal EMWaver provisioning tool (DFU + key/cert provisioning + RDP1).
+        Internal EMWaver provisioning tool (DFU + DeviceID minting + Proof signing).
       </p>
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button onClick={generateRoot}>Generate Root keypair…</button>
+        <button onClick={selectRootPrivateKey}>Select Root PRIVATE key…</button>
+        <button onClick={selectFirmware}>Select firmware…</button>
         <button onClick={probe}>Probe DFU device</button>
+        <button onClick={mintAndProvision}>Mint + Provision (DFU)</button>
         <div><b>Status:</b> {status}</div>
+      </div>
+
+      <div style={{ marginTop: 10, color: '#555' }}>
+        <div><b>Root private key:</b> {rootPrivateKeyPath ?? '(not selected)'}</div>
+        <div><b>Firmware:</b> {firmwarePath ?? '(not selected)'}</div>
       </div>
 
       {rootInfo && (
@@ -90,6 +169,24 @@ export default function App() {
         </div>
       )}
 
+      {minted && (
+        <div style={{ marginTop: 16 }}>
+          <h2>Minted identity</h2>
+          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
+            {JSON.stringify(minted, null, 2)}
+          </pre>
+        </div>
+      )}
+
+      {provisionResult && (
+        <div style={{ marginTop: 16 }}>
+          <h2>Provision result</h2>
+          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
+            {JSON.stringify(provisionResult, null, 2)}
+          </pre>
+        </div>
+      )}
+
       {dfuInfo && (
         <div style={{ marginTop: 16 }}>
           <h2>DFU Discovery</h2>
@@ -100,14 +197,12 @@ export default function App() {
       )}
 
       <hr style={{ margin: '24px 0' }} />
-      <h2>Next steps (TODO)</h2>
+      <h2>Flow</h2>
       <ol>
-        <li>Generate/import Root key (offline) + choose key version</li>
-        <li>Generate per-device keypair + Root-signed cert</li>
-        <li>Flash key/cert into reserved page (preserve across updates)</li>
-        <li>Flash firmware</li>
-        <li>Set RDP1 option bytes</li>
-        <li>Verify handshake (“secure connected”)</li>
+        <li>Generate Root keypair once (keep private key offline).</li>
+        <li>Select Root PRIVATE key + firmware.</li>
+        <li>Mint DeviceID + Proof (signature) and flash DeviceID+Proof to the device.</li>
+        <li>Apps verify offline; server verifies again for cloud feature gating.</li>
       </ol>
     </div>
   );
