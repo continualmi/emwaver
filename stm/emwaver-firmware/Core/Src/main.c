@@ -174,6 +174,16 @@ __attribute__((noreturn, noinline, section(".RamFunc"))) static void emw_enter_r
 #define USER_DATA_FLASH_ADDR 0x08007C00
 #define DEVICE_NAME_MAX_LEN 32
 
+// SecureWaver identity blob (DeviceID + Proof) is provisioned into the page below USER_DATA_FLASH_ADDR.
+// Layout must match securewaver/src-tauri/src/main.rs.
+#define EMW_IDENTITY_FLASH_ADDR 0x08007800
+#define EMW_IDENTITY_MAGIC0 'E'
+#define EMW_IDENTITY_MAGIC1 'M'
+#define EMW_IDENTITY_MAGIC2 'I'
+#define EMW_IDENTITY_MAGIC3 'D'
+#define EMW_IDENTITY_DEVICE_ID_LEN 16u
+#define EMW_IDENTITY_PROOF_LEN 64u
+
 void get_device_name(char* buf, size_t max_len) {
     uint8_t* flash_ptr = (uint8_t*)USER_DATA_FLASH_ADDR;
     if (flash_ptr[0] == 0xFF) {
@@ -186,6 +196,42 @@ void get_device_name(char* buf, size_t max_len) {
         buf[i] = (char)flash_ptr[i];
     }
     buf[i] = '\0';
+}
+
+static int emw_identity_valid(void)
+{
+    const uint8_t *p = (const uint8_t *)EMW_IDENTITY_FLASH_ADDR;
+    if (p[0] != (uint8_t)EMW_IDENTITY_MAGIC0 ||
+        p[1] != (uint8_t)EMW_IDENTITY_MAGIC1 ||
+        p[2] != (uint8_t)EMW_IDENTITY_MAGIC2 ||
+        p[3] != (uint8_t)EMW_IDENTITY_MAGIC3) {
+        return 0;
+    }
+    if (p[4] != 1u) {
+        return 0;
+    }
+    if (p[5] != (uint8_t)EMW_IDENTITY_DEVICE_ID_LEN) {
+        return 0;
+    }
+    if (p[6] != (uint8_t)EMW_IDENTITY_PROOF_LEN) {
+        return 0;
+    }
+    return 1;
+}
+
+static void emw_identity_get_device_id(uint8_t out[EMW_IDENTITY_DEVICE_ID_LEN])
+{
+    const uint8_t *p = (const uint8_t *)EMW_IDENTITY_FLASH_ADDR;
+    memcpy(out, &p[16], EMW_IDENTITY_DEVICE_ID_LEN);
+}
+
+static void emw_identity_get_proof_chunk(uint8_t chunk_index, uint8_t out[16])
+{
+    const uint8_t *p = (const uint8_t *)EMW_IDENTITY_FLASH_ADDR;
+    // proof starts immediately after the 16-byte device id.
+    const uint32_t proof_off = 16u + EMW_IDENTITY_DEVICE_ID_LEN;
+    const uint32_t chunk_off = proof_off + ((uint32_t)chunk_index * 16u);
+    memcpy(out, &p[chunk_off], 16u);
 }
 
 #define ISM_BURST_MAX 64u
@@ -1699,6 +1745,41 @@ int main(void)
           case EMW_OP_HELP: {
               // Intentionally empty: docs are host-side.
               command_send_ok(NULL, 0);
+              break;
+          }
+
+          case EMW_OP_IDENTITY_GET: {
+              // Returns SecureWaver-provisioned identity bytes.
+              // Request format: [opcode, which, chunk]
+              // - which: 0 = DeviceID (16 bytes), 1 = Proof chunk (16 bytes)
+              // - chunk: 0..3 (only used when which=1)
+              if (!emw_identity_valid()) {
+                  command_send_err(NULL);
+                  break;
+              }
+
+              uint8_t which = midi_packet[1];
+              uint8_t chunk = midi_packet[2];
+
+              if (which == EMW_IDENTITY_DEVICE_ID) {
+                  uint8_t out[EMW_IDENTITY_DEVICE_ID_LEN];
+                  emw_identity_get_device_id(out);
+                  command_send_ok(out, sizeof(out));
+                  break;
+              }
+
+              if (which == EMW_IDENTITY_PROOF) {
+                  if (chunk >= 4u) {
+                      command_send_err(NULL);
+                      break;
+                  }
+                  uint8_t out[16];
+                  emw_identity_get_proof_chunk(chunk, out);
+                  command_send_ok(out, sizeof(out));
+                  break;
+              }
+
+              command_send_err(NULL);
               break;
           }
 

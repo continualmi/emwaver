@@ -11,7 +11,8 @@ type AnyResult<T> = Result<T, String>;
 
 const DEVICE_ID_LEN: usize = 16;
 const PROOF_LEN: usize = 64; // Ed25519 signature
-const IDENTITY_PAGE_SIZE: usize = emwaver_dfu::BLOCK_SIZE; // 2048
+// STM32F042 flash page size is 1KB; keep identity within a single page so it doesn't clobber other data.
+const IDENTITY_PAGE_SIZE: usize = 1024;
 const DEFAULT_IDENTITY_PAGE_ADDR: u32 = 0x0800_7800; // last 2KB page on STM32F042 (32KB flash)
 
 #[derive(Debug, Clone, Serialize)]
