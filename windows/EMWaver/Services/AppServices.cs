@@ -13,16 +13,16 @@ internal static class AppServices
 
     // Cloud sync (Google via Firebase Auth + Azure Blob storage via backend SAS URLs)
     internal static readonly HttpClient Http = new();
-    internal static readonly CloudConfig CloudConfig = CloudConfig.FromEnvironment();
-    internal static readonly CloudAuthManager CloudAuth = new(
+    internal static CloudConfig CloudConfig = CloudConfig.FromEnvironment();
+    internal static CloudAuthManager CloudAuth = new(
         CloudConfig,
         google: new GoogleOAuthPkce(Http),
         firebase: new FirebaseAuthService(Http)
     );
-    internal static readonly CloudFilesClient CloudFiles = new(Http, CloudConfig, CloudAuth);
-    internal static readonly CloudHostsClient CloudHosts = new(Http, CloudConfig, CloudAuth);
+    internal static CloudFilesClient CloudFiles = new(Http, CloudConfig, CloudAuth);
+    internal static CloudHostsClient CloudHosts = new(Http, CloudConfig, CloudAuth);
 
-    internal static readonly HostSessionManager HostSession = new(
+    internal static HostSessionManager HostSession = new(
         Http,
         CloudConfig,
         CloudAuth,
@@ -35,6 +35,31 @@ internal static class AppServices
     );
 
     // Remote control host WS (web can attach + drive scripts/UI).
-    internal static readonly RemoteControlHostService RemoteControlHost = new(CloudConfig, CloudAuth);
-    internal static readonly RemoteControlClientService RemoteControlClient = new(CloudConfig, CloudAuth);
+    internal static RemoteControlHostService RemoteControlHost = new(CloudConfig, CloudAuth);
+    internal static RemoteControlClientService RemoteControlClient = new(CloudConfig, CloudAuth);
+
+    internal static void ReloadCloud()
+    {
+        CloudConfig = CloudConfig.FromEnvironment();
+        CloudAuth = new CloudAuthManager(
+            CloudConfig,
+            google: new GoogleOAuthPkce(Http),
+            firebase: new FirebaseAuthService(Http)
+        );
+        CloudFiles = new CloudFilesClient(Http, CloudConfig, CloudAuth);
+        CloudHosts = new CloudHostsClient(Http, CloudConfig, CloudAuth);
+        HostSession = new HostSessionManager(
+            Http,
+            CloudConfig,
+            CloudAuth,
+            statusProvider: () => (
+                usbConnected: Device.IsConnected,
+                portName: Device.ConnectedPort?.DisplayName ?? "",
+                scriptRunning: false,
+                scriptName: ""
+            )
+        );
+        RemoteControlHost = new RemoteControlHostService(CloudConfig, CloudAuth);
+        RemoteControlClient = new RemoteControlClientService(CloudConfig, CloudAuth);
+    }
 }

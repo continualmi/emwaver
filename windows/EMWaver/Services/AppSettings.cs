@@ -17,6 +17,10 @@ internal sealed class AppSettings
 
         // Back-compat for older builds. If present, we migrate to EditorMode.
         public bool? UseMonacoEditor { get; set; }
+
+        // Backend selection
+        public bool UseProductionBackend { get; set; } = true;
+        public string LocalBackendUrl { get; set; } = "http://127.0.0.1:8787";
     }
 
     private static string GetSettingsPath()
@@ -44,6 +48,12 @@ internal sealed class AppSettings
             {
                 model.EditorMode = model.UseMonacoEditor.Value ? "code" : "simple";
                 model.UseMonacoEditor = null;
+            }
+
+            // Sanity.
+            if (string.IsNullOrWhiteSpace(model.LocalBackendUrl))
+            {
+                model.LocalBackendUrl = "http://127.0.0.1:8787";
             }
 
             return model;
@@ -109,5 +119,47 @@ internal sealed class AppSettings
     {
         get => EditorMode == EMWaver.Services.EditorMode.Code;
         set => EditorMode = value ? EMWaver.Services.EditorMode.Code : EMWaver.Services.EditorMode.Simple;
+    }
+
+    public bool UseProductionBackend
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().UseProductionBackend;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.UseProductionBackend = value;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public string LocalBackendUrl
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().LocalBackendUrl ?? "";
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.LocalBackendUrl = value ?? "";
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
     }
 }
