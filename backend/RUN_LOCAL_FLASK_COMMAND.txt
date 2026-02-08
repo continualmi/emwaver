@@ -15,6 +15,9 @@ B) Full remote-control dev (HTTP + WebSockets):
   # run
   gunicorn -b 0.0.0.0:8787 \
     -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
+    --access-logfile - \
+    --error-logfile - \
+    --log-level info \
     wsgi:app
 
 Notes:
