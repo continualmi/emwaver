@@ -109,6 +109,12 @@ struct ScriptsContainerView: View {
                                     .foregroundStyle(.secondary)
                             }
 
+                            if bleManager.isConnected {
+                                Divider()
+                                Text(bleManager.isSecureConnected ? "Secure Connection" : "Not verified")
+                                    .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
+                            }
+
                             if let err = bleManager.lastErrorText, !err.isEmpty {
                                 Divider()
                                 Text(err)
@@ -120,6 +126,10 @@ struct ScriptsContainerView: View {
                                     .fill(connectionStatusColor)
                                     .frame(width: 8, height: 8)
                                 Image(systemName: "cable.connector")
+                                if bleManager.isConnected {
+                                    Image(systemName: bleManager.isSecureConnected ? "checkmark.shield.fill" : "shield")
+                                        .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
+                                }
                             }
                             .contentShape(Rectangle())
                             .accessibilityLabel(connectionStatusText)
