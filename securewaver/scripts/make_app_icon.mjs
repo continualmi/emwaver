@@ -25,14 +25,28 @@ async function main() {
   const target = Math.round(CANVAS * SCALE);
   const inset = Math.round((CANVAS - target) / 2);
 
-  // Resize artwork to target size, then place it centered on a transparent 1024x1024 canvas.
-  const resized = await sharp(SRC)
+  // Resize artwork to target size.
+  const resizedBuf = await sharp(SRC)
     .resize(target, target, { fit: 'fill', kernel: sharp.kernel.lanczos3 })
     .png()
     .toBuffer();
 
-  // Compose on transparent canvas.
-  const baseBuf = await sharp({
+  // Apply rounded corners to the *artwork* itself (this is what shows up in Finder previews).
+  const r = Math.max(0, Math.min(RADIUS, CANVAS / 2));
+  const rArt = Math.round(r * (target / CANVAS));
+  const maskSvgArt = `
+    <svg width="${target}" height="${target}" viewBox="0 0 ${target} ${target}" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="0" width="${target}" height="${target}" rx="${rArt}" ry="${rArt}" fill="white"/>
+    </svg>
+  `;
+
+  const roundedResizedBuf = await sharp(resizedBuf)
+    .composite([{ input: Buffer.from(maskSvgArt), blend: 'dest-in' }])
+    .png()
+    .toBuffer();
+
+  // Compose on transparent 1024x1024 canvas.
+  await sharp({
     create: {
       width: CANVAS,
       height: CANVAS,
@@ -40,24 +54,11 @@ async function main() {
       background: { r: 0, g: 0, b: 0, alpha: 0 }
     }
   })
-    .composite([{ input: resized, left: inset, top: inset }])
-    .png()
-    .toBuffer();
-
-  // Apply rounded-rect alpha mask.
-  const r = Math.max(0, Math.min(RADIUS, CANVAS / 2));
-  const maskSvg = `
-    <svg width="${CANVAS}" height="${CANVAS}" viewBox="0 0 ${CANVAS} ${CANVAS}" xmlns="http://www.w3.org/2000/svg">
-      <rect x="0" y="0" width="${CANVAS}" height="${CANVAS}" rx="${r}" ry="${r}" fill="white"/>
-    </svg>
-  `;
-
-  await sharp(baseBuf)
-    .composite([{ input: Buffer.from(maskSvg), blend: 'dest-in' }])
+    .composite([{ input: roundedResizedBuf, left: inset, top: inset }])
     .png()
     .toFile(OUT);
 
-  console.log(`Wrote ${OUT} (canvas=${CANVAS}, scale=${SCALE}, target=${target}, radius=${r})`);
+  console.log(`Wrote ${OUT} (canvas=${CANVAS}, scale=${SCALE}, target=${target}, radius=${r} (art radius ${rArt}))`);
 }
 
 main().catch((err) => {
