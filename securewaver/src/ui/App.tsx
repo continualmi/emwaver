@@ -59,7 +59,8 @@ export default function App() {
     setLogLines((prev) => [`${ts}  ${line}`, ...prev].slice(0, 200));
   }
 
-  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  type Page = 'main' | 'settings';
+  const [page, setPage] = useState<Page>('main');
   type BackendMode = 'production' | 'local';
   const [backendMode, setBackendMode] = useState<BackendMode>(() => {
     try {
@@ -229,31 +230,46 @@ export default function App() {
 
   return (
     <div className="sw-wrap">
-      <div className="sw-topbar">
-        <div className="sw-title">
-          <h1>SecureWaver</h1>
-          <p>Provisioning (mint DeviceID+Proof from backend, then flash in Update Mode).</p>
-        </div>
+      {page === 'settings' ? (
+        <div className="sw-topbar">
+          <div className="sw-title">
+            <h1>Settings</h1>
+            <p>Backend selection.</p>
+          </div>
 
-        <div className="sw-row">
-          <span className="sw-pill">
-            <span style={{ width: 8, height: 8, borderRadius: 99, background: session ? 'var(--aqua)' : 'rgba(233,238,252,0.25)' }} />
-            {signedInLabel}
-          </span>
-          <button className="sw-btn" onClick={() => setSettingsOpen((v) => !v)}>
-            Settings
-          </button>
-          {!session ? (
-            <button className="sw-btn sw-btn-primary" onClick={loginGoogle}>
-              Sign in
+          <div className="sw-row">
+            <button className="sw-btn" onClick={() => setPage('main')}>
+              Back
             </button>
-          ) : (
-            <button className="sw-btn sw-btn-danger" onClick={logout}>
-              Sign out
-            </button>
-          )}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="sw-topbar">
+          <div className="sw-title">
+            <h1>SecureWaver</h1>
+            <p>Provisioning (mint DeviceID+Proof from backend, then flash in Update Mode).</p>
+          </div>
+
+          <div className="sw-row">
+            <span className="sw-pill">
+              <span style={{ width: 8, height: 8, borderRadius: 99, background: session ? 'var(--aqua)' : 'rgba(233,238,252,0.25)' }} />
+              {signedInLabel}
+            </span>
+            <button className="sw-btn" onClick={() => setPage('settings')}>
+              Settings
+            </button>
+            {!session ? (
+              <button className="sw-btn sw-btn-primary" onClick={loginGoogle}>
+                Sign in
+              </button>
+            ) : (
+              <button className="sw-btn sw-btn-danger" onClick={logout}>
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className={status.toLowerCase().includes('failed') ? 'sw-banner error' : 'sw-banner'}>
         <strong>Status:</strong> {status}
@@ -261,7 +277,43 @@ export default function App() {
 
       <div style={{ height: 12 }} />
 
-      <div className="sw-grid">
+      {page === 'settings' ? (
+        <div className="sw-card">
+          <div className="sw-card-h">
+            <h2>Backend</h2>
+            <div className="sub">Select which backend SecureWaver uses.</div>
+          </div>
+          <div className="sw-card-b">
+            <div className="sw-row">
+              <button
+                className={`sw-btn ${backendMode === 'production' ? 'sw-btn-primary' : ''}`}
+                onClick={() => {
+                  setBackendMode('production');
+                  try { localStorage.setItem('emwaver.backend.useProduction', '1'); } catch {}
+                }}
+              >
+                Production (Azure)
+              </button>
+              <button
+                className={`sw-btn ${backendMode === 'local' ? 'sw-btn-primary' : ''}`}
+                onClick={() => {
+                  setBackendMode('local');
+                  try { localStorage.setItem('emwaver.backend.useProduction', '0'); } catch {}
+                }}
+              >
+                Local
+              </button>
+            </div>
+
+            <div style={{ height: 10 }} />
+
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+              Current: <code>{backendUrl}</code>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="sw-grid">
         <div className="sw-card">
           <div className="sw-card-h">
             <h2>Update Mode</h2>
@@ -374,48 +426,6 @@ export default function App() {
             </div>
 
             <div style={{ height: 12 }} />
-
-            {settingsOpen && (
-              <div style={{ marginTop: 14 }} className="sw-banner">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-                  <strong>Backend settings</strong>
-                  <button className="sw-btn" onClick={() => setSettingsOpen(false)}>Close</button>
-                </div>
-
-                <div style={{ height: 10 }} />
-
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <button
-                      className={`sw-btn ${backendMode === 'production' ? 'sw-btn-primary' : ''}`}
-                      onClick={() => {
-                        setBackendMode('production');
-                        try { localStorage.setItem('emwaver.backend.useProduction', '1'); } catch {}
-                      }}
-                    >
-                      Production (Azure)
-                    </button>
-                    <button
-                      className={`sw-btn ${backendMode === 'local' ? 'sw-btn-primary' : ''}`}
-                      onClick={() => {
-                        setBackendMode('local');
-                        try { localStorage.setItem('emwaver.backend.useProduction', '0'); } catch {}
-                      }}
-                    >
-                      Local
-                    </button>
-                  </div>
-
-                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-dim)' }}>
-                  Current: <code>{backendUrl}</code>
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-dim)' }}>
-                  Local is fixed to <code>{localBackend}</code>.
-                </div>
-                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-dim)' }}>
-                  Production is <code>{productionBackend}</code>.
-                </div>
-              </div>
-            )}
           </div>
         </div>
 
@@ -427,9 +437,7 @@ export default function App() {
           <div className="sw-card-b">
             <div className="sw-row" style={{ justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-                Device (Run Mode): <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
-                {'  '}|{'  '}
-                Update Mode: <code>{updateModeInfo ? 'Detected' : 'Not detected'}</code>
+                Device: <code>{runModePorts.length > 0 ? 'Detected' : (updateModeInfo ? 'Update Mode' : 'Not detected')}</code>
               </div>
               <button className="sw-btn" onClick={() => setLogLines([])}>
                 Clear
@@ -442,6 +450,7 @@ export default function App() {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 }
