@@ -1,15 +1,19 @@
 import Combine
 import Foundation
+import UIKit
 
 @MainActor
 final class HostSessionManager: ObservableObject {
-    let objectWillChange = ObservableObjectPublisher()
-
     private let urlSession: URLSession
     private var timer: Timer?
 
-    private var scriptRunning: Bool = false
-    private var activeScriptName: String = ""
+    // Keep state on the main actor for SwiftUI observers.
+    @Published private var scriptRunning: Bool = false
+    @Published private var activeScriptName: String = ""
+
+    // Hold weak refs so Timer closures don't capture non-Sendable values.
+    private weak var authRef: AuthenticationManager?
+    private weak var deviceRef: USBManager?
 
     private let hostSessionIdKey = "emwaver.hostSessionId"
     private(set) var hostSessionId: String
@@ -33,10 +37,14 @@ final class HostSessionManager: ObservableObject {
 
     func start(auth: AuthenticationManager, device: USBManager) {
         stop()
-        Task { await self.sendHeartbeat(auth: auth, device: device) }
+
+        self.authRef = auth
+        self.deviceRef = device
+
+        Task { await self.sendHeartbeatTick() }
         timer = Timer.scheduledTimer(withTimeInterval: 10.0, repeats: true) { [weak self] _ in
             guard let self else { return }
-            Task { await self.sendHeartbeat(auth: auth, device: device) }
+            Task { await self.sendHeartbeatTick() }
         }
     }
 
@@ -58,7 +66,8 @@ final class HostSessionManager: ObservableObject {
         return nil
     }
 
-    private func sendHeartbeat(auth: AuthenticationManager, device: USBManager) async {
+    private func sendHeartbeatTick() async {
+        guard let auth = authRef, let device = deviceRef else { return }
         guard let cfg = backendConfig(auth: auth) else { return }
 
         var url = cfg.baseURL
@@ -67,7 +76,7 @@ final class HostSessionManager: ObservableObject {
         let payload: [String: Any] = [
             "host_session_id": hostSessionId,
             "platform": "ios",
-            "device_name": Host.current().localizedName ?? "iPhone",
+            "device_name": UIDevice.current.name,
             "app_version": Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "",
             "capabilities": [
                 "usb": true,

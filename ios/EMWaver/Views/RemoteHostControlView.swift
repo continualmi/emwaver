@@ -24,7 +24,7 @@ struct RemoteHostControlView: View {
                     Text("WS: \(client.wsStatus)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    if let a = client.attachedHostSessionId {
+                    if client.attachedHostSessionId != nil {
                         Text("Attached")
                             .font(.caption)
                     } else {
