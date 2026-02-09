@@ -36,6 +36,7 @@ export default function App() {
 
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
+  const [useCustomFirmware, setUseCustomFirmware] = useState<boolean>(false);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
@@ -91,14 +92,14 @@ export default function App() {
   }, []);
 
   async function probe() {
-    setStatus('Probing DFU…');
+    setStatus('Checking Update Mode…');
     setDfuInfo(null);
     try {
       const info = await invoke<DfuInfo>('dfu_probe');
       setDfuInfo(info);
-      setStatus('DFU device found');
+      setStatus('Update Mode detected');
     } catch (e: any) {
-      setStatus(`DFU probe failed: ${e}`);
+      setStatus(`Update Mode not detected: ${e}`);
     }
   }
 
@@ -124,7 +125,8 @@ export default function App() {
     const picked = await open({ title: 'Select firmware (.bin)', multiple: false });
     if (!picked || Array.isArray(picked)) return;
     setFirmwarePath(picked);
-    setStatus('Firmware selected');
+    setUseCustomFirmware(true);
+    setStatus('Custom firmware selected');
   }
 
   async function mintFromBackend(idToken: string): Promise<DeviceMintResult> {
@@ -150,8 +152,8 @@ export default function App() {
       setStatus('Missing login');
       return;
     }
-    if (!firmwarePath) {
-      setStatus('Missing firmware file');
+    if (useCustomFirmware && !firmwarePath) {
+      setStatus('Missing custom firmware file');
       return;
     }
 
@@ -160,11 +162,11 @@ export default function App() {
       const m = await mintFromBackend(session.id_token);
       setMinted(m);
 
-      setStatus('Provisioning via DFU (flash firmware + identity)…');
+      setStatus('Provisioning in Update Mode (flash firmware + identity)…');
       const pr = await invoke<ProvisionResult>('dfu_provision_device', {
-        firmwarePath,
-        deviceIdB64: m.device_id_b64,
-        proofB64: m.proof_b64
+        firmware_path: useCustomFirmware ? firmwarePath : null,
+        device_id_b64: m.device_id_b64,
+        proof_b64: m.proof_b64
       });
       setProvisionResult(pr);
       setStatus('Provisioning complete');
@@ -173,14 +175,14 @@ export default function App() {
     }
   }
 
-  const canProvision = !!session?.id_token && !!firmwarePath;
+  const canProvision = !!session?.id_token && (useCustomFirmware ? !!firmwarePath : true);
 
   return (
     <div className="sw-wrap">
       <div className="sw-topbar">
         <div className="sw-title">
           <h1>SecureWaver</h1>
-          <p>Provisioning (mint DeviceID+Proof from backend, then DFU flash).</p>
+          <p>Provisioning (mint DeviceID+Proof from backend, then flash in Update Mode).</p>
         </div>
 
         <div className="sw-row">
@@ -213,7 +215,7 @@ export default function App() {
         <div className="sw-card">
           <div className="sw-card-h">
             <h2>Update Mode</h2>
-            <div className="sub">If the device is connected normally, switch it into Update Mode first.</div>
+            <div className="sub">Put the device into Update Mode, then provision it.</div>
           </div>
           <div className="sw-card-b">
             <div className="sw-row">
@@ -237,8 +239,7 @@ export default function App() {
             <div style={{ height: 12 }} />
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-              After entering Update Mode, the device will reboot into the STM32 ROM bootloader.
-              If Update Mode isn’t detected, unplug and plug it back in.
+              After entering Update Mode, unplug and plug the device back in.
             </div>
 
             <div style={{ height: 14 }} />
@@ -248,10 +249,26 @@ export default function App() {
             </div>
 
             <div className="sw-row">
-              <button className="sw-btn" onClick={selectFirmware}>Select firmware</button>
               <button className="sw-btn sw-btn-primary" onClick={mintAndProvision} disabled={!canProvision}>
                 Mint + Provision
               </button>
+              <button
+                className="sw-btn"
+                onClick={() => {
+                  setUseCustomFirmware((v) => !v);
+                  if (useCustomFirmware) {
+                    setFirmwarePath(null);
+                    setStatus('Using bundled firmware');
+                  }
+                }}
+              >
+                {useCustomFirmware ? 'Use bundled firmware' : 'Use custom firmware…'}
+              </button>
+              {useCustomFirmware && (
+                <button className="sw-btn" onClick={selectFirmware}>
+                  Select .bin…
+                </button>
+              )}
             </div>
 
             <div style={{ height: 12 }} />
@@ -260,7 +277,11 @@ export default function App() {
               <div>Backend</div>
               <div><code>{backendUrl}</code></div>
               <div>Firmware</div>
-              <div><code>{firmwarePath ?? '(not selected)'}</code></div>
+              <div>
+                <code>
+                  {useCustomFirmware ? (firmwarePath ?? '(custom not selected)') : '(bundled)'}
+                </code>
+              </div>
               <div>Update Mode</div>
               <div><code>{dfuInfo ? 'Detected' : 'Not detected'}</code></div>
             </div>
@@ -312,7 +333,7 @@ export default function App() {
         <div className="sw-card">
           <div className="sw-card-h">
             <h2>Results</h2>
-            <div className="sub">Minted identity + DFU discovery + provision output.</div>
+            <div className="sub">Minted identity + Update Mode status + provision output.</div>
           </div>
           <div className="sw-card-b">
             {minted && (
@@ -333,12 +354,12 @@ export default function App() {
 
             {dfuInfo && (
               <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>DFU discovery</div>
-                <pre className="sw-pre">{JSON.stringify(dfuInfo, null, 2)}</pre>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Update Mode</div>
+                <pre className="sw-pre">{JSON.stringify({ update_mode: 'detected' }, null, 2)}</pre>
               </>
             )}
 
-            {!minted && !provisionResult && !dfuInfo && (
+            {!minted && !provisionResult && (
               <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
                 No output yet.
               </div>

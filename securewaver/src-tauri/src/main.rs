@@ -1,9 +1,9 @@
 // SecureWaver - internal EMWaver provisioning UI
 //
 // Tauri-side responsibilities:
-// - DFU probe
-// - Flash firmware via DFU
-// - Write identity page (DeviceID + Proof) via DFU
+// - Update Mode detection (device bootloader presence)
+// - Flash firmware in Update Mode
+// - Write identity page (DeviceID + Proof) in Update Mode
 //
 // Minting (DeviceID + Proof signing) happens on the backend.
 
@@ -30,9 +30,9 @@ fn request_enter_update_mode() -> AnyResult<String> {
 const DEVICE_ID_LEN: usize = 16;
 const PROOF_LEN: usize = 64; // Ed25519 signature bytes
 
-// STM32F042 flash page size is 1KB; keep identity within a single page so it doesn't clobber other data.
+// Flash page size is 1KB on the shipped device; keep identity within a single page so it doesn't clobber other data.
 const IDENTITY_PAGE_SIZE: usize = 1024;
-const DEFAULT_IDENTITY_PAGE_ADDR: u32 = 0x0800_7800; // last 1KB page on STM32F042 (32KB flash)
+const DEFAULT_IDENTITY_PAGE_ADDR: u32 = 0x0800_7800; // identity page (last 1KB page)
 
 #[derive(Debug, Clone, Serialize)]
 struct DfuAltSettingInfo {
@@ -59,16 +59,10 @@ fn dfu_probe() -> AnyResult<DfuDiscoveryInfo> {
     )
     .map_err(|e| format!("{e}"))?;
 
+    // Don't surface alt-setting descriptions to the UI (some targets are option-bytes).
     Ok(DfuDiscoveryInfo {
         interface_number: info.interface_number,
-        alt_settings: info
-            .alt_settings
-            .into_iter()
-            .map(|a| DfuAltSettingInfo {
-                setting_number: a.setting_number,
-                description: a.description,
-            })
-            .collect(),
+        alt_settings: vec![],
         selected_alt_setting: info.selected_alt_setting,
     })
 }
@@ -109,16 +103,24 @@ struct ProvisionResult {
     wrote_identity: bool,
 }
 
-/// Factory provisioning step: flash firmware (mass-erase) and then write DeviceID+Proof into the identity page.
+/// Provisioning step: flash firmware (mass-erase) and then write DeviceID+Proof into the identity page.
+///
+/// `firmware_path` is optional: if omitted, SecureWaver uses the bundled firmware payload.
 #[tauri::command]
 fn dfu_provision_device(
-    firmware_path: String,
+    firmware_path: Option<String>,
     device_id_b64: String,
     proof_b64: String,
     identity_page_addr: Option<u32>,
 ) -> AnyResult<ProvisionResult> {
-    let firmware = fs::read(&firmware_path)
-        .map_err(|e| format!("Failed to read firmware file {firmware_path}: {e}"))?;
+    let (firmware, firmware_path) = if let Some(p) = firmware_path {
+        let fw = fs::read(&p).map_err(|e| format!("Failed to read firmware file {p}: {e}"))?;
+        (fw, p)
+    } else {
+        // Bundled firmware payload (same idea as other apps).
+        let fw: &[u8] = include_bytes!("../../../firmware/emwaver.bin");
+        (fw.to_vec(), "(bundled)".to_string())
+    };
 
     let device_id = B64
         .decode(device_id_b64)
@@ -142,13 +144,13 @@ fn dfu_provision_device(
 
     // Flash firmware (this performs a mass erase).
     dev.flash(&firmware, 0x0800_0000, |_| {})
-        .map_err(|e| format!("DFU flash failed: {e}"))?;
+        .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
     // Write identity page after firmware.
     dev.set_address_pointer(page_addr)
-        .map_err(|e| format!("DFU set address pointer failed: {e}"))?;
+        .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
     dev.write_block(2, &identity_page)
-        .map_err(|e| format!("DFU write identity page failed: {e}"))?;
+        .map_err(|e| format!("Update Mode write identity page failed: {e}"))?;
 
     Ok(ProvisionResult {
         identity_page_addr: page_addr,
