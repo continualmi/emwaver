@@ -267,7 +267,8 @@ When SecureWaver’s Dock icon looks **too big** or the **corners look square**,
 - Raw artwork (source-of-truth): `securewaver/src-tauri/icons/icon-art-512.png`
 - Generated padded master (1024×1024): `securewaver/src-tauri/app-icon.png`
   - default scale: `ICON_SCALE=0.84` (artwork is 0.84× the canvas, centered, transparent padding)
-  - optional rounded mask baked into alpha (if macOS does not apply masking as desired): `ICON_RADIUS` (default 200 @ 1024px)
+  - **Rounded corners are baked into the artwork alpha** (needed because Finder/Dock don’t reliably apply a mask in dev flows).
+    - Control with `ICON_RADIUS` (default 200 @ 1024px). The script scales this radius down to the artwork size.
 - Generated bundle icons (includes macOS ICNS): `securewaver/src-tauri/icons/icon.icns`
 
 Regenerate icons:
@@ -280,6 +281,8 @@ Tune padding/corners:
 ```bash
 ICON_SCALE=0.84 ICON_RADIUS=200 npm run gen:icon
 ```
+
+**Key detail:** rounding must be applied to the **resized artwork** (not just the 1024 canvas), otherwise Finder previews of the generated PNGs look square (you only see the padding corners rounded).
 
 **Important:** the definitive check is the **built `.app`** (not just `tauri dev`).
 
