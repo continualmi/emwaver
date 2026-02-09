@@ -232,7 +232,8 @@ final class USBManager: ObservableObject {
             NativeBufferRust.setRxCounter(NativeBufferRust.getRxPacketCount())
         }
 
-        sendPacket(command)
+        // Send synchronously to avoid racing the RX wait-loop.
+        sendPacketBestEffortSync(command)
 
         let startTime = Date().timeIntervalSince1970
         var out = Data()
@@ -256,6 +257,24 @@ final class USBManager: ObservableObject {
         }
 
         return out
+    }
+
+    private func sendPacketBestEffortSync(_ data: Data) {
+        guard connectedDestination != 0 else { return }
+
+        // Ensure we send on the MIDI queue, but synchronously for determinism.
+        midiQueue.sync {
+            guard self.connectedDestination != 0 else { return }
+            guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else { return }
+
+            self.withBufferQueueSync {
+                NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
+            }
+            DispatchQueue.main.async { self.bufferVersion += 1 }
+
+            let sf = self.makeSuperframe(cmdLane: packet64, streamLane: nil)
+            self.sendSuperframeBestEffort(sf)
+        }
     }
 
     private func makeSuperframe(cmdLane: Data?, streamLane: Data?) -> Data {
@@ -288,6 +307,13 @@ final class USBManager: ObservableObject {
         if st != noErr {
             setError("MIDISend failed: \(st)")
         }
+    }
+
+    /// Best-effort send that never updates `lastErrorText`.
+    private func sendSuperframeBestEffort(_ superframe: Data) {
+        guard connectedDestination != 0 else { return }
+        guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else { return }
+        _ = sendSysex(sysex, to: connectedDestination)
     }
 
     @objc func sendPacket(_ data: Data) {
@@ -764,9 +790,15 @@ final class USBManager: ObservableObject {
             self.secureDeviceProofB64 = nil
         }
 
-        // Verify authenticity in the background (never on midiQueue; sendCommand schedules work onto midiQueue).
+        // Verify authenticity in the background.
+        // Do a couple of retries because CoreMIDI connection state / RX plumbing can settle slightly after the green dot flips.
         DispatchQueue.global(qos: .userInitiated).async {
-            let ok = self.verifySecureIdentity(timeoutMs: 800)
+            var ok = false
+            for attempt in 0..<3 {
+                if attempt > 0 { Thread.sleep(forTimeInterval: 0.25) }
+                ok = self.verifySecureIdentity(timeoutMs: 900)
+                if ok { break }
+            }
             DispatchQueue.main.async {
                 self.isSecureConnected = ok
             }
