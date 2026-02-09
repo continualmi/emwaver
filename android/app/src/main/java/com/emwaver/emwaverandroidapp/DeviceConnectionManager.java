@@ -35,6 +35,15 @@ public class DeviceConnectionManager {
             usbService = binder.getService();
             isUsbServiceBound = true;
             Log.d(TAG, "USB Service Connected");
+
+            // Important: when the app is launched via USB_DEVICE_ATTACHED intent, initialize()
+            // can run before the service is actually bound. Re-scan here to avoid requiring a
+            // physical unplug/replug.
+            try {
+                usbService.checkForConnectedDevices();
+            } catch (Throwable ignored) {
+            }
+
             checkAndUpdateActiveService();
         }
 
