@@ -1,8 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
-import React, { useEffect, useMemo, useState } from 'react';
-import { initFirebase } from '../firebase';
-import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
+import React, { useMemo, useState } from 'react';
 
 type DfuInfo = {
   interface_number: number;
@@ -24,40 +22,30 @@ type ProvisionResult = {
   wrote_identity: boolean;
 };
 
+type AuthSession = {
+  id_token: string;
+  refresh_token: string;
+  email?: string | null;
+  display_name?: string | null;
+  uid?: string | null;
+};
+
 export default function App() {
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
 
-  const [user, setUser] = useState<User | null>(null);
   const [backendUrl, setBackendUrl] = useState<string>(
     (import.meta.env.VITE_BACKEND_URL as string) || 'https://api.emwavers.com'
   );
 
-  const [firebaseError, setFirebaseError] = useState<string | null>(null);
-
-  const fb = useMemo(() => {
-    try {
-      const v = initFirebase();
-      setFirebaseError(null);
-      return v;
-    } catch (e: any) {
-      setFirebaseError(String(e?.message ?? e));
-      return null;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!fb) return;
-    return onAuthStateChanged(fb.auth, (u) => setUser(u));
-  }, [fb]);
-
   const userLabel = useMemo(() => {
-    if (!user) return '(not signed in)';
-    return user.email || user.uid;
-  }, [user]);
+    if (!session) return '(not signed in)';
+    return session.display_name || session.email || session.uid || '(signed in)';
+  }, [session]);
 
   async function probe() {
     setStatus('Probing DFU…');
@@ -72,24 +60,19 @@ export default function App() {
   }
 
   async function loginGoogle() {
-    setStatus('Signing in with Google…');
+    setStatus('Signing in with Google (system browser)…');
     try {
-      if (!fb) throw new Error(firebaseError ?? 'Firebase not configured');
-      await signInWithPopup(fb.auth, fb.googleProvider);
+      const s = await invoke<AuthSession>('auth_google_sign_in');
+      setSession(s);
       setStatus('Signed in');
     } catch (e: any) {
       setStatus(`Sign-in failed: ${e}`);
     }
   }
 
-  async function logout() {
-    try {
-      if (!fb) throw new Error(firebaseError ?? 'Firebase not configured');
-      await signOut(fb.auth);
-      setStatus('Signed out');
-    } catch (e: any) {
-      setStatus(`Sign-out failed: ${e}`);
-    }
+  function logout() {
+    setSession(null);
+    setStatus('Signed out');
   }
 
   async function selectFirmware() {
@@ -102,10 +85,7 @@ export default function App() {
     setStatus('Firmware selected');
   }
 
-  async function mintFromBackend(): Promise<DeviceMintResult> {
-    if (!user) throw new Error('Not signed in');
-    const idToken = await user.getIdToken();
-
+  async function mintFromBackend(idToken: string): Promise<DeviceMintResult> {
     const url = `${backendUrl.replace(/\/$/, '')}/provisioning/mint`;
     const res = await fetch(url, {
       method: 'POST',
@@ -124,7 +104,7 @@ export default function App() {
     setProvisionResult(null);
     setMinted(null);
 
-    if (!user) {
+    if (!session?.id_token) {
       setStatus('Missing login');
       return;
     }
@@ -135,7 +115,7 @@ export default function App() {
 
     try {
       setStatus('Requesting DeviceID+Proof from backend…');
-      const m = await mintFromBackend();
+      const m = await mintFromBackend(session.id_token);
       setMinted(m);
 
       setStatus('Provisioning via DFU (flash firmware + identity)…');
@@ -155,20 +135,11 @@ export default function App() {
     <div style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 980 }}>
       <h1 style={{ marginTop: 0 }}>SecureWaver</h1>
       <p style={{ color: '#555' }}>
-        Internal provisioning tool (Google/Firebase auth + backend mint + DFU flash).
+        Internal provisioning tool (Google OAuth PKCE + Firebase ID token + backend mint + DFU flash).
       </p>
 
-      {firebaseError && (
-        <div style={{ marginTop: 12, padding: 12, background: '#fff3cd', borderRadius: 8 }}>
-          <b>Firebase config error:</b> {firebaseError}
-          <div style={{ marginTop: 6, color: '#555' }}>
-            This causes a blank screen if SecureWaver cannot initialize Firebase. Fix by setting Vite env vars.
-          </div>
-        </div>
-      )}
-
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        {!user ? (
+        {!session ? (
           <button onClick={loginGoogle}>Sign in with Google…</button>
         ) : (
           <button onClick={logout}>Sign out</button>
@@ -228,12 +199,13 @@ export default function App() {
       )}
 
       <hr style={{ margin: '24px 0' }} />
-      <h2>Flow</h2>
-      <ol>
-        <li>Sign in with Google (Firebase). Backend allowlists a single email.</li>
-        <li>Backend mints DeviceID+Proof using the Root private key stored server-side.</li>
-        <li>SecureWaver flashes firmware and identity page via DFU.</li>
-      </ol>
+      <h2>Required env vars (SecureWaver)</h2>
+      <ul>
+        <li><code>EMWAVER_GOOGLE_CLIENT_ID</code></li>
+        <li><code>EMWAVER_GOOGLE_CLIENT_SECRET</code> (optional)</li>
+        <li><code>EMWAVER_FIREBASE_WEB_API_KEY</code></li>
+        <li><code>VITE_BACKEND_URL</code> (optional)</li>
+      </ul>
     </div>
   );
 }
