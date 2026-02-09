@@ -31,21 +31,13 @@ type AuthSession = {
 };
 
 export default function App() {
+  const productionBackend = 'https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io';
+
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
-  const [session, setSession] = useState<AuthSession | null>(() => {
-    try {
-      const raw = localStorage.getItem('securewaver.auth.session');
-      return raw ? (JSON.parse(raw) as AuthSession) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  const productionBackend = 'https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io';
 
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   const [useProductionBackend, setUseProductionBackend] = useState<boolean>(() => {
@@ -70,17 +62,38 @@ export default function App() {
     return productionBackend;
   }, [useProductionBackend, localBackendUrl]);
 
-  const userLabel = useMemo(() => {
-    if (!session) return '(not signed in)';
-    return session.display_name || session.email || session.uid || '(signed in)';
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    try {
+      const raw = localStorage.getItem('securewaver.auth.session');
+      return raw ? (JSON.parse(raw) as AuthSession) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  const signedInLabel = useMemo(() => {
+    if (!session) return 'Not signed in';
+    return session.display_name || session.email || session.uid || 'Signed in';
   }, [session]);
 
-  // Best-effort restore on first render.
-  React.useEffect(() => {
-    if (session?.refresh_token) {
-      // don't block initial render
-      void tryRestore();
+  async function tryRestore() {
+    if (!session?.refresh_token) return;
+    try {
+      setStatus('Restoring session…');
+      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: session.refresh_token });
+      const merged: AuthSession = { ...session, ...s, email: session.email, display_name: session.display_name };
+      setSession(merged);
+      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(merged)); } catch {}
+      setStatus('Signed in');
+    } catch (e: any) {
+      setStatus(`Session restore failed: ${e}`);
+      setSession(null);
+      try { localStorage.removeItem('securewaver.auth.session'); } catch {}
     }
+  }
+
+  React.useEffect(() => {
+    if (session?.refresh_token) void tryRestore();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -97,7 +110,7 @@ export default function App() {
   }
 
   async function loginGoogle() {
-    setStatus('Signing in with Google (system browser)…');
+    setStatus('Signing in with Google…');
     try {
       const s = await invoke<AuthSession>('auth_google_sign_in');
       setSession(s);
@@ -108,24 +121,6 @@ export default function App() {
     }
   }
 
-  async function tryRestore() {
-    if (!session?.refresh_token) return;
-    try {
-      setStatus('Restoring session…');
-      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: session.refresh_token });
-      // keep original email/display_name if we had them
-      const merged: AuthSession = { ...session, ...s, email: session.email, display_name: session.display_name };
-      setSession(merged);
-      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(merged)); } catch {}
-      setStatus('Signed in');
-    } catch (e: any) {
-      // leave user signed out if refresh fails
-      setStatus(`Session restore failed: ${e}`);
-      setSession(null);
-      try { localStorage.removeItem('securewaver.auth.session'); } catch {}
-    }
-  }
-
   function logout() {
     setSession(null);
     try { localStorage.removeItem('securewaver.auth.session'); } catch {}
@@ -133,10 +128,7 @@ export default function App() {
   }
 
   async function selectFirmware() {
-    const picked = await open({
-      title: 'Select firmware (.bin)',
-      multiple: false
-    });
+    const picked = await open({ title: 'Select firmware (.bin)', multiple: false });
     if (!picked || Array.isArray(picked)) return;
     setFirmwarePath(picked);
     setStatus('Firmware selected');
@@ -188,120 +180,149 @@ export default function App() {
     }
   }
 
+  const canProvision = !!session?.id_token && !!firmwarePath;
+
   return (
-    <div style={{ fontFamily: 'system-ui', padding: 16, maxWidth: 980 }}>
-      <h1 style={{ marginTop: 0 }}>SecureWaver</h1>
-      <p style={{ color: '#555' }}>
-        Internal provisioning tool (Google OAuth PKCE + Firebase ID token + backend mint + DFU flash).
-      </p>
-
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        {!session ? (
-          <button onClick={loginGoogle}>Sign in with Google…</button>
-        ) : (
-          <button onClick={logout}>Sign out</button>
-        )}
-
-        <button onClick={() => setSettingsOpen((v) => !v)}>Settings…</button>
-        <button onClick={selectFirmware}>Select firmware…</button>
-        <button onClick={probe}>Probe DFU device</button>
-        <button onClick={mintAndProvision}>Mint (backend) + Provision (DFU)</button>
-
-        <div>
-          <b>Status:</b> {status}
+    <div className="sw-wrap">
+      <div className="sw-topbar">
+        <div className="sw-title">
+          <h1>SecureWaver</h1>
+          <p>Provisioning (mint DeviceID+Proof from backend, then DFU flash).</p>
         </div>
-      </div>
 
-      <div style={{ marginTop: 10, color: '#555' }}>
-        <div>
-          <b>Signed in:</b> {userLabel}
-        </div>
-        <div>
-          <b>Backend:</b> {backendUrl}
-        </div>
-        <div>
-          <b>Firmware:</b> {firmwarePath ?? '(not selected)'}
-        </div>
-      </div>
-
-      {settingsOpen && (
-        <div style={{ marginTop: 16, padding: 12, background: '#f6f6f6', borderRadius: 8 }}>
-          <h2 style={{ marginTop: 0 }}>Settings</h2>
-
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <input
-              type="checkbox"
-              checked={useProductionBackend}
-              onChange={(e) => {
-                const v = e.target.checked;
-                setUseProductionBackend(v);
-                try { localStorage.setItem('emwaver.backend.useProduction', v ? '1' : '0'); } catch {}
-              }}
-            />
-            Use production backend (Azure)
-          </label>
-
-          {!useProductionBackend && (
-            <div style={{ marginTop: 10 }}>
-              <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>Local backend URL</div>
-              <input
-                value={localBackendUrl}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setLocalBackendUrl(v);
-                  try { localStorage.setItem('emwaver.backend.localURL', v); } catch {}
-                }}
-                placeholder="http://localhost:8787"
-                style={{ width: 520 }}
-              />
-            </div>
+        <div className="sw-row">
+          <span className="sw-pill">
+            <span style={{ width: 8, height: 8, borderRadius: 99, background: session ? 'var(--aqua)' : 'rgba(233,238,252,0.25)' }} />
+            {signedInLabel}
+          </span>
+          <button className="sw-btn" onClick={() => setSettingsOpen((v) => !v)}>
+            Settings
+          </button>
+          {!session ? (
+            <button className="sw-btn sw-btn-primary" onClick={loginGoogle}>
+              Sign in
+            </button>
+          ) : (
+            <button className="sw-btn sw-btn-danger" onClick={logout}>
+              Sign out
+            </button>
           )}
+        </div>
+      </div>
 
-          <div style={{ marginTop: 10, fontSize: 12, color: '#555' }}>
-            Production: {productionBackend}
+      <div className={status.toLowerCase().includes('failed') ? 'sw-banner error' : 'sw-banner'}>
+        <strong>Status:</strong> {status}
+      </div>
+
+      <div style={{ height: 12 }} />
+
+      <div className="sw-grid">
+        <div className="sw-card">
+          <div className="sw-card-h">
+            <h2>Provision</h2>
+            <div className="sub">Mint identity on backend then flash firmware + identity page over DFU.</div>
           </div>
+          <div className="sw-card-b">
+            <div className="sw-row">
+              <button className="sw-btn" onClick={selectFirmware}>Select firmware</button>
+              <button className="sw-btn" onClick={probe}>Probe DFU</button>
+              <button className="sw-btn sw-btn-primary" onClick={mintAndProvision} disabled={!canProvision}>
+                Mint + Provision
+              </button>
+            </div>
 
-          <div style={{ marginTop: 12 }}>
-            <button onClick={() => setSettingsOpen(false)}>Close settings</button>
+            <div style={{ height: 12 }} />
+
+            <div className="sw-kv">
+              <div>Backend</div>
+              <div><code>{backendUrl}</code></div>
+              <div>Firmware</div>
+              <div><code>{firmwarePath ?? '(not selected)'}</code></div>
+            </div>
+
+            {settingsOpen && (
+              <div style={{ marginTop: 14 }} className="sw-banner">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+                  <strong>Backend settings</strong>
+                  <button className="sw-btn" onClick={() => setSettingsOpen(false)}>Close</button>
+                </div>
+
+                <div style={{ height: 10 }} />
+
+                <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <input
+                    type="checkbox"
+                    checked={useProductionBackend}
+                    onChange={(e) => {
+                      const v = e.target.checked;
+                      setUseProductionBackend(v);
+                      try { localStorage.setItem('emwaver.backend.useProduction', v ? '1' : '0'); } catch {}
+                    }}
+                  />
+                  Use production backend (Azure)
+                </label>
+
+                {!useProductionBackend && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Local backend URL</div>
+                    <input
+                      className="sw-input"
+                      value={localBackendUrl}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setLocalBackendUrl(v);
+                        try { localStorage.setItem('emwaver.backend.localURL', v); } catch {}
+                      }}
+                      placeholder="http://localhost:8787"
+                    />
+                  </div>
+                )}
+
+                <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-dim)' }}>
+                  Production: <code>{productionBackend}</code>
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
 
-      {minted && (
-        <div style={{ marginTop: 16 }}>
-          <h2>Minted identity</h2>
-          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-            {JSON.stringify(minted, null, 2)}
-          </pre>
+        <div className="sw-card">
+          <div className="sw-card-h">
+            <h2>Results</h2>
+            <div className="sub">Minted identity + DFU discovery + provision output.</div>
+          </div>
+          <div className="sw-card-b">
+            {minted && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Minted identity</div>
+                <pre className="sw-pre">{JSON.stringify(minted, null, 2)}</pre>
+                <div style={{ height: 10 }} />
+              </>
+            )}
+
+            {provisionResult && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Provision result</div>
+                <pre className="sw-pre">{JSON.stringify(provisionResult, null, 2)}</pre>
+                <div style={{ height: 10 }} />
+              </>
+            )}
+
+            {dfuInfo && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>DFU discovery</div>
+                <pre className="sw-pre">{JSON.stringify(dfuInfo, null, 2)}</pre>
+              </>
+            )}
+
+            {!minted && !provisionResult && !dfuInfo && (
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+                No output yet.
+              </div>
+            )}
+          </div>
         </div>
-      )}
-
-      {provisionResult && (
-        <div style={{ marginTop: 16 }}>
-          <h2>Provision result</h2>
-          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-            {JSON.stringify(provisionResult, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      {dfuInfo && (
-        <div style={{ marginTop: 16 }}>
-          <h2>DFU Discovery</h2>
-          <pre style={{ background: '#f6f6f6', padding: 12, borderRadius: 8, overflowX: 'auto' }}>
-            {JSON.stringify(dfuInfo, null, 2)}
-          </pre>
-        </div>
-      )}
-
-      <hr style={{ margin: '24px 0' }} />
-      <h2>Required env vars (SecureWaver)</h2>
-      <ul>
-        <li><code>EMWAVER_GOOGLE_CLIENT_ID</code></li>
-        <li><code>EMWAVER_GOOGLE_CLIENT_SECRET</code> (optional)</li>
-        <li><code>EMWAVER_FIREBASE_WEB_API_KEY</code></li>
-        <li><code>VITE_BACKEND_URL</code> (optional)</li>
-      </ul>
+      </div>
     </div>
   );
 }
