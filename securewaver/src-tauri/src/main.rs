@@ -188,16 +188,16 @@ async fn dfu_provision_device(
     proof_b64: String,
     identity_page_addr: Option<u32>,
 ) -> AnyResult<ProvisionResult> {
-    let window2 = window.clone();
+    let app = window.app_handle();
     tauri::async_runtime::spawn_blocking(move || {
-        dfu_provision_device_blocking(window2, firmware_path, device_id_b64, proof_b64, identity_page_addr)
+        dfu_provision_device_blocking(app, firmware_path, device_id_b64, proof_b64, identity_page_addr)
     })
     .await
     .map_err(|e| format!("Provision task failed: {e}"))?
 }
 
 fn dfu_provision_device_blocking(
-    window: tauri::Window,
+    app: tauri::AppHandle,
     firmware_path: Option<String>,
     device_id_b64: String,
     proof_b64: String,
@@ -234,7 +234,7 @@ fn dfu_provision_device_blocking(
 
     // Flash firmware (this performs a mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        if let Err(e) = window.emit("emw_flash_progress", msg.clone()) {
+        if let Err(e) = app.emit("emw_flash_progress", msg.clone()) {
             eprintln!("emit emw_flash_progress failed: {e}");
         }
     })
@@ -263,14 +263,14 @@ async fn update_device_preserve_identity(
     window: tauri::Window,
     firmware_path: Option<String>,
 ) -> AnyResult<UpdatePreserveIdentityResult> {
-    let window2 = window.clone();
-    tauri::async_runtime::spawn_blocking(move || update_device_preserve_identity_blocking(window2, firmware_path))
+    let app = window.app_handle();
+    tauri::async_runtime::spawn_blocking(move || update_device_preserve_identity_blocking(app, firmware_path))
         .await
         .map_err(|e| format!("Update task failed: {e}"))?
 }
 
 fn update_device_preserve_identity_blocking(
-    window: tauri::Window,
+    app: tauri::AppHandle,
     firmware_path: Option<String>,
 ) -> AnyResult<UpdatePreserveIdentityResult> {
     let (firmware, firmware_path) = if let Some(p) = firmware_path {
@@ -301,7 +301,7 @@ fn update_device_preserve_identity_blocking(
 
     // Flash firmware (mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        if let Err(e) = window.emit("emw_flash_progress", msg.clone()) {
+        if let Err(e) = app.emit("emw_flash_progress", msg.clone()) {
             eprintln!("emit emw_flash_progress failed: {e}");
         }
     })
