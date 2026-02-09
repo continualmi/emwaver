@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
 import React, { useMemo, useState } from 'react';
 
@@ -12,6 +13,7 @@ type LegitCheckResult = {
   transport: string;
   device_id_b64?: string | null;
   proof_b64?: string | null;
+  details?: string[] | null;
 };
 
 type DeviceMintResult = {
@@ -114,11 +116,22 @@ export default function App() {
       await loadSessionFromBackend();
     })();
 
+    const unlistenPromise = listen<string>('emw_flash_progress', (event) => {
+      // Progress comes from the DFU crate as "... (NN%)"
+      const msg = event.payload;
+      setStatus(msg);
+      log(msg);
+    });
+
     void refreshDetections(true);
     const t = setInterval(() => {
       void refreshDetections(true);
     }, 1000);
-    return () => clearInterval(t);
+
+    return () => {
+      clearInterval(t);
+      void unlistenPromise.then((u) => u());
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -357,7 +370,12 @@ export default function App() {
                     const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
                     setLegit(r);
                     setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
-                    log(`Verify (Run Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'}`);
+                    log(`Verify (Run Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
+                    if (r.details?.length) {
+                      for (const line of r.details) log(line);
+                    }
+                    if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
+                    if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
                   } catch (e: any) {
                     setStatus(`Verify failed: ${e}`);
                     log(`Verify failed: ${e}`);
@@ -376,7 +394,12 @@ export default function App() {
                     const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
                     setLegit(r);
                     setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
-                    log(`Verify (Update Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'}`);
+                    log(`Verify (Update Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
+                    if (r.details?.length) {
+                      for (const line of r.details) log(line);
+                    }
+                    if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
+                    if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
                   } catch (e: any) {
                     setStatus(`Verify failed: ${e}`);
                     log(`Verify failed: ${e}`);

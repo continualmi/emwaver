@@ -31,6 +31,7 @@ struct LegitCheckResult {
     transport: String,
     device_id_b64: Option<String>,
     proof_b64: Option<String>,
+    details: Vec<String>,
 }
 
 #[tauri::command]
@@ -41,11 +42,17 @@ fn detect_device() -> AnyResult<Vec<String>> {
 #[tauri::command]
 fn check_device_legit_run_mode() -> AnyResult<LegitCheckResult> {
     let r = legit_check::run_mode_legit_check()?;
+    let mut details: Vec<String> = Vec::new();
+    details.push("Method: Run Mode identity opcode (0x07) over USB MIDI".to_string());
+    details.push(format!("MIDI port: {}", r.port_name));
+    details.push("Proof check: Ed25519 verify( DeviceID , Proof ) with Root Public Key".to_string());
+
     Ok(LegitCheckResult {
         ok: r.ok,
         transport: format!("Run Mode ({})", r.port_name),
         device_id_b64: Some(r.device_id_b64),
         proof_b64: Some(r.proof_b64),
+        details,
     })
 }
 
@@ -66,11 +73,17 @@ fn check_device_legit_update_mode() -> AnyResult<LegitCheckResult> {
         DEFAULT_IDENTITY_PAGE_ADDR,
     )?;
 
+    let mut details: Vec<String> = Vec::new();
+    details.push("Method: Update Mode identity page read (UPLOAD)".to_string());
+    details.push(format!("DFU interface: {}", info.interface_number));
+    details.push("Proof check: Ed25519 verify( DeviceID , Proof ) with Root Public Key".to_string());
+
     Ok(LegitCheckResult {
         ok: r.ok,
         transport: format!("Update Mode (iface {})", info.interface_number),
         device_id_b64: r.device_id_b64,
         proof_b64: r.proof_b64,
+        details,
     })
 }
 
@@ -168,6 +181,7 @@ struct UpdatePreserveIdentityResult {
 /// `firmware_path` is optional: if omitted, SecureWaver uses the bundled firmware payload.
 #[tauri::command]
 fn dfu_provision_device(
+    app: tauri::AppHandle,
     firmware_path: Option<String>,
     device_id_b64: String,
     proof_b64: String,
@@ -203,8 +217,10 @@ fn dfu_provision_device(
     .map_err(|e| format!("{e}"))?;
 
     // Flash firmware (this performs a mass erase).
-    dev.flash(&firmware, 0x0800_0000, |_| {})
-        .map_err(|e| format!("Firmware flash failed: {e}"))?;
+    dev.flash(&firmware, 0x0800_0000, |msg| {
+        let _ = app.emit_all("emw_flash_progress", msg.clone());
+    })
+    .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
     // Write identity page after firmware.
     // Some hosts/devices need a short settle after mass erase + flash.
@@ -225,7 +241,7 @@ fn dfu_provision_device(
 }
 
 #[tauri::command]
-fn update_device_preserve_identity(firmware_path: Option<String>) -> AnyResult<UpdatePreserveIdentityResult> {
+fn update_device_preserve_identity(app: tauri::AppHandle, firmware_path: Option<String>) -> AnyResult<UpdatePreserveIdentityResult> {
     let (firmware, firmware_path) = if let Some(p) = firmware_path {
         let fw = fs::read(&p).map_err(|e| format!("Failed to read firmware file {p}: {e}"))?;
         (fw, p)
@@ -253,8 +269,10 @@ fn update_device_preserve_identity(firmware_path: Option<String>) -> AnyResult<U
     }
 
     // Flash firmware (mass erase).
-    dev.flash(&firmware, 0x0800_0000, |_| {})
-        .map_err(|e| format!("Firmware flash failed: {e}"))?;
+    dev.flash(&firmware, 0x0800_0000, |msg| {
+        let _ = app.emit_all("emw_flash_progress", msg.clone());
+    })
+    .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
     // Restore identity page.
     let _ = dev.abort();
