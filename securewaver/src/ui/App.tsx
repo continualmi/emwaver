@@ -2,10 +2,16 @@ import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import React, { useMemo, useState } from 'react';
 
-type DfuInfo = {
+type UpdateModeInfo = {
   interface_number: number;
-  alt_settings: { setting_number: number; description?: string | null }[];
   selected_alt_setting?: number | null;
+};
+
+type LegitCheckResult = {
+  ok: boolean;
+  transport: string;
+  device_id_b64?: string | null;
+  proof_b64?: string | null;
 };
 
 type DeviceMintResult = {
@@ -35,7 +41,9 @@ export default function App() {
   const localBackend = 'http://localhost:8787';
 
   const [status, setStatus] = useState<string>('Idle');
-  const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
+  const [updateModeInfo, setUpdateModeInfo] = useState<UpdateModeInfo | null>(null);
+  const [runModePorts, setRunModePorts] = useState<string[]>([]);
+  const [legit, setLegit] = useState<LegitCheckResult | null>(null);
   const [useCustomFirmware, setUseCustomFirmware] = useState<boolean>(false);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
@@ -88,18 +96,31 @@ export default function App() {
 
   React.useEffect(() => {
     if (session?.refresh_token) void tryRestore();
+    void refreshDetections(true);
+    const t = setInterval(() => {
+      void refreshDetections(true);
+    }, 1000);
+    return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function probe() {
-    setStatus('Checking Update Mode…');
-    setDfuInfo(null);
+  async function refreshDetections(silent = true) {
     try {
-      const info = await invoke<DfuInfo>('dfu_probe');
-      setDfuInfo(info);
-      setStatus('Update Mode detected');
-    } catch (e: any) {
-      setStatus(`Update Mode not detected: ${e}`);
+      const ports = await invoke<string[]>('detect_device');
+      setRunModePorts(ports);
+    } catch {
+      setRunModePorts([]);
+    }
+
+    try {
+      const info = await invoke<UpdateModeInfo>('update_mode_detect');
+      setUpdateModeInfo(info);
+    } catch {
+      setUpdateModeInfo(null);
+    }
+
+    if (!silent) {
+      setStatus('Detection updated');
     }
   }
 
@@ -175,7 +196,7 @@ export default function App() {
     }
   }
 
-  const canProvision = !!session?.id_token && (useCustomFirmware ? !!firmwarePath : true);
+  const canProvision = true;
 
   return (
     <div className="sw-wrap">
@@ -233,7 +254,38 @@ export default function App() {
               >
                 Enter Update Mode
               </button>
-              <button className="sw-btn" onClick={probe}>Refresh Update Mode</button>
+
+              <button
+                className="sw-btn"
+                onClick={async () => {
+                  try {
+                    setStatus('Checking device legitimacy (Run Mode)…');
+                    const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
+                    setLegit(r);
+                    setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                  } catch (e: any) {
+                    setStatus(`Legit check failed: ${e}`);
+                  }
+                }}
+              >
+                Check device (Run Mode)
+              </button>
+
+              <button
+                className="sw-btn"
+                onClick={async () => {
+                  try {
+                    setStatus('Checking device legitimacy (Update Mode)…');
+                    const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
+                    setLegit(r);
+                    setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                  } catch (e: any) {
+                    setStatus(`Legit check failed: ${e}`);
+                  }
+                }}
+              >
+                Check device (Update Mode)
+              </button>
             </div>
 
             <div style={{ height: 12 }} />
@@ -249,7 +301,7 @@ export default function App() {
             </div>
 
             <div className="sw-row">
-              <button className="sw-btn sw-btn-primary" onClick={mintAndProvision} disabled={!canProvision}>
+              <button className="sw-btn sw-btn-primary" onClick={mintAndProvision}>
                 Mint + Provision
               </button>
               <button
@@ -282,8 +334,12 @@ export default function App() {
                   {useCustomFirmware ? (firmwarePath ?? '(custom not selected)') : '(bundled)'}
                 </code>
               </div>
+              <div>Device (Run Mode)</div>
+              <div>
+                <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
+              </div>
               <div>Update Mode</div>
-              <div><code>{dfuInfo ? 'Detected' : 'Not detected'}</code></div>
+              <div><code>{updateModeInfo ? 'Detected' : 'Not detected'}</code></div>
             </div>
 
             {settingsOpen && (
@@ -352,10 +408,18 @@ export default function App() {
               </>
             )}
 
-            {dfuInfo && (
+            {updateModeInfo && (
               <>
                 <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Update Mode</div>
                 <pre className="sw-pre">{JSON.stringify({ update_mode: 'detected' }, null, 2)}</pre>
+                <div style={{ height: 10 }} />
+              </>
+            )}
+
+            {legit && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Legitimacy</div>
+                <pre className="sw-pre">{JSON.stringify(legit, null, 2)}</pre>
               </>
             )}
 

@@ -8,7 +8,9 @@
 // Minting (DeviceID + Proof signing) happens on the backend.
 
 mod auth_google;
+mod legit_check;
 mod update_mode;
+mod update_mode_identity;
 mod usb_midi_sysex;
 
 // Dev convenience: load env vars from a local .env file when present.
@@ -21,6 +23,55 @@ use serde::Serialize;
 use std::fs;
 
 type AnyResult<T> = Result<T, String>;
+
+#[derive(Debug, Clone, Serialize)]
+struct LegitCheckResult {
+    ok: bool,
+    transport: String,
+    device_id_b64: Option<String>,
+    proof_b64: Option<String>,
+}
+
+#[tauri::command]
+fn detect_device() -> AnyResult<Vec<String>> {
+    legit_check::detect_run_mode_device()
+}
+
+#[tauri::command]
+fn check_device_legit_run_mode() -> AnyResult<LegitCheckResult> {
+    let r = legit_check::run_mode_legit_check()?;
+    Ok(LegitCheckResult {
+        ok: r.ok,
+        transport: format!("Run Mode ({})", r.port_name),
+        device_id_b64: Some(r.device_id_b64),
+        proof_b64: Some(r.proof_b64),
+    })
+}
+
+#[tauri::command]
+fn check_device_legit_update_mode() -> AnyResult<LegitCheckResult> {
+    let (mut dev, info) = emwaver_dfu::DfuDevice::open_with_options(
+        emwaver_dfu::DEFAULT_USB_VENDOR_ID,
+        emwaver_dfu::DEFAULT_USB_PRODUCT_ID,
+        emwaver_dfu::DfuOpenOptions {
+            alt_setting: None,
+            verbose: false,
+        },
+    )
+    .map_err(|e| format!("{e}"))?;
+
+    let r = update_mode_identity::read_and_verify_identity_page(
+        &mut dev,
+        DEFAULT_IDENTITY_PAGE_ADDR,
+    )?;
+
+    Ok(LegitCheckResult {
+        ok: r.ok,
+        transport: format!("Update Mode (iface {})", info.interface_number),
+        device_id_b64: r.device_id_b64,
+        proof_b64: r.proof_b64,
+    })
+}
 
 #[tauri::command]
 fn request_enter_update_mode() -> AnyResult<String> {
@@ -43,12 +94,13 @@ struct DfuAltSettingInfo {
 #[derive(Debug, Clone, Serialize)]
 struct DfuDiscoveryInfo {
     interface_number: u8,
+    // Intentionally hidden from UI.
     alt_settings: Vec<DfuAltSettingInfo>,
     selected_alt_setting: Option<u8>,
 }
 
 #[tauri::command]
-fn dfu_probe() -> AnyResult<DfuDiscoveryInfo> {
+fn update_mode_detect() -> AnyResult<DfuDiscoveryInfo> {
     let (_dev, info) = emwaver_dfu::DfuDevice::open_with_options(
         emwaver_dfu::DEFAULT_USB_VENDOR_ID,
         emwaver_dfu::DEFAULT_USB_PRODUCT_ID,
@@ -252,8 +304,11 @@ fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
-            dfu_probe,
+            update_mode_detect,
             dfu_provision_device,
+            detect_device,
+            check_device_legit_run_mode,
+            check_device_legit_update_mode,
             request_enter_update_mode,
             auth_google_sign_in,
             auth_firebase_refresh
