@@ -32,6 +32,7 @@ type AuthSession = {
 
 export default function App() {
   const productionBackend = 'https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io';
+  const localBackend = 'http://localhost:8787';
 
   const [status, setStatus] = useState<string>('Idle');
   const [dfuInfo, setDfuInfo] = useState<DfuInfo | null>(null);
@@ -40,27 +41,19 @@ export default function App() {
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
-  const [useProductionBackend, setUseProductionBackend] = useState<boolean>(() => {
+  type BackendMode = 'production' | 'local';
+  const [backendMode, setBackendMode] = useState<BackendMode>(() => {
     try {
-      return localStorage.getItem('emwaver.backend.useProduction') === '1';
+      // Mirror desktop keys.
+      return localStorage.getItem('emwaver.backend.useProduction') === '1' ? 'production' : 'local';
     } catch {
-      return false;
-    }
-  });
-  const [localBackendUrl, setLocalBackendUrl] = useState<string>(() => {
-    try {
-      return localStorage.getItem('emwaver.backend.localURL') || '';
-    } catch {
-      return '';
+      return 'production';
     }
   });
 
   const backendUrl = useMemo(() => {
-    if (useProductionBackend) return productionBackend;
-    const trimmed = localBackendUrl.trim();
-    if (trimmed) return trimmed;
-    return productionBackend;
-  }, [useProductionBackend, localBackendUrl]);
+    return backendMode === 'production' ? productionBackend : localBackend;
+  }, [backendMode]);
 
   const [session, setSession] = useState<AuthSession | null>(() => {
     try {
@@ -249,37 +242,35 @@ export default function App() {
 
                 <div style={{ height: 10 }} />
 
-                <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <input
-                    type="checkbox"
-                    checked={useProductionBackend}
-                    onChange={(e) => {
-                      const v = e.target.checked;
-                      setUseProductionBackend(v);
-                      try { localStorage.setItem('emwaver.backend.useProduction', v ? '1' : '0'); } catch {}
-                    }}
-                  />
-                  Use production backend (Azure)
-                </label>
-
-                {!useProductionBackend && (
-                  <div style={{ marginTop: 10 }}>
-                    <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Local backend URL</div>
-                    <input
-                      className="sw-input"
-                      value={localBackendUrl}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        setLocalBackendUrl(v);
-                        try { localStorage.setItem('emwaver.backend.localURL', v); } catch {}
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <button
+                      className={`sw-btn ${backendMode === 'production' ? 'sw-btn-primary' : ''}`}
+                      onClick={() => {
+                        setBackendMode('production');
+                        try { localStorage.setItem('emwaver.backend.useProduction', '1'); } catch {}
                       }}
-                      placeholder="http://localhost:8787"
-                    />
+                    >
+                      Production (Azure)
+                    </button>
+                    <button
+                      className={`sw-btn ${backendMode === 'local' ? 'sw-btn-primary' : ''}`}
+                      onClick={() => {
+                        setBackendMode('local');
+                        try { localStorage.setItem('emwaver.backend.useProduction', '0'); } catch {}
+                      }}
+                    >
+                      Local
+                    </button>
                   </div>
-                )}
 
                 <div style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-dim)' }}>
-                  Production: <code>{productionBackend}</code>
+                  Current: <code>{backendUrl}</code>
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-dim)' }}>
+                  Local is fixed to <code>{localBackend}</code>.
+                </div>
+                <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-dim)' }}>
+                  Production is <code>{productionBackend}</code>.
                 </div>
               </div>
             )}
