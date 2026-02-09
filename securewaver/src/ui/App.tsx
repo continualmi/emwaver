@@ -351,76 +351,98 @@ export default function App() {
         </div>
       ) : (
         <div className="sw-grid">
-        <div className="sw-card">
-          <div className="sw-card-h">
-            <h2>Connections</h2>
-            <div className="sub">Run Mode (USB MIDI) + Update Mode detection.</div>
-          </div>
-          <div className="sw-card-b">
-            <div className="sw-row" style={{ justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-                Run Mode: <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
-                {'  '}|{'  '}
-                Update Mode: <code>{updateModeInfo ? 'Detected' : 'Not detected'}</code>
+          <div style={{ display: 'flex', gap: 12, alignItems: 'stretch' }}>
+            <div className="sw-card" style={{ flex: '0 0 360px' }}>
+              <div className="sw-card-h">
+                <h2>Connections</h2>
+                <div className="sub">Run Mode (USB MIDI) + Update Mode detection.</div>
               </div>
-              <button className="sw-btn" onClick={() => refreshDetections(false)}>
-                Recheck
-              </button>
+              <div className="sw-card-b">
+                <div className="sw-row" style={{ justifyContent: 'space-between' }}>
+                  <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+                    Run Mode: <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
+                    {'  '}|{'  '}
+                    Update Mode: <code>{updateModeInfo ? 'Detected' : 'Not detected'}</code>
+                  </div>
+                  <button className="sw-btn" onClick={() => refreshDetections(false)}>
+                    Recheck
+                  </button>
+                </div>
+
+                <div style={{ height: 10 }} />
+
+                <div className="sw-row">
+                  <button
+                    className="sw-btn"
+                    disabled={runModePorts.length === 0}
+                    onClick={async () => {
+                      try {
+                        setStatus('Verifying device…');
+                        const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
+                        setLegit(r);
+                        setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
+                        log(`Verify (Run Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
+                        if (r.details?.length) {
+                          for (const line of r.details) log(line);
+                        }
+                        if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
+                        if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
+                      } catch (e: any) {
+                        setStatus(`Verify failed: ${e}`);
+                        log(`Verify failed: ${e}`);
+                      }
+                    }}
+                  >
+                    Verify certified original
+                  </button>
+
+                  <button
+                    className="sw-btn"
+                    disabled={!updateModeInfo}
+                    onClick={async () => {
+                      try {
+                        setStatus('Verifying device…');
+                        const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
+                        setLegit(r);
+                        setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
+                        log(`Verify (Update Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
+                        if (r.details?.length) {
+                          for (const line of r.details) log(line);
+                        }
+                        if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
+                        if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
+                      } catch (e: any) {
+                        setStatus(`Verify failed: ${e}`);
+                        log(`Verify failed: ${e}`);
+                      }
+                    }}
+                  >
+                    Verify certified original
+                  </button>
+                </div>
+              </div>
             </div>
 
-            <div style={{ height: 10 }} />
+            <div className="sw-card" style={{ flex: 1 }}>
+              <div className="sw-card-h">
+                <h2>Log</h2>
+                <div className="sub">Session log.</div>
+              </div>
+              <div className="sw-card-b">
+                <div className="sw-row" style={{ justifyContent: 'flex-end' }}>
+                  <button className="sw-btn" onClick={() => setLogLines([])}>
+                    Clear
+                  </button>
+                </div>
 
-            <div className="sw-row">
-              <button
-                className="sw-btn"
-                disabled={runModePorts.length === 0}
-                onClick={async () => {
-                  try {
-                    setStatus('Verifying device…');
-                    const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
-                    setLegit(r);
-                    setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
-                    log(`Verify (Run Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
-                    if (r.details?.length) {
-                      for (const line of r.details) log(line);
-                    }
-                    if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
-                    if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
-                  } catch (e: any) {
-                    setStatus(`Verify failed: ${e}`);
-                    log(`Verify failed: ${e}`);
-                  }
-                }}
-              >
-                Verify certified original
-              </button>
+                <div style={{ height: 10 }} />
 
-              <button
-                className="sw-btn"
-                disabled={!updateModeInfo}
-                onClick={async () => {
-                  try {
-                    setStatus('Verifying device…');
-                    const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
-                    setLegit(r);
-                    setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
-                    log(`Verify (Update Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'} via ${r.transport}`);
-                    if (r.details?.length) {
-                      for (const line of r.details) log(line);
-                    }
-                    if (r.device_id_b64) log(`DeviceID: ${r.device_id_b64.slice(0, 16)}…`);
-                    if (r.proof_b64) log(`Proof: ${r.proof_b64.slice(0, 16)}…`);
-                  } catch (e: any) {
-                    setStatus(`Verify failed: ${e}`);
-                    log(`Verify failed: ${e}`);
-                  }
-                }}
-              >
-                Verify certified original
-              </button>
+                <pre className="sw-pre" style={{ minHeight: 260, maxHeight: 420, overflow: 'auto' }}>
+                  {logLines.length ? logLines.join('\n') : 'No log yet.'}
+                </pre>
+              </div>
             </div>
           </div>
-        </div>
 
         <div className="sw-card">
           <div className="sw-card-h">
@@ -453,23 +475,21 @@ export default function App() {
 
             <div style={{ height: 14 }} />
 
-            {flashProgress && (
-              <div className="sw-banner" style={{ marginBottom: 12 }}>
-                <strong>Flashing:</strong> {flashProgress}
-                {typeof flashPercent === 'number' && (
-                  <div style={{ marginTop: 8, height: 6, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
-                    <div
-                      style={{
-                        width: `${Math.max(0, Math.min(100, flashPercent))}%`,
-                        height: 6,
-                        background: 'var(--aqua)',
-                        borderRadius: 99
-                      }}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
+            <div className="sw-banner" style={{ marginBottom: 12, minHeight: 44 }}>
+              <strong>Flashing:</strong> {flashProgress || '—'}
+              {typeof flashPercent === 'number' && (
+                <div style={{ marginTop: 8, height: 6, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
+                  <div
+                    style={{
+                      width: `${Math.max(0, Math.min(100, flashPercent))}%`,
+                      height: 6,
+                      background: 'var(--aqua)',
+                      borderRadius: 99
+                    }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
               Update device
@@ -514,10 +534,10 @@ export default function App() {
           </div>
         </div>
 
-        <div className="sw-card">
+        <div className="sw-card" style={{ display: 'none' }}>
           <div className="sw-card-h">
             <h2>Log</h2>
-            <div className="sub">What happened (most recent first).</div>
+            <div className="sub">Session log.</div>
           </div>
           <div className="sw-card-b">
             <div className="sw-row" style={{ justifyContent: 'space-between' }}>
