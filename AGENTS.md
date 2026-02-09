@@ -66,16 +66,28 @@ No secret material is stored on the device for this scheme.
   - If invalid: reject as non-genuine.
   - If valid: show a **“secure connected”** badge/glyph.
 
-#### Cloud feature gating (Pro)
+#### Cloud feature gating + Pro purchase eligibility
 
-To enable any cloud features, the device acts as a hardware key:
+**Genuine device is the key**: cloud features and Pro are designed to work seamlessly on genuine hardware and be unattractive on clones.
 
+**Device attach / verification** (required):
+- On connect, the device reports `DeviceID` + `Proof`.
 - App forwards `DeviceID` + `Proof` to the backend.
 - Backend repeats verification (never trust app alone) and enforces policy:
   - detect mass-reuse / concurrency / abnormal patterns
   - revoke `DeviceID` if abused
-- Backend issues a **session token bound to DeviceID**.
-- The app requires a valid server token for **cloud features / Pro** only.
+- Backend attaches the verified device to the user account.
+
+**Pro purchase eligibility rule (important):**
+- A user can **only start/buy** an **EMWaver Pro** subscription if:
+  - the user is signed in, **and**
+  - the user account already has **≥1 verified genuine device attached**.
+- Ineligible users must not be shown a purchase flow; the app should guide them to connect/attach a device first.
+
+**Entitlements + enforcement:**
+- Backend issues a session/auth token and returns entitlements (e.g. `pro=true/false`, feature flags).
+- **Backend is authoritative**: all cloud endpoints must enforce Pro/entitlements server-side.
+- The app gates UI/UX for Pro features, but server checks are the real security boundary.
 
 Store distribution (apps)
 
@@ -109,19 +121,24 @@ Later goals:
 GitHub Actions are used for CI (and optionally deployment) of **frontend + backend** only.
 We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
-### Business model (direction)
+### Business model: EMWaver Pro (current plan)
 
-We may offer a subscription tier (e.g. **EMWaver Pro**) that bundles **Cloud features** which incur recurring costs per active user.
+**EMWaver Pro** is a subscription that unlocks **cloud features** and the **Agent experience**.
 
-Core separation (important):
-- **Cloud / infrastructure** (EMWaver Pro): remote host control, file sync, hosted storage, relay bandwidth, auth, observability/support burden.
-- **AI inference** (Agent): initially **BYO-provider** (user connects their own ChatGPT/OpenAI/etc.) so we are not reselling tokens / "charging a wrapper".
-  - Later, once we have **EMWaver-owned model weights** (EMWaver-specific models for hardware control), it becomes appropriate to offer a bundled "EMWaver Agent" with usage limits/credits.
+What Pro includes (gated behind entitlements):
+- **Cloud / infrastructure**: remote host sessions, file storage + sync across devices, relay bandwidth, auth, observability/support.
+- **AI Agent**: the Agent UI + cloud-integrated workflows are **Pro-only**.
+  - Inference can still be **BYO-provider** (user connects their own OpenAI/ChatGPT/etc.) to avoid “reselling tokens”.
+  - If/when we ship EMWaver-owned models later, Pro may additionally include bundled inference credits/limits.
+
+Purchase eligibility (anti-abuse / aligns with hardware-key strategy):
+- Users must be **signed in** and have at least **one verified genuine EMWaver device attached** to their account before they are allowed to **start/buy** a Pro subscription.
+- Apps should enforce this by hiding/disabling purchase UI until eligible, and the backend must enforce it authoritatively.
 
 Platform rules-of-thumb:
-- Pro subscription should clearly communicate it's paying for **EMWaver Cloud**, not for access to third-party models.
-- Keep a sensible **free/local** mode that does not require cloud (local USB scripting), while cloud-dependent features are gated.
-- App Store constraints likely apply for iOS/macOS digital subscriptions (plan tiers accordingly).
+- Keep a sensible **free/local** mode (local USB scripting) that does not require cloud.
+- Cloud endpoints enforce Pro server-side; client gating is UX only.
+- App Store constraints apply for iOS/macOS subscriptions (StoreKit).
 
 ### Infrastructure (current direction)
 
