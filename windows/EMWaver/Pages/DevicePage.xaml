@@ -37,6 +37,8 @@
                 <TextBlock Text="Status" FontWeight="SemiBold" />
                 <TextBlock x:Name="StatusText" Text="Disconnected" />
                 <TextBlock x:Name="VersionText" Foreground="Gray" />
+                <TextBlock x:Name="SecureText" Foreground="Gray" />
+                <TextBlock x:Name="DeviceIdText" Foreground="Gray" TextWrapping="Wrap" />
                 <TextBlock x:Name="DfuText" Foreground="Gray" />
                 <TextBlock x:Name="ErrorText" Foreground="DarkRed" TextWrapping="Wrap" />
             </StackPanel>
