@@ -46,14 +46,32 @@
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Put the device into Update Mode"
+            android:text="Step 1 — Enter Update Mode"
             android:textStyle="bold" />
 
         <TextView
+            android:id="@+id/enter_update_warning"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="If your device is connected, use the Connection menu → Update firmware to switch it to Update Mode. Otherwise, unplug and plug back in (Update Mode) and wait for EMWaver to detect it." />
+            android:text="Warning: this will switch the device to the STM32 ROM bootloader. The device will be unusable until you re-flash firmware. You will need to unplug and plug it back in to continue the update."
+            android:textColor="@android:color/holo_orange_dark" />
+
+        <Button
+            android:id="@+id/enter_update_mode_button"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Enter Update Mode"
+            android:enabled="false" />
+
+        <TextView
+            android:id="@+id/dfu_instructions"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:text="Step 2 — Unplug and plug back in. When ‘Device connected in Update Mode’ appears, you can flash firmware."
+            android:visibility="gone" />
     </LinearLayout>
 
     <TextView
@@ -133,7 +151,8 @@
             android:id="@+id/update_device_button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Update device" />
+            android:text="Flash firmware"
+            android:enabled="false" />
     </LinearLayout>
 
 </LinearLayout>
