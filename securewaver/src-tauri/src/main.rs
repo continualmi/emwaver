@@ -8,6 +8,8 @@
 // Minting (DeviceID + Proof signing) happens on the backend.
 
 mod auth_google;
+mod update_mode;
+mod usb_midi_sysex;
 
 // Dev convenience: load env vars from a local .env file when present.
 // Note: packaged apps should rely on configured environment/launchd, not .env.
@@ -19,6 +21,11 @@ use serde::Serialize;
 use std::fs;
 
 type AnyResult<T> = Result<T, String>;
+
+#[tauri::command]
+fn request_enter_update_mode() -> AnyResult<String> {
+    update_mode::enter_update_mode_via_midi()
+}
 
 const DEVICE_ID_LEN: usize = 16;
 const PROOF_LEN: usize = 64; // Ed25519 signature bytes
@@ -245,6 +252,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             dfu_probe,
             dfu_provision_device,
+            request_enter_update_mode,
             auth_google_sign_in,
             auth_firebase_refresh
         ])
