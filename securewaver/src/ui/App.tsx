@@ -28,6 +28,12 @@ type ProvisionResult = {
   wrote_identity: boolean;
 };
 
+type UpdatePreserveIdentityResult = {
+  identity_page_addr: number;
+  firmware_path: string;
+  restored_identity: boolean;
+};
+
 type AuthSession = {
   id_token: string;
   refresh_token: string;
@@ -48,6 +54,7 @@ export default function App() {
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
+  const [updateResult, setUpdateResult] = useState<UpdatePreserveIdentityResult | null>(null);
 
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   type BackendMode = 'production' | 'local';
@@ -163,6 +170,20 @@ export default function App() {
       throw new Error(`Backend mint failed (${res.status}): ${txt}`);
     }
     return (await res.json()) as DeviceMintResult;
+  }
+
+  async function updateDevicePreservingIdentity() {
+    setUpdateResult(null);
+    try {
+      setStatus('Updating device (preserve identity)…');
+      const r = await invoke<UpdatePreserveIdentityResult>('update_device_preserve_identity', {
+        firmware_path: useCustomFirmware ? firmwarePath : null
+      });
+      setUpdateResult(r);
+      setStatus('Update complete');
+    } catch (e: any) {
+      setStatus(`Update failed: ${e}`);
+    }
   }
 
   async function mintAndProvision() {
@@ -297,7 +318,19 @@ export default function App() {
             <div style={{ height: 14 }} />
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
-              Provision
+              Update device
+            </div>
+
+            <div className="sw-row">
+              <button className="sw-btn sw-btn-primary" onClick={updateDevicePreservingIdentity}>
+                Update device (preserve identity)
+              </button>
+            </div>
+
+            <div style={{ height: 14 }} />
+
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
+              Mint + Provision
             </div>
 
             <div className="sw-row">
@@ -400,6 +433,14 @@ export default function App() {
               </>
             )}
 
+            {updateResult && (
+              <>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Update result</div>
+                <pre className="sw-pre">{JSON.stringify(updateResult, null, 2)}</pre>
+                <div style={{ height: 10 }} />
+              </>
+            )}
+
             {provisionResult && (
               <>
                 <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Provision result</div>
@@ -423,7 +464,7 @@ export default function App() {
               </>
             )}
 
-            {!minted && !provisionResult && (
+            {!minted && !provisionResult && !updateResult && (
               <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
                 No output yet.
               </div>

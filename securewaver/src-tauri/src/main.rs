@@ -155,6 +155,13 @@ struct ProvisionResult {
     wrote_identity: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct UpdatePreserveIdentityResult {
+    identity_page_addr: u32,
+    firmware_path: String,
+    restored_identity: bool,
+}
+
 /// Provisioning step: flash firmware (mass-erase) and then write DeviceID+Proof into the identity page.
 ///
 /// `firmware_path` is optional: if omitted, SecureWaver uses the bundled firmware payload.
@@ -213,6 +220,54 @@ fn dfu_provision_device(
         identity_page_addr: page_addr,
         firmware_path,
         wrote_identity: true,
+    })
+}
+
+#[tauri::command]
+fn update_device_preserve_identity(firmware_path: Option<String>) -> AnyResult<UpdatePreserveIdentityResult> {
+    let (firmware, firmware_path) = if let Some(p) = firmware_path {
+        let fw = fs::read(&p).map_err(|e| format!("Failed to read firmware file {p}: {e}"))?;
+        (fw, p)
+    } else {
+        let fw: &[u8] = include_bytes!("../../../firmware/emwaver.bin");
+        (fw.to_vec(), "(bundled)".to_string())
+    };
+
+    let page_addr = DEFAULT_IDENTITY_PAGE_ADDR;
+
+    let (mut dev, _info) = emwaver_dfu::DfuDevice::open_with_options(
+        emwaver_dfu::DEFAULT_USB_VENDOR_ID,
+        emwaver_dfu::DEFAULT_USB_PRODUCT_ID,
+        emwaver_dfu::DfuOpenOptions {
+            alt_setting: None,
+            verbose: false,
+        },
+    )
+    .map_err(|e| format!("{e}"))?;
+
+    // Read and validate identity page first.
+    let identity_page = update_mode_identity::read_identity_page_raw(&mut dev, page_addr)?;
+    if identity_page.len() < 16 || &identity_page[0..4] != b"EMID" {
+        return Err("Missing identity header. Refusing to update (would erase identity).".to_string());
+    }
+
+    // Flash firmware (mass erase).
+    dev.flash(&firmware, 0x0800_0000, |_| {})
+        .map_err(|e| format!("Firmware flash failed: {e}"))?;
+
+    // Restore identity page.
+    let _ = dev.abort();
+    let _ = dev.clear_status();
+
+    dev.set_address_pointer(page_addr)
+        .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
+    dev.write_block(2, &identity_page)
+        .map_err(|e| format!("Update Mode write identity page failed: {e}"))?;
+
+    Ok(UpdatePreserveIdentityResult {
+        identity_page_addr: page_addr,
+        firmware_path,
+        restored_identity: true,
     })
 }
 
@@ -311,6 +366,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             update_mode_detect,
             dfu_provision_device,
+            update_device_preserve_identity,
             detect_device,
             check_device_legit_run_mode,
             check_device_legit_update_mode,
