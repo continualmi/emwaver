@@ -257,6 +257,8 @@ public class MainActivity extends AppCompatActivity {
         }
 
         // Primary action: Update firmware.
+        // IMPORTANT: do NOT switch into DFU here. The update dialog has an explicit confirmation
+        // button for entering Update Mode (with a warning that the device becomes unusable until flashed).
         builder.setPositiveButton("Update firmware…", (d, w) -> {
             if (connectionManager == null) {
                 return;
@@ -266,37 +268,18 @@ public class MainActivity extends AppCompatActivity {
             boolean isSecure = svc != null && svc.isSecureConnected();
             boolean isDfu = svc != null && svc.isFlashDeviceConnected();
 
-            if (isDfu && !isConnected) {
-                com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
-                    new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
-                update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
-                return;
-            }
-
-            if (!isConnected) {
+            if (!isConnected && !isDfu) {
                 Toast.makeText(MainActivity.this, "Connect a device first", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (!isSecure) {
+            if (isConnected && !isSecure) {
                 Toast.makeText(MainActivity.this, "Firmware update blocked: device is not secured", Toast.LENGTH_LONG).show();
                 return;
             }
 
-            // Enter DFU via opcode, then disconnect. DFU will enumerate as STM32 BOOTLOADER.
-            Toast.makeText(MainActivity.this, "Switching device to Update Mode…", Toast.LENGTH_SHORT).show();
-            try {
-                svc.requestEnterUpdateMode();
-            } catch (Throwable ignored) {
-            }
-            connectionManager.disconnect();
-
-            // Show the update dialog shortly after disconnect; it will prompt for USB permission
-            // and guide the user to unplug/replug if DFU isn't detected yet.
-            new Handler(Looper.getMainLooper()).postDelayed(() -> {
-                com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
-                    new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
-                update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
-            }, 250);
+            com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+            update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
         });
 
         // Secondary actions.
