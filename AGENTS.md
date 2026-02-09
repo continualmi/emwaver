@@ -254,6 +254,35 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - After building `stm/emwaver-firmware/Release/emwaver-firmware.elf`, update *all* bundled `emwaver.bin` copies by running:
   - `stm/update_firmware_bins.sh` (optionally pass an `.elf` path)
 - The agent is allowed to run this script itself when needed (and should prefer it over ad-hoc `objcopy` commands).
+
+### SecureWaver macOS icon sizing (Dock-friendly)
+
+When SecureWaver’s Dock icon looks **too big** or the **corners look square**, the reliable fix is to:
+
+1) Start from a **square PNG with alpha** for the raw artwork.
+2) Create a **padded 1024×1024 master** (transparent canvas) so the artwork scales down nicely in the Dock.
+3) Generate a proper **`icon.icns`** and wire it into the Tauri bundle config.
+
+**Current implementation (SecureWaver / Tauri v2):**
+- Raw artwork (source-of-truth): `securewaver/src-tauri/icons/icon-art-512.png`
+- Generated padded master (1024×1024): `securewaver/src-tauri/app-icon.png`
+  - default scale: `ICON_SCALE=0.84` (artwork is 0.84× the canvas, centered, transparent padding)
+  - optional rounded mask baked into alpha (if macOS does not apply masking as desired): `ICON_RADIUS` (default 200 @ 1024px)
+- Generated bundle icons (includes macOS ICNS): `securewaver/src-tauri/icons/icon.icns`
+
+Regenerate icons:
+```bash
+cd securewaver
+npm install
+npm run gen:icon
+```
+Tune padding/corners:
+```bash
+ICON_SCALE=0.84 ICON_RADIUS=200 npm run gen:icon
+```
+
+**Important:** the definitive check is the **built `.app`** (not just `tauri dev`).
+
 - **Website:** `frontend/` (Next.js)
 - **Dev env (macOS + Windows):** `DEV_ENV.md` (developer setup checklist; not product docs)
 
