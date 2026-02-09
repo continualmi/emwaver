@@ -55,10 +55,13 @@ export default function App() {
   const [useCustomFirmware, setUseCustomFirmware] = useState<boolean>(false);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
+  const [flashProgress, setFlashProgress] = useState<string | null>(null);
+  const [flashPercent, setFlashPercent] = useState<number | null>(null);
 
   function log(line: string) {
     const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
-    setLogLines((prev) => [`${ts}  ${line}`, ...prev].slice(0, 200));
+    // Natural order: oldest at top, newest at bottom.
+    setLogLines((prev) => [...prev, `${ts}  ${line}`].slice(-400));
   }
 
   type Page = 'main' | 'settings';
@@ -119,6 +122,9 @@ export default function App() {
     const unlistenPromise = listen<string>('emw_flash_progress', (event) => {
       // Progress comes from the DFU crate as "... (NN%)"
       const msg = event.payload;
+      setFlashProgress(msg);
+      const m = msg.match(/\((\d+)%\)/);
+      if (m) setFlashPercent(parseInt(m[1], 10));
       setStatus(msg);
       log(msg);
     });
@@ -207,6 +213,8 @@ export default function App() {
 
   async function updateDevicePreservingIdentity() {
     try {
+      setFlashProgress(null);
+      setFlashPercent(null);
       setStatus('Updating device…');
       log('Update device (preserve identity): start');
       await invoke('update_device_preserve_identity', {
@@ -238,6 +246,8 @@ export default function App() {
       const m = await mintFromBackend(session.id_token);
       log('Mint identity: ok');
 
+      setFlashProgress(null);
+      setFlashPercent(null);
       setStatus('Provisioning in Update Mode…');
       log('Provision: start');
       await invoke('dfu_provision_device', {
@@ -442,6 +452,24 @@ export default function App() {
             </div>
 
             <div style={{ height: 14 }} />
+
+            {flashProgress && (
+              <div className="sw-banner" style={{ marginBottom: 12 }}>
+                <strong>Flashing:</strong> {flashProgress}
+                {typeof flashPercent === 'number' && (
+                  <div style={{ marginTop: 8, height: 6, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
+                    <div
+                      style={{
+                        width: `${Math.max(0, Math.min(100, flashPercent))}%`,
+                        height: 6,
+                        background: 'var(--aqua)',
+                        borderRadius: 99
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
               Update device
