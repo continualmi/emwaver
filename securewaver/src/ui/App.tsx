@@ -38,9 +38,30 @@ export default function App() {
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
   const [session, setSession] = useState<AuthSession | null>(null);
 
-  const [backendUrl, setBackendUrl] = useState<string>(
-    (import.meta.env.VITE_BACKEND_URL as string) || 'https://api.emwavers.com'
-  );
+  const productionBackend = 'https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io';
+
+  const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
+  const [useProductionBackend, setUseProductionBackend] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('emwaver.backend.useProduction') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const [localBackendUrl, setLocalBackendUrl] = useState<string>(() => {
+    try {
+      return localStorage.getItem('emwaver.backend.localURL') || '';
+    } catch {
+      return '';
+    }
+  });
+
+  const backendUrl = useMemo(() => {
+    if (useProductionBackend) return productionBackend;
+    const trimmed = localBackendUrl.trim();
+    if (trimmed) return trimmed;
+    return productionBackend;
+  }, [useProductionBackend, localBackendUrl]);
 
   const userLabel = useMemo(() => {
     if (!session) return '(not signed in)';
@@ -145,6 +166,7 @@ export default function App() {
           <button onClick={logout}>Sign out</button>
         )}
 
+        <button onClick={() => setSettingsOpen((v) => !v)}>Settings…</button>
         <button onClick={selectFirmware}>Select firmware…</button>
         <button onClick={probe}>Probe DFU device</button>
         <button onClick={mintAndProvision}>Mint (backend) + Provision (DFU)</button>
@@ -159,17 +181,55 @@ export default function App() {
           <b>Signed in:</b> {userLabel}
         </div>
         <div>
-          <b>Backend:</b>{' '}
-          <input
-            value={backendUrl}
-            onChange={(e) => setBackendUrl(e.target.value)}
-            style={{ width: 420 }}
-          />
+          <b>Backend:</b> {backendUrl}
         </div>
         <div>
           <b>Firmware:</b> {firmwarePath ?? '(not selected)'}
         </div>
       </div>
+
+      {settingsOpen && (
+        <div style={{ marginTop: 16, padding: 12, background: '#f6f6f6', borderRadius: 8 }}>
+          <h2 style={{ marginTop: 0 }}>Settings</h2>
+
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input
+              type="checkbox"
+              checked={useProductionBackend}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setUseProductionBackend(v);
+                try { localStorage.setItem('emwaver.backend.useProduction', v ? '1' : '0'); } catch {}
+              }}
+            />
+            Use production backend (Azure)
+          </label>
+
+          {!useProductionBackend && (
+            <div style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: '#555', marginBottom: 6 }}>Local backend URL</div>
+              <input
+                value={localBackendUrl}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setLocalBackendUrl(v);
+                  try { localStorage.setItem('emwaver.backend.localURL', v); } catch {}
+                }}
+                placeholder="http://localhost:8787"
+                style={{ width: 520 }}
+              />
+            </div>
+          )}
+
+          <div style={{ marginTop: 10, fontSize: 12, color: '#555' }}>
+            Production: {productionBackend}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            <button onClick={() => setSettingsOpen(false)}>Close settings</button>
+          </div>
+        </div>
+      )}
 
       {minted && (
         <div style={{ marginTop: 16 }}>
