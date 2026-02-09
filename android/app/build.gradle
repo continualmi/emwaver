@@ -6,10 +6,6 @@ plugins {
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
 def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "assets/default-scripts")
 
-def emwaverRootPublicKeyB64 = (project.findProperty("EMWAVER_ROOT_PUBLIC_KEY_B64") ?: System.getenv("EMWAVER_ROOT_PUBLIC_KEY_B64") ?: "").toString()
-// Escape for Java string literal in BuildConfig.
-def emwaverRootPublicKeyB64Esc = emwaverRootPublicKeyB64.replace('\\', '\\\\').replace('"', '\\"')
-
 android {
     namespace 'com.emwaver.emwaverandroidapp'
     compileSdk 35
@@ -20,8 +16,6 @@ android {
         targetSdk 35
         versionCode 2
         versionName "1.0.0"
-
-        buildConfigField "String", "EMWAVER_ROOT_PUBLIC_KEY_B64", '"' + emwaverRootPublicKeyB64Esc + '"'
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

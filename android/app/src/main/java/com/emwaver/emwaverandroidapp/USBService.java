@@ -33,6 +33,11 @@ import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
+import com.emwaver.emwaverandroidapp.security.SecureIdentity;
+
+import android.util.Base64;
+
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
@@ -64,6 +69,10 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiOutputPort midiOut;
 
     private final Object midiLock = new Object();
+
+    private volatile boolean secureConnected = false;
+    private volatile String secureDeviceIdB64 = null;
+    private volatile String secureDeviceProofB64 = null;
 
     // SysEx receive accumulator (raw MIDI bytes)
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
@@ -293,7 +302,80 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
+            // Verify SecureWaver identity in Run mode to mark connection as secure.
+            verifySecureIdentityAsync();
         }, midiHandler);
+    }
+
+
+    private void verifySecureIdentityAsync() {
+        // Run on MIDI handler thread to avoid blocking the main thread.
+        if (midiHandler == null) {
+            // Fallback: best-effort inline.
+            verifySecureIdentityOnce();
+            return;
+        }
+        midiHandler.post(this::verifySecureIdentityOnce);
+    }
+
+    private void verifySecureIdentityOnce() {
+        try {
+            if (!checkConnection()) {
+                secureConnected = false;
+                secureDeviceIdB64 = null;
+                secureDeviceProofB64 = null;
+                return;
+            }
+
+            DeviceIdentity ident = readDeviceIdentity(1800);
+            if (ident == null) {
+                secureConnected = false;
+                secureDeviceIdB64 = null;
+                secureDeviceProofB64 = null;
+                return;
+            }
+
+            boolean ok = SecureIdentity.verifyDeviceIdentity(ident.deviceId, ident.proof);
+            secureConnected = ok;
+            if (ok) {
+                secureDeviceIdB64 = Base64.encodeToString(ident.deviceId, Base64.NO_WRAP);
+                secureDeviceProofB64 = Base64.encodeToString(ident.proof, Base64.NO_WRAP);
+            } else {
+                secureDeviceIdB64 = null;
+                secureDeviceProofB64 = null;
+            }
+        } catch (Throwable t) {
+            secureConnected = false;
+            secureDeviceIdB64 = null;
+            secureDeviceProofB64 = null;
+        }
+    }
+
+    private static final class DeviceIdentity {
+        final byte[] deviceId;
+        final byte[] proof;
+        DeviceIdentity(byte[] deviceId, byte[] proof) {
+            this.deviceId = deviceId;
+            this.proof = proof;
+        }
+    }
+
+    private DeviceIdentity readDeviceIdentity(int timeoutMs) {
+        // EMW_OP_IDENTITY_GET (0x07)
+        byte[] devLane = sendCommand(new byte[]{0x07, 0x00, 0x00}, timeoutMs);
+        if (devLane == null || devLane.length < 18) return null;
+        if ((devLane[0] & 0xFF) != 0x80) return null;
+        byte[] deviceId = Arrays.copyOfRange(devLane, 1, 17);
+
+        byte[] proof = new byte[64];
+        for (int chunk = 0; chunk < 4; chunk++) {
+            byte[] lane = sendCommand(new byte[]{0x07, 0x01, (byte) chunk}, timeoutMs);
+            if (lane == null || lane.length < 18) return null;
+            if ((lane[0] & 0xFF) != 0x80) return null;
+            System.arraycopy(lane, 1, proof, chunk * 16, 16);
+        }
+
+        return new DeviceIdentity(deviceId, proof);
     }
 
     private void closeMidiLocked() {
@@ -460,7 +542,13 @@ public class USBService extends Service implements DeviceConnectionService {
         write(packet);
     }
 
-    // DFU helpers
+    
+    // Secure connection (genuine device identity verified via EMW_OP_IDENTITY_GET)
+    public boolean isSecureConnected() { return secureConnected; }
+    public String getSecureDeviceIdB64() { return secureDeviceIdB64; }
+    public String getSecureDeviceProofB64() { return secureDeviceProofB64; }
+
+// DFU helpers
 
     public UsbDevice getUsbDevice() {
         UsbManager manager = getUsbManager();
