@@ -32,11 +32,9 @@ import androidx.fragment.app.DialogFragment;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.USBService;
-import com.emwaver.emwaverandroidapp.security.EmwaverRootKey;
+import com.emwaver.emwaverandroidapp.security.SecureIdentity;
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
-import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
-import org.bouncycastle.crypto.signers.Ed25519Signer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -301,9 +299,9 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             throw new Exception("USB service or DFU not available");
         }
 
-        byte[] pkRaw = EmwaverRootKey.getPublicKeyRaw(requireContext());
+        byte[] pkRaw = SecureIdentity.rootPublicKeyRaw();
         if (pkRaw == null) {
-            throw new Exception("Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64)");
+            throw new Exception("Missing Root public key");
         }
 
         // Read identity page via DFU_UPLOAD (block 2).
@@ -328,27 +326,11 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         int proofOff = 16 + DEVICE_ID_LEN;
         byte[] proof = Arrays.copyOfRange(page, proofOff, proofOff + PROOF_LEN);
 
-        if (!verifyIdentityProof(pkRaw, deviceId, proof)) {
+        if (!SecureIdentity.verifyDeviceIdentity(deviceId, proof)) {
             throw new Exception("Device identity proof is invalid");
         }
 
         return new DeviceIdentity(deviceId, proof);
-    }
-
-    private static boolean verifyIdentityProof(byte[] rootPkRaw32, byte[] deviceId16, byte[] proof64) {
-        try {
-            if (rootPkRaw32 == null || rootPkRaw32.length != 32) return false;
-            if (deviceId16 == null || deviceId16.length != DEVICE_ID_LEN) return false;
-            if (proof64 == null || proof64.length != PROOF_LEN) return false;
-
-            Ed25519PublicKeyParameters pk = new Ed25519PublicKeyParameters(rootPkRaw32, 0);
-            Ed25519Signer signer = new Ed25519Signer();
-            signer.init(false, pk);
-            signer.update(deviceId16, 0, deviceId16.length);
-            return signer.verifySignature(proof64);
-        } catch (Throwable t) {
-            return false;
-        }
     }
 
     private void writeIdentityPageOrFail(DeviceIdentity ident) throws Exception {

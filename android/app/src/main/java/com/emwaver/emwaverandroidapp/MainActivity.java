@@ -214,6 +214,7 @@ public class MainActivity extends AppCompatActivity {
         final boolean connected = connectionManager != null && connectionManager.isConnected();
         final USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
         final boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
+        final boolean secureConnected = usbService != null && usbService.isSecureConnected();
 
         // If the device is already in Update Mode, the primary action is "Update".
         // Don't force an extra click through the actions list.
@@ -231,9 +232,14 @@ public class MainActivity extends AppCompatActivity {
         }
         actions.add("Update device...");
 
-        String status = connected ? "Connected" : (dfuConnected ? "Update Mode detected" : "Disconnected");
+        String status;
+        if (connected) {
+            status = secureConnected ? "Connected (Secure)" : "Connected (Not secure)";
+        } else {
+            status = dfuConnected ? "Update Mode detected" : "Disconnected";
+        }
 
-        new AlertDialog.Builder(this)
+        AlertDialog.Builder builder = new AlertDialog.Builder(this)
             .setTitle("Connection")
             .setMessage(status)
             .setItems(actions.toArray(new String[0]), (dialog, which) -> {
@@ -258,8 +264,13 @@ public class MainActivity extends AppCompatActivity {
                     });
                 }
             })
-            .setNegativeButton("Close", null)
-            .show();
+            .setNegativeButton("Close", null);
+
+        if (connected && secureConnected) {
+            builder.setIcon(R.drawable.ic_securewaver);
+        }
+
+        builder.show();
     }
 
     private void requestAllRequiredPermissions() {
