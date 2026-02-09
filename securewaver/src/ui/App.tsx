@@ -54,14 +54,17 @@ export default function App() {
   const [legit, setLegit] = useState<LegitCheckResult | null>(null);
   const [useCustomFirmware, setUseCustomFirmware] = useState<boolean>(false);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
-  const [logLines, setLogLines] = useState<string[]>([]);
   const [flashProgress, setFlashProgress] = useState<string | null>(null);
   const [flashPercent, setFlashPercent] = useState<number | null>(null);
 
+  const [flashModalOpen, setFlashModalOpen] = useState<boolean>(false);
+  const [flashModalTitle, setFlashModalTitle] = useState<string>('');
+  const [flashModalLines, setFlashModalLines] = useState<string[]>([]);
+  const [flashModalDone, setFlashModalDone] = useState<boolean>(false);
+
   function log(line: string) {
     const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
-    // Natural order: oldest at top, newest at bottom.
-    setLogLines((prev) => [...prev, `${ts}  ${line}`].slice(-400));
+    setFlashModalLines((prev) => [...prev, `${ts}  ${line}`].slice(-500));
   }
 
   type Page = 'main' | 'settings';
@@ -213,6 +216,10 @@ export default function App() {
 
   async function updateDevicePreservingIdentity() {
     try {
+      setFlashModalOpen(true);
+      setFlashModalTitle('Updating device');
+      setFlashModalLines([]);
+      setFlashModalDone(false);
       setFlashProgress(null);
       setFlashPercent(null);
       setStatus('Updating device…');
@@ -222,9 +229,11 @@ export default function App() {
       });
       setStatus('Update complete');
       log('Update device (preserve identity): complete');
+      setFlashModalDone(true);
     } catch (e: any) {
       setStatus(`Update failed: ${e}`);
       log(`Update failed: ${e}`);
+      setFlashModalDone(true);
     }
   }
 
@@ -246,6 +255,10 @@ export default function App() {
       const m = await mintFromBackend(session.id_token);
       log('Mint identity: ok');
 
+      setFlashModalOpen(true);
+      setFlashModalTitle('Mint + Provision');
+      setFlashModalLines([]);
+      setFlashModalDone(false);
       setFlashProgress(null);
       setFlashPercent(null);
       setStatus('Provisioning in Update Mode…');
@@ -257,9 +270,11 @@ export default function App() {
       });
       setStatus('Provisioning complete');
       log('Provision: complete');
+      setFlashModalDone(true);
     } catch (e: any) {
       setStatus(`Provisioning failed: ${e}`);
       log(`Provisioning failed: ${e}`);
+      setFlashModalDone(true);
     }
   }
 
@@ -313,6 +328,51 @@ export default function App() {
       </div>
 
       <div style={{ height: 12 }} />
+
+      {flashModalOpen && (
+        <div className="sw-modal-overlay">
+          <div className="sw-modal">
+            <div className="sw-modal-h">
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700 }}>{flashModalTitle}</div>
+                <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{status}</div>
+              </div>
+              <button
+                className="sw-btn"
+                disabled={!flashModalDone}
+                onClick={() => setFlashModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+
+            <div style={{ height: 10 }} />
+
+            {flashProgress && (
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>{flashProgress}</div>
+            )}
+
+            {typeof flashPercent === 'number' && (
+              <div style={{ marginTop: 10, height: 8, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
+                <div
+                  style={{
+                    width: `${Math.max(0, Math.min(100, flashPercent))}%`,
+                    height: 8,
+                    background: 'var(--aqua)',
+                    borderRadius: 99
+                  }}
+                />
+              </div>
+            )}
+
+            <div style={{ height: 12 }} />
+
+            <pre className="sw-pre" style={{ maxHeight: 360 }}>
+              {flashModalLines.length ? flashModalLines.join('\n') : '…'}
+            </pre>
+          </div>
+        </div>
+      )}
 
       {page === 'settings' ? (
         <div className="sw-card">
@@ -423,25 +483,7 @@ export default function App() {
               </div>
             </div>
 
-            <div className="sw-card" style={{ flex: 1 }}>
-              <div className="sw-card-h">
-                <h2>Log</h2>
-                <div className="sub">Session log.</div>
-              </div>
-              <div className="sw-card-b">
-                <div className="sw-row" style={{ justifyContent: 'flex-end' }}>
-                  <button className="sw-btn" onClick={() => setLogLines([])}>
-                    Clear
-                  </button>
-                </div>
-
-                <div style={{ height: 10 }} />
-
-                <pre className="sw-pre" style={{ minHeight: 260, maxHeight: 420, overflow: 'auto' }}>
-                  {logLines.length ? logLines.join('\n') : 'No log yet.'}
-                </pre>
-              </div>
-            </div>
+            {/* Log pane removed: progress + details are shown in a modal instead. */}
           </div>
 
         <div className="sw-card">
@@ -536,26 +578,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="sw-card" style={{ display: 'none' }}>
-          <div className="sw-card-h">
-            <h2>Log</h2>
-            <div className="sub">Session log.</div>
-          </div>
-          <div className="sw-card-b">
-            <div className="sw-row" style={{ justifyContent: 'space-between' }}>
-              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-                Device: <code>{runModePorts.length > 0 ? 'Detected' : (updateModeInfo ? 'Update Mode' : 'Not detected')}</code>
-              </div>
-              <button className="sw-btn" onClick={() => setLogLines([])}>
-                Clear
-              </button>
-            </div>
-
-            <div style={{ height: 10 }} />
-
-            <pre className="sw-pre">{logLines.length ? logLines.join('\n') : 'No log yet.'}</pre>
-          </div>
-        </div>
+        {/* Log pane removed. */}
       </div>
       )}
     </div>
