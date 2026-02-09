@@ -1,6 +1,6 @@
 use base64::Engine as _;
 use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
-use std::{env, fs, process};
+use std::{env, fs, io::{self, Write}, process};
 
 const DEVICE_ID_LEN: usize = 16;
 const PROOF_LEN: usize = 64;
@@ -40,6 +40,11 @@ fn cmd_is_connected() -> i32 {
             2
         }
     }
+}
+
+fn println_flush(msg: &str) {
+    println!("{msg}");
+    let _ = io::stdout().flush();
 }
 
 fn cmd_flash(args: &[String]) -> i32 {
@@ -86,8 +91,8 @@ fn cmd_flash(args: &[String]) -> i32 {
         }
     };
 
-    println!("Using {} ({} bytes)", firmware_path, bytes.len());
-    println!("Opening device in Update Mode...");
+    println_flush(&format!("Using {} ({} bytes)", firmware_path, bytes.len()));
+    println_flush("Opening device in Update Mode...");
 
     let (mut device, _discovery) = match DfuDevice::open_with_options(
         DEFAULT_USB_VENDOR_ID,
@@ -104,7 +109,10 @@ fn cmd_flash(args: &[String]) -> i32 {
         }
     };
 
-    match device.flash(&bytes, 0x0800_0000, |msg| println!("{msg}")) {
+    match device.flash(&bytes, 0x0800_0000, |msg| {
+        println!("{msg}");
+        let _ = io::stdout().flush();
+    }) {
         Ok(()) => 0,
         Err(e) => {
             eprintln!("{e}");
