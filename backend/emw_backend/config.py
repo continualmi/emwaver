@@ -35,6 +35,14 @@ class Config:
     openai_api_key: str
     openai_model: str
 
+    # Store (Stripe)
+    stripe_secret_key: str
+    stripe_webhook_secret: str
+    store_stripe_price_id: str
+    store_success_url: str
+    store_cancel_url: str
+    store_shipping_countries: List[str]
+
     @staticmethod
     def from_env() -> "Config":
         cors_raw = _env("CORS_ORIGINS", "*")
@@ -61,4 +69,11 @@ class Config:
             openai_base_url=_env("OPENAI_BASE_URL", "https://api.openai.com/v1"),
             openai_api_key=_env("OPENAI_API_KEY", ""),
             openai_model=_env("OPENAI_MODEL", "gpt-4o-mini"),
+
+            stripe_secret_key=_env("STRIPE_SECRET_KEY", ""),
+            stripe_webhook_secret=_env("STRIPE_WEBHOOK_SECRET", ""),
+            store_stripe_price_id=_env("STORE_STRIPE_PRICE_ID", ""),
+            store_success_url=_env("STORE_SUCCESS_URL", ""),
+            store_cancel_url=_env("STORE_CANCEL_URL", ""),
+            store_shipping_countries=[c.strip() for c in _env("STORE_SHIPPING_COUNTRIES", "").split(",") if c.strip()],
         )

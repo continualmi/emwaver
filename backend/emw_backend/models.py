@@ -115,3 +115,45 @@ class HostSession(Base):
 
 
 Index("idx_host_sessions_uid_last_seen", HostSession.firebase_uid, HostSession.last_seen_at_ms)
+
+
+# --- Store / orders ---
+
+
+class StoreOrder(Base):
+    __tablename__ = "store_orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+
+    # Optional: linked account. For guest checkout this starts null.
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+
+    email: Mapped[str] = mapped_column(String(256), default="")
+    status: Mapped[str] = mapped_column(String(32), default="created", index=True)
+
+    quantity: Mapped[int] = mapped_column(Integer, default=1)
+
+    stripe_checkout_session_id: Mapped[str] = mapped_column(String(255), default="", index=True)
+    stripe_payment_intent_id: Mapped[str] = mapped_column(String(255), default="", index=True)
+
+    currency: Mapped[str] = mapped_column(String(16), default="")
+    amount_total: Mapped[int] = mapped_column(Integer, default=0)  # minor units (cents)
+
+    # Stripe shipping_details (JSON). Stored as text for dialect portability.
+    shipping_json: Mapped[str] = mapped_column(Text, default="{}")
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+    def to_public_dict(self):
+        return {
+            "id": self.id,
+            "status": self.status,
+            "email": self.email,
+            "quantity": int(self.quantity or 0),
+            "currency": self.currency,
+            "amount_total": int(self.amount_total or 0),
+            "stripe_checkout_session_id": self.stripe_checkout_session_id,
+            "created_at_ms": int(self.created_at_ms or 0),
+            "updated_at_ms": int(self.updated_at_ms or 0),
+        }

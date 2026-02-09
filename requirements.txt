@@ -9,6 +9,7 @@ flask-cors==4.0.0
 requests==2.31.0
 gunicorn==21.2.0
 openai==1.61.0
+stripe==11.1.0
 
 # WebSocket (Remote Sessions)
 flask-sock==0.7.0

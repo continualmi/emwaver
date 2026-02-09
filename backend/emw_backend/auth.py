@@ -120,3 +120,30 @@ def verify_request_identity(request: Request, config: Config) -> Optional[Verifi
         )
 
     return ident
+
+
+@dataclass(frozen=True)
+class AuthUser:
+    firebase_uid: str
+    email: Optional[str] = None
+    display_name: Optional[str] = None
+
+
+def optional_auth_user(config: Config) -> Optional[AuthUser]:
+    """Return authenticated user info if present; otherwise None."""
+    from flask import request as flask_request
+
+    ident = verify_request_identity(flask_request, config)
+    if not ident:
+        return None
+    return AuthUser(firebase_uid=ident.uid, email=ident.email, display_name=ident.display_name)
+
+
+def require_auth_user(config: Config) -> AuthUser:
+    """Require auth; raises a 401 response via Flask abort-like pattern."""
+    from flask import abort, request as flask_request
+
+    ident = verify_request_identity(flask_request, config)
+    if not ident:
+        abort(401)
+    return AuthUser(firebase_uid=ident.uid, email=ident.email, display_name=ident.display_name)
