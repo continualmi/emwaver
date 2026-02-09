@@ -138,8 +138,8 @@ dependencies {
 
     // Crypto (Ed25519 verification for secured update)
     implementation 'org.bouncycastle:bcprov-jdk18on:1.78.1'
-
+    
     // USB MIDI uses the platform android.media.midi APIs; no external USB-serial dependency.
-
+ 
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:1.1.5'
 }
