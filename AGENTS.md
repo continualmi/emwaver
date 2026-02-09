@@ -128,8 +128,9 @@ We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 What Pro includes (gated behind entitlements):
 - **Cloud / infrastructure**: remote host sessions, file storage + sync across devices, relay bandwidth, auth, observability/support.
 - **AI Agent**: the Agent UI + cloud-integrated workflows are **Pro-only**.
-  - Inference can still be **BYO-provider** (user connects their own OpenAI/ChatGPT/etc.) to avoid “reselling tokens”.
-  - If/when we ship EMWaver-owned models later, Pro may additionally include bundled inference credits/limits.
+  - **Inference is included with Pro** via **EMWaver-managed models** (no “bring your own OpenAI key” requirement).
+  - Near-term implementation may use a compatibility layer behind the scenes, but it must be presented as **EMWaver models** and treated as a **temporary** bridge.
+  - Longer-term: train EMWaver models (e.g. with Tinker), ship weights, and host inference on providers like **RunPod** / **Vast.ai** (or equivalent).
 
 Purchase eligibility (anti-abuse / aligns with hardware-key strategy):
 - Users must be **signed in** and have at least **one verified genuine EMWaver device attached** to their account before they are allowed to **start/buy** a Pro subscription.
