@@ -47,6 +47,14 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var isSecureConnected: Bool = false
     @Published var secureDeviceIdHex: String? = nil
 
+    // SecureWaver identity (base64) for account attach flows.
+    @Published var secureDeviceIdB64: String? = nil
+    @Published var secureDeviceProofB64: String? = nil
+
+    // If a genuine device is connected but the user isn't signed in, prompt to sign in to attach it.
+    @Published var needsLoginToSaveDevice: Bool = false
+    @Published var deviceAttachStatusText: String? = nil
+
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
 
@@ -405,7 +413,13 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
                 self.isSecureConnected = identityOk
-                if !identityOk {
+                if identityOk {
+                    // Cache identity for account attach (DeviceID+Proof already verified locally).
+                    if let ident = self.readDeviceIdentity(timeoutMs: 1800) {
+                        self.secureDeviceIdB64 = ident.deviceIdB64
+                        self.secureDeviceProofB64 = ident.proofB64
+                    }
+                } else {
                     self.lastErrorText = "Device is not secured (missing/invalid DeviceID proof)"
                     self.disconnect()
                 }
@@ -426,6 +440,10 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.deviceEmwaverVersion = nil
             self.isSecureConnected = false
             self.secureDeviceIdHex = nil
+            self.secureDeviceIdB64 = nil
+            self.secureDeviceProofB64 = nil
+            self.needsLoginToSaveDevice = false
+            self.deviceAttachStatusText = nil
         }
     }
 
