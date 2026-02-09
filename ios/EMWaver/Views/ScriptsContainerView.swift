@@ -127,8 +127,14 @@ struct ScriptsContainerView: View {
                                     .frame(width: 8, height: 8)
                                 Image(systemName: "cable.connector")
                                 if bleManager.isConnected {
-                                    Image(systemName: bleManager.isSecureConnected ? "checkmark.shield.fill" : "shield")
-                                        .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
+                                    if bleManager.isSecureConnected {
+                                        Image("SecureWaver")
+                                            .renderingMode(.template)
+                                            .foregroundStyle(.green)
+                                    } else {
+                                        Image(systemName: "shield.slash")
+                                            .foregroundStyle(.secondary)
+                                    }
                                 }
                             }
                             .contentShape(Rectangle())
