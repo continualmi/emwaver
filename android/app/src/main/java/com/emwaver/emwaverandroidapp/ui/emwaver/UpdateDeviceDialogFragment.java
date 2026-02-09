@@ -17,6 +17,7 @@ import android.hardware.usb.UsbManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Base64;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -31,17 +32,30 @@ import androidx.fragment.app.DialogFragment;
 import com.emwaver.emwaverandroidapp.DeviceConnectionManager;
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.USBService;
+import com.emwaver.emwaverandroidapp.security.EmwaverRootKey;
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
+
+import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
+import org.bouncycastle.crypto.signers.Ed25519Signer;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class UpdateDeviceDialogFragment extends DialogFragment {
     private static final String BUNDLED_FIRMWARE_ASSET_PATH = "firmware/emwaver.bin";
+
+    // Secured update identity page (aligned with crates/emwaver-dfu-helper)
+    private static final int DEVICE_ID_LEN = 16;
+    private static final int PROOF_LEN = 64;
+    private static final int IDENTITY_PAGE_SIZE = 1024;
+    private static final int IDENTITY_PAGE_ADDR = 0x08007800;
+
+    private static final byte[] IDENTITY_MAGIC = new byte[]{'E', 'M', 'I', 'D'};
 
     private TextView dfuConnectedBanner;
     private View instructionsCard;
@@ -62,11 +76,31 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     private volatile boolean isFlashing = false;
     private volatile boolean updateDone = false;
 
+    private DeviceIdentity preservedIdentity = null;
+
     private USBService usbService;
     private Dfu dfu;
 
     private final Pattern pctPattern = Pattern.compile("\\((\\d+)%\\)\\s*$");
     private int lastPct = 0;
+
+    private static final class DeviceIdentity {
+        final byte[] deviceId;
+        final byte[] proof;
+
+        DeviceIdentity(byte[] deviceId, byte[] proof) {
+            this.deviceId = deviceId;
+            this.proof = proof;
+        }
+
+        String deviceIdB64() {
+            return Base64.encodeToString(deviceId, Base64.NO_WRAP);
+        }
+
+        String proofB64() {
+            return Base64.encodeToString(proof, Base64.NO_WRAP);
+        }
+    }
 
     @Nullable
     @Override
@@ -212,6 +246,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         isFlashing = true;
+        preservedIdentity = null;
         updateDfuStateUi();
 
         new Thread(() -> {
@@ -219,12 +254,21 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
                 emitProgress("Using bundled firmware");
                 emitProgress("Opening device in Update Mode...");
 
+                // Gate: only secured devices can be updated.
+                preservedIdentity = gateOnDfuIdentityOrFail();
+
                 byte[] firmware = readBundledFirmware();
                 if (firmware == null || firmware.length == 0) {
                     throw new Exception("Bundled firmware missing");
                 }
 
                 flashFirmwareWithDesktopProgress(firmware, 0x08000000);
+
+                // ROM DFU mass erase wipes the identity page; restore it.
+                if (preservedIdentity != null) {
+                    emitProgress("Restoring device identity...");
+                    writeIdentityPageOrFail(preservedIdentity);
+                }
 
                 handler.post(() -> {
                     updateDone = true;
@@ -250,6 +294,140 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             }
             return out.toByteArray();
         }
+    }
+
+    private DeviceIdentity gateOnDfuIdentityOrFail() throws Exception {
+        if (usbService == null || dfu == null) {
+            throw new Exception("USB service or DFU not available");
+        }
+
+        byte[] pkRaw = EmwaverRootKey.getPublicKeyRaw(requireContext());
+        if (pkRaw == null) {
+            throw new Exception("Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64)");
+        }
+
+        // Read identity page via DFU_UPLOAD (block 2).
+        emitProgress("Reading identity page...");
+        setAddressPointer(IDENTITY_PAGE_ADDR);
+
+        byte[] page = new byte[IDENTITY_PAGE_SIZE];
+        dfu.waitUploadIdle();
+        readBlockOrFail(page, 2, IDENTITY_PAGE_SIZE);
+
+        boolean hasHeader = page.length >= 16
+                && Arrays.equals(Arrays.copyOfRange(page, 0, 4), IDENTITY_MAGIC)
+                && (page[4] == 1)
+                && ((page[5] & 0xFF) == DEVICE_ID_LEN)
+                && ((page[6] & 0xFF) == PROOF_LEN);
+
+        if (!hasHeader) {
+            throw new Exception("Device is not secured (missing identity page)");
+        }
+
+        byte[] deviceId = Arrays.copyOfRange(page, 16, 16 + DEVICE_ID_LEN);
+        int proofOff = 16 + DEVICE_ID_LEN;
+        byte[] proof = Arrays.copyOfRange(page, proofOff, proofOff + PROOF_LEN);
+
+        if (!verifyIdentityProof(pkRaw, deviceId, proof)) {
+            throw new Exception("Device identity proof is invalid");
+        }
+
+        return new DeviceIdentity(deviceId, proof);
+    }
+
+    private static boolean verifyIdentityProof(byte[] rootPkRaw32, byte[] deviceId16, byte[] proof64) {
+        try {
+            if (rootPkRaw32 == null || rootPkRaw32.length != 32) return false;
+            if (deviceId16 == null || deviceId16.length != DEVICE_ID_LEN) return false;
+            if (proof64 == null || proof64.length != PROOF_LEN) return false;
+
+            Ed25519PublicKeyParameters pk = new Ed25519PublicKeyParameters(rootPkRaw32, 0);
+            Ed25519Signer signer = new Ed25519Signer();
+            signer.init(false, pk);
+            signer.update(deviceId16, 0, deviceId16.length);
+            return signer.verifySignature(proof64);
+        } catch (Throwable t) {
+            return false;
+        }
+    }
+
+    private void writeIdentityPageOrFail(DeviceIdentity ident) throws Exception {
+        if (ident == null || ident.deviceId == null || ident.proof == null) {
+            throw new Exception("Missing preserved device identity");
+        }
+        if (ident.deviceId.length != DEVICE_ID_LEN || ident.proof.length != PROOF_LEN) {
+            throw new Exception("Preserved device identity is malformed");
+        }
+
+        byte[] page = buildIdentityPage(ident.deviceId, ident.proof);
+        setAddressPointer(IDENTITY_PAGE_ADDR);
+        writeBlock(page, 2, page.length);
+    }
+
+    private static byte[] buildIdentityPage(byte[] deviceId16, byte[] proof64) throws Exception {
+        if (deviceId16 == null || deviceId16.length != DEVICE_ID_LEN) {
+            throw new Exception("DeviceID must be " + DEVICE_ID_LEN + " bytes");
+        }
+        if (proof64 == null || proof64.length != PROOF_LEN) {
+            throw new Exception("Proof must be " + PROOF_LEN + " bytes");
+        }
+
+        byte[] page = new byte[IDENTITY_PAGE_SIZE];
+        Arrays.fill(page, (byte) 0xFF);
+
+        System.arraycopy(IDENTITY_MAGIC, 0, page, 0, 4);
+        page[4] = 1;
+        page[5] = (byte) DEVICE_ID_LEN;
+        page[6] = (byte) PROOF_LEN;
+
+        int off = 16;
+        System.arraycopy(deviceId16, 0, page, off, DEVICE_ID_LEN);
+        off += DEVICE_ID_LEN;
+        System.arraycopy(proof64, 0, page, off, PROOF_LEN);
+
+        return page;
+    }
+
+    private void readBlockOrFail(byte[] buffer, int block, int numBytes) throws Exception {
+        if (usbService == null || usbService.getUsbDeviceConnection() == null) {
+            throw new Exception("USB connection not available");
+        }
+        if (buffer == null || buffer.length < numBytes) {
+            throw new Exception("Read buffer too small");
+        }
+
+        String lastErr = null;
+        for (int attempt = 0; attempt < 3; attempt++) {
+            if (attempt > 0) {
+                try {
+                    usbService.getUsbDeviceConnection().controlTransfer(
+                            Dfu.DFU_REQUEST_TYPE_OUT, Dfu.DFU_ABORT, 0, 0, null, 0, 500);
+                } catch (Throwable ignored) {
+                }
+                try {
+                    dfu.clearStatus();
+                } catch (Throwable ignored) {
+                }
+                try {
+                    dfu.waitUploadIdle();
+                } catch (Throwable ignored) {
+                }
+                Thread.sleep(20);
+            }
+
+            int n = usbService.getUsbDeviceConnection().controlTransfer(
+                    Dfu.DFU_REQUEST_TYPE_IN, Dfu.DFU_UPLOAD, block, 0, buffer, numBytes, 1500);
+            if (n == numBytes) {
+                return;
+            }
+            if (n < 0) {
+                lastErr = "DFU_UPLOAD failed";
+            } else {
+                lastErr = "DFU_UPLOAD returned " + n + " bytes (expected " + numBytes + ")";
+            }
+        }
+
+        throw new Exception(lastErr != null ? lastErr : "DFU_UPLOAD failed");
     }
 
     private void flashFirmwareWithDesktopProgress(byte[] firmware, int address) throws Exception {
