@@ -291,6 +291,11 @@ public struct ScriptNodeProps {
         raw["selected"] as? String ?? ""
     }
 
+    // Back-compat alias (older call sites used pickerSelected)
+    public var pickerSelected: String {
+        pickerSelection
+    }
+
     public var pickerStyle: String? {
         (raw["style"] as? String)?.lowercased()
     }
