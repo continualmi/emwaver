@@ -58,6 +58,9 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     private TextView dfuConnectedBanner;
     private View instructionsCard;
 
+    private TextView dfuInstructions;
+    private Button enterUpdateModeButton;
+
     private TextView errorText;
     private View progressContainer;
     private TextView progressMessage;
@@ -110,6 +113,8 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         View root = inflater.inflate(R.layout.dialog_update_device, container, false);
 
         instructionsCard = root.findViewById(R.id.instructions_card);
+        dfuInstructions = root.findViewById(R.id.dfu_instructions);
+        enterUpdateModeButton = root.findViewById(R.id.enter_update_mode_button);
         dfuConnectedBanner = root.findViewById(R.id.dfu_connected_banner);
         errorText = root.findViewById(R.id.update_error_text);
         progressContainer = root.findViewById(R.id.progress_container);
@@ -127,6 +132,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         });
 
         updateButton.setOnClickListener(v -> startUpdate());
+
+        if (enterUpdateModeButton != null) {
+            enterUpdateModeButton.setOnClickListener(v -> enterUpdateMode());
+        }
 
         clearError();
         lastPct = 0;
@@ -194,6 +203,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         boolean hasPermission = usbService != null && usbService.hasUsbPermission();
         boolean hasConnection = usbService != null && usbService.getUsbDeviceConnection() != null;
 
+        DeviceConnectionManager mgr = DeviceConnectionManager.getInstance(requireContext());
+        boolean runConnected = mgr.isConnected();
+        boolean secureConnected = usbService != null && usbService.isSecureConnected();
+
         if (dfuDevicePresent && !hasPermission && !isFlashing) {
             // Best-effort: request permission automatically.
             usbService.requestUsbPermission();
@@ -202,21 +215,61 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             usbService.connectUSBFlash();
         }
 
-        boolean ready = dfuDevicePresent && hasPermission;
+        boolean dfuReady = dfuDevicePresent && hasPermission;
+        boolean canEnterUpdate = runConnected && secureConnected && !dfuDevicePresent;
 
         if (instructionsCard != null) {
-            instructionsCard.setVisibility((!ready && !updateDone) ? View.VISIBLE : View.GONE);
+            instructionsCard.setVisibility((!dfuReady && !updateDone) ? View.VISIBLE : View.GONE);
         }
         if (dfuConnectedBanner != null) {
-            dfuConnectedBanner.setVisibility((ready && !updateDone) ? View.VISIBLE : View.GONE);
+            dfuConnectedBanner.setVisibility((dfuReady && !updateDone) ? View.VISIBLE : View.GONE);
+        }
+        if (dfuInstructions != null) {
+            dfuInstructions.setVisibility((!dfuReady && !updateDone) ? View.VISIBLE : View.GONE);
+        }
+
+        if (enterUpdateModeButton != null) {
+            enterUpdateModeButton.setEnabled(canEnterUpdate && !isFlashing);
         }
 
         if (updateButton != null) {
-            updateButton.setEnabled(ready && !isFlashing);
+            updateButton.setEnabled(dfuReady && !isFlashing);
         }
         if (closeButton != null) {
             closeButton.setEnabled(!isFlashing);
         }
+    }
+
+    private void enterUpdateMode() {
+        clearError();
+        setDone(false);
+
+        DeviceConnectionManager mgr = DeviceConnectionManager.getInstance(requireContext());
+        USBService svc = mgr.getUsbService();
+        boolean connected = mgr.isConnected();
+        boolean secure = svc != null && svc.isSecureConnected();
+
+        if (!connected) {
+            showError("Connect a device first.");
+            return;
+        }
+        if (!secure) {
+            showError("Firmware update blocked: device is not secured.");
+            return;
+        }
+
+        // Enter DFU via opcode, then disconnect. User must unplug/replug for DFU enumeration.
+        emitProgress("Switching device to Update Mode...");
+        try {
+            svc.requestEnterUpdateMode();
+        } catch (Throwable ignored) {
+        }
+        mgr.disconnect();
+
+        if (dfuInstructions != null) {
+            dfuInstructions.setVisibility(View.VISIBLE);
+        }
+        updateDfuStateUi();
     }
 
     private void startUpdate() {
