@@ -41,7 +41,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class UpdateDeviceDialogFragment extends DialogFragment {
-    private static final String BUNDLED_FIRMWARE_ASSET_PATH = "dfu/emwaver.bin";
+    private static final String BUNDLED_FIRMWARE_ASSET_PATH = "firmware/emwaver.bin";
 
     private TextView dfuConnectedBanner;
     private View instructionsCard;
