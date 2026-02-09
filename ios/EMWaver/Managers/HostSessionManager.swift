@@ -3,7 +3,7 @@ import Foundation
 import UIKit
 
 @MainActor
-final class HostSessionManager: ObservableObject {
+final class HostSessionManager: @preconcurrency ObservableObject {
     private let urlSession: URLSession
     private var timer: Timer?
 

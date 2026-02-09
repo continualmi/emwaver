@@ -6,8 +6,7 @@ import EMWaverScriptModel
 // Keep it intentionally small; expand only as needed.
 
 extension View {
-    @ViewBuilder
-    func applyScriptModifiers(_ props: ScriptNodeProps) -> some View {
+    func applyScriptModifiers(_ props: ScriptNodeProps) -> AnyView {
         var v: AnyView = AnyView(self)
 
         if let padding = props.padding {
@@ -51,6 +50,6 @@ extension View {
             )
         }
 
-        v
+        return v
     }
 }
