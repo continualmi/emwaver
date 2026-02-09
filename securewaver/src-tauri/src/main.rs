@@ -218,7 +218,7 @@ fn dfu_provision_device(
 
     // Flash firmware (this performs a mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        let _ = app.emit_all("emw_flash_progress", msg.clone());
+        let _ = app.emit("emw_flash_progress", msg.clone());
     })
     .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
@@ -270,7 +270,7 @@ fn update_device_preserve_identity(app: tauri::AppHandle, firmware_path: Option<
 
     // Flash firmware (mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        let _ = app.emit_all("emw_flash_progress", msg.clone());
+        let _ = app.emit("emw_flash_progress", msg.clone());
     })
     .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
