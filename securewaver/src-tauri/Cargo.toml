@@ -17,6 +17,15 @@ tauri-plugin-dialog = "2"
 # Encoding
 base64 = "0.22"
 
+# Auth (Google OAuth PKCE + Firebase exchange)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
+rand = "0.8"
+url = "2"
+tiny_http = "0.12"
+open = "5"
+urlencoding = "2"
+
 # Internal DFU helper crate
 emwaver-dfu = { path = "../../crates/emwaver-dfu" }
 

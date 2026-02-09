@@ -7,6 +7,8 @@
 //
 // Minting (DeviceID + Proof signing) happens on the backend.
 
+mod auth_google;
+
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::Serialize;
 use std::fs;
@@ -143,10 +145,45 @@ fn dfu_provision_device(
     })
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct SecurewaverAuthSession {
+    id_token: String,
+    refresh_token: String,
+    email: Option<String>,
+    display_name: Option<String>,
+    uid: Option<String>,
+}
+
+#[tauri::command]
+async fn auth_google_sign_in() -> AnyResult<SecurewaverAuthSession> {
+    let google_client_id = (std::env::var("EMWAVER_GOOGLE_CLIENT_ID").unwrap_or_default()).trim().to_string();
+    let google_client_secret = (std::env::var("EMWAVER_GOOGLE_CLIENT_SECRET").unwrap_or_default()).trim().to_string();
+    let firebase_web_api_key = (std::env::var("EMWAVER_FIREBASE_WEB_API_KEY").unwrap_or_default()).trim().to_string();
+
+    let fb = auth_google::sign_in_google_pkce_firebase(
+        google_client_id,
+        google_client_secret,
+        firebase_web_api_key,
+    )
+    .await?;
+
+    Ok(SecurewaverAuthSession {
+        id_token: fb.id_token,
+        refresh_token: fb.refresh_token,
+        email: fb.email,
+        display_name: fb.display_name,
+        uid: fb.local_id,
+    })
+}
+
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![dfu_probe, dfu_provision_device])
+        .invoke_handler(tauri::generate_handler![
+            dfu_probe,
+            dfu_provision_device,
+            auth_google_sign_in
+        ])
         .run(tauri::generate_context!())
         .expect("error while running SecureWaver");
 }
