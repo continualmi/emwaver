@@ -475,21 +475,23 @@ export default function App() {
 
             <div style={{ height: 14 }} />
 
-            <div className="sw-banner" style={{ marginBottom: 12, minHeight: 44 }}>
-              <strong>Flashing:</strong> {flashProgress || '—'}
-              {typeof flashPercent === 'number' && (
-                <div style={{ marginTop: 8, height: 6, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
-                  <div
-                    style={{
-                      width: `${Math.max(0, Math.min(100, flashPercent))}%`,
-                      height: 6,
-                      background: 'var(--aqua)',
-                      borderRadius: 99
-                    }}
-                  />
-                </div>
-              )}
-            </div>
+            {flashProgress && (
+              <div className="sw-banner" style={{ marginBottom: 12 }}>
+                <strong>Flashing:</strong> {flashProgress}
+                {typeof flashPercent === 'number' && (
+                  <div style={{ marginTop: 8, height: 6, background: 'rgba(233,238,252,0.12)', borderRadius: 99 }}>
+                    <div
+                      style={{
+                        width: `${Math.max(0, Math.min(100, flashPercent))}%`,
+                        height: 6,
+                        background: 'var(--aqua)',
+                        borderRadius: 99
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
               Update device
