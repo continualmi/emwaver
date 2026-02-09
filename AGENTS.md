@@ -249,6 +249,11 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
   - iOS: `ios/EMWaver/firmware/emwaver.bin`
   - Apple shared: `apple/EMWaverAppleCore/Resources/Firmware/emwaver.bin`
   - Windows: `windows/EMWaver/Assets/Firmware/emwaver.bin`
+
+**Important dev workflow:** SecureWaver (and other apps) flash a **`.bin`**, not the firmware `.elf`.
+- After building `stm/emwaver-firmware/Release/emwaver-firmware.elf`, update *all* bundled `emwaver.bin` copies by running:
+  - `stm/update_firmware_bins.sh` (optionally pass an `.elf` path)
+- The agent is allowed to run this script itself when needed (and should prefer it over ad-hoc `objcopy` commands).
 - **Website:** `frontend/` (Next.js)
 - **Dev env (macOS + Windows):** `DEV_ENV.md` (developer setup checklist; not product docs)
 
