@@ -196,7 +196,11 @@ a {
   border-radius: 12px;
   overflow: auto;
   color: rgba(233, 238, 252, 0.86);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .sw-banner {
