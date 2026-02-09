@@ -24,16 +24,58 @@ pub struct UpdateModeLegitResult {
     pub ok: bool,
 }
 
+fn wait_ready_for_commands(dev: &mut emwaver_dfu::DfuDevice) -> Result<(), String> {
+    // Some hosts/devices need extra time after enumeration.
+    // Wait longer than the default 5s and respect bwPollTimeout.
+    use std::{thread, time::{Duration, Instant}};
+
+    let start = Instant::now();
+    let timeout = Duration::from_secs(25);
+
+    // Best-effort: clear/abort once.
+    let _ = dev.abort();
+    let _ = dev.clear_status();
+
+    loop {
+        if start.elapsed() > timeout {
+            let st = dev.get_status().ok();
+            return Err(format!("Update Mode not ready (timeout). status={:?}", st));
+        }
+
+        let st = dev.get_status()?;
+        let b_state = st[4];
+        let bw_poll_timeout: u64 = ((st[3] as u64) << 16) | ((st[2] as u64) << 8) | (st[1] as u64);
+
+        // 0x02 idle, 0x05 download-idle, 0x09 upload-idle
+        if b_state == 0x02 || b_state == 0x05 || b_state == 0x09 {
+            return Ok(());
+        }
+
+        // If in error state, try clearing.
+        if b_state == 0x0A {
+            let _ = dev.clear_status();
+        }
+
+        let sleep_ms = bw_poll_timeout.max(20).min(500);
+        thread::sleep(Duration::from_millis(sleep_ms));
+    }
+}
+
 pub fn read_and_verify_identity_page(
     dev: &mut emwaver_dfu::DfuDevice,
     identity_page_addr: u32,
 ) -> Result<UpdateModeLegitResult, String> {
     let root = parse_root_public_key()?;
 
+    wait_ready_for_commands(dev)?;
+
     dev.set_address_pointer(identity_page_addr)
         .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
 
     let mut page = vec![0u8; IDENTITY_PAGE_SIZE];
+    // DFU uploads can be picky about state; wait for upload-idle.
+    let _ = dev.wait_upload_idle();
+
     let n = dev
         .read_block(2, &mut page)
         .map_err(|e| format!("Update Mode read identity page failed: {e}"))?;
