@@ -276,43 +276,50 @@ export default function App() {
                 Enter Update Mode
               </button>
 
-              <button
-                className="sw-btn"
-                onClick={async () => {
-                  try {
-                    setStatus('Checking device legitimacy (Run Mode)…');
-                    const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
-                    setLegit(r);
-                    setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
-                  } catch (e: any) {
-                    setStatus(`Legit check failed: ${e}`);
-                  }
-                }}
-              >
-                Check device (Run Mode)
-              </button>
+              {runModePorts.length > 0 && (
+                <button
+                  className="sw-btn"
+                  onClick={async () => {
+                    try {
+                      setStatus('Checking device legitimacy…');
+                      const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
+                      setLegit(r);
+                      setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                    } catch (e: any) {
+                      setStatus(`Legit check failed: ${e}`);
+                    }
+                  }}
+                >
+                  Check device
+                </button>
+              )}
 
-              <button
-                className="sw-btn"
-                onClick={async () => {
-                  try {
-                    setStatus('Checking device legitimacy (Update Mode)…');
-                    const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
-                    setLegit(r);
-                    setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
-                  } catch (e: any) {
-                    setStatus(`Legit check failed: ${e}`);
-                  }
-                }}
-              >
-                Check device (Update Mode)
-              </button>
+              {updateModeInfo && (
+                <button
+                  className="sw-btn"
+                  onClick={async () => {
+                    try {
+                      setStatus('Checking device legitimacy…');
+                      const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
+                      setLegit(r);
+                      setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                    } catch (e: any) {
+                      setStatus(`Legit check failed: ${e}`);
+                    }
+                  }}
+                >
+                  Check device
+                </button>
+              )}
             </div>
 
             <div style={{ height: 12 }} />
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
               After entering Update Mode, unplug and plug the device back in.
+              {runModePorts.length === 0 && !updateModeInfo && (
+                <> When a device is detected, a <b>Check device</b> button will appear for that mode.</>
+              )}
             </div>
 
             <div style={{ height: 14 }} />
