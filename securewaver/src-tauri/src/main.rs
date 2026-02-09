@@ -181,6 +181,62 @@ async fn auth_google_sign_in() -> AnyResult<SecurewaverAuthSession> {
     })
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+struct FirebaseRefreshResponse {
+    #[serde(rename = "id_token")]
+    id_token: String,
+    #[serde(rename = "refresh_token")]
+    refresh_token: String,
+    #[serde(rename = "expires_in")]
+    expires_in: Option<String>,
+    #[serde(rename = "user_id")]
+    user_id: Option<String>,
+}
+
+/// Refresh a Firebase session given a refresh token.
+#[tauri::command]
+async fn auth_firebase_refresh(refresh_token: String) -> AnyResult<SecurewaverAuthSession> {
+    let firebase_web_api_key = (std::env::var("EMWAVER_FIREBASE_WEB_API_KEY").unwrap_or_default()).trim().to_string();
+    if firebase_web_api_key.is_empty() {
+        return Err("Missing EMWAVER_FIREBASE_WEB_API_KEY".to_string());
+    }
+    if refresh_token.trim().is_empty() {
+        return Err("Missing refresh_token".to_string());
+    }
+
+    let url = format!(
+        "https://securetoken.googleapis.com/v1/token?key={}",
+        urlencoding::encode(firebase_web_api_key.trim())
+    );
+
+    let body = format!(
+        "grant_type=refresh_token&refresh_token={}",
+        urlencoding::encode(refresh_token.trim())
+    );
+
+    let http = reqwest::Client::new();
+    let rr: FirebaseRefreshResponse = http
+        .post(url)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(body)
+        .send()
+        .await
+        .map_err(|e| format!("Firebase refresh failed: {e}"))?
+        .error_for_status()
+        .map_err(|e| format!("Firebase refresh failed: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("Firebase refresh decode failed: {e}"))?;
+
+    Ok(SecurewaverAuthSession {
+        id_token: rr.id_token,
+        refresh_token: rr.refresh_token,
+        email: None,
+        display_name: None,
+        uid: rr.user_id,
+    })
+}
+
 fn main() {
     let _ = dotenvy::dotenv();
 
@@ -189,7 +245,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             dfu_probe,
             dfu_provision_device,
-            auth_google_sign_in
+            auth_google_sign_in,
+            auth_firebase_refresh
         ])
         .run(tauri::generate_context!())
         .expect("error while running SecureWaver");

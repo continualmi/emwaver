@@ -36,7 +36,14 @@ export default function App() {
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
   const [minted, setMinted] = useState<DeviceMintResult | null>(null);
   const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
-  const [session, setSession] = useState<AuthSession | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(() => {
+    try {
+      const raw = localStorage.getItem('securewaver.auth.session');
+      return raw ? (JSON.parse(raw) as AuthSession) : null;
+    } catch {
+      return null;
+    }
+  });
 
   const productionBackend = 'https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io';
 
@@ -68,6 +75,15 @@ export default function App() {
     return session.display_name || session.email || session.uid || '(signed in)';
   }, [session]);
 
+  // Best-effort restore on first render.
+  React.useEffect(() => {
+    if (session?.refresh_token) {
+      // don't block initial render
+      void tryRestore();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function probe() {
     setStatus('Probing DFU…');
     setDfuInfo(null);
@@ -85,14 +101,34 @@ export default function App() {
     try {
       const s = await invoke<AuthSession>('auth_google_sign_in');
       setSession(s);
+      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(s)); } catch {}
       setStatus('Signed in');
     } catch (e: any) {
       setStatus(`Sign-in failed: ${e}`);
     }
   }
 
+  async function tryRestore() {
+    if (!session?.refresh_token) return;
+    try {
+      setStatus('Restoring session…');
+      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: session.refresh_token });
+      // keep original email/display_name if we had them
+      const merged: AuthSession = { ...session, ...s, email: session.email, display_name: session.display_name };
+      setSession(merged);
+      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(merged)); } catch {}
+      setStatus('Signed in');
+    } catch (e: any) {
+      // leave user signed out if refresh fails
+      setStatus(`Session restore failed: ${e}`);
+      setSession(null);
+      try { localStorage.removeItem('securewaver.auth.session'); } catch {}
+    }
+  }
+
   function logout() {
     setSession(null);
+    try { localStorage.removeItem('securewaver.auth.session'); } catch {}
     setStatus('Signed out');
   }
 
