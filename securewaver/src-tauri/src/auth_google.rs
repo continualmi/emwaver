@@ -1,3 +1,4 @@
+use base64::Engine as _;
 use rand::{distributions::Alphanumeric, Rng};
 use reqwest::Client;
 use serde::Deserialize;
@@ -17,18 +18,18 @@ struct GoogleTokenResponse {
 }
 
 #[derive(Debug, Clone, Deserialize)]
-struct FirebaseSessionResponse {
+pub struct FirebaseSessionResponse {
     #[serde(rename = "idToken")]
-    id_token: String,
+    pub id_token: String,
     #[serde(rename = "refreshToken")]
-    refresh_token: String,
+    pub refresh_token: String,
     #[serde(rename = "expiresIn")]
-    expires_in: Option<String>,
-    email: Option<String>,
+    pub expires_in: Option<String>,
+    pub email: Option<String>,
     #[serde(rename = "displayName")]
-    display_name: Option<String>,
+    pub display_name: Option<String>,
     #[serde(rename = "localId")]
-    local_id: Option<String>,
+    pub local_id: Option<String>,
 }
 
 fn rand_urlsafe(len: usize) -> String {
@@ -65,7 +66,8 @@ pub async fn sign_in_google_pkce_firebase(
     let redirect_uri = format!("http://127.0.0.1:{}/oauth2redirect", addr.port());
 
     // tiny_http server from existing listener
-    let server = Server::from_tcp(listener).map_err(|e| format!("Failed to start local server: {e}"))?;
+    let server = Server::from_listener(listener, None)
+        .map_err(|e| format!("Failed to start local server: {e}"))?;
 
     let state = rand_urlsafe(24);
     let nonce = rand_urlsafe(24);
@@ -94,8 +96,8 @@ pub async fn sign_in_google_pkce_firebase(
 
     while std::time::Instant::now() < deadline {
         if let Ok(Some(req)) = server.recv_timeout(Duration::from_millis(250)) {
-            let url = format!("http://localhost{}", req.url());
-            let parsed = Url::parse(&url).map_err(|e| format!("Invalid callback URL: {e}"))?;
+            let url_str: String = format!("http://localhost{}", req.url());
+            let parsed = Url::parse(&url_str).map_err(|e| format!("Invalid callback URL: {e}"))?;
             let qs: std::collections::HashMap<String, String> = parsed
                 .query_pairs()
                 .map(|(k, v)| (k.to_string(), v.to_string()))
