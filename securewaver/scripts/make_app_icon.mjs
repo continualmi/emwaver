@@ -31,14 +31,18 @@ async function main() {
     .png()
     .toBuffer();
 
-  const base = sharp({
+  // Compose on transparent canvas.
+  const baseBuf = await sharp({
     create: {
       width: CANVAS,
       height: CANVAS,
       channels: 4,
       background: { r: 0, g: 0, b: 0, alpha: 0 }
     }
-  }).composite([{ input: resized, left: inset, top: inset }]);
+  })
+    .composite([{ input: resized, left: inset, top: inset }])
+    .png()
+    .toBuffer();
 
   // Apply rounded-rect alpha mask.
   const r = Math.max(0, Math.min(RADIUS, CANVAS / 2));
@@ -48,7 +52,7 @@ async function main() {
     </svg>
   `;
 
-  await base
+  await sharp(baseBuf)
     .composite([{ input: Buffer.from(maskSvg), blend: 'dest-in' }])
     .png()
     .toFile(OUT);
