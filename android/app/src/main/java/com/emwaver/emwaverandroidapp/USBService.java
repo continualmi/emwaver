@@ -74,6 +74,8 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile String secureDeviceIdB64 = null;
     private volatile String secureDeviceProofB64 = null;
 
+    private volatile String deviceFirmwareVersion = null;
+
     // SysEx receive accumulator (raw MIDI bytes)
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
     private boolean inSysex = false;
@@ -304,9 +306,52 @@ public class USBService extends Service implements DeviceConnectionService {
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             // Verify SecureWaver identity in Run mode to mark connection as secure.
             verifySecureIdentityAsync();
+            queryFirmwareVersionAsync();
         }, midiHandler);
     }
 
+
+
+    private void queryFirmwareVersionAsync() {
+        if (midiHandler == null) {
+            queryFirmwareVersionOnce();
+            return;
+        }
+        midiHandler.post(this::queryFirmwareVersionOnce);
+    }
+
+    private void queryFirmwareVersionOnce() {
+        try {
+            if (!checkConnection()) {
+                deviceFirmwareVersion = null;
+                return;
+            }
+            // EMW_OP_VERSION (0x01). Response: [0x80, major, minor, ...]
+            byte[] lane = sendCommand(new byte[]{0x01}, 900);
+            if (lane == null || lane.length < 3) {
+                deviceFirmwareVersion = null;
+                return;
+            }
+            if ((lane[0] & 0xFF) != 0x80) {
+                deviceFirmwareVersion = null;
+                return;
+            }
+            int major = lane[1] & 0xFF;
+            int minor = lane[2] & 0xFF;
+            deviceFirmwareVersion = major + "." + minor;
+        } catch (Throwable t) {
+            deviceFirmwareVersion = null;
+        }
+    }
+
+    public void requestEnterUpdateMode() {
+        // Only valid in Run mode.
+        try {
+            // EMW_OP_ENTER_DFU (0x06)
+            sendCommand(new byte[]{0x06}, 900);
+        } catch (Throwable ignored) {
+        }
+    }
 
     private void verifySecureIdentityAsync() {
         // Run on MIDI handler thread to avoid blocking the main thread.
@@ -547,6 +592,7 @@ public class USBService extends Service implements DeviceConnectionService {
     public boolean isSecureConnected() { return secureConnected; }
     public String getSecureDeviceIdB64() { return secureDeviceIdB64; }
     public String getSecureDeviceProofB64() { return secureDeviceProofB64; }
+    public String getDeviceFirmwareVersion() { return deviceFirmwareVersion; }
 
 // DFU helpers
 

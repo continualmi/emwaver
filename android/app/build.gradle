@@ -6,6 +6,18 @@ plugins {
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
 def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "assets/default-scripts")
 
+// Keep Android UI in sync with the bundled firmware version (from STM source-of-truth).
+def emwaverStmMainC = new File(emwaverRepoRootDir, "stm/emwaver-firmware/Core/Src/main.c")
+def emwaverBundledFwVersion = "unknown"
+if (emwaverStmMainC.exists()) {
+    def mainC = emwaverStmMainC.getText('UTF-8')
+    def m1 = (mainC =~ /#define\s+EMWAVER_FIRMWARE_VERSION_MAJOR\s+(\d+)u/)
+    def m2 = (mainC =~ /#define\s+EMWAVER_FIRMWARE_VERSION_MINOR\s+(\d+)u/)
+    if (m1.find() && m2.find()) {
+        emwaverBundledFwVersion = "${m1.group(1)}.${m2.group(1)}"
+    }
+}
+
 android {
     namespace 'com.emwaver.emwaverandroidapp'
     compileSdk 35
@@ -16,6 +28,8 @@ android {
         targetSdk 35
         versionCode 2
         versionName "1.0.0"
+
+        buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

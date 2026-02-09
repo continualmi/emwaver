@@ -25,6 +25,8 @@ import android.os.Handler;
 import android.os.Looper;
 import android.widget.Toast;
 
+import com.emwaver.emwaverandroidapp.BuildConfig;
+
 import android.app.AlertDialog;
 
 import androidx.annotation.NonNull;
@@ -216,6 +218,10 @@ public class MainActivity extends AppCompatActivity {
         final boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
         final boolean secureConnected = usbService != null && usbService.isSecureConnected();
 
+        final String deviceVer = usbService != null ? usbService.getDeviceFirmwareVersion() : null;
+        final String bundledVer = BuildConfig.EMWAVER_BUNDLED_FW_VERSION;
+        final boolean upToDate = deviceVer != null && bundledVer != null && !bundledVer.isEmpty() && deviceVer.equals(bundledVer);
+
         // If the device is already in Update Mode, the primary action is "Update".
         // Don't force an extra click through the actions list.
         if (dfuConnected && !connected) {
@@ -225,12 +231,7 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        List<String> actions = new ArrayList<>();
-        actions.add("Search for device");
-        if (connected) {
-            actions.add("Disconnect");
-        }
-        actions.add("Update device...");
+        // Keep this modal lightweight; actions are explicit buttons (like macOS).
 
         String status;
         if (connected) {
@@ -239,35 +240,78 @@ public class MainActivity extends AppCompatActivity {
             status = dfuConnected ? "Update Mode detected" : "Disconnected";
         }
 
+        String versionLine = "";
+        if (connected) {
+            String dv = (deviceVer != null && !deviceVer.isEmpty()) ? deviceVer : "?";
+            String bv = (bundledVer != null && !bundledVer.isEmpty()) ? bundledVer : "?";
+            versionLine = "\n\nFirmware: " + dv + " (bundled: " + bv + ")" + (upToDate ? " • Up to date" : " • Update available");
+        }
+
         AlertDialog.Builder builder = new AlertDialog.Builder(this)
             .setTitle("Connection")
-            .setMessage(status)
-            .setItems(actions.toArray(new String[0]), (dialog, which) -> {
-                String selected = actions.get(which);
-                if ("Search for device".equals(selected)) {
-                    if (connectionManager != null) {
-                        connectionManager.checkForUsbDevices();
-                    }
-                } else if ("Disconnect".equals(selected)) {
-                    if (connectionManager != null) {
-                        connectionManager.disconnect();
-                    }
-                } else if ("Update device...".equals(selected)) {
-                    // Avoid dialog-on-dialog weirdness (especially when Android is also showing
-                    // a USB permission prompt). Dismiss this actions dialog first, then show the
-                    // update dialog on the next loop tick.
-                    dialog.dismiss();
-                    new Handler(Looper.getMainLooper()).post(() -> {
-                        com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
-                            new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
-                        update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
-                    });
-                }
-            })
+            .setMessage(status + versionLine)
             .setNegativeButton("Close", null);
 
         if (connected && secureConnected) {
             builder.setIcon(R.drawable.ic_securewaver);
+        }
+
+        // Primary action: Update firmware.
+        builder.setPositiveButton("Update firmware…", (d, w) -> {
+            if (connectionManager == null) {
+                return;
+            }
+            USBService svc = connectionManager.getUsbService();
+            boolean isConnected = connectionManager.isConnected();
+            boolean isSecure = svc != null && svc.isSecureConnected();
+            boolean isDfu = svc != null && svc.isFlashDeviceConnected();
+
+            if (isDfu && !isConnected) {
+                com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                    new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+                update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+                return;
+            }
+
+            if (!isConnected) {
+                Toast.makeText(MainActivity.this, "Connect a device first", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            if (!isSecure) {
+                Toast.makeText(MainActivity.this, "Firmware update blocked: device is not secured", Toast.LENGTH_LONG).show();
+                return;
+            }
+
+            // Enter DFU via opcode, then disconnect. DFU will enumerate as STM32 BOOTLOADER.
+            Toast.makeText(MainActivity.this, "Switching device to Update Mode…", Toast.LENGTH_SHORT).show();
+            try {
+                svc.requestEnterUpdateMode();
+            } catch (Throwable ignored) {
+            }
+            connectionManager.disconnect();
+
+            // Show the update dialog shortly after disconnect; it will prompt for USB permission
+            // and guide the user to unplug/replug if DFU isn't detected yet.
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                    new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+                update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+            }, 250);
+        });
+
+        // Secondary actions.
+        if (connected) {
+            builder.setNeutralButton("Disconnect", (d, w) -> {
+                if (connectionManager != null) {
+                    connectionManager.disconnect();
+                }
+            });
+        } else {
+            builder.setNeutralButton("Search", (d, w) -> {
+                if (connectionManager != null) {
+                    connectionManager.checkForUsbDevices();
+                }
+            });
         }
 
         builder.show();

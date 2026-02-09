@@ -53,7 +53,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="6dp"
-            android:text="Unplug, flip the Update switch to Update, plug back in, and wait for EMWaver to detect it." />
+            android:text="If your device is connected, use the Connection menu → Update firmware to switch it to Update Mode. Otherwise, unplug and plug back in (Update Mode) and wait for EMWaver to detect it." />
     </LinearLayout>
 
     <TextView
@@ -119,7 +119,7 @@
         android:layout_marginTop="12dp"
         android:padding="12dp"
         android:background="@color/surfaceCard"
-        android:text="Update complete. Unplug the device, flip the Update switch to Run, and reconnect."
+        android:text="Update complete. Unplug the device and reconnect (Run mode)."
         android:visibility="gone" />
 
     <LinearLayout
