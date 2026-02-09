@@ -89,9 +89,8 @@ private struct HostsListView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-            }
-            .padding(.vertical, 4)
                 }
+                .padding(.vertical, 4)
             }
         }
     }
