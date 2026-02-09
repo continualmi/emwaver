@@ -59,14 +59,30 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        // If DFU is already present, verify DFU identity page before flashing.
+        // Prefer preserving identity from Run mode (EMWaver opcode), because DFU_UPLOAD readback
+        // is flaky on macOS (Pipe error) and can prevent DFU identity reads.
+        if device.isConnected && device.isSecureConnected {
+            preservedIdentity = device.readDeviceIdentity(timeoutMs: 900)
+            if preservedIdentity == nil {
+                updateError = "Failed to read device identity in Run mode. Reconnect and retry."
+                return
+            }
+        }
+
+        // If DFU is already present, try to gate on DFU identity page (if needed), then flash.
         if dfuConnected {
-            preservedIdentity = nil
             do {
-                try gateOnDfuIdentityOrFail()
+                if preservedIdentity == nil {
+                    try gateOnDfuIdentityOrFail()
+                }
                 try runFlash()
             } catch {
-                updateError = String(describing: error)
+                let msg = String(describing: error)
+                if msg.contains("req=0x02") || msg.lowercased().contains("pipe error") {
+                    updateError = "macOS DFU readback failed (DFU_UPLOAD Pipe error). Connect the device in Run mode first, then click Update so we can preserve identity without DFU readback."
+                } else {
+                    updateError = msg
+                }
                 isFlashing = false
             }
             return
