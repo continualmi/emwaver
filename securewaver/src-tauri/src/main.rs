@@ -20,8 +20,9 @@ mod usb_midi_sysex;
 use dotenvy::dotenv;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use std::fs;
+use tauri::Emitter;
 
 type AnyResult<T> = Result<T, String>;
 
