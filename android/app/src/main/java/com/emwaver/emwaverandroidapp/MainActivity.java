@@ -215,6 +215,15 @@ public class MainActivity extends AppCompatActivity {
         final USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
         final boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
 
+        // If the device is already in Update Mode, the primary action is "Update".
+        // Don't force an extra click through the actions list.
+        if (dfuConnected && !connected) {
+            com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+            update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+            return;
+        }
+
         List<String> actions = new ArrayList<>();
         actions.add("Search for device");
         if (connected) {
