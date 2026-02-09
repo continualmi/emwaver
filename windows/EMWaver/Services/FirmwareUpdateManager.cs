@@ -126,6 +126,8 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         RunOnUi(() => DfuConnected = present);
     }
 
+    private WindowsDeviceManager.DeviceIdentity? _preservedIdentity;
+
     public async Task StartUpdateAsync(WindowsDeviceManager device)
     {
         UpdateError = null;
@@ -135,10 +137,45 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         if (IsFlashing) return;
 
-        // If DFU is already present, flash immediately.
+        _preservedIdentity = null;
+
+        // Gate: only secured devices can be updated.
+        // For run-mode devices we can use the already-verified secure connection state.
+        if (device.IsConnected && !device.IsSecureConnected)
+        {
+            UpdateError = "Firmware update blocked: device is not secured.";
+            ProgressMessage = "";
+            return;
+        }
+
+        // Prefer preserving identity from Run mode (EMW opcode), because ROM DFU mass erase wipes it.
+        if (device.IsConnected && device.IsSecureConnected)
+        {
+            _preservedIdentity = await device.ReadDeviceIdentityAsync(timeoutMs: 900);
+            if (_preservedIdentity == null)
+            {
+                UpdateError = "Failed to read device identity in Run mode. Reconnect and retry.";
+                ProgressMessage = "";
+                return;
+            }
+        }
+
+        // If DFU is already present, gate on DFU identity (if needed), then flash.
         if (DfuConnected)
         {
-            await RunFlashAsync();
+            try
+            {
+                if (_preservedIdentity == null)
+                {
+                    await GateOnDfuIdentityOrFailAsync();
+                }
+                await RunFlashAsync();
+            }
+            catch (Exception ex)
+            {
+                UpdateError = ex.Message;
+                ProgressMessage = "";
+            }
             return;
         }
 
@@ -184,7 +221,17 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
 
         ProgressMessage = "Preparing update...";
-        await RunFlashAsync();
+
+        try
+        {
+            await GateOnDfuIdentityOrFailAsync();
+            await RunFlashAsync();
+        }
+        catch (Exception ex)
+        {
+            UpdateError = ex.Message;
+            ProgressMessage = "";
+        }
     }
 
     // MARK: - Private
@@ -204,6 +251,192 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         var selector = UsbDevice.GetDeviceSelector(Dfu.USB_VENDOR_ID, Dfu.USB_PRODUCT_ID);
         var devices = await DeviceInformation.FindAllAsync(selector);
         return devices.Count > 0;
+    }
+
+    private const uint IdentityPageAddr = 0x0800_7800;
+    private const int IdentityPageSize = 1024;
+    private const int DeviceIdLen = 16;
+    private const int ProofLen = 64;
+
+    private static byte[] BuildIdentityPage(byte[] deviceId16, byte[] proof64)
+    {
+        if (deviceId16.Length != DeviceIdLen) throw new ArgumentException($"DeviceID must be {DeviceIdLen} bytes");
+        if (proof64.Length != ProofLen) throw new ArgumentException($"Proof must be {ProofLen} bytes");
+
+        var page = new byte[IdentityPageSize];
+        for (int i = 0; i < page.Length; i++) page[i] = 0xFF;
+
+        page[0] = (byte)'E';
+        page[1] = (byte)'M';
+        page[2] = (byte)'I';
+        page[3] = (byte)'D';
+        page[4] = 1;
+        page[5] = (byte)DeviceIdLen;
+        page[6] = (byte)ProofLen;
+
+        var off = 16;
+        Buffer.BlockCopy(deviceId16, 0, page, off, DeviceIdLen);
+        off += DeviceIdLen;
+        Buffer.BlockCopy(proof64, 0, page, off, ProofLen);
+
+        return page;
+    }
+
+    private static bool VerifyEd25519(byte[] pkRaw32, byte[] message, byte[] signature64)
+    {
+        try
+        {
+            var pk = new Org.BouncyCastle.Crypto.Parameters.Ed25519PublicKeyParameters(pkRaw32, 0);
+            var verifier = new Org.BouncyCastle.Crypto.Signers.Ed25519Signer();
+            verifier.Init(false, pk);
+            verifier.BlockUpdate(message, 0, message.Length);
+            return verifier.VerifySignature(signature64);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static byte[] GetRootPublicKeyOrThrow()
+    {
+        var pk = EMWaver.Services.Security.EmwaverRootKey.GetPublicKeyRaw();
+        if (pk == null)
+        {
+            throw new InvalidOperationException("Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64)");
+        }
+        return pk;
+    }
+
+    private async Task GateOnDfuIdentityOrFailAsync()
+    {
+        var pk = GetRootPublicKeyOrThrow();
+
+        await using var dfu = await Dfu.OpenFirstAsync();
+        await dfu.SetAddressPointerAsync(IdentityPageAddr, CancellationToken.None);
+
+        var buf = new byte[IdentityPageSize];
+        await dfu.ReadBlockAsync(buf, blockNum: 2, numBytes: IdentityPageSize, CancellationToken.None);
+
+        var hasHeader = buf.Length >= 16
+            && buf[0] == (byte)'E' && buf[1] == (byte)'M' && buf[2] == (byte)'I' && buf[3] == (byte)'D'
+            && buf[4] == 1
+            && buf[5] == DeviceIdLen
+            && buf[6] == ProofLen;
+
+        if (!hasHeader)
+        {
+            throw new InvalidOperationException("Device is not secured (missing identity page)");
+        }
+
+        var deviceId = new byte[DeviceIdLen];
+        Buffer.BlockCopy(buf, 16, deviceId, 0, DeviceIdLen);
+        var proof = new byte[ProofLen];
+        Buffer.BlockCopy(buf, 16 + DeviceIdLen, proof, 0, ProofLen);
+
+        if (!VerifyEd25519(pk, deviceId, proof))
+        {
+            throw new InvalidOperationException("Device identity proof is invalid");
+        }
+
+        _preservedIdentity = new WindowsDeviceManager.DeviceIdentity(deviceId, proof);
+    }
+
+    public async Task StartRecoveryAsync(EMWaver.Services.Cloud.CloudAuthManager auth, WindowsDeviceManager device)
+    {
+        UpdateError = null;
+        UpdateDone = false;
+        ProgressPct = 0;
+        ProgressMessage = "Recovering device identity...";
+
+        if (IsFlashing) return;
+
+        try
+        {
+            IsFlashing = true;
+
+            // Step 1: sign in and request a fresh DeviceID+Proof.
+            using var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
+            var idToken = await auth.EnsureSignedInAsync(cts.Token);
+            if (string.IsNullOrWhiteSpace(idToken))
+            {
+                throw new InvalidOperationException("Sign in to recover device identity.");
+            }
+
+            var baseUrl = EMWaver.Services.Cloud.BackendUrl.Resolve().Trim().TrimEnd('/');
+            if (string.IsNullOrWhiteSpace(baseUrl))
+            {
+                throw new InvalidOperationException("Missing backend URL (configure backend first)." );
+            }
+
+            ProgressMessage = "Minting identity...";
+
+            var url = new Uri(baseUrl + "/provisioning/mint");
+            using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, url);
+            req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", idToken);
+
+            var res = await AppServices.Http.SendAsync(req, cts.Token);
+            var body = await res.Content.ReadAsStringAsync(cts.Token);
+            if (!res.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"Mint failed: {body}");
+            }
+
+            using var doc = System.Text.Json.JsonDocument.Parse(body);
+            var root = doc.RootElement;
+            var devB64 = root.GetProperty("device_id_b64").GetString() ?? "";
+            var proofB64 = root.GetProperty("proof_b64").GetString() ?? "";
+            var dev = Convert.FromBase64String(devB64);
+            var proof = Convert.FromBase64String(proofB64);
+
+            if (dev.Length != DeviceIdLen || proof.Length != ProofLen)
+            {
+                throw new InvalidOperationException("Mint returned malformed identity");
+            }
+
+            // Step 2: enter DFU and write identity page.
+            ProgressMessage = "Switching device to Update Mode...";
+
+            if (device.IsConnected)
+            {
+                device.RequestEnterUpdateMode();
+                device.Disconnect();
+            }
+
+            // Wait for DFU.
+            var detected = false;
+            var deadline = DateTimeOffset.UtcNow.AddSeconds(8);
+            while (DateTimeOffset.UtcNow < deadline)
+            {
+                detected = await IsDfuPresentAsync();
+                if (detected) break;
+                await Task.Delay(250, cts.Token);
+            }
+            if (!detected)
+            {
+                throw new InvalidOperationException("DFU not detected");
+            }
+
+            ProgressMessage = "Writing identity page...";
+
+            var page = BuildIdentityPage(dev, proof);
+            await using (var dfu = await Dfu.OpenFirstAsync())
+            {
+                await dfu.SetAddressPointerAsync(IdentityPageAddr, cts.Token);
+                await dfu.WriteBlockAsync(page, blockNum: 2, numBytes: page.Length, cts.Token);
+            }
+
+            ProgressMessage = "Identity recovered. Reconnect device and retry update.";
+        }
+        catch (Exception ex)
+        {
+            UpdateError = ex.ToString();
+            ProgressMessage = "";
+        }
+        finally
+        {
+            IsFlashing = false;
+        }
     }
 
     private async Task RunFlashAsync()
@@ -293,6 +526,15 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
                 step += 1;
                 blockNum += 1;
+            }
+
+            // Restore identity page after DFU flash (ROM DFU mass erase wipes it).
+            if (_preservedIdentity != null)
+            {
+                SetProgress("Restoring device identity...", 98);
+                var page = BuildIdentityPage(_preservedIdentity.DeviceId, _preservedIdentity.Proof);
+                await dfu.SetAddressPointerAsync(IdentityPageAddr, ct);
+                await dfu.WriteBlockAsync(page, blockNum: 2, numBytes: page.Length, ct);
             }
 
             SetProgress("Flash write completed successfully.", 100);

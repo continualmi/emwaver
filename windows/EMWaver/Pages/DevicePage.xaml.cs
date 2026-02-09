@@ -75,6 +75,14 @@ public sealed partial class DevicePage : Page
             ? $"EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
 
+        SecureText.Text = device.IsConnected
+            ? (device.IsSecureConnected ? "Secure connection: OK" : "Secure connection: Not secured")
+            : string.Empty;
+
+        DeviceIdText.Text = device.IsConnected && device.IsSecureConnected && !string.IsNullOrWhiteSpace(device.SecureDeviceIdHex)
+            ? $"DeviceID: {device.SecureDeviceIdHex}"
+            : string.Empty;
+
         DfuText.Text = device.DfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected";
         ErrorText.Text = device.LastErrorText ?? string.Empty;
     }
