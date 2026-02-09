@@ -27,6 +27,7 @@ open = "5"
 urlencoding = "2"
 dotenvy = "0.15"
 midir = "0.10"
+ed25519-dalek = { version = "2", features = ["rand_core"] }
 
 # Internal DFU helper crate
 emwaver-dfu = { path = "../../crates/emwaver-dfu" }
