@@ -9,6 +9,7 @@
 
 mod auth_google;
 mod legit_check;
+mod session_store;
 mod update_mode;
 mod update_mode_identity;
 mod usb_midi_sysex;
@@ -19,7 +20,7 @@ mod usb_midi_sysex;
 use dotenvy::dotenv;
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
-use serde::Serialize;
+use serde::{Serialize, Deserialize};
 use std::fs;
 
 type AnyResult<T> = Result<T, String>;
@@ -271,7 +272,7 @@ fn update_device_preserve_identity(firmware_path: Option<String>) -> AnyResult<U
     })
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SecurewaverAuthSession {
     id_token: String,
     refresh_token: String,
@@ -281,7 +282,17 @@ struct SecurewaverAuthSession {
 }
 
 #[tauri::command]
-async fn auth_google_sign_in() -> AnyResult<SecurewaverAuthSession> {
+fn auth_session_get(app: tauri::AppHandle) -> AnyResult<Option<SecurewaverAuthSession>> {
+    session_store::get(&app)
+}
+
+#[tauri::command]
+fn auth_session_clear(app: tauri::AppHandle) -> AnyResult<()> {
+    session_store::clear(&app)
+}
+
+#[tauri::command]
+async fn auth_google_sign_in(app: tauri::AppHandle) -> AnyResult<SecurewaverAuthSession> {
     let google_client_id = (std::env::var("EMWAVER_GOOGLE_CLIENT_ID").unwrap_or_default()).trim().to_string();
     let google_client_secret = (std::env::var("EMWAVER_GOOGLE_CLIENT_SECRET").unwrap_or_default()).trim().to_string();
     let firebase_web_api_key = (std::env::var("EMWAVER_FIREBASE_WEB_API_KEY").unwrap_or_default()).trim().to_string();
@@ -293,13 +304,18 @@ async fn auth_google_sign_in() -> AnyResult<SecurewaverAuthSession> {
     )
     .await?;
 
-    Ok(SecurewaverAuthSession {
+    let session = SecurewaverAuthSession {
         id_token: fb.id_token,
         refresh_token: fb.refresh_token,
         email: fb.email,
         display_name: fb.display_name,
         uid: fb.local_id,
-    })
+    };
+
+    // Persist session so relaunch doesn't require sign-in.
+    let _ = session_store::set(&app, &session);
+
+    Ok(session)
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -316,7 +332,7 @@ struct FirebaseRefreshResponse {
 
 /// Refresh a Firebase session given a refresh token.
 #[tauri::command]
-async fn auth_firebase_refresh(refresh_token: String) -> AnyResult<SecurewaverAuthSession> {
+async fn auth_firebase_refresh(app: tauri::AppHandle, refresh_token: String) -> AnyResult<SecurewaverAuthSession> {
     let firebase_web_api_key = (std::env::var("EMWAVER_FIREBASE_WEB_API_KEY").unwrap_or_default()).trim().to_string();
     if firebase_web_api_key.is_empty() {
         return Err("Missing EMWAVER_FIREBASE_WEB_API_KEY".to_string());
@@ -349,13 +365,18 @@ async fn auth_firebase_refresh(refresh_token: String) -> AnyResult<SecurewaverAu
         .await
         .map_err(|e| format!("Firebase refresh decode failed: {e}"))?;
 
-    Ok(SecurewaverAuthSession {
+    let session = SecurewaverAuthSession {
         id_token: rr.id_token,
         refresh_token: rr.refresh_token,
         email: None,
         display_name: None,
         uid: rr.user_id,
-    })
+    };
+
+    // Persist rotated refresh_token.
+    let _ = session_store::set(&app, &session);
+
+    Ok(session)
 }
 
 fn main() {
@@ -363,6 +384,7 @@ fn main() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
             update_mode_detect,
             dfu_provision_device,
@@ -371,6 +393,8 @@ fn main() {
             check_device_legit_run_mode,
             check_device_legit_update_mode,
             request_enter_update_mode,
+            auth_session_get,
+            auth_session_clear,
             auth_google_sign_in,
             auth_firebase_refresh
         ])
