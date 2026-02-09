@@ -212,13 +212,43 @@ export default function App() {
       <div className="sw-grid">
         <div className="sw-card">
           <div className="sw-card-h">
-            <h2>Provision</h2>
-            <div className="sub">Mint identity on backend then flash firmware + identity page over DFU.</div>
+            <h2>Update Mode</h2>
+            <div className="sub">If the device is connected normally, switch it into Update Mode first.</div>
           </div>
           <div className="sw-card-b">
             <div className="sw-row">
+              <button
+                className="sw-btn sw-btn-primary"
+                onClick={async () => {
+                  try {
+                    setStatus('Requesting Update Mode…');
+                    const port = await invoke<string>('request_enter_update_mode');
+                    setStatus(`Update Mode requested via ${port}. Unplug and plug the device again.`);
+                  } catch (e: any) {
+                    setStatus(`Failed to enter Update Mode: ${e}`);
+                  }
+                }}
+              >
+                Enter Update Mode
+              </button>
+              <button className="sw-btn" onClick={probe}>Refresh Update Mode</button>
+            </div>
+
+            <div style={{ height: 12 }} />
+
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+              After entering Update Mode, the device will reboot into the STM32 ROM bootloader.
+              If Update Mode isn’t detected, unplug and plug it back in.
+            </div>
+
+            <div style={{ height: 14 }} />
+
+            <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>
+              Provision
+            </div>
+
+            <div className="sw-row">
               <button className="sw-btn" onClick={selectFirmware}>Select firmware</button>
-              <button className="sw-btn" onClick={probe}>Probe DFU</button>
               <button className="sw-btn sw-btn-primary" onClick={mintAndProvision} disabled={!canProvision}>
                 Mint + Provision
               </button>
@@ -231,6 +261,8 @@ export default function App() {
               <div><code>{backendUrl}</code></div>
               <div>Firmware</div>
               <div><code>{firmwarePath ?? '(not selected)'}</code></div>
+              <div>Update Mode</div>
+              <div><code>{dfuInfo ? 'Detected' : 'Not detected'}</code></div>
             </div>
 
             {settingsOpen && (
