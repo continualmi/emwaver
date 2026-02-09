@@ -9,6 +9,11 @@
 
 mod auth_google;
 
+// Dev convenience: load env vars from a local .env file when present.
+// Note: packaged apps should rely on configured environment/launchd, not .env.
+#[allow(unused_imports)]
+use dotenvy::dotenv;
+
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::Serialize;
 use std::fs;
@@ -177,6 +182,8 @@ async fn auth_google_sign_in() -> AnyResult<SecurewaverAuthSession> {
 }
 
 fn main() {
+    let _ = dotenvy::dotenv();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
