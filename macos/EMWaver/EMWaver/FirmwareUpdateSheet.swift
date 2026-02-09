@@ -106,7 +106,10 @@ struct FirmwareUpdateSheet: View {
             }
 
             if let err = updater.updateError, !err.isEmpty {
+                // Text views aren't selectable by default, which makes debugging painful.
+                // Keep this selectable so errors can be copied.
                 Text(err)
+                    .textSelection(.enabled)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .padding(12)
