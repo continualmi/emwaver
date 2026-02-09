@@ -75,40 +75,45 @@ export default function App() {
     return backendMode === 'production' ? productionBackend : localBackend;
   }, [backendMode]);
 
-  const [session, setSession] = useState<AuthSession | null>(() => {
-    try {
-      const raw = localStorage.getItem('securewaver.auth.session');
-      return raw ? (JSON.parse(raw) as AuthSession) : null;
-    } catch {
-      return null;
-    }
-  });
+  const [session, setSession] = useState<AuthSession | null>(null);
 
   const signedInLabel = useMemo(() => {
     if (!session) return 'Not signed in';
     return session.display_name || session.email || session.uid || 'Signed in';
   }, [session]);
 
-  async function tryRestore() {
-    if (!session?.refresh_token) return;
+  async function loadSessionFromBackend() {
+    try {
+      const stored = await invoke<AuthSession | null>('auth_session_get');
+      if (!stored) return;
+      setSession(stored);
+    } catch (e: any) {
+      log(`Failed to load stored session: ${e}`);
+    }
+  }
+
+  async function tryRestore(current: AuthSession) {
+    if (!current?.refresh_token) return;
     try {
       setStatus('Restoring session…');
-      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: session.refresh_token });
-      const merged: AuthSession = { ...session, ...s, email: session.email, display_name: session.display_name };
+      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: current.refresh_token });
+      const merged: AuthSession = { ...current, ...s, email: current.email, display_name: current.display_name };
       setSession(merged);
-      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(merged)); } catch {}
       setStatus('Signed in');
       log('Session restored');
     } catch (e: any) {
       setStatus(`Session restore failed: ${e}`);
       log(`Session restore failed: ${e}`);
       setSession(null);
-      try { localStorage.removeItem('securewaver.auth.session'); } catch {}
+      try { await invoke('auth_session_clear'); } catch {}
     }
   }
 
   React.useEffect(() => {
-    if (session?.refresh_token) void tryRestore();
+    (async () => {
+      await loadSessionFromBackend();
+    })();
+
     void refreshDetections(true);
     const t = setInterval(() => {
       void refreshDetections(true);
@@ -116,6 +121,13 @@ export default function App() {
     return () => clearInterval(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  React.useEffect(() => {
+    if (session?.refresh_token) {
+      void tryRestore(session);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.refresh_token]);
 
   async function refreshDetections(silent = true) {
     try {
@@ -142,17 +154,19 @@ export default function App() {
     try {
       const s = await invoke<AuthSession>('auth_google_sign_in');
       setSession(s);
-      try { localStorage.setItem('securewaver.auth.session', JSON.stringify(s)); } catch {}
       setStatus('Signed in');
+      log('Signed in');
     } catch (e: any) {
       setStatus(`Sign-in failed: ${e}`);
+      log(`Sign-in failed: ${e}`);
     }
   }
 
-  function logout() {
+  async function logout() {
     setSession(null);
-    try { localStorage.removeItem('securewaver.auth.session'); } catch {}
+    try { await invoke('auth_session_clear'); } catch {}
     setStatus('Signed out');
+    log('Signed out');
   }
 
   async function selectFirmware() {
