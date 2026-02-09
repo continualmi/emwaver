@@ -425,7 +425,26 @@ impl DfuDevice {
     }
 
     pub fn read_block(&mut self, block_num: u16, out: &mut [u8]) -> Result<usize, String> {
-        self.control_in(DFU_UPLOAD, block_num, out, 500)
+        // DFU_UPLOAD can stall on some host stacks (macOS/libusb often reports this as Pipe error).
+        // Add a small retry loop with state recovery.
+        let mut last_err: Option<String> = None;
+        for attempt in 0..3 {
+            if attempt > 0 {
+                // Best-effort recovery between attempts.
+                let _ = self.abort();
+                let _ = self.clear_status();
+                let _ = self.wait_upload_idle();
+                thread::sleep(Duration::from_millis(20));
+            }
+
+            match self.control_in(DFU_UPLOAD, block_num, out, 1500) {
+                Ok(n) => return Ok(n),
+                Err(e) => {
+                    last_err = Some(e);
+                }
+            }
+        }
+        Err(last_err.unwrap_or_else(|| "DFU_UPLOAD failed".to_string()))
     }
 
     pub fn flash(
