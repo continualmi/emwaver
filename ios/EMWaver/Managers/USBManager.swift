@@ -765,7 +765,8 @@ final class USBManager: ObservableObject {
 
         let ok: Bool = sysex.withUnsafeBytes { bytes in
             guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else { return false }
-            return MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base) != nil
+            _ = MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base)
+            return true
         }
 
         guard ok else {
