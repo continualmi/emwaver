@@ -96,7 +96,7 @@ export default function App() {
     if (!current?.refresh_token) return;
     try {
       setStatus('Restoring session…');
-      const s = await invoke<AuthSession>('auth_firebase_refresh', { refresh_token: current.refresh_token });
+      const s = await invoke<AuthSession>('auth_firebase_refresh', { refreshToken: current.refresh_token });
       const merged: AuthSession = { ...current, ...s, email: current.email, display_name: current.display_name };
       setSession(merged);
       setStatus('Signed in');
