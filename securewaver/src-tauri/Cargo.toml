@@ -25,6 +25,7 @@ url = "2"
 tiny_http = "0.12"
 open = "5"
 urlencoding = "2"
+dotenvy = "0.15"
 
 # Internal DFU helper crate
 emwaver-dfu = { path = "../../crates/emwaver-dfu" }
