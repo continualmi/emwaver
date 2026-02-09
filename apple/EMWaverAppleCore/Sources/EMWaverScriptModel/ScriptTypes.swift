@@ -337,6 +337,10 @@ public struct ScriptNodeProps {
         return minValue...maxValue
     }
 
+    public var sliderStep: Double? {
+        ScriptNodeProps.extractDouble(raw["step"])
+    }
+
     public func handlerId(for event: ScriptEventType) -> String? {
         eventHandlers[event]
     }
