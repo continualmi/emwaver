@@ -20,12 +20,16 @@ struct ContentView: View {
     @ObservedObject var hostDirectory: HostDirectory
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
+    @EnvironmentObject private var entitlements: EntitlementsManager
 
     let previewManager: ScriptPreviewManager
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
     @State private var showingBackendSettings: Bool = false
+
+    @State private var showingProUpgrade: Bool = false
+    @State private var proFeatureName: String = ""
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -37,26 +41,36 @@ struct ContentView: View {
                     previewManager: previewManager,
                     device: device,
                     syncProvider: {
-                    // Backend base URL is controlled by BackendUrl (supports a hard switch to Azure prod).
-                    guard let base = BackendUrl.resolve() else { return nil }
+                        // Backend base URL is controlled by BackendUrl (supports a hard switch to Azure prod).
+                        guard let base = BackendUrl.resolve() else { return nil }
 
-                    // For local dev: allow sync without sign-in when backend auth is disabled.
-                    // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
-                    let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
+                        // For local dev: allow sync without sign-in when backend auth is disabled.
+                        // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
+                        let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
-                    if let session = auth.session, !session.idToken.isEmpty {
-                        return (baseURL: base, accessToken: session.idToken)
-                    }
+                        // Pro gating: cloud file sync is Pro-only.
+                        if !(entitlements.entitlements?.features.cloudFiles ?? false), !allowAnonSync {
+                            return nil
+                        }
 
-                    if allowAnonSync {
-                        return (baseURL: base, accessToken: "")
-                    }
+                        if let session = auth.session, !session.idToken.isEmpty {
+                            return (baseURL: base, accessToken: session.idToken)
+                        }
 
-                    return nil
-                },
+                        if allowAnonSync {
+                            return (baseURL: base, accessToken: "")
+                        }
+
+                        return nil
+                    },
                     hostStatusSink: { running, name in
                         // Treat "preview showing" as "script running" on macOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                    },
+                    agentEnabled: (entitlements.entitlements?.features.agent ?? false),
+                    onRequestAgentUpgrade: {
+                        proFeatureName = "AI Agent"
+                        showingProUpgrade = true
                     }
                 )
 
@@ -133,7 +147,12 @@ struct ContentView: View {
 
             ToolbarItem(placement: .automatic) {
                 Button {
-                    showingHosts = true
+                    if entitlements.entitlements?.features.cloudHosts ?? false {
+                        showingHosts = true
+                    } else {
+                        proFeatureName = "Remote host sessions"
+                        showingProUpgrade = true
+                    }
                 } label: {
                     Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
                 }
@@ -212,6 +231,10 @@ struct ContentView: View {
         .sheet(isPresented: $showingBackendSettings) {
             BackendSettingsView()
         }
+        .sheet(isPresented: $showingProUpgrade) {
+            ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)
+                .environmentObject(auth)
+        }
         .alert("Save device to your account?", isPresented: $device.needsLoginToSaveDevice) {
             Button("Sign In") {
                 auth.isSignInSheetPresented = true
@@ -224,6 +247,12 @@ struct ContentView: View {
         }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
+        .task {
+            await entitlements.refresh(auth: auth, force: true)
+        }
+        .onChange(of: auth.isSignedIn) { _ in
+            Task { await entitlements.refresh(auth: auth, force: true) }
+        }
 
     }
 }
@@ -238,4 +267,5 @@ struct ContentView: View {
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())
+    .environmentObject(EntitlementsManager())
 }

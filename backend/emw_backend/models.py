@@ -27,6 +27,30 @@ class User(Base):
     last_seen_at: Mapped[int] = mapped_column(Integer, default=_now_epoch)
 
 
+# --- Entitlements (EMWaver Pro) ---
+
+
+def _now_ms() -> int:
+    return int(time.time() * 1000)
+
+
+class UserEntitlement(Base):
+    __tablename__ = "user_entitlements"
+
+    # Keep it simple: 1 row per user (firebase_uid as primary key).
+    firebase_uid: Mapped[str] = mapped_column(String(128), primary_key=True)
+
+    # Pro subscription state.
+    pro_active: Mapped[int] = mapped_column(Integer, default=0)  # 0/1
+    pro_expires_at_ms: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+Index("idx_user_entitlements_updated", UserEntitlement.updated_at_ms)
+
+
 
 class UserFileIndex(Base):
     """Current file index (Postgres): bytes in Azure Blob, metadata/index in SQL.
@@ -55,10 +79,6 @@ Index("idx_user_files_uid_name", UserFileIndex.firebase_uid, UserFileIndex.name,
 
 
 # --- Agent chat persistence ---
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
 
 
 class AgentConversation(Base):
