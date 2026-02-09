@@ -26,6 +26,10 @@ public struct ScriptsRootView: View {
     private let agentHost: DefaultAgentHost
     private let hostStatusSink: ((Bool, String?) -> Void)?
 
+    // Pro gating (caller-controlled).
+    private let agentEnabled: Bool
+    private let onRequestAgentUpgrade: (() -> Void)?
+
     @State private var showingEditor = false
     @State private var showingPreview = false
     @State private var previewLaunchedFromEditor = false
@@ -59,11 +63,15 @@ public struct ScriptsRootView: View {
         previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
-        hostStatusSink: ((Bool, String?) -> Void)? = nil
+        hostStatusSink: ((Bool, String?) -> Void)? = nil,
+        agentEnabled: Bool = true,
+        onRequestAgentUpgrade: (() -> Void)? = nil
     ) {
         self.device = device
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
+        self.agentEnabled = agentEnabled
+        self.onRequestAgentUpgrade = onRequestAgentUpgrade
         let host = DefaultAgentHost(previewManager: previewManager)
         self._previewManager = StateObject(wrappedValue: previewManager)
         self.agentHost = host
@@ -74,15 +82,24 @@ public struct ScriptsRootView: View {
     public init(
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
-        hostStatusSink: ((Bool, String?) -> Void)? = nil
+        hostStatusSink: ((Bool, String?) -> Void)? = nil,
+        agentEnabled: Bool = true,
+        onRequestAgentUpgrade: (() -> Void)? = nil
     ) {
-        self.init(previewManager: ScriptPreviewManager(), device: device, syncProvider: syncProvider, hostStatusSink: hostStatusSink)
+        self.init(
+            previewManager: ScriptPreviewManager(),
+            device: device,
+            syncProvider: syncProvider,
+            hostStatusSink: hostStatusSink,
+            agentEnabled: agentEnabled,
+            onRequestAgentUpgrade: onRequestAgentUpgrade
+        )
     }
 
     public var body: some View {
         ZStack {
             #if os(macOS)
-            if showingAgentPanel {
+            if showingAgentPanel && agentEnabled {
                 HSplitView {
                     primaryContent
                         .frame(minWidth: 520)
@@ -684,11 +701,15 @@ public struct ScriptsRootView: View {
         #if os(macOS)
         ToolbarItem(placement: .primaryAction) {
             Button {
-                showingAgentPanel.toggle()
+                if agentEnabled {
+                    showingAgentPanel.toggle()
+                } else {
+                    onRequestAgentUpgrade?()
+                }
             } label: {
-                Image(systemName: "sparkles")
+                Image(systemName: agentEnabled ? "sparkles" : "lock.fill")
             }
-            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
+            .help(agentEnabled ? (showingAgentPanel ? "Hide agent panel" : "Show agent panel") : "EMWaver Pro required")
         }
         #endif
 

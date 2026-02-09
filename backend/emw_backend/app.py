@@ -12,6 +12,8 @@ from emw_backend.routes.ws import init_ws
 from emw_backend.routes.provisioning import provisioning_bp
 from emw_backend.routes.store import store_bp
 from emw_backend.routes.devices import devices_bp
+from emw_backend.routes.entitlements import entitlements_bp
+from emw_backend.routes.billing import billing_bp
 
 
 def create_app() -> Flask:
@@ -37,6 +39,8 @@ def create_app() -> Flask:
     app.register_blueprint(provisioning_bp)
     app.register_blueprint(store_bp)
     app.register_blueprint(devices_bp)
+    app.register_blueprint(entitlements_bp)
+    app.register_blueprint(billing_bp)
 
     # WebSocket endpoint for Remote Sessions.
     init_ws(app)
