@@ -170,13 +170,23 @@ pub fn run_mode_legit_check() -> Result<LegitCheckResult, String> {
 
 pub fn detect_run_mode_device() -> Result<Vec<String>, String> {
     let midi_out = MidiOutput::new("SecureWaver").map_err(|e| format!("MIDI init failed: {e}"))?;
-    let mut names: Vec<String> = Vec::new();
-    for p in midi_out.ports() {
+    let ports = midi_out.ports();
+
+    let mut matches: Vec<String> = Vec::new();
+    let mut all: Vec<String> = Vec::new();
+
+    for p in ports {
         if let Ok(name) = midi_out.port_name(&p) {
-            if name.to_lowercase().contains("emwaver") {
-                names.push(name);
+            let lower = name.to_lowercase();
+            all.push(name.clone());
+            if lower.contains("emwaver") || lower.contains("em waver") || lower.contains(" emw ") || lower.starts_with("emw") {
+                matches.push(name);
             }
         }
     }
-    Ok(names)
+
+    // On some OSes the port name doesn't include "emwaver".
+    // If we don't find a match, return *all* output ports so the UI can still
+    // show Run Mode as present and allow the user to press "Check device".
+    Ok(if !matches.is_empty() { matches } else { all })
 }
