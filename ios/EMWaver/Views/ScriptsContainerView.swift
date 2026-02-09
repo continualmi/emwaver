@@ -111,8 +111,16 @@ struct ScriptsContainerView: View {
 
                             if bleManager.isConnected {
                                 Divider()
-                                Text(bleManager.isSecureConnected ? "Secure Connection" : "Not verified")
-                                    .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
+                                HStack(spacing: 6) {
+                                    Text(bleManager.isSecureConnected ? "Secured" : "Not verified")
+                                    if bleManager.isSecureConnected {
+                                        Image("SecureWaver")
+                                            .renderingMode(.template)
+                                            .foregroundStyle(.green)
+                                            .frame(width: 14, height: 14)
+                                    }
+                                }
+                                .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
                             }
 
                             if let err = bleManager.lastErrorText, !err.isEmpty {
@@ -126,16 +134,6 @@ struct ScriptsContainerView: View {
                                     .fill(connectionStatusColor)
                                     .frame(width: 8, height: 8)
                                 Image(systemName: "cable.connector")
-                                if bleManager.isConnected {
-                                    if bleManager.isSecureConnected {
-                                        Image("SecureWaver")
-                                            .renderingMode(.template)
-                                            .foregroundStyle(.green)
-                                    } else {
-                                        Image(systemName: "shield.slash")
-                                            .foregroundStyle(.secondary)
-                                    }
-                                }
                             }
                             .contentShape(Rectangle())
                             .accessibilityLabel(connectionStatusText)
