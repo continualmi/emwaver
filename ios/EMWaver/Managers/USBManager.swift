@@ -220,7 +220,44 @@ final class USBManager: ObservableObject {
     }
 
     // MARK: - Transport (TX/RX)
-    
+
+    /// Best-effort variant of `sendCommand` used for non-critical background checks (e.g. secure identity).
+    /// Never touches `lastErrorText`.
+    private func sendCommandBestEffort(_ command: Data, timeout: Int) -> Data? {
+        // Avoid depending on the @Published `isConnected` flag here; it may lag behind CoreMIDI state.
+        guard connectedDestination != 0 else { return nil }
+
+        // Drop any stale RX packets so next_rx_packet returns this command's response.
+        withBufferQueueSync {
+            NativeBufferRust.setRxCounter(NativeBufferRust.getRxPacketCount())
+        }
+
+        sendPacket(command)
+
+        let startTime = Date().timeIntervalSince1970
+        var out = Data()
+        out.reserveCapacity(Self.packetSizeBytes)
+
+        while out.count < Self.packetSizeBytes {
+            if connectedDestination == 0 { return nil }
+
+            let nextPacket = withBufferQueueSync { NativeBufferRust.nextRxPacket() }
+            if let pkt = nextPacket {
+                out.append(pkt.packet64)
+                break
+            }
+
+            let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
+            if elapsedMs >= Double(max(1, timeout)) {
+                return nil
+            }
+
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+
+        return out
+    }
+
     private func makeSuperframe(cmdLane: Data?, streamLane: Data?) -> Data {
         var sf = Data(repeating: 0, count: Self.superframeSizeBytes)
         
@@ -563,14 +600,14 @@ final class USBManager: ObservableObject {
     /// Read DeviceID (16B) and Proof (64B) using EMW_OP_IDENTITY_GET.
     func readDeviceIdentity(timeoutMs: Int) -> DeviceIdentity? {
         // Read DeviceID.
-        guard let devLane = sendCommand(Data([EmwOpcode.identityGet, 0x00, 0x00]), timeout: timeoutMs) else { return nil }
+        guard let devLane = sendCommandBestEffort(Data([EmwOpcode.identityGet, 0x00, 0x00]), timeout: timeoutMs) else { return nil }
         guard devLane.count >= 17, devLane[0] == 0x80 else { return nil }
         let deviceId = Data(devLane[1..<17])
 
         // Read Proof in 4 chunks (16B each).
         var proof = Data(capacity: 64)
         for chunk in 0..<4 {
-            guard let lane = sendCommand(Data([EmwOpcode.identityGet, 0x01, UInt8(chunk)]), timeout: timeoutMs) else { return nil }
+            guard let lane = sendCommandBestEffort(Data([EmwOpcode.identityGet, 0x01, UInt8(chunk)]), timeout: timeoutMs) else { return nil }
             guard lane.count >= 17, lane[0] == 0x80 else { return nil }
             proof.append(contentsOf: lane[1..<17])
         }
