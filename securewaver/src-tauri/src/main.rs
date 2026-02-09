@@ -199,6 +199,11 @@ fn dfu_provision_device(
         .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
     // Write identity page after firmware.
+    // Some hosts/devices need a short settle after mass erase + flash.
+    // Best-effort recover if the device reports busy.
+    let _ = dev.abort();
+    let _ = dev.clear_status();
+
     dev.set_address_pointer(page_addr)
         .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
     dev.write_block(2, &identity_page)
