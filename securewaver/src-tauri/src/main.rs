@@ -22,7 +22,7 @@ use dotenvy::dotenv;
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::{Deserialize, Serialize};
 use std::fs;
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 
 type AnyResult<T> = Result<T, String>;
 
@@ -188,7 +188,7 @@ async fn dfu_provision_device(
     proof_b64: String,
     identity_page_addr: Option<u32>,
 ) -> AnyResult<ProvisionResult> {
-    let app = window.app_handle();
+    let app = window.app_handle().clone();
     tauri::async_runtime::spawn_blocking(move || {
         dfu_provision_device_blocking(app, firmware_path, device_id_b64, proof_b64, identity_page_addr)
     })
@@ -263,7 +263,7 @@ async fn update_device_preserve_identity(
     window: tauri::Window,
     firmware_path: Option<String>,
 ) -> AnyResult<UpdatePreserveIdentityResult> {
-    let app = window.app_handle();
+    let app = window.app_handle().clone();
     tauri::async_runtime::spawn_blocking(move || update_device_preserve_identity_blocking(app, firmware_path))
         .await
         .map_err(|e| format!("Update task failed: {e}"))?
