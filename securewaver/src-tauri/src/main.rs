@@ -182,22 +182,22 @@ struct UpdatePreserveIdentityResult {
 /// `firmware_path` is optional: if omitted, SecureWaver uses the bundled firmware payload.
 #[tauri::command]
 async fn dfu_provision_device(
-    app: tauri::AppHandle,
+    window: tauri::Window,
     firmware_path: Option<String>,
     device_id_b64: String,
     proof_b64: String,
     identity_page_addr: Option<u32>,
 ) -> AnyResult<ProvisionResult> {
-    let app2 = app.clone();
+    let window2 = window.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        dfu_provision_device_blocking(app2, firmware_path, device_id_b64, proof_b64, identity_page_addr)
+        dfu_provision_device_blocking(window2, firmware_path, device_id_b64, proof_b64, identity_page_addr)
     })
     .await
     .map_err(|e| format!("Provision task failed: {e}"))?
 }
 
 fn dfu_provision_device_blocking(
-    app: tauri::AppHandle,
+    window: tauri::Window,
     firmware_path: Option<String>,
     device_id_b64: String,
     proof_b64: String,
@@ -234,7 +234,9 @@ fn dfu_provision_device_blocking(
 
     // Flash firmware (this performs a mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        let _ = app.emit("emw_flash_progress", msg.clone());
+        if let Err(e) = window.emit("emw_flash_progress", msg.clone()) {
+            eprintln!("emit emw_flash_progress failed: {e}");
+        }
     })
     .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
@@ -258,17 +260,17 @@ fn dfu_provision_device_blocking(
 
 #[tauri::command]
 async fn update_device_preserve_identity(
-    app: tauri::AppHandle,
+    window: tauri::Window,
     firmware_path: Option<String>,
 ) -> AnyResult<UpdatePreserveIdentityResult> {
-    let app2 = app.clone();
-    tauri::async_runtime::spawn_blocking(move || update_device_preserve_identity_blocking(app2, firmware_path))
+    let window2 = window.clone();
+    tauri::async_runtime::spawn_blocking(move || update_device_preserve_identity_blocking(window2, firmware_path))
         .await
         .map_err(|e| format!("Update task failed: {e}"))?
 }
 
 fn update_device_preserve_identity_blocking(
-    app: tauri::AppHandle,
+    window: tauri::Window,
     firmware_path: Option<String>,
 ) -> AnyResult<UpdatePreserveIdentityResult> {
     let (firmware, firmware_path) = if let Some(p) = firmware_path {
@@ -299,7 +301,9 @@ fn update_device_preserve_identity_blocking(
 
     // Flash firmware (mass erase).
     dev.flash(&firmware, 0x0800_0000, |msg| {
-        let _ = app.emit("emw_flash_progress", msg.clone());
+        if let Err(e) = window.emit("emw_flash_progress", msg.clone()) {
+            eprintln!("emit emw_flash_progress failed: {e}");
+        }
     })
     .map_err(|e| format!("Firmware flash failed: {e}"))?;
 
