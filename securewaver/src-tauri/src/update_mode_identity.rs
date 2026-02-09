@@ -24,6 +24,28 @@ pub struct UpdateModeLegitResult {
     pub ok: bool,
 }
 
+pub fn read_identity_page_raw(
+    dev: &mut emwaver_dfu::DfuDevice,
+    identity_page_addr: u32,
+) -> Result<Vec<u8>, String> {
+    wait_ready_for_commands(dev)?;
+
+    dev.set_address_pointer(identity_page_addr)
+        .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
+
+    let mut page = vec![0u8; IDENTITY_PAGE_SIZE];
+
+    let _ = dev.wait_upload_idle();
+    let n = dev
+        .read_block(2, &mut page)
+        .map_err(|e| format!("Update Mode read identity page failed: {e}"))?;
+    if n == 0 {
+        return Err("Update Mode read returned 0 bytes".to_string());
+    }
+
+    Ok(page)
+}
+
 fn wait_ready_for_commands(dev: &mut emwaver_dfu::DfuDevice) -> Result<(), String> {
     // Some hosts/devices need extra time after enumeration.
     // Wait longer than the default 5s and respect bwPollTimeout.
@@ -67,21 +89,7 @@ pub fn read_and_verify_identity_page(
 ) -> Result<UpdateModeLegitResult, String> {
     let root = parse_root_public_key()?;
 
-    wait_ready_for_commands(dev)?;
-
-    dev.set_address_pointer(identity_page_addr)
-        .map_err(|e| format!("Update Mode set address pointer failed: {e}"))?;
-
-    let mut page = vec![0u8; IDENTITY_PAGE_SIZE];
-    // DFU uploads can be picky about state; wait for upload-idle.
-    let _ = dev.wait_upload_idle();
-
-    let n = dev
-        .read_block(2, &mut page)
-        .map_err(|e| format!("Update Mode read identity page failed: {e}"))?;
-    if n == 0 {
-        return Err("Update Mode read returned 0 bytes".to_string());
-    }
+    let page = read_identity_page_raw(dev, identity_page_addr)?;
 
     if page.len() < 16 {
         return Err("Identity page too small".to_string());
