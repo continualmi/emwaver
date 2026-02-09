@@ -494,6 +494,18 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+
+        // If Android launched us due to a USB attach event, kick the USB scan.
+        if (intent != null && UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
+            new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                if (connectionManager == null) {
+                    connectionManager = DeviceConnectionManager.getInstance(this);
+                }
+                if (connectionManager != null) {
+                    connectionManager.checkForUsbDevices();
+                }
+            }, 250);
+        }
     }
     
 }
