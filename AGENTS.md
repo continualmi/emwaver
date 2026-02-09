@@ -973,6 +973,10 @@ Native interop
   - Manage attached EMWaver devices (SecureWaver DeviceID+Proof identities).
   - Recovery flows live here (attach device to account, reclaim access, etc.).
 
+Backend APIs (store + devices):
+- Store: `/v1/store/*` (Stripe Checkout session + webhooks + order claim)
+- Devices: `/v1/devices/*` (verify DeviceID+Proof, attach to account, list devices)
+
 ## Agent Workflow Guardrails
 
 - Prefer making changes in the working tree first and showing a diff/summary.

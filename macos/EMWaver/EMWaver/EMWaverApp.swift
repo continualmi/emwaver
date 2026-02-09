@@ -16,6 +16,7 @@ struct EMWaverApp: App {
     @StateObject private var hostSessions = HostSessionManager()
     @StateObject private var hostDirectory = HostDirectory()
     @StateObject private var remoteControlHost = RemoteControlHostService()
+    @StateObject private var deviceRegistry = DeviceRegistryService()
     @StateObject private var previewManager = ScriptPreviewManager()
 
     var body: some Scene {
@@ -32,6 +33,9 @@ struct EMWaverApp: App {
 
                     // Remote control host WS (web can attach + drive scripts/UI).
                     remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)
+
+                    // Device identity -> backend attach (or prompt sign-in).
+                    deviceRegistry.start(auth: auth, device: device)
                 }
         }
         .commands {

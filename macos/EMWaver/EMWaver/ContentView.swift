@@ -212,6 +212,16 @@ struct ContentView: View {
         .sheet(isPresented: $showingBackendSettings) {
             BackendSettingsView()
         }
+        .alert("Save device to your account?", isPresented: $device.needsLoginToSaveDevice) {
+            Button("Sign In") {
+                auth.isSignInSheetPresented = true
+            }
+            Button("Not now", role: .cancel) {
+                device.needsLoginToSaveDevice = false
+            }
+        } message: {
+            Text("This EMWaver device is genuine (SecureWaver identity verified). Sign in to attach it to your account for recovery and support.")
+        }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
 
