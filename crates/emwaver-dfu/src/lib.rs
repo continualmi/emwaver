@@ -463,6 +463,8 @@ impl DfuDevice {
 
         let mut block_num: u16 = 2;
         let mut read_buffer = vec![0u8; BLOCK_SIZE];
+        let mut can_verify = true;
+
         for (block_index, chunk) in firmware.chunks(BLOCK_SIZE).enumerate() {
             let block_index = (block_index as u32).saturating_add(1);
             emit(
@@ -472,25 +474,48 @@ impl DfuDevice {
             self.write_block(block_num, chunk)?;
 
             step_index = step_index.saturating_add(1);
-            emit(
-                step_index,
-                format!("Verifying block {block_num} ({block_index}/{total_blocks})..."),
-            );
-            self.wait_upload_idle()?;
 
-            let buf = &mut read_buffer[..chunk.len()];
-            let n = self.read_block(block_num, buf)?;
-            if n != chunk.len() {
-                return Err(format!(
-                    "Verification failed for block {block_num}: read {n} bytes, expected {}",
-                    chunk.len()
-                ));
-            }
-            if buf != chunk {
-                return Err(format!(
-                    "Error verifying block {}",
-                    block_num.saturating_sub(2)
-                ));
+            if can_verify {
+                emit(
+                    step_index,
+                    format!("Verifying block {block_num} ({block_index}/{total_blocks})..."),
+                );
+                self.wait_upload_idle()?;
+
+                let buf = &mut read_buffer[..chunk.len()];
+                match self.read_block(block_num, buf) {
+                    Ok(n) => {
+                        if n != chunk.len() {
+                            return Err(format!(
+                                "Verification failed for block {block_num}: read {n} bytes, expected {}",
+                                chunk.len()
+                            ));
+                        }
+                        if buf != chunk {
+                            return Err(format!(
+                                "Error verifying block {}",
+                                block_num.saturating_sub(2)
+                            ));
+                        }
+                    }
+                    Err(e) => {
+                        // Some DFU implementations (or macOS USB stacks) will stall DFU_UPLOAD.
+                        // If we can't verify, continue flashing without verification rather than failing.
+                        let lower = e.to_ascii_lowercase();
+                        let looks_like_pipe = lower.contains("pipe error") || lower.contains("stall") || lower.contains("req=0x02");
+                        if looks_like_pipe {
+                            can_verify = false;
+                            emit(
+                                step_index,
+                                format!("Verify not supported ({}). Continuing without verification...", e),
+                            );
+                        } else {
+                            return Err(e);
+                        }
+                    }
+                }
+            } else {
+                emit(step_index, "Skipping verify (unsupported).".to_string());
             }
 
             step_index = step_index.saturating_add(1);
