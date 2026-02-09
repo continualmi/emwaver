@@ -330,8 +330,69 @@ export default function App() {
         <div className="sw-grid">
         <div className="sw-card">
           <div className="sw-card-h">
+            <h2>Connections</h2>
+            <div className="sub">Run Mode (USB MIDI) + Update Mode detection.</div>
+          </div>
+          <div className="sw-card-b">
+            <div className="sw-row" style={{ justifyContent: 'space-between' }}>
+              <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
+                Run Mode: <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
+                {'  '}|{'  '}
+                Update Mode: <code>{updateModeInfo ? 'Detected' : 'Not detected'}</code>
+              </div>
+              <button className="sw-btn" onClick={() => refreshDetections(false)}>
+                Recheck
+              </button>
+            </div>
+
+            <div style={{ height: 10 }} />
+
+            <div className="sw-row">
+              <button
+                className="sw-btn"
+                disabled={runModePorts.length === 0}
+                onClick={async () => {
+                  try {
+                    setStatus('Verifying device…');
+                    const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
+                    setLegit(r);
+                    setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
+                    log(`Verify (Run Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'}`);
+                  } catch (e: any) {
+                    setStatus(`Verify failed: ${e}`);
+                    log(`Verify failed: ${e}`);
+                  }
+                }}
+              >
+                Verify certified original
+              </button>
+
+              <button
+                className="sw-btn"
+                disabled={!updateModeInfo}
+                onClick={async () => {
+                  try {
+                    setStatus('Verifying device…');
+                    const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
+                    setLegit(r);
+                    setStatus(r.ok ? 'Certified original EMWaver device' : 'Not a certified original device');
+                    log(`Verify (Update Mode): ${r.ok ? 'CERTIFIED' : 'NOT CERTIFIED'}`);
+                  } catch (e: any) {
+                    setStatus(`Verify failed: ${e}`);
+                    log(`Verify failed: ${e}`);
+                  }
+                }}
+              >
+                Verify certified original
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="sw-card">
+          <div className="sw-card-h">
             <h2>Update Mode</h2>
-            <div className="sub">Put the device into Update Mode, then provision it.</div>
+            <div className="sub">Enter Update Mode if you need to flash firmware.</div>
           </div>
           <div className="sw-card-b">
             <div className="sw-row">
@@ -349,53 +410,12 @@ export default function App() {
               >
                 Enter Update Mode
               </button>
-
-              {runModePorts.length > 0 && (
-                <button
-                  className="sw-btn"
-                  onClick={async () => {
-                    try {
-                      setStatus('Checking device legitimacy…');
-                      const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
-                      setLegit(r);
-                      setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
-                      log(`Legit check (Run Mode): ${r.ok ? 'OK' : 'FAIL'}`);
-                    } catch (e: any) {
-                      setStatus(`Legit check failed: ${e}`);
-                    }
-                  }}
-                >
-                  Check device
-                </button>
-              )}
-
-              {updateModeInfo && (
-                <button
-                  className="sw-btn"
-                  onClick={async () => {
-                    try {
-                      setStatus('Checking device legitimacy…');
-                      const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
-                      setLegit(r);
-                      setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
-                      log(`Legit check (Update Mode): ${r.ok ? 'OK' : 'FAIL'}`);
-                    } catch (e: any) {
-                      setStatus(`Legit check failed: ${e}`);
-                    }
-                  }}
-                >
-                  Check device
-                </button>
-              )}
             </div>
 
             <div style={{ height: 12 }} />
 
             <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
               After entering Update Mode, unplug and plug the device back in.
-              {runModePorts.length === 0 && !updateModeInfo && (
-                <> When a device is detected, a <b>Check device</b> button will appear for that mode.</>
-              )}
             </div>
 
             <div style={{ height: 14 }} />
