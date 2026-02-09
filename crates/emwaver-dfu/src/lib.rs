@@ -432,6 +432,7 @@ impl DfuDevice {
         &mut self,
         firmware: &[u8],
         address: u32,
+        verify: bool,
         mut on_progress: impl FnMut(String),
     ) -> Result<(), String> {
         let _ = self.clear_status();
@@ -463,7 +464,7 @@ impl DfuDevice {
 
         let mut block_num: u16 = 2;
         let mut read_buffer = vec![0u8; BLOCK_SIZE];
-        let mut can_verify = true;
+        let mut can_verify = verify;
 
         for (block_index, chunk) in firmware.chunks(BLOCK_SIZE).enumerate() {
             let block_index = (block_index as u32).saturating_add(1);

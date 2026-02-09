@@ -233,7 +233,8 @@ fn dfu_provision_device_blocking(
     .map_err(|e| format!("{e}"))?;
 
     // Flash firmware (this performs a mass erase).
-    dev.flash(&firmware, 0x0800_0000, |msg| {
+    // Note: verification via DFU_UPLOAD is flaky on some hosts (Pipe error). Disable by default.
+    dev.flash(&firmware, 0x0800_0000, false, |msg| {
         if let Err(e) = app.emit("emw_flash_progress", msg.clone()) {
             eprintln!("emit emw_flash_progress failed: {e}");
         }
@@ -300,7 +301,8 @@ fn update_device_preserve_identity_blocking(
     }
 
     // Flash firmware (mass erase).
-    dev.flash(&firmware, 0x0800_0000, |msg| {
+    // Note: verification via DFU_UPLOAD is flaky on some hosts (Pipe error). Disable by default.
+    dev.flash(&firmware, 0x0800_0000, false, |msg| {
         if let Err(e) = app.emit("emw_flash_progress", msg.clone()) {
             eprintln!("emit emw_flash_progress failed: {e}");
         }

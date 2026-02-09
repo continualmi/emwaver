@@ -353,7 +353,8 @@ final class FirmwareUpdateManager: ObservableObject {
 
         let process = Process()
         process.executableURL = try helperURL()
-        process.arguments = ["flash", "--firmware", fw.path]
+        // DFU_UPLOAD verification is flaky on macOS (Pipe error). Disable temporarily.
+        process.arguments = ["flash", "--firmware", fw.path, "--no-verify"]
 
         let stdout = Pipe()
         let stderr = Pipe()

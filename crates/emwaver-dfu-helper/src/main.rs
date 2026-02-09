@@ -16,7 +16,7 @@ fn main() {
         Some("write-identity") => cmd_write_identity(&args[2..]),
         _ => {
             eprintln!(
-                "usage:\n  emwaver-dfu-helper is-connected\n  emwaver-dfu-helper flash --firmware <path> [--alt <n>] [--verbose]\n  emwaver-dfu-helper read-identity [--addr <hex>] [--alt <n>] [--verbose]\n  emwaver-dfu-helper write-identity --device-id-b64 <b64> --proof-b64 <b64> [--addr <hex>] [--alt <n>] [--verbose]"
+                "usage:\n  emwaver-dfu-helper is-connected\n  emwaver-dfu-helper flash --firmware <path> [--no-verify] [--alt <n>] [--verbose]\n  emwaver-dfu-helper read-identity [--addr <hex>] [--alt <n>] [--verbose]\n  emwaver-dfu-helper write-identity --device-id-b64 <b64> --proof-b64 <b64> [--addr <hex>] [--alt <n>] [--verbose]"
             );
             2
         }
@@ -51,6 +51,7 @@ fn cmd_flash(args: &[String]) -> i32 {
     let mut firmware_path: Option<String> = None;
     let mut alt_setting: Option<u8> = None;
     let mut verbose = false;
+    let mut verify = true;
 
     let mut i = 0;
     while i < args.len() {
@@ -66,6 +67,9 @@ fn cmd_flash(args: &[String]) -> i32 {
             }
             "--verbose" => {
                 verbose = true;
+            }
+            "--no-verify" => {
+                verify = false;
             }
             other => {
                 eprintln!("Unknown argument: {other}");
@@ -109,7 +113,7 @@ fn cmd_flash(args: &[String]) -> i32 {
         }
     };
 
-    match device.flash(&bytes, 0x0800_0000, |msg| {
+    match device.flash(&bytes, 0x0800_0000, verify, |msg| {
         println!("{msg}");
         let _ = io::stdout().flush();
     }) {
