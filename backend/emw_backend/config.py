@@ -17,8 +17,11 @@ class Config:
     cors_origins: Union[List[str], str]
 
     # Provisioning
+    provisioning_enabled: bool
     provisioning_root_private_key_b64: str
+    provisioning_allowed_uids: List[str]
     provisioning_allowed_email: str
+    provisioning_mint_rate_limit_per_minute: int
 
     # Auth
     auth_mode: str
@@ -60,8 +63,11 @@ class Config:
             cors_origins=cors_origins,
 
             # Provisioning
+            provisioning_enabled=_env("EMWAVER_PROVISIONING_ENABLED", "0") in ("1", "true", "yes", "on"),
             provisioning_root_private_key_b64=_env("EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64", ""),
+            provisioning_allowed_uids=[u.strip() for u in _env("EMWAVER_PROVISIONING_ALLOWED_UIDS", "").split(",") if u.strip()],
             provisioning_allowed_email=_env("EMWAVER_PROVISIONING_ALLOWED_EMAIL", "maarnotto@gmail.com"),
+            provisioning_mint_rate_limit_per_minute=int(_env("EMWAVER_PROVISIONING_MINT_RPM", "60") or "60"),
 
             auth_mode=_env("EMWAVER_AUTH_MODE", "firebase"),
             firebase_project_id=_env("FIREBASE_PROJECT_ID", ""),

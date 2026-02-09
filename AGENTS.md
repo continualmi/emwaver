@@ -977,6 +977,14 @@ Backend APIs (store + devices):
 - Store: `/v1/store/*` (Stripe Checkout session + webhooks + order claim)
 - Devices: `/v1/devices/*` (verify DeviceID+Proof, attach to account, list devices)
 
+Provisioning (internal):
+- Mint endpoint: `/provisioning/mint`
+- Controlled by env vars:
+  - `EMWAVER_PROVISIONING_ENABLED=1` (default 0)
+  - `EMWAVER_PROVISIONING_ALLOWED_UIDS=uid1,uid2` (preferred allowlist)
+  - `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64=...` (ed25519 32B private key)
+  - `EMWAVER_PROVISIONING_MINT_RPM=60` (basic in-memory rate limit)
+
 ## Agent Workflow Guardrails
 
 - Prefer making changes in the working tree first and showing a diff/summary.
