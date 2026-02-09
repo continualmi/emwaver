@@ -157,7 +157,7 @@ private struct RemoteScriptRenderView: View {
             TextField(
                 node.props.label ?? "",
                 text: Binding(
-                    get: { node.props.textFieldValue ?? "" },
+                    get: { node.props.textFieldValue },
                     set: { next in onEvent(node.id, .change, next) }
                 )
             )
@@ -168,7 +168,7 @@ private struct RemoteScriptRenderView: View {
         case .textEditor:
             TextEditor(
                 text: Binding(
-                    get: { node.props.textEditorValue ?? "" },
+                    get: { node.props.textEditorValue },
                     set: { next in onEvent(node.id, .change, next) }
                 )
             )
