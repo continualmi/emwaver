@@ -963,9 +963,15 @@ Native interop
 
 #### Hardware pages
 
-- **Order** (`/order`): placeholder UX for device ordering.
-  - No vendor branding.
+- **Order / Buy** (`/order`): email-first purchase flow scaffold (Stripe Checkout).
+  - Step 1: collect email + quantity.
+  - Step 2: choose **guest checkout** or **Google login** (optional) to tie purchases to account.
+  - Success page: `/order/confirmed` supports “claim order” to attach a guest purchase to an account.
   - **No fabrication/manufacturing artifacts** are published (no Gerbers/BOM/CPL/pick-and-place/case STLs/CAD exports).
+
+- **Account** (`/account`): complementary to `/cloud`.
+  - Manage attached EMWaver devices (SecureWaver DeviceID+Proof identities).
+  - Recovery flows live here (attach device to account, reclaim access, etc.).
 
 ## Agent Workflow Guardrails
 

@@ -43,6 +43,9 @@ class Config:
     store_cancel_url: str
     store_shipping_countries: List[str]
 
+    # SecureWaver / device authenticity
+    root_public_key_b64: str
+
     @staticmethod
     def from_env() -> "Config":
         cors_raw = _env("CORS_ORIGINS", "*")
@@ -76,4 +79,6 @@ class Config:
             store_success_url=_env("STORE_SUCCESS_URL", ""),
             store_cancel_url=_env("STORE_CANCEL_URL", ""),
             store_shipping_countries=[c.strip() for c in _env("STORE_SHIPPING_COUNTRIES", "").split(",") if c.strip()],
+
+            root_public_key_b64=_env("EMWAVER_ROOT_PUBLIC_KEY_B64", ""),
         )

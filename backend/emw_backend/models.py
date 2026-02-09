@@ -157,3 +157,34 @@ class StoreOrder(Base):
             "created_at_ms": int(self.created_at_ms or 0),
             "updated_at_ms": int(self.updated_at_ms or 0),
         }
+
+
+# --- User devices (SecureWaver identity binding) ---
+
+
+class UserDevice(Base):
+    __tablename__ = "user_devices"
+
+    # Base64-encoded 16-byte device id (stable).
+    device_id_b64: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    # Base64-encoded ed25519 signature over the raw 16-byte device id.
+    proof_b64: Mapped[str] = mapped_column(String(128), default="")
+
+    # Optional owner; device can exist unowned in DB, but product intent is to attach on login.
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+
+    label: Mapped[str] = mapped_column(String(128), default="")
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    last_seen_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+    def to_public_dict(self):
+        return {
+            "device_id_b64": self.device_id_b64,
+            "label": self.label,
+            "created_at_ms": int(self.created_at_ms or 0),
+            "updated_at_ms": int(self.updated_at_ms or 0),
+            "last_seen_at_ms": int(self.last_seen_at_ms or 0),
+        }
