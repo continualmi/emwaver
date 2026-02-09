@@ -111,7 +111,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
             while Date() < deadline {
                 do {
-                    let (code, _stdout, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
+                    let (code, _, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
                     if code == 0 {
                         detected = true
                         break
@@ -199,7 +199,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 var detected = false
                 let deadline = Date().addingTimeInterval(8.0)
                 while Date() < deadline {
-                    let (code, _stdout, _stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
+                    let (code, _, _) = try self.runHelperAndWait(arguments: ["is-connected"])
                     if code == 0 {
                         detected = true
                         break
@@ -215,7 +215,7 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.progressMessage = "Writing identity page..."
                 }
 
-                let (code2, _stdout2, stderr) = try self.runHelperAndWait(arguments: [
+                let (code2, _, stderr) = try self.runHelperAndWait(arguments: [
                     "write-identity",
                     "--device-id-b64",
                     mint.device_id_b64,
@@ -244,7 +244,7 @@ final class FirmwareUpdateManager: ObservableObject {
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
             do {
-                let (code, _stdout, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
+                let (code, _, stderr) = try self.runHelperAndWait(arguments: ["is-connected"])
                 DispatchQueue.main.async {
                     switch code {
                     case 0:
@@ -414,7 +414,7 @@ final class FirmwareUpdateManager: ObservableObject {
                     if let ident = self.preservedIdentity {
                         do {
                             self.progressMessage = "Restoring device identity..."
-                            let (code3, _stdout3, stderr3) = try self.runHelperAndWait(arguments: [
+                            let (code3, _, stderr3) = try self.runHelperAndWait(arguments: [
                                 "write-identity",
                                 "--device-id-b64",
                                 ident.deviceIdB64,
