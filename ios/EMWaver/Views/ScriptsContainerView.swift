@@ -114,10 +114,9 @@ struct ScriptsContainerView: View {
                                 HStack(spacing: 6) {
                                     Text(bleManager.isSecureConnected ? "Secured" : "Not verified")
                                     if bleManager.isSecureConnected {
-                                        Image("SecureWaver")
-                                            .renderingMode(.template)
-                                            .foregroundStyle(.green)
-                                            .frame(width: 14, height: 14)
+                                        Image(systemName: "checkmark.shield.fill")
+                                    } else {
+                                        Image(systemName: "shield.slash")
                                     }
                                 }
                                 .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
