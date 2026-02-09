@@ -238,9 +238,15 @@ public class MainActivity extends AppCompatActivity {
                         connectionManager.disconnect();
                     }
                 } else if ("Update device...".equals(selected)) {
-                    com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
-                        new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
-                    update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+                    // Avoid dialog-on-dialog weirdness (especially when Android is also showing
+                    // a USB permission prompt). Dismiss this actions dialog first, then show the
+                    // update dialog on the next loop tick.
+                    dialog.dismiss();
+                    new Handler(Looper.getMainLooper()).post(() -> {
+                        com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment update =
+                            new com.emwaver.emwaverandroidapp.ui.emwaver.UpdateDeviceDialogFragment();
+                        update.show(getSupportFragmentManager(), "UpdateDeviceDialogFragment");
+                    });
                 }
             })
             .setNegativeButton("Close", null)
