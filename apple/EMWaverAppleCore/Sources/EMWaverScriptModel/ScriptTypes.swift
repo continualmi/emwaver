@@ -216,6 +216,10 @@ public struct ScriptNodeProps {
         raw["value"] as? String ?? ""
     }
 
+    public var textEditorValue: String {
+        raw["value"] as? String ?? ""
+    }
+
     public var placeholder: String {
         raw["placeholder"] as? String ?? ""
     }

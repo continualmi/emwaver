@@ -1,9 +1,9 @@
-import Combine
+@preconcurrency import Combine
 import Foundation
 import UIKit
 
 @MainActor
-final class HostSessionManager: @preconcurrency ObservableObject {
+final class HostSessionManager: ObservableObject {
     private let urlSession: URLSession
     private var timer: Timer?
 
