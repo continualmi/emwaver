@@ -114,7 +114,12 @@ struct DeviceConnectionSheet: View {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Button("Update firmware…") {
-                            firmwareUpdater.present()
+                            // Avoid sheet-on-sheet. Dismiss the device sheet first,
+                            // then present the firmware update sheet from the app root.
+                            dismiss()
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                firmwareUpdater.present()
+                            }
                         }
 
                         Spacer()
