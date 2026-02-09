@@ -197,7 +197,7 @@ export default function App() {
       setStatus('Updating device…');
       log('Update device (preserve identity): start');
       await invoke('update_device_preserve_identity', {
-        firmware_path: useCustomFirmware ? firmwarePath : null
+        firmwarePath: useCustomFirmware ? firmwarePath : null
       });
       setStatus('Update complete');
       log('Update device (preserve identity): complete');
@@ -228,9 +228,9 @@ export default function App() {
       setStatus('Provisioning in Update Mode…');
       log('Provision: start');
       await invoke('dfu_provision_device', {
-        firmware_path: useCustomFirmware ? firmwarePath : null,
-        device_id_b64: m.device_id_b64,
-        proof_b64: m.proof_b64
+        firmwarePath: useCustomFirmware ? firmwarePath : null,
+        deviceIdB64: m.device_id_b64,
+        proofB64: m.proof_b64
       });
       setStatus('Provisioning complete');
       log('Provision: complete');
