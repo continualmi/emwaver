@@ -365,12 +365,15 @@ async fn auth_firebase_refresh(app: tauri::AppHandle, refresh_token: String) -> 
         .await
         .map_err(|e| format!("Firebase refresh decode failed: {e}"))?;
 
+    // Keep profile fields (email/display name) if we already have them stored.
+    let prev = session_store::get(&app).ok().flatten();
+
     let session = SecurewaverAuthSession {
         id_token: rr.id_token,
         refresh_token: rr.refresh_token,
-        email: None,
-        display_name: None,
-        uid: rr.user_id,
+        email: prev.as_ref().and_then(|p| p.email.clone()),
+        display_name: prev.as_ref().and_then(|p| p.display_name.clone()),
+        uid: rr.user_id.or_else(|| prev.as_ref().and_then(|p| p.uid.clone())),
     };
 
     // Persist rotated refresh_token.
