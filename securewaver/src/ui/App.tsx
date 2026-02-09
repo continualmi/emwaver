@@ -1,7 +1,7 @@
 import { invoke } from '@tauri-apps/api/core';
 import { open } from '@tauri-apps/plugin-dialog';
 import React, { useEffect, useMemo, useState } from 'react';
-import { auth, googleProvider } from '../firebase';
+import { initFirebase } from '../firebase';
 import { onAuthStateChanged, signInWithPopup, signOut, User } from 'firebase/auth';
 
 type DfuInfo = {
@@ -36,9 +36,23 @@ export default function App() {
     (import.meta.env.VITE_BACKEND_URL as string) || 'https://api.emwavers.com'
   );
 
-  useEffect(() => {
-    return onAuthStateChanged(auth, (u) => setUser(u));
+  const [firebaseError, setFirebaseError] = useState<string | null>(null);
+
+  const fb = useMemo(() => {
+    try {
+      const v = initFirebase();
+      setFirebaseError(null);
+      return v;
+    } catch (e: any) {
+      setFirebaseError(String(e?.message ?? e));
+      return null;
+    }
   }, []);
+
+  useEffect(() => {
+    if (!fb) return;
+    return onAuthStateChanged(fb.auth, (u) => setUser(u));
+  }, [fb]);
 
   const userLabel = useMemo(() => {
     if (!user) return '(not signed in)';
@@ -60,7 +74,8 @@ export default function App() {
   async function loginGoogle() {
     setStatus('Signing in with Google…');
     try {
-      await signInWithPopup(auth, googleProvider);
+      if (!fb) throw new Error(firebaseError ?? 'Firebase not configured');
+      await signInWithPopup(fb.auth, fb.googleProvider);
       setStatus('Signed in');
     } catch (e: any) {
       setStatus(`Sign-in failed: ${e}`);
@@ -69,7 +84,8 @@ export default function App() {
 
   async function logout() {
     try {
-      await signOut(auth);
+      if (!fb) throw new Error(firebaseError ?? 'Firebase not configured');
+      await signOut(fb.auth);
       setStatus('Signed out');
     } catch (e: any) {
       setStatus(`Sign-out failed: ${e}`);
@@ -141,6 +157,15 @@ export default function App() {
       <p style={{ color: '#555' }}>
         Internal provisioning tool (Google/Firebase auth + backend mint + DFU flash).
       </p>
+
+      {firebaseError && (
+        <div style={{ marginTop: 12, padding: 12, background: '#fff3cd', borderRadius: 8 }}>
+          <b>Firebase config error:</b> {firebaseError}
+          <div style={{ marginTop: 6, color: '#555' }}>
+            This causes a blank screen if SecureWaver cannot initialize Firebase. Fix by setting Vite env vars.
+          </div>
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         {!user ? (
