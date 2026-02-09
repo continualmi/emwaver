@@ -6,6 +6,7 @@ const nav = [
   { href: "/docs", label: "Documentation" },
   { href: "/news", label: "News" },
   { href: "/cloud", label: "Dashboard" },
+  { href: "/account", label: "Account" },
 ];
 
 export function SiteHeader() {
