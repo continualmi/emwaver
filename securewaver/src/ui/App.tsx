@@ -52,9 +52,12 @@ export default function App() {
   const [legit, setLegit] = useState<LegitCheckResult | null>(null);
   const [useCustomFirmware, setUseCustomFirmware] = useState<boolean>(false);
   const [firmwarePath, setFirmwarePath] = useState<string | null>(null);
-  const [minted, setMinted] = useState<DeviceMintResult | null>(null);
-  const [provisionResult, setProvisionResult] = useState<ProvisionResult | null>(null);
-  const [updateResult, setUpdateResult] = useState<UpdatePreserveIdentityResult | null>(null);
+  const [logLines, setLogLines] = useState<string[]>([]);
+
+  function log(line: string) {
+    const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
+    setLogLines((prev) => [`${ts}  ${line}`, ...prev].slice(0, 200));
+  }
 
   const [settingsOpen, setSettingsOpen] = useState<boolean>(false);
   type BackendMode = 'production' | 'local';
@@ -94,8 +97,10 @@ export default function App() {
       setSession(merged);
       try { localStorage.setItem('securewaver.auth.session', JSON.stringify(merged)); } catch {}
       setStatus('Signed in');
+      log('Session restored');
     } catch (e: any) {
       setStatus(`Session restore failed: ${e}`);
+      log(`Session restore failed: ${e}`);
       setSession(null);
       try { localStorage.removeItem('securewaver.auth.session'); } catch {}
     }
@@ -173,47 +178,50 @@ export default function App() {
   }
 
   async function updateDevicePreservingIdentity() {
-    setUpdateResult(null);
     try {
-      setStatus('Updating device (preserve identity)…');
-      const r = await invoke<UpdatePreserveIdentityResult>('update_device_preserve_identity', {
+      setStatus('Updating device…');
+      log('Update device (preserve identity): start');
+      await invoke('update_device_preserve_identity', {
         firmware_path: useCustomFirmware ? firmwarePath : null
       });
-      setUpdateResult(r);
       setStatus('Update complete');
+      log('Update device (preserve identity): complete');
     } catch (e: any) {
       setStatus(`Update failed: ${e}`);
+      log(`Update failed: ${e}`);
     }
   }
 
   async function mintAndProvision() {
-    setProvisionResult(null);
-    setMinted(null);
-
     if (!session?.id_token) {
       setStatus('Missing login');
+      log('Provision failed: missing login');
       return;
     }
     if (useCustomFirmware && !firmwarePath) {
       setStatus('Missing custom firmware file');
+      log('Provision failed: missing custom firmware file');
       return;
     }
 
     try {
-      setStatus('Requesting DeviceID+Proof from backend…');
+      setStatus('Minting identity…');
+      log('Mint identity: start');
       const m = await mintFromBackend(session.id_token);
-      setMinted(m);
+      log('Mint identity: ok');
 
-      setStatus('Provisioning in Update Mode (flash firmware + identity)…');
-      const pr = await invoke<ProvisionResult>('dfu_provision_device', {
+      setStatus('Provisioning in Update Mode…');
+      log('Provision: start');
+      await invoke('dfu_provision_device', {
         firmware_path: useCustomFirmware ? firmwarePath : null,
         device_id_b64: m.device_id_b64,
         proof_b64: m.proof_b64
       });
-      setProvisionResult(pr);
       setStatus('Provisioning complete');
+      log('Provision: complete');
     } catch (e: any) {
       setStatus(`Provisioning failed: ${e}`);
+      log(`Provisioning failed: ${e}`);
     }
   }
 
@@ -285,6 +293,7 @@ export default function App() {
                       const r = await invoke<LegitCheckResult>('check_device_legit_run_mode');
                       setLegit(r);
                       setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                      log(`Legit check (Run Mode): ${r.ok ? 'OK' : 'FAIL'}`);
                     } catch (e: any) {
                       setStatus(`Legit check failed: ${e}`);
                     }
@@ -303,6 +312,7 @@ export default function App() {
                       const r = await invoke<LegitCheckResult>('check_device_legit_update_mode');
                       setLegit(r);
                       setStatus(r.ok ? 'Device is legit' : 'Device is NOT legit');
+                      log(`Legit check (Update Mode): ${r.ok ? 'OK' : 'FAIL'}`);
                     } catch (e: any) {
                       setStatus(`Legit check failed: ${e}`);
                     }
@@ -365,23 +375,6 @@ export default function App() {
 
             <div style={{ height: 12 }} />
 
-            <div className="sw-kv">
-              <div>Backend</div>
-              <div><code>{backendUrl}</code></div>
-              <div>Firmware</div>
-              <div>
-                <code>
-                  {useCustomFirmware ? (firmwarePath ?? '(custom not selected)') : '(bundled)'}
-                </code>
-              </div>
-              <div>Device (Run Mode)</div>
-              <div>
-                <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
-              </div>
-              <div>Update Mode</div>
-              <div><code>{updateModeInfo ? 'Detected' : 'Not detected'}</code></div>
-            </div>
-
             {settingsOpen && (
               <div style={{ marginTop: 14 }} className="sw-banner">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
@@ -428,54 +421,24 @@ export default function App() {
 
         <div className="sw-card">
           <div className="sw-card-h">
-            <h2>Results</h2>
-            <div className="sub">Minted identity + Update Mode status + provision output.</div>
+            <h2>Log</h2>
+            <div className="sub">What happened (most recent first).</div>
           </div>
           <div className="sw-card-b">
-            {minted && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Minted identity</div>
-                <pre className="sw-pre">{JSON.stringify(minted, null, 2)}</pre>
-                <div style={{ height: 10 }} />
-              </>
-            )}
-
-            {updateResult && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Update result</div>
-                <pre className="sw-pre">{JSON.stringify(updateResult, null, 2)}</pre>
-                <div style={{ height: 10 }} />
-              </>
-            )}
-
-            {provisionResult && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Provision result</div>
-                <pre className="sw-pre">{JSON.stringify(provisionResult, null, 2)}</pre>
-                <div style={{ height: 10 }} />
-              </>
-            )}
-
-            {updateModeInfo && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Update Mode</div>
-                <pre className="sw-pre">{JSON.stringify({ update_mode: 'detected' }, null, 2)}</pre>
-                <div style={{ height: 10 }} />
-              </>
-            )}
-
-            {legit && (
-              <>
-                <div style={{ fontSize: 12, color: 'var(--ink-dim)', marginBottom: 6 }}>Legitimacy</div>
-                <pre className="sw-pre">{JSON.stringify(legit, null, 2)}</pre>
-              </>
-            )}
-
-            {!minted && !provisionResult && !updateResult && (
+            <div className="sw-row" style={{ justifyContent: 'space-between' }}>
               <div style={{ fontSize: 12, color: 'var(--ink-dim)' }}>
-                No output yet.
+                Device (Run Mode): <code>{runModePorts.length > 0 ? 'Detected' : 'Not detected'}</code>
+                {'  '}|{'  '}
+                Update Mode: <code>{updateModeInfo ? 'Detected' : 'Not detected'}</code>
               </div>
-            )}
+              <button className="sw-btn" onClick={() => setLogLines([])}>
+                Clear
+              </button>
+            </div>
+
+            <div style={{ height: 10 }} />
+
+            <pre className="sw-pre">{logLines.length ? logLines.join('\n') : 'No log yet.'}</pre>
           </div>
         </div>
       </div>
