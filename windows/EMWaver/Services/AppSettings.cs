@@ -47,20 +47,25 @@ internal sealed class AppSettings
 
             var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
 
+            var needsSave = needsScrub;
+
             // Sanity.
             if (string.IsNullOrWhiteSpace(model.LocalBackendUrl))
             {
                 model.LocalBackendUrl = "http://127.0.0.1:8787";
+                needsSave = true;
             }
 
-            if (string.IsNullOrWhiteSpace(model.LocalFrontendUrl))
+            var normalizedFrontendUrl = NormalizeLocalFrontendUrl(model.LocalFrontendUrl);
+            if (!string.Equals(normalizedFrontendUrl, model.LocalFrontendUrl, StringComparison.Ordinal))
             {
-                model.LocalFrontendUrl = "http://localhost:3000";
+                model.LocalFrontendUrl = normalizedFrontendUrl;
+                needsSave = true;
             }
 
-            if (needsScrub)
+            if (needsSave)
             {
-                // Best-effort: rewrite without legacy keys.
+                // Best-effort: rewrite migrated/sanitized settings.
                 try { Save(model); } catch { }
             }
 
@@ -91,6 +96,21 @@ internal sealed class AppSettings
             // Best effort.
             try { File.Move(tmp, path, overwrite: true); } catch { }
         }
+    }
+
+    private static string NormalizeLocalFrontendUrl(string? value)
+    {
+        var trimmed = (value ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return "http://localhost:3000";
+        }
+
+        // Migration: older builds defaulted to 127.0.0.1, but some environments only
+        // work reliably with localhost for web sign-in handoff.
+        return trimmed
+            .Replace("http://127.0.0.1:3000", "http://localhost:3000", StringComparison.OrdinalIgnoreCase)
+            .Replace("https://127.0.0.1:3000", "https://localhost:3000", StringComparison.OrdinalIgnoreCase);
     }
 
     public bool UseProductionBackend
@@ -170,7 +190,7 @@ internal sealed class AppSettings
             lock (_lock)
             {
                 var m = Load();
-                m.LocalFrontendUrl = value ?? "";
+                m.LocalFrontendUrl = NormalizeLocalFrontendUrl(value);
                 Save(m);
             }
             Changed?.Invoke();
