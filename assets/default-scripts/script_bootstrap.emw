@@ -4,7 +4,7 @@
 // This file is intended to be the single source of truth for the EMWaver Script API surface.
 //
 // Hosts must provide (at minimum) these bridge functions:
-// - _scriptRender(node: object): void
+// - _scriptRender(jsonString: string): void   (JSON.stringify(rootNode))
 // - _scriptRegisterCallback(token: string, fn: Function): void
 //
 // Device operations are performed by the standard library via:
@@ -1440,7 +1440,13 @@ if (typeof analogWrite !== 'function') {
         if (!node || typeof node !== 'object') {
           return;
         }
-        _scriptRender(node);
+        // Host expects JSON string.
+        try {
+          _scriptRender(JSON.stringify(node));
+        } catch (e) {
+          // Best-effort fallback.
+          _scriptRender('{}');
+        }
       },
     };
   })();
