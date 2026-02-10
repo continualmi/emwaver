@@ -11,9 +11,9 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
         <img
           src="/2015_upscale.jpg"
           alt=""
-          className="h-full w-full object-cover opacity-[0.22]"
+          className="h-full w-full object-cover opacity-[0.45]"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(1200px_700px_at_10%_0%,rgba(255,255,255,0.08),transparent_62%),radial-gradient(900px_600px_at_80%_10%,rgba(78,231,199,0.10),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.88),rgba(2,3,8,0.92))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(1200px_700px_at_10%_0%,rgba(255,255,255,0.06),transparent_62%),radial-gradient(900px_600px_at_80%_10%,rgba(78,231,199,0.08),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.72),rgba(2,3,8,0.80))]" />
       </div>
 
       <SiteHeader />
