@@ -2,14 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NEWS_POSTS } from "@/lib/newsPosts";
+// News has moved to EMWaver Society.
 
 function currentLabel(pathname: string) {
-  if (pathname === "/news") return "All posts";
-  for (const post of NEWS_POSTS) {
-    if (pathname === `/news/${post.slug}`) return post.title;
-  }
-  return "News";
+  if (pathname === "/society") return "EMWaver Society";
+  return "EMWaver Society";
 }
 
 export function NewsMobileNav() {
@@ -27,20 +24,11 @@ export function NewsMobileNav() {
 
       <div className="mt-3 grid gap-1">
         <Link
-          href="/news"
+          href="/society"
           className="rounded-xl px-3 py-2 text-sm text-[color:var(--ink-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[color:var(--ink)]"
         >
-          All posts
+          Open EMWaver Society
         </Link>
-        {NEWS_POSTS.map((post) => (
-          <Link
-            key={post.slug}
-            href={`/news/${post.slug}`}
-            className="rounded-xl px-3 py-2 text-sm text-[color:var(--ink-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[color:var(--ink)]"
-          >
-            {post.title}
-          </Link>
-        ))}
       </div>
     </details>
   );
