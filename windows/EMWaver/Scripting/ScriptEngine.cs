@@ -11,6 +11,7 @@ using System.Threading;
 using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
+using EMWaver.Interop;
 
 namespace EMWaver.Scripting;
 
@@ -368,6 +369,10 @@ public sealed class ScriptEngine : IDisposable
             PlotBufferStore.Shared.SetBuffer(id, bytes);
             return id;
         }));
+
+        // Keep parity with macOS: expose the live sampler capture stream as a built-in
+        // plot source named "samplerBits" so sampler.emw can render UI.plot directly.
+        PlotBufferStore.Shared.SetProvider("samplerBits", static () => NativeBufferRust.GetRxSnapshot());
 
         // Minimal filesystem/path helpers used by built-in scripts.
         engine.SetValue("_scriptAppDataDir", new Func<string>(() =>
