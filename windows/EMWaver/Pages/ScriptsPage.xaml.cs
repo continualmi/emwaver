@@ -702,7 +702,19 @@ public sealed partial class ScriptsPage : Page
     private void SetAgentPaneVisibility(bool show)
     {
         AgentPane.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
-        AgentColumn.Width = show ? new GridLength(380) : new GridLength(0);
+        AgentPaneSplitter.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+
+        if (show)
+        {
+            if (AgentColumn.Width.Value <= 0)
+            {
+                AgentColumn.Width = new GridLength(380);
+            }
+        }
+        else
+        {
+            AgentColumn.Width = new GridLength(0);
+        }
 
         if (show)
         {
@@ -718,9 +730,9 @@ public sealed partial class ScriptsPage : Page
     {
         if (!_agentEnabled)
         {
-            AgentStatusText.Text = _agentSignedIn
+            SetAgentStatusText(_agentSignedIn
                 ? "ELM requires EMWaver Pro. Sending is locked."
-                : "Sign in with your EMWaver account to use ELM.";
+                : "Sign in with your EMWaver account to use ELM.");
             return;
         }
 
@@ -728,7 +740,7 @@ public sealed partial class ScriptsPage : Page
         if (string.IsNullOrWhiteSpace(text)) return;
 
         AgentInput.Text = string.Empty;
-        AgentStatusText.Text = "";
+        SetAgentStatusText("");
 
         _agentMessages.Add(new AgentMessageRow("You", text));
 
@@ -785,7 +797,7 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
-            AgentStatusText.Text = ex.Message;
+            SetAgentStatusText(ex.Message);
             SetAgentSending(false);
         }
     }
@@ -802,9 +814,9 @@ public sealed partial class ScriptsPage : Page
             await RefreshEntitlementsUiAsync(force: false);
             if (!_agentEnabled)
             {
-                AgentStatusText.Text = _agentSignedIn
+                SetAgentStatusText(_agentSignedIn
                     ? "ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
-                    : "Sign in with your EMWaver account to use ELM.";
+                    : "Sign in with your EMWaver account to use ELM.");
                 return;
             }
 
@@ -823,42 +835,52 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
-            AgentStatusText.Text = ex.Message;
+            SetAgentStatusText(ex.Message);
         }
     }
 
     private async Task RefreshAgentConversationsAsync()
     {
-        AgentStatusText.Text = "";
+        SetAgentStatusText("");
         var list = await AgentApi.ListConversationsAsync(CancellationToken.None);
 
-        _agentConversations.Clear();
-        foreach (var c in list)
+        await RunOnUiAsync(async () =>
         {
-            _agentConversations.Add(c);
-        }
-
-        if (!string.IsNullOrWhiteSpace(_agentConversationId))
-        {
-            var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
-            if (match != null)
+            _agentConversations.Clear();
+            foreach (var c in list)
             {
-                AgentConversationsCombo.SelectedItem = match;
+                _agentConversations.Add(c);
             }
-        }
+
+            if (!string.IsNullOrWhiteSpace(_agentConversationId))
+            {
+                var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
+                if (match != null)
+                {
+                    AgentConversationsCombo.SelectedItem = match;
+                }
+            }
+
+            await Task.CompletedTask;
+        });
     }
 
     private async Task LoadAgentConversationAsync(string id)
     {
-        AgentStatusText.Text = "";
+        SetAgentStatusText("");
 
         var msgs = await AgentApi.ListMessagesAsync(id, CancellationToken.None);
-        _agentMessages.Clear();
-        foreach (var m in msgs)
+        await RunOnUiAsync(async () =>
         {
-            var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM";
-            _agentMessages.Add(new AgentMessageRow(role, m.Content));
-        }
+            _agentMessages.Clear();
+            foreach (var m in msgs)
+            {
+                var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM";
+                _agentMessages.Add(new AgentMessageRow(role, m.Content));
+            }
+
+            await Task.CompletedTask;
+        });
     }
 
     private void ReplaceLastAgentMessage(string text)
@@ -904,6 +926,17 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
+    private void SetAgentStatusText(string text)
+    {
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            AgentStatusText.Text = text;
+            return;
+        }
+
+        _ = DispatcherQueue.TryEnqueue(() => AgentStatusText.Text = text);
+    }
+
     private async void OnGetProClick(object sender, RoutedEventArgs e)
     {
         try
@@ -913,7 +946,7 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
-            AgentStatusText.Text = ex.Message;
+            SetAgentStatusText(ex.Message);
         }
     }
 
@@ -925,7 +958,7 @@ public sealed partial class ScriptsPage : Page
         }
         catch (Exception ex)
         {
-            AgentStatusText.Text = ex.Message;
+            SetAgentStatusText(ex.Message);
         }
     }
 
@@ -966,7 +999,7 @@ public sealed partial class ScriptsPage : Page
     private async void OnAgentRefreshConversationsClick(object sender, RoutedEventArgs e)
     {
         try { await RefreshAgentConversationsAsync(); }
-        catch (Exception ex) { AgentStatusText.Text = ex.Message; }
+        catch (Exception ex) { SetAgentStatusText(ex.Message); }
     }
 
     private void OnAgentNewChatClick(object sender, RoutedEventArgs e)
@@ -974,14 +1007,14 @@ public sealed partial class ScriptsPage : Page
         _agentConversationId = null;
         SaveAgentConversationId(null);
         _agentMessages.Clear();
-        AgentStatusText.Text = "";
+        SetAgentStatusText("");
         AgentConversationsCombo.SelectedItem = null;
     }
 
     private void OnAgentClearClick(object sender, RoutedEventArgs e)
     {
         _agentMessages.Clear();
-        AgentStatusText.Text = "";
+        SetAgentStatusText("");
     }
 
     private async void OnAgentConversationChanged(object sender, SelectionChangedEventArgs e)
@@ -992,7 +1025,7 @@ public sealed partial class ScriptsPage : Page
         SaveAgentConversationId(c.Id);
 
         try { await LoadAgentConversationAsync(c.Id); }
-        catch (Exception ex) { AgentStatusText.Text = ex.Message; }
+        catch (Exception ex) { SetAgentStatusText(ex.Message); }
     }
 
     private bool _syncInProgress;
