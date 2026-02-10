@@ -7,6 +7,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.System;
 
 namespace EMWaver.Pages;
 
@@ -20,7 +21,10 @@ public sealed partial class HostsPage : Page
         string PortLine,
         string ScriptLine,
         string IdLine,
+        bool CanControl,
         Windows.UI.Color OnlineColor);
+
+    private bool _proEnabled;
 
     public HostsPage()
     {
@@ -46,6 +50,12 @@ public sealed partial class HostsPage : Page
 
         try
         {
+            var pro = await AppServices.Entitlements.RefreshAsync(force: true, CancellationToken.None);
+            _proEnabled = pro.Entitlements?.FeatureFlags.CloudHosts ?? false;
+            var signedIn = AppServices.CloudAuth.IsSignedIn;
+            ProBanner.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
+            GetProButton.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
+
             // Require auth (same as file sync). Allow empty token in dev when backend auth disabled.
             var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
             var tok = AppServices.CloudAuth.GetIdToken();
@@ -66,11 +76,34 @@ public sealed partial class HostsPage : Page
                 PortLine: h.UsbConnected && !string.IsNullOrWhiteSpace(h.ConnectedPort) ? ("Port: " + h.ConnectedPort) : "",
                 ScriptLine: h.ScriptRunning ? (string.IsNullOrWhiteSpace(h.ActiveScriptName) ? "Script running" : ("Running: " + h.ActiveScriptName)) : "",
                 IdLine: "ID: " + h.Id,
+                CanControl: _proEnabled,
                 OnlineColor: h.Online ? Colors.LimeGreen : Colors.Gray
             )).ToList();
 
             HostsList.ItemsSource = list;
-            StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
+            if (!_proEnabled)
+            {
+                if (!signedIn)
+                {
+                    StatusText.Text = "Sign in, then attach a genuine EMWaver device to your account to become eligible for Pro.";
+                }
+                else if (pro.Eligibility?.CanPurchasePro == true)
+                {
+                    StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
+                }
+                else if (string.Equals(pro.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
+                {
+                    StatusText.Text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
+                }
+                else
+                {
+                    StatusText.Text = "You’re not eligible to subscribe yet.";
+                }
+            }
+            else
+            {
+                StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
+            }
         }
         catch (Exception ex)
         {
@@ -86,10 +119,29 @@ public sealed partial class HostsPage : Page
             var hostId = b.Tag as string ?? "";
             if (string.IsNullOrWhiteSpace(hostId)) return;
 
+            if (!_proEnabled)
+            {
+                StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
+                return;
+            }
+
             Frame.Navigate(typeof(RemoteHostControlPage), hostId);
         }
         catch
         {
+        }
+    }
+
+    private async void OnGetProClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
+            await Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = ex.Message;
         }
     }
 }
