@@ -59,12 +59,7 @@
                         </ComboBox>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Local URL:" />
-                        <TextBox x:Name="LocalBackendUrlBox" Width="320" TextChanged="OnLocalBackendUrlChanged" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    </StackPanel>
-
-                    <TextBlock Text="Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Local mode uses hardcoded http://localhost:8787. Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
