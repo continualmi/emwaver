@@ -23,9 +23,8 @@ url = "2"
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 hostname = "0.4"
 
-# JS engine (QuickJS)
-# NOTE: temporarily disabled for the minimal secure-connection daemon milestone.
-# rquickjs = { version = "0.9", features = ["loader", "macro"] }
+# JS engine (Boa)
+boa_engine = "0.19"
 
 # USB MIDI SysEx transport (cross-platform)
 midir = "0.10"
