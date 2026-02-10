@@ -206,19 +206,28 @@ public struct ScriptsRootView: View {
                     Text("Cloud sync is available with EMWaver Pro.")
                         .foregroundStyle(.secondary)
 
-                    Text("Opening EMWaver Pro…")
+                    Text("Upgrade to sync scripts and signals across devices.")
                         .foregroundStyle(.secondary)
                 }
 
                 Spacer()
 
                 HStack {
-                    Spacer()
                     Button("Cancel") { showingSyncUpsell = false }
+
+                    Spacer()
+
+                    if syncUpsellPhase == .proOnly {
+                        Button("Get Pro…") {
+                            showingSyncUpsell = false
+                            onRequestSyncUpgrade?()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .padding(18)
-            .frame(minWidth: 420, minHeight: 180)
+            .frame(minWidth: 420, minHeight: 200)
             .interactiveDismissDisabled(syncUpsellPhase == .syncing)
         }
         .confirmationDialog(
@@ -895,9 +904,6 @@ public struct ScriptsRootView: View {
                             Task {
                                 try? await Task.sleep(nanoseconds: 800_000_000)
                                 syncUpsellPhase = .proOnly
-                                try? await Task.sleep(nanoseconds: 900_000_000)
-                                showingSyncUpsell = false
-                                onRequestSyncUpgrade?()
                             }
                         }
                     } label: {
