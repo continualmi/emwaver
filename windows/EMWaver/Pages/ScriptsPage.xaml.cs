@@ -19,7 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Windows.Storage;
-using Windows.System;
+using WindowsLauncher = Windows.System.Launcher;
 
 namespace EMWaver.Pages;
 
@@ -900,7 +900,7 @@ public sealed partial class ScriptsPage : Page
         try
         {
             var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
-            await Launcher.LaunchUriAsync(new Uri(url));
+            await WindowsLauncher.LaunchUriAsync(new Uri(url));
         }
         catch (Exception ex)
         {
