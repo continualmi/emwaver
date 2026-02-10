@@ -1033,7 +1033,7 @@ Native interop
 - Provides a single CLI entrypoint: `emwaver …` (start/stop/status/login/etc.).
 - Runs the script runtime + UI state machine headlessly (no presented UI).
 - Streams `ui.snapshot` and accepts `ui.event` from remote controllers via the existing remote host protocol.
-- Includes the same cloud-facing capabilities as the GUI apps (login, secure connection/auth, secure updates) but in a daemon/CLI form.
+- Includes the same cloud-facing capabilities as the GUI apps needed for **login + secure connection/auth** (but **not firmware updates**; firmware updates remain in the GUI apps).
 - USB transport uses cross-platform **MIDI** (USB MIDI SysEx, 64-byte frames).
 - Packaging target:
   - macOS: launchd (later)

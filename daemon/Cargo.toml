@@ -1,0 +1,6 @@
+[workspace]
+members = [
+  "emwaver-host",
+  "emwaver",
+]
+resolver = "2"

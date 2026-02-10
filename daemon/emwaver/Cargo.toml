@@ -1,0 +1,20 @@
+[package]
+name = "emwaver"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# For device discovery via MIDI
+midir = "0.10"
+
+# For pidfile paths
+directories = "5"
+
+# Process management
+nix = { version = "0.29", features = ["signal", "process"] }
