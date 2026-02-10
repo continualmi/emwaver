@@ -9,6 +9,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Diagnostics;
+using System.Text;
 
 namespace EMWaver.Scripting;
 
@@ -28,6 +29,7 @@ public sealed class ScriptEngine : IDisposable
     private Func<byte[], int, byte[]?>? _sendPacket;
 
     private bool _haltedUntilNextExecute;
+    private string _currentScriptSource = string.Empty;
 
     public ScriptEngine()
     {
@@ -80,6 +82,7 @@ public sealed class ScriptEngine : IDisposable
             }
 
             _haltedUntilNextExecute = false;
+            _currentScriptSource = trimmed;
             CancelAllTimeoutsLocked();
             _callbacks.Clear();
 
@@ -94,11 +97,11 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (JavaScriptException ex)
             {
-                EmitError("Script error: " + ex.Message);
+                EmitError(FormatJavaScriptException("Script error", ex));
             }
             catch (Exception ex)
             {
-                EmitError("Script error: " + ex.Message);
+                EmitError(FormatGeneralException("Script error", ex));
             }
         });
     }
@@ -138,11 +141,11 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (JavaScriptException ex)
             {
-                EmitError("Script callback error: " + ex.Message);
+                EmitError(FormatJavaScriptException("Script callback error", ex));
             }
             catch (Exception ex)
             {
-                EmitError("Script callback error: " + ex.Message);
+                EmitError(FormatGeneralException("Script callback error", ex));
             }
         });
     }
@@ -322,8 +325,8 @@ public sealed class ScriptEngine : IDisposable
                         if (!_timeouts.Remove(id)) return;
                         if (_haltedUntilNextExecute) return;
                         try { _engine!.Invoke(fn, Array.Empty<JsValue>()); }
-                        catch (JavaScriptException ex) { EmitError("Script timer error: " + ex.Message); }
-                        catch (Exception ex) { EmitError("Script timer error: " + ex.Message); }
+                        catch (JavaScriptException ex) { EmitError(FormatJavaScriptException("Script timer error", ex)); }
+                        catch (Exception ex) { EmitError(FormatGeneralException("Script timer error", ex)); }
                     });
                 }
                 catch { }
@@ -610,6 +613,81 @@ public sealed class ScriptEngine : IDisposable
     {
         // Keep behavior aligned across platforms: intentionally simple token scan.
         return script.Contains("await", StringComparison.Ordinal) || script.Contains("async", StringComparison.Ordinal);
+    }
+
+    private string FormatJavaScriptException(string prefix, JavaScriptException ex)
+    {
+        var sb = new StringBuilder();
+        sb.Append(prefix).Append(": ").Append(ex.Message);
+
+        var line = ex.Location.Start.Line;
+        var column = ex.Location.Start.Column;
+
+        // User code is wrapped in `(() => { ... })();` for isolation.
+        // Adjust line numbers back to the user's source where possible.
+        var userLine = line > 0 ? Math.Max(1, line - 1) : 0;
+        if (userLine > 0)
+        {
+            sb.AppendLine();
+            sb.Append("Location: line ").Append(userLine).Append(", column ").Append(Math.Max(1, column));
+        }
+
+        var frame = BuildSourceFrame(_currentScriptSource, userLine, contextLines: 2);
+        if (!string.IsNullOrWhiteSpace(frame))
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine("Code:");
+            sb.Append(frame);
+        }
+
+        var details = ex.ToString();
+        if (!string.IsNullOrWhiteSpace(details))
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine("Details:");
+            sb.Append(details);
+        }
+
+        return sb.ToString();
+    }
+
+    private static string FormatGeneralException(string prefix, Exception ex)
+    {
+        if (string.IsNullOrWhiteSpace(ex.StackTrace))
+        {
+            return prefix + ": " + ex.Message;
+        }
+        return prefix + ": " + ex.Message + "\n\nDetails:\n" + ex;
+    }
+
+    private static string BuildSourceFrame(string source, int lineNumber, int contextLines)
+    {
+        if (string.IsNullOrWhiteSpace(source) || lineNumber <= 0)
+        {
+            return string.Empty;
+        }
+
+        var normalized = source.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        if (lineNumber > lines.Length)
+        {
+            return string.Empty;
+        }
+
+        var start = Math.Max(1, lineNumber - contextLines);
+        var end = Math.Min(lines.Length, lineNumber + contextLines);
+        var sb = new StringBuilder();
+        for (var i = start; i <= end; i++)
+        {
+            var marker = i == lineNumber ? ">" : " ";
+            sb.Append(marker)
+              .Append(i.ToString().PadLeft(4))
+              .Append(" | ")
+              .AppendLine(lines[i - 1]);
+        }
+        return sb.ToString().TrimEnd();
     }
 
     private void EmitError(string message)
