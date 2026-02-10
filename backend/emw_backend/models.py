@@ -280,6 +280,12 @@ class SocietyPost(Base):
     pinned: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0/1
     locked: Mapped[int] = mapped_column(Integer, default=0)  # 0/1
 
+    # Media gating / attachment (used by Videos; future: scripts with blobs).
+    pro_only: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0/1
+    media_blob_key: Mapped[str] = mapped_column(String(768), default="")
+    media_poster_blob_key: Mapped[str] = mapped_column(String(768), default="")
+    media_duration_s: Mapped[int] = mapped_column(Integer, default=0)
+
     created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
     updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
 
@@ -293,6 +299,7 @@ class SocietyPost(Base):
             "tags": self.tags_json,
             "pinned": int(self.pinned or 0),
             "locked": int(self.locked or 0),
+            "pro_only": int(self.pro_only or 0),
             "created_at_ms": int(self.created_at_ms or 0),
             "updated_at_ms": int(self.updated_at_ms or 0),
             "author": {
