@@ -16,7 +16,8 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="320" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="AgentColumn" Width="0" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="AgentColumn" Width="0" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
             <!-- Scripts list -->
@@ -168,8 +169,17 @@
                 </Grid>
             </Border>
 
+            <GridSplitter x:Name="AgentPaneSplitter"
+                          Grid.Column="2"
+                          Width="6"
+                          HorizontalAlignment="Stretch"
+                          VerticalAlignment="Stretch"
+                          ResizeDirection="Columns"
+                          ResizeBehavior="PreviousAndNext"
+                          Visibility="Collapsed" />
+
             <!-- ELM pane -->
-            <Grid Grid.Column="2" Margin="12,0,0,0">
+            <Grid Grid.Column="3" Margin="12,0,0,0">
                 <Border
                     x:Name="AgentPane"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -186,11 +196,19 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Orientation="Vertical" Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Grid ColumnSpacing="8" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
                                 <TextBlock Text="ELM" FontWeight="SemiBold" />
 
-                                <Button Padding="4,0" MinWidth="0" HorizontalAlignment="Left">
-                                    <TextBlock Text="?" />
+                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE946;" FontSize="14" />
                                     <Button.Flyout>
                                         <Flyout Placement="Bottom">
                                             <StackPanel Spacing="8" MaxWidth="280" Padding="4">
@@ -204,12 +222,19 @@
                                     </Button.Flyout>
                                 </Button>
 
-                                <ComboBox x:Name="AgentConversationsCombo" MinWidth="160" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
+                                <ComboBox Grid.Column="2" x:Name="AgentConversationsCombo" MinWidth="140" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
 
-                                <Button Content="Refresh" Click="OnAgentRefreshConversationsClick" />
-                                <Button Content="New" Click="OnAgentNewChatClick" />
-                                <Button Content="Clear" Click="OnAgentClearClick" />
-                            </StackPanel>
+                                <Button Grid.Column="3" Content="Refresh" Click="OnAgentRefreshConversationsClick" />
+
+                                <Button Grid.Column="4" Content="More">
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="New" Click="OnAgentNewChatClick" />
+                                            <MenuFlyoutItem Text="Clear" Click="OnAgentClearClick" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
 
                             <TextBlock x:Name="AgentStatusText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
 
