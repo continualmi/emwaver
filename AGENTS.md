@@ -274,7 +274,8 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **iOS:** `ios/`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
 - **macOS App (defacto):** `macos/` (SwiftUI)
-- **Provisioning (internal, not shipped):** `securewaver/` (device provisioning: keys/certs + DFU + RDP)
+- **Provisioning (internal, manufacturer-only; not shipped to end users):** `securewaver/` (SecureWaver device provisioning app: root key mgmt, mint DeviceID+Proof, DFU flash identity/firmware)
+  - SecureWaver is an **internal manufacturing tool**. It is **not** part of the user recovery UX; end users use the EMWaver apps only.
 - **Shared assets:** `assets/` (default scripts, etc.)
 
 ### Script sharing / cloud sync safety
