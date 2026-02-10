@@ -1,1 +1,9 @@
 *.emw linguist-language=JavaScript
+
+# Large media tracked via Git LFS
+videos/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+videos/**/*.mov filter=lfs diff=lfs merge=lfs -text
+videos/**/*.m4v filter=lfs diff=lfs merge=lfs -text
+videos/**/*.webm filter=lfs diff=lfs merge=lfs -text
+videos/**/*.ogg filter=lfs diff=lfs merge=lfs -text
+videos/**/*.wav filter=lfs diff=lfs merge=lfs -text

@@ -279,6 +279,10 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 - **Provisioning (internal, manufacturer-only; not shipped to end users):** `securewaver/` (SecureWaver device provisioning app: root key mgmt, mint DeviceID+Proof, DFU flash identity/firmware)
   - SecureWaver is an **internal manufacturing tool**. It is **not** part of the user recovery UX; end users use the EMWaver apps only.
 - **Shared assets:** `assets/` (default scripts, etc.)
+- **Videos (planning + originals):** `videos/`
+  - `videos/VIDEOS.md` is the canonical video plan.
+  - Original video sources are intended to live under `videos/` and be tracked with **Git LFS** so the repo can keep “ground truth” media without bloating normal Git history.
+  - The frontend can embed/serve videos from the project as needed, but prefer generating web-optimized derivatives (smaller encodes/posters) to keep deploys fast.
 
 ### Script sharing / cloud sync safety
 
