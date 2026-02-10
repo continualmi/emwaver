@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { SiteFooter } from "@/components/SiteFooter";
+// No SiteFooter in Society.
 import { SiteHeader } from "@/components/SiteHeader";
 import { SocietyTabs } from "@/app/society/societyTabs";
 
@@ -50,7 +50,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
         </div>
       </main>
 
-      <SiteFooter />
+      {/* No footer in Society (distinct section). */}
     </div>
   );
 }
