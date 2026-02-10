@@ -27,6 +27,7 @@ internal sealed class CloudFilesClient
         string Kind,
         string Etag,
         long SizeBytes,
+        long? MtimeMs,
         string? ContentType,
         string? Sha256);
 
@@ -190,7 +191,15 @@ internal sealed class CloudFilesClient
         }
     }
 
-    internal async Task<CloudFileMetadata> UploadViaBackendAsync(Uri baseUrl, string accessToken, string kind, string name, string contentType, byte[] bytes, CancellationToken ct)
+    internal async Task<CloudFileMetadata> UploadViaBackendAsync(
+        Uri baseUrl,
+        string accessToken,
+        string kind,
+        string name,
+        string contentType,
+        byte[] bytes,
+        CancellationToken ct,
+        long? mtimeMs = null)
     {
         // POST /v1/files/upload { kind, name, content_type, data_base64, size_bytes }
         var payload = new
@@ -200,6 +209,7 @@ internal sealed class CloudFilesClient
             content_type = contentType,
             data_base64 = Convert.ToBase64String(bytes),
             size_bytes = (long)bytes.Length,
+            mtime_ms = mtimeMs,
         };
 
         var body = JsonSerializer.Serialize(payload);
@@ -286,6 +296,16 @@ internal sealed class CloudFilesClient
             return 0;
         }
 
+        static long? GetInt64OrNull(JsonElement obj, string prop)
+        {
+            if (obj.ValueKind == JsonValueKind.Object && obj.TryGetProperty(prop, out var v))
+            {
+                if (v.ValueKind == JsonValueKind.Number && v.TryGetInt64(out var n)) return n;
+                if (v.ValueKind == JsonValueKind.String && long.TryParse(v.GetString(), out var s)) return s;
+            }
+            return null;
+        }
+
         var meta = new FileMetadata(
             Id: GetString(md, "id"),
             Name: GetString(md, "name"),
@@ -293,6 +313,7 @@ internal sealed class CloudFilesClient
             Kind: GetString(md, "kind"),
             Etag: GetString(md, "etag"),
             SizeBytes: GetInt64(md, "size_bytes"),
+            MtimeMs: GetInt64OrNull(md, "mtime_ms"),
             ContentType: GetStringOrNull(md, "content_type"),
             Sha256: GetStringOrNull(md, "sha256")
         );
