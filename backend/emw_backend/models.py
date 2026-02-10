@@ -202,6 +202,25 @@ class StoreOrder(Base):
 # --- User devices (SecureWaver identity binding) ---
 
 
+# --- Auth handoff (web sign-in -> native apps) ---
+
+
+class AuthHandoffCode(Base):
+    __tablename__ = "auth_handoff_codes"
+
+    # sha256 of uppercased code
+    code_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    expires_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    consumed_at_ms: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+
+
+Index("idx_auth_handoff_uid_created", AuthHandoffCode.firebase_uid, AuthHandoffCode.created_at_ms)
+
+
 class UserDevice(Base):
     __tablename__ = "user_devices"
 

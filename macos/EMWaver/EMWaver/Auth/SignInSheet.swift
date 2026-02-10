@@ -36,19 +36,10 @@ struct SignInSheet: View {
                 Spacer()
 
                 Button {
-                    Task {
-                        await auth.signInWithGoogle()
-                        if auth.isSignedIn {
-                            dismiss()
-                        }
-                    }
+                    auth.beginWebSignInHandoff()
                 } label: {
                     HStack(spacing: 8) {
-                        if auth.isSigningIn {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text("Continue with Google")
+                        Text("Continue with EMWaver")
                     }
                 }
                 .buttonStyle(.borderedProminent)

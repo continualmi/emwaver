@@ -61,6 +61,40 @@ final class FirebaseAuthService {
         return try JSONDecoder().decode(FirebaseSession.self, from: data)
     }
 
+    func signInWithCustomToken(firebaseWebApiKey: String, customToken: String) async throws -> FirebaseSession {
+        if firebaseWebApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw AuthError.failed("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)")
+        }
+        if customToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            throw AuthError.failed("Missing custom token")
+        }
+
+        // Firebase Identity Toolkit: accounts:signInWithCustomToken
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=\(firebaseWebApiKey.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? firebaseWebApiKey)")!
+
+        let payload: [String: Any] = [
+            "token": customToken,
+            "returnSecureToken": true,
+        ]
+
+        let body = try JSONSerialization.data(withJSONObject: payload)
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = body
+
+        let (data, res) = try await urlSession.data(for: req)
+        let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+
+        if code < 200 || code >= 300 {
+            let msg = String(data: data, encoding: .utf8) ?? ""
+            throw AuthError.failed("Firebase signInWithCustomToken failed: \(msg)")
+        }
+
+        return try JSONDecoder().decode(FirebaseSession.self, from: data)
+    }
+
     func refresh(firebaseWebApiKey: String, refreshToken: String) async throws -> FirebaseSession {
         if firebaseWebApiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             throw AuthError.failed("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)")
