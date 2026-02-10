@@ -346,11 +346,13 @@ public sealed partial class ScriptsPage : Page
         {
             if (string.Equals(sig.Extension, ".raw", StringComparison.OrdinalIgnoreCase))
             {
-                text = "(Binary signal .raw)";
+                var data = await File.ReadAllBytesAsync(sig.FullPath);
+                text = FormatHex(data, maxBytes: 256 * 1024);
             }
             else
             {
-                text = await File.ReadAllTextAsync(sig.FullPath);
+                var data = await File.ReadAllBytesAsync(sig.FullPath);
+                text = Encoding.UTF8.GetString(data);
             }
         }
         catch (Exception ex)
@@ -443,6 +445,63 @@ public sealed partial class ScriptsPage : Page
             EditorBox,
             wrapText ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto
         );
+    }
+
+    private static string FormatHex(byte[] data, int maxBytes)
+    {
+        var count = Math.Min(data.Length, maxBytes);
+        var sb = new StringBuilder(capacity: Math.Max(64, (count / 16 + 2) * 80));
+
+        for (var offset = 0; offset < count; offset += 16)
+        {
+            var lineCount = Math.Min(16, count - offset);
+
+            sb.Append(offset.ToString("X8"));
+            sb.Append("  ");
+
+            for (var i = 0; i < 16; i++)
+            {
+                if (i < lineCount)
+                {
+                    sb.Append(data[offset + i].ToString("X2"));
+                }
+                else
+                {
+                    sb.Append("  ");
+                }
+
+                if (i != 15)
+                {
+                    sb.Append(' ');
+                }
+            }
+
+            sb.Append("  |");
+            for (var i = 0; i < lineCount; i++)
+            {
+                var b = data[offset + i];
+                sb.Append(b >= 32 && b < 127 ? (char)b : '.');
+            }
+            sb.Append('|');
+
+            if (offset + 16 < count)
+            {
+                sb.AppendLine();
+            }
+        }
+
+        if (data.Length > maxBytes)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            sb.AppendLine();
+            sb.Append("(truncated to ");
+            sb.Append(maxBytes);
+            sb.Append(" bytes; file is ");
+            sb.Append(data.Length);
+            sb.Append(" bytes)");
+        }
+
+        return sb.ToString();
     }
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
