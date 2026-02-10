@@ -168,7 +168,7 @@
                 </Grid>
             </Border>
 
-            <!-- Agent pane -->
+            <!-- ELM pane -->
             <Grid Grid.Column="2" Margin="12,0,0,0">
                 <Border
                     x:Name="AgentPane"
@@ -187,7 +187,22 @@
 
                         <StackPanel Orientation="Vertical" Spacing="8">
                             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Text="Agent" FontWeight="SemiBold" />
+                                <TextBlock Text="ELM" FontWeight="SemiBold" />
+
+                                <Button Padding="4,0" MinWidth="0" HorizontalAlignment="Left">
+                                    <TextBlock Text="?" />
+                                    <Button.Flyout>
+                                        <Flyout Placement="Bottom">
+                                            <StackPanel Spacing="8" MaxWidth="280" Padding="4">
+                                                <TextBlock Text="ELM" FontWeight="SemiBold" />
+                                                <TextBlock Text="Electronics Language Model" Opacity="0.8" />
+                                                <TextBlock Text="An AI language model trained to control EMWaver and help with electronics workflows."
+                                                           TextWrapping="Wrap"
+                                                           Opacity="0.8" />
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
 
                                 <ComboBox x:Name="AgentConversationsCombo" MinWidth="160" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
 
@@ -197,6 +212,22 @@
                             </StackPanel>
 
                             <TextBlock x:Name="AgentStatusText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                            <Border x:Name="AgentSignInNotice"
+                                    Visibility="Collapsed"
+                                    CornerRadius="8"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Padding="10"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <TextBlock Text="Sign in with your EMWaver account to use ELM."
+                                               TextWrapping="Wrap"
+                                               Opacity="0.85"
+                                               VerticalAlignment="Center" />
+                                    <Button Content="Sign In…" Click="OnAgentSignInClick" />
+                                </StackPanel>
+                            </Border>
 
                             <Border x:Name="AgentProNotice"
                                     Visibility="Collapsed"
@@ -223,7 +254,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBox x:Name="AgentInput" PlaceholderText="Ask the agent..." />
+                            <TextBox x:Name="AgentInput" PlaceholderText="Ask ELM..." />
                             <Button x:Name="AgentSendButton" Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
                         </Grid>
                     </Grid>
