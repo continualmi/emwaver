@@ -1,6 +1,10 @@
 import Combine
 import Foundation
 
+#if canImport(AppKit)
+import AppKit
+#endif
+
 @MainActor
 final class AuthenticationManager: ObservableObject {
     @Published private(set) var session: AuthSession?
@@ -83,8 +87,9 @@ final class AuthenticationManager: ObservableObject {
         // redirect to /auth/handoff to show the code.
         let urlStr = base.absoluteString + "?redirect=%2Fauth%2Fhandoff"
         if let url = URL(string: urlStr) {
-            import AppKit
-            AppKit.NSWorkspace.shared.open(url)
+            #if canImport(AppKit)
+            NSWorkspace.shared.open(url)
+            #endif
         }
 
         isWebHandoffSheetPresented = true
