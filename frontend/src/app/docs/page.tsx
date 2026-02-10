@@ -16,6 +16,14 @@ export default function DocsIndex() {
         </li>
       </ol>
 
+      <h2>Troubleshooting</h2>
+      <ul>
+        <li>
+          <Link href="/docs/device-recovery">Recover device identity</Link>: fix “Not secure” after an
+          update.
+        </li>
+      </ul>
+
       <h2>Hardware</h2>
       <ul>
         <li>
