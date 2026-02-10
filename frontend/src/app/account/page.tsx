@@ -161,12 +161,12 @@ export default function AccountPage() {
           </div>
 
           {!userEmail ? (
-            <button
-              onClick={() => void doSignIn()}
+            <a
+              href="/signin?redirect=%2Faccount"
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
             >
-              Sign in with Google
-            </button>
+              Sign in
+            </a>
           ) : (
             <div className="flex items-center gap-3">
               <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
