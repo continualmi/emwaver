@@ -36,12 +36,13 @@ public sealed partial class ScriptsPage : Page
     private readonly ObservableCollection<AgentMessageRow> _agentMessages = new();
     private readonly ObservableCollection<EMWaver.Services.Agent.AgentApi.Conversation> _agentConversations = new();
 
-    private readonly EMWaver.Services.Agent.AgentApi _agentApi = new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
-
     private string? _agentConversationId;
     private CancellationTokenSource? _agentStreamCts;
+    private bool _agentSignedIn;
     private bool _agentEnabled;
     private bool _cloudSyncEnabled;
+
+    private EMWaver.Services.Agent.AgentApi AgentApi => new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
 
 
     private ScriptInfo? _current;
@@ -717,7 +718,9 @@ public sealed partial class ScriptsPage : Page
     {
         if (!_agentEnabled)
         {
-            AgentStatusText.Text = "ELM requires EMWaver Pro. Sending is locked.";
+            AgentStatusText.Text = _agentSignedIn
+                ? "ELM requires EMWaver Pro. Sending is locked."
+                : "Sign in with your EMWaver account to use ELM.";
             return;
         }
 
@@ -730,7 +733,7 @@ public sealed partial class ScriptsPage : Page
         _agentMessages.Add(new AgentMessageRow("You", text));
 
         // Placeholder row for streaming.
-        var placeholder = new AgentMessageRow("Agent", "");
+        var placeholder = new AgentMessageRow("ELM", "");
         _agentMessages.Add(placeholder);
 
         try
@@ -739,7 +742,7 @@ public sealed partial class ScriptsPage : Page
             if (string.IsNullOrWhiteSpace(convoId))
             {
                 var title = text.Split('\n').FirstOrDefault() ?? "";
-                var convo = await _agentApi.CreateConversationAsync(title, CancellationToken.None);
+                var convo = await AgentApi.CreateConversationAsync(title, CancellationToken.None);
                 convoId = convo.Id;
                 _agentConversationId = convoId;
                 SaveAgentConversationId(convoId);
@@ -753,7 +756,7 @@ public sealed partial class ScriptsPage : Page
 
             SetAgentSending(true);
 
-            await _agentApi.ChatStreamAsync(convoId!, text, ev =>
+            await AgentApi.ChatStreamAsync(convoId!, text, ev =>
             {
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
@@ -799,7 +802,9 @@ public sealed partial class ScriptsPage : Page
             await RefreshEntitlementsUiAsync(force: false);
             if (!_agentEnabled)
             {
-                AgentStatusText.Text = "ELM requires EMWaver Pro. You can read chats and type, but sending is locked.";
+                AgentStatusText.Text = _agentSignedIn
+                    ? "ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
+                    : "Sign in with your EMWaver account to use ELM.";
                 return;
             }
 
@@ -825,7 +830,7 @@ public sealed partial class ScriptsPage : Page
     private async Task RefreshAgentConversationsAsync()
     {
         AgentStatusText.Text = "";
-        var list = await _agentApi.ListConversationsAsync(CancellationToken.None);
+        var list = await AgentApi.ListConversationsAsync(CancellationToken.None);
 
         _agentConversations.Clear();
         foreach (var c in list)
@@ -847,11 +852,11 @@ public sealed partial class ScriptsPage : Page
     {
         AgentStatusText.Text = "";
 
-        var msgs = await _agentApi.ListMessagesAsync(id, CancellationToken.None);
+        var msgs = await AgentApi.ListMessagesAsync(id, CancellationToken.None);
         _agentMessages.Clear();
         foreach (var m in msgs)
         {
-            var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "Agent";
+            var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM";
             _agentMessages.Add(new AgentMessageRow(role, m.Content));
         }
     }
@@ -860,9 +865,9 @@ public sealed partial class ScriptsPage : Page
     {
         for (var i = _agentMessages.Count - 1; i >= 0; i--)
         {
-            if (_agentMessages[i].Role == "Agent")
+            if (_agentMessages[i].Role == "ELM")
             {
-                _agentMessages[i] = new AgentMessageRow("Agent", text);
+                _agentMessages[i] = new AgentMessageRow("ELM", text);
                 return;
             }
         }
@@ -879,13 +884,17 @@ public sealed partial class ScriptsPage : Page
         try
         {
             var snap = await AppServices.Entitlements.RefreshAsync(force: force, CancellationToken.None);
-            _agentEnabled = snap.Entitlements?.FeatureFlags.Agent ?? false;
+            _agentSignedIn = AppServices.CloudAuth.IsSignedIn;
+            var agentFeatureEnabled = snap.Entitlements?.FeatureFlags.Agent ?? false;
+            _agentEnabled = _agentSignedIn && (agentFeatureEnabled || snap.IsPro);
             _cloudSyncEnabled = snap.Entitlements?.FeatureFlags.CloudFiles ?? false;
 
             await RunOnUiAsync(async () =>
             {
-                AgentProNotice.Visibility = _agentEnabled ? Visibility.Collapsed : Visibility.Visible;
+                AgentSignInNotice.Visibility = _agentSignedIn ? Visibility.Collapsed : Visibility.Visible;
+                AgentProNotice.Visibility = (!_agentSignedIn || _agentEnabled) ? Visibility.Collapsed : Visibility.Visible;
                 AgentSendButton.IsEnabled = _agentEnabled;
+                AgentInput.IsEnabled = _agentEnabled;
                 await Task.CompletedTask;
             });
         }
@@ -901,6 +910,18 @@ public sealed partial class ScriptsPage : Page
         {
             var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
             await WindowsLauncher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex)
+        {
+            AgentStatusText.Text = ex.Message;
+        }
+    }
+
+    private void OnAgentSignInClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            Frame.Navigate(typeof(SettingsPage));
         }
         catch (Exception ex)
         {
