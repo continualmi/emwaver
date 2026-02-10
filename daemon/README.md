@@ -28,4 +28,14 @@ Target UX:
   - Linux: `systemd` + installer (later)
 - Good headless UX for secure connection.
 
+## Dev quickstart
+
+From repo root:
+
+- `./daemon/dev devices`
+- `./daemon/dev daemon start`
+- `./daemon/dev daemon status`
+
+This is the "npm run dev" equivalent: it builds `emwaver-host` + `emwaver` and runs the CLI.
+
 Status: beta / experimental.
