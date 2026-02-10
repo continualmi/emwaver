@@ -40,7 +40,7 @@ internal sealed class AgentApi
         var baseRaw = (_cfg.BackendBaseUrl ?? "").Trim();
         if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))
         {
-            throw new InvalidOperationException("Backend URL is not configured (EMWAVER_BACKEND_URL).");
+            throw new InvalidOperationException("Backend URL is not configured (Settings → Backend).");
         }
         return new Uri(baseUrl, path);
     }
