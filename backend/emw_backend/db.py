@@ -60,6 +60,19 @@ def init_db(database_url: str) -> None:
                     if "integer" in size_t and "bigint" not in size_t:
                         conn.execute(text("ALTER TABLE user_files ALTER COLUMN size_bytes TYPE BIGINT"))
 
+        # Society: add columns when running against an existing DB (create_all won't ALTER).
+        if insp.has_table("society_posts"):
+            cols = {c["name"] for c in insp.get_columns("society_posts")}
+            with _ENGINE.begin() as conn:
+                if "pro_only" not in cols:
+                    conn.execute(text("ALTER TABLE society_posts ADD COLUMN pro_only INTEGER DEFAULT 0"))
+                if "media_blob_key" not in cols:
+                    conn.execute(text("ALTER TABLE society_posts ADD COLUMN media_blob_key VARCHAR(768) DEFAULT ''"))
+                if "media_poster_blob_key" not in cols:
+                    conn.execute(text("ALTER TABLE society_posts ADD COLUMN media_poster_blob_key VARCHAR(768) DEFAULT ''"))
+                if "media_duration_s" not in cols:
+                    conn.execute(text("ALTER TABLE society_posts ADD COLUMN media_duration_s INTEGER DEFAULT 0"))
+
     except Exception:
         # Best-effort: if this fails (permissions/older DB), backend will still run.
         pass

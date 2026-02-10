@@ -6,7 +6,7 @@ from typing import Optional
 from flask import Blueprint, current_app, jsonify, request
 from sqlalchemy import desc, select
 
-from emw_backend.auth import require_auth_user
+from emw_backend.auth import optional_auth_user, require_auth_user
 from emw_backend.db import SessionLocal
 from emw_backend.models import SocietyComment, SocietyPost, UserDevice
 
@@ -52,6 +52,17 @@ def list_posts():
         except Exception:
             before_ms = None
 
+    config = current_app.config.get("EMWAVER_CONFIG")
+    authed = optional_auth_user(config)
+
+    is_pro = False
+    if authed:
+        # Lightweight check: Pro entitlements are already in /v1/entitlements elsewhere.
+        # For Society listing we don't need full entitlements; we'll just use presence of pro_active
+        # later when we add a cached table. For now, treat signed-in as not-pro and only enforce on playback.
+        # (We still include pro_only rows; UI can show them locked.)
+        is_pro = False
+
     db = SessionLocal()
     try:
         q = select(SocietyPost).where(SocietyPost.published == 1)
@@ -59,6 +70,9 @@ def list_posts():
             q = q.where(SocietyPost.kind == kind)
         if before_ms is not None:
             q = q.where(SocietyPost.created_at_ms < before_ms)
+
+        # NOTE: We *do not* hide pro_only content from listing; show it locked in UI.
+        # Playback/stream URLs must be gated server-side.
 
         q = q.order_by(desc(SocietyPost.created_at_ms)).limit(limit)
         rows = db.execute(q).scalars().all()
@@ -160,5 +174,67 @@ def create_comment(post_id: str):
 
         db.commit()
         return jsonify({"comment": row.to_public_dict()}), 201
+    finally:
+        db.close()
+
+
+@society_bp.post("/forum/threads")
+def create_forum_thread():
+    """Create a forum thread (discussion).
+
+    Requirements:
+      - signed in
+      - account has >=1 attached genuine device
+
+    Payload: { title, body_md, summary? }
+    """
+
+    config = current_app.config.get("EMWAVER_CONFIG")
+    user = require_auth_user(config)
+
+    payload = request.get_json(silent=True) or {}
+    title = str(payload.get("title") or "").strip()
+    if not title:
+        return jsonify({"error": "missing_title"}), 400
+    if len(title) > 256:
+        return jsonify({"error": "title_too_long"}), 400
+
+    body_md = str(payload.get("body_md") or "").strip()
+    if not body_md:
+        return jsonify({"error": "missing_body_md"}), 400
+    if len(body_md) > 60_000:
+        return jsonify({"error": "body_too_long"}), 400
+
+    summary = str(payload.get("summary") or "").strip()
+    if len(summary) > 512:
+        return jsonify({"error": "summary_too_long"}), 400
+
+    db = SessionLocal()
+    try:
+        has_device = db.execute(
+            select(UserDevice.device_id_b64).where(UserDevice.firebase_uid == user.firebase_uid).limit(1)
+        ).first()
+        if not has_device:
+            return jsonify({"error": "device_required"}), 403
+
+        now = _now_ms()
+        row = SocietyPost(
+            id=str(uuid.uuid4()),
+            kind="discussion",
+            title=title,
+            summary=summary,
+            body_md=body_md,
+            firebase_uid=user.firebase_uid,
+            author_email=user.email,
+            author_display_name=user.display_name,
+            published=1,
+            pinned=0,
+            locked=0,
+            created_at_ms=now,
+            updated_at_ms=now,
+        )
+        db.add(row)
+        db.commit()
+        return jsonify({"post": row.to_public_dict(include_body=True)}), 201
     finally:
         db.close()

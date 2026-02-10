@@ -17,6 +17,7 @@ export function SocietyTabs() {
 
   const items = [
     { href: "/society", label: "Posts" },
+    { href: "/society/forum", label: "Forum" },
     { href: "/society/scripts", label: "EMWaver Scripts" },
     { href: "/society/videos", label: "Videos" },
   ];
