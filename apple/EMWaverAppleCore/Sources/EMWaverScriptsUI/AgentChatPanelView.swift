@@ -79,7 +79,7 @@ public struct AgentChatPanelView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                    Text("Agent")
+                    Text("ELM")
                         .font(.headline)
                 }
 
@@ -299,7 +299,7 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("AI Agent requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                    Text("ELM requires EMWaver Pro. You can read chats and type, but sending is locked.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
