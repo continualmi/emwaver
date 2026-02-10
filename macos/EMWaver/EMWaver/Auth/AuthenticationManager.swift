@@ -78,6 +78,9 @@ final class AuthenticationManager: ObservableObject {
     func beginWebSignInHandoff() {
         lastError = nil
 
+        // Close the sign-in sheet first; SwiftUI doesn't reliably present two sheets at once.
+        isSignInSheetPresented = false
+
         // Open the EMWaver web sign-in page and then prompt for the code.
         guard var base = FrontendUrl.resolve() else {
             lastError = "Missing frontend URL"
@@ -92,7 +95,10 @@ final class AuthenticationManager: ObservableObject {
             #endif
         }
 
-        isWebHandoffSheetPresented = true
+        // Present the handoff sheet after the sign-in sheet has had a moment to dismiss.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            self.isWebHandoffSheetPresented = true
+        }
     }
 
     func consumeWebHandoffCode(code: String) async {
