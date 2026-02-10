@@ -134,23 +134,27 @@ public sealed partial class ScriptsPage : Page
             await AppServices.Scripts.EnsureBootstrappedAsync();
             var scripts = await AppServices.Scripts.ListScriptsAsync();
 
-            // Signals directory (synced)
-            var signalsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "EMWaver",
-                "Signals"
-            );
-
             var signals = new List<Models.SignalFileInfo>();
             try
             {
-                if (Directory.Exists(signalsDir))
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var signalsDir in GetSignalDirectories())
                 {
+                    if (!Directory.Exists(signalsDir))
+                    {
+                        continue;
+                    }
+
                     foreach (var p in Directory.EnumerateFiles(signalsDir, "*", SearchOption.TopDirectoryOnly))
                     {
                         var ext = Path.GetExtension(p) ?? "";
                         if (!string.Equals(ext, ".raw", StringComparison.OrdinalIgnoreCase) &&
                             !string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (!seen.Add(p))
                         {
                             continue;
                         }
@@ -308,6 +312,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = script.IsBundled;
             EditorBox.Text = text ?? string.Empty;
+            SetEditorWrapping(wrapText: false);
             _suppressEditorChanged = false;
 
             // Always start in editor mode when opening a script.
@@ -365,6 +370,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = true;
             EditorBox.Text = text;
+            SetEditorWrapping(wrapText: string.Equals(sig.Extension, ".txt", StringComparison.OrdinalIgnoreCase));
             _suppressEditorChanged = false;
 
 
@@ -386,6 +392,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = true;
             EditorBox.Text = string.Empty;
+            SetEditorWrapping(wrapText: false);
             _suppressEditorChanged = false;
 
 
@@ -398,6 +405,25 @@ public sealed partial class ScriptsPage : Page
             UpdateCommandStates();
             await Task.CompletedTask;
         });
+    }
+
+    private static IEnumerable<string> GetSignalDirectories()
+    {
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EMWaver"
+        );
+
+        // Current scripts (e.g. sampler.emw) save signal files directly under appDataDir().
+        // Keep reading the legacy "Signals" subdirectory for backwards compatibility.
+        yield return root;
+        yield return Path.Combine(root, "Signals");
+    }
+
+    private void SetEditorWrapping(bool wrapText)
+    {
+        EditorBox.TextWrapping = wrapText ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        EditorBox.HorizontalScrollBarVisibility = wrapText ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
     }
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
