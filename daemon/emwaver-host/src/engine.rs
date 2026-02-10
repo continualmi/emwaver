@@ -1,11 +1,11 @@
 use anyhow::{Context, Result};
 use boa_engine::{
-    object::FunctionObjectBuilder,
+    object::{builtins::JsArray, FunctionObjectBuilder, ObjectInitializer},
     property::Attribute,
     Context as BoaContext,
-    JsResult,
     JsValue,
     NativeFunction,
+    Source,
 };
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -138,8 +138,8 @@ impl Engine {
                         Err(_) => vec![0x81u8],
                     };
 
-                    // Return Uint8Array(resp)
-                    let array = ctx.construct_array(resp.len() as u64, None)?;
+                    // Return an Array(respBytes)
+                    let array = JsArray::new(ctx);
                     for (i, b) in resp.iter().enumerate() {
                         array.set(i, JsValue::new(*b), ctx)?;
                     }
@@ -155,7 +155,7 @@ impl Engine {
         }
 
         // Load bootstrap.
-        ctx.eval(bootstrap_source)
+        ctx.eval(Source::from_bytes(bootstrap_source))
             .map_err(map_js_err)
             .context("failed to eval script_bootstrap.emw")?;
 
@@ -170,7 +170,7 @@ impl Engine {
 
     pub fn run_script(&self, source: &str) -> Result<()> {
         let mut ctx = self.ctx.lock().unwrap();
-        ctx.eval(source)
+        ctx.eval(Source::from_bytes(source))
             .map_err(map_js_err)
             .context("script eval failed")?;
         Ok(())
@@ -214,14 +214,14 @@ fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
             } else if let Some(u) = n.as_u64() {
                 JsValue::new(u as f64)
             } else if let Some(f) = n.as_f64() {
-                JsValue::new(*f)
+                JsValue::new(f)
             } else {
                 JsValue::null()
             }
         }
-        JsonValue::String(s) => JsValue::new(s.as_str()),
+        JsonValue::String(s) => JsValue::new(s.clone()),
         JsonValue::Array(arr) => {
-            let array = ctx.construct_array(arr.len() as u64, None)?;
+            let array = JsArray::new(ctx);
             for (i, item) in arr.iter().enumerate() {
                 let js = json_to_js(ctx, item)?;
                 array.set(i, js, ctx)?;
@@ -229,12 +229,12 @@ fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
             array.into()
         }
         JsonValue::Object(map) => {
-            let obj = ctx.construct_object();
+            let mut init = ObjectInitializer::new(ctx);
             for (k, item) in map.iter() {
                 let js = json_to_js(ctx, item)?;
-                obj.set(k.as_str(), js, ctx)?;
+                init = init.property(k.as_str(), js, Attribute::all());
             }
-            obj.into()
+            init.build().into()
         }
     })
 }
