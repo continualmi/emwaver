@@ -1,4 +1,5 @@
 using EMWaver.Services;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.ComponentModel;
@@ -9,6 +10,7 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 {
     private readonly WindowsDeviceManager _device;
     private readonly FirmwareUpdateManager _updater;
+    private readonly DispatcherQueue _ui = DispatcherQueue.GetForCurrentThread();
 
     internal FirmwareUpdateDialog(WindowsDeviceManager device, FirmwareUpdateManager updater)
     {
@@ -28,6 +30,9 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
     private void OnOpened(ContentDialog sender, ContentDialogOpenedEventArgs args)
     {
+        // Ensure updater marshals UI-visible state changes via a UI dispatcher.
+        _updater.AttachUiDispatcher(_ui);
+
         _updater.ResetForPresent();
         _ = _updater.RefreshDfuPresenceAsync();
         UpdateUi();
@@ -59,7 +64,9 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
     private void OnUpdaterPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        UpdateUi();
+        // FirmwareUpdateManager updates can come from background threads (DFU polling, flashing).
+        // ContentDialog UI must only be touched on the UI thread.
+        _ = _ui.TryEnqueue(UpdateUi);
     }
 
     private void UpdateUi()
