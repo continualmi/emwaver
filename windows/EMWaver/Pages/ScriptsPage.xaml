@@ -16,7 +16,8 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="320" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition x:Name="AgentColumn" Width="0" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition x:Name="AgentColumn" Width="0" MinWidth="280" />
             </Grid.ColumnDefinitions>
 
             <!-- Scripts list -->
@@ -168,8 +169,21 @@
                 </Grid>
             </Border>
 
-            <!-- Agent pane -->
-            <Grid Grid.Column="2" Margin="12,0,0,0">
+            <Border x:Name="AgentPaneSplitter"
+                    Grid.Column="2"
+                    Width="6"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    Opacity="0.35"
+                    Visibility="Collapsed"
+                    PointerPressed="OnAgentSplitterPointerPressed"
+                    PointerMoved="OnAgentSplitterPointerMoved"
+                    PointerReleased="OnAgentSplitterPointerReleased"
+                    PointerCanceled="OnAgentSplitterPointerReleased" />
+
+            <!-- ELM pane -->
+            <Grid Grid.Column="3" Margin="12,0,0,0">
                 <Border
                     x:Name="AgentPane"
                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -186,17 +200,79 @@
                         </Grid.RowDefinitions>
 
                         <StackPanel Orientation="Vertical" Spacing="8">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock Text="Agent" FontWeight="SemiBold" />
+                            <Grid ColumnSpacing="8" VerticalAlignment="Center">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
-                                <ComboBox x:Name="AgentConversationsCombo" MinWidth="160" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
+                                <TextBlock Text="ELM" FontWeight="SemiBold" />
 
-                                <Button Content="Refresh" Click="OnAgentRefreshConversationsClick" />
-                                <Button Content="New" Click="OnAgentNewChatClick" />
-                                <Button Content="Clear" Click="OnAgentClearClick" />
-                            </StackPanel>
+                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE946;" FontSize="14" />
+                                    <Button.Flyout>
+                                        <Flyout Placement="Bottom">
+                                            <StackPanel Spacing="8" MaxWidth="280" Padding="4">
+                                                <TextBlock Text="ELM" FontWeight="SemiBold" />
+                                                <TextBlock Text="Electronics Language Model" Opacity="0.8" />
+                                                <TextBlock Text="An AI language model trained to control EMWaver and help with electronics workflows."
+                                                           TextWrapping="Wrap"
+                                                           Opacity="0.8" />
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <ComboBox Grid.Column="2" x:Name="AgentConversationsCombo" MinWidth="140" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
+
+                                <Button Grid.Column="3" Content="Refresh" Click="OnAgentRefreshConversationsClick" />
+
+                                <Button Grid.Column="4" Content="More">
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="New" Click="OnAgentNewChatClick" />
+                                            <MenuFlyoutItem Text="Clear" Click="OnAgentClearClick" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </Grid>
 
                             <TextBlock x:Name="AgentStatusText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                            <Border x:Name="AgentSignInNotice"
+                                    Visibility="Collapsed"
+                                    CornerRadius="8"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Padding="10"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <TextBlock Text="Sign in with your EMWaver account to use ELM."
+                                               TextWrapping="Wrap"
+                                               Opacity="0.85"
+                                               VerticalAlignment="Center" />
+                                    <Button Content="Sign In…" Click="OnAgentSignInClick" />
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="AgentProNotice"
+                                    Visibility="Collapsed"
+                                    CornerRadius="8"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Padding="10"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <TextBlock Text="ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
+                                               TextWrapping="Wrap"
+                                               Opacity="0.85"
+                                               VerticalAlignment="Center" />
+                                    <Button Content="Get EMWaver Pro…" Click="OnGetProClick" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <ListView Grid.Row="1" x:Name="AgentMessagesList" />
@@ -207,8 +283,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBox x:Name="AgentInput" PlaceholderText="Ask the agent..." />
-                            <Button Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
+                            <TextBox x:Name="AgentInput" PlaceholderText="Ask ELM..." />
+                            <Button x:Name="AgentSendButton" Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
                         </Grid>
                     </Grid>
                 </Border>

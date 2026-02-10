@@ -44,6 +44,24 @@
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
+                    <TextBlock Text="EMWaver Pro" FontWeight="SemiBold" />
+                    <TextBlock x:Name="ProStatusText" Text="Checking eligibility…" Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Note: Pro purchase is web-first for now. Eligibility is still enforced by the backend."
+                               Opacity="0.75"
+                               TextWrapping="Wrap" />
+                    <StackPanel Orientation="Horizontal" Spacing="10">
+                        <Button Content="Get Pro…" Click="OnGetProClick" />
+                        <Button Content="Refresh" Click="OnRefreshProClick" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
                     <TextBlock Text="Cloud" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
