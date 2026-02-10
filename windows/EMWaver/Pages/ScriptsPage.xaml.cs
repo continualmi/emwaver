@@ -423,7 +423,10 @@ public sealed partial class ScriptsPage : Page
     private void SetEditorWrapping(bool wrapText)
     {
         EditorBox.TextWrapping = wrapText ? TextWrapping.Wrap : TextWrapping.NoWrap;
-        EditorBox.HorizontalScrollBarVisibility = wrapText ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto;
+        ScrollViewer.SetHorizontalScrollBarVisibility(
+            EditorBox,
+            wrapText ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto
+        );
     }
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
@@ -577,11 +580,11 @@ public sealed partial class ScriptsPage : Page
         PreviewModeChanged?.Invoke(preview);
     }
 
-    private void RenderPreview(ScriptTree tree)
+    private void RenderPreview(ScriptTree? tree)
     {
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Preview] RenderPreview rootType={tree?.Root.Type}");
 
-        if (!_isPreviewMode)
+        if (!_isPreviewMode || tree == null)
         {
             return;
         }
