@@ -66,7 +66,10 @@ final class DeviceRegistryService: ObservableObject {
             let claimed = (obj?["claimed"] as? Bool) ?? false
 
             if needsLogin && token.isEmpty {
-                device.needsLoginToSaveDevice = true
+                let suppress = UserDefaults.standard.bool(forKey: "emwaver.deviceAttachPrompt.suppress")
+                if !suppress {
+                    device.needsLoginToSaveDevice = true
+                }
                 device.deviceAttachStatusText = "Sign in to save device"
                 return
             }

@@ -28,6 +28,7 @@ struct ContentView: View {
     @State private var showingHosts: Bool = false
     @State private var showingBackendSettings: Bool = false
     @State private var showingFrontendSettings: Bool = false
+    @State private var showingSettings: Bool = false
 
     @State private var showingProUpgrade: Bool = false
     @State private var proFeatureName: String = ""
@@ -197,12 +198,8 @@ struct ContentView: View {
 
                         Divider()
 
-                        Button("Backend…") {
-                            showingBackendSettings = true
-                        }
-
-                        Button("Web Frontend…") {
-                            showingFrontendSettings = true
+                        Button("Settings…") {
+                            showingSettings = true
                         }
 
                         Divider()
@@ -236,6 +233,7 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
+                .environmentObject(auth)
         }
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
@@ -263,6 +261,9 @@ struct ContentView: View {
         .sheet(isPresented: $showingFrontendSettings) {
             FrontendSettingsView()
         }
+        .sheet(isPresented: $showingSettings) {
+            SettingsView(device: device)
+        }
         .sheet(isPresented: $showingProUpgrade) {
             ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)
                 .environmentObject(auth)
@@ -271,11 +272,15 @@ struct ContentView: View {
             Button("Sign In") {
                 auth.isSignInSheetPresented = true
             }
+            Button("Don't ask again") {
+                UserDefaults.standard.set(true, forKey: "emwaver.deviceAttachPrompt.suppress")
+                device.needsLoginToSaveDevice = false
+            }
             Button("Not now", role: .cancel) {
                 device.needsLoginToSaveDevice = false
             }
         } message: {
-            Text("This EMWaver device is genuine (SecureWaver identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro.")
+            Text("This EMWaver device is genuine (SecureWaver identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro. You can attach the device later from the Device panel.")
         }
         .alert("Connect an EMWaver device to sign in", isPresented: $showingSignInRequiresDeviceAlert) {
             Button("Open Device…") {
