@@ -128,7 +128,7 @@ export default function OrderPage() {
             <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5">
               <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">Accounts</div>
               <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Optional Google sign-in</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Sign in to manage orders and support recovery flows (e.g. Securewaver).</div>
+              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Sign in to attach devices to your account and manage Pro (cloud features are Pro-only).</div>
             </div>
 
             <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5">

@@ -5,8 +5,7 @@ export default function DeviceDocPage() {
     <>
       <h1>Current board</h1>
       <p>
-        EMWaver ships a single current-gen STM32 board, USB-only, designed around scripts + UI rather
-        than reflashing loops.
+        EMWaver ships a single USB device designed around scripts + UI rather than reflashing loops.
       </p>
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">

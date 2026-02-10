@@ -13,7 +13,7 @@ export default function HomePage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
-                Script-first hardware exploration
+                USB-only · script-first hardware exploration
               </div>
 
               <h1 className="text-4xl leading-[1.02] font-semibold tracking-tight text-[color:var(--ink)] md:text-6xl">
@@ -23,8 +23,9 @@ export default function HomePage() {
               </h1>
 
               <p className="max-w-xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                EMWaver is a script-centered hardware exploration platform. You iterate fast,
-                build real UIs alongside experiments, and ship repeatable tools as scripts.
+                EMWaver is a script-centered hardware exploration platform built around a single USB device.
+                You iterate fast, build real UI alongside experiments, and keep repeatable tools as scripts —
+                without reflashing loops.
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -99,15 +100,15 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-                  <div className="text-xs font-semibold text-[color:var(--sky)]">Agent loop</div>
+                  <div className="text-xs font-semibold text-[color:var(--sky)]">ELM Agent (Pro)</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                    Ask for an experiment. Get a script you can run and edit.
+                    Ask for an experiment. Get a runnable script (with UI) you can edit.
                   </div>
                 </div>
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
-                  <div className="text-xs font-semibold text-[color:var(--copper)]">Single platform</div>
+                  <div className="text-xs font-semibold text-[color:var(--copper)]">One platform</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                    One device + apps that evolve with you.
+                    One USB device + apps on Android, iOS, macOS, and Windows.
                   </div>
                 </div>
               </div>
