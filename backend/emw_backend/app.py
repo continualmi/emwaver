@@ -19,6 +19,7 @@ from emw_backend.routes.admin import admin_bp
 from emw_backend.routes.pro import pro_bp
 from emw_backend.routes.credits import credits_bp
 from emw_backend.routes.auth_handoff import auth_handoff_bp
+from emw_backend.routes.society import society_bp
 
 
 def create_app() -> Flask:
@@ -60,6 +61,7 @@ def create_app() -> Flask:
     app.register_blueprint(pro_bp)
     app.register_blueprint(credits_bp)
     app.register_blueprint(auth_handoff_bp)
+    app.register_blueprint(society_bp)
     app.register_blueprint(admin_bp)
 
     # WebSocket endpoint for Remote Sessions.
