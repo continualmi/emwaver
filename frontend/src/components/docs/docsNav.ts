@@ -36,6 +36,16 @@ export const DOCS_NAV: DocsNavGroup[] = [
     ],
   },
   {
+    heading: "Troubleshooting",
+    items: [
+      {
+        href: "/docs/device-recovery",
+        label: "Recover device identity",
+        description: "Fix “Not secure” after an update.",
+      },
+    ],
+  },
+  {
     heading: "Hardware",
     items: [
       {
