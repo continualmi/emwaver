@@ -46,22 +46,6 @@ public sealed partial class SettingsPage : Page
 
             LocalBackendUrlBox.Text = AppServices.Settings.LocalBackendUrl;
             LocalBackendUrlBox.IsEnabled = !prod;
-
-            var mode = AppServices.Settings.EditorMode;
-            var tag = mode switch
-            {
-                Services.EditorMode.Simple => "simple",
-                _ => "code",
-            };
-
-            foreach (var item in EditorModeCombo.Items)
-            {
-                if (item is ComboBoxItem cbi && (cbi.Tag as string) == tag)
-                {
-                    EditorModeCombo.SelectedItem = cbi;
-                    break;
-                }
-            }
         }
 
         // UI updates must happen on the UI thread.
@@ -92,26 +76,6 @@ public sealed partial class SettingsPage : Page
     {
         AppServices.CloudAuth.SignOut();
         RefreshUi("Signed out.");
-    }
-
-    private void OnEditorModeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (EditorModeCombo.SelectedItem is not ComboBoxItem item)
-        {
-            return;
-        }
-
-        var tag = item.Tag as string;
-        var mode = tag switch
-        {
-            "simple" => Services.EditorMode.Simple,
-            _ => Services.EditorMode.Code,
-        };
-
-        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode => {tag}");
-        AppServices.Settings.EditorMode = mode;
-        System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Settings] EditorMode persisted => {AppServices.Settings.EditorMode}");
-        RefreshUi("Editor setting updated.");
     }
 
     private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)

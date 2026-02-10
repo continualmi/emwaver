@@ -38,23 +38,6 @@
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Editor" FontWeight="SemiBold" />
-
-                    <ComboBox x:Name="EditorModeCombo" SelectionChanged="OnEditorModeChanged" Width="260" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
-                        <ComboBoxItem Content="Simple" Tag="simple" />
-                        <ComboBoxItem Content="Code (JS)" Tag="code" />
-                    </ComboBox>
-
-                    <TextBlock Text="Code editor is native (RichEdit document formatting) and uses JS-focused tokenization." Opacity="0.75" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="10">
                     <TextBlock Text="Cloud" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
