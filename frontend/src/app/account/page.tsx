@@ -256,18 +256,18 @@ export default function AccountPage() {
             </section>
 
             <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Recovery</div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Help</div>
               <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                This is where we’ll add “recovery mode” flows: re-attaching devices, resolving lost accounts, and validating genuine hardware ownership.
+                Need to fix a device that shows as “Not secure” after an update? Follow the in-app recovery steps.
               </div>
 
-              <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-4">
-                <div className="text-xs font-semibold tracking-wide text-[color:var(--copper)]">Planned</div>
-                <ul className="mt-2 list-disc pl-5 text-sm text-[color:var(--ink-dim)]">
-                  <li>Show connected devices and offer “Attach to account” if missing.</li>
-                  <li>Recovery flow using device possession (DeviceID+Proof) + account sign-in.</li>
-                  <li>Order-to-device association (optional, later).</li>
-                </ul>
+              <div className="mt-4">
+                <a
+                  href="/docs/device-recovery"
+                  className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] no-underline hover:bg-[color:var(--surface-3)]"
+                >
+                  Recover device identity
+                </a>
               </div>
             </section>
           </div>
