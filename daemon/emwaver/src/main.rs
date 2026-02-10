@@ -25,6 +25,9 @@ enum Commands {
         cmd: DaemonCmd,
     },
 
+    /// Terminal UI for daemon + device status.
+    Tui,
+
     /// List MIDI devices and highlight likely EMWaver ports.
     Devices,
 
@@ -225,22 +228,32 @@ fn autostart_status() -> Result<String> {
     }
 }
 
-fn list_devices() -> Result<()> {
+fn list_devices_lines() -> Result<Vec<String>> {
     let midi_in = MidiInput::new("emwaver-cli")?;
     let ports = midi_in.ports();
     if ports.is_empty() {
-        println!("No MIDI input ports found.");
-        return Ok(());
+        return Ok(vec!["No MIDI input ports found.".to_string()]);
     }
 
-    println!("MIDI input ports:");
+    let mut out: Vec<String> = vec!["MIDI input ports:".to_string()];
     for (i, p) in ports.iter().enumerate() {
         let name = midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"));
         let l = name.to_lowercase();
-        let hint = if l.contains("emw") || l.contains("emwaver") { "  <— likely EMWaver" } else { "" };
-        println!("  {i}: {name}{hint}");
+        let hint = if l.contains("emw") || l.contains("emwaver") {
+            "  <— likely EMWaver"
+        } else {
+            ""
+        };
+        out.push(format!("  {i}: {name}{hint}"));
     }
 
+    Ok(out)
+}
+
+fn list_devices() -> Result<()> {
+    for line in list_devices_lines()? {
+        println!("{line}");
+    }
     Ok(())
 }
 
@@ -281,7 +294,98 @@ fn main() -> Result<()> {
                 Ok(())
             }
         },
+        Commands::Tui => run_tui(),
         Commands::Devices => list_devices(),
         Commands::Paths => print_paths(),
     }
+}
+
+fn run_tui() -> Result<()> {
+    use crossterm::{
+        event::{self, Event, KeyCode},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{
+        backend::CrosstermBackend,
+        layout::{Constraint, Direction, Layout},
+        style::{Modifier, Style},
+        text::{Line, Text},
+        widgets::{Block, Borders, Paragraph},
+        Terminal,
+    };
+
+    enable_raw_mode()?;
+    let mut stdout = std::io::stdout();
+    execute!(stdout, EnterAlternateScreen)?;
+    let backend = CrosstermBackend::new(stdout);
+    let mut terminal = Terminal::new(backend)?;
+
+    let res = (|| -> Result<()> {
+        loop {
+            let daemon_line = match daemon_running()? {
+                Some(pid) => format!("running (pid={pid})"),
+                None => "not running".to_string(),
+            };
+            let autostart = autostart_status()?;
+            let devices = list_devices_lines()?;
+
+            terminal.draw(|f| {
+                let size = f.size();
+                let chunks = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Length(5),
+                        Constraint::Min(8),
+                        Constraint::Length(3),
+                    ])
+                    .split(size);
+
+                let header = Paragraph::new(Text::from(vec![
+                    Line::from("EMWaver Daemon (beta)".to_string()).style(Style::default().add_modifier(Modifier::BOLD)),
+                    Line::from(format!("daemon: {daemon_line}")),
+                    Line::from(autostart),
+                ]))
+                .block(Block::default().borders(Borders::ALL).title("Status"));
+                f.render_widget(header, chunks[0]);
+
+                let dev_text: Vec<Line> = devices.into_iter().map(Line::from).collect();
+                let dev = Paragraph::new(Text::from(dev_text))
+                    .block(Block::default().borders(Borders::ALL).title("Devices"));
+                f.render_widget(dev, chunks[1]);
+
+                let help = Paragraph::new("Keys: (s)tart  s(t)op  (r)efresh  (q)uit")
+                    .block(Block::default().borders(Borders::ALL).title("Help"));
+                f.render_widget(help, chunks[2]);
+            })?;
+
+            // Input
+            if event::poll(std::time::Duration::from_millis(250))? {
+                if let Event::Key(key) = event::read()? {
+                    match key.code {
+                        KeyCode::Char('q') => break,
+                        KeyCode::Char('r') => {
+                            // redraw on next loop
+                        }
+                        KeyCode::Char('s') => {
+                            // Start with defaults (env can override)
+                            let _ = daemon_start(None, None, None, None, false);
+                        }
+                        KeyCode::Char('t') => {
+                            let _ = daemon_stop();
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        Ok(())
+    })();
+
+    // restore terminal
+    disable_raw_mode()?;
+    execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    terminal.show_cursor()?;
+
+    res
 }
