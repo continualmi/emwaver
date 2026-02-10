@@ -10,12 +10,17 @@ tmux clear-history -t $SESSION:1
 tmux rename-window -t $SESSION:1 'git'
 tmux send-keys -t $SESSION:1.1 'lazygit' C-m
 
-# Window 2: Dev (Backend + Frontend) — typed only
+# Window 2: Dev (Backend + Frontend) — auto-run
 PANE_BACKEND=$(tmux new-window -t $SESSION -n 'dev' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -h -l 50% -t "$PANE_BACKEND" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-tmux send-keys -t "$PANE_BACKEND" 'cd backend && python app.py'
-tmux send-keys -t "$PANE_FRONTEND" 'cd frontend && npm run dev'
+# Backend
+tmux send-keys -t "$PANE_BACKEND" 'cd backend' C-m
+tmux send-keys -t "$PANE_BACKEND" 'python app.py' C-m
+
+# Frontend
+tmux send-keys -t "$PANE_FRONTEND" 'cd frontend' C-m
+tmux send-keys -t "$PANE_FRONTEND" 'npm run dev' C-m
 
 # Window 3: Dev Ops (2x2 Grid) — typed only
 # Android | SecureWaver (tauri)
