@@ -109,7 +109,7 @@
                         </Border>
 
                         <Grid Grid.Row="1">
-                            <!-- Simple editor (fallback) -->
+                            <!-- Simple editor (Windows uses a single editor now; no variants/JS modes). -->
                             <TextBox
                                 x:Name="EditorBox"
                                 BorderThickness="0"
@@ -124,21 +124,6 @@
                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
                                 ScrollViewer.HorizontalScrollBarVisibility="Auto"
                                 TextChanged="OnEditorTextChanged" />
-
-                            <!-- Highlighted editor (RichEditBox) -->
-                            <RichEditBox
-                                x:Name="RichEditor"
-                                Visibility="Collapsed"
-                                BorderThickness="0"
-                                Background="#1E1E1E"
-                                Foreground="#D4D4D4"
-                                FontFamily="Consolas"
-                                FontSize="13"
-                                IsSpellCheckEnabled="False"
-                                IsTextPredictionEnabled="False"
-                                TextChanged="OnRichEditorTextChanged" />
-
-                            <!-- -->
 
                             <TextBlock
                                 x:Name="EmptyHint"

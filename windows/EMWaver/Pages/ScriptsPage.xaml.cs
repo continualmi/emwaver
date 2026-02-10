@@ -25,28 +25,6 @@ public sealed partial class ScriptsPage : Page
 {
     public event Action<bool>? PreviewModeChanged;
 
-    protected override async void OnNavigatedTo(Microsoft.UI.Xaml.Navigation.NavigationEventArgs e)
-    {
-        base.OnNavigatedTo(e);
-
-        var next = AppServices.Settings.EditorMode;
-        Debug.WriteLine($"[EMWaver][Windows][Editor] OnNavigatedTo mode(setting)={next} prev={_editorMode}");
-
-        if (next != _editorMode)
-        {
-            _editorMode = next;
-            ApplyEditorMode();
-        }
-
-        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode visible code={RichEditor?.Visibility} simple={EditorBox?.Visibility}");
-
-        if (_editorMode == EditorMode.Code)
-        {
-            EnsureHighlightTimer();
-            ScheduleHighlight();
-        }
-    }
-
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
     private sealed record AgentMessageRow(string Role, string Text)
     {
@@ -68,13 +46,6 @@ public sealed partial class ScriptsPage : Page
     private bool _isDirty;
     private bool _suppressSelectionChange;
     private bool _suppressEditorChanged;
-
-    private EditorMode _editorMode;
-
-    // Code editor state (RichEditBox)
-    private bool _suppressRichChanged;
-    private string _richTextCache = string.Empty;
-    private Microsoft.UI.Dispatching.DispatcherQueueTimer? _highlightTimer;
 
     private readonly ScriptEngine _scriptEngine = new();
     private readonly ScriptRenderer _scriptRenderer;
@@ -102,9 +73,6 @@ public sealed partial class ScriptsPage : Page
         AgentConversationsCombo.ItemsSource = _agentConversations;
 
         _agentConversationId = LoadAgentConversationId();
-
-        _editorMode = AppServices.Settings.EditorMode;
-        AppServices.Settings.Changed += OnSettingsChanged;
 
         _scriptRenderer = new ScriptRenderer((token, args) =>
         {
@@ -135,7 +103,6 @@ public sealed partial class ScriptsPage : Page
         // Default: editor-first.
         SetPreviewMode(false);
 
-        ApplyEditorMode();
 
         EmptyHint.Visibility = Visibility.Visible;
         PreviewHint.Visibility = Visibility.Visible;
@@ -153,72 +120,7 @@ public sealed partial class ScriptsPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-
-        if (_editorMode == EditorMode.Code)
-        {
-            EnsureHighlightTimer();
-            ScheduleHighlight();
-        }
-
         await RefreshAsync();
-    }
-
-    private void OnSettingsChanged()
-    {
-        _ = DispatcherQueue.TryEnqueue(async () =>
-        {
-            var next = AppServices.Settings.EditorMode;
-            if (next == _editorMode)
-            {
-                return;
-            }
-
-            // Moving between editors: capture latest buffer so the next editor has the same text.
-            var currentText = GetEditorTextNormalized();
-
-            _editorMode = next;
-            ApplyEditorMode();
-
-            if (_editorMode == EditorMode.Simple)
-            {
-                _suppressEditorChanged = true;
-                try { EditorBox.Text = currentText; }
-                finally { _suppressEditorChanged = false; }
-            }
-            else // Code editor
-            {
-                SetRichEditorText(currentText);
-                EnsureHighlightTimer();
-                ScheduleHighlight();
-            }
-
-            // Re-evaluate dirty state (buffer may have moved between controls).
-            var now = GetEditorTextNormalized();
-            _isDirty = !string.Equals(now, _loadedTextNormalized, StringComparison.Ordinal);
-            UpdateCommandStates();
-        });
-    }
-
-    private void ApplyEditorMode()
-    {
-        if (RichEditor == null || EditorBox == null)
-        {
-            Debug.WriteLine("[EMWaver][Windows][Editor] ApplyEditorMode: controls not ready");
-            return;
-        }
-
-        RichEditor.Visibility = _editorMode == EditorMode.Code ? Visibility.Visible : Visibility.Collapsed;
-        EditorBox.Visibility = _editorMode == EditorMode.Simple ? Visibility.Visible : Visibility.Collapsed;
-
-        // When switching into code mode, apply highlight once (helps read-only/bundled scripts).
-        if (_editorMode == EditorMode.Code && _current != null)
-        {
-            EnsureHighlightTimer();
-            ScheduleHighlight();
-            ApplyHighlightingSafe();
-        }
-
-        Debug.WriteLine($"[EMWaver][Windows][Editor] ApplyEditorMode: mode={_editorMode} => code={RichEditor.Visibility} simple={EditorBox.Visibility}");
     }
 
     // Monaco/WebView2 removed on Windows (unstable and non-native).
@@ -406,16 +308,6 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = text ?? string.Empty;
             _suppressEditorChanged = false;
 
-            // NOTE: setting RichEditBox.Document text can throw if IsReadOnly is true.
-            // Set read-only after we load text.
-
-            // Code editor state
-            SetRichEditorText(text ?? string.Empty);
-            RichEditor.IsReadOnly = script.IsBundled;
-            EnsureHighlightTimer();
-            ScheduleHighlight();
-            ApplyHighlightingSafe();
-
             // Always start in editor mode when opening a script.
             SetPreviewMode(false);
 
@@ -427,20 +319,10 @@ public sealed partial class ScriptsPage : Page
 
             UpdateCommandStates();
 
-            // Improve UX: focus the active editor automatically when a script is opened.
+            // Improve UX: focus the editor automatically when a script is opened.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                try
-                {
-                    if (_editorMode == EditorMode.Code)
-                    {
-                        RichEditor.Focus(FocusState.Programmatic);
-                    }
-                    else
-                    {
-                        EditorBox.Focus(FocusState.Programmatic);
-                    }
-                }
+                try { EditorBox.Focus(FocusState.Programmatic); }
                 catch { }
             });
 
@@ -489,8 +371,6 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = text;
             _suppressEditorChanged = false;
 
-            SetRichEditorText(text);
-            RichEditor.IsReadOnly = true;
 
             EmptyHint.Visibility = Visibility.Collapsed;
 
@@ -512,8 +392,6 @@ public sealed partial class ScriptsPage : Page
             EditorBox.Text = string.Empty;
             _suppressEditorChanged = false;
 
-            SetRichEditorText(string.Empty);
-            RichEditor.IsReadOnly = true;
 
             EmptyHint.Visibility = Visibility.Visible;
             ReadOnlyBanner.Visibility = Visibility.Collapsed;
@@ -528,7 +406,7 @@ public sealed partial class ScriptsPage : Page
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
     {
-        if (_suppressEditorChanged || _editorMode != EditorMode.Simple)
+        if (_suppressEditorChanged)
         {
             return;
         }
@@ -549,13 +427,9 @@ public sealed partial class ScriptsPage : Page
 
     private string GetEditorTextNormalized()
     {
-        var raw = _editorMode switch
-        {
-            // Always read the document; RichEdit normalizes line endings and may differ from our last cache.
-            EditorMode.Code => GetRichEditorText(),
-            _ => (EditorBox.Text ?? string.Empty),
-        };
-        return NormalizeLineEndings(raw).TrimEnd('\n');
+        var raw = (EditorBox.Text ?? string.Empty);
+        return NormalizeLineEndings(raw).TrimEnd('
+');
     }
 
     private static string NormalizeLineEndings(string text)
@@ -606,28 +480,10 @@ public sealed partial class ScriptsPage : Page
             }
             catch { }
 
-            // Re-apply highlighting when returning from preview.
-            // (RichEdit can lose formatting when hidden/collapsed by the layout.)
-            if (_editorMode == EditorMode.Code && _current != null)
-            {
-                try { _highlightTimer?.Stop(); } catch { }
-                ApplyHighlightingSafe();
-            }
-
-            // When returning to code view, make the editor immediately interactive.
+            // Make the editor immediately interactive when returning.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                try
-                {
-                    if (_editorMode == EditorMode.Code)
-                    {
-                        RichEditor.Focus(FocusState.Programmatic);
-                    }
-                    else
-                    {
-                        EditorBox.Focus(FocusState.Programmatic);
-                    }
-                }
+                try { EditorBox.Focus(FocusState.Programmatic); }
                 catch { }
             });
         }

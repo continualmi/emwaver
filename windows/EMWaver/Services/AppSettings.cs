@@ -12,12 +12,6 @@ internal sealed class AppSettings
 
     private sealed class SettingsModel
     {
-        // "simple" | "code"
-        public string EditorMode { get; set; } = "code";
-
-        // Back-compat for older builds. If present, we migrate to EditorMode.
-        public bool? UseMonacoEditor { get; set; }
-
         // Backend selection
         public bool UseProductionBackend { get; set; } = true;
         public string LocalBackendUrl { get; set; } = "http://127.0.0.1:8787";
@@ -41,14 +35,13 @@ internal sealed class AppSettings
             }
 
             var json = File.ReadAllText(path);
-            var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
 
-            // Migrate legacy bool toggle (if present) into EditorMode.
-            if (model.UseMonacoEditor.HasValue)
-            {
-                model.EditorMode = model.UseMonacoEditor.Value ? "code" : "simple";
-                model.UseMonacoEditor = null;
-            }
+            // Migration: Windows used to have editor-mode settings ("Code (JS)" vs "Simple").
+            // We no longer support variants on Windows; ignore and scrub those keys when present.
+            var needsScrub = json.Contains("\"EditorMode\"", StringComparison.OrdinalIgnoreCase)
+                || json.Contains("\"UseMonacoEditor\"", StringComparison.OrdinalIgnoreCase);
+
+            var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
 
             // Sanity.
             if (string.IsNullOrWhiteSpace(model.LocalBackendUrl))
@@ -56,11 +49,17 @@ internal sealed class AppSettings
                 model.LocalBackendUrl = "http://127.0.0.1:8787";
             }
 
+            if (needsScrub)
+            {
+                // Best-effort: rewrite without legacy keys.
+                try { Save(model); } catch { }
+            }
+
             return model;
         }
         catch
         {
-            // Fail safe: keep defaults (Monaco ON) if settings are unreadable.
+            // Fail safe: keep defaults.
             return new SettingsModel();
         }
     }
@@ -83,42 +82,6 @@ internal sealed class AppSettings
             // Best effort.
             try { File.Move(tmp, path, overwrite: true); } catch { }
         }
-    }
-
-    public EMWaver.Services.EditorMode EditorMode
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return Load().EditorMode switch
-                {
-                    "simple" => EMWaver.Services.EditorMode.Simple,
-                    _ => EMWaver.Services.EditorMode.Code,
-                };
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                var m = Load();
-                m.EditorMode = value switch
-                {
-                    EMWaver.Services.EditorMode.Simple => "simple",
-                    _ => "code",
-                };
-                Save(m);
-            }
-            Changed?.Invoke();
-        }
-    }
-
-    // Back-compat API used by older UI code paths.
-    public bool UseMonacoEditor
-    {
-        get => EditorMode == EMWaver.Services.EditorMode.Code;
-        set => EditorMode = value ? EMWaver.Services.EditorMode.Code : EMWaver.Services.EditorMode.Simple;
     }
 
     public bool UseProductionBackend

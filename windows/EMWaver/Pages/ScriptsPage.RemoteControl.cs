@@ -46,16 +46,9 @@ public sealed partial class ScriptsPage
                     // Populate editor buffer for transparency (so user can see what is running).
                     var scriptName = !string.IsNullOrWhiteSpace(name) ? name : "Remote Script";
 
-                    if (_page._editorMode == Services.EditorMode.Simple)
-                    {
-                        _page._suppressEditorChanged = true;
-                        try { _page.EditorBox.Text = source; }
-                        finally { _page._suppressEditorChanged = false; }
-                    }
-                    else
-                    {
-                        _page.SetRichEditorText(source);
-                    }
+                    _page._suppressEditorChanged = true;
+                    try { _page.EditorBox.Text = source; }
+                    finally { _page._suppressEditorChanged = false; }
 
                     // Best-effort: set current selection label (does not persist to repo).
                     // ScriptInfo is a record with ctor args; FileName is derived from Name.
