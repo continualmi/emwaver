@@ -764,7 +764,7 @@ export default function CloudPage() {
                 Log out
               </button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {!proAccess ? (
