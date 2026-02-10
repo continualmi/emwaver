@@ -7,6 +7,7 @@ using System.IO;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using System;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -121,6 +122,7 @@ public sealed partial class ScriptsPage : Page
     {
         Loaded -= OnLoaded;
         await RefreshAsync();
+        QueueEditorFocus();
     }
 
     // Monaco/WebView2 removed on Windows (unstable and non-native).
@@ -318,13 +320,7 @@ public sealed partial class ScriptsPage : Page
             PreviewHint.Visibility = Visibility.Visible;
 
             UpdateCommandStates();
-
-            // Improve UX: focus the editor automatically when a script is opened.
-            _ = DispatcherQueue.TryEnqueue(() =>
-            {
-                try { EditorBox.Focus(FocusState.Programmatic); }
-                catch { }
-            });
+            QueueEditorFocus();
 
             await Task.CompletedTask;
         });
@@ -428,8 +424,7 @@ public sealed partial class ScriptsPage : Page
     private string GetEditorTextNormalized()
     {
         var raw = (EditorBox.Text ?? string.Empty);
-        return NormalizeLineEndings(raw).TrimEnd('
-');
+        return NormalizeLineEndings(raw).TrimEnd('\n');
     }
 
     private static string NormalizeLineEndings(string text)
@@ -441,6 +436,72 @@ public sealed partial class ScriptsPage : Page
     private bool _isPreviewMode;
     private int _renderGeneration;
     private int _activeRenderGeneration;
+    private DispatcherQueueTimer? _editorFocusTimer;
+    private int _editorFocusAttemptsRemaining;
+
+    private void QueueEditorFocus()
+    {
+        // Selection/toolbar actions can steal focus after open; retry a few times.
+        _ = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            StopEditorFocusTimer();
+            _editorFocusAttemptsRemaining = 6;
+
+            if (TryFocusEditorNow())
+            {
+                return;
+            }
+
+            _editorFocusTimer ??= DispatcherQueue.CreateTimer();
+            _editorFocusTimer.IsRepeating = true;
+            _editorFocusTimer.Interval = TimeSpan.FromMilliseconds(40);
+            _editorFocusTimer.Tick -= OnEditorFocusTimerTick;
+            _editorFocusTimer.Tick += OnEditorFocusTimerTick;
+            _editorFocusTimer.Start();
+        });
+    }
+
+    private void OnEditorFocusTimerTick(DispatcherQueueTimer sender, object args)
+    {
+        _editorFocusAttemptsRemaining--;
+        if (TryFocusEditorNow() || _editorFocusAttemptsRemaining <= 0)
+        {
+            StopEditorFocusTimer();
+        }
+    }
+
+    private bool TryFocusEditorNow()
+    {
+        try
+        {
+            if (EditorPane.Visibility != Visibility.Visible || EditorBox.IsReadOnly)
+            {
+                return true;
+            }
+
+            EditorBox.Focus(FocusState.Programmatic);
+            EditorBox.SelectionStart = EditorBox.Text?.Length ?? 0;
+            EditorBox.SelectionLength = 0;
+
+            var focused = FocusManager.GetFocusedElement(XamlRoot);
+            return ReferenceEquals(focused, EditorBox);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private void StopEditorFocusTimer()
+    {
+        if (_editorFocusTimer is null)
+        {
+            return;
+        }
+
+        _editorFocusTimer.Stop();
+        _editorFocusTimer.Tick -= OnEditorFocusTimerTick;
+    }
 
     private void SetPreviewMode(bool preview)
     {
@@ -483,8 +544,7 @@ public sealed partial class ScriptsPage : Page
             // Make the editor immediately interactive when returning.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                try { EditorBox.Focus(FocusState.Programmatic); }
-                catch { }
+                QueueEditorFocus();
             });
         }
 
