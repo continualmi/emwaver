@@ -6,52 +6,47 @@ import { SocietyTabs } from "@/app/society/societyTabs";
 export default function SocietyLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative min-h-dvh overflow-hidden">
-      {/* Society has its own vibe + the 2015 background. */}
+      {/* Society has its own vibe + the 2015 background (visible, then blur on top — no dark fade). */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <img
-          src="/2015_upscale.jpg"
-          alt=""
-          className="h-full w-full object-cover opacity-[0.45]"
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(1200px_700px_at_10%_0%,rgba(255,255,255,0.06),transparent_62%),radial-gradient(900px_600px_at_80%_10%,rgba(78,231,199,0.08),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.72),rgba(2,3,8,0.80))]" />
+        <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.72]" />
+        {/* keep a tiny contrast helper, but avoid the heavy dark overlay */}
+        <div className="absolute inset-0 bg-[radial-gradient(900px_600px_at_15%_0%,rgba(255,255,255,0.10),transparent_60%),radial-gradient(900px_600px_at_85%_10%,rgba(78,231,199,0.10),transparent_62%)]" />
       </div>
 
       <SiteHeader />
 
       <main className="mx-auto max-w-6xl px-5 py-10">
-        <div className="flex flex-col gap-6">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6 backdrop-blur md:p-8">
-            <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
-              <div className="space-y-2">
-                <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">
-                  A place for members
-                </div>
-                <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
-                  EMWaver Society
-                </h1>
-                <p className="max-w-2xl text-sm leading-6 text-[color:var(--ink-dim)]">
-                  Community posts, scripts, and videos. Comments are tied to your EMWaver account (device required).
-                </p>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                <Link
-                  href="/account"
-                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.06)]"
-                >
-                  My account
-                </Link>
-              </div>
+        <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-start">
+          {/* Left rail (distinct Society layout) */}
+          <aside className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:sticky md:top-24">
+            <div className="space-y-3">
+              <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">EMWaver</div>
+              <div className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Society</div>
+              <p className="text-sm leading-6 text-[color:var(--ink-dim)]">
+                Posts, scripts, and videos.
+                <br />
+                Comments require a device-attached account.
+              </p>
             </div>
 
             <div className="mt-5">
               <SocietyTabs />
             </div>
-          </div>
 
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.50)] p-6 backdrop-blur md:p-8">
+            <div className="mt-6 flex flex-wrap gap-2">
+              <Link
+                href="/account"
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.10)]"
+              >
+                My account
+              </Link>
+            </div>
+          </aside>
+
+          {/* Main content */}
+          <section className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:p-8">
             {children}
-          </div>
+          </section>
         </div>
       </main>
 
