@@ -132,7 +132,8 @@ public sealed class ScriptEngine : IDisposable
 
             try
             {
-                var jsArgs = arguments.Select(a => JsValue.FromObject(_engine, a)).ToArray();
+                var safeArgs = arguments ?? Array.Empty<object?>();
+                var jsArgs = safeArgs.Select(a => JsValue.FromObject(_engine, a)).ToArray();
                 _engine.Invoke(fn, jsArgs);
             }
             catch (JavaScriptException ex)

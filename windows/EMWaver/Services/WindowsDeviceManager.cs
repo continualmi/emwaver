@@ -488,7 +488,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return null;
             }
 
-            Buffer.BlockCopy(lane, 1, proof, chunk * 16, 16);
+            System.Buffer.BlockCopy(lane, 1, proof, chunk * 16, 16);
         }
 
         return new DeviceIdentity(deviceId, proof);
