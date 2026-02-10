@@ -4,7 +4,16 @@ import { SiteHeader } from "@/components/SiteHeader";
 
 export default function HomePage() {
   return (
-    <div className="min-h-dvh">
+    <div className="relative min-h-dvh overflow-hidden">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <img
+          src="/2015_upscale.jpg"
+          alt=""
+          className="h-full w-full object-cover opacity-[0.28]"
+        />
+        <div className="absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.18),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.12),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.82),rgba(2,3,8,0.88))]" />
+      </div>
+
       <SiteHeader />
 
       <main>

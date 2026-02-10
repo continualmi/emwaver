@@ -10,6 +10,7 @@ import { evalEmwUi } from "@/lib/emwUiRuntime";
 import { exampleEmwScripts } from "@/lib/exampleEmwScripts";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
+  backendFetch,
   deleteFile,
   downloadFileContent,
   listFiles,

@@ -11,9 +11,9 @@ type SocietyPost = {
   created_at_ms: number;
 };
 
-async function fetchVideos(): Promise<SocietyPost[]> {
+async function fetchScripts(): Promise<SocietyPost[]> {
   const url = new URL(`${backendBaseUrl()}/v1/society/posts`);
-  url.searchParams.set("kind", "video");
+  url.searchParams.set("kind", "script");
   const res = await fetch(url.toString(), { cache: "no-store" });
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
@@ -21,44 +21,44 @@ async function fetchVideos(): Promise<SocietyPost[]> {
   return (json.posts || []) as SocietyPost[];
 }
 
-export default async function SocietyVideosPage() {
-  const videos = await fetchVideos();
+export default async function SocietyScriptsPage() {
+  const scripts = await fetchScripts();
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Hosted</div>
+          <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Library</div>
           <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
-            Videos are hosted by EMWaver Society.
+            Share runnable <span className="font-mono">.emw</span> scripts with the community.
           </div>
         </div>
 
         <Link
-          href="/signin?redirect=/society/videos"
+          href="/signin?redirect=/society/scripts"
           className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
         >
-          Sign in
+          Sign in to publish
         </Link>
       </div>
 
-      {videos.length === 0 ? (
+      {scripts.length === 0 ? (
         <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5">
-          <div className="text-sm font-semibold text-[color:var(--ink)]">No videos yet</div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">No scripts published yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
-            We’ll publish bring-up demos and deep dives here.
+            First wave will be curated. Then we’ll open submissions.
           </p>
         </div>
       ) : (
         <div className="grid gap-3">
-          {videos.map((v) => (
+          {scripts.map((s) => (
             <Link
-              key={v.id}
-              href={`/society/posts/${encodeURIComponent(v.id)}`}
+              key={s.id}
+              href={`/society/posts/${encodeURIComponent(s.id)}`}
               className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 hover:bg-[rgba(255,255,255,0.05)]"
             >
-              <div className="text-lg font-semibold text-[color:var(--ink)]">{v.title}</div>
-              {v.summary ? <div className="mt-2 text-sm text-[color:var(--ink-dim)]">{v.summary}</div> : null}
+              <div className="text-lg font-semibold text-[color:var(--ink)]">{s.title}</div>
+              {s.summary ? <div className="mt-2 text-sm text-[color:var(--ink-dim)]">{s.summary}</div> : null}
             </Link>
           ))}
         </div>
