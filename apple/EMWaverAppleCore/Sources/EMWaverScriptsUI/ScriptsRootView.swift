@@ -20,6 +20,8 @@ public struct ScriptsRootView: View {
     @StateObject private var previewManager: ScriptPreviewManager
     @StateObject private var agentViewModel: AgentChatViewModel
 
+    private let agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
+
     private let device: (any ScriptDevice)?
     private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
     // Agent runs locally on the host.
@@ -63,6 +65,7 @@ public struct ScriptsRootView: View {
         previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil
@@ -72,16 +75,20 @@ public struct ScriptsRootView: View {
         self.hostStatusSink = hostStatusSink
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
+        self.agentCloudProvider = agentCloudProvider
         let host = DefaultAgentHost(previewManager: previewManager)
         self._previewManager = StateObject(wrappedValue: previewManager)
         self.agentHost = host
-        _agentViewModel = StateObject(wrappedValue: AgentChatViewModel(host: host))
+        _agentViewModel = StateObject(
+            wrappedValue: AgentChatViewModel(host: host, cloudProvider: agentCloudProvider)
+        )
     }
 
     @MainActor
     public init(
         device: (any ScriptDevice)? = nil,
         syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil
@@ -90,6 +97,7 @@ public struct ScriptsRootView: View {
             previewManager: ScriptPreviewManager(),
             device: device,
             syncProvider: syncProvider,
+            agentCloudProvider: agentCloudProvider,
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade

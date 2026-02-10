@@ -69,6 +69,13 @@ struct ContentView: View {
                         // Treat "preview showing" as "script running" on macOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
                     },
+                    agentCloudProvider: {
+                        // Cloud-stored conversations (Pro-only). We still run inference locally for now.
+                        guard (entitlements.entitlements?.features.agent ?? false) else { return nil }
+                        guard let base = BackendUrl.resolve() else { return nil }
+                        guard let session = auth.session, !session.idToken.isEmpty else { return nil }
+                        return (baseURL: base, accessToken: session.idToken)
+                    },
                     agentEnabled: (entitlements.entitlements?.features.agent ?? false),
                     onRequestAgentUpgrade: {
                         proFeatureName = "AI Agent"

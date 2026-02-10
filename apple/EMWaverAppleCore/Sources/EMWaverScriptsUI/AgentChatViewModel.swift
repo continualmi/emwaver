@@ -48,6 +48,10 @@ public final class AgentChatViewModel: ObservableObject {
 
     public let host: AgentHost
 
+    // Cloud persistence (optional): if provided, conversation list + messages are stored in the backend DB.
+    // This enables cross-device continuity while still allowing local inference providers.
+    private let cloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
+
     private let codex = AgentCodexClient()
     private let openRouter = AgentOpenRouterClient()
 
@@ -58,9 +62,20 @@ public final class AgentChatViewModel: ObservableObject {
     private let preferredModelKey = "emwaver.agent.local.preferred_model_id"
     private let preferredProviderKey = "emwaver.agent.local.preferred_provider_id"
 
-    public init(host: AgentHost) {
+    public init(host: AgentHost, cloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
         self.host = host
-        loadPersistedState()
+        self.cloudProvider = cloudProvider
+
+        // If cloud persistence is enabled, prefer cloud conversations over local state.
+        if cloudProvider != nil {
+            // Start with empty state; load from backend asynchronously.
+            self.messages = []
+            self.conversations = []
+            self.selectedConversationId = nil
+            Task { await self.refreshCloudConversations() }
+        } else {
+            loadPersistedState()
+        }
     }
 
     private let keychainService = "com.emwaver.agent"
@@ -103,6 +118,12 @@ public final class AgentChatViewModel: ObservableObject {
         messages.removeAll()
         lastError = nil
 
+        // In cloud mode, "clear" is intentionally a UI-only action for now.
+        // (We can add a backend endpoint later if we want to delete messages.)
+        if cloudProvider != nil {
+            return
+        }
+
         guard let id = selectedConversationId else {
             persistState()
             return
@@ -120,6 +141,11 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     public func newConversation() {
+        if cloudProvider != nil {
+            Task { await self.createCloudConversation() }
+            return
+        }
+
         let id = UUID()
         let conv = Conversation(
             id: id,
@@ -140,6 +166,12 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func selectConversation(_ id: UUID) {
         selectedConversationId = id
+
+        if cloudProvider != nil {
+            Task { await self.loadCloudMessages(conversationId: id) }
+            return
+        }
+
         messages = conversation(id: id)?.messages ?? []
         persistState()
     }
@@ -192,6 +224,11 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     public func deleteConversation(_ id: UUID) {
+        if cloudProvider != nil {
+            Task { await self.deleteCloudConversation(id) }
+            return
+        }
+
         removeConversation(id)
         if selectedConversationId == id {
             if let next = conversations.first?.id {
@@ -235,6 +272,9 @@ public final class AgentChatViewModel: ObservableObject {
         lastError = nil
         draft = ""
 
+        // In cloud mode we still run inference locally, but we persist user/assistant turns to the backend.
+        let isCloud = (cloudProvider != nil)
+
         // Provider-specific connection checks
         switch selectedProviderId {
         case .chatgptCodex:
@@ -251,26 +291,36 @@ public final class AgentChatViewModel: ObservableObject {
 
         messages.append(AgentChatMessage(role: .user, text: text))
 
-        if let id = selectedConversationId {
+        // Persist locally only in local mode.
+        if !isCloud, let id = selectedConversationId {
             updateConversation(id: id) { conv in
                 conv.messages = self.messages
                 conv.updatedAt = Date()
                 switch conv.providerId {
                 case .chatgptCodex:
-                    // Codex input history is built inside runToolLoop now.
                     break
                 case .openrouter:
                     let msg: [String: Any] = ["role": "user", "content": text]
                     conv.openRouterMessagesJSON.append(jsonString(msg))
                 }
             }
+            persistState()
         }
-        persistState()
 
         isSending = true
 
         Task {
             do {
+                // Ensure cloud conversation exists.
+                if isCloud, self.selectedConversationId == nil {
+                    await self.createCloudConversation()
+                }
+
+                // Persist user turn to cloud.
+                if isCloud, let cid = self.selectedConversationId {
+                    await self.appendCloudMessage(conversationId: cid, role: "user", content: text)
+                }
+
                 // Placeholder assistant message for streaming-ish UI.
                 let placeholderId = UUID()
                 await MainActor.run {
@@ -286,6 +336,11 @@ public final class AgentChatViewModel: ObservableObject {
                     reply = try await self.runOpenRouterToolLoop(userPrompt: text)
                 }
 
+                // Persist assistant turn to cloud.
+                if isCloud, let cid = self.selectedConversationId {
+                    await self.appendCloudMessage(conversationId: cid, role: "assistant", content: reply)
+                }
+
                 await MainActor.run {
                     if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
                         self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
@@ -294,13 +349,17 @@ public final class AgentChatViewModel: ObservableObject {
                     }
                     self.isSending = false
                     self.assistantPlaceholderId = nil
-                    if let id = self.selectedConversationId {
+
+                    // In cloud mode, refresh conversation list ordering.
+                    if isCloud {
+                        Task { await self.refreshCloudConversations() }
+                    } else if let id = self.selectedConversationId {
                         self.updateConversation(id: id) { conv in
                             conv.messages = self.messages
                             conv.updatedAt = Date()
                         }
+                        self.persistState()
                     }
-                    self.persistState()
                 }
             } catch {
                 await MainActor.run {
@@ -1378,5 +1437,191 @@ private enum PatchApplier {
 
         out.replaceSubrange(idx0..<(idx0 + consumed), with: newBlock)
         return out
+    }
+}
+
+
+extension AgentChatViewModel {
+    func refreshCloudConversations() async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            return
+        }
+
+        do {
+            let api = AgentCloudAPI()
+            let rows = try await api.listConversations(baseURL: ctx.baseURL, token: ctx.accessToken)
+
+            let infos: [ConversationInfo] = rows.compactMap { r in
+                guard let id = UUID(uuidString: r.id) else { return nil }
+                return ConversationInfo(
+                    id: id,
+                    title: r.title ?? "Chat",
+                    updatedAt: Date(timeIntervalSince1970: TimeInterval(r.updated_at_ms) / 1000.0)
+                )
+            }
+
+            self.conversations = infos
+
+            // Auto-select first conversation if none selected.
+            if self.selectedConversationId == nil {
+                if let first = infos.first?.id {
+                    self.selectConversation(first)
+                } else {
+                    // Create an initial conversation.
+                    await self.createCloudConversation()
+                }
+            }
+
+        } catch {
+            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    func createCloudConversation() async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            self.lastError = "Sign in to use the Agent."
+            return
+        }
+
+        do {
+            let api = AgentCloudAPI()
+            let c = try await api.createConversation(baseURL: ctx.baseURL, token: ctx.accessToken, title: nil)
+            guard let id = UUID(uuidString: c.id) else {
+                throw NSError(domain: "AgentCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid conversation id"]) 
+            }
+
+            await refreshCloudConversations()
+            selectConversation(id)
+        } catch {
+            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    func loadCloudMessages(conversationId: UUID) async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            self.lastError = "Sign in to use the Agent."
+            return
+        }
+
+        let cid = conversationId.uuidString.lowercased()
+
+        do {
+            let api = AgentCloudAPI()
+            let rows = try await api.listMessages(baseURL: ctx.baseURL, token: ctx.accessToken, conversationId: cid)
+
+            self.messages = rows.compactMap { r in
+                let mid = UUID(uuidString: r.id) ?? UUID()
+                let role: AgentChatMessage.Role
+                switch r.role {
+                case "assistant": role = .assistant
+                case "system": role = .system
+                default: role = .user
+                }
+                return AgentChatMessage(id: mid, role: role, text: r.content)
+            }
+
+            // Ensure we have a shadow local conversation for provider state.
+            ensureShadowLocalConversationExists(id: conversationId)
+
+            // Rebuild provider histories from plain messages so the next send has context.
+            rebuildLocalHistoriesFromDisplayedMessages()
+        } catch {
+            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    func deleteCloudConversation(_ id: UUID) async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            self.lastError = "Sign in to use the Agent."
+            return
+        }
+
+        do {
+            let api = AgentCloudAPI()
+            try await api.deleteConversation(baseURL: ctx.baseURL, token: ctx.accessToken, conversationId: id.uuidString.lowercased())
+
+            if self.selectedConversationId == id {
+                self.selectedConversationId = nil
+                self.messages = []
+            }
+
+            await refreshCloudConversations()
+        } catch {
+            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    func appendCloudMessage(conversationId: UUID, role: String, content: String) async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            return
+        }
+
+        do {
+            let api = AgentCloudAPI()
+            _ = try await api.appendMessage(
+                baseURL: ctx.baseURL,
+                token: ctx.accessToken,
+                conversationId: conversationId.uuidString.lowercased(),
+                role: role,
+                content: content
+            )
+        } catch {
+            // Best-effort; keep UI responsive even if persistence fails.
+            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    private func ensureShadowLocalConversationExists(id: UUID) {
+        // Create a local shadow conversation if missing. This stores provider/model/session state
+        // (Codex input items / OpenRouter messages) so local inference can reuse cloud history.
+        if conversation(id: id) != nil { return }
+
+        let conv = Conversation(
+            id: id,
+            title: nil,
+            createdAt: Date(),
+            updatedAt: Date(),
+            sessionId: UUID().uuidString,
+            providerId: preferredProviderId(),
+            modelId: preferredModelId(),
+            messages: [],
+            codexInputItemsJSON: [],
+            openRouterMessagesJSON: []
+        )
+        upsertConversation(conv)
+    }
+
+    private func rebuildLocalHistoriesFromDisplayedMessages() {
+        // Reset provider histories so local inference reuses cloud history.
+        guard let id = selectedConversationId else { return }
+
+        updateConversation(id: id) { conv in
+            conv.codexInputItemsJSON = []
+            conv.openRouterMessagesJSON = []
+            conv.sessionId = UUID().uuidString
+        }
+
+        // Seed OpenRouter with system instructions, then replay user/assistant turns.
+        let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
+        updateConversation(id: id) { conv in
+            let sys: [String: Any] = ["role": "system", "content": instructions]
+            conv.openRouterMessagesJSON.append(self.jsonString(sys))
+        }
+
+        for m in messages {
+            switch m.role {
+            case .user:
+                appendOpenRouterMessageToCurrentConversation(["role": "user", "content": m.text])
+                appendCodexItemToCurrentConversation(Self.codexUserMessageItem(text: m.text))
+            case .assistant:
+                appendOpenRouterMessageToCurrentConversation(["role": "assistant", "content": m.text])
+                appendCodexItemToCurrentConversation(Self.codexAssistantMessageItem(text: m.text))
+            case .system:
+                // Skip tool bubbles/system notices for now.
+                break
+            }
+        }
+
+        persistState()
     }
 }
