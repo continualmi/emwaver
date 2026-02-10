@@ -102,8 +102,9 @@ async fn main() -> Result<()> {
         host_session_id,
     };
 
-    // Load canonical bootstrap from the repo (dev mode). In a packaged build this
-    // should be embedded into the binary.
+    // Load canonical bootstrap from the repo (dev mode).
+    // NOTE: script runtime is currently stubbed; we still load the file so we can
+    // re-enable it without changing daemon wiring.
     let bootstrap_path = env_trim("EMWAVER_BOOTSTRAP_PATH")
         .unwrap_or_else(|| "assets/default-scripts/script_bootstrap.emw".to_string());
     let bootstrap = fs::read_to_string(&bootstrap_path)
