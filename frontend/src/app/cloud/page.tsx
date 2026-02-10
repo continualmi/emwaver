@@ -73,6 +73,7 @@ export default function CloudPage() {
   const [idToken, setIdToken] = useState<string>("");
   const [files, setFiles] = useState<CloudUserFile[]>([]);
   const [isPro, setIsPro] = useState<boolean>(false);
+  const [entitlementsOk, setEntitlementsOk] = useState<boolean>(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [emwMode, setEmwMode] = useState<"editor" | "preview">("editor");
   const [viewerText, setViewerText] = useState<string>("");
@@ -123,6 +124,7 @@ export default function CloudPage() {
     const ent = JSON.parse(entText) as { pro?: boolean };
     const pro = !!ent.pro;
     setIsPro(pro);
+    setEntitlementsOk(true);
 
     if (!pro) {
       setFiles([]);
@@ -160,6 +162,7 @@ export default function CloudPage() {
         setUserEmail(null);
         setIdToken("");
         setIsPro(false);
+        setEntitlementsOk(false);
         setFiles([]);
         setHosts([]);
         setSelectedHostId("");
@@ -182,7 +185,13 @@ export default function CloudPage() {
       setUserEmail(u.email || u.displayName || "Signed in");
       const tok = await u.getIdToken();
       setIdToken(tok);
-      await refresh(tok);
+      try {
+        await refresh(tok);
+      } catch (e: any) {
+        setIsPro(false);
+        setEntitlementsOk(false);
+        setError(String(e?.message || e));
+      }
     });
   }, [auth]);
 
@@ -624,6 +633,7 @@ export default function CloudPage() {
   }
 
   const proAccess = !!idToken && isPro;
+  const showProPreview = !userEmail || (entitlementsOk && !proAccess);
 
   return (
     <div className="min-h-dvh">
@@ -767,7 +777,7 @@ export default function CloudPage() {
           ) : null}
         </div>
 
-        {!proAccess ? (
+        {showProPreview ? (
           <div className="mb-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-4">
             <div className="text-sm font-semibold text-[color:var(--ink)]">Pro feature preview</div>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">
