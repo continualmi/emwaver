@@ -5,8 +5,6 @@ struct DeviceConnectionSheet: View {
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @Environment(\.dismiss) private var dismiss
 
-    @State private var selectedPort: String? = nil
-
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
             return ("Connected", "cable.connector")
@@ -23,16 +21,20 @@ struct DeviceConnectionSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("Device")
                         .font(.title3.weight(.semibold))
+
                     HStack(spacing: 8) {
                         Label(statusLabel.text, systemImage: statusLabel.icon)
+
                         if let port = device.connectedPortName, !port.isEmpty {
                             Text(port)
                                 .foregroundStyle(.secondary)
                         }
+
                         if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
                             Text("• EMWaver \(v)")
                                 .foregroundStyle(.secondary)
                         }
+
                         if device.isConnected {
                             if device.isSecureConnected {
                                 Text("• Secure")
@@ -45,66 +47,25 @@ struct DeviceConnectionSheet: View {
                     }
                     .font(.subheadline)
                 }
+
                 Spacer()
+
                 Button("Close") { dismiss() }
             }
 
             GroupBox("Connection") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Toggle("Auto-connect", isOn: $device.autoConnectEnabled)
+                    Text("EMWaver connects automatically when the device is plugged in.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
 
-                    HStack(spacing: 10) {
-                        Button("Refresh ports") {
-                            device.refreshPorts()
-                        }
-
-                        Spacer()
-
+                    HStack {
                         Button("Disconnect") {
                             device.disconnect()
                         }
                         .disabled(!device.isConnected)
-                    }
 
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Ports")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Picker("", selection: Binding(
-                            get: {
-                                selectedPort ?? device.connectedPortName ?? device.availablePorts.first
-                            },
-                            set: { newValue in
-                                selectedPort = newValue
-                            }
-                        )) {
-                            if device.availablePorts.isEmpty {
-                                Text("No ports found").tag(Optional<String>.none)
-                            } else {
-                                ForEach(device.availablePorts, id: \.self) { port in
-                                    Text(port).tag(Optional(port))
-                                }
-                            }
-                        }
-                        .labelsHidden()
-
-                        HStack {
-                            Button("Connect") {
-                                if let p = selectedPort ?? device.connectedPortName ?? device.availablePorts.first {
-                                    device.connect(portName: p)
-                                }
-                            }
-                            .disabled(device.availablePorts.isEmpty)
-
-                            Spacer()
-
-                            if device.isConnected {
-                                Text("Connected")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
+                        Spacer()
                     }
                 }
                 .padding(.vertical, 4)
@@ -112,20 +73,12 @@ struct DeviceConnectionSheet: View {
 
             GroupBox("Firmware") {
                 VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Button("Update firmware…") {
-                            // Avoid sheet-on-sheet. Dismiss the device sheet first,
-                            // then present the firmware update sheet from the app root.
-                            dismiss()
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                firmwareUpdater.present()
-                            }
-                        }
-
-                        Spacer()
-
-                        Button("Refresh update mode") {
-                            firmwareUpdater.refreshDfuPresence()
+                    Button("Update firmware…") {
+                        // Avoid sheet-on-sheet. Dismiss the device sheet first,
+                        // then present the firmware update sheet from the app root.
+                        dismiss()
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                            firmwareUpdater.present()
                         }
                     }
 
@@ -140,12 +93,6 @@ struct DeviceConnectionSheet: View {
                     Text(firmwareUpdater.dfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-
-                    if let err = firmwareUpdater.updateError, !err.isEmpty {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 .padding(.vertical, 4)
             }
@@ -162,11 +109,9 @@ struct DeviceConnectionSheet: View {
             Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(minWidth: 520, minHeight: 420)
+        .frame(minWidth: 520, minHeight: 380)
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
-            device.refreshPorts()
-            selectedPort = device.connectedPortName
         }
     }
 }
