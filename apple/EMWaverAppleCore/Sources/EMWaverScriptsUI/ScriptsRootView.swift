@@ -31,6 +31,7 @@ public struct ScriptsRootView: View {
     // Pro gating (caller-controlled).
     private let agentEnabled: Bool
     private let onRequestAgentUpgrade: (() -> Void)?
+    private let onRequestSyncUpgrade: (() -> Void)?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -42,6 +43,14 @@ public struct ScriptsRootView: View {
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
+
+    private enum SyncUpsellPhase {
+        case syncing
+        case proOnly
+    }
+
+    @State private var showingSyncUpsell = false
+    @State private var syncUpsellPhase: SyncUpsellPhase = .syncing
 
     private enum EditorMode {
         case script
@@ -68,13 +77,15 @@ public struct ScriptsRootView: View {
         agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
-        onRequestAgentUpgrade: (() -> Void)? = nil
+        onRequestAgentUpgrade: (() -> Void)? = nil,
+        onRequestSyncUpgrade: (() -> Void)? = nil
     ) {
         self.device = device
         self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
+        self.onRequestSyncUpgrade = onRequestSyncUpgrade
         self.agentCloudProvider = agentCloudProvider
         let host = DefaultAgentHost(previewManager: previewManager)
         self._previewManager = StateObject(wrappedValue: previewManager)
@@ -91,7 +102,8 @@ public struct ScriptsRootView: View {
         agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
-        onRequestAgentUpgrade: (() -> Void)? = nil
+        onRequestAgentUpgrade: (() -> Void)? = nil,
+        onRequestSyncUpgrade: (() -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -100,7 +112,8 @@ public struct ScriptsRootView: View {
             agentCloudProvider: agentCloudProvider,
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
-            onRequestAgentUpgrade: onRequestAgentUpgrade
+            onRequestAgentUpgrade: onRequestAgentUpgrade,
+            onRequestSyncUpgrade: onRequestSyncUpgrade
         )
     }
 
@@ -172,6 +185,41 @@ public struct ScriptsRootView: View {
         }
         .sheet(item: $signalRenamePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
+        }
+        .sheet(isPresented: $showingSyncUpsell) {
+            VStack(alignment: .leading, spacing: 14) {
+                Text("Sync")
+                    .font(.title3.weight(.semibold))
+
+                switch syncUpsellPhase {
+                case .syncing:
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Syncing…")
+                            .foregroundStyle(.secondary)
+                    }
+
+                    Text("Checking cloud sync…")
+                        .foregroundStyle(.secondary)
+
+                case .proOnly:
+                    Text("Cloud sync is available with EMWaver Pro.")
+                        .foregroundStyle(.secondary)
+
+                    Text("Opening EMWaver Pro…")
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                HStack {
+                    Spacer()
+                    Button("Cancel") { showingSyncUpsell = false }
+                }
+            }
+            .padding(18)
+            .frame(minWidth: 420, minHeight: 180)
+            .interactiveDismissDisabled(syncUpsellPhase == .syncing)
         }
         .confirmationDialog(
             "Delete script?",
@@ -832,10 +880,25 @@ public struct ScriptsRootView: View {
                     ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1"
                 )
 
-                if let provider = syncProvider, let ctx = provider(), (!ctx.accessToken.isEmpty || allowAnonSync) {
+                if let provider = syncProvider {
                     Button {
-                        Task {
-                            await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
+                        // If the caller provides a syncProvider but it returns nil, treat it as a
+                        // gated feature and upsell Pro.
+                        if let ctx = provider(), (!ctx.accessToken.isEmpty || allowAnonSync) {
+                            Task {
+                                await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
+                            }
+                        } else {
+                            syncUpsellPhase = .syncing
+                            showingSyncUpsell = true
+
+                            Task {
+                                try? await Task.sleep(nanoseconds: 800_000_000)
+                                syncUpsellPhase = .proOnly
+                                try? await Task.sleep(nanoseconds: 900_000_000)
+                                showingSyncUpsell = false
+                                onRequestSyncUpgrade?()
+                            }
                         }
                     } label: {
                         #if canImport(AppKit)

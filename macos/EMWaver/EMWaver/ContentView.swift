@@ -81,6 +81,10 @@ struct ContentView: View {
                     onRequestAgentUpgrade: {
                         proFeatureName = "AI Agent"
                         showingProUpgrade = true
+                    },
+                    onRequestSyncUpgrade: {
+                        proFeatureName = "Cloud sync"
+                        showingProUpgrade = true
                     }
                 )
 
