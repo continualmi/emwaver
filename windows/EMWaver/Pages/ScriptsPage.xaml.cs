@@ -134,23 +134,27 @@ public sealed partial class ScriptsPage : Page
             await AppServices.Scripts.EnsureBootstrappedAsync();
             var scripts = await AppServices.Scripts.ListScriptsAsync();
 
-            // Signals directory (synced)
-            var signalsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "EMWaver",
-                "Signals"
-            );
-
             var signals = new List<Models.SignalFileInfo>();
             try
             {
-                if (Directory.Exists(signalsDir))
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var signalsDir in GetSignalDirectories())
                 {
+                    if (!Directory.Exists(signalsDir))
+                    {
+                        continue;
+                    }
+
                     foreach (var p in Directory.EnumerateFiles(signalsDir, "*", SearchOption.TopDirectoryOnly))
                     {
                         var ext = Path.GetExtension(p) ?? "";
                         if (!string.Equals(ext, ".raw", StringComparison.OrdinalIgnoreCase) &&
                             !string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (!seen.Add(p))
                         {
                             continue;
                         }
@@ -308,6 +312,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = script.IsBundled;
             EditorBox.Text = text ?? string.Empty;
+            SetEditorWrapping(wrapText: false);
             _suppressEditorChanged = false;
 
             // Always start in editor mode when opening a script.
@@ -341,11 +346,13 @@ public sealed partial class ScriptsPage : Page
         {
             if (string.Equals(sig.Extension, ".raw", StringComparison.OrdinalIgnoreCase))
             {
-                text = "(Binary signal .raw)";
+                var data = await File.ReadAllBytesAsync(sig.FullPath);
+                text = FormatHex(data, maxBytes: 256 * 1024);
             }
             else
             {
-                text = await File.ReadAllTextAsync(sig.FullPath);
+                var data = await File.ReadAllBytesAsync(sig.FullPath);
+                text = Encoding.UTF8.GetString(data);
             }
         }
         catch (Exception ex)
@@ -365,6 +372,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = true;
             EditorBox.Text = text;
+            SetEditorWrapping(wrapText: string.Equals(sig.Extension, ".txt", StringComparison.OrdinalIgnoreCase));
             _suppressEditorChanged = false;
 
 
@@ -386,6 +394,7 @@ public sealed partial class ScriptsPage : Page
             _suppressEditorChanged = true;
             EditorBox.IsReadOnly = true;
             EditorBox.Text = string.Empty;
+            SetEditorWrapping(wrapText: false);
             _suppressEditorChanged = false;
 
 
@@ -398,6 +407,101 @@ public sealed partial class ScriptsPage : Page
             UpdateCommandStates();
             await Task.CompletedTask;
         });
+    }
+
+    private static IEnumerable<string> GetSignalDirectories()
+    {
+        var root = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EMWaver"
+        );
+
+        // Signals can exist in multiple locations depending on script/runtime generation:
+        // - root: current sampler save target via FS.appDataDir()
+        // - Scripts: parity with platforms that keep artifacts beside scripts
+        // - Signals: legacy Windows sync storage
+        var candidates = new[]
+        {
+            root,
+            Path.Combine(root, "Scripts"),
+            Path.Combine(root, "Signals"),
+            Path.Combine(root, "signals"),
+        };
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in candidates)
+        {
+            if (seen.Add(dir))
+            {
+                yield return dir;
+            }
+        }
+    }
+
+    private void SetEditorWrapping(bool wrapText)
+    {
+        EditorBox.TextWrapping = wrapText ? TextWrapping.Wrap : TextWrapping.NoWrap;
+        ScrollViewer.SetHorizontalScrollBarVisibility(
+            EditorBox,
+            wrapText ? ScrollBarVisibility.Disabled : ScrollBarVisibility.Auto
+        );
+    }
+
+    private static string FormatHex(byte[] data, int maxBytes)
+    {
+        var count = Math.Min(data.Length, maxBytes);
+        var sb = new StringBuilder(capacity: Math.Max(64, (count / 16 + 2) * 80));
+
+        for (var offset = 0; offset < count; offset += 16)
+        {
+            var lineCount = Math.Min(16, count - offset);
+
+            sb.Append(offset.ToString("X8"));
+            sb.Append("  ");
+
+            for (var i = 0; i < 16; i++)
+            {
+                if (i < lineCount)
+                {
+                    sb.Append(data[offset + i].ToString("X2"));
+                }
+                else
+                {
+                    sb.Append("  ");
+                }
+
+                if (i != 15)
+                {
+                    sb.Append(' ');
+                }
+            }
+
+            sb.Append("  |");
+            for (var i = 0; i < lineCount; i++)
+            {
+                var b = data[offset + i];
+                sb.Append(b >= 32 && b < 127 ? (char)b : '.');
+            }
+            sb.Append('|');
+
+            if (offset + 16 < count)
+            {
+                sb.AppendLine();
+            }
+        }
+
+        if (data.Length > maxBytes)
+        {
+            if (sb.Length > 0) sb.AppendLine();
+            sb.AppendLine();
+            sb.Append("(truncated to ");
+            sb.Append(maxBytes);
+            sb.Append(" bytes; file is ");
+            sb.Append(data.Length);
+            sb.Append(" bytes)");
+        }
+
+        return sb.ToString();
     }
 
     private void OnEditorTextChanged(object sender, RoutedEventArgs e)
@@ -551,11 +655,11 @@ public sealed partial class ScriptsPage : Page
         PreviewModeChanged?.Invoke(preview);
     }
 
-    private void RenderPreview(ScriptTree tree)
+    private void RenderPreview(ScriptTree? tree)
     {
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Preview] RenderPreview rootType={tree?.Root.Type}");
 
-        if (!_isPreviewMode)
+        if (!_isPreviewMode || tree == null)
         {
             return;
         }
