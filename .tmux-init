@@ -2,50 +2,37 @@
 SESSION=$1
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Window 1: Dev (Backend + Frontend)
+# Window 1: Git (only thing that auto-runs)
 # Force the first pane to the correct directory just in case
 tmux send-keys -t $SESSION:1 'cd ' "$PROJECT_DIR" C-m
 tmux clear-history -t $SESSION:1
 
-tmux rename-window -t $SESSION:1 'dev'
+tmux rename-window -t $SESSION:1 'git'
+tmux send-keys -t $SESSION:1.1 'lazygit' C-m
 
-# Split horizontally: Backend | Frontend
-PANE_BACKEND=$(tmux display-message -p -t $SESSION:1.1 '#{pane_id}')
+# Window 2: Dev (Backend + Frontend) — typed only
+PANE_BACKEND=$(tmux new-window -t $SESSION -n 'dev' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -h -l 50% -t "$PANE_BACKEND" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Pre-type commands (no enter)
 tmux send-keys -t "$PANE_BACKEND" 'cd backend && python app.py'
 tmux send-keys -t "$PANE_FRONTEND" 'cd frontend && npm run dev'
 
-# Window 2: Dev Ops (2x2 Grid)
+# Window 3: Dev Ops (2x2 Grid) — typed only
 # Android | SecureWaver (tauri)
-# emwaver.sh (typed) | emwaver daemon TUI
+# emwaver.sh | emwaver daemon TUI
 
-# Use pane_id capture so we don't depend on tmux's pane numbering.
 PANE_TOP_LEFT=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
-
-# Split horizontally: left (Android) | right (SecureWaver)
 PANE_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-
-# Split vertically: bottom-left (emwaver.sh) from top-left
 PANE_BOTTOM_LEFT=$(tmux split-window -v -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-# Split vertically: bottom-right (emwaver TUI) from top-right
 PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
-# Assign commands
-# Android (runs)
-tmux send-keys -t "$PANE_TOP_LEFT" 'cd android' C-m
-tmux send-keys -t "$PANE_TOP_LEFT" './gradlew installDebug' C-m
-
-# SecureWaver (runs)
-tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver && npm run tauri' C-m
-
-# emwaver.sh pane (typed, no enter)
+# Typed only (no enter)
+tmux send-keys -t "$PANE_TOP_LEFT" 'cd android && ./gradlew installDebug'
+tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver && npm run tauri'
 tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
+tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
-# emwaver daemon TUI (runs)
-tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui' C-m
+# Start on git window
 
-# Start on dev window, backend pane
 tmux select-window -t "$SESSION:1"
-tmux select-pane -t "$PANE_BACKEND"
+tmux select-pane -t "$SESSION:1.1"
