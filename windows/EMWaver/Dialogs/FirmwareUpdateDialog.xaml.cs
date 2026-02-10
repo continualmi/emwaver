@@ -112,6 +112,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
                 || _updater.UpdateError!.Contains("identity", System.StringComparison.OrdinalIgnoreCase));
 
         IsSecondaryButtonEnabled = canRecover;
-        IsCloseButtonEnabled = !_updater.IsFlashing;
+        // Note: ContentDialog has no IsCloseButtonEnabled; Closing handler cancels while flashing.
     }
 }
