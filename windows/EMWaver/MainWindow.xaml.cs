@@ -71,12 +71,12 @@ public sealed partial class MainWindow : Window
                 iconPath = Path.Combine(AppContext.BaseDirectory, "emwaver.ico");
             }
 
-            if (!File.Exists(iconPath) || App.MainWindow == null)
+            if (!File.Exists(iconPath))
             {
                 return;
             }
 
-            var hwnd = WindowNative.GetWindowHandle(App.MainWindow);
+            var hwnd = WindowNative.GetWindowHandle(this);
 
             // 1) Best-effort: AppWindow icon (taskbar/alt-tab, depends on host)
             try
@@ -163,7 +163,6 @@ public sealed partial class MainWindow : Window
         AppCommandBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
 
         TopBackButton.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
-        TopAppIcon.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
 
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
