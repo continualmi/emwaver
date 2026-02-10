@@ -8,6 +8,12 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { backendFetch } from "@/lib/backend";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
+type Entitlements = {
+  pro: boolean;
+  expires_at_ms?: number | null;
+  features?: { [k: string]: boolean };
+};
+
 type Device = {
   device_id_b64: string;
   label?: string;
@@ -22,6 +28,21 @@ async function listMyDevices(idToken: string): Promise<Device[]> {
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const json = JSON.parse(text);
   return json.devices || [];
+}
+
+async function getEntitlements(idToken: string): Promise<Entitlements> {
+  const res = await backendFetch("/v1/entitlements", idToken, { method: "GET" });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  return JSON.parse(text) as Entitlements;
+}
+
+async function openProPortal(idToken: string): Promise<string> {
+  const res = await backendFetch("/v1/pro/portal", idToken, { method: "POST", body: "{}" });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  const json = JSON.parse(text);
+  return String(json.url || "");
 }
 
 async function setDeviceLabel(idToken: string, deviceIdB64: string, label: string) {
@@ -41,6 +62,7 @@ export default function AccountPage() {
   const [idToken, setIdToken] = useState<string>("");
 
   const [devices, setDevices] = useState<Device[]>([]);
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,15 +74,17 @@ export default function AccountPage() {
         setUserEmail(null);
         setIdToken("");
         setDevices([]);
+        setEntitlements(null);
         return;
       }
       setUserEmail(u.email || u.displayName || "Signed in");
       const tok = await u.getIdToken();
       setIdToken(tok);
-      // Load devices.
+      // Load devices + entitlements.
       try {
-        const d = await listMyDevices(tok);
+        const [d, ent] = await Promise.all([listMyDevices(tok), getEntitlements(tok)]);
         setDevices(d);
+        setEntitlements(ent);
       } catch (e: any) {
         setError(String(e?.message || e));
       }
@@ -95,7 +119,24 @@ export default function AccountPage() {
     setBusy(true);
     setError(null);
     try {
-      setDevices(await listMyDevices(idToken));
+      const [d, ent] = await Promise.all([listMyDevices(idToken), getEntitlements(idToken)]);
+      setDevices(d);
+      setEntitlements(ent);
+    } catch (e: any) {
+      setError(String(e?.message || e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doManagePro() {
+    if (!idToken) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const url = await openProPortal(idToken);
+      if (!url) throw new Error("No portal URL returned.");
+      window.location.href = url;
     } catch (e: any) {
       setError(String(e?.message || e));
     } finally {
@@ -112,6 +153,11 @@ export default function AccountPage() {
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Account</h1>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and recovery</div>
+            {entitlements?.pro ? (
+              <div className="mt-2 inline-flex items-center rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.10)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
+                Pro active
+              </div>
+            ) : null}
           </div>
 
           {!userEmail ? (
@@ -130,6 +176,13 @@ export default function AccountPage() {
               >
                 Dashboard
               </a>
+              <button
+                disabled={busy}
+                onClick={() => void doManagePro()}
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
+              >
+                Manage Pro
+              </button>
               <button
                 onClick={() => void doSignOut()}
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
