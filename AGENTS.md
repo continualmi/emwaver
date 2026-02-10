@@ -128,9 +128,29 @@ We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 What Pro includes (gated behind entitlements):
 - **Cloud / infrastructure**: remote host sessions, file storage + sync across devices, relay bandwidth, auth, observability/support.
 - **AI Agent**: the Agent UI + cloud-integrated workflows are **Pro-only**.
-  - **Inference is included with Pro** via **EMWaver-managed models** (no “bring your own OpenAI key” requirement).
-  - Near-term implementation may use a compatibility layer behind the scenes, but it must be presented as **EMWaver models** and treated as a **temporary** bridge.
-  - Longer-term: train EMWaver models (e.g. with Tinker), ship weights, and host inference on providers like **RunPod** / **Vast.ai** (or equivalent).
+  - **Agent conversations are stored in EMWaver Cloud** and associated with the user account (cross-device continuity).
+  - **Inference can be BYO-provider initially** (user connects their own OpenAI/ChatGPT/etc.) to avoid “reselling tokens”.
+  - If/when we ship EMWaver-owned models, Pro may also include bundled inference credits/limits.
+
+#### ELM (Electronic Language Models)
+
+EMWaver’s in-house models are called **ELMs** (**E**lectronic **L**anguage **M**odels), versioned as:
+- `ELM-1`, `ELM-2`, …
+- minor versions: `ELM-1.1`, `ELM-1.2`, …
+
+ELMs are trained to be EMWaver-native: hardware exploration, scripting, bus protocols, UI workflows, and device/host control.
+
+#### Agent conversation storage + training data policy (important)
+
+- **Conversation sync (storage) is a Pro feature.**
+- **Training use must be opt-in and separate from sync.**
+  - Users can have synced conversations without consenting to training.
+  - Users must be able to revoke training consent.
+- **Data minimization:** do not intentionally collect secrets/credentials/keys; avoid storing raw binary payloads when not needed.
+- **Retention & deletion:**
+  - Users can delete conversations.
+  - Define a retention policy (time-based) rather than “keep forever” by default.
+- Training pipelines should use a **sanitized dataset** derived from production, not direct raw table reads.
 
 Purchase eligibility (anti-abuse / aligns with hardware-key strategy):
 - Users must be **signed in** and have at least **one verified genuine EMWaver device attached** to their account before they are allowed to **start/buy** a Pro subscription.
