@@ -41,17 +41,13 @@ def _redact_token(token: str) -> str:
 
 
 def verify_request_identity(request: Request, config: Config) -> Optional[VerifiedIdentity]:
-    # Dev escape hatch.
-    if config.auth_mode == "disabled":
-        return VerifiedIdentity(uid="dev-user", email=None, display_name="Dev User")
-
+    # Auth is always enforced (Firebase ID tokens).
     raw_auth = (request.headers.get("Authorization", "") or "").strip()
     token = _bearer_token(request)
     if not token:
         if config.auth_debug:
             log.warning(
-                "auth: missing/invalid Authorization header (auth_mode=%s) header=%r path=%s",
-                config.auth_mode,
+                "auth: missing/invalid Authorization header header=%r path=%s",
                 raw_auth[:80],
                 getattr(request, "path", ""),
             )
