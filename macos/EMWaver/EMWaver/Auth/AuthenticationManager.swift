@@ -7,6 +7,7 @@ final class AuthenticationManager: ObservableObject {
     @Published private(set) var isSigningIn = false
     @Published var lastError: String?
     @Published var isSignInSheetPresented = false
+    @Published var isWebHandoffSheetPresented = false
 
     private let provider: GoogleSignInProviding
     private let firebase = FirebaseAuthService()
@@ -63,6 +64,101 @@ final class AuthenticationManager: ObservableObject {
             let profileData = try JSONEncoder().encode(profile)
             let profileStr = String(data: profileData, encoding: .utf8) ?? ""
             try KeychainStore.setString(profileStr, account: profileAccount)
+        } catch {
+            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        }
+    }
+
+    // MARK: - Web sign-in handoff
+
+    func beginWebSignInHandoff() {
+        lastError = nil
+
+        // Open the EMWaver web sign-in page and then prompt for the code.
+        guard var base = FrontendUrl.resolve() else {
+            lastError = "Missing frontend URL"
+            return
+        }
+        base.appendPathComponent("signin")
+        // redirect to /auth/handoff to show the code.
+        let urlStr = base.absoluteString + "?redirect=%2Fauth%2Fhandoff"
+        if let url = URL(string: urlStr) {
+            import AppKit
+            AppKit.NSWorkspace.shared.open(url)
+        }
+
+        isWebHandoffSheetPresented = true
+    }
+
+    func consumeWebHandoffCode(code: String) async {
+        guard !isSigningIn else { return }
+        lastError = nil
+        isSigningIn = true
+        defer { isSigningIn = false }
+
+        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            lastError = "Missing code"
+            return
+        }
+
+        guard let base = BackendUrl.resolve() else {
+            lastError = "Missing backend URL"
+            return
+        }
+
+        let apiKey = (ProcessInfo.processInfo.environment["EMWAVER_FIREBASE_WEB_API_KEY"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if apiKey.isEmpty {
+            lastError = "Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)"
+            return
+        }
+
+        do {
+            // Consume handoff code -> custom token.
+            var consumeURL = base
+            consumeURL.appendPathComponent("v1")
+            consumeURL.appendPathComponent("auth")
+            consumeURL.appendPathComponent("handoff")
+            consumeURL.appendPathComponent("consume")
+
+            var req = URLRequest(url: consumeURL)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try JSONSerialization.data(withJSONObject: ["code": trimmed])
+
+            let (data, res) = try await URLSession.shared.data(for: req)
+            let http = (res as? HTTPURLResponse)?.statusCode ?? -1
+            if http < 200 || http >= 300 {
+                let msg = String(data: data, encoding: .utf8) ?? ""
+                throw AuthError.failed(msg.isEmpty ? "HTTP \(http)" : msg)
+            }
+
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let customToken = (json?["firebase_custom_token"] as? String) ?? ""
+            if customToken.isEmpty {
+                throw AuthError.failed("Missing firebase_custom_token")
+            }
+
+            // Exchange custom token for Firebase session (idToken + refreshToken).
+            let fb = try await firebase.signInWithCustomToken(firebaseWebApiKey: apiKey, customToken: customToken)
+
+            let newSession = AuthSession(
+                uid: fb.localId ?? "",
+                email: fb.email,
+                displayName: fb.displayName,
+                idToken: fb.idToken,
+                refreshToken: fb.refreshToken
+            )
+
+            // Persist refresh token + profile for restore.
+            try KeychainStore.setString(newSession.refreshToken, account: refreshTokenAccount)
+            let profile = StoredProfile(uid: newSession.uid, email: newSession.email, displayName: newSession.displayName)
+            let profileData = try JSONEncoder().encode(profile)
+            let profileStr = String(data: profileData, encoding: .utf8) ?? ""
+            try KeychainStore.setString(profileStr, account: profileAccount)
+
+            session = newSession
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }

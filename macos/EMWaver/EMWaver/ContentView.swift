@@ -230,6 +230,10 @@ struct ContentView: View {
             SignInSheet()
                 .environmentObject(auth)
         }
+        .sheet(isPresented: $auth.isWebHandoffSheetPresented) {
+            WebSignInHandoffSheet()
+                .environmentObject(auth)
+        }
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
         }
