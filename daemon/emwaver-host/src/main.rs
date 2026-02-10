@@ -94,7 +94,7 @@ async fn main() -> Result<()> {
     let id_token = env_trim("EMWAVER_ID_TOKEN");
 
     let host_session_id = env_trim("EMWAVER_HOST_SESSION_ID")
-        .unwrap_or_else(|| format!("linux-{}", uuid_like()));
+        .unwrap_or_else(|| format!("daemon-{}", uuid_like()));
 
     let cfg = Config {
         backend_base_url,

@@ -18,6 +18,6 @@
 
 - [ ] `emwaver` CLI (single entrypoint)
 - [ ] `emwaver daemon start|stop|status`
-- [ ] macOS `launchd` service definition
+- [ ] macOS `launchd` service definition (optional; for now we can run as a background child process)
 - [ ] Linux `systemd` service unit + `install.sh` single-command installer
-- [ ] TUI pairing/login flow (device-code / browser OAuth)
+- [ ] `emwaver login` (device-code / browser OAuth) — optional for first milestone (allow EMWAVER_ID_TOKEN env)
