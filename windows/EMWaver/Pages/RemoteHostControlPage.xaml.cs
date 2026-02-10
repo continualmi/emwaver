@@ -35,7 +35,7 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
     {
         try
         {
-            if (AppServices.RemoteControlClient.Delegate == this)
+            if (ReferenceEquals(AppServices.RemoteControlClient.Delegate, this))
             {
                 AppServices.RemoteControlClient.Delegate = null;
             }
