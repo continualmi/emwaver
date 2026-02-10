@@ -1024,12 +1024,18 @@ Native interop
 
 > **Agent Note:** In this agent environment on Windows, avoid running builds (MSBuild/WinUI XAML compilation). After code changes, wait for the user to build/run locally; this environment frequently hits file locks/permission issues.
 
-### Linux headless host (`/linux`) — beta
+### Headless host daemon (`/daemon`) — beta
 
-- Headless host process intended for Raspberry Pi/Linux portable setups.
+- Cross-platform **terminal-first** headless host (starting with **macOS**).
+- Implemented in **Rust**.
+- Provides a single CLI entrypoint: `emwaver …` (start/stop/status/login/etc.).
 - Runs the script runtime + UI state machine headlessly (no presented UI).
 - Streams `ui.snapshot` and accepts `ui.event` from remote controllers via the existing remote host protocol.
-- Packaging target: single-command installer + background service (likely `systemd`) + TUI pairing/sign-in flow.
+- Includes the same cloud-facing capabilities as the GUI apps (login, secure connection/auth, secure updates) but in a daemon/CLI form.
+- USB transport uses cross-platform **MIDI** (USB MIDI SysEx, 64-byte frames).
+- Packaging target:
+  - macOS: launchd (later)
+  - Linux: systemd + single-command installer (later)
 
 
 ### Website (`/frontend`)

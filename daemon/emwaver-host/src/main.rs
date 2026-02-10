@@ -21,8 +21,8 @@ use device::Device;
 use engine::Engine;
 use heartbeat::heartbeat_once;
 
-// Linux host (Model 1): headless script runtime + UI tree state machine.
-// Matches the existing remote host protocol (`/v1/ws`) used by macOS.
+// Headless host daemon (Model 1): headless script runtime + UI tree state machine.
+// Matches the existing remote host protocol (`/v1/ws`) used by the GUI apps.
 
 #[derive(Debug, Deserialize)]
 struct Incoming {
