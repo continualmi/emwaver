@@ -414,10 +414,26 @@ public sealed partial class ScriptsPage : Page
             "EMWaver"
         );
 
-        // Current scripts (e.g. sampler.emw) save signal files directly under appDataDir().
-        // Keep reading the legacy "Signals" subdirectory for backwards compatibility.
-        yield return root;
-        yield return Path.Combine(root, "Signals");
+        // Signals can exist in multiple locations depending on script/runtime generation:
+        // - root: current sampler save target via FS.appDataDir()
+        // - Scripts: parity with platforms that keep artifacts beside scripts
+        // - Signals: legacy Windows sync storage
+        var candidates = new[]
+        {
+            root,
+            Path.Combine(root, "Scripts"),
+            Path.Combine(root, "Signals"),
+            Path.Combine(root, "signals"),
+        };
+
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var dir in candidates)
+        {
+            if (seen.Add(dir))
+            {
+                yield return dir;
+            }
+        }
     }
 
     private void SetEditorWrapping(bool wrapText)
