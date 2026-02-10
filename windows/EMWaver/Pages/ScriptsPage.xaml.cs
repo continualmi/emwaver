@@ -41,6 +41,9 @@ public sealed partial class ScriptsPage : Page
     private bool _agentSignedIn;
     private bool _agentEnabled;
     private bool _cloudSyncEnabled;
+    private bool _isResizingAgentPane;
+    private double _agentResizeStartX;
+    private double _agentResizeStartWidth;
 
     private EMWaver.Services.Agent.AgentApi AgentApi => new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
 
@@ -724,6 +727,59 @@ public sealed partial class ScriptsPage : Page
         {
             CancelAgentStream();
         }
+    }
+
+    private void OnAgentSplitterPointerPressed(object sender, PointerRoutedEventArgs e)
+    {
+        if (AgentPane.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        _isResizingAgentPane = true;
+        _agentResizeStartX = e.GetCurrentPoint(this).Position.X;
+        _agentResizeStartWidth = AgentColumn.ActualWidth > 0 ? AgentColumn.ActualWidth : AgentColumn.Width.Value;
+
+        if (sender is UIElement el)
+        {
+            el.CapturePointer(e.Pointer);
+        }
+
+        e.Handled = true;
+    }
+
+    private void OnAgentSplitterPointerMoved(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isResizingAgentPane)
+        {
+            return;
+        }
+
+        var x = e.GetCurrentPoint(this).Position.X;
+        var delta = x - _agentResizeStartX;
+        var next = _agentResizeStartWidth - delta;
+
+        // Keep the pane practical: min 280, max 720 (matches desktop intent).
+        next = Math.Max(280, Math.Min(720, next));
+        AgentColumn.Width = new GridLength(next);
+
+        e.Handled = true;
+    }
+
+    private void OnAgentSplitterPointerReleased(object sender, PointerRoutedEventArgs e)
+    {
+        if (!_isResizingAgentPane)
+        {
+            return;
+        }
+
+        _isResizingAgentPane = false;
+        if (sender is UIElement el)
+        {
+            el.ReleasePointerCaptures();
+        }
+
+        e.Handled = true;
     }
 
     private async void OnAgentSendClick(object sender, RoutedEventArgs e)
