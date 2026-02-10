@@ -1,5 +1,6 @@
 using EMWaver.Services;
 using EMWaver.Services.Cloud;
+using EMWaver.Services.Pro;
 using System.Net.Http;
 
 namespace EMWaver;
@@ -37,6 +38,7 @@ internal static class AppServices
     // Remote control host WS (web can attach + drive scripts/UI).
     internal static RemoteControlHostService RemoteControlHost = new(CloudConfig, CloudAuth);
     internal static RemoteControlClientService RemoteControlClient = new(CloudConfig, CloudAuth);
+    internal static EntitlementsManager Entitlements = new(Http, () => CloudConfig, () => CloudAuth);
 
     internal static void ReloadCloud()
     {
@@ -61,5 +63,6 @@ internal static class AppServices
         );
         RemoteControlHost = new RemoteControlHostService(CloudConfig, CloudAuth);
         RemoteControlClient = new RemoteControlClientService(CloudConfig, CloudAuth);
+        Entitlements = new EntitlementsManager(Http, () => CloudConfig, () => CloudAuth);
     }
 }
