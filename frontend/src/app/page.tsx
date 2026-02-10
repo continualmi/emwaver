@@ -9,9 +9,9 @@ export default function HomePage() {
         <img
           src="/2015_upscale.jpg"
           alt=""
-          className="h-full w-full object-cover opacity-[0.28]"
+          className="h-full w-full object-cover opacity-[0.45]"
         />
-        <div className="absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.18),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.12),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.82),rgba(2,3,8,0.88))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.14),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.10),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.70),rgba(2,3,8,0.78))]" />
       </div>
 
       <SiteHeader />
