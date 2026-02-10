@@ -27,6 +27,7 @@ struct ContentView: View {
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
     @State private var showingBackendSettings: Bool = false
+    @State private var showingFrontendSettings: Bool = false
 
     @State private var showingProUpgrade: Bool = false
     @State private var proFeatureName: String = ""
@@ -196,6 +197,10 @@ struct ContentView: View {
                             showingBackendSettings = true
                         }
 
+                        Button("Web Frontend…") {
+                            showingFrontendSettings = true
+                        }
+
                         Divider()
 
                         Button("Sign Out") {
@@ -246,6 +251,9 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingBackendSettings) {
             BackendSettingsView()
+        }
+        .sheet(isPresented: $showingFrontendSettings) {
+            FrontendSettingsView()
         }
         .sheet(isPresented: $showingProUpgrade) {
             ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)

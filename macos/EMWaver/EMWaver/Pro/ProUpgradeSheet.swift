@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 
 struct ProUpgradeSheet: View {
     @EnvironmentObject private var auth: AuthenticationManager
@@ -37,13 +38,15 @@ struct ProUpgradeSheet: View {
                         Text("Eligible to subscribe.")
                             .foregroundStyle(.secondary)
 
-                        // TODO(StoreKit): hook up subscription products.
-                        Button("Subscribe (coming next)") {}
-                            .buttonStyle(.borderedProminent)
-                            .disabled(true)
+                        Button("Get Pro…") {
+                            openProPurchase()
+                        }
+                        .buttonStyle(.borderedProminent)
 
-                        Button("Restore Purchases") {}
-                            .disabled(true)
+                        Button("Manage on web") {
+                            openProPurchase()
+                        }
+                        .buttonStyle(.bordered)
                     } else {
                         if el.reason == "no_device" {
                             Text("To subscribe, connect and attach a genuine EMWaver device to your account first.")
@@ -54,10 +57,17 @@ struct ProUpgradeSheet: View {
                         }
 
                         // Not sure where your attach UI will live; today DeviceRegistryService attaches automatically when signed in.
-                        Button("Refresh") {
-                            Task { await entitlements.refresh(auth: auth, force: true) }
+                        HStack(spacing: 10) {
+                            Button("Get Pro…") {
+                                openProPurchase()
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            Button("Refresh") {
+                                Task { await entitlements.refresh(auth: auth, force: true) }
+                            }
+                            .buttonStyle(.bordered)
                         }
-                        .buttonStyle(.bordered)
                     }
                 } else {
                     HStack(spacing: 10) {
@@ -82,5 +92,11 @@ struct ProUpgradeSheet: View {
         .task {
             await entitlements.refresh(auth: auth, force: true)
         }
+    }
+
+    private func openProPurchase() {
+        guard var base = FrontendUrl.resolve() else { return }
+        base.appendPathComponent("pro")
+        NSWorkspace.shared.open(base)
     }
 }
