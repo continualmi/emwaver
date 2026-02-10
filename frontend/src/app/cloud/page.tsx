@@ -637,12 +637,12 @@ export default function CloudPage() {
           </div>
 
           {!userEmail ? (
-            <button
-              onClick={doSignIn}
+            <a
+              href="/signin?redirect=%2Fcloud"
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
             >
-              Sign in with Google
-            </button>
+              Sign in
+            </a>
           ) : null}
 
           {userEmail ? (
@@ -781,12 +781,12 @@ export default function CloudPage() {
                 Get EMWaver Pro
               </a>
               {!userEmail ? (
-                <button
-                  onClick={doSignIn}
+                <a
+                  href="/signin?redirect=%2Fcloud"
                   className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
                 >
                   Sign in
-                </button>
+                </a>
               ) : (
                 <a
                   href="/account"
