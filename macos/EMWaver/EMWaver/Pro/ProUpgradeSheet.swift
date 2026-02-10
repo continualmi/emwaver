@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 
 struct ProUpgradeSheet: View {
+    @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var auth: AuthenticationManager
     @ObservedObject var entitlements: EntitlementsManager
 
@@ -9,8 +10,15 @@ struct ProUpgradeSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("EMWaver Pro")
-                .font(.title2.weight(.semibold))
+            HStack {
+                Text("EMWaver Pro")
+                    .font(.title2.weight(.semibold))
+
+                Spacer()
+
+                Button("Cancel") { dismiss() }
+                    .buttonStyle(.bordered)
+            }
 
             Text("\(featureName) requires EMWaver Pro.")
                 .foregroundStyle(.secondary)
@@ -18,9 +26,13 @@ struct ProUpgradeSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label("Remote host sessions", systemImage: "dot.radiowaves.left.and.right")
                 Label("File storage + sync across devices", systemImage: "arrow.triangle.2.circlepath")
-                Label("AI Agent (Pro-only)", systemImage: "sparkles")
+                Label("AI Agent (ELM models)", systemImage: "sparkles")
             }
             .padding(.top, 6)
+
+            Text("The Agent uses EMWaver ELMs (Electronic Language Models).")
+                .font(.callout)
+                .foregroundStyle(.secondary)
 
             Divider()
 
