@@ -5,6 +5,7 @@ const nav = [
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
   { href: "/news", label: "News" },
+  { href: "/pro", label: "Pro" },
   { href: "/cloud", label: "Dashboard" },
   { href: "/account", label: "Account" },
 ];
