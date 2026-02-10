@@ -1509,9 +1509,9 @@ extension AgentChatViewModel {
             let api = AgentCloudAPI()
             let rows = try await api.listMessages(baseURL: ctx.baseURL, token: ctx.accessToken, conversationId: cid)
 
-            self.messages = rows.compactMap { r in
+            self.messages = rows.map { r in
                 let mid = UUID(uuidString: r.id) ?? UUID()
-                let role: AgentChatMessage.Role
+                let role: AgentChatRole
                 switch r.role {
                 case "assistant": role = .assistant
                 case "system": role = .system
