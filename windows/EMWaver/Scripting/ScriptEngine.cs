@@ -9,6 +9,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using EMWaver.Interop;
 
 namespace EMWaver.Scripting;
 
@@ -28,6 +31,9 @@ public sealed class ScriptEngine : IDisposable
     private Func<byte[], int, byte[]?>? _sendPacket;
 
     private bool _haltedUntilNextExecute;
+    private string _currentScriptSource = string.Empty;
+    private readonly object _samplerBufferLock = new();
+    private byte[]? _samplerManualBuffer;
 
     public ScriptEngine()
     {
@@ -80,6 +86,7 @@ public sealed class ScriptEngine : IDisposable
             }
 
             _haltedUntilNextExecute = false;
+            _currentScriptSource = trimmed;
             CancelAllTimeoutsLocked();
             _callbacks.Clear();
 
@@ -94,11 +101,11 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (JavaScriptException ex)
             {
-                EmitError("Script error: " + ex.Message);
+                EmitError(FormatJavaScriptException("Script error", ex));
             }
             catch (Exception ex)
             {
-                EmitError("Script error: " + ex.Message);
+                EmitError(FormatGeneralException("Script error", ex));
             }
         });
     }
@@ -138,11 +145,11 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (JavaScriptException ex)
             {
-                EmitError("Script callback error: " + ex.Message);
+                EmitError(FormatJavaScriptException("Script callback error", ex));
             }
             catch (Exception ex)
             {
-                EmitError("Script callback error: " + ex.Message);
+                EmitError(FormatGeneralException("Script callback error", ex));
             }
         });
     }
@@ -217,19 +224,34 @@ public sealed class ScriptEngine : IDisposable
 
                 if (nodeValue.IsNull() || nodeValue.IsUndefined())
                 {
-                    EmitError("Script render called with invalid node");
-                    return;
-                }
-                if (!nodeValue.IsObject())
-                {
-                    EmitError("Script render called with invalid node");
+                    EmitError("Script render called with empty node payload (null/undefined).");
                     return;
                 }
 
-                var tree = BuildTreeFromJs(nodeValue.AsObject());
-                if (tree == null)
+                ScriptTree? tree = null;
+                string? parseError = null;
+
+                if (nodeValue.IsString())
                 {
-                    EmitError("Script render received malformed node");
+                    var json = nodeValue.AsString();
+                    if (!TryBuildTreeFromJson(json, out tree, out parseError))
+                    {
+                        EmitError("Script render JSON parse failed: " + (parseError ?? "unknown error"));
+                        return;
+                    }
+                }
+                else if (nodeValue.IsObject())
+                {
+                    tree = BuildTreeFromJs(nodeValue.AsObject(), out parseError);
+                    if (tree == null)
+                    {
+                        EmitError("Script render node parse failed: " + (parseError ?? "unknown error"));
+                        return;
+                    }
+                }
+                else
+                {
+                    EmitError("Script render called with unsupported payload type: " + nodeValue.Type + ". Expected JSON string or object.");
                     return;
                 }
 
@@ -238,7 +260,7 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (Exception ex)
             {
-                EmitError("Script render error: " + ex.Message);
+                EmitError(FormatGeneralException("Script render error", ex));
             }
         }));
 
@@ -322,8 +344,8 @@ public sealed class ScriptEngine : IDisposable
                         if (!_timeouts.Remove(id)) return;
                         if (_haltedUntilNextExecute) return;
                         try { _engine!.Invoke(fn, Array.Empty<JsValue>()); }
-                        catch (JavaScriptException ex) { EmitError("Script timer error: " + ex.Message); }
-                        catch (Exception ex) { EmitError("Script timer error: " + ex.Message); }
+                        catch (JavaScriptException ex) { EmitError(FormatJavaScriptException("Script timer error", ex)); }
+                        catch (Exception ex) { EmitError(FormatGeneralException("Script timer error", ex)); }
                     });
                 }
                 catch { }
@@ -350,11 +372,80 @@ public sealed class ScriptEngine : IDisposable
             return id;
         }));
 
+        // Keep parity with macOS: expose the live sampler capture stream as a built-in
+        // plot source named "samplerBits" so sampler.emw can render UI.plot directly.
+        PlotBufferStore.Shared.SetProvider("samplerBits", () => GetSamplerBytes());
+
+        // Sampler buffer API parity with macOS (used by script_bootstrap + sampler.emw).
+        engine.SetValue("_scriptSamplerBufferGetPacketCount", new Func<int>(() =>
+        {
+            var len = GetSamplerBytes().Length;
+            return len <= 0 ? 0 : (len + 63) / 64;
+        }));
+
+        engine.SetValue("_scriptSamplerBufferGetLenBytes", new Func<int>(() => GetSamplerBytes().Length));
+
+        engine.SetValue("_scriptSamplerBufferGetBytes", new Func<JsValue>(() =>
+        {
+            var bytes = GetSamplerBytes();
+            return JsValue.FromObject(engine, bytes.Select(static b => (int)b).ToArray());
+        }));
+
+        engine.SetValue("_scriptSamplerBufferClear", new Action(() =>
+        {
+            lock (_samplerBufferLock) _samplerManualBuffer = Array.Empty<byte>();
+            NativeBufferRust.ClearAll();
+        }));
+
+        engine.SetValue("_scriptSamplerBufferReadPacketsSince", new Func<int, int, JsValue>((packetIndex, maxPackets) =>
+        {
+            var data = GetSamplerBytes();
+            var totalPackets = data.Length <= 0 ? 0 : (data.Length + 63) / 64;
+            var startPacket = Math.Max(0, packetIndex);
+            var availablePackets = Math.Max(0, totalPackets - startPacket);
+            var toRead = Math.Max(0, Math.Min(availablePackets, Math.Max(1, maxPackets)));
+
+            var startByte = startPacket * 64;
+            var endByte = Math.Min(data.Length, startByte + toRead * 64);
+            var slice = startByte < endByte ? data[startByte..endByte] : Array.Empty<byte>();
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["data"] = slice.Select(static b => (int)b).ToArray(),
+                ["nextPacketIndex"] = startPacket + toRead,
+                ["availablePackets"] = availablePackets,
+            };
+            return JsValue.FromObject(engine, payload);
+        }));
+
+        engine.SetValue("_scriptBufferSetBytes", new Func<JsValue, int>(bytesValue =>
+        {
+            var bytes = CoerceToByteArray(bytesValue) ?? Array.Empty<byte>();
+            lock (_samplerBufferLock) _samplerManualBuffer = (byte[])bytes.Clone();
+            return bytes.Length;
+        }));
+
+        engine.SetValue("_scriptBufferSaveBytesFile", new Action<string>(path =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
+            File.WriteAllBytes(p, GetSamplerBytes());
+        }));
+
+        engine.SetValue("_scriptBufferBuildSignedRawTimings", new Func<int, string>(samplePeriodUs =>
+        {
+            var tickUs = Math.Clamp(samplePeriodUs <= 0 ? 10 : samplePeriodUs, 1, 255);
+            return BuildSignedRawTimingsText(GetSamplerBytes(), tickUs);
+        }));
+
         // Minimal filesystem/path helpers used by built-in scripts.
         engine.SetValue("_scriptAppDataDir", new Func<string>(() =>
         {
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EMWaver");
-            return root;
+            var scriptsDir = GetScriptsDataDir();
+            MigrateLegacySignalsToScriptsDir(scriptsDir);
+            Directory.CreateDirectory(scriptsDir);
+            return scriptsDir;
         }));
 
         engine.SetValue("_scriptPathJoin", new Func<JsValue, string>(partsValue =>
@@ -396,22 +487,48 @@ public sealed class ScriptEngine : IDisposable
             return JsValue.FromObject(engine, entries);
         }));
 
-        engine.SetValue("_scriptReadText", new Func<string, string>(path =>
+        var readText = new Func<string, string>(path =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0 || !File.Exists(p)) return string.Empty;
             return File.ReadAllText(p);
-        }));
+        });
+        engine.SetValue("_scriptReadText", readText);
+        engine.SetValue("_scriptReadFileText", readText);
 
-        engine.SetValue("_scriptWriteText", new Action<string, string>((path, content) =>
+        var writeText = new Action<string, string>((path, content) =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0) return;
             Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
             File.WriteAllText(p, content ?? string.Empty);
-        }));
+        });
+        engine.SetValue("_scriptWriteText", writeText);
+        engine.SetValue("_scriptWriteFileText", writeText);
 
-        engine.SetValue("_scriptRemove", new Action<string>(path =>
+        var readBytes = new Func<string, JsValue>(path =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0 || !File.Exists(p))
+            {
+                return JsValue.FromObject(engine, Array.Empty<int>());
+            }
+            var bytes = File.ReadAllBytes(p);
+            return JsValue.FromObject(engine, bytes.Select(static b => (int)b).ToArray());
+        });
+        engine.SetValue("_scriptReadFileBytes", readBytes);
+
+        var writeBytes = new Action<string, JsValue>((path, bytesValue) =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0) return;
+            var bytes = CoerceToByteArray(bytesValue) ?? Array.Empty<byte>();
+            Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
+            File.WriteAllBytes(p, bytes);
+        });
+        engine.SetValue("_scriptWriteFileBytes", writeBytes);
+
+        var removePath = new Action<string>(path =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0) return;
@@ -424,49 +541,203 @@ public sealed class ScriptEngine : IDisposable
             {
                 // Ignore.
             }
-        }));
+        });
+        engine.SetValue("_scriptRemove", removePath);
+        engine.SetValue("_scriptRemovePath", removePath);
     }
 
-    private ScriptTree? BuildTreeFromJs(ObjectInstance node)
+    private byte[] GetSamplerBytes()
     {
-        var root = BuildNode(node, path: new List<int>());
-        if (root == null) return null;
-
-        var meta = new Dictionary<string, object?>();
-        var metadataVal = node.Get("metadata");
-        if (metadataVal.IsObject())
+        lock (_samplerBufferLock)
         {
-            if (TryToDictionary(metadataVal, out var dict))
+            if (_samplerManualBuffer != null)
             {
-                meta = dict;
+                return (byte[])_samplerManualBuffer.Clone();
             }
         }
-
-        return new ScriptTree { Root = root, Metadata = meta };
+        return NativeBufferRust.GetRxSnapshot();
     }
 
-    private ScriptNode? BuildNode(ObjectInstance node, List<int> path)
+    private static string GetScriptsDataDir()
     {
-        var typeVal = node.Get("type");
-        var typeRaw = typeVal.IsString() ? typeVal.AsString() : null;
-        if (!ScriptNodeTypeExtensions.TryFromRaw(typeRaw, out var nodeType))
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EMWaver",
+            "Scripts"
+        );
+    }
+
+    private static void MigrateLegacySignalsToScriptsDir(string scriptsDir)
+    {
+        try
+        {
+            var legacySignalsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "EMWaver",
+                "Signals"
+            );
+            if (!Directory.Exists(legacySignalsDir)) return;
+
+            Directory.CreateDirectory(scriptsDir);
+
+            foreach (var src in Directory.EnumerateFiles(legacySignalsDir, "*", SearchOption.TopDirectoryOnly))
+            {
+                var ext = Path.GetExtension(src);
+                if (!string.Equals(ext, ".raw", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var dst = Path.Combine(scriptsDir, Path.GetFileName(src));
+                if (File.Exists(dst)) continue;
+                File.Copy(src, dst, overwrite: false);
+            }
+        }
+        catch
+        {
+            // Best-effort migration only.
+        }
+    }
+
+    private static string BuildSignedRawTimingsText(byte[] bytes, int tickUs)
+    {
+        if (bytes.Length == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        var totalBits = bytes.Length * 8;
+        var prevBit = (bytes[0] & 1) != 0;
+        var run = 1;
+
+        for (var bit = 1; bit < totalBits; bit++)
+        {
+            var by = bit >> 3;
+            var bi = bit & 7;
+            var curBit = ((bytes[by] >> bi) & 1) == 1;
+            if (curBit == prevBit)
+            {
+                run++;
+                continue;
+            }
+
+            AppendRun(sb, prevBit, run, tickUs);
+            prevBit = curBit;
+            run = 1;
+        }
+
+        AppendRun(sb, prevBit, run, tickUs);
+        return sb.ToString();
+
+        static void AppendRun(StringBuilder sb, bool high, int runBits, int tick)
+        {
+            if (runBits <= 0) return;
+            var us = runBits * tick;
+            if (!high) us = -us;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(us);
+        }
+    }
+
+    private ScriptTree? BuildTreeFromJs(ObjectInstance node, out string? error)
+    {
+        error = null;
+
+        Dictionary<string, object?> rootDict;
+        try
+        {
+            if (!TryToDictionary(JsValue.FromObject(_engine, node), out rootDict))
+            {
+                error = "root node is not a valid object";
+                return null;
+            }
+        }
+        catch (Exception ex)
+        {
+            error = "failed to convert JS tree: " + ex.Message;
+            return null;
+        }
+
+        return BuildTreeFromDictionary(rootDict, out error);
+    }
+
+    private bool TryBuildTreeFromJson(string json, out ScriptTree? tree, out string? error)
+    {
+        tree = null;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            error = "empty JSON payload";
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = "root JSON value is " + doc.RootElement.ValueKind + ", expected object";
+                return false;
+            }
+
+            var rootDict = JsonElementToObject(doc.RootElement) as Dictionary<string, object?>;
+            if (rootDict == null)
+            {
+                error = "root JSON object conversion failed";
+                return false;
+            }
+
+            tree = BuildTreeFromDictionary(rootDict, out error);
+            return tree != null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private ScriptTree? BuildTreeFromDictionary(Dictionary<string, object?> root, out string? error)
+    {
+        error = null;
+
+        var rootNode = BuildNodeFromDictionary(root, new List<int>(), out error);
+        if (rootNode == null)
         {
             return null;
         }
 
-        var rawId = node.Get("id").IsString() ? node.Get("id").AsString() : string.Empty;
+        var metadata = new Dictionary<string, object?>();
+        if (root.TryGetValue("metadata", out var metadataObj) && metadataObj is Dictionary<string, object?> metaDict)
+        {
+            metadata = metaDict;
+        }
+
+        return new ScriptTree { Root = rootNode, Metadata = metadata };
+    }
+
+    private ScriptNode? BuildNodeFromDictionary(Dictionary<string, object?> node, List<int> path, out string? error)
+    {
+        error = null;
+
+        var typeRaw = node.TryGetValue("type", out var typeObj) ? typeObj?.ToString() : null;
+        if (!ScriptNodeTypeExtensions.TryFromRaw(typeRaw, out var nodeType))
+        {
+            error = "unknown or missing node type '" + (typeRaw ?? "<null>") + "' at path " + FormatPath(path) + ".";
+            return null;
+        }
+
+        var rawId = node.TryGetValue("id", out var idObj) ? idObj?.ToString() ?? string.Empty : string.Empty;
         var id = MakeStableIdentifier(rawId, nodeType, path);
 
         var rawProps = new Dictionary<string, object?>();
-        var propsVal = node.Get("props");
-        if (propsVal.IsObject() && TryToDictionary(propsVal, out var propsDict))
+        if (node.TryGetValue("props", out var propsObj) && propsObj is Dictionary<string, object?> propsDict)
         {
             rawProps = propsDict;
         }
 
         var handlers = new Dictionary<ScriptEventType, string>();
-        var handlersVal = node.Get("handlers");
-        if (handlersVal.IsObject() && TryToDictionary(handlersVal, out var handlerDictObj))
+        if (node.TryGetValue("handlers", out var handlersObj) && handlersObj is Dictionary<string, object?> handlerDictObj)
         {
             foreach (var kv in handlerDictObj)
             {
@@ -479,18 +750,22 @@ public sealed class ScriptEngine : IDisposable
         }
 
         var children = new List<ScriptNode>();
-        var childrenVal = node.Get("children");
-        if (childrenVal.IsArray())
+        if (node.TryGetValue("children", out var childrenObj) && childrenObj is List<object?> childList)
         {
-            var arr = childrenVal.AsArray();
-            var len = (int)arr.Length;
-            for (var i = 0; i < len; i++)
+            for (var i = 0; i < childList.Count; i++)
             {
-                var childVal = arr.Get(i);
-                if (!childVal.IsObject()) continue;
+                if (childList[i] is not Dictionary<string, object?> childDict)
+                {
+                    continue;
+                }
+
                 var nextPath = new List<int>(path) { i };
-                var built = BuildNode(childVal.AsObject(), nextPath);
-                if (built != null) children.Add(built);
+                var built = BuildNodeFromDictionary(childDict, nextPath, out error);
+                if (built == null)
+                {
+                    return null;
+                }
+                children.Add(built);
             }
         }
 
@@ -577,6 +852,51 @@ public sealed class ScriptEngine : IDisposable
         return value;
     }
 
+    private static object? JsonElementToObject(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                {
+                    var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        dict[prop.Name] = JsonElementToObject(prop.Value);
+                    }
+                    return dict;
+                }
+            case JsonValueKind.Array:
+                {
+                    var list = new List<object?>();
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        list.Add(JsonElementToObject(item));
+                    }
+                    return list;
+                }
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                if (element.TryGetInt64(out var l)) return l;
+                if (element.TryGetDouble(out var d)) return d;
+                return element.GetRawText();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+            default:
+                return element.GetRawText();
+        }
+    }
+
+    private static string FormatPath(List<int> path)
+    {
+        return path.Count == 0 ? "root" : "root.children[" + string.Join("].children[", path) + "]";
+    }
+
     private static byte[]? CoerceToByteArray(JsValue value)
     {
         if (value.IsNull() || value.IsUndefined()) return null;
@@ -610,6 +930,81 @@ public sealed class ScriptEngine : IDisposable
     {
         // Keep behavior aligned across platforms: intentionally simple token scan.
         return script.Contains("await", StringComparison.Ordinal) || script.Contains("async", StringComparison.Ordinal);
+    }
+
+    private string FormatJavaScriptException(string prefix, JavaScriptException ex)
+    {
+        var sb = new StringBuilder();
+        sb.Append(prefix).Append(": ").Append(ex.Message);
+
+        var line = ex.Location.Start.Line;
+        var column = ex.Location.Start.Column;
+
+        // User code is wrapped in `(() => { ... })();` for isolation.
+        // Adjust line numbers back to the user's source where possible.
+        var userLine = line > 0 ? Math.Max(1, line - 1) : 0;
+        if (userLine > 0)
+        {
+            sb.AppendLine();
+            sb.Append("Location: line ").Append(userLine).Append(", column ").Append(Math.Max(1, column));
+        }
+
+        var frame = BuildSourceFrame(_currentScriptSource, userLine, contextLines: 2);
+        if (!string.IsNullOrWhiteSpace(frame))
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine("Code:");
+            sb.Append(frame);
+        }
+
+        var details = ex.ToString();
+        if (!string.IsNullOrWhiteSpace(details))
+        {
+            sb.AppendLine();
+            sb.AppendLine();
+            sb.AppendLine("Details:");
+            sb.Append(details);
+        }
+
+        return sb.ToString();
+    }
+
+    private static string FormatGeneralException(string prefix, Exception ex)
+    {
+        if (string.IsNullOrWhiteSpace(ex.StackTrace))
+        {
+            return prefix + ": " + ex.Message;
+        }
+        return prefix + ": " + ex.Message + "\n\nDetails:\n" + ex;
+    }
+
+    private static string BuildSourceFrame(string source, int lineNumber, int contextLines)
+    {
+        if (string.IsNullOrWhiteSpace(source) || lineNumber <= 0)
+        {
+            return string.Empty;
+        }
+
+        var normalized = source.Replace("\r\n", "\n").Replace('\r', '\n');
+        var lines = normalized.Split('\n');
+        if (lineNumber > lines.Length)
+        {
+            return string.Empty;
+        }
+
+        var start = Math.Max(1, lineNumber - contextLines);
+        var end = Math.Min(lines.Length, lineNumber + contextLines);
+        var sb = new StringBuilder();
+        for (var i = start; i <= end; i++)
+        {
+            var marker = i == lineNumber ? ">" : " ";
+            sb.Append(marker)
+              .Append(i.ToString().PadLeft(4))
+              .Append(" | ")
+              .AppendLine(lines[i - 1]);
+        }
+        return sb.ToString().TrimEnd();
     }
 
     private void EmitError(string message)
