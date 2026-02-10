@@ -46,6 +46,16 @@ export const DOCS_NAV: DocsNavGroup[] = [
     ],
   },
   {
+    heading: "Headless",
+    items: [
+      {
+        href: "/docs/daemon",
+        label: "EMWaver Daemon",
+        description: "Run scripts as a background service.",
+      },
+    ],
+  },
+  {
     heading: "Hardware",
     items: [
       {
