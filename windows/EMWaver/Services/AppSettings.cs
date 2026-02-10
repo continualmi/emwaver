@@ -18,7 +18,6 @@ internal sealed class AppSettings
 
         // Frontend selection (used by web-first sign-in and purchase flows).
         public bool UseProductionFrontend { get; set; } = true;
-        public string LocalFrontendUrl { get; set; } = "http://localhost:3000";
     }
 
     private static string GetSettingsPath()
@@ -56,13 +55,6 @@ internal sealed class AppSettings
                 needsSave = true;
             }
 
-            var normalizedFrontendUrl = NormalizeLocalFrontendUrl(model.LocalFrontendUrl);
-            if (!string.Equals(normalizedFrontendUrl, model.LocalFrontendUrl, StringComparison.Ordinal))
-            {
-                model.LocalFrontendUrl = normalizedFrontendUrl;
-                needsSave = true;
-            }
-
             if (needsSave)
             {
                 // Best-effort: rewrite migrated/sanitized settings.
@@ -96,21 +88,6 @@ internal sealed class AppSettings
             // Best effort.
             try { File.Move(tmp, path, overwrite: true); } catch { }
         }
-    }
-
-    private static string NormalizeLocalFrontendUrl(string? value)
-    {
-        var trimmed = (value ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(trimmed))
-        {
-            return "http://localhost:3000";
-        }
-
-        // Migration: older builds defaulted to 127.0.0.1, but some environments only
-        // work reliably with localhost for web sign-in handoff.
-        return trimmed
-            .Replace("http://127.0.0.1:3000", "http://localhost:3000", StringComparison.OrdinalIgnoreCase)
-            .Replace("https://127.0.0.1:3000", "https://localhost:3000", StringComparison.OrdinalIgnoreCase);
     }
 
     public bool UseProductionBackend
@@ -176,24 +153,4 @@ internal sealed class AppSettings
         }
     }
 
-    public string LocalFrontendUrl
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return Load().LocalFrontendUrl ?? "";
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                var m = Load();
-                m.LocalFrontendUrl = NormalizeLocalFrontendUrl(value);
-                Save(m);
-            }
-            Changed?.Invoke();
-        }
-    }
 }
