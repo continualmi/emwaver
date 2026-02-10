@@ -173,7 +173,8 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             }
             catch (Exception ex)
             {
-                UpdateError = ex.Message;
+                // Keep full details; COMException messages are often empty.
+                UpdateError = ex.ToString();
                 ProgressMessage = "";
             }
             return;
@@ -275,9 +276,9 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         page[6] = (byte)ProofLen;
 
         var off = 16;
-        Buffer.BlockCopy(deviceId16, 0, page, off, DeviceIdLen);
+        System.Buffer.BlockCopy(deviceId16, 0, page, off, DeviceIdLen);
         off += DeviceIdLen;
-        Buffer.BlockCopy(proof64, 0, page, off, ProofLen);
+        System.Buffer.BlockCopy(proof64, 0, page, off, ProofLen);
 
         return page;
     }
@@ -330,9 +331,9 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
 
         var deviceId = new byte[DeviceIdLen];
-        Buffer.BlockCopy(buf, 16, deviceId, 0, DeviceIdLen);
+        System.Buffer.BlockCopy(buf, 16, deviceId, 0, DeviceIdLen);
         var proof = new byte[ProofLen];
-        Buffer.BlockCopy(buf, 16 + DeviceIdLen, proof, 0, ProofLen);
+        System.Buffer.BlockCopy(buf, 16 + DeviceIdLen, proof, 0, ProofLen);
 
         if (!VerifyEd25519(pk, deviceId, proof))
         {
@@ -508,7 +509,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 SetProgress($"Writing block {blockNum} ({oneBased}/{totalBlocks})...", (step * 100.0) / totalSteps);
 
                 var chunk = new byte[chunkLen];
-                Buffer.BlockCopy(fwBytes, chunkStart, chunk, 0, chunkLen);
+                System.Buffer.BlockCopy(fwBytes, chunkStart, chunk, 0, chunkLen);
                 await dfu.WriteBlockAsync(chunk, blockNum, chunkLen, ct);
 
                 step += 1;
