@@ -3,6 +3,15 @@ use serde_json::json;
 
 use crate::config::Config;
 
+fn platform_name() -> &'static str {
+    #[cfg(target_os = "macos")]
+    { "macos" }
+    #[cfg(target_os = "linux")]
+    { "linux" }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    { "unknown" }
+}
+
 pub async fn heartbeat_once(cfg: &Config) -> Result<()> {
     let tok = cfg
         .id_token
@@ -21,7 +30,7 @@ pub async fn heartbeat_once(cfg: &Config) -> Result<()> {
         .bearer_auth(tok)
         .json(&json!({
             "host_session_id": cfg.host_session_id,
-            "platform": "linux",
+            "platform": platform_name(),
             "device_name": hostname::get().ok().and_then(|s| s.into_string().ok()).unwrap_or_default(),
             "app_version": env!("CARGO_PKG_VERSION"),
             "capabilities": {
@@ -35,8 +44,9 @@ pub async fn heartbeat_once(cfg: &Config) -> Result<()> {
         .context("heartbeat request failed")?;
 
     if !res.status().is_success() {
+        let status = res.status();
         let body = res.text().await.unwrap_or_default();
-        anyhow::bail!("heartbeat failed: {} {body}", res.status());
+        anyhow::bail!("heartbeat failed: {status} {body}");
     }
 
     Ok(())

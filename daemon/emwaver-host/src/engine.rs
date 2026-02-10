@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use rquickjs::{Context as JsContext, Function, Runtime, Value as JsValue};
+use rquickjs::prelude::Func;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -34,7 +35,7 @@ impl Engine {
 
             // _scriptRegisterCallback(token, fn)
             let cb_map = callbacks.clone();
-            let register = rquickjs::Func::new("_scriptRegisterCallback", move |token: String, func: Function| {
+            let register = Func::new("_scriptRegisterCallback", move |token: String, func: Function| {
                 // NOTE: QuickJS functions are GC'd; for simplicity we keep them alive by
                 // converting to a 'static handle. This is a TODO: use proper persistent handles.
                 let func_static: Function<'static> = unsafe { std::mem::transmute(func) };
@@ -44,8 +45,8 @@ impl Engine {
 
             // _scriptRender(node)
             let tree_store = latest_tree.clone();
-            let render = rquickjs::Func::new("_scriptRender", move |node: JsValue| {
-                let v: Value = rquickjs::from_js(node).unwrap_or(Value::Null);
+            let render = Func::new("_scriptRender", move |node: JsValue| {
+                let v: Value = rquickjs::serde::from_value(node).unwrap_or(Value::Null);
                 // The bootstrap passes a full tree root node object.
                 let parsed: Option<UiNode> = serde_json::from_value(v).ok();
                 *tree_store.lock().unwrap() = parsed;
@@ -53,14 +54,14 @@ impl Engine {
             globals.set("_scriptRender", render)?;
 
             // _scriptSleep(ms)
-            let sleep_fn = rquickjs::Func::new("_scriptSleep", move |_ms: i32| {
+            let sleep_fn = Func::new("_scriptSleep", move |_ms: i32| {
                 // TODO: integrate with tokio time; for now, no-op.
             });
             globals.set("_scriptSleep", sleep_fn)?;
 
             // _scriptSendPacket(bytes, timeoutMs) -> Uint8Array (synchronous)
             let dev = device.clone();
-            let send_packet = rquickjs::Func::new("_scriptSendPacket", move |bytes: rquickjs::TypedArray<u8>, timeout_ms: i32| {
+            let send_packet = Func::new("_scriptSendPacket", move |bytes: rquickjs::TypedArray<u8>, timeout_ms: i32| {
                 let cmd: Vec<u8> = bytes.as_bytes().to_vec();
                 let timeout = (timeout_ms.max(1) as u64).min(10_000);
 
@@ -101,7 +102,7 @@ impl Engine {
             // Convert args to JS values.
             let mut js_args: Vec<JsValue> = Vec::with_capacity(args.len());
             for a in args {
-                js_args.push(rquickjs::to_js(ctx, a).unwrap_or(JsValue::Undefined));
+                js_args.push(rquickjs::serde::to_value(ctx, &a).unwrap_or(JsValue::Undefined));
             }
 
             match cb.call::<(), _>(js_args) {

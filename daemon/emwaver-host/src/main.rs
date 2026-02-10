@@ -131,7 +131,7 @@ async fn connect_once(cfg: &Config, engine: &Engine) -> Result<()> {
     let url = ws_url(cfg)?;
     info!("connecting ws: {url}");
 
-    let (mut ws, _resp) = tokio_tungstenite::connect_async(url).await?;
+    let (mut ws, _resp) = tokio_tungstenite::connect_async(url.as_str()).await?;
 
     // hello
     let hello = Hello {
