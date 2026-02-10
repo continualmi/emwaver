@@ -1,5 +1,6 @@
 using EMWaver.Services.Cloud;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -39,10 +40,21 @@ public sealed partial class HostsPage : Page
         await RefreshAsync();
     }
 
+    private void OnBackClick(object sender, RoutedEventArgs e)
+    {
+        if (Frame?.CanGoBack == true)
+        {
+            Frame.GoBack();
+        }
+    }
+
     private async Task RefreshAsync()
     {
-        StatusText.Text = "Loading…";
-        HostsList.ItemsSource = null;
+        await RunOnUiAsync(() =>
+        {
+            StatusText.Text = "Loading…";
+            HostsList.ItemsSource = null;
+        });
 
         try
         {
@@ -51,7 +63,10 @@ public sealed partial class HostsPage : Page
             var tok = AppServices.CloudAuth.GetIdToken();
             if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
             {
-                StatusText.Text = "Please sign in to view hosts.";
+                await RunOnUiAsync(() =>
+                {
+                    StatusText.Text = "Please sign in to view hosts.";
+                });
                 return;
             }
 
@@ -69,13 +84,49 @@ public sealed partial class HostsPage : Page
                 OnlineColor: h.Online ? Colors.LimeGreen : Colors.Gray
             )).ToList();
 
-            HostsList.ItemsSource = list;
-            StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
+            await RunOnUiAsync(() =>
+            {
+                HostsList.ItemsSource = list;
+                StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
+            });
         }
         catch (Exception ex)
         {
-            StatusText.Text = ex.Message;
+            await RunOnUiAsync(() =>
+            {
+                StatusText.Text = ex.Message;
+            });
         }
+    }
+
+    private Task RunOnUiAsync(Action action)
+    {
+        if (DispatcherQueue == null || DispatcherQueue.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource<bool>();
+        var queued = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+        {
+            try
+            {
+                action();
+                tcs.TrySetResult(true);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        });
+
+        if (!queued)
+        {
+            tcs.TrySetException(new InvalidOperationException("Failed to enqueue UI update."));
+        }
+
+        return tcs.Task;
     }
 
     private void OnControlClick(object sender, RoutedEventArgs e)

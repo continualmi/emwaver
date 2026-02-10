@@ -10,6 +10,7 @@
 
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                 <TextBlock Text="Hosts" FontSize="20" FontWeight="SemiBold" />
+                <Button Content="Back" Click="OnBackClick" />
                 <Button Content="Refresh" Click="OnRefreshClick" />
             </StackPanel>
 
