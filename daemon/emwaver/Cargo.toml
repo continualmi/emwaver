@@ -10,6 +10,10 @@ clap = { version = "4", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# TUI
+crossterm = "0.27"
+ratatui = "0.26"
+
 # For device discovery via MIDI
 midir = "0.10"
 
