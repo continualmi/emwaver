@@ -15,7 +15,8 @@ export default function HomePage() {
 
       <main>
         <section className="mx-auto max-w-6xl px-5 pt-14 pb-10">
-          <div className="grid items-start gap-10 md:grid-cols-2">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:p-10">
+            <div className="grid items-start gap-10 md:grid-cols-2">
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
@@ -51,7 +52,7 @@ export default function HomePage() {
             </div>
 
             <div className="space-y-4">
-              <div className="relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
+              <div className="relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] backdrop-blur-xl shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
                 <div className="absolute inset-0 bg-[radial-gradient(600px_300px_at_30%_10%,rgba(78,231,199,0.22),transparent_55%),radial-gradient(600px_400px_at_90%_40%,rgba(91,192,255,0.18),transparent_58%)]" />
                 <div className="relative p-4">
                   <img
@@ -63,7 +64,7 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] backdrop-blur-xl">
                   <img
                     src="/landing1.jpeg"
                     alt="EMWaver in the field"
@@ -74,7 +75,7 @@ export default function HomePage() {
                     Build tools
                   </div>
                 </div>
-                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] backdrop-blur-xl">
                   <img
                     src="/landing2.jpeg"
                     alt="Script-driven workflows"
@@ -85,7 +86,7 @@ export default function HomePage() {
                     Run experiments
                   </div>
                 </div>
-                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)]">
+                <div className="group relative overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] backdrop-blur-xl">
                   <img
                     src="/landing3.jpeg"
                     alt="Hardware exploration"
@@ -99,26 +100,27 @@ export default function HomePage() {
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-4 backdrop-blur-xl">
                   <div className="text-xs font-semibold text-[color:var(--aqua)]">Scripts</div>
-                  <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  <div className="pt-2 text-sm text-[color:var(--ink)]/80">
                     UI + device I/O in one file. No reflash loops.
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-4 backdrop-blur-xl">
                   <div className="text-xs font-semibold text-[color:var(--sky)]">ELM Agent (Pro)</div>
-                  <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  <div className="pt-2 text-sm text-[color:var(--ink)]/80">
                     Ask for an experiment. Get a runnable script (with UI) you can edit.
                   </div>
                 </div>
-                <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-4 backdrop-blur-xl">
                   <div className="text-xs font-semibold text-[color:var(--copper)]">One platform</div>
-                  <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+                  <div className="pt-2 text-sm text-[color:var(--ink)]/80">
                     One USB device + apps on Android, iOS, macOS, and Windows.
                   </div>
                 </div>
               </div>
             </div>
+          </div>
           </div>
         </section>
 
