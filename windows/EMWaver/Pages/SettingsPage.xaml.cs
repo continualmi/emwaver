@@ -46,9 +46,6 @@ public sealed partial class SettingsPage : Page
                 }
             }
 
-            LocalBackendUrlBox.Text = AppServices.Settings.LocalBackendUrl;
-            LocalBackendUrlBox.IsEnabled = !prod;
-
             var frontendProd = AppServices.Settings.UseProductionFrontend;
             var frontendDesiredTag = frontendProd ? "prod" : "local";
             foreach (var item in FrontendModeCombo.Items)
@@ -118,28 +115,12 @@ public sealed partial class SettingsPage : Page
         var useProd = tag != "local";
 
         AppServices.Settings.UseProductionBackend = useProd;
-        LocalBackendUrlBox.IsEnabled = !useProd;
 
         // Backend change: sign out + restart cloud stack.
         AppServices.CloudAuth.SignOut();
         AppServices.ReloadCloud();
 
         RefreshUi("Backend updated.");
-    }
-
-    private void OnLocalBackendUrlChanged(object sender, TextChangedEventArgs e)
-    {
-        var v = (LocalBackendUrlBox.Text ?? "").Trim();
-        AppServices.Settings.LocalBackendUrl = v;
-
-        // If currently in local mode, restart cloud stack so new URL is used.
-        if (!AppServices.Settings.UseProductionBackend)
-        {
-            AppServices.CloudAuth.SignOut();
-            AppServices.ReloadCloud();
-        }
-
-        RefreshUi("Local backend URL updated.");
     }
 
     private void OnFrontendModeChanged(object sender, SelectionChangedEventArgs e)
