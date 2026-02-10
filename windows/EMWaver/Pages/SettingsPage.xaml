@@ -25,8 +25,14 @@
 
                     <TextBlock x:Name="AuthDetailText" Text="" Opacity="0.75" TextWrapping="Wrap" />
 
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Handoff code:" />
+                        <TextBox x:Name="HandoffCodeBox" Width="240" PlaceholderText="EMW-XXXXXX" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                        <Button x:Name="ConsumeHandoffButton" Content="Continue" Click="OnConsumeHandoffClick" />
+                    </StackPanel>
+
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button x:Name="SignInButton" Content="Sign in" Click="OnSignInClick" />
+                        <Button x:Name="SignInButton" Content="Open web sign-in" Click="OnSignInClick" />
                         <Button x:Name="SignOutButton" Content="Sign out" Click="OnSignOutClick" IsEnabled="False" />
                     </StackPanel>
                 </StackPanel>
@@ -59,6 +65,36 @@
                     </StackPanel>
 
                     <TextBlock Text="Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Web Frontend" FontWeight="SemiBold" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Frontend:" />
+                        <TextBlock x:Name="FrontendUrlText" Text="" />
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Mode:" />
+                        <ComboBox x:Name="FrontendModeCombo" SelectionChanged="OnFrontendModeChanged" Width="220" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
+                            <ComboBoxItem Content="Azure (prod)" Tag="prod" />
+                            <ComboBoxItem Content="Local" Tag="local" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Local URL:" />
+                        <TextBox x:Name="LocalFrontendUrlBox" Width="320" TextChanged="OnLocalFrontendUrlChanged" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+                    </StackPanel>
+
+                    <TextBlock Text="Used by web-first sign-in and web purchase flow." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
