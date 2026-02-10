@@ -16,6 +16,7 @@ from emw_backend.routes.devices import devices_bp
 from emw_backend.routes.entitlements import entitlements_bp
 from emw_backend.routes.billing import billing_bp
 from emw_backend.routes.admin import admin_bp
+from emw_backend.routes.pro import pro_bp
 
 
 def create_app() -> Flask:
@@ -54,6 +55,7 @@ def create_app() -> Flask:
     app.register_blueprint(devices_bp)
     app.register_blueprint(entitlements_bp)
     app.register_blueprint(billing_bp)
+    app.register_blueprint(pro_bp)
     app.register_blueprint(admin_bp)
 
     # WebSocket endpoint for Remote Sessions.
