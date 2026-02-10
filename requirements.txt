@@ -29,6 +29,7 @@ azure-storage-blob==12.19.0
 
 # Auth (Firebase ID token verification)
 google-auth==2.26.2
+firebase-admin==6.6.0
 
 # Local dev convenience (.env loader)
 python-dotenv==1.0.1
