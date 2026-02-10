@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · EMWaver",
   },
   description:
-    "Offline-first hardware exploration platform: scripts + UI evolve without reflashing.",
+    "Script-first hardware exploration over USB: build UI + device workflows in one file, no reflash loops.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 

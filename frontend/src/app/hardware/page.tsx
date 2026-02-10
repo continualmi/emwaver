@@ -20,8 +20,8 @@ export default function HardwarePage() {
             </h1>
 
             <p className="max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              A focused hardware platform designed for exploration. Variants are population/placement
-              options so the experience stays consistent.
+              A single, focused hardware platform designed for exploration: one USB transport, one board,
+              one firmware, and one set of apps.
             </p>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -84,9 +84,9 @@ export default function HardwarePage() {
                 Design rules
               </div>
               <div className="pt-3 space-y-2 text-sm text-[color:var(--ink-dim)]">
-                <div>One platform, consistent behavior</div>
-                <div>Agent-assisted iteration</div>
+                <div>USB-only transport (no wireless workflows)</div>
                 <div>Scripts + UI as the primary interface</div>
+                <div>One board + one firmware</div>
               </div>
             </div>
           </div>
