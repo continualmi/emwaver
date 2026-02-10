@@ -39,20 +39,6 @@
                 </StackPanel>
             </Button>
 
-            <!-- App icon (rounded) shown in the top app bar (main page only) -->
-            <Border x:Name="TopAppIcon"
-                Grid.Column="0"
-                Width="24"
-                Height="24"
-                Margin="0,0,10,0"
-                CornerRadius="6"
-                Background="Transparent"
-                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                VerticalAlignment="Center">
-                <Image Source="ms-appx:///Assets/emwaver.ico" Stretch="UniformToFill" />
-            </Border>
-
             <!-- Device status button (replaces "Device" menu; shows connection + version) -->
             <Button Grid.Column="1" x:Name="DeviceMenuButton" Padding="10,6" Background="Transparent" BorderThickness="0" HorizontalAlignment="Left">
                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
