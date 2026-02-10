@@ -10,6 +10,8 @@ namespace EMWaver.Pages;
 
 public sealed partial class SettingsPage : Page
 {
+    private bool _suppressModeSelectionEvents;
+
     public SettingsPage()
     {
         InitializeComponent();
@@ -37,27 +39,35 @@ public sealed partial class SettingsPage : Page
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
             FrontendUrlText.Text = FrontendUrl.Resolve();
 
-            // Backend mode
-            var prod = AppServices.Settings.UseProductionBackend;
-            var desiredTag = prod ? "prod" : "local";
-            foreach (var item in BackendModeCombo.Items)
+            _suppressModeSelectionEvents = true;
+            try
             {
-                if (item is ComboBoxItem cbi && (cbi.Tag as string) == desiredTag)
+                // Backend mode
+                var prod = AppServices.Settings.UseProductionBackend;
+                var desiredTag = prod ? "prod" : "local";
+                foreach (var item in BackendModeCombo.Items)
                 {
-                    BackendModeCombo.SelectedItem = cbi;
-                    break;
+                    if (item is ComboBoxItem cbi && (cbi.Tag as string) == desiredTag)
+                    {
+                        BackendModeCombo.SelectedItem = cbi;
+                        break;
+                    }
+                }
+
+                var frontendProd = AppServices.Settings.UseProductionFrontend;
+                var frontendDesiredTag = frontendProd ? "prod" : "local";
+                foreach (var item in FrontendModeCombo.Items)
+                {
+                    if (item is ComboBoxItem cbi && (cbi.Tag as string) == frontendDesiredTag)
+                    {
+                        FrontendModeCombo.SelectedItem = cbi;
+                        break;
+                    }
                 }
             }
-
-            var frontendProd = AppServices.Settings.UseProductionFrontend;
-            var frontendDesiredTag = frontendProd ? "prod" : "local";
-            foreach (var item in FrontendModeCombo.Items)
+            finally
             {
-                if (item is ComboBoxItem cbi && (cbi.Tag as string) == frontendDesiredTag)
-                {
-                    FrontendModeCombo.SelectedItem = cbi;
-                    break;
-                }
+                _suppressModeSelectionEvents = false;
             }
         }
 
@@ -160,6 +170,11 @@ public sealed partial class SettingsPage : Page
 
     private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressModeSelectionEvents)
+        {
+            return;
+        }
+
         if (BackendModeCombo.SelectedItem is not ComboBoxItem item)
         {
             return;
@@ -167,6 +182,11 @@ public sealed partial class SettingsPage : Page
 
         var tag = (item.Tag as string) ?? "prod";
         var useProd = tag != "local";
+
+        if (AppServices.Settings.UseProductionBackend == useProd)
+        {
+            return;
+        }
 
         AppServices.Settings.UseProductionBackend = useProd;
 
@@ -179,6 +199,11 @@ public sealed partial class SettingsPage : Page
 
     private void OnFrontendModeChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (_suppressModeSelectionEvents)
+        {
+            return;
+        }
+
         if (FrontendModeCombo.SelectedItem is not ComboBoxItem item)
         {
             return;
@@ -186,6 +211,11 @@ public sealed partial class SettingsPage : Page
 
         var tag = (item.Tag as string) ?? "prod";
         var useProd = tag != "local";
+
+        if (AppServices.Settings.UseProductionFrontend == useProd)
+        {
+            return;
+        }
 
         AppServices.Settings.UseProductionFrontend = useProd;
         RefreshUi("Frontend updated.");
