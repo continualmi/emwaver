@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 SESSION=$1
-PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"; pwd )"
 
 # Window 1: Dev (lazygit + backend + frontend) — 3 panes, all auto-run
 # Force the first pane to the correct directory just in case
@@ -13,7 +13,8 @@ tmux rename-window -t $SESSION:1 'dev'
 #   [ lazygit ] | [ backend ]
 #              | [ frontend ]
 PANE_GIT=$(tmux display-message -p -t $SESSION:1.1 '#{pane_id}')
-PANE_RIGHT=$(tmux split-window -h -l 66% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Make lazygit pane narrower (left), leave more space for backend/frontend
+PANE_RIGHT=$(tmux split-window -h -l 75% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_BACKEND="$PANE_RIGHT"
 
@@ -38,8 +39,11 @@ PANE_BOTTOM_LEFT=$(tmux split-window -v -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_
 PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 
 # Typed only (no enter)
-tmux send-keys -t "$PANE_TOP_LEFT" 'cd android && ./gradlew installDebug'
-tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver && npm run tauri'
+tmux send-keys -t "$PANE_TOP_LEFT" 'cd android' C-m
+tmux send-keys -t "$PANE_TOP_LEFT" './gradlew installDebug'
+
+tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver' C-m
+tmux send-keys -t "$PANE_TOP_RIGHT" 'npm run tauri'
 tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
