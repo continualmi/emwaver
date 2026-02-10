@@ -21,6 +21,12 @@ type Credits = {
   resetsAt?: string | null;
 };
 
+type Entitlements = {
+  pro: boolean;
+  expires_at_ms?: number | null;
+  features?: { [k: string]: boolean };
+};
+
 export default function ProPage() {
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
 
@@ -32,6 +38,7 @@ export default function ProPage() {
 
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [credits, setCredits] = useState<Credits | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
 
   useEffect(() => {
     if (!auth) return;
@@ -39,6 +46,7 @@ export default function ProPage() {
       setError(null);
       setEligibility(null);
       setCredits(null);
+      setEntitlements(null);
 
       if (!u) {
         setIdToken("");
@@ -53,6 +61,7 @@ export default function ProPage() {
 
   useEffect(() => {
     if (!idToken) return;
+    void refreshEntitlements();
     void refreshEligibility();
     void refreshCredits();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,6 +76,18 @@ export default function ProPage() {
       setEligibility(JSON.parse(text) as Eligibility);
     } catch (e: any) {
       setError(String(e?.message || e));
+    }
+  }
+
+  async function refreshEntitlements() {
+    if (!idToken) return;
+    try {
+      const res = await backendFetch("/v1/entitlements", idToken, { method: "GET" });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      setEntitlements(JSON.parse(text) as Entitlements);
+    } catch {
+      setEntitlements(null);
     }
   }
 
@@ -215,7 +236,14 @@ export default function ProPage() {
             </div>
 
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Status</div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">Status</div>
+                {entitlements?.pro ? (
+                  <div className="rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.10)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
+                    Pro active
+                  </div>
+                ) : null}
+              </div>
 
               <div className="mt-3 space-y-2 text-sm text-[color:var(--ink-dim)]">
                 <div>
@@ -253,11 +281,11 @@ export default function ProPage() {
 
               <div className="mt-4 grid gap-2">
                 <button
-                  disabled={busy}
+                  disabled={busy || !!entitlements?.pro}
                   onClick={() => void startProCheckout()}
                   className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
                 >
-                  {idToken ? "Get Pro" : "Sign in to get Pro"}
+                  {entitlements?.pro ? "You already have Pro" : idToken ? "Get Pro" : "Sign in to get Pro"}
                 </button>
 
                 <button
