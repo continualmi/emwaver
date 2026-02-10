@@ -71,21 +71,22 @@ struct FirmwareUpdateSheet: View {
                     Text("Put the device into Update Mode")
                         .font(.subheadline.weight(.semibold))
 
-                    Text("Click Update device. The firmware will erase the initial flash pages and reboot into the STM32 ROM DFU bootloader.")
+                    Text("1) Plug in your EMWaver device.\n2) Click Enter Update Mode.\n3) If Update Mode still isn’t detected, unplug and plug it back in.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    HStack(spacing: 10) {
-                        Label("Update mode", systemImage: "arrow.triangle.2.circlepath")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("|")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Label("Run mode", systemImage: "play.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    if device.isConnected {
+                        Button("Enter Update Mode") {
+                            device.requestEnterUpdateMode()
+                            device.disconnect()
+                            updater.refreshDfuPresence()
+                        }
+                        .disabled(updater.isFlashing)
                     }
+
+                    Text("Status: \(updater.dfuConnected ? "Update Mode detected" : "Waiting for Update Mode")")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 .padding(12)
                 .background(
@@ -95,7 +96,7 @@ struct FirmwareUpdateSheet: View {
             }
 
             if updater.dfuConnected && !updater.updateDone {
-                Text("Device connected in Update Mode.")
+                Text("Device detected in Update Mode.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                     .padding(12)
