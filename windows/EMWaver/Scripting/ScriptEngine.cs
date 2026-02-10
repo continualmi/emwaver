@@ -32,6 +32,8 @@ public sealed class ScriptEngine : IDisposable
 
     private bool _haltedUntilNextExecute;
     private string _currentScriptSource = string.Empty;
+    private readonly object _samplerBufferLock = new();
+    private byte[]? _samplerManualBuffer;
 
     public ScriptEngine()
     {
@@ -372,7 +374,70 @@ public sealed class ScriptEngine : IDisposable
 
         // Keep parity with macOS: expose the live sampler capture stream as a built-in
         // plot source named "samplerBits" so sampler.emw can render UI.plot directly.
-        PlotBufferStore.Shared.SetProvider("samplerBits", static () => NativeBufferRust.GetRxSnapshot());
+        PlotBufferStore.Shared.SetProvider("samplerBits", () => GetSamplerBytes());
+
+        // Sampler buffer API parity with macOS (used by script_bootstrap + sampler.emw).
+        engine.SetValue("_scriptSamplerBufferGetPacketCount", new Func<int>(() =>
+        {
+            var len = GetSamplerBytes().Length;
+            return len <= 0 ? 0 : (len + 63) / 64;
+        }));
+
+        engine.SetValue("_scriptSamplerBufferGetLenBytes", new Func<int>(() => GetSamplerBytes().Length));
+
+        engine.SetValue("_scriptSamplerBufferGetBytes", new Func<JsValue>(() =>
+        {
+            var bytes = GetSamplerBytes();
+            return JsValue.FromObject(engine, bytes.Select(static b => (int)b).ToArray());
+        }));
+
+        engine.SetValue("_scriptSamplerBufferClear", new Action(() =>
+        {
+            lock (_samplerBufferLock) _samplerManualBuffer = Array.Empty<byte>();
+            NativeBufferRust.ClearAll();
+        }));
+
+        engine.SetValue("_scriptSamplerBufferReadPacketsSince", new Func<int, int, JsValue>((packetIndex, maxPackets) =>
+        {
+            var data = GetSamplerBytes();
+            var totalPackets = data.Length <= 0 ? 0 : (data.Length + 63) / 64;
+            var startPacket = Math.Max(0, packetIndex);
+            var availablePackets = Math.Max(0, totalPackets - startPacket);
+            var toRead = Math.Max(0, Math.Min(availablePackets, Math.Max(1, maxPackets)));
+
+            var startByte = startPacket * 64;
+            var endByte = Math.Min(data.Length, startByte + toRead * 64);
+            var slice = startByte < endByte ? data[startByte..endByte] : Array.Empty<byte>();
+
+            var payload = new Dictionary<string, object?>
+            {
+                ["data"] = slice.Select(static b => (int)b).ToArray(),
+                ["nextPacketIndex"] = startPacket + toRead,
+                ["availablePackets"] = availablePackets,
+            };
+            return JsValue.FromObject(engine, payload);
+        }));
+
+        engine.SetValue("_scriptBufferSetBytes", new Func<JsValue, int>(bytesValue =>
+        {
+            var bytes = CoerceToByteArray(bytesValue) ?? Array.Empty<byte>();
+            lock (_samplerBufferLock) _samplerManualBuffer = (byte[])bytes.Clone();
+            return bytes.Length;
+        }));
+
+        engine.SetValue("_scriptBufferSaveBytesFile", new Action<string>(path =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0) return;
+            Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
+            File.WriteAllBytes(p, GetSamplerBytes());
+        }));
+
+        engine.SetValue("_scriptBufferBuildSignedRawTimings", new Func<int, string>(samplePeriodUs =>
+        {
+            var tickUs = Math.Clamp(samplePeriodUs <= 0 ? 10 : samplePeriodUs, 1, 255);
+            return BuildSignedRawTimingsText(GetSamplerBytes(), tickUs);
+        }));
 
         // Minimal filesystem/path helpers used by built-in scripts.
         engine.SetValue("_scriptAppDataDir", new Func<string>(() =>
@@ -420,22 +485,48 @@ public sealed class ScriptEngine : IDisposable
             return JsValue.FromObject(engine, entries);
         }));
 
-        engine.SetValue("_scriptReadText", new Func<string, string>(path =>
+        var readText = new Func<string, string>(path =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0 || !File.Exists(p)) return string.Empty;
             return File.ReadAllText(p);
-        }));
+        });
+        engine.SetValue("_scriptReadText", readText);
+        engine.SetValue("_scriptReadFileText", readText);
 
-        engine.SetValue("_scriptWriteText", new Action<string, string>((path, content) =>
+        var writeText = new Action<string, string>((path, content) =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0) return;
             Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
             File.WriteAllText(p, content ?? string.Empty);
-        }));
+        });
+        engine.SetValue("_scriptWriteText", writeText);
+        engine.SetValue("_scriptWriteFileText", writeText);
 
-        engine.SetValue("_scriptRemove", new Action<string>(path =>
+        var readBytes = new Func<string, JsValue>(path =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0 || !File.Exists(p))
+            {
+                return JsValue.FromObject(engine, Array.Empty<int>());
+            }
+            var bytes = File.ReadAllBytes(p);
+            return JsValue.FromObject(engine, bytes.Select(static b => (int)b).ToArray());
+        });
+        engine.SetValue("_scriptReadFileBytes", readBytes);
+
+        var writeBytes = new Action<string, JsValue>((path, bytesValue) =>
+        {
+            var p = (path ?? string.Empty).Trim();
+            if (p.Length == 0) return;
+            var bytes = CoerceToByteArray(bytesValue) ?? Array.Empty<byte>();
+            Directory.CreateDirectory(Path.GetDirectoryName(p) ?? p);
+            File.WriteAllBytes(p, bytes);
+        });
+        engine.SetValue("_scriptWriteFileBytes", writeBytes);
+
+        var removePath = new Action<string>(path =>
         {
             var p = (path ?? string.Empty).Trim();
             if (p.Length == 0) return;
@@ -448,7 +539,59 @@ public sealed class ScriptEngine : IDisposable
             {
                 // Ignore.
             }
-        }));
+        });
+        engine.SetValue("_scriptRemove", removePath);
+        engine.SetValue("_scriptRemovePath", removePath);
+    }
+
+    private byte[] GetSamplerBytes()
+    {
+        lock (_samplerBufferLock)
+        {
+            if (_samplerManualBuffer != null)
+            {
+                return (byte[])_samplerManualBuffer.Clone();
+            }
+        }
+        return NativeBufferRust.GetRxSnapshot();
+    }
+
+    private static string BuildSignedRawTimingsText(byte[] bytes, int tickUs)
+    {
+        if (bytes.Length == 0) return string.Empty;
+
+        var sb = new StringBuilder();
+        var totalBits = bytes.Length * 8;
+        var prevBit = (bytes[0] & 1) != 0;
+        var run = 1;
+
+        for (var bit = 1; bit < totalBits; bit++)
+        {
+            var by = bit >> 3;
+            var bi = bit & 7;
+            var curBit = ((bytes[by] >> bi) & 1) == 1;
+            if (curBit == prevBit)
+            {
+                run++;
+                continue;
+            }
+
+            AppendRun(sb, prevBit, run, tickUs);
+            prevBit = curBit;
+            run = 1;
+        }
+
+        AppendRun(sb, prevBit, run, tickUs);
+        return sb.ToString();
+
+        static void AppendRun(StringBuilder sb, bool high, int runBits, int tick)
+        {
+            if (runBits <= 0) return;
+            var us = runBits * tick;
+            if (!high) us = -us;
+            if (sb.Length > 0) sb.Append('\n');
+            sb.Append(us);
+        }
     }
 
     private ScriptTree? BuildTreeFromJs(ObjectInstance node, out string? error)
