@@ -27,7 +27,7 @@ export function SiteHeader() {
               EMWaver
             </div>
             <div className="text-[12px] text-[color:var(--ink-dim)]">
-              Script-first hardware exploration over USB
+              Script-first hardware exploration
             </div>
           </div>
         </Link>

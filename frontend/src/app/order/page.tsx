@@ -122,7 +122,7 @@ export default function OrderPage() {
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
               <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">What ships</div>
               <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">One board + apps</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">USB-only transport. Script-first exploration on mobile + desktop.</div>
+              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Script-first exploration on mobile + desktop.</div>
             </div>
 
             <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5">
