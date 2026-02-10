@@ -10,6 +10,7 @@ using System.Linq;
 using System.Threading;
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 
 namespace EMWaver.Scripting;
 
@@ -220,19 +221,34 @@ public sealed class ScriptEngine : IDisposable
 
                 if (nodeValue.IsNull() || nodeValue.IsUndefined())
                 {
-                    EmitError("Script render called with invalid node");
-                    return;
-                }
-                if (!nodeValue.IsObject())
-                {
-                    EmitError("Script render called with invalid node");
+                    EmitError("Script render called with empty node payload (null/undefined).");
                     return;
                 }
 
-                var tree = BuildTreeFromJs(nodeValue.AsObject());
-                if (tree == null)
+                ScriptTree? tree = null;
+                string? parseError = null;
+
+                if (nodeValue.IsString())
                 {
-                    EmitError("Script render received malformed node");
+                    var json = nodeValue.AsString();
+                    if (!TryBuildTreeFromJson(json, out tree, out parseError))
+                    {
+                        EmitError("Script render JSON parse failed: " + (parseError ?? "unknown error"));
+                        return;
+                    }
+                }
+                else if (nodeValue.IsObject())
+                {
+                    tree = BuildTreeFromJs(nodeValue.AsObject(), out parseError);
+                    if (tree == null)
+                    {
+                        EmitError("Script render node parse failed: " + (parseError ?? "unknown error"));
+                        return;
+                    }
+                }
+                else
+                {
+                    EmitError("Script render called with unsupported payload type: " + nodeValue.Type + ". Expected JSON string or object.");
                     return;
                 }
 
@@ -241,7 +257,7 @@ public sealed class ScriptEngine : IDisposable
             }
             catch (Exception ex)
             {
-                EmitError("Script render error: " + ex.Message);
+                EmitError(FormatGeneralException("Script render error", ex));
             }
         }));
 
@@ -430,46 +446,106 @@ public sealed class ScriptEngine : IDisposable
         }));
     }
 
-    private ScriptTree? BuildTreeFromJs(ObjectInstance node)
+    private ScriptTree? BuildTreeFromJs(ObjectInstance node, out string? error)
     {
-        var root = BuildNode(node, path: new List<int>());
-        if (root == null) return null;
+        error = null;
 
-        var meta = new Dictionary<string, object?>();
-        var metadataVal = node.Get("metadata");
-        if (metadataVal.IsObject())
+        Dictionary<string, object?> rootDict;
+        try
         {
-            if (TryToDictionary(metadataVal, out var dict))
+            if (!TryToDictionary(JsValue.FromObject(_engine, node), out rootDict))
             {
-                meta = dict;
+                error = "root node is not a valid object";
+                return null;
             }
         }
+        catch (Exception ex)
+        {
+            error = "failed to convert JS tree: " + ex.Message;
+            return null;
+        }
 
-        return new ScriptTree { Root = root, Metadata = meta };
+        return BuildTreeFromDictionary(rootDict, out error);
     }
 
-    private ScriptNode? BuildNode(ObjectInstance node, List<int> path)
+    private bool TryBuildTreeFromJson(string json, out ScriptTree? tree, out string? error)
     {
-        var typeVal = node.Get("type");
-        var typeRaw = typeVal.IsString() ? typeVal.AsString() : null;
-        if (!ScriptNodeTypeExtensions.TryFromRaw(typeRaw, out var nodeType))
+        tree = null;
+        error = null;
+
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            error = "empty JSON payload";
+            return false;
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                error = "root JSON value is " + doc.RootElement.ValueKind + ", expected object";
+                return false;
+            }
+
+            var rootDict = JsonElementToObject(doc.RootElement) as Dictionary<string, object?>;
+            if (rootDict == null)
+            {
+                error = "root JSON object conversion failed";
+                return false;
+            }
+
+            tree = BuildTreeFromDictionary(rootDict, out error);
+            return tree != null;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    private ScriptTree? BuildTreeFromDictionary(Dictionary<string, object?> root, out string? error)
+    {
+        error = null;
+
+        var rootNode = BuildNodeFromDictionary(root, new List<int>(), out error);
+        if (rootNode == null)
         {
             return null;
         }
 
-        var rawId = node.Get("id").IsString() ? node.Get("id").AsString() : string.Empty;
+        var metadata = new Dictionary<string, object?>();
+        if (root.TryGetValue("metadata", out var metadataObj) && metadataObj is Dictionary<string, object?> metaDict)
+        {
+            metadata = metaDict;
+        }
+
+        return new ScriptTree { Root = rootNode, Metadata = metadata };
+    }
+
+    private ScriptNode? BuildNodeFromDictionary(Dictionary<string, object?> node, List<int> path, out string? error)
+    {
+        error = null;
+
+        var typeRaw = node.TryGetValue("type", out var typeObj) ? typeObj?.ToString() : null;
+        if (!ScriptNodeTypeExtensions.TryFromRaw(typeRaw, out var nodeType))
+        {
+            error = "unknown or missing node type '" + (typeRaw ?? "<null>") + "' at path " + FormatPath(path) + ".";
+            return null;
+        }
+
+        var rawId = node.TryGetValue("id", out var idObj) ? idObj?.ToString() ?? string.Empty : string.Empty;
         var id = MakeStableIdentifier(rawId, nodeType, path);
 
         var rawProps = new Dictionary<string, object?>();
-        var propsVal = node.Get("props");
-        if (propsVal.IsObject() && TryToDictionary(propsVal, out var propsDict))
+        if (node.TryGetValue("props", out var propsObj) && propsObj is Dictionary<string, object?> propsDict)
         {
             rawProps = propsDict;
         }
 
         var handlers = new Dictionary<ScriptEventType, string>();
-        var handlersVal = node.Get("handlers");
-        if (handlersVal.IsObject() && TryToDictionary(handlersVal, out var handlerDictObj))
+        if (node.TryGetValue("handlers", out var handlersObj) && handlersObj is Dictionary<string, object?> handlerDictObj)
         {
             foreach (var kv in handlerDictObj)
             {
@@ -482,18 +558,22 @@ public sealed class ScriptEngine : IDisposable
         }
 
         var children = new List<ScriptNode>();
-        var childrenVal = node.Get("children");
-        if (childrenVal.IsArray())
+        if (node.TryGetValue("children", out var childrenObj) && childrenObj is List<object?> childList)
         {
-            var arr = childrenVal.AsArray();
-            var len = (int)arr.Length;
-            for (var i = 0; i < len; i++)
+            for (var i = 0; i < childList.Count; i++)
             {
-                var childVal = arr.Get(i);
-                if (!childVal.IsObject()) continue;
+                if (childList[i] is not Dictionary<string, object?> childDict)
+                {
+                    continue;
+                }
+
                 var nextPath = new List<int>(path) { i };
-                var built = BuildNode(childVal.AsObject(), nextPath);
-                if (built != null) children.Add(built);
+                var built = BuildNodeFromDictionary(childDict, nextPath, out error);
+                if (built == null)
+                {
+                    return null;
+                }
+                children.Add(built);
             }
         }
 
@@ -578,6 +658,51 @@ public sealed class ScriptEngine : IDisposable
             return outList;
         }
         return value;
+    }
+
+    private static object? JsonElementToObject(JsonElement element)
+    {
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                {
+                    var dict = new Dictionary<string, object?>(StringComparer.Ordinal);
+                    foreach (var prop in element.EnumerateObject())
+                    {
+                        dict[prop.Name] = JsonElementToObject(prop.Value);
+                    }
+                    return dict;
+                }
+            case JsonValueKind.Array:
+                {
+                    var list = new List<object?>();
+                    foreach (var item in element.EnumerateArray())
+                    {
+                        list.Add(JsonElementToObject(item));
+                    }
+                    return list;
+                }
+            case JsonValueKind.String:
+                return element.GetString();
+            case JsonValueKind.Number:
+                if (element.TryGetInt64(out var l)) return l;
+                if (element.TryGetDouble(out var d)) return d;
+                return element.GetRawText();
+            case JsonValueKind.True:
+                return true;
+            case JsonValueKind.False:
+                return false;
+            case JsonValueKind.Null:
+            case JsonValueKind.Undefined:
+                return null;
+            default:
+                return element.GetRawText();
+        }
+    }
+
+    private static string FormatPath(List<int> path)
+    {
+        return path.Count == 0 ? "root" : "root.children[" + string.Join("].children[", path) + "]";
     }
 
     private static byte[]? CoerceToByteArray(JsValue value)
