@@ -24,7 +24,7 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 hostname = "0.4"
 
 # JS engine (QuickJS)
-rquickjs = { version = "0.9", features = ["loader", "macro", "serde"] }
+rquickjs = { version = "0.9", features = ["loader", "macro"] }
 
 # USB MIDI SysEx transport (cross-platform)
 midir = "0.10"

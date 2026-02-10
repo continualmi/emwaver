@@ -1,10 +1,10 @@
 use anyhow::{Context, Result};
-use rquickjs::{Context as JsContext, Function, Runtime, Value as JsValue};
+use rquickjs::{Array, Context as JsContext, Ctx, Function, Object, Runtime, Value as JsValue};
 use rquickjs::prelude::Func;
-use serde_json::Value;
+use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use tracing::{error, info};
+use tracing::error;
 
 use crate::device::Device;
 use crate::ui_tree::UiNode;
@@ -16,7 +16,7 @@ pub struct Engine {
     callbacks: Arc<Mutex<HashMap<String, Function<'static>>>>,
 
     pub latest_tree: Arc<Mutex<Option<UiNode>>>,
-    pub latest_metadata: Arc<Mutex<Value>>,
+    pub latest_metadata: Arc<Mutex<JsonValue>>,
 }
 
 impl Engine {
@@ -27,7 +27,7 @@ impl Engine {
         // Shared state.
         let callbacks: Arc<Mutex<HashMap<String, Function<'static>>>> = Arc::new(Mutex::new(HashMap::new()));
         let latest_tree: Arc<Mutex<Option<UiNode>>> = Arc::new(Mutex::new(None));
-        let latest_metadata: Arc<Mutex<Value>> = Arc::new(Mutex::new(Value::Object(Default::default())));
+        let latest_metadata: Arc<Mutex<JsonValue>> = Arc::new(Mutex::new(JsonValue::Object(Default::default())));
 
         // Install host functions.
         {
@@ -45,9 +45,10 @@ impl Engine {
 
             // _scriptRender(node)
             let tree_store = latest_tree.clone();
-            let render = Func::new("_scriptRender", move |node: JsValue| {
-                let v: Value = rquickjs::serde::from_value(node).unwrap_or(Value::Null);
-                // The bootstrap passes a full tree root node object.
+            // _scriptRender(jsonString)
+            // (We intentionally accept JSON to avoid depending on rquickjs serde helpers.)
+            let render = Func::new("_scriptRender", move |json_str: String| {
+                let v: JsonValue = serde_json::from_str(&json_str).unwrap_or(JsonValue::Null);
                 let parsed: Option<UiNode> = serde_json::from_value(v).ok();
                 *tree_store.lock().unwrap() = parsed;
             });
@@ -92,17 +93,17 @@ impl Engine {
         Ok(())
     }
 
-    pub fn dispatch_ui_event(&self, token: &str, args: Vec<Value>) -> Result<()> {
+    pub fn dispatch_ui_event(&self, token: &str, args: Vec<JsonValue>) -> Result<()> {
         let cb_opt = { self.callbacks.lock().unwrap().get(token).cloned() };
         let Some(cb) = cb_opt else {
             anyhow::bail!("unknown_handler_token");
         };
 
         self.ctx.with(|ctx| {
-            // Convert args to JS values.
+            // Convert args (JSON) to JS values.
             let mut js_args: Vec<JsValue> = Vec::with_capacity(args.len());
             for a in args {
-                js_args.push(rquickjs::serde::to_value(ctx, &a).unwrap_or(JsValue::Undefined));
+                js_args.push(json_to_js(ctx, &a).unwrap_or(JsValue::Undefined));
             }
 
             match cb.call::<(), _>(js_args) {
@@ -114,4 +115,39 @@ impl Engine {
             }
         })
     }
+}
+
+fn json_to_js<'js>(ctx: Ctx<'js>, v: &JsonValue) -> Result<JsValue<'js>> {
+    Ok(match v {
+        JsonValue::Null => JsValue::Null,
+        JsonValue::Bool(b) => JsValue::new_bool(ctx, *b),
+        JsonValue::Number(n) => {
+            if let Some(i) = n.as_i64() {
+                JsValue::new_int(ctx, i as i32)
+            } else if let Some(u) = n.as_u64() {
+                JsValue::new_int(ctx, u.min(i32::MAX as u64) as i32)
+            } else if let Some(f) = n.as_f64() {
+                JsValue::new_float64(ctx, f)
+            } else {
+                JsValue::Null
+            }
+        }
+        JsonValue::String(s) => JsValue::new_string(ctx, s),
+        JsonValue::Array(arr) => {
+            let a = Array::new(ctx)?;
+            for (i, item) in arr.iter().enumerate() {
+                let js = json_to_js(ctx, item)?;
+                a.set(i, js)?;
+            }
+            a.into_value()
+        }
+        JsonValue::Object(map) => {
+            let o = Object::new(ctx)?;
+            for (k, item) in map.iter() {
+                let js = json_to_js(ctx, item)?;
+                o.set(k.as_str(), js)?;
+            }
+            o.into_value()
+        }
+    })
 }
