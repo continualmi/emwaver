@@ -72,6 +72,7 @@ export default function CloudPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
   const [files, setFiles] = useState<CloudUserFile[]>([]);
+  const [isPro, setIsPro] = useState<boolean>(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [emwMode, setEmwMode] = useState<"editor" | "preview">("editor");
   const [viewerText, setViewerText] = useState<string>("");
@@ -114,7 +115,18 @@ export default function CloudPage() {
 
   async function refresh(token: string) {
     setError(null);
-    const [f, h] = await Promise.all([listFiles(token), listHostSessions(token)]);
+    const [entRes, f, h] = await Promise.all([
+      backendFetch("/v1/entitlements", token, { method: "GET" }),
+      listFiles(token),
+      listHostSessions(token),
+    ]);
+
+    const entText = await entRes.text();
+    if (!entRes.ok) throw new Error(entText || `HTTP ${entRes.status}`);
+    const ent = JSON.parse(entText) as { pro?: boolean };
+    const pro = !!ent.pro;
+    setIsPro(pro);
+
     setFiles(f);
     setHosts(h.hosts || []);
   }
@@ -143,6 +155,7 @@ export default function CloudPage() {
       if (!u) {
         setUserEmail(null);
         setIdToken("");
+        setIsPro(false);
         setFiles([]);
         setHosts([]);
         setSelectedHostId("");
@@ -604,6 +617,64 @@ export default function CloudPage() {
     } finally {
       setIsBusy(false);
     }
+  }
+
+  if (!userEmail) {
+    return (
+      <div className="min-h-dvh">
+        <SiteHeader />
+        <main className="mx-auto max-w-4xl px-5 pt-10 pb-14">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
+            <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">Dashboard</h1>
+            <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
+              The Dashboard is a Pro feature. Sign in to continue.
+            </p>
+            <div className="mt-6">
+              <button
+                onClick={doSignIn}
+                className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
+              >
+                Sign in with Google
+              </button>
+            </div>
+            {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
+          </div>
+        </main>
+        <SiteFooter />
+      </div>
+    );
+  }
+
+  if (!isPro) {
+    return (
+      <div className="min-h-dvh">
+        <SiteHeader />
+        <main className="mx-auto max-w-4xl px-5 pt-10 pb-14">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
+            <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">Dashboard</h1>
+            <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
+              The Dashboard is Pro-only.
+            </p>
+            <div className="mt-6 flex flex-wrap items-center gap-3">
+              <a
+                href="/pro"
+                className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
+              >
+                Get EMWaver Pro
+              </a>
+              <a
+                href="/account"
+                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+              >
+                Account
+              </a>
+            </div>
+            {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
+          </div>
+        </main>
+        <SiteFooter />
+      </div>
+    );
   }
 
   return (
