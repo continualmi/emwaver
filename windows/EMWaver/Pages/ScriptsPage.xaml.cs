@@ -121,6 +121,7 @@ public sealed partial class ScriptsPage : Page
     {
         Loaded -= OnLoaded;
         await RefreshAsync();
+        QueueEditorFocus();
     }
 
     // Monaco/WebView2 removed on Windows (unstable and non-native).
@@ -318,13 +319,7 @@ public sealed partial class ScriptsPage : Page
             PreviewHint.Visibility = Visibility.Visible;
 
             UpdateCommandStates();
-
-            // Improve UX: focus the editor automatically when a script is opened.
-            _ = DispatcherQueue.TryEnqueue(() =>
-            {
-                try { EditorBox.Focus(FocusState.Programmatic); }
-                catch { }
-            });
+            QueueEditorFocus();
 
             await Task.CompletedTask;
         });
@@ -428,8 +423,7 @@ public sealed partial class ScriptsPage : Page
     private string GetEditorTextNormalized()
     {
         var raw = (EditorBox.Text ?? string.Empty);
-        return NormalizeLineEndings(raw).TrimEnd('
-');
+        return NormalizeLineEndings(raw).TrimEnd('\n');
     }
 
     private static string NormalizeLineEndings(string text)
@@ -441,6 +435,26 @@ public sealed partial class ScriptsPage : Page
     private bool _isPreviewMode;
     private int _renderGeneration;
     private int _activeRenderGeneration;
+
+    private void QueueEditorFocus()
+    {
+        // Run after layout/selection settles so the first user interaction edits immediately.
+        _ = DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+        {
+            try
+            {
+                if (EditorPane.Visibility != Visibility.Visible || EditorBox.IsReadOnly)
+                {
+                    return;
+                }
+
+                EditorBox.Focus(FocusState.Programmatic);
+                EditorBox.SelectionStart = EditorBox.Text?.Length ?? 0;
+                EditorBox.SelectionLength = 0;
+            }
+            catch { }
+        });
+    }
 
     private void SetPreviewMode(bool preview)
     {
@@ -483,8 +497,7 @@ public sealed partial class ScriptsPage : Page
             // Make the editor immediately interactive when returning.
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                try { EditorBox.Focus(FocusState.Programmatic); }
-                catch { }
+                QueueEditorFocus();
             });
         }
 
