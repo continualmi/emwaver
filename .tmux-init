@@ -2,27 +2,33 @@
 SESSION=$1
 PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 
-# Window 1: Git (only thing that auto-runs)
+# Window 1: Dev (lazygit + backend + frontend) — 3 panes, all auto-run
 # Force the first pane to the correct directory just in case
 tmux send-keys -t $SESSION:1 'cd ' "$PROJECT_DIR" C-m
 tmux clear-history -t $SESSION:1
 
-tmux rename-window -t $SESSION:1 'git'
-tmux send-keys -t $SESSION:1.1 'lazygit' C-m
+tmux rename-window -t $SESSION:1 'dev'
 
-# Window 2: Dev (Backend + Frontend) — auto-run
-PANE_BACKEND=$(tmux new-window -t $SESSION -n 'dev' -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_FRONTEND=$(tmux split-window -h -l 50% -t "$PANE_BACKEND" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+# Layout:
+#   [ lazygit ] | [ backend ]
+#              | [ frontend ]
+PANE_GIT=$(tmux display-message -p -t $SESSION:1.1 '#{pane_id}')
+PANE_RIGHT=$(tmux split-window -h -l 66% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_BACKEND="$PANE_RIGHT"
 
-# Backend
+# lazygit
+tmux send-keys -t "$PANE_GIT" 'lazygit' C-m
+
+# backend
 tmux send-keys -t "$PANE_BACKEND" 'cd backend' C-m
 tmux send-keys -t "$PANE_BACKEND" 'python app.py' C-m
 
-# Frontend
+# frontend
 tmux send-keys -t "$PANE_FRONTEND" 'cd frontend' C-m
 tmux send-keys -t "$PANE_FRONTEND" 'npm run dev' C-m
 
-# Window 3: Dev Ops (2x2 Grid) — typed only
+# Window 2: Dev Ops (2x2 Grid) — typed only
 # Android | SecureWaver (tauri)
 # emwaver.sh | emwaver daemon TUI
 
@@ -37,7 +43,7 @@ tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver && npm run tauri'
 tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
-# Window 4: Codex (2x2 Grid) — runs in all panes
+# Window 3: Codex (2x2 Grid) — runs in all panes
 PANE_CODEX_TL=$(tmux new-window -t $SESSION -n 'codex' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_CODEX_TR=$(tmux split-window -h -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_CODEX_BL=$(tmux split-window -v -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
