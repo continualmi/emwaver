@@ -986,7 +986,7 @@ public sealed partial class ScriptsPage : Page
             var baseRaw = (AppServices.CloudConfig.BackendBaseUrl ?? "").Trim();
             if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))
             {
-                await ShowInfoAsync("Sync", "Backend URL is not configured (EMWAVER_BACKEND_URL).");
+                await ShowInfoAsync("Sync", "Backend URL is not configured (Settings → Backend).");
                 return;
             }
 
