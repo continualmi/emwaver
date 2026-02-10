@@ -14,7 +14,9 @@ internal sealed class AppSettings
     {
         // Backend selection
         public bool UseProductionBackend { get; set; } = true;
-        public string LocalBackendUrl { get; set; } = "http://127.0.0.1:8787";
+
+        // Frontend selection (used by web-first sign-in and purchase flows).
+        public bool UseProductionFrontend { get; set; } = true;
     }
 
     private static string GetSettingsPath()
@@ -43,15 +45,11 @@ internal sealed class AppSettings
 
             var model = JsonSerializer.Deserialize<SettingsModel>(json) ?? new SettingsModel();
 
-            // Sanity.
-            if (string.IsNullOrWhiteSpace(model.LocalBackendUrl))
-            {
-                model.LocalBackendUrl = "http://127.0.0.1:8787";
-            }
+            var needsSave = needsScrub;
 
-            if (needsScrub)
+            if (needsSave)
             {
-                // Best-effort: rewrite without legacy keys.
+                // Best-effort: rewrite migrated/sanitized settings.
                 try { Save(model); } catch { }
             }
 
@@ -105,13 +103,13 @@ internal sealed class AppSettings
         }
     }
 
-    public string LocalBackendUrl
+    public bool UseProductionFrontend
     {
         get
         {
             lock (_lock)
             {
-                return Load().LocalBackendUrl ?? "";
+                return Load().UseProductionFrontend;
             }
         }
         set
@@ -119,10 +117,11 @@ internal sealed class AppSettings
             lock (_lock)
             {
                 var m = Load();
-                m.LocalBackendUrl = value ?? "";
+                m.UseProductionFrontend = value;
                 Save(m);
             }
             Changed?.Invoke();
         }
     }
+
 }
