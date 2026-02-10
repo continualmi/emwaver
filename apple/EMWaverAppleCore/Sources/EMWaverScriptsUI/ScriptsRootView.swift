@@ -330,12 +330,22 @@ public struct ScriptsRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
+                        let allowAnonSync = (
+                            ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1"
+                        )
+                        let cloudIndicatorsEnabled: Bool = {
+                            guard let provider = syncProvider else { return false }
+                            guard let ctx = provider() else { return false }
+                            return !ctx.accessToken.isEmpty || allowAnonSync
+                        }()
+
                         if !viewModel.assetScripts.isEmpty {
                             Section("Example Scripts") {
                                 ForEach(viewModel.assetScripts) { script in
                                     ScriptRow(
                                         script: script,
                                         isSelected: script.id == viewModel.selectedScriptId,
+                                        showCloudIndicators: cloudIndicatorsEnabled,
                                         onTap: { previewScript(script.id) },
                                         onEdit: { openEditor(for: script.id) }
                                     )
@@ -351,6 +361,7 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: script,
                                         isSelected: script.id == viewModel.selectedScriptId,
+                                        showCloudIndicators: cloudIndicatorsEnabled,
                                         onTap: { previewScript(script.id) },
                                         onEdit: { openEditor(for: script.id) }
                                     )
@@ -366,6 +377,7 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: item,
                                         isSelected: false,
+                                        showCloudIndicators: cloudIndicatorsEnabled,
                                         onTap: { openSignalEditor(item) },
                                         onEdit: { openSignalEditor(item) }
                                     )
@@ -998,6 +1010,7 @@ private struct EmwFileBadgeIcon: View {
 private struct ScriptRow: View {
     let script: ScriptsViewModel.ScriptListItem
     let isSelected: Bool
+    let showCloudIndicators: Bool
     let onTap: () -> Void
     let onEdit: () -> Void
 
@@ -1022,10 +1035,12 @@ private struct ScriptRow: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Image(systemName: script.syncStatus.iconSystemName)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .accessibilityLabel(Text(script.syncStatus.rawValue))
+                    if showCloudIndicators, !script.isAsset {
+                        Image(systemName: script.syncStatus.iconSystemName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(Text(script.syncStatus.rawValue))
+                    }
 
                     if script.isDirty {
                         Text("Unsaved changes")
