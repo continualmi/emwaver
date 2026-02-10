@@ -159,6 +159,7 @@ export default function ProPage() {
           <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">EMWaver Pro</h1>
           <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
             Pro unlocks cloud features + the Agent experience. To subscribe, you must be signed in and have at least one verified genuine EMWaver device attached to your account.
+            Pro includes EMWaver-managed inference credits, and also supports unlimited BYOK/BYO third‑party providers.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
@@ -195,9 +196,14 @@ export default function ProPage() {
                       <td className="px-3 py-2">Yes</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">ELM Credits (monthly)</td>
+                      <td className="px-3 py-2">ELM credits (tokens / month)</td>
                       <td className="px-3 py-2">—</td>
-                      <td className="px-3 py-2">Included</td>
+                      <td className="px-3 py-2">10M tokens / month</td>
+                    </tr>
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">BYOK / third‑party providers</td>
+                      <td className="px-3 py-2">Yes</td>
+                      <td className="px-3 py-2">Unlimited</td>
                     </tr>
                   </tbody>
                 </table>
