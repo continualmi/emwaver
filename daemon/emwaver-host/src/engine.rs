@@ -137,17 +137,17 @@ fn json_to_js<'js>(ctx: Ctx<'js>, v: &JsonValue) -> Result<JsValue<'js>> {
             js_s.into_value()
         }
         JsonValue::Array(arr) => {
-            let a = Array::new(ctx)?;
+            let a = Array::new(ctx.clone())?;
             for (i, item) in arr.iter().enumerate() {
-                let js = json_to_js(ctx, item)?;
+                let js = json_to_js(ctx.clone(), item)?;
                 a.set(i, js)?;
             }
             a.into_value()
         }
         JsonValue::Object(map) => {
-            let o = Object::new(ctx)?;
+            let o = Object::new(ctx.clone())?;
             for (k, item) in map.iter() {
-                let js = json_to_js(ctx, item)?;
+                let js = json_to_js(ctx.clone(), item)?;
                 o.set(k.as_str(), js)?;
             }
             o.into_value()
