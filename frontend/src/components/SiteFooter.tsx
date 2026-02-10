@@ -16,19 +16,11 @@ export function SiteFooter() {
           <a className="block hover:text-[color:var(--ink)]" href="/order">
             Order
           </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/news">
-            News
+          <a className="block hover:text-[color:var(--ink)]" href="/society">
+            EMWaver Society
           </a>
-        </div>
-
-        <div className="space-y-2 text-sm text-[color:var(--ink-dim)]">
-          <a
-            className="block hover:text-[color:var(--ink)]"
-            href="https://www.youtube.com/@EMWavers"
-            target="_blank"
-            rel="noreferrer"
-          >
-            YouTube
+          <a className="block hover:text-[color:var(--ink)]" href="/society/videos">
+            Videos
           </a>
         </div>
       </div>

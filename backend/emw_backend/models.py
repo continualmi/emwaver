@@ -247,3 +247,95 @@ class UserDevice(Base):
             "updated_at_ms": int(self.updated_at_ms or 0),
             "last_seen_at_ms": int(self.last_seen_at_ms or 0),
         }
+
+
+# --- EMWaver Society (community) ---
+
+
+class SocietyPost(Base):
+    __tablename__ = "society_posts"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+
+    # announcement|discussion|script|video
+    kind: Mapped[str] = mapped_column(String(32), index=True, default="discussion")
+
+    title: Mapped[str] = mapped_column(String(256), default="")
+    summary: Mapped[str] = mapped_column(String(512), default="")
+
+    # Markdown body (or script/video details).
+    body_md: Mapped[str] = mapped_column(Text, default="")
+
+    # Optional canonical slug for frontend routes.
+    slug: Mapped[str] = mapped_column(String(256), default="", index=True)
+
+    # Author (nullable for imported/official announcements).
+    firebase_uid: Mapped[Optional[str]] = mapped_column(String(128), nullable=True, index=True)
+    author_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    author_display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+    tags_json: Mapped[str] = mapped_column(Text, default="[]")
+
+    published: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0/1
+    pinned: Mapped[int] = mapped_column(Integer, default=0, index=True)  # 0/1
+    locked: Mapped[int] = mapped_column(Integer, default=0)  # 0/1
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+    def to_public_dict(self, include_body: bool = False):
+        d = {
+            "id": self.id,
+            "kind": self.kind,
+            "slug": self.slug,
+            "title": self.title,
+            "summary": self.summary,
+            "tags": self.tags_json,
+            "pinned": int(self.pinned or 0),
+            "locked": int(self.locked or 0),
+            "created_at_ms": int(self.created_at_ms or 0),
+            "updated_at_ms": int(self.updated_at_ms or 0),
+            "author": {
+                "firebase_uid": self.firebase_uid,
+                "display_name": self.author_display_name,
+            },
+        }
+        if include_body:
+            d["body_md"] = self.body_md
+        return d
+
+
+Index("idx_society_posts_kind_created", SocietyPost.kind, SocietyPost.created_at_ms)
+Index("idx_society_posts_published_created", SocietyPost.published, SocietyPost.created_at_ms)
+
+
+class SocietyComment(Base):
+    __tablename__ = "society_comments"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    post_id: Mapped[str] = mapped_column(String(36), ForeignKey("society_posts.id"), index=True)
+
+    firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
+    author_email: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    author_display_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+
+    body_md: Mapped[str] = mapped_column(Text, default="")
+
+    created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+    def to_public_dict(self):
+        return {
+            "id": self.id,
+            "post_id": self.post_id,
+            "body_md": self.body_md,
+            "created_at_ms": int(self.created_at_ms or 0),
+            "updated_at_ms": int(self.updated_at_ms or 0),
+            "author": {
+                "firebase_uid": self.firebase_uid,
+                "display_name": self.author_display_name,
+            },
+        }
+
+
+Index("idx_society_comments_post_created", SocietyComment.post_id, SocietyComment.created_at_ms)
