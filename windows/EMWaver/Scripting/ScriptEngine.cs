@@ -442,8 +442,10 @@ public sealed class ScriptEngine : IDisposable
         // Minimal filesystem/path helpers used by built-in scripts.
         engine.SetValue("_scriptAppDataDir", new Func<string>(() =>
         {
-            var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "EMWaver");
-            return root;
+            var scriptsDir = GetScriptsDataDir();
+            MigrateLegacySignalsToScriptsDir(scriptsDir);
+            Directory.CreateDirectory(scriptsDir);
+            return scriptsDir;
         }));
 
         engine.SetValue("_scriptPathJoin", new Func<JsValue, string>(partsValue =>
@@ -554,6 +556,48 @@ public sealed class ScriptEngine : IDisposable
             }
         }
         return NativeBufferRust.GetRxSnapshot();
+    }
+
+    private static string GetScriptsDataDir()
+    {
+        return Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EMWaver",
+            "Scripts"
+        );
+    }
+
+    private static void MigrateLegacySignalsToScriptsDir(string scriptsDir)
+    {
+        try
+        {
+            var legacySignalsDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "EMWaver",
+                "Signals"
+            );
+            if (!Directory.Exists(legacySignalsDir)) return;
+
+            Directory.CreateDirectory(scriptsDir);
+
+            foreach (var src in Directory.EnumerateFiles(legacySignalsDir, "*", SearchOption.TopDirectoryOnly))
+            {
+                var ext = Path.GetExtension(src);
+                if (!string.Equals(ext, ".raw", StringComparison.OrdinalIgnoreCase) &&
+                    !string.Equals(ext, ".txt", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var dst = Path.Combine(scriptsDir, Path.GetFileName(src));
+                if (File.Exists(dst)) continue;
+                File.Copy(src, dst, overwrite: false);
+            }
+        }
+        catch
+        {
+            // Best-effort migration only.
+        }
     }
 
     private static string BuildSignedRawTimingsText(byte[] bytes, int tickUs)
