@@ -106,10 +106,9 @@ struct DeviceConnectionSheet: View {
                 }
             }
 
-            Spacer(minLength: 0)
         }
         .padding(16)
-        .frame(minWidth: 520, minHeight: 380)
+        .frame(minWidth: 520, minHeight: 280)
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
         }
