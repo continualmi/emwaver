@@ -14,8 +14,8 @@ Local dev (recommended)
 
 2) Configure env:
 
-  # Local dev without auth (bypasses Firebase token checks)
-  export EMWAVER_AUTH_MODE=disabled
+  # Auth is always enforced (Firebase ID tokens)
+  export FIREBASE_PROJECT_ID=emwaver-64527
 
   # Optional: CORS
   export CORS_ORIGINS=*
@@ -38,13 +38,12 @@ Local dev (recommended)
   curl "http://127.0.0.1:8787/v1/files?kind=script&ext=.emw&include_content=0"
 
 
-Auth (Firebase) mode
+Auth (Firebase)
 
-- For real auth, the backend expects:
+- Backend expects:
   Authorization: Bearer <firebase_id_token>
 
 - Required env:
-  export EMWAVER_AUTH_MODE=firebase
   export FIREBASE_PROJECT_ID=...  # Firebase project id
 
 
@@ -53,15 +52,14 @@ Docker
   # Build from repo root so Docker can access repo-wide requirements.txt
   docker build -f backend/Dockerfile -t emwaver-backend .
 
-  # Local dev without auth
   docker run --rm -p 8787:8787 \
-    -e EMWAVER_AUTH_MODE=disabled \
+    -e FIREBASE_PROJECT_ID=... \
     -e CORS_ORIGINS='*' \
     emwaver-backend
 
   # With agent chat enabled
   docker run --rm -p 8787:8787 \
-    -e EMWAVER_AUTH_MODE=disabled \
+    -e FIREBASE_PROJECT_ID=... \
     -e OPENROUTER_API_KEY=... \
     emwaver-backend
 

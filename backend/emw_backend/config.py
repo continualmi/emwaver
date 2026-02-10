@@ -24,7 +24,6 @@ class Config:
     provisioning_mint_rate_limit_per_minute: int
 
     # Auth
-    auth_mode: str
     firebase_project_id: str
     auth_debug: bool
 
@@ -69,7 +68,6 @@ class Config:
             provisioning_allowed_email=_env("EMWAVER_PROVISIONING_ALLOWED_EMAIL", "maarnotto@gmail.com"),
             provisioning_mint_rate_limit_per_minute=int(_env("EMWAVER_PROVISIONING_MINT_RPM", "60") or "60"),
 
-            auth_mode=_env("EMWAVER_AUTH_MODE", "firebase"),
             firebase_project_id=_env("FIREBASE_PROJECT_ID", ""),
             auth_debug=_env("EMWAVER_AUTH_DEBUG", "0") in ("1", "true", "yes", "on"),
             azure_storage_account=_env("AZURE_STORAGE_ACCOUNT", ""),

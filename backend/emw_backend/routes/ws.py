@@ -48,10 +48,6 @@ def _bearer_or_query_token() -> str:
 
 
 def verify_ws_identity(config: Config) -> Optional[VerifiedIdentity]:
-    # Dev escape hatch.
-    if config.auth_mode == "disabled":
-        return VerifiedIdentity(uid="dev-user", email=None, display_name="Dev User")
-
     token = _bearer_or_query_token()
     if not token:
         return None
