@@ -14,7 +14,7 @@ tmux rename-window -t $SESSION:1 'dev'
 #              | [ frontend ]
 PANE_GIT=$(tmux display-message -p -t $SESSION:1.1 '#{pane_id}')
 # Make lazygit pane narrower (left), leave more space for backend/frontend
-PANE_RIGHT=$(tmux split-window -h -l 75% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_BACKEND="$PANE_RIGHT"
 
