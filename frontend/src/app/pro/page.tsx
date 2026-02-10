@@ -15,6 +15,12 @@ type Eligibility = {
   hasDeviceAttached: boolean;
 };
 
+type Credits = {
+  balance: number;
+  monthlyAllowance: number;
+  resetsAt?: string | null;
+};
+
 export default function ProPage() {
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
 
@@ -25,12 +31,14 @@ export default function ProPage() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
   const [eligibility, setEligibility] = useState<Eligibility | null>(null);
+  const [credits, setCredits] = useState<Credits | null>(null);
 
   useEffect(() => {
     if (!auth) return;
     return onAuthStateChanged(auth, async (u) => {
       setError(null);
       setEligibility(null);
+      setCredits(null);
 
       if (!u) {
         setIdToken("");
@@ -46,6 +54,7 @@ export default function ProPage() {
   useEffect(() => {
     if (!idToken) return;
     void refreshEligibility();
+    void refreshCredits();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idToken]);
 
@@ -58,6 +67,19 @@ export default function ProPage() {
       setEligibility(JSON.parse(text) as Eligibility);
     } catch (e: any) {
       setError(String(e?.message || e));
+    }
+  }
+
+  async function refreshCredits() {
+    if (!idToken) return;
+    try {
+      const res = await backendFetch("/v1/credits", idToken, { method: "GET" });
+      const text = await res.text();
+      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+      setCredits(JSON.parse(text) as Credits);
+    } catch {
+      // Credits are new; keep the page usable even if backend isn't updated yet.
+      setCredits(null);
     }
   }
 
@@ -141,13 +163,49 @@ export default function ProPage() {
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Includes</div>
-              <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-[color:var(--ink-dim)]">
-                <li>Remote host sessions</li>
-                <li>File storage + sync across devices</li>
-                <li>AI Agent (Pro-only)</li>
-                <li>EMWaver-managed inference (no BYO key requirement)</li>
-              </ul>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Free vs Pro</div>
+              <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--line)]">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[color:var(--surface-2)] text-[color:var(--ink)]">
+                    <tr>
+                      <th className="px-3 py-2 font-semibold">Feature</th>
+                      <th className="px-3 py-2 font-semibold">Free</th>
+                      <th className="px-3 py-2 font-semibold">Pro</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-[color:var(--ink-dim)]">
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">Local USB scripting</td>
+                      <td className="px-3 py-2">Yes</td>
+                      <td className="px-3 py-2">Yes</td>
+                    </tr>
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">Remote host sessions</td>
+                      <td className="px-3 py-2">No</td>
+                      <td className="px-3 py-2">Yes</td>
+                    </tr>
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">Cloud file sync</td>
+                      <td className="px-3 py-2">No</td>
+                      <td className="px-3 py-2">Yes</td>
+                    </tr>
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">Agent (ELM)</td>
+                      <td className="px-3 py-2">No</td>
+                      <td className="px-3 py-2">Yes</td>
+                    </tr>
+                    <tr className="border-t border-[color:var(--line)]">
+                      <td className="px-3 py-2">ELM Credits (monthly)</td>
+                      <td className="px-3 py-2">—</td>
+                      <td className="px-3 py-2">Included</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="mt-4 text-xs text-[color:var(--ink-dim)]">
+                Note: Pro purchase requires a signed-in account with at least one verified genuine EMWaver device attached.
+              </div>
             </div>
 
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
@@ -169,6 +227,19 @@ export default function ProPage() {
                       )
                     ) : (
                       <span>Checking…</span>
+                    )}
+                  </div>
+                ) : null}
+
+                {idToken ? (
+                  <div>
+                    <span className="font-semibold text-[color:var(--ink)]">ELM Credits:</span>{" "}
+                    {credits ? (
+                      <span>
+                        {credits.balance} available{credits.monthlyAllowance ? ` / ${credits.monthlyAllowance} per month` : ""}
+                      </span>
+                    ) : (
+                      <span className="text-[color:var(--ink-dim)]">(coming soon)</span>
                     )}
                   </div>
                 ) : null}
