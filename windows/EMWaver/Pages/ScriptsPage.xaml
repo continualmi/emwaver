@@ -197,6 +197,22 @@
                             </StackPanel>
 
                             <TextBlock x:Name="AgentStatusText" Text="" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+
+                            <Border x:Name="AgentProNotice"
+                                    Visibility="Collapsed"
+                                    CornerRadius="8"
+                                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    Padding="10"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <TextBlock Text="ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
+                                               TextWrapping="Wrap"
+                                               Opacity="0.85"
+                                               VerticalAlignment="Center" />
+                                    <Button Content="Get EMWaver Pro…" Click="OnGetProClick" />
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
 
                         <ListView Grid.Row="1" x:Name="AgentMessagesList" />
@@ -208,7 +224,7 @@
                             </Grid.ColumnDefinitions>
 
                             <TextBox x:Name="AgentInput" PlaceholderText="Ask the agent..." />
-                            <Button Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
+                            <Button x:Name="AgentSendButton" Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
                         </Grid>
                     </Grid>
                 </Border>

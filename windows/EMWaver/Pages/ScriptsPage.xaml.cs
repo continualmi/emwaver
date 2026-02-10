@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Windows.Storage;
+using Windows.System;
 
 namespace EMWaver.Pages;
 
@@ -39,6 +40,8 @@ public sealed partial class ScriptsPage : Page
 
     private string? _agentConversationId;
     private CancellationTokenSource? _agentStreamCts;
+    private bool _agentEnabled;
+    private bool _cloudSyncEnabled;
 
 
     private ScriptInfo? _current;
@@ -121,6 +124,7 @@ public sealed partial class ScriptsPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
+        await RefreshEntitlementsUiAsync(force: true);
         await RefreshAsync();
         QueueEditorFocus();
     }
@@ -711,6 +715,12 @@ public sealed partial class ScriptsPage : Page
 
     private async void OnAgentSendClick(object sender, RoutedEventArgs e)
     {
+        if (!_agentEnabled)
+        {
+            AgentStatusText.Text = "ELM requires EMWaver Pro. Sending is locked.";
+            return;
+        }
+
         var text = AgentInput.Text?.Trim() ?? "";
         if (string.IsNullOrWhiteSpace(text)) return;
 
@@ -786,6 +796,13 @@ public sealed partial class ScriptsPage : Page
     {
         try
         {
+            await RefreshEntitlementsUiAsync(force: false);
+            if (!_agentEnabled)
+            {
+                AgentStatusText.Text = "ELM requires EMWaver Pro. You can read chats and type, but sending is locked.";
+                return;
+            }
+
             await RefreshAgentConversationsAsync();
 
             // Restore selection if we have a persisted conversation.
@@ -854,6 +871,41 @@ public sealed partial class ScriptsPage : Page
     private void SetAgentSending(bool sending)
     {
         AgentInput.IsEnabled = !sending;
+        AgentSendButton.IsEnabled = !sending && _agentEnabled;
+    }
+
+    private async Task RefreshEntitlementsUiAsync(bool force)
+    {
+        try
+        {
+            var snap = await AppServices.Entitlements.RefreshAsync(force: force, CancellationToken.None);
+            _agentEnabled = snap.Entitlements?.FeatureFlags.Agent ?? false;
+            _cloudSyncEnabled = snap.Entitlements?.FeatureFlags.CloudFiles ?? false;
+
+            await RunOnUiAsync(async () =>
+            {
+                AgentProNotice.Visibility = _agentEnabled ? Visibility.Collapsed : Visibility.Visible;
+                AgentSendButton.IsEnabled = _agentEnabled;
+                await Task.CompletedTask;
+            });
+        }
+        catch
+        {
+            // Best-effort.
+        }
+    }
+
+    private async void OnGetProClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
+            await Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex)
+        {
+            AgentStatusText.Text = ex.Message;
+        }
     }
 
     private void CancelAgentStream()
@@ -1002,6 +1054,14 @@ public sealed partial class ScriptsPage : Page
         {
             await ShowSyncProgressAsync("Preparing sync…");
             var allowAnonSync = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
+
+            await RefreshEntitlementsUiAsync(force: false);
+            if (!_cloudSyncEnabled && !allowAnonSync)
+            {
+                await HideSyncProgressAsync();
+                await ShowInfoAsync("Sync", "Cloud sync is available with EMWaver Pro. Upgrade to sync scripts and signals across devices.");
+                return;
+            }
 
             var baseRaw = (AppServices.CloudConfig.BackendBaseUrl ?? "").Trim();
             if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))

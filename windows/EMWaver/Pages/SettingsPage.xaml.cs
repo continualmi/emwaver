@@ -2,7 +2,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using EMWaver.Services.Cloud;
+using Windows.System;
 
 namespace EMWaver.Pages;
 
@@ -18,6 +20,7 @@ public sealed partial class SettingsPage : Page
     {
         Loaded -= OnLoaded;
         RefreshUi();
+        _ = RefreshProStatusAsync();
     }
 
     private void RefreshUi(string? message = null)
@@ -66,6 +69,57 @@ public sealed partial class SettingsPage : Page
         }
 
         _ = DispatcherQueue.TryEnqueue(Apply);
+    }
+
+    private async Task RefreshProStatusAsync()
+    {
+        try
+        {
+            var snap = await AppServices.Entitlements.RefreshAsync(force: true, CancellationToken.None);
+            var text = "You’re not eligible to subscribe yet.";
+
+            if (!AppServices.CloudAuth.IsSignedIn)
+            {
+                text = "To subscribe, sign in and attach a genuine EMWaver device to your account first.";
+            }
+            else if (snap.Entitlements?.Pro == true)
+            {
+                text = "EMWaver Pro is active.";
+            }
+            else if (snap.Eligibility?.CanPurchasePro == true)
+            {
+                text = "Eligible to subscribe.";
+            }
+            else if (string.Equals(snap.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
+            {
+                text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(snap.LastError))
+            {
+                text = snap.LastError!;
+            }
+
+            if (DispatcherQueue.HasThreadAccess)
+            {
+                ProStatusText.Text = text;
+            }
+            else
+            {
+                _ = DispatcherQueue.TryEnqueue(() => ProStatusText.Text = text);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (DispatcherQueue.HasThreadAccess)
+            {
+                ProStatusText.Text = ex.Message;
+            }
+            else
+            {
+                _ = DispatcherQueue.TryEnqueue(() => ProStatusText.Text = ex.Message);
+            }
+        }
     }
 
     private async void OnSignInClick(object sender, RoutedEventArgs e)
@@ -135,5 +189,23 @@ public sealed partial class SettingsPage : Page
 
         AppServices.Settings.UseProductionFrontend = useProd;
         RefreshUi("Frontend updated.");
+    }
+
+    private async void OnGetProClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
+            await Launcher.LaunchUriAsync(new Uri(url));
+        }
+        catch (Exception ex)
+        {
+            RefreshUi(ex.Message);
+        }
+    }
+
+    private async void OnRefreshProClick(object sender, RoutedEventArgs e)
+    {
+        await RefreshProStatusAsync();
     }
 }
