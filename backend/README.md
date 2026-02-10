@@ -31,7 +31,7 @@ Environment
 Auth / cloud sync
 
 - `FIREBASE_PROJECT_ID` (required for auth in prod) - used to verify Firebase ID tokens
-- `EMWAVER_AUTH_MODE` (optional, default: `firebase`) - set to `disabled` for local dev without auth
+- Auth is always enforced via Firebase ID tokens.
 - `DATABASE_URL` (optional, default: `sqlite:///./emwaver.db`) - Azure Postgres in prod (use `postgresql+psycopg://...`)
 
 Azure Blob storage
@@ -87,4 +87,4 @@ Notes
 Auth note
 
 - For v1, the backend expects `Authorization: Bearer <firebase_id_token>` on cloud sync endpoints.
-- For local dev, you can set `EMWAVER_AUTH_MODE=disabled` to bypass auth.
+- For local dev, set `FIREBASE_PROJECT_ID` and ensure you have a valid Firebase ID token.

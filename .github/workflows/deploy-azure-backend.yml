@@ -47,7 +47,6 @@ jobs:
             --resource-group "${{ secrets.AZURE_RESOURCE_GROUP }}" \
             --image "$IMAGE" \
             --set-env-vars \
-              EMWAVER_AUTH_MODE='${{ secrets.EMWAVER_AUTH_MODE }}' \
               EMWAVER_ALLOW_ANON_SYNC='${{ secrets.EMWAVER_ALLOW_ANON_SYNC }}' \
               DATABASE_URL='${{ secrets.DATABASE_URL }}' \
               AZURE_STORAGE_CONNECTION_STRING='${{ secrets.AZURE_STORAGE_CONNECTION_STRING }}' \
