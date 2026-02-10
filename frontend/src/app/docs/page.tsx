@@ -24,6 +24,13 @@ export default function DocsIndex() {
         </li>
       </ul>
 
+      <h2>Headless</h2>
+      <ul>
+        <li>
+          <Link href="/docs/daemon">EMWaver Daemon</Link>: run scripts as a background service.
+        </li>
+      </ul>
+
       <h2>Hardware</h2>
       <ul>
         <li>
