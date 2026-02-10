@@ -838,7 +838,11 @@ public struct ScriptsRootView: View {
                             await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
                         }
                     } label: {
+                        #if canImport(AppKit)
+                        Image(systemName: "icloud.circle")
+                        #else
                         Image(systemName: "arrow.triangle.2.circlepath")
+                        #endif
                     }
                     .help("Sync")
                 }
