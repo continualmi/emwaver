@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Threading;
+using EMWaver.Services.Cloud;
 
 namespace EMWaver.Pages;
 
@@ -31,6 +32,7 @@ public sealed partial class SettingsPage : Page
             SignOutButton.IsEnabled = signedIn;
 
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
+            FrontendUrlText.Text = FrontendUrl.Resolve();
 
             // Backend mode
             var prod = AppServices.Settings.UseProductionBackend;
@@ -46,6 +48,20 @@ public sealed partial class SettingsPage : Page
 
             LocalBackendUrlBox.Text = AppServices.Settings.LocalBackendUrl;
             LocalBackendUrlBox.IsEnabled = !prod;
+
+            var frontendProd = AppServices.Settings.UseProductionFrontend;
+            var frontendDesiredTag = frontendProd ? "prod" : "local";
+            foreach (var item in FrontendModeCombo.Items)
+            {
+                if (item is ComboBoxItem cbi && (cbi.Tag as string) == frontendDesiredTag)
+                {
+                    FrontendModeCombo.SelectedItem = cbi;
+                    break;
+                }
+            }
+
+            LocalFrontendUrlBox.Text = AppServices.Settings.LocalFrontendUrl;
+            LocalFrontendUrlBox.IsEnabled = !frontendProd;
         }
 
         // UI updates must happen on the UI thread.
@@ -62,9 +78,25 @@ public sealed partial class SettingsPage : Page
     {
         try
         {
+            var url = AppServices.CloudAuth.BuildSigninUrl();
+            await Windows.System.Launcher.LaunchUriAsync(url);
+            RefreshUi("Complete sign-in in browser, then paste the one-time handoff code and press Continue.");
+        }
+        catch (Exception ex)
+        {
+            RefreshUi(ex.Message);
+        }
+    }
+
+    private async void OnConsumeHandoffClick(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var code = (HandoffCodeBox.Text ?? "").Trim();
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            await AppServices.CloudAuth.SignInInteractiveAsync(cts.Token);
-            RefreshUi("OK");
+            await AppServices.CloudAuth.SignInWithHandoffCodeAsync(code, cts.Token);
+            HandoffCodeBox.Text = string.Empty;
+            RefreshUi("Signed in.");
         }
         catch (Exception ex)
         {
@@ -111,5 +143,30 @@ public sealed partial class SettingsPage : Page
         }
 
         RefreshUi("Local backend URL updated.");
+    }
+
+    private void OnFrontendModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (FrontendModeCombo.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var tag = (item.Tag as string) ?? "prod";
+        var useProd = tag != "local";
+
+        AppServices.Settings.UseProductionFrontend = useProd;
+        LocalFrontendUrlBox.IsEnabled = !useProd;
+        RefreshUi("Frontend updated.");
+    }
+
+    private void OnLocalFrontendUrlChanged(object sender, TextChangedEventArgs e)
+    {
+        var v = (LocalFrontendUrlBox.Text ?? "").Trim();
+        AppServices.Settings.LocalFrontendUrl = v;
+        if (!AppServices.Settings.UseProductionFrontend)
+        {
+            RefreshUi("Local frontend URL updated.");
+        }
     }
 }

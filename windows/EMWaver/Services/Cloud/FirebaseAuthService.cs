@@ -73,4 +73,53 @@ internal sealed class FirebaseAuthService
 
         return new FirebaseSession(idToken!, refresh!, expires);
     }
+
+    internal async Task<FirebaseSession> SignInWithCustomTokenAsync(string firebaseWebApiKey, string customToken, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(firebaseWebApiKey))
+        {
+            throw new InvalidOperationException("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)");
+        }
+        if (string.IsNullOrWhiteSpace(customToken))
+        {
+            throw new InvalidOperationException("Missing Firebase custom token");
+        }
+
+        var url = $"https://identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key={Uri.EscapeDataString(firebaseWebApiKey)}";
+        var payload = new
+        {
+            token = customToken,
+            returnSecureToken = true,
+        };
+
+        var json = JsonSerializer.Serialize(payload);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var res = await _http.PostAsync(url, content, ct);
+        var resJson = await res.Content.ReadAsStringAsync(ct);
+
+        if (!res.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException("Firebase signInWithCustomToken failed: " + resJson);
+        }
+
+        using var doc = JsonDocument.Parse(resJson);
+        var root = doc.RootElement;
+
+        var idToken = root.TryGetProperty("idToken", out var it) ? it.GetString() : null;
+        var refresh = root.TryGetProperty("refreshToken", out var rt) ? rt.GetString() : null;
+        var expiresInStr = root.TryGetProperty("expiresIn", out var ex) ? ex.GetString() : null;
+
+        if (string.IsNullOrWhiteSpace(idToken) || string.IsNullOrWhiteSpace(refresh))
+        {
+            throw new InvalidOperationException("Firebase response missing idToken/refreshToken");
+        }
+
+        var expires = 3600;
+        if (!string.IsNullOrWhiteSpace(expiresInStr) && int.TryParse(expiresInStr, out var parsed))
+        {
+            expires = parsed;
+        }
+
+        return new FirebaseSession(idToken!, refresh!, expires);
+    }
 }

@@ -1,5 +1,8 @@
 using System;
+using System.Diagnostics;
 using System.IO;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,8 +16,8 @@ internal sealed class CloudAuthManager
     private const string KeyRefreshToken = "cloud.firebase.refreshToken";
 
     private readonly CloudConfig _cfg;
-    private readonly GoogleOAuthPkce _google;
     private readonly FirebaseAuthService _firebase;
+    private readonly HttpClient _http = new();
 
     private string? _idToken;
     private string? _refreshToken;
@@ -24,7 +27,6 @@ internal sealed class CloudAuthManager
     internal CloudAuthManager(CloudConfig cfg, GoogleOAuthPkce google, FirebaseAuthService firebase)
     {
         _cfg = cfg;
-        _google = google;
         _firebase = firebase;
 
         // Best-effort hydrate tokens so IsSignedIn works in unpackaged runs.
@@ -71,13 +73,58 @@ internal sealed class CloudAuthManager
         return await SignInInteractiveAsync(ct);
     }
 
-    internal async Task<string> SignInInteractiveAsync(CancellationToken ct)
+    internal Task<string> SignInInteractiveAsync(CancellationToken ct)
     {
-        var googleTokens = await _google.AuthorizeAsync(_cfg.GoogleClientId, _cfg.GoogleClientSecret, ct);
-        var session = await _firebase.SignInWithGoogleAsync(
+        _ = ct;
+        if (string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
+        {
+            throw new InvalidOperationException("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)");
+        }
+
+        var signin = BuildSigninUrl();
+        OpenBrowser(signin.ToString());
+
+        return Task.FromException<string>(new InvalidOperationException(
+            "Complete sign-in in your browser, then paste the one-time EMW handoff code in Settings."
+        ));
+    }
+
+    internal async Task<string> SignInWithHandoffCodeAsync(string code, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
+        {
+            throw new InvalidOperationException("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)");
+        }
+
+        var trimmed = (code ?? "").Trim().ToUpperInvariant();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            throw new InvalidOperationException("Missing handoff code");
+        }
+
+        var consume = new Uri(new Uri(_cfg.BackendBaseUrl.TrimEnd('/') + "/"), "v1/auth/handoff/consume");
+        using var req = new HttpRequestMessage(HttpMethod.Post, consume)
+        {
+            Content = JsonContent.Create(new { code = trimmed })
+        };
+        using var res = await _http.SendAsync(req, ct);
+        var resJson = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(resJson) ? $"HTTP {(int)res.StatusCode}" : resJson);
+        }
+
+        using var doc = JsonDocument.Parse(resJson);
+        var root = doc.RootElement;
+        var customToken = root.TryGetProperty("firebase_custom_token", out var tokenEl) ? tokenEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(customToken))
+        {
+            throw new InvalidOperationException("Missing firebase_custom_token");
+        }
+
+        var session = await _firebase.SignInWithCustomTokenAsync(
             firebaseWebApiKey: _cfg.FirebaseWebApiKey,
-            googleIdToken: googleTokens.IdToken,
-            googleAccessToken: googleTokens.AccessToken,
+            customToken: customToken!,
             ct: ct
         );
 
@@ -92,6 +139,23 @@ internal sealed class CloudAuthManager
         TrySavePersisted();
 
         return _idToken ?? "";
+    }
+
+    internal Uri BuildSigninUrl()
+    {
+        var baseUrl = FrontendUrl.Resolve().TrimEnd('/');
+        var redirect = Uri.EscapeDataString("/auth/handoff");
+        return new Uri($"{baseUrl}/signin?redirect={redirect}");
+    }
+
+    private static void OpenBrowser(string url)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true,
+        };
+        Process.Start(psi);
     }
 
     internal void SignOut()

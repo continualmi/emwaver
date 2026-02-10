@@ -15,6 +15,10 @@ internal sealed class AppSettings
         // Backend selection
         public bool UseProductionBackend { get; set; } = true;
         public string LocalBackendUrl { get; set; } = "http://127.0.0.1:8787";
+
+        // Frontend selection (used by web-first sign-in and purchase flows).
+        public bool UseProductionFrontend { get; set; } = true;
+        public string LocalFrontendUrl { get; set; } = "http://127.0.0.1:3000";
     }
 
     private static string GetSettingsPath()
@@ -47,6 +51,11 @@ internal sealed class AppSettings
             if (string.IsNullOrWhiteSpace(model.LocalBackendUrl))
             {
                 model.LocalBackendUrl = "http://127.0.0.1:8787";
+            }
+
+            if (string.IsNullOrWhiteSpace(model.LocalFrontendUrl))
+            {
+                model.LocalFrontendUrl = "http://127.0.0.1:3000";
             }
 
             if (needsScrub)
@@ -120,6 +129,48 @@ internal sealed class AppSettings
             {
                 var m = Load();
                 m.LocalBackendUrl = value ?? "";
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public bool UseProductionFrontend
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().UseProductionFrontend;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.UseProductionFrontend = value;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public string LocalFrontendUrl
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().LocalFrontendUrl ?? "";
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.LocalFrontendUrl = value ?? "";
                 Save(m);
             }
             Changed?.Invoke();
