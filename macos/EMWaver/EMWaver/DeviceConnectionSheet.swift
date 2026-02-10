@@ -3,6 +3,7 @@ import SwiftUI
 struct DeviceConnectionSheet: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
+    @EnvironmentObject private var auth: AuthenticationManager
     @Environment(\.dismiss) private var dismiss
 
     private var statusLabel: (text: String, icon: String) {
@@ -59,6 +60,27 @@ struct DeviceConnectionSheet: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
+                    if device.isSecureConnected {
+                        Text(device.deviceAttachStatusText ?? "Device verified")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        if auth.isSignedIn,
+                           let deviceId = device.secureDeviceIdB64,
+                           let proof = device.secureDeviceProofB64,
+                           !deviceId.isEmpty,
+                           !proof.isEmpty {
+                            Button("Attach device to my account") {
+                                Task { await attachDevice(deviceIdB64: deviceId, proofB64: proof) }
+                            }
+                            .buttonStyle(.bordered)
+                        } else if device.isSecureConnected {
+                            Text("Sign in to attach this device to your account for recovery/support.")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     HStack {
                         Button("Disconnect") {
                             device.disconnect()
@@ -111,6 +133,48 @@ struct DeviceConnectionSheet: View {
         .frame(minWidth: 520, minHeight: 280)
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
+        }
+    }
+
+    private func attachDevice(deviceIdB64: String, proofB64: String) async {
+        guard let base = BackendUrl.resolve() else {
+            device.deviceAttachStatusText = "Missing backend URL"
+            return
+        }
+        guard let tok = auth.session?.idToken, !tok.isEmpty else {
+            device.deviceAttachStatusText = "Sign in required"
+            return
+        }
+
+        device.deviceAttachStatusText = "Attaching…"
+
+        do {
+            var url = base
+            url.appendPathComponent("v1")
+            url.appendPathComponent("devices")
+            url.appendPathComponent("attach")
+
+            var req = URLRequest(url: url)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Accept")
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.setValue("Bearer \(tok)", forHTTPHeaderField: "Authorization")
+            req.httpBody = try JSONSerialization.data(withJSONObject: [
+                "device_id_b64": deviceIdB64,
+                "proof_b64": proofB64,
+            ])
+
+            let (data, res) = try await URLSession.shared.data(for: req)
+            let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+            if code < 200 || code >= 300 {
+                let msg = String(data: data, encoding: .utf8) ?? ""
+                device.deviceAttachStatusText = msg.isEmpty ? "Attach failed (HTTP \(code))" : msg
+                return
+            }
+
+            device.deviceAttachStatusText = "Device saved to account"
+        } catch {
+            device.deviceAttachStatusText = error.localizedDescription
         }
     }
 }
