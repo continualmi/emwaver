@@ -26,5 +26,5 @@ hostname = "0.4"
 # JS engine (QuickJS)
 rquickjs = { version = "0.9", features = ["loader", "macro"] }
 
-# USB MIDI (Linux host)
+# USB MIDI SysEx transport (cross-platform)
 midir = "0.10"
