@@ -25,6 +25,6 @@ internal static class FrontendUrl
             return env;
         }
 
-        return "http://127.0.0.1:3000";
+        return "http://localhost:3000";
     }
 }
