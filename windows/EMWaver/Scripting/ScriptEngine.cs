@@ -255,6 +255,12 @@ public sealed class ScriptEngine : IDisposable
                     return;
                 }
 
+                if (tree == null)
+                {
+                    EmitError("Script render produced no tree.");
+                    return;
+                }
+
                 Debug.WriteLine($"[EMWaver][Script][Render] rootType={tree.Root.Type} rootId={tree.Root.Id}");
                 _renderHandler?.Invoke(tree);
             }
@@ -645,6 +651,12 @@ public sealed class ScriptEngine : IDisposable
         Dictionary<string, object?> rootDict;
         try
         {
+            if (_engine == null)
+            {
+                error = "engine unavailable";
+                return null;
+            }
+
             if (!TryToDictionary(JsValue.FromObject(_engine, node), out rootDict))
             {
                 error = "root node is not a valid object";
