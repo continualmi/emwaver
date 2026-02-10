@@ -86,6 +86,9 @@ struct ContentView: View {
                     onRequestSyncUpgrade: {
                         proFeatureName = "Cloud sync"
                         showingProUpgrade = true
+                    },
+                    onRequestOpenSettings: {
+                        showingSettings = true
                     }
                 )
 
@@ -194,12 +197,6 @@ struct ContentView: View {
                         if let email = auth.session?.email, !email.isEmpty {
                             Text(email)
                                 .foregroundStyle(.secondary)
-                        }
-
-                        Divider()
-
-                        Button("Settings…") {
-                            showingSettings = true
                         }
 
                         Divider()
