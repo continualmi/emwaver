@@ -201,8 +201,8 @@ export default function ProPage() {
                       <td className="px-3 py-2">10M tokens / month</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">BYOK / third‑party providers</td>
-                      <td className="px-3 py-2">Yes</td>
+                      <td className="px-3 py-2">BYOK / third‑party providers (Agent)</td>
+                      <td className="px-3 py-2">No</td>
                       <td className="px-3 py-2">Unlimited</td>
                     </tr>
                   </tbody>
