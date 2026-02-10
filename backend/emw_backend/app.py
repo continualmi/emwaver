@@ -18,6 +18,16 @@ from emw_backend.routes.admin import admin_bp
 
 
 def create_app() -> Flask:
+    # Local dev convenience: load backend/.env if present.
+    # (No-op in prod; env vars in Container Apps remain authoritative.)
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv(dotenv_path="backend/.env", override=False)
+        load_dotenv(dotenv_path=".env", override=False)
+    except Exception:
+        pass
+
     config = Config.from_env()
 
     app = Flask(__name__)

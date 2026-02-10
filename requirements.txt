@@ -30,6 +30,9 @@ azure-storage-blob==12.19.0
 # Auth (Firebase ID token verification)
 google-auth==2.26.2
 
+# Local dev convenience (.env loader)
+python-dotenv==1.0.1
+
 # Crypto (provisioning mint endpoint uses Ed25519)
 cryptography==43.0.3
 
