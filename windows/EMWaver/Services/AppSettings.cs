@@ -18,7 +18,7 @@ internal sealed class AppSettings
 
         // Frontend selection (used by web-first sign-in and purchase flows).
         public bool UseProductionFrontend { get; set; } = true;
-        public string LocalFrontendUrl { get; set; } = "http://127.0.0.1:3000";
+        public string LocalFrontendUrl { get; set; } = "http://localhost:3000";
     }
 
     private static string GetSettingsPath()
@@ -55,7 +55,7 @@ internal sealed class AppSettings
 
             if (string.IsNullOrWhiteSpace(model.LocalFrontendUrl))
             {
-                model.LocalFrontendUrl = "http://127.0.0.1:3000";
+                model.LocalFrontendUrl = "http://localhost:3000";
             }
 
             if (needsScrub)
