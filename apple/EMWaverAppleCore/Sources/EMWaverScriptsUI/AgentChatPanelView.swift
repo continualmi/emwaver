@@ -9,11 +9,20 @@ import SwiftUI
 public struct AgentChatPanelView: View {
     @ObservedObject private var viewModel: AgentChatViewModel
 
+    private let agentEnabled: Bool
+    private let onRequestUpgrade: (() -> Void)?
+
     @State private var showingOpenRouterConnect = false
     @State private var openRouterApiKeyDraft = ""
 
-    public init(viewModel: AgentChatViewModel) {
+    public init(
+        viewModel: AgentChatViewModel,
+        agentEnabled: Bool = true,
+        onRequestUpgrade: (() -> Void)? = nil
+    ) {
         self.viewModel = viewModel
+        self.agentEnabled = agentEnabled
+        self.onRequestUpgrade = onRequestUpgrade
     }
 
     public var body: some View {
@@ -25,6 +34,8 @@ public struct AgentChatPanelView: View {
             messages
 
             Divider()
+
+            proNotice
 
             composer
         }
@@ -251,24 +262,26 @@ public struct AgentChatPanelView: View {
     }
 
     private var composer: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
+            suggestions
+
             TextField("Message", text: $viewModel.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...6)
                 .disabled(viewModel.isSending)
                 .onSubmit {
-                    viewModel.send()
+                    sendOrUpgrade()
                 }
 
             HStack {
-                Text("Enter to send")
+                Text(agentEnabled ? "Enter to send" : "Pro required to send")
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
                 Spacer()
 
                 Button {
-                    viewModel.send()
+                    sendOrUpgrade()
                 } label: {
                     Text("Send")
                 }
@@ -278,7 +291,76 @@ public struct AgentChatPanelView: View {
         }
         .padding(12)
     }
+
+    private var proNotice: some View {
+        Group {
+            if !agentEnabled {
+                HStack(alignment: .center, spacing: 10) {
+                    Image(systemName: "lock.fill")
+                        .foregroundStyle(.secondary)
+
+                    Text("AI Agent requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+
+                    Spacer()
+
+                    Button("Get EMWaver Pro…") {
+                        onRequestUpgrade?()
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+            }
+        }
+    }
+
+    private func sendOrUpgrade() {
+        if agentEnabled {
+            viewModel.send()
+        } else {
+            onRequestUpgrade?()
+        }
+    }
+
+    @ViewBuilder
+    private var suggestions: some View {
+        let items: [String] = [
+            "How do I connect an EMWaver device over USB?",
+            "Show me where to find Host Sessions and what they do.",
+            "Help me write a script to blink a GPIO pin.",
+            "How do I capture and replay an IR remote?",
+            "How do I sync scripts across devices?",
+        ]
+
+        // Keep it lightweight: show when draft is empty.
+        if viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(items, id: \.self) { text in
+                        Button {
+                            viewModel.draft = text
+                            // Don't auto-send; user can edit then Send.
+                        } label: {
+                            Text(text)
+                                .font(.caption)
+                                .lineLimit(1)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 7)
+                                .background(Color.gray.opacity(0.12), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
 }
+
 
 private struct MessageRow: View {
     let message: AgentChatMessage

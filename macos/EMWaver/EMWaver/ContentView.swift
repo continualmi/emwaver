@@ -147,12 +147,8 @@ struct ContentView: View {
 
             ToolbarItem(placement: .automatic) {
                 Button {
-                    if entitlements.entitlements?.features.cloudHosts ?? false {
-                        showingHosts = true
-                    } else {
-                        proFeatureName = "Remote host sessions"
-                        showingProUpgrade = true
-                    }
+                    // Always open the Hosts panel; lock functionality inside if not Pro.
+                    showingHosts = true
                 } label: {
                     Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
                 }
@@ -217,7 +213,14 @@ struct ContentView: View {
         }
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
-                HostsView(directory: hostDirectory) {
+                HostsView(
+                    directory: hostDirectory,
+                    proEnabled: (entitlements.entitlements?.features.cloudHosts ?? false),
+                    onRequestUpgrade: {
+                        proFeatureName = "Remote host sessions"
+                        showingProUpgrade = true
+                    }
+                ) {
                     await hostDirectory.refresh(auth: auth)
                 }
                 .toolbar {
