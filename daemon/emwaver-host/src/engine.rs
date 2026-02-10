@@ -119,20 +119,23 @@ impl Engine {
 
 fn json_to_js<'js>(ctx: Ctx<'js>, v: &JsonValue) -> Result<JsValue<'js>> {
     Ok(match v {
-        JsonValue::Null => JsValue::Null,
+        JsonValue::Null => JsValue::new_null(ctx),
         JsonValue::Bool(b) => JsValue::new_bool(ctx, *b),
         JsonValue::Number(n) => {
             if let Some(i) = n.as_i64() {
-                JsValue::new_int(ctx, i as i32)
+                JsValue::new_int(ctx, i.clamp(i32::MIN as i64, i32::MAX as i64) as i32)
             } else if let Some(u) = n.as_u64() {
                 JsValue::new_int(ctx, u.min(i32::MAX as u64) as i32)
             } else if let Some(f) = n.as_f64() {
-                JsValue::new_float64(ctx, f)
+                JsValue::new_float(ctx, f)
             } else {
-                JsValue::Null
+                JsValue::new_null(ctx)
             }
         }
-        JsonValue::String(s) => JsValue::new_string(ctx, s),
+        JsonValue::String(s) => {
+            let js_s = rquickjs::String::from_str(ctx, s)?;
+            js_s.into_value()
+        }
         JsonValue::Array(arr) => {
             let a = Array::new(ctx)?;
             for (i, item) in arr.iter().enumerate() {
