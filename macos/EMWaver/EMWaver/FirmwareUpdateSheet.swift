@@ -5,6 +5,8 @@ struct FirmwareUpdateSheet: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var updater: FirmwareUpdateManager
 
+    @State private var updateModeRequested: Bool = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
@@ -71,22 +73,35 @@ struct FirmwareUpdateSheet: View {
                     Text("Put the device into Update Mode")
                         .font(.subheadline.weight(.semibold))
 
-                    Text("1) Plug in your EMWaver device.\n2) Click Enter Update Mode.\n3) If Update Mode still isn’t detected, unplug and plug it back in.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    if !updateModeRequested {
+                        Text("1) Plug in your EMWaver device.\n2) Click Enter Update Mode.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
 
-                    if device.isConnected {
                         Button("Enter Update Mode") {
+                            updateModeRequested = true
                             device.requestEnterUpdateMode()
                             device.disconnect()
+                        }
+                        .disabled(!device.isConnected || updater.isFlashing)
+
+                        Text("After you click Enter Update Mode, you must unplug and plug the device back in.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Now unplug and plug the device back in.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Button("I replugged it") {
                             updater.refreshDfuPresence()
                         }
                         .disabled(updater.isFlashing)
-                    }
 
-                    Text("Status: \(updater.dfuConnected ? "Update Mode detected" : "Waiting for Update Mode")")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                        Text("Waiting for Update Mode…")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(12)
                 .background(
@@ -167,6 +182,7 @@ struct FirmwareUpdateSheet: View {
         .padding(16)
         .frame(minWidth: 520, minHeight: 360)
         .onAppear {
+            updateModeRequested = false
             updater.refreshDfuPresence()
         }
     }
