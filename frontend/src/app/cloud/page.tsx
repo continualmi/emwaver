@@ -115,18 +115,22 @@ export default function CloudPage() {
 
   async function refresh(token: string) {
     setError(null);
-    const [entRes, f, h] = await Promise.all([
-      backendFetch("/v1/entitlements", token, { method: "GET" }),
-      listFiles(token),
-      listHostSessions(token),
-    ]);
 
+    // Always fetch entitlements first; only fetch Pro resources if Pro is active.
+    const entRes = await backendFetch("/v1/entitlements", token, { method: "GET" });
     const entText = await entRes.text();
     if (!entRes.ok) throw new Error(entText || `HTTP ${entRes.status}`);
     const ent = JSON.parse(entText) as { pro?: boolean };
     const pro = !!ent.pro;
     setIsPro(pro);
 
+    if (!pro) {
+      setFiles([]);
+      setHosts([]);
+      return;
+    }
+
+    const [f, h] = await Promise.all([listFiles(token), listHostSessions(token)]);
     setFiles(f);
     setHosts(h.hosts || []);
   }
@@ -619,63 +623,7 @@ export default function CloudPage() {
     }
   }
 
-  if (!userEmail) {
-    return (
-      <div className="min-h-dvh">
-        <SiteHeader />
-        <main className="mx-auto max-w-4xl px-5 pt-10 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
-            <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">Dashboard</h1>
-            <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              The Dashboard is a Pro feature. Sign in to continue.
-            </p>
-            <div className="mt-6">
-              <button
-                onClick={doSignIn}
-                className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
-              >
-                Sign in with Google
-              </button>
-            </div>
-            {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
-          </div>
-        </main>
-        <SiteFooter />
-      </div>
-    );
-  }
-
-  if (!isPro) {
-    return (
-      <div className="min-h-dvh">
-        <SiteHeader />
-        <main className="mx-auto max-w-4xl px-5 pt-10 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
-            <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">Dashboard</h1>
-            <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              The Dashboard is Pro-only.
-            </p>
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
-                href="/pro"
-                className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
-              >
-                Get EMWaver Pro
-              </a>
-              <a
-                href="/account"
-                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-              >
-                Account
-              </a>
-            </div>
-            {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
-          </div>
-        </main>
-        <SiteFooter />
-      </div>
-    );
-  }
+  const proAccess = !!idToken && isPro;
 
   return (
     <div className="min-h-dvh">
@@ -695,7 +643,9 @@ export default function CloudPage() {
             >
               Sign in with Google
             </button>
-          ) : (
+          ) : null}
+
+          {userEmail ? (
             <div className="flex flex-wrap items-center justify-end gap-3">
               <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
 
@@ -766,7 +716,7 @@ export default function CloudPage() {
               <div className="flex items-center gap-2">
                 <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Host</div>
                 <select
-                  disabled={!idToken}
+                  disabled={!proAccess}
                   value={selectedHostId}
                   onChange={(e) => {
                     const next = String(e.target.value || "");
@@ -817,13 +767,45 @@ export default function CloudPage() {
           )}
         </div>
 
+        {!proAccess ? (
+          <div className="mb-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-4">
+            <div className="text-sm font-semibold text-[color:var(--ink)]">Pro feature preview</div>
+            <div className="pt-1 text-sm text-[color:var(--ink-dim)]">
+              You can browse the UI and bundled example scripts. Cloud files, remote hosts, and the Agent require EMWaver Pro.
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <a
+                href="/pro"
+                className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
+              >
+                Get EMWaver Pro
+              </a>
+              {!userEmail ? (
+                <button
+                  onClick={doSignIn}
+                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+                >
+                  Sign in
+                </button>
+              ) : (
+                <a
+                  href="/account"
+                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+                >
+                  Account
+                </a>
+              )}
+            </div>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-[340px_1fr]">
           <aside className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[color:var(--ink)]">Scripts</div>
               <button
-                disabled={!idToken || isBusy}
-                onClick={() => idToken && refresh(idToken)}
+                disabled={!proAccess || isBusy}
+                onClick={() => proAccess && refresh(idToken)}
                 className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] disabled:opacity-50"
               >
                 Refresh
@@ -834,7 +816,7 @@ export default function CloudPage() {
               <label className="block text-xs font-semibold text-[color:var(--ink-dim)]">Upload</label>
               <input
                 type="file"
-                disabled={!idToken || isBusy}
+                disabled={!proAccess || isBusy}
                 className="mt-2 w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] p-2 text-xs text-[color:var(--ink)] disabled:opacity-50"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -879,13 +861,13 @@ export default function CloudPage() {
                         <button
                           onClick={() => void openFile(f.name)}
                           className="flex-1 text-left"
-                          disabled={!idToken || isBusy}
+                          disabled={!proAccess || isBusy}
                         >
                           <div className="font-semibold text-[color:var(--ink)]">{f.name}</div>
                           <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">{(f.size_bytes ?? 0).toLocaleString()} bytes</div>
                         </button>
                         <button
-                          disabled={!idToken || isBusy}
+                          disabled={!proAccess || isBusy}
                           onClick={() => void doDelete(f.name)}
                           className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)] disabled:opacity-50"
                         >
@@ -943,7 +925,7 @@ export default function CloudPage() {
                 ) : null}
 
                 <button
-                  disabled={!selected || isBusy || !idToken}
+                  disabled={!selected || isBusy || !proAccess}
                   onClick={saveCurrent}
                   className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)] disabled:opacity-50"
                 >
