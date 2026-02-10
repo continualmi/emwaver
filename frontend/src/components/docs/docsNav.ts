@@ -21,7 +21,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
       {
         href: "/docs/install",
         label: "Install & connect",
-        description: "Get the apps and connect over USB.",
+        description: "Get the apps and connect to your device.",
       },
     ],
   },

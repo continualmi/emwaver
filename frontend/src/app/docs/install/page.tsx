@@ -41,7 +41,7 @@ export default function InstallDocPage() {
   return (
     <>
       <h1>Install & connect</h1>
-      <p>Install the apps, connect over USB, and run scripts with UI.</p>
+      <p>Install the apps, connect to your device, and run scripts with UI.</p>
 
       <h2>Install</h2>
       <StoreBadges />

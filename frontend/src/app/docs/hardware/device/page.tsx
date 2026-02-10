@@ -30,7 +30,7 @@ export default function DeviceDocPage() {
       <h2>What you get</h2>
       <ul>
         <li>One board</li>
-        <li>One transport (USB)</li>
+        <li>One device</li>
         <li>One set of apps (Android / iOS / Desktop)</li>
       </ul>
 

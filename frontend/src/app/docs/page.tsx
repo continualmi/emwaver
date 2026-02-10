@@ -9,7 +9,7 @@ export default function DocsIndex() {
       <h2>Start here</h2>
       <ol>
         <li>
-          <Link href="/docs/install">Install & connect</Link>: get the apps and connect over USB.
+          <Link href="/docs/install">Install & connect</Link>: get the apps and connect to your device.
         </li>
         <li>
           <Link href="/docs/scripts">Run scripts</Link>: start from default scripts or write your own.

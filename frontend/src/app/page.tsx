@@ -13,7 +13,7 @@ export default function HomePage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
                 <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
-                USB-only · script-first hardware exploration
+                Script-first hardware exploration
               </div>
 
               <h1 className="text-4xl leading-[1.02] font-semibold tracking-tight text-[color:var(--ink)] md:text-6xl">
@@ -267,7 +267,7 @@ UI.render(UI.column({
                   Installing & using
                 </div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                    Install the apps and connect over USB.
+                    Install the apps and connect to your device.
                   </div>
                 </Link>
 

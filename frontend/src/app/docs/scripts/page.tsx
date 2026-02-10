@@ -16,7 +16,7 @@ export default function ScriptsDocPage() {
 
       <h2>How you use them</h2>
       <ol>
-        <li>Connect the device over USB</li>
+        <li>Connect the device</li>
         <li>Open Scripts in the app</li>
         <li>Run a script (or duplicate and edit one)</li>
       </ol>
