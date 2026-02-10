@@ -31,6 +31,8 @@ struct ContentView: View {
     @State private var showingProUpgrade: Bool = false
     @State private var proFeatureName: String = ""
 
+    @State private var showingSignInRequiresDeviceAlert: Bool = false
+
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
 
@@ -197,7 +199,11 @@ struct ContentView: View {
                     }
                 } else {
                     Button {
-                        auth.isSignInSheetPresented = true
+                        if device.isConnected {
+                            auth.isSignInSheetPresented = true
+                        } else {
+                            showingSignInRequiresDeviceAlert = true
+                        }
                     } label: {
                         Label("Sign In", systemImage: "person.crop.circle.badge.plus")
                     }
@@ -238,7 +244,7 @@ struct ContentView: View {
             ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)
                 .environmentObject(auth)
         }
-        .alert("Save device to your account?", isPresented: $device.needsLoginToSaveDevice) {
+        .alert("Attach device to your account?", isPresented: $device.needsLoginToSaveDevice) {
             Button("Sign In") {
                 auth.isSignInSheetPresented = true
             }
@@ -246,7 +252,15 @@ struct ContentView: View {
                 device.needsLoginToSaveDevice = false
             }
         } message: {
-            Text("This EMWaver device is genuine (SecureWaver identity verified). Sign in to attach it to your account for recovery and support.")
+            Text("This EMWaver device is genuine (SecureWaver identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro.")
+        }
+        .alert("Connect an EMWaver device to sign in", isPresented: $showingSignInRequiresDeviceAlert) {
+            Button("Open Device…") {
+                showingDeviceSheet = true
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("To keep accounts tied to genuine hardware, EMWaver sign-in requires a connected device. (Free users can still sign in to attach/register their device for recovery; Pro unlocks cloud features.)")
         }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
