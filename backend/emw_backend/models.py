@@ -51,6 +51,26 @@ class UserEntitlement(Base):
 Index("idx_user_entitlements_updated", UserEntitlement.updated_at_ms)
 
 
+# --- ELM Credits (token balance) ---
+
+
+class UserCreditBalance(Base):
+    __tablename__ = "user_credit_balances"
+
+    firebase_uid: Mapped[str] = mapped_column(String(128), primary_key=True)
+
+    # Token balance (credits) for EMWaver-managed models.
+    balance_tokens: Mapped[int] = mapped_column(BigInteger, default=0)
+
+    # Current billing period window for the balance (rolling until Stripe billing is wired).
+    period_start_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+    period_end_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
+
+    updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)
+
+
+Index("idx_user_credit_balances_updated", UserCreditBalance.updated_at_ms)
+
 
 class UserFileIndex(Base):
     """Current file index (Postgres): bytes in Azure Blob, metadata/index in SQL.
