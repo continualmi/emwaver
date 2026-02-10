@@ -89,12 +89,7 @@
                         </ComboBox>
                     </StackPanel>
 
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Local URL:" />
-                        <TextBox x:Name="LocalFrontendUrlBox" Width="320" TextChanged="OnLocalFrontendUrlChanged" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-                    </StackPanel>
-
-                    <TextBlock Text="Used by web-first sign-in and web purchase flow." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Local mode uses hardcoded http://localhost:3000." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

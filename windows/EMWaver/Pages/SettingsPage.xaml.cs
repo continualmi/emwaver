@@ -59,9 +59,6 @@ public sealed partial class SettingsPage : Page
                     break;
                 }
             }
-
-            LocalFrontendUrlBox.Text = AppServices.Settings.LocalFrontendUrl;
-            LocalFrontendUrlBox.IsEnabled = !frontendProd;
         }
 
         // UI updates must happen on the UI thread.
@@ -156,17 +153,6 @@ public sealed partial class SettingsPage : Page
         var useProd = tag != "local";
 
         AppServices.Settings.UseProductionFrontend = useProd;
-        LocalFrontendUrlBox.IsEnabled = !useProd;
         RefreshUi("Frontend updated.");
-    }
-
-    private void OnLocalFrontendUrlChanged(object sender, TextChangedEventArgs e)
-    {
-        var v = (LocalFrontendUrlBox.Text ?? "").Trim();
-        AppServices.Settings.LocalFrontendUrl = v;
-        if (!AppServices.Settings.UseProductionFrontend)
-        {
-            RefreshUi("Local frontend URL updated.");
-        }
     }
 }
