@@ -45,6 +45,11 @@ class Config:
     store_cancel_url: str
     store_shipping_countries: List[str]
 
+    # Pro (Stripe Billing)
+    pro_stripe_price_id: str
+    pro_success_url: str
+    pro_cancel_url: str
+
     # SecureWaver / device authenticity
     root_public_key_b64: str
 
@@ -83,6 +88,10 @@ class Config:
             store_success_url=_env("STORE_SUCCESS_URL", ""),
             store_cancel_url=_env("STORE_CANCEL_URL", ""),
             store_shipping_countries=[c.strip() for c in _env("STORE_SHIPPING_COUNTRIES", "").split(",") if c.strip()],
+
+            pro_stripe_price_id=_env("PRO_STRIPE_PRICE_ID", ""),
+            pro_success_url=_env("PRO_SUCCESS_URL", ""),
+            pro_cancel_url=_env("PRO_CANCEL_URL", ""),
 
             root_public_key_b64=_env("EMWAVER_ROOT_PUBLIC_KEY_B64", ""),
         )
