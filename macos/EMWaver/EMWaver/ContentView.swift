@@ -80,7 +80,7 @@ struct ContentView: View {
                     },
                     agentEnabled: (entitlements.entitlements?.features.agent ?? false),
                     onRequestAgentUpgrade: {
-                        proFeatureName = "AI Agent"
+                        proFeatureName = "ELM"
                         showingProUpgrade = true
                     },
                     onRequestSyncUpgrade: {

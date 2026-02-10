@@ -127,16 +127,16 @@ We do **not** publish GitHub Releases for the apps (or for frontend/backend).
 
 What Pro includes (gated behind entitlements):
 - **Cloud / infrastructure**: remote host sessions, file storage + sync across devices, relay bandwidth, auth, observability/support.
-- **AI Agent**: the Agent UI + cloud-integrated workflows are **Pro-only**.
+- **ELM**: the Agent UI + cloud-integrated workflows are **Pro-only**.
   - **Agent conversations are stored in EMWaver Cloud** and associated with the user account (cross-device continuity).
   - **EMWaver-managed inference credits included** (token-based allowance, resets monthly; top-ups available).
   - **Unlimited BYOK / third‑party provider mode** is allowed for Pro users (power-user option; not required).
   - Near-term implementation may use a compatibility layer behind the scenes, but it must be presented as **EMWaver models** and treated as a **temporary** bridge.
   - Longer-term: train EMWaver models (e.g. with Tinker), ship weights, and host inference on providers like **RunPod** / **Vast.ai** (or equivalent).
 
-#### ELM (Electronic Language Models)
+#### ELM (Electronics Language Models)
 
-EMWaver’s in-house models are called **ELMs** (**E**lectronic **L**anguage **M**odels), versioned as:
+EMWaver’s in-house models are called **ELMs** (**E**lectronics **L**anguage **M**odels), versioned as:
 - `ELM-1`, `ELM-2`, …
 - minor versions: `ELM-1.1`, `ELM-1.2`, …
 
