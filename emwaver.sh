@@ -15,6 +15,19 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT/daemon"
 
+# Ensure Rust toolchain is available (common on macOS when using rustup)
+if ! command -v cargo >/dev/null 2>&1; then
+  if [[ -f "$HOME/.cargo/env" ]]; then
+    # shellcheck disable=SC1090
+    source "$HOME/.cargo/env"
+  fi
+fi
+
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "error: cargo not found. Install Rust (rustup) or ensure cargo is on PATH." >&2
+  exit 127
+fi
+
 cargo build -q -p emwaver-host -p emwaver
 
 if [[ $# -eq 0 ]]; then
