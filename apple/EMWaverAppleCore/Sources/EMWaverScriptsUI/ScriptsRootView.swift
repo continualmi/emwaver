@@ -99,13 +99,17 @@ public struct ScriptsRootView: View {
     public var body: some View {
         ZStack {
             #if os(macOS)
-            if showingAgentPanel && agentEnabled {
+            if showingAgentPanel {
                 HSplitView {
                     primaryContent
                         .frame(minWidth: 520)
 
-                    AgentChatPanelView(viewModel: agentViewModel)
-                        .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
+                    AgentChatPanelView(
+                        viewModel: agentViewModel,
+                        agentEnabled: agentEnabled,
+                        onRequestUpgrade: onRequestAgentUpgrade
+                    )
+                    .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
                 }
                 .transition(.opacity)
             } else {
@@ -701,15 +705,11 @@ public struct ScriptsRootView: View {
         #if os(macOS)
         ToolbarItem(placement: .primaryAction) {
             Button {
-                if agentEnabled {
-                    showingAgentPanel.toggle()
-                } else {
-                    onRequestAgentUpgrade?()
-                }
+                showingAgentPanel.toggle()
             } label: {
-                Image(systemName: agentEnabled ? "sparkles" : "lock.fill")
+                Image(systemName: "sparkles")
             }
-            .help(agentEnabled ? (showingAgentPanel ? "Hide agent panel" : "Show agent panel") : "EMWaver Pro required")
+            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
         }
         #endif
 

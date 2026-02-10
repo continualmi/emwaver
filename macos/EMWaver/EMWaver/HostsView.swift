@@ -3,14 +3,38 @@ import AppKit
 
 struct HostsView: View {
     @ObservedObject var directory: HostDirectory
+
+    let proEnabled: Bool
+    let onRequestUpgrade: (() -> Void)?
+
     let onRefresh: () async -> Void
 
     // macOS List + NavigationLink inside a sheet can behave like a selection-only click.
     // Use an explicit sheet for control so a single click always opens the controller.
     @State private var controllingHost: HostSession?
 
+    @State private var showingLockedNotice: Bool = false
+
     var body: some View {
         List {
+            if !proEnabled {
+                Section {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Remote host sessions are an EMWaver Pro feature.")
+                            .font(.headline)
+                        Text("You can browse host presence, but controlling a host is locked until you upgrade.")
+                            .foregroundStyle(.secondary)
+                            .font(.callout)
+
+                        Button("Get EMWaver Pro…") {
+                            onRequestUpgrade?()
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                    .padding(.vertical, 6)
+                }
+            }
+
             if !directory.lastErrorText.isEmpty {
                 Section {
                     Text(directory.lastErrorText)
@@ -34,9 +58,14 @@ struct HostsView: View {
                 } else {
                     ForEach(directory.hosts) { h in
                         Button {
-                            controllingHost = h
+                            if proEnabled {
+                                controllingHost = h
+                            } else {
+                                showingLockedNotice = true
+                            }
                         } label: {
                             HostRow(host: h)
+                                .opacity(proEnabled ? 1 : 0.75)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
@@ -77,6 +106,12 @@ struct HostsView: View {
                     }
             }
             .frame(minWidth: 900, minHeight: 560)
+        }
+        .alert("EMWaver Pro required", isPresented: $showingLockedNotice) {
+            Button("Get EMWaver Pro…") { onRequestUpgrade?() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.")
         }
     }
 
