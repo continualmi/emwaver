@@ -7,6 +7,41 @@
 import SwiftUI
 
 public struct AgentChatPanelView: View {
+
+    private struct ELMHelpGlyph: View {
+        @State private var showing = false
+
+        var body: some View {
+            Button {
+                showing = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .help("What is ELM?")
+            .popover(isPresented: $showing, arrowEdge: .bottom) {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("ELM")
+                        .font(.headline)
+
+                    Text("Electronics Language Model")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+
+                    Text("An AI language model trained to control EMWaver and help with electronics workflows.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(14)
+                .frame(width: 320)
+            }
+        }
+    }
     @ObservedObject private var viewModel: AgentChatViewModel
 
     private let agentEnabled: Bool
@@ -81,6 +116,8 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "sparkles")
                     Text("ELM")
                         .font(.headline)
+
+                    ELMHelpGlyph()
                 }
 
                 Spacer()
