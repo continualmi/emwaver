@@ -19,6 +19,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Windows.Storage;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace EMWaver.Pages;
 
@@ -95,7 +96,7 @@ public sealed partial class ScriptsPage : Page
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
             errorHandler: message =>
             {
-                _ = DispatcherQueue.TryEnqueue(async () => await ShowInfoAsync("Script Error", message));
+                _ = DispatcherQueue.TryEnqueue(async () => await ShowScriptErrorAsync(message));
             }
         );
 
@@ -1219,6 +1220,59 @@ public sealed partial class ScriptsPage : Page
             };
 
             await dialog.ShowAsync();
+        }
+        catch (COMException)
+        {
+            // Ignore; WinUI can throw during transitions or if another dialog is up.
+        }
+        finally
+        {
+            _infoDialogLock.Release();
+        }
+    }
+
+    private async Task ShowScriptErrorAsync(string message)
+    {
+        await _infoDialogLock.WaitAsync();
+        try
+        {
+            var text = string.IsNullOrWhiteSpace(message) ? "Unknown script error." : message.Trim();
+
+            var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "The script failed. Full details are below (including line/location when available).",
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            panel.Children.Add(new TextBox
+            {
+                Text = text,
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.Wrap,
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                MinWidth = 720,
+                Height = 340,
+            });
+
+            var dialog = new ContentDialog
+            {
+                Title = "Script Error",
+                Content = panel,
+                PrimaryButtonText = "Copy",
+                CloseButtonText = "Close",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = XamlRoot,
+            };
+
+            var result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                var package = new DataPackage();
+                package.SetText(text);
+                Clipboard.SetContent(package);
+            }
         }
         catch (COMException)
         {
