@@ -32,6 +32,7 @@ public struct ScriptsRootView: View {
     private let agentEnabled: Bool
     private let onRequestAgentUpgrade: (() -> Void)?
     private let onRequestSyncUpgrade: (() -> Void)?
+    private let onRequestOpenSettings: (() -> Void)?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -78,7 +79,8 @@ public struct ScriptsRootView: View {
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestSyncUpgrade: (() -> Void)? = nil
+        onRequestSyncUpgrade: (() -> Void)? = nil,
+        onRequestOpenSettings: (() -> Void)? = nil
     ) {
         self.device = device
         self.syncProvider = syncProvider
@@ -86,6 +88,7 @@ public struct ScriptsRootView: View {
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestSyncUpgrade = onRequestSyncUpgrade
+        self.onRequestOpenSettings = onRequestOpenSettings
         self.agentCloudProvider = agentCloudProvider
         let host = DefaultAgentHost(previewManager: previewManager)
         self._previewManager = StateObject(wrappedValue: previewManager)
@@ -103,7 +106,8 @@ public struct ScriptsRootView: View {
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestSyncUpgrade: (() -> Void)? = nil
+        onRequestSyncUpgrade: (() -> Void)? = nil,
+        onRequestOpenSettings: (() -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -113,7 +117,8 @@ public struct ScriptsRootView: View {
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade,
-            onRequestSyncUpgrade: onRequestSyncUpgrade
+            onRequestSyncUpgrade: onRequestSyncUpgrade,
+            onRequestOpenSettings: onRequestOpenSettings
         )
     }
 
@@ -942,6 +947,13 @@ public struct ScriptsRootView: View {
                                 deleteTarget = DeletionTarget(id: selected, name: viewModel.scriptName(for: selected))
                                 showingDeleteConfirmation = true
                             }
+                        }
+                    }
+
+                    if let openSettings = onRequestOpenSettings {
+                        Divider()
+                        Button("Settings…") {
+                            openSettings()
                         }
                     }
                 } label: {
