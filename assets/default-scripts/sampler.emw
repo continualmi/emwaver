@@ -36,8 +36,7 @@ function baseName(s) {
 }
 
 function signalsDir() {
-  // Keep signals alongside scripts (same directory). Treat signals as "just files".
-  // We still *read* legacy appDataDir()/signals for backwards compatibility.
+  // Single flat user directory for everything (.emw/.raw/.txt).
   return FS.appDataDir() || '';
 }
 
@@ -126,7 +125,7 @@ function listFiles() {
   // Ensure the root exists (where we save new signals).
   try { FS.ensureDir(root); } catch (e0) {}
 
-  // Read both the root and the legacy "signals" subfolder.
+  // Read only the single flat root directory.
   var out = [];
   try {
     var a = FS.readDir(root) || [];
@@ -134,16 +133,6 @@ function listFiles() {
       out.push(String(a[i0] || ''));
     }
   } catch (e1) {}
-
-  try {
-    var legacyDir = FS.join(root, 'signals');
-    var b = FS.readDir(legacyDir) || [];
-    for (var i1 = 0; i1 < b.length; i1 += 1) {
-      var n1 = String(b[i1] || '');
-      if (!n1) continue;
-      out.push('signals/' + n1);
-    }
-  } catch (e2) {}
 
   // Normalize + filter + sort.
   files = out

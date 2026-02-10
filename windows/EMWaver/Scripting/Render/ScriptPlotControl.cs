@@ -135,27 +135,29 @@ public sealed class ScriptPlotControl : UserControl
         if (xMax <= xMin) xMax = Math.Min(maxBits, xMin + 1);
 
         var bins = Math.Max(16, _bins);
-
+        var startBit = (int)Math.Floor(xMin);
+        var endBit = (int)Math.Ceiling(xMax);
+        var compressed = CompressBits(bytes, startBit, endBit, bins);
         var points = new PointCollection();
 
         // Add a little padding so the signal doesn't draw right on the border.
-        // This avoids the "min/max going out of the chart" feel when values are 0/255.
         var padX = 6.0;
         var padY = 6.0;
         var plotW = Math.Max(1.0, width - padX * 2);
         var plotH = Math.Max(1.0, height - padY * 2);
 
-        for (var i = 0; i < bins; i++)
+        if (compressed.Count == 0)
         {
-            var t0 = xMin + (xMax - xMin) * (i / (double)bins);
-            var t1 = xMin + (xMax - xMin) * ((i + 1) / (double)bins);
-            // For binary sources we want the plot to *not* "zoom" vertically as the
-            // viewport changes. Using average density (0..255) makes the waveform
-            // appear to compress/expand when the bin width changes. Instead we
-            // render a stable 0/255 digital level by taking the majority value per bin.
-            var v = BinMajority(bytes, (int)Math.Floor(t0), (int)Math.Floor(t1));
+            _line.Points = points;
+            return;
+        }
 
-            var px = padX + (i / (double)(bins - 1)) * plotW;
+        var domain = Math.Max(1.0, xMax - xMin);
+        foreach (var (xBit, v) in compressed)
+        {
+            var norm = (xBit - xMin) / domain;
+            norm = Math.Clamp(norm, 0.0, 1.0);
+            var px = padX + norm * plotW;
             var py = padY + (1.0 - (v / 255.0)) * plotH;
             points.Add(new Windows.Foundation.Point(px, py));
         }
@@ -163,24 +165,83 @@ public sealed class ScriptPlotControl : UserControl
         _line.Points = points;
     }
 
-    private static int BinMajority(byte[] bytes, int bitStart, int bitEnd)
+    private static List<(double xBit, int y)> CompressBits(byte[] bytes, int startBit, int endBit, int bins)
     {
-        var maxBits = bytes.Length * 8;
-        var start = Math.Max(0, Math.Min(bitStart, maxBits));
-        var end = Math.Max(0, Math.Min(bitEnd, maxBits));
-        if (end <= start) end = Math.Min(maxBits, start + 1);
-
-        var ones = 0;
-        var total = end - start;
-        for (var b = start; b < end; b++)
+        var outPoints = new List<(double xBit, int y)>();
+        var span = Math.Max(0, endBit - startBit);
+        if (span <= 0 || bytes.Length == 0)
         {
-            var by = b >> 3;
-            var bi = b & 7;
-            if (((bytes[by] >> bi) & 1) == 1) ones++;
+            return outPoints;
         }
 
-        // Majority vote: stable 0/255 even when the bin width changes.
-        return ones * 2 >= total ? 255 : 0;
+        static int BitAt(byte[] src, int idx)
+        {
+            var byteIndex = idx >> 3;
+            var bitIndex = idx & 7;
+            if (byteIndex < 0 || byteIndex >= src.Length) return 0;
+            return ((src[byteIndex] >> bitIndex) & 1) == 1 ? 1 : 0;
+        }
+
+        // Match macOS behavior: for narrow spans draw every bit.
+        if (span <= bins * 2)
+        {
+            outPoints.Capacity = span;
+            for (var i = startBit; i < endBit; i++)
+            {
+                outPoints.Add((i, BitAt(bytes, i) == 1 ? 255 : 0));
+            }
+            return outPoints;
+        }
+
+        var binWidth = (double)span / bins;
+        outPoints.Capacity = bins * 2;
+
+        for (var bin = 0; bin < bins; bin++)
+        {
+            var binStart = (int)Math.Floor(startBit + bin * binWidth);
+            var binEnd = (int)Math.Floor(binStart + binWidth);
+            if (binEnd > endBit) binEnd = endBit;
+            if (binEnd <= binStart) continue;
+
+            var hasLow = false;
+            var hasHigh = false;
+
+            var i = binStart;
+            while (i < binEnd)
+            {
+                var byteIndex = i >> 3;
+                if (byteIndex >= bytes.Length) break;
+
+                if ((i & 7) == 0 && i + 8 <= binEnd)
+                {
+                    var val = bytes[byteIndex];
+                    if (val == 0) hasLow = true;
+                    else if (val == 255) hasHigh = true;
+                    else
+                    {
+                        hasLow = true;
+                        hasHigh = true;
+                    }
+                    i += 8;
+                }
+                else
+                {
+                    if (BitAt(bytes, i) == 1) hasHigh = true;
+                    else hasLow = true;
+                    i += 1;
+                }
+
+                if (hasLow && hasHigh) break;
+            }
+
+            if (hasLow || hasHigh)
+            {
+                outPoints.Add((binStart, hasLow ? 0 : 255));
+                outPoints.Add((Math.Max(binStart, binEnd - 1), hasHigh ? 255 : 0));
+            }
+        }
+
+        return outPoints;
     }
 
     private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
