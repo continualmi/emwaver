@@ -1,5 +1,6 @@
 using EMWaver.Services.Cloud;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -25,6 +26,7 @@ public sealed partial class HostsPage : Page
         Windows.UI.Color OnlineColor);
 
     private bool _proEnabled;
+    private int _refreshVersion;
 
     public HostsPage()
     {
@@ -45,23 +47,29 @@ public sealed partial class HostsPage : Page
 
     private async Task RefreshAsync()
     {
-        StatusText.Text = "Loading…";
-        HostsList.ItemsSource = null;
+        var refreshVersion = Interlocked.Increment(ref _refreshVersion);
+        await RunOnUiThreadAsync(() =>
+        {
+            StatusText.Text = "Loading…";
+            HostsList.ItemsSource = null;
+        });
 
         try
         {
             var pro = await AppServices.Entitlements.RefreshAsync(force: true, CancellationToken.None);
             _proEnabled = pro.Entitlements?.FeatureFlags.CloudHosts ?? false;
             var signedIn = AppServices.CloudAuth.IsSignedIn;
-            ProBanner.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
-            GetProButton.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
 
             // Require auth (same as file sync). Allow empty token in dev when backend auth disabled.
             var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
             var tok = AppServices.CloudAuth.GetIdToken();
             if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
             {
-                StatusText.Text = "Please sign in to view hosts.";
+                await RunOnUiThreadAsync(() =>
+                {
+                    if (refreshVersion != _refreshVersion) return;
+                    StatusText.Text = "Please sign in to view hosts.";
+                });
                 return;
             }
 
@@ -80,35 +88,75 @@ public sealed partial class HostsPage : Page
                 OnlineColor: h.Online ? Colors.LimeGreen : Colors.Gray
             )).ToList();
 
-            HostsList.ItemsSource = list;
-            if (!_proEnabled)
+            await RunOnUiThreadAsync(() =>
             {
-                if (!signedIn)
+                if (refreshVersion != _refreshVersion) return;
+
+                HostsList.ItemsSource = list;
+                ProBanner.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
+                GetProButton.Visibility = _proEnabled ? Visibility.Collapsed : Visibility.Visible;
+
+                if (!_proEnabled)
                 {
-                    StatusText.Text = "Sign in, then attach a genuine EMWaver device to your account to become eligible for Pro.";
-                }
-                else if (pro.Eligibility?.CanPurchasePro == true)
-                {
-                    StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
-                }
-                else if (string.Equals(pro.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
-                {
-                    StatusText.Text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
+                    if (!signedIn)
+                    {
+                        StatusText.Text = "Sign in, then attach a genuine EMWaver device to your account to become eligible for Pro.";
+                    }
+                    else if (pro.Eligibility?.CanPurchasePro == true)
+                    {
+                        StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
+                    }
+                    else if (string.Equals(pro.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
+                    {
+                        StatusText.Text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
+                    }
+                    else
+                    {
+                        StatusText.Text = "You’re not eligible to subscribe yet.";
+                    }
                 }
                 else
                 {
-                    StatusText.Text = "You’re not eligible to subscribe yet.";
+                    StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
                 }
-            }
-            else
-            {
-                StatusText.Text = list.Count == 0 ? "No host sessions detected" : "";
-            }
+            });
         }
         catch (Exception ex)
         {
-            StatusText.Text = ex.Message;
+            await RunOnUiThreadAsync(() =>
+            {
+                if (refreshVersion != _refreshVersion) return;
+                StatusText.Text = ex.Message;
+            });
         }
+    }
+
+    private Task RunOnUiThreadAsync(Action action)
+    {
+        if (DispatcherQueue.HasThreadAccess)
+        {
+            action();
+            return Task.CompletedTask;
+        }
+
+        var tcs = new TaskCompletionSource<object?>();
+        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+        {
+            try
+            {
+                action();
+                tcs.TrySetResult(null);
+            }
+            catch (Exception ex)
+            {
+                tcs.TrySetException(ex);
+            }
+        }))
+        {
+            tcs.TrySetException(new InvalidOperationException("Unable to access UI dispatcher."));
+        }
+
+        return tcs.Task;
     }
 
     private void OnControlClick(object sender, RoutedEventArgs e)
@@ -143,5 +191,16 @@ public sealed partial class HostsPage : Page
         {
             StatusText.Text = ex.Message;
         }
+    }
+
+    private void OnBackClick(object sender, RoutedEventArgs e)
+    {
+        if (Frame?.CanGoBack == true)
+        {
+            Frame.GoBack();
+            return;
+        }
+
+        Frame?.Navigate(typeof(ScriptsPage));
     }
 }
