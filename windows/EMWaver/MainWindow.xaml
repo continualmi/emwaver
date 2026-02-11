@@ -111,10 +111,6 @@
                         </AppBarButton.Icon>
                     </AppBarButton>
                     <AppBarButton x:Name="HostsButton" Label="Hosts" Icon="Globe" Click="OnHostsClick" />
-                    <AppBarButton x:Name="ScriptSaveButton" Label="Save" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptRenameButton" Label="Rename" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptDeleteButton" Label="Delete" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
-
                     <AppBarSeparator />
 
                     <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="ELM" Click="OnScriptAgentToggleClick">
@@ -126,6 +122,9 @@
                     <CommandBar.SecondaryCommands>
                         <AppBarButton x:Name="ScriptNewButton" Label="New Script" Icon="Add" Click="OnScriptNewClick" />
                         <AppBarButton x:Name="ScriptCopyButton" Label="Copy Script" Icon="Copy" Click="OnScriptCopyClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptSaveButton" Label="Save Script" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptRenameButton" Label="Edit Script Name" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptDeleteButton" Label="Delete Script" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
                     </CommandBar.SecondaryCommands>
                 </CommandBar>
 
