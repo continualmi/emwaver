@@ -9,6 +9,7 @@ import SwiftUI
 public struct AgentChatPanelView: View {
 
     private struct ELMHelpGlyph: View {
+        let mode: AgentChatViewModel.AgentMode
         @State private var showing = false
 
         var body: some View {
@@ -26,11 +27,13 @@ public struct AgentChatPanelView: View {
                     Text("ELM")
                         .font(.headline)
 
-                    Text("Electronics Language Model")
+                    Text(mode == .elm ? "Electronics Language Model" : "Large Language Model")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    Text("An AI language model trained to control EMWaver and help with electronics workflows.")
+                    Text(mode == .elm
+                         ? "Single-turn JSON control loop for deterministic script/UI operation."
+                         : "Multi-turn conversational agent with tool-calling workflows.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -48,6 +51,7 @@ public struct AgentChatPanelView: View {
     private let onRequestUpgrade: (() -> Void)?
 
     @State private var showingOpenRouterConnect = false
+    @State private var showingElmDebugInspector = false
     @State private var openRouterApiKeyDraft = ""
 
     public init(
@@ -107,6 +111,9 @@ public struct AgentChatPanelView: View {
             .padding(16)
             .frame(width: 420)
         }
+        .sheet(isPresented: $showingElmDebugInspector) {
+            ElmDebugInspectorSheet(viewModel: viewModel)
+        }
     }
 
     private var header: some View {
@@ -114,13 +121,23 @@ public struct AgentChatPanelView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                    Text("ELM")
+                    Text(viewModel.mode == .elm ? "ELM" : "LLM")
                         .font(.headline)
 
-                    ELMHelpGlyph()
+                    ELMHelpGlyph(mode: viewModel.mode)
                 }
 
                 Spacer()
+
+                if viewModel.mode == .elm {
+                    Button {
+                        showingElmDebugInspector = true
+                    } label: {
+                        Image(systemName: "ladybug")
+                    }
+                    .buttonStyle(.plain)
+                    .help("ELM turn debug inspector")
+                }
 
                 Menu {
                     Button("New Chat") {
@@ -166,6 +183,9 @@ public struct AgentChatPanelView: View {
                             } label: {
                                 HStack {
                                     Text(conv.title)
+                                    Text(conv.agentType == .elm ? "ELM" : "LLM")
+                                        .font(.caption2)
+                                        .foregroundStyle(.secondary)
                                     if viewModel.selectedConversationId == conv.id {
                                         Spacer()
                                         Image(systemName: "checkmark")
@@ -382,7 +402,7 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("ELM requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                    Text("\(viewModel.mode == .elm ? "ELM" : "LLM") requires EMWaver Pro. You can read chats and type, but sending is locked.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
@@ -441,6 +461,105 @@ public struct AgentChatPanelView: View {
                 }
             }
         }
+    }
+}
+
+private struct ElmDebugInspectorSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject var viewModel: AgentChatViewModel
+    @State private var selectedTurnId: UUID?
+    @State private var selectedPane: Pane = .input
+
+    private enum Pane: String, CaseIterable, Identifiable {
+        case input
+        case output
+
+        var id: String { rawValue }
+        var label: String { self == .input ? "Input" : "Output" }
+    }
+
+    private var selectedTurn: AgentChatViewModel.ElmDebugTurn? {
+        if let selectedTurnId {
+            return viewModel.elmDebugTurns.first(where: { $0.id == selectedTurnId })
+        }
+        return viewModel.elmDebugTurns.first
+    }
+
+    var body: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("ELM Turn Debug")
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Close") {
+                    dismiss()
+                }
+
+                Button("Clear") {
+                    viewModel.clearElmDebugTurns()
+                    selectedTurnId = nil
+                }
+                .disabled(viewModel.elmDebugTurns.isEmpty)
+            }
+
+            HStack(spacing: 12) {
+                List(viewModel.elmDebugTurns, selection: $selectedTurnId) { turn in
+                    HStack(spacing: 8) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Tick \(turn.tickId)")
+                                .font(.subheadline.weight(.semibold))
+                            Text(turn.createdAt.formatted(date: .omitted, time: .standard))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        if turn.errorText != nil {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .foregroundStyle(.red)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        selectedTurnId = turn.id
+                    }
+                    .tag(turn.id)
+                }
+                .frame(minWidth: 220)
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Picker("Pane", selection: $selectedPane) {
+                        ForEach(Pane.allCases) { pane in
+                            Text(pane.label).tag(pane)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    if let turn = selectedTurn {
+                        if let err = turn.errorText, !err.isEmpty {
+                            Text(err)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+
+                        ScrollView {
+                            Text(selectedPane == .input ? turn.inputJSON : (turn.outputJSON ?? "{}"))
+                                .font(.system(.callout, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(10)
+                        }
+                        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    } else {
+                        Text("No turns captured yet.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .padding(14)
+        .frame(minWidth: 860, minHeight: 520)
     }
 }
 

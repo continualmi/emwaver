@@ -109,6 +109,7 @@ class AgentConversation(Base):
     firebase_uid: Mapped[str] = mapped_column(String(128), index=True)
 
     title: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    agent_type: Mapped[str] = mapped_column(String(16), default="llm")  # llm|elm
 
     created_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms)
     updated_at_ms: Mapped[int] = mapped_column(BigInteger, default=_now_ms, index=True)

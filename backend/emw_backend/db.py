@@ -78,6 +78,13 @@ def init_db(database_url: str) -> None:
                 if "media_duration_s" not in cols:
                     conn.execute(text("ALTER TABLE society_posts ADD COLUMN media_duration_s INTEGER DEFAULT 0"))
 
+        # Agent conversations: add agent_type for dual-mode identity if missing.
+        if insp.has_table("agent_conversations"):
+            cols = {c["name"] for c in insp.get_columns("agent_conversations")}
+            if "agent_type" not in cols:
+                with _ENGINE.begin() as conn:
+                    conn.execute(text("ALTER TABLE agent_conversations ADD COLUMN agent_type VARCHAR(16) DEFAULT 'llm'"))
+
     except Exception:
         # Best-effort: if this fails (permissions/older DB), backend will still run.
         pass

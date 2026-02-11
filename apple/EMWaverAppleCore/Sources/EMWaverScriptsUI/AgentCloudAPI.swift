@@ -8,6 +8,7 @@ struct AgentCloudAPI {
     struct ConversationInfo: Codable {
         var id: String
         var title: String?
+        var agent_type: String?
         var created_at_ms: Int
         var updated_at_ms: Int
     }
@@ -51,7 +52,7 @@ struct AgentCloudAPI {
         return try JSONDecoder().decode(ConversationsResponse.self, from: data).conversations
     }
 
-    func createConversation(baseURL: URL, token: String, title: String?) async throws -> ConversationInfo {
+    func createConversation(baseURL: URL, token: String, title: String?, agentType: String?) async throws -> ConversationInfo {
         var url = baseURL
         url.appendPathComponent("v1/agent/conversations")
 
@@ -64,6 +65,34 @@ struct AgentCloudAPI {
         var payload: [String: Any] = [:]
         if let t = title, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             payload["title"] = t
+        }
+        if let type = agentType, !type.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            payload["agent_type"] = type
+        }
+        req.httpBody = try JSONSerialization.data(withJSONObject: payload)
+
+        let (data, res) = try await urlSession.data(for: req)
+        try Self.throwIfHTTPError(res, data)
+        return try JSONDecoder().decode(CreateConversationResponse.self, from: data).conversation
+    }
+
+    func updateConversation(baseURL: URL, token: String, conversationId: String, title: String?, agentType: String?) async throws -> ConversationInfo {
+        var url = baseURL
+        url.appendPathComponent("v1/agent/conversations")
+        url.appendPathComponent(conversationId)
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "PATCH"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+
+        var payload: [String: Any] = [:]
+        if let title {
+            payload["title"] = title
+        }
+        if let agentType {
+            payload["agent_type"] = agentType
         }
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
 
