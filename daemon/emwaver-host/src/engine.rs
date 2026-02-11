@@ -1,5 +1,6 @@
 use anyhow::{Context, Result};
 use boa_engine::{
+    js_string,
     object::{builtins::JsArray, FunctionObjectBuilder, ObjectInitializer},
     property::Attribute,
     Context as BoaContext,
@@ -38,8 +39,8 @@ impl Engine {
         {
             let cb_map = callbacks.clone();
             let func = FunctionObjectBuilder::new(
-                &mut ctx,
-                NativeFunction::from_closure(move |_this, args, _ctx| {
+                ctx.realm(),
+                unsafe { NativeFunction::from_closure(move |_this, args, _ctx| {
                     let token = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let token = token
                         .as_string()
@@ -53,13 +54,14 @@ impl Engine {
 
                     cb_map.lock().unwrap().insert(token, f);
                     Ok(JsValue::undefined())
-                }),
+                }) },
             )
             .name("_scriptRegisterCallback")
             .length(2)
             .build();
 
-            ctx.register_global_property("_scriptRegisterCallback", func, Attribute::all())
+            ctx.register_global_property(js_string!("_scriptRegisterCallback"), func, Attribute::all())
+                .map_err(map_js_err)
                 .context("register _scriptRegisterCallback")?;
         }
 
@@ -67,8 +69,8 @@ impl Engine {
         {
             let tree_store = latest_tree.clone();
             let func = FunctionObjectBuilder::new(
-                &mut ctx,
-                NativeFunction::from_closure(move |_this, args, _ctx| {
+                ctx.realm(),
+                unsafe { NativeFunction::from_closure(move |_this, args, _ctx| {
                     let s = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let json_str = s
                         .as_string()
@@ -79,27 +81,29 @@ impl Engine {
                     let parsed: Option<UiNode> = serde_json::from_value(v).ok();
                     *tree_store.lock().unwrap() = parsed;
                     Ok(JsValue::undefined())
-                }),
+                }) },
             )
             .name("_scriptRender")
             .length(1)
             .build();
 
-            ctx.register_global_property("_scriptRender", func, Attribute::all())
+            ctx.register_global_property(js_string!("_scriptRender"), func, Attribute::all())
+                .map_err(map_js_err)
                 .context("register _scriptRender")?;
         }
 
         // _scriptSleep(ms) (optional)
         {
             let func = FunctionObjectBuilder::new(
-                &mut ctx,
-                NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined())),
+                ctx.realm(),
+                unsafe { NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined())) },
             )
             .name("_scriptSleep")
             .length(1)
             .build();
 
-            ctx.register_global_property("_scriptSleep", func, Attribute::all())
+            ctx.register_global_property(js_string!("_scriptSleep"), func, Attribute::all())
+                .map_err(map_js_err)
                 .context("register _scriptSleep")?;
         }
 
@@ -107,8 +111,8 @@ impl Engine {
         {
             let dev = device.clone();
             let func = FunctionObjectBuilder::new(
-                &mut ctx,
-                NativeFunction::from_closure(move |_this, args, ctx| {
+                ctx.realm(),
+                unsafe { NativeFunction::from_closure(move |_this, args, ctx| {
                     let bytes = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let timeout_ms = args
                         .get(1)
@@ -122,7 +126,7 @@ impl Engine {
                     let obj = bytes.as_object().cloned();
                     let mut cmd: Vec<u8> = vec![];
                     if let Some(o) = obj {
-                        let len = o.get("length", ctx)?.as_number().unwrap_or(0.0) as usize;
+                        let len = o.get(js_string!("length"), ctx)?.as_number().unwrap_or(0.0) as usize;
                         cmd.reserve(len);
                         for i in 0..len {
                             let v = o.get(i, ctx)?;
@@ -141,16 +145,17 @@ impl Engine {
                     // Return an Array(respBytes)
                     let array = JsArray::new(ctx);
                     for (i, b) in resp.iter().enumerate() {
-                        array.set(i, JsValue::new(*b), ctx)?;
+                        array.set(i, JsValue::new(*b), true, ctx)?;
                     }
                     Ok(array.into())
-                }),
+                }) },
             )
             .name("_scriptSendPacket")
             .length(2)
             .build();
 
-            ctx.register_global_property("_scriptSendPacket", func, Attribute::all())
+            ctx.register_global_property(js_string!("_scriptSendPacket"), func, Attribute::all())
+                .map_err(map_js_err)
                 .context("register _scriptSendPacket")?;
         }
 
@@ -219,20 +224,24 @@ fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
                 JsValue::null()
             }
         }
-        JsonValue::String(s) => JsValue::new(s.clone()),
+        JsonValue::String(s) => JsValue::from(js_string!(s.as_str())),
         JsonValue::Array(arr) => {
             let array = JsArray::new(ctx);
             for (i, item) in arr.iter().enumerate() {
                 let js = json_to_js(ctx, item)?;
-                array.set(i, js, ctx)?;
+                array.set(i, js, true, ctx).map_err(map_js_err)?;
             }
             array.into()
         }
         JsonValue::Object(map) => {
-            let mut init = ObjectInitializer::new(ctx);
+            let mut pairs: Vec<(&str, JsValue)> = Vec::with_capacity(map.len());
             for (k, item) in map.iter() {
-                let js = json_to_js(ctx, item)?;
-                init = init.property(k.as_str(), js, Attribute::all());
+                pairs.push((k.as_str(), json_to_js(ctx, item)?));
+            }
+
+            let mut init = ObjectInitializer::new(ctx);
+            for (k, js) in pairs {
+                init.property(js_string!(k), js, Attribute::all());
             }
             init.build().into()
         }
