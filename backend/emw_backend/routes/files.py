@@ -3,7 +3,6 @@ from __future__ import annotations
 import base64
 import time
 from collections import defaultdict
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
@@ -17,18 +16,6 @@ files_bp = Blueprint("files", __name__, url_prefix="/v1")
 
 def _now_epoch_ms() -> int:
     return int(time.time() * 1000)
-
-
-def _azure_blob_service(config: Config):
-    from azure.storage.blob import BlobServiceClient
-
-    if not config.azure_storage_account or not config.azure_storage_key or not config.azure_blob_container:
-        raise RuntimeError(
-            "Azure Blob storage is not configured (AZURE_STORAGE_ACCOUNT/AZURE_STORAGE_KEY/AZURE_BLOB_CONTAINER)"
-        )
-
-    url = f"https://{config.azure_storage_account}.blob.core.windows.net"
-    return BlobServiceClient(account_url=url, credential=config.azure_storage_key)
 
 
 def _require_user_uid(config: Config) -> Optional[str]:
@@ -75,26 +62,6 @@ def _dt_to_iso(dt: Optional[datetime]) -> Optional[str]:
     return dt.astimezone(timezone.utc).isoformat()
 
 
-def _file_json_from_blob(blob: Any) -> Dict[str, Any]:
-    # Azure returns metadata keys lowercased in practice.
-    md = getattr(blob, "metadata", None) or {}
-    mtime_ms = md.get("mtime_ms")
-    try:
-        mtime_ms_int = int(mtime_ms) if mtime_ms is not None else None
-    except Exception:
-        mtime_ms_int = None
-
-    return {
-        "name": blob.name.split("/")[-1],
-        "blob_key": blob.name,
-        "etag": getattr(blob, "etag", None),
-        "size_bytes": int(getattr(blob, "size", 0) or 0),
-        "last_modified": _dt_to_iso(getattr(blob, "last_modified", None)),
-        "content_type": getattr(getattr(blob, "content_settings", None), "content_type", None),
-        "mtime_ms": mtime_ms_int,
-    }
-
-
 def _dedupe_user_file_rows(db: Any, uid: str) -> None:
     """Best-effort cleanup for legacy duplicate rows by (firebase_uid, name).
 
@@ -138,7 +105,7 @@ def _dedupe_user_file_rows(db: Any, uid: str) -> None:
 
 @files_bp.get("/files")
 def list_files():
-    """List all user files from Postgres index (bytes live in Azure Blob)."""
+    """List all user files from Postgres (metadata + inline bytes)."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
@@ -178,7 +145,7 @@ def list_files():
 
 @files_bp.get("/files/content")
 def get_file_content():
-    """Download bytes for a file (Azure Blob), with Postgres index lookup."""
+    """Download bytes for a file from Postgres inline storage."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
@@ -201,37 +168,18 @@ def get_file_content():
         )
         if not row:
             return jsonify({"error": "Not found"}), 404
-        blob_key = row.blob_key
+        if row.content is None:
+            return jsonify({"error": "File content missing (migration pending)"}), 404
 
-        expected_prefix = f"u/{uid}/"
-        if not blob_key.startswith(expected_prefix):
-            return jsonify({"error": "Invalid blob_key in index"}), 500
+        ct = row.content_type or "application/octet-stream"
+        return Response(bytes(row.content), mimetype=ct)
     finally:
         db.close()
-
-    svc = _azure_blob_service(config)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
-
-    try:
-        downloader = blob.download_blob()
-        data = downloader.readall()
-        props = blob.get_blob_properties()
-    except Exception as e:
-        msg = str(e)
-        if "BlobNotFound" in msg or "The specified blob does not exist" in msg:
-            return jsonify({"error": "Not found"}), 404
-        return jsonify({"error": f"Azure download failed: {msg}"}), 502
-
-    ct = getattr(getattr(props, "content_settings", None), "content_type", None) or "application/octet-stream"
-    return Response(data, mimetype=ct)
 
 
 @files_bp.post("/files/upload")
 def upload_file():
-    """Upload bytes for a file by name (overwrite).
-
-    Writes bytes to Azure Blob and upserts metadata to Postgres index.
-    """
+    """Upload bytes for a file by name (overwrite) into Postgres."""
     config: Config = current_app.config["EMWAVER_CONFIG"]
     uid = _require_user_uid(config)
     if not uid:
@@ -267,24 +215,7 @@ def upload_file():
         except Exception:
             return jsonify({"error": "Invalid 'mtime_ms'"}), 400
 
-    svc = _azure_blob_service(config)
-    blob_key = _blob_key(uid, name)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
-
-    try:
-        from azure.storage.blob import ContentSettings
-
-        blob.upload_blob(
-            data,
-            overwrite=True,
-            content_settings=ContentSettings(content_type=content_type or "application/octet-stream"),
-            metadata={"mtime_ms": str(mtime_ms)},
-        )
-        props = blob.get_blob_properties()
-    except Exception as e:
-        return jsonify({"error": f"Azure upload failed: {str(e)}"}), 502
-
-    # Upsert Postgres index
+    # Upsert Postgres row with inline bytes.
     try:
         from emw_backend.db import SessionLocal
         from emw_backend.models import UserFileIndex
@@ -298,11 +229,12 @@ def upload_file():
             values = {
                 "firebase_uid": uid,
                 "name": name,
-                "blob_key": blob_key,
+                "blob_key": _blob_key(uid, name),
+                "content": data,
                 "mtime_ms": int(mtime_ms),
-                "size_bytes": int(getattr(props, "size", 0) or len(data)),
-                "content_type": getattr(getattr(props, "content_settings", None), "content_type", None),
-                "etag": getattr(props, "etag", None),
+                "size_bytes": int(len(data)),
+                "content_type": content_type or "application/octet-stream",
+                "etag": None,
                 "updated_at": now_s,
             }
 
@@ -349,11 +281,11 @@ def upload_file():
         {
             "file": {
                 "name": name,
-                "blob_key": blob_key,
-                "etag": getattr(props, "etag", None),
-                "size_bytes": int(getattr(props, "size", 0) or len(data)),
-                "last_modified": _dt_to_iso(getattr(props, "last_modified", None)),
-                "content_type": getattr(getattr(props, "content_settings", None), "content_type", None),
+                "blob_key": _blob_key(uid, name),
+                "etag": None,
+                "size_bytes": int(len(data)),
+                "last_modified": _dt_to_iso(datetime.now(timezone.utc)),
+                "content_type": content_type or "application/octet-stream",
                 "mtime_ms": mtime_ms,
             }
         }
@@ -374,33 +306,22 @@ def delete_file():
     from emw_backend.db import SessionLocal
     from emw_backend.models import UserFileIndex
 
-    # Delete bytes first
-    svc = _azure_blob_service(config)
-    blob_key = _blob_key(uid, name)
-    blob = svc.get_blob_client(container=config.azure_blob_container, blob=blob_key)
-
-    try:
-        blob.delete_blob()
-    except Exception as e:
-        msg = str(e)
-        if "BlobNotFound" in msg or "The specified blob does not exist" in msg:
-            return jsonify({"error": "Not found"}), 404
-        return jsonify({"error": f"Azure delete failed: {msg}"}), 502
-
-    # Delete index row (best-effort)
+    # Delete row (inline bytes included).
     try:
         db = SessionLocal()
         try:
-            (
+            deleted = (
                 db.query(UserFileIndex)
                 .filter(UserFileIndex.firebase_uid == uid)
                 .filter(UserFileIndex.name == name)
                 .delete(synchronize_session=False)
             )
             db.commit()
+            if deleted <= 0:
+                return jsonify({"error": "Not found"}), 404
         finally:
             db.close()
-    except Exception:
-        pass
+    except Exception as e:
+        return jsonify({"error": f"DB delete failed: {str(e)}"}), 502
 
     return jsonify({"ok": True})
