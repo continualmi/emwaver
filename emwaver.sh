@@ -33,7 +33,8 @@ Usage: ./emwaver.sh <command>
 
 Commands:
   install [--prefix <dir>] [--force]
-      Build + install `emwaver` and `emwaver-host` to <prefix>/bin.
+      Build + install `emwaver` to <prefix>/bin.
+      (`emwaver-host` is installed as an internal runtime dependency.)
       Default prefix: ~/.local
 
   <emwaver args...>
@@ -64,7 +65,7 @@ install_cli() {
         ;;
       -h|--help)
         cat <<'HELP'
-Install emwaver CLI + daemon host binaries.
+Install emwaver CLI.
 
 Options:
   --prefix <dir>   Install root. Binaries go to <dir>/bin (default: ~/.local)
@@ -86,9 +87,8 @@ HELP
   cargo install --path "$DAEMON_DIR/emwaver-host" --root "$prefix" $force_flag
 
   echo
-  echo "✅ Installed binaries:"
-  echo "   - $prefix/bin/emwaver"
-  echo "   - $prefix/bin/emwaver-host"
+  echo "✅ Installed: $prefix/bin/emwaver"
+  echo "   (plus internal runtime: $prefix/bin/emwaver-host)"
 
   case ":$PATH:" in
     *":$prefix/bin:"*)
