@@ -17,6 +17,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices;
@@ -66,7 +67,7 @@ public sealed partial class ScriptsPage : Page
             {
                 if (!IsTool)
                 {
-                    return Text;
+                    return IsAssistant ? RenderMarkdownLikeMac(Text) : Text;
                 }
 
                 var raw = (Text ?? "").Trim();
@@ -96,6 +97,39 @@ public sealed partial class ScriptsPage : Page
 
                 return string.IsNullOrWhiteSpace(detail) ? title : (title + "\n" + detail);
             }
+        }
+
+        private static string RenderMarkdownLikeMac(string text)
+        {
+            var t = (text ?? string.Empty).Replace("\r\n", "\n").Replace("\r", "\n");
+
+            // Code fences: keep content, drop fence markers.
+            t = Regex.Replace(t, @"```(?:[a-zA-Z0-9_+-]+)?\n([\s\S]*?)```", m => m.Groups[1].Value.Trim('\n'));
+
+            // Headings to plain lines.
+            t = Regex.Replace(t, @"^\s{0,3}#{1,6}\s*", "", RegexOptions.Multiline);
+
+            // Bullets and task lists.
+            t = Regex.Replace(t, @"^\s*[-*+]\s+", "• ", RegexOptions.Multiline);
+            t = Regex.Replace(t, @"^\s*\d+\.\s+", "• ", RegexOptions.Multiline);
+            t = Regex.Replace(t, @"\[(x|X| )\]\s+", "", RegexOptions.Multiline);
+
+            // Links: keep label only.
+            t = Regex.Replace(t, @"\[([^\]]+)\]\(([^\)]+)\)", "$1");
+
+            // Emphasis/inline code markers (keep content).
+            t = Regex.Replace(t, @"`([^`]+)`", "$1");
+            t = Regex.Replace(t, @"\*\*([^*]+)\*\*", "$1");
+            t = Regex.Replace(t, @"__([^_]+)__", "$1");
+            t = Regex.Replace(t, @"\*([^*]+)\*", "$1");
+            t = Regex.Replace(t, @"_([^_]+)_", "$1");
+
+            // Block quote prefix.
+            t = Regex.Replace(t, @"^>\s?", "", RegexOptions.Multiline);
+
+            // Tighten excessive blank lines while preserving paragraph breaks.
+            t = Regex.Replace(t, "\n{3,}", "\n\n");
+            return t.Trim();
         }
     }
 
@@ -920,10 +954,12 @@ public sealed partial class ScriptsPage : Page
         SetAgentStatusText("");
 
         _agentMessages.Add(new AgentMessageRow("You", text));
+        ScrollAgentMessagesToBottom();
 
         // Placeholder row for streaming.
         var placeholder = new AgentMessageRow("ELM", "");
         _agentMessages.Add(placeholder);
+        ScrollAgentMessagesToBottom();
 
         try
         {
@@ -968,6 +1004,7 @@ public sealed partial class ScriptsPage : Page
                             if (!string.IsNullOrWhiteSpace(ev.Text))
                             {
                                 _agentMessages.Add(new AgentMessageRow("Tool", ev.Text));
+                                ScrollAgentMessagesToBottom();
                             }
                             break;
 
@@ -1068,7 +1105,31 @@ public sealed partial class ScriptsPage : Page
             }
 
             SetAgentStatusText("");
+            ScrollAgentMessagesToBottom();
             await Task.CompletedTask;
+        });
+    }
+
+
+    private void ScrollAgentMessagesToBottom()
+    {
+        if (_agentMessages.Count == 0)
+        {
+            return;
+        }
+
+        var last = _agentMessages[_agentMessages.Count - 1];
+        _ = DispatcherQueue.TryEnqueue(() =>
+        {
+            try
+            {
+                AgentMessagesList.UpdateLayout();
+                AgentMessagesList.ScrollIntoView(last);
+            }
+            catch
+            {
+                // Best-effort.
+            }
         });
     }
 
@@ -1079,6 +1140,7 @@ public sealed partial class ScriptsPage : Page
             if (_agentMessages[i].Role == "ELM")
             {
                 _agentMessages[i] = new AgentMessageRow("ELM", text);
+                ScrollAgentMessagesToBottom();
                 return;
             }
         }
