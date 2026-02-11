@@ -184,6 +184,8 @@
                     Background="{ThemeResource ControlStrokeColorDefaultBrush}"
                     Opacity="0.35"
                     Visibility="Collapsed"
+                    PointerEntered="OnAgentSplitterPointerEntered"
+                    PointerExited="OnAgentSplitterPointerExited"
                     PointerPressed="OnAgentSplitterPointerPressed"
                     PointerMoved="OnAgentSplitterPointerMoved"
                     PointerReleased="OnAgentSplitterPointerReleased"
@@ -213,7 +215,6 @@
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
                                 <TextBlock Text="ELM" FontWeight="SemiBold" />
@@ -235,9 +236,8 @@
 
                                 <ComboBox Grid.Column="2" x:Name="AgentConversationsCombo" MinWidth="140" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
 
-                                <Button Grid.Column="3" Content="Refresh" Click="OnAgentRefreshConversationsClick" />
-
-                                <Button Grid.Column="4" Content="More">
+                                <Button Grid.Column="3" Padding="8,2" MinWidth="30" Height="30" ToolTipService.ToolTip="Conversation actions">
+                                    <FontIcon Glyph="&#xE712;" />
                                     <Button.Flyout>
                                         <MenuFlyout>
                                             <MenuFlyoutItem Text="New" Click="OnAgentNewChatClick" />

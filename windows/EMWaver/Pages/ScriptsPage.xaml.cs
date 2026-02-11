@@ -5,6 +5,7 @@ using EMWaver.Services;
 using EMWaver.Services.Cloud;
 using System.IO;
 using Microsoft.UI.Dispatching;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -45,6 +46,7 @@ public sealed partial class ScriptsPage : Page
     private bool _isResizingAgentPane;
     private double _agentResizeStartX;
     private double _agentResizeStartWidth;
+    private readonly InputCursor _agentResizeCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
 
     private EMWaver.Services.Agent.AgentApi AgentApi => new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
 
@@ -750,6 +752,7 @@ public sealed partial class ScriptsPage : Page
         else
         {
             AgentColumn.Width = new GridLength(0);
+            ProtectedCursor = null;
         }
 
         if (show)
@@ -760,6 +763,26 @@ public sealed partial class ScriptsPage : Page
         {
             CancelAgentStream();
         }
+    }
+
+    private void OnAgentSplitterPointerEntered(object sender, PointerRoutedEventArgs e)
+    {
+        if (AgentPane.Visibility != Visibility.Visible)
+        {
+            return;
+        }
+
+        ProtectedCursor = _agentResizeCursor;
+    }
+
+    private void OnAgentSplitterPointerExited(object sender, PointerRoutedEventArgs e)
+    {
+        if (_isResizingAgentPane)
+        {
+            return;
+        }
+
+        ProtectedCursor = null;
     }
 
     private void OnAgentSplitterPointerPressed(object sender, PointerRoutedEventArgs e)
@@ -807,6 +830,7 @@ public sealed partial class ScriptsPage : Page
         }
 
         _isResizingAgentPane = false;
+        ProtectedCursor = null;
         if (sender is UIElement el)
         {
             el.ReleasePointerCaptures();
@@ -900,7 +924,7 @@ public sealed partial class ScriptsPage : Page
     {
         try
         {
-            await RefreshEntitlementsUiAsync(force: false);
+            await RefreshEntitlementsUiAsync(force: true);
             if (!_agentEnabled)
             {
                 SetAgentStatusText(_agentSignedIn
@@ -1083,12 +1107,6 @@ public sealed partial class ScriptsPage : Page
             }
         }
         catch { }
-    }
-
-    private async void OnAgentRefreshConversationsClick(object sender, RoutedEventArgs e)
-    {
-        try { await RefreshAgentConversationsAsync(); }
-        catch (Exception ex) { SetAgentStatusText(ex.Message); }
     }
 
     private void OnAgentNewChatClick(object sender, RoutedEventArgs e)
