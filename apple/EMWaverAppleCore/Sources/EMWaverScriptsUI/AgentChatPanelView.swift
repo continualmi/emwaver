@@ -127,6 +127,36 @@ public struct AgentChatPanelView: View {
                         viewModel.newConversation()
                     }
 
+                    Divider()
+
+                    Menu {
+                        Button {
+                            viewModel.mode = .llm
+                        } label: {
+                            HStack {
+                                Text("LLM")
+                                if viewModel.mode == .llm {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+
+                        Button {
+                            viewModel.mode = .elm
+                        } label: {
+                            HStack {
+                                Text("ELM")
+                                if viewModel.mode == .elm {
+                                    Spacer()
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    } label: {
+                        Text("Mode • \(viewModel.mode == .elm ? "ELM" : "LLM")")
+                    }
+
                     if !viewModel.conversations.isEmpty {
                         Divider()
 
@@ -181,6 +211,7 @@ public struct AgentChatPanelView: View {
                                     }
                                 }
                             }
+                            .disabled(viewModel.mode == .elm)
                         }
 
                         Divider()
@@ -302,7 +333,22 @@ public struct AgentChatPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             suggestions
 
-            TextField("Message", text: $viewModel.draft, axis: .vertical)
+            if viewModel.mode == .elm {
+                HStack(spacing: 10) {
+                    Toggle("Tick Active", isOn: $viewModel.elmTickActive)
+
+                    Spacer()
+
+                    Stepper(value: $viewModel.elmTickPeriodSeconds, in: 1...3600, step: 1) {
+                        Text("Tick: \(viewModel.elmTickPeriodSeconds)s")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 180)
+                }
+            }
+
+            TextField(viewModel.mode == .elm ? "User message (optional between ticks)" : "Message", text: $viewModel.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...6)
                 .disabled(viewModel.isSending)
@@ -311,7 +357,7 @@ public struct AgentChatPanelView: View {
                 }
 
             HStack {
-                Text(agentEnabled ? "Enter to send" : "Pro required to send")
+                Text(agentEnabled ? (viewModel.mode == .elm ? "Enter to send one ELM turn" : "Enter to send") : "Pro required to send")
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
