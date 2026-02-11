@@ -42,6 +42,30 @@
         android:textColor="@color/textSecondary"
         android:textSize="13sp" />
 
+
+
+    <TextView
+        android:id="@+id/sign_in_code_label"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:text="One-time code"
+        android:textColor="@color/textSecondary"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <EditText
+        android:id="@+id/sign_in_code_input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:hint="EMW-XXXXXX"
+        android:imeOptions="actionDone"
+        android:inputType="textNoSuggestions|textVisiblePassword"
+        android:maxLines="1"
+        android:textColor="@color/textPrimary"
+        android:textColorHint="@color/textSecondary" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -66,7 +90,7 @@
             style="@style/Widget.MaterialComponents.Button"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Continue with Google" />
+            android:text="Open Browser" />
     </LinearLayout>
 
 </LinearLayout>
