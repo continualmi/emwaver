@@ -15,7 +15,7 @@
 
         <TextBlock x:Name="AuthDetailText" Text="" Opacity="0.75" TextWrapping="Wrap" />
 
-        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+        <StackPanel x:Name="HandoffPanel" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
             <TextBlock Text="Handoff code:" />
             <TextBox x:Name="HandoffCodeBox" Width="240" PlaceholderText="EMW-XXXXXX" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             <Button x:Name="ConsumeHandoffButton" Content="Continue" Click="OnConsumeHandoffClick" />
@@ -23,7 +23,7 @@
 
         <StackPanel Orientation="Horizontal" Spacing="10">
             <Button x:Name="SignInButton" Content="Open web sign-in" Click="OnSignInClick" />
-            <Button x:Name="SignOutButton" Content="Sign out" Click="OnSignOutClick" IsEnabled="False" />
+            <Button x:Name="SignOutButton" Content="Sign out" Click="OnSignOutClick" Visibility="Collapsed" />
         </StackPanel>
     </StackPanel>
 </ContentDialog>
