@@ -29,6 +29,8 @@ namespace EMWaver.Pages;
 
 public sealed partial class ScriptsPage : Page
 {
+    private const double DefaultAgentPaneWidth = 380;
+
     public event Action<bool>? PreviewModeChanged;
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
@@ -844,7 +846,7 @@ public sealed partial class ScriptsPage : Page
         {
             if (AgentColumn.Width.Value <= 0)
             {
-                AgentColumn.Width = new GridLength(380);
+                AgentColumn.Width = new GridLength(DefaultAgentPaneWidth);
             }
         }
         else
