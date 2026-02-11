@@ -24,6 +24,24 @@ internal sealed record CloudSyncSummary(int Uploaded, int Downloaded, int Confli
     );
 }
 
+internal enum CloudSyncProgressAction
+{
+    Scanning,
+    Uploading,
+    Downloading,
+    Skipped,
+}
+
+internal sealed record CloudSyncProgress(
+    string Kind,
+    string Name,
+    CloudSyncProgressAction Action,
+    int Processed,
+    int Total,
+    int Uploaded,
+    int Downloaded,
+    int Conflicts);
+
 internal sealed class CloudSyncEngine
 {
     private static void DebugLog(string msg)
@@ -46,7 +64,8 @@ internal sealed class CloudSyncEngine
         string storageDir,
         IReadOnlyList<FileKindSpec> kinds,
         CloudSyncPolicy policy,
-        CancellationToken ct)
+        CancellationToken ct,
+        IProgress<CloudSyncProgress>? progress = null)
     {
         // Empty accessToken is allowed in dev when backend auth is disabled (EMWAVER_ALLOW_ANON_SYNC=1).
         // Caller decides whether that is acceptable.
@@ -56,6 +75,10 @@ internal sealed class CloudSyncEngine
         DebugLog($"sync start dir='{storageDir}' kinds={kinds.Count} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
 
         var summary = CloudSyncSummary.Empty;
+        var globalProcessed = 0;
+        var globalTotal = 0;
+
+        var kindNames = new List<(FileKindSpec Spec, List<string> Names, Dictionary<string, CloudFilesClient.CloudFile> CloudByName, Dictionary<string, string> LocalByName)>();
 
         foreach (var spec in kinds)
         {
@@ -79,8 +102,22 @@ internal sealed class CloudSyncEngine
 
             var names = new HashSet<string>(cloudByName.Keys, StringComparer.OrdinalIgnoreCase);
             foreach (var n in localByName.Keys) names.Add(n);
+            var orderedNames = names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
 
-            foreach (var name in names.OrderBy(n => n, StringComparer.OrdinalIgnoreCase))
+            kindNames.Add((spec, orderedNames, cloudByName, localByName));
+            globalTotal += orderedNames.Count;
+
+            DebugLog($"kind={spec.Kind} total={orderedNames.Count} globalTotal={globalTotal}");
+        }
+
+        foreach (var batch in kindNames)
+        {
+            var spec = batch.Spec;
+            var cloudByName = batch.CloudByName;
+            var localByName = batch.LocalByName;
+            var orderedNames = batch.Names;
+
+            foreach (var name in orderedNames)
             {
                 ct.ThrowIfCancellationRequested();
 
@@ -98,6 +135,8 @@ internal sealed class CloudSyncEngine
                         TrySetFileMtimeMs(destPath, cloudMtimeMs);
                     }
                     summary = summary with { Downloaded = summary.Downloaded + 1 };
+                    globalProcessed += 1;
+                    progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Downloading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                     continue;
                 }
 
@@ -116,6 +155,8 @@ internal sealed class CloudSyncEngine
                         ct,
                         mtimeMs: TryGetFileMtimeMs(localPath));
                     summary = summary with { Uploaded = summary.Uploaded + 1 };
+                    globalProcessed += 1;
+                    progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Uploading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                     continue;
                 }
 
@@ -128,6 +169,8 @@ internal sealed class CloudSyncEngine
                     {
                         if (lm == cm)
                         {
+                            globalProcessed += 1;
+                            progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Skipped, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                             continue;
                         }
 
@@ -145,6 +188,8 @@ internal sealed class CloudSyncEngine
                                 ct,
                                 mtimeMs: lm);
                             summary = summary with { Uploaded = summary.Uploaded + 1 };
+                            globalProcessed += 1;
+                            progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Uploading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                             continue;
                         }
 
@@ -154,6 +199,8 @@ internal sealed class CloudSyncEngine
                             await DownloadAsync(baseUrl, accessToken, cloudName: name, cloudId: cloudFile.Metadata.Id, localPath, ct);
                             TrySetFileMtimeMs(localPath, cm);
                             summary = summary with { Downloaded = summary.Downloaded + 1 };
+                            globalProcessed += 1;
+                            progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Downloading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                             continue;
                         }
                         catch (CloudFilesClient.CloudFilesClientError ex) when (ex.StatusCode == 404 || ex.StatusCode == 502)
@@ -171,6 +218,8 @@ internal sealed class CloudSyncEngine
                                 ct,
                                 mtimeMs: lm);
                             summary = summary with { Uploaded = summary.Uploaded + 1 };
+                            globalProcessed += 1;
+                            progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Uploading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                             continue;
                         }
                     }
@@ -188,6 +237,13 @@ internal sealed class CloudSyncEngine
                         ct,
                         mtimeMs: localMtime ?? DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
                     summary = summary with { Uploaded = summary.Uploaded + 1 };
+                    globalProcessed += 1;
+                    progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Uploading, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
+                }
+                else
+                {
+                    globalProcessed += 1;
+                    progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Skipped, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));
                 }
             }
         }

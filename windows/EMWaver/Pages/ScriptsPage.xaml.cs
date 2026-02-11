@@ -284,6 +284,37 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
+    private void OnScriptsListRightTapped(object sender, RightTappedRoutedEventArgs e)
+    {
+        var fe = e.OriginalSource as FrameworkElement;
+        var candidate = fe?.DataContext;
+        if (candidate is ScriptInfo script)
+        {
+            ScriptsList.SelectedItem = script;
+        }
+        else if (candidate is Models.SignalFileInfo signal)
+        {
+            ScriptsList.SelectedItem = signal;
+        }
+    }
+
+    private void OnScriptsListContextOpening(object sender, object e)
+    {
+        var canEditScript = _current != null && !_current.IsBundled;
+        ScriptsContextRenameItem.IsEnabled = canEditScript;
+        ScriptsContextDeleteItem.IsEnabled = canEditScript;
+    }
+
+    private void OnScriptsContextRenameClick(object sender, RoutedEventArgs e)
+    {
+        OnRenameClick(sender, e);
+    }
+
+    private void OnScriptsContextDeleteClick(object sender, RoutedEventArgs e)
+    {
+        OnDeleteClick(sender, e);
+    }
+
     private async Task OpenScriptAsync(ScriptInfo script)
     {
         _current = script;
@@ -927,9 +958,17 @@ public sealed partial class ScriptsPage : Page
     private ContentDialog? _syncDialog;
     private ProgressBar? _syncProgress;
     private TextBlock? _syncStatus;
+    private TextBlock? _syncCounts;
     private CancellationTokenSource? _syncCts;
 
+    private sealed record SyncUiProgressState(string Status, int Processed, int Total, int Uploaded, int Downloaded);
+
     private async Task ShowSyncProgressAsync(string status)
+    {
+        await ShowSyncProgressAsync(new SyncUiProgressState(status, 0, 0, 0, 0));
+    }
+
+    private async Task ShowSyncProgressAsync(SyncUiProgressState state)
     {
         await RunOnUiAsync(async () =>
         {
@@ -937,21 +976,33 @@ public sealed partial class ScriptsPage : Page
             {
                 _syncProgress = new ProgressBar
                 {
-                    IsIndeterminate = true,
+                    IsIndeterminate = false,
                     Height = 6,
                     MinWidth = 260,
+                    Minimum = 0,
+                    Maximum = 1,
+                    Value = 0,
                 };
 
                 _syncStatus = new TextBlock
                 {
-                    Text = status,
+                    Text = state.Status,
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(0, 10, 0, 0),
+                };
+
+                _syncCounts = new TextBlock
+                {
+                    Text = "Processed 0/0 • Uploads 0 • Downloads 0",
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(0, 6, 0, 0),
+                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
                 };
 
                 var panel = new StackPanel();
                 panel.Children.Add(_syncProgress);
                 panel.Children.Add(_syncStatus);
+                panel.Children.Add(_syncCounts);
 
                 _syncDialog = new ContentDialog
                 {
@@ -973,9 +1024,23 @@ public sealed partial class ScriptsPage : Page
                 _ = _syncDialog.ShowAsync();
             }
 
-            if (_syncStatus != null)
+            if (_syncStatus != null) _syncStatus.Text = state.Status;
+            if (_syncProgress != null)
             {
-                _syncStatus.Text = status;
+                if (state.Total > 0)
+                {
+                    _syncProgress.Maximum = state.Total;
+                    _syncProgress.Value = Math.Min(state.Processed, state.Total);
+                }
+                else
+                {
+                    _syncProgress.Maximum = 1;
+                    _syncProgress.Value = 0;
+                }
+            }
+            if (_syncCounts != null)
+            {
+                _syncCounts.Text = $"Processed {state.Processed}/{state.Total} • Uploads {state.Uploaded} • Downloads {state.Downloaded}";
             }
 
             await Task.CompletedTask;
@@ -991,8 +1056,20 @@ public sealed partial class ScriptsPage : Page
             _syncDialog = null;
             _syncProgress = null;
             _syncStatus = null;
+            _syncCounts = null;
             await Task.CompletedTask;
         });
+    }
+
+    private static string ProgressActionLabel(CloudSyncProgressAction action)
+    {
+        return action switch
+        {
+            CloudSyncProgressAction.Uploading => "Uploading",
+            CloudSyncProgressAction.Downloading => "Downloading",
+            CloudSyncProgressAction.Skipped => "Skipping",
+            _ => "Scanning",
+        };
     }
 
     private async Task SyncNowAsync()
@@ -1050,6 +1127,24 @@ public sealed partial class ScriptsPage : Page
             using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, userCts.Token);
             _syncCts = userCts;
 
+            var aggregateUploaded = 0;
+            var aggregateDownloaded = 0;
+
+            IProgress<CloudSyncProgress> MakePhaseProgress(string phaseLabel)
+            {
+                return new Progress<CloudSyncProgress>(p =>
+                {
+                    var action = ProgressActionLabel(p.Action);
+                    var status = $"{phaseLabel}: {action} {p.Name}";
+                    _ = ShowSyncProgressAsync(new SyncUiProgressState(
+                        status,
+                        p.Processed,
+                        p.Total,
+                        aggregateUploaded + p.Uploaded,
+                        aggregateDownloaded + p.Downloaded));
+                });
+            }
+
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] baseUrl={baseUrl} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] scriptsDir={scriptsDir}");
 
@@ -1063,8 +1158,11 @@ public sealed partial class ScriptsPage : Page
                     new CloudSyncEngine.FileKindSpec(Kind: "script", Ext: ".emw", ContentType: "text/plain"),
                 },
                 policy: CloudSyncPolicy.PreferLocal,
-                ct: linkedCts.Token
+                ct: linkedCts.Token,
+                progress: MakePhaseProgress("Scripts")
             );
+            aggregateUploaded += s1.Uploaded;
+            aggregateDownloaded += s1.Downloaded;
 
             await ShowSyncProgressAsync("Syncing signals…");
             var s2 = await engine.SyncAsync(
@@ -1077,7 +1175,8 @@ public sealed partial class ScriptsPage : Page
                     new CloudSyncEngine.FileKindSpec(Kind: "signal_text", Ext: ".txt", ContentType: "text/plain"),
                 },
                 policy: CloudSyncPolicy.PreferLocal,
-                ct: linkedCts.Token
+                ct: linkedCts.Token,
+                progress: MakePhaseProgress("Signals")
             );
 
             var total = s1.Add(s2);
