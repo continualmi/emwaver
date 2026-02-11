@@ -9,6 +9,7 @@ using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using System;
 using System.Diagnostics;
 using System.Collections.Generic;
@@ -30,9 +31,72 @@ public sealed partial class ScriptsPage : Page
     public event Action<bool>? PreviewModeChanged;
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
-    private sealed record AgentMessageRow(string Role, string Text)
+    private sealed class AgentMessageRow
     {
-        public override string ToString() => $"{Role}: {Text}";
+        public string Role { get; }
+        public string Text { get; }
+
+        public AgentMessageRow(string role, string text)
+        {
+            Role = role;
+            Text = text;
+        }
+
+        public bool IsUser => string.Equals(Role, "You", StringComparison.OrdinalIgnoreCase);
+        public bool IsAssistant => string.Equals(Role, "ELM", StringComparison.OrdinalIgnoreCase);
+        public bool IsTool => string.Equals(Role, "Tool", StringComparison.OrdinalIgnoreCase);
+
+        public string RoleLabel => IsUser ? "You" : (IsTool ? "Tool" : "Agent");
+
+        public string IconGlyph => IsUser ? "" : (IsTool ? "" : "");
+
+        public Brush BubbleBackground => IsUser
+            ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(36, 0, 120, 212))
+            : (IsTool
+                ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(25, 140, 140, 140))
+                : new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(18, 128, 128, 128)));
+
+        public Brush BubbleBorderBrush => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(36, 80, 80, 80));
+
+        public HorizontalAlignment BubbleAlignment => IsUser ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+
+        public string RenderedText
+        {
+            get
+            {
+                if (!IsTool)
+                {
+                    return Text;
+                }
+
+                var raw = (Text ?? "").Trim();
+                if (raw.StartsWith("[tool]", StringComparison.OrdinalIgnoreCase))
+                {
+                    raw = raw[6..].Trim();
+                }
+
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    return "Tool action";
+                }
+
+                var firstSpace = raw.IndexOf(' ');
+                var toolId = firstSpace > 0 ? raw[..firstSpace] : raw;
+                var detail = firstSpace > 0 ? raw[(firstSpace + 1)..].Trim() : "";
+
+                var title = toolId switch
+                {
+                    "hosts_list" => "List hosts",
+                    "remote_attach" => "Attach host",
+                    "remote_run_script" => "Run script",
+                    "remote_wait_for_ui" => "Wait for UI",
+                    "remote_send_ui_event" => "UI action",
+                    _ => toolId,
+                };
+
+                return string.IsNullOrWhiteSpace(detail) ? title : (title + "\n" + detail);
+            }
+        }
     }
 
     private readonly ObservableCollection<AgentMessageRow> _agentMessages = new();
@@ -881,7 +945,7 @@ public sealed partial class ScriptsPage : Page
 
             SetAgentSending(true);
 
-            await AgentApi.ChatStreamAsync(convoId!, text, ev =>
+            await AgentApi.ChatStreamWithToolsAsync(convoId!, text, ev =>
             {
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
@@ -898,6 +962,13 @@ public sealed partial class ScriptsPage : Page
                         case EMWaver.Services.Agent.AgentApi.StreamEventKind.Done:
                             ReplaceLastAgentMessage(ev.DoneMessage?.Content ?? accum.ToString());
                             SetAgentSending(false);
+                            break;
+
+                        case EMWaver.Services.Agent.AgentApi.StreamEventKind.Tool:
+                            if (!string.IsNullOrWhiteSpace(ev.Text))
+                            {
+                                _agentMessages.Add(new AgentMessageRow("Tool", ev.Text));
+                            }
                             break;
 
                         case EMWaver.Services.Agent.AgentApi.StreamEventKind.Error:
@@ -935,15 +1006,19 @@ public sealed partial class ScriptsPage : Page
 
             await RefreshAgentConversationsAsync();
 
-            // Restore selection if we have a persisted conversation.
+            EMWaver.Services.Agent.AgentApi.Conversation? selected = null;
             if (!string.IsNullOrWhiteSpace(_agentConversationId))
             {
-                var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
-                if (match != null)
-                {
-                    AgentConversationsCombo.SelectedItem = match;
-                    await LoadAgentConversationAsync(match.Id);
-                }
+                selected = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
+            }
+
+            selected ??= _agentConversations.FirstOrDefault();
+            if (selected != null)
+            {
+                AgentConversationsCombo.SelectedItem = selected;
+                _agentConversationId = selected.Id;
+                SaveAgentConversationId(selected.Id);
+                await LoadAgentConversationAsync(selected.Id);
             }
         }
         catch (Exception ex)
@@ -954,7 +1029,7 @@ public sealed partial class ScriptsPage : Page
 
     private async Task RefreshAgentConversationsAsync()
     {
-        SetAgentStatusText("");
+        SetAgentStatusText("Loading chats…");
         var list = await AgentApi.ListConversationsAsync(CancellationToken.None);
 
         await RunOnUiAsync(async () =>
@@ -965,13 +1040,13 @@ public sealed partial class ScriptsPage : Page
                 _agentConversations.Add(c);
             }
 
-            if (!string.IsNullOrWhiteSpace(_agentConversationId))
+            var selected = !string.IsNullOrWhiteSpace(_agentConversationId)
+                ? _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId)
+                : null;
+            selected ??= _agentConversations.FirstOrDefault();
+            if (selected != null)
             {
-                var match = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
-                if (match != null)
-                {
-                    AgentConversationsCombo.SelectedItem = match;
-                }
+                AgentConversationsCombo.SelectedItem = selected;
             }
 
             await Task.CompletedTask;
@@ -992,6 +1067,7 @@ public sealed partial class ScriptsPage : Page
                 _agentMessages.Add(new AgentMessageRow(role, m.Content));
             }
 
+            SetAgentStatusText("");
             await Task.CompletedTask;
         });
     }
@@ -1011,7 +1087,8 @@ public sealed partial class ScriptsPage : Page
     private void SetAgentSending(bool sending)
     {
         AgentInput.IsEnabled = !sending;
-        AgentSendButton.IsEnabled = !sending && _agentEnabled;
+        AgentSendButton.IsEnabled = !sending && _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
+        AgentThinkingRow.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task RefreshEntitlementsUiAsync(bool force)
@@ -1028,7 +1105,7 @@ public sealed partial class ScriptsPage : Page
             {
                 AgentSignInNotice.Visibility = _agentSignedIn ? Visibility.Collapsed : Visibility.Visible;
                 AgentProNotice.Visibility = (!_agentSignedIn || _agentEnabled) ? Visibility.Collapsed : Visibility.Visible;
-                AgentSendButton.IsEnabled = _agentEnabled;
+                AgentSendButton.IsEnabled = _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
                 AgentInput.IsEnabled = _agentEnabled;
                 await Task.CompletedTask;
             });
@@ -1122,6 +1199,11 @@ public sealed partial class ScriptsPage : Page
     {
         _agentMessages.Clear();
         SetAgentStatusText("");
+    }
+
+    private void OnAgentInputTextChanged(object sender, TextChangedEventArgs e)
+    {
+        AgentSendButton.IsEnabled = _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
     }
 
     private async void OnAgentConversationChanged(object sender, SelectionChangedEventArgs e)

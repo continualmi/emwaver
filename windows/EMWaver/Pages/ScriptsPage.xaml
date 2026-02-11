@@ -9,6 +9,29 @@
     <Page.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVisibility" />
         <conv:ScriptListItemTemplateSelector x:Key="ScriptListTemplateSelector" />
+        <DataTemplate x:Key="AgentMessageTemplate">
+            <Grid>
+                <Border
+                    MaxWidth="520"
+                    CornerRadius="10"
+                    Padding="10"
+                    HorizontalAlignment="{Binding BubbleAlignment}"
+                    Background="{Binding BubbleBackground}"
+                    BorderBrush="{Binding BubbleBorderBrush}"
+                    BorderThickness="1">
+                    <StackPanel Spacing="6">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <FontIcon Glyph="{Binding IconGlyph}" FontSize="12" Opacity="0.8" />
+                            <TextBlock Text="{Binding RoleLabel}" FontSize="12" Opacity="0.8" />
+                        </StackPanel>
+                        <TextBlock
+                            Text="{Binding RenderedText}"
+                            TextWrapping="Wrap"
+                            IsTextSelectionEnabled="True" />
+                    </StackPanel>
+                </Border>
+            </Grid>
+        </DataTemplate>
     </Page.Resources>
 
     <Grid Padding="16" RowSpacing="12" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
@@ -217,14 +240,14 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <TextBlock Text="ELM" FontWeight="SemiBold" />
+                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="ELM" FontWeight="SemiBold" /></StackPanel>
 
-                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center">
+                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center" ToolTipService.ToolTip="What is ELM?">
                                     <FontIcon Glyph="&#xE946;" FontSize="14" />
                                     <Button.Flyout>
                                         <Flyout Placement="Bottom">
                                             <StackPanel Spacing="8" MaxWidth="280" Padding="4">
-                                                <TextBlock Text="ELM" FontWeight="SemiBold" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="ELM" FontWeight="SemiBold" /></StackPanel>
                                                 <TextBlock Text="Electronics Language Model" Opacity="0.8" />
                                                 <TextBlock Text="An AI language model trained to control EMWaver and help with electronics workflows."
                                                            TextWrapping="Wrap"
@@ -237,7 +260,7 @@
                                 <ComboBox Grid.Column="2" x:Name="AgentConversationsCombo" MinWidth="140" DisplayMemberPath="DisplayTitle" SelectionChanged="OnAgentConversationChanged" />
 
                                 <Button Grid.Column="3" Padding="8,2" MinWidth="30" Height="30" ToolTipService.ToolTip="Conversation actions">
-                                    <FontIcon Glyph="&#xE712;" />
+                                    <FontIcon Glyph="&#xE10C;" />
                                     <Button.Flyout>
                                         <MenuFlyout>
                                             <MenuFlyoutItem Text="New" Click="OnAgentNewChatClick" />
@@ -273,6 +296,7 @@
                                     Padding="10"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                    <FontIcon Glyph="&#xE72E;" Opacity="0.8"/>
                                     <TextBlock Text="ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
                                                TextWrapping="Wrap"
                                                Opacity="0.85"
@@ -282,7 +306,17 @@
                             </Border>
                         </StackPanel>
 
-                        <ListView Grid.Row="1" x:Name="AgentMessagesList" />
+                        <StackPanel Grid.Row="1" Spacing="8">
+                            <StackPanel x:Name="AgentThinkingRow" Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
+                                <ProgressRing Width="14" Height="14" IsActive="True" />
+                                <TextBlock Text="Thinking…" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                            </StackPanel>
+                            <ListView Grid.Row="1"
+                                      x:Name="AgentMessagesList"
+                                      ItemTemplate="{StaticResource AgentMessageTemplate}"
+                                      SelectionMode="None"
+                                      IsItemClickEnabled="False" />
+                        </StackPanel>
 
                         <Grid Grid.Row="2" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -290,7 +324,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
 
-                            <TextBox x:Name="AgentInput" PlaceholderText="Ask ELM..." />
+                            <TextBox x:Name="AgentInput" PlaceholderText="Message" TextChanged="OnAgentInputTextChanged" />
                             <Button x:Name="AgentSendButton" Grid.Column="1" Content="Send" Click="OnAgentSendClick" />
                         </Grid>
                     </Grid>
