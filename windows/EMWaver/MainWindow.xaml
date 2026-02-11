@@ -115,6 +115,31 @@
 
                     <AppBarSeparator />
 
+                    <AppBarElementContainer x:Name="RunningScriptContainer" Visibility="Collapsed">
+                        <Button x:Name="RunningScriptButton"
+                                Click="OnRunningScriptClick"
+                                Padding="10,4"
+                                Background="Transparent"
+                                BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="6"
+                                ToolTipService.ToolTip="Open running script preview">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Ellipse x:Name="RunningPulseDot" Width="8" Height="8" Fill="#42D17C" Opacity="1" VerticalAlignment="Center" />
+                                <TextBlock x:Name="RunningScriptText" Text="Running" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </AppBarElementContainer>
+
+                    <AppBarButton
+                        x:Name="StopRunningScriptButton"
+                        Label="Stop"
+                        Icon="Stop"
+                        Visibility="Collapsed"
+                        Click="OnStopRunningScriptClick" />
+
+                    <AppBarSeparator />
+
                     <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="ELM" Click="OnScriptAgentToggleClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Message" />

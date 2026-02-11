@@ -1,6 +1,5 @@
 using EMWaver.Services.Cloud;
 using EMWaver.Scripting;
-using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.Text.Json;
@@ -23,14 +22,7 @@ public sealed partial class ScriptsPage
         {
             _ = _page.DispatcherQueue.TryEnqueue(() =>
             {
-                try
-                {
-                    if (_page.RemoteControlBanner != null)
-                    {
-                        _page.RemoteControlBanner.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-                    }
-                }
-                catch { }
+                _page.NotifyRunningScriptStatusChanged();
             });
         }
 
@@ -58,6 +50,8 @@ public sealed partial class ScriptsPage
                         IsBundled: true,
                         ShadowsBundled: false
                     );
+
+                    _page.SetRunningScriptState(true, scriptName);
 
                     // Execute.
                     _page._scriptEngine.Execute(source);
@@ -143,6 +137,5 @@ public sealed partial class ScriptsPage
     private void RenderPreviewWithRemoteMirror(ScriptTree tree)
     {
         _lastRenderedTree = tree;
-        AppServices.RemoteControlHost.PublishUiSnapshotIfRemoteControlled();
     }
 }
