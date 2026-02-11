@@ -87,7 +87,7 @@ internal sealed class RemoteControlClientService
             Delegate?.OnStatus("connecting");
 
             var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-            var tok = _auth.GetIdToken();
+            var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
             if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
             {
                 Delegate?.OnError("missing auth token");

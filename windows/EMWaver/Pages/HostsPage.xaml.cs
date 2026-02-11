@@ -61,7 +61,7 @@ public sealed partial class HostsPage : Page
 
             // Require auth (same as file sync). Allow empty token in dev when backend auth disabled.
             var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-            var tok = AppServices.CloudAuth.GetIdToken();
+            var tok = await AppServices.CloudAuth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
             if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
             {
                 await RunOnUiThreadAsync(() =>
@@ -73,7 +73,7 @@ public sealed partial class HostsPage : Page
             }
 
             var cts = new CancellationTokenSource(TimeSpan.FromSeconds(20));
-            var rows = await AppServices.CloudHosts.ListAsync(accessToken: allowAnon ? tok : tok, ct: cts.Token);
+            var rows = await AppServices.CloudHosts.ListAsync(accessToken: tok, ct: cts.Token);
 
             var list = rows.Select(h => new HostRow(
                 HostSessionId: h.Id,
