@@ -9,6 +9,23 @@ import JavaScriptCore
 import EMWaverScriptModel
 
 public final class ScriptEngine {
+    private enum RenderNodeError: LocalizedError {
+        case invalidObject(path: String)
+        case missingType(path: String)
+        case unsupportedType(path: String, type: String)
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidObject(let path):
+                return "invalid object at \(path)"
+            case .missingType(let path):
+                return "missing node type at \(path)"
+            case .unsupportedType(let path, let type):
+                return "unsupported node type '\(type)' at \(path)"
+            }
+        }
+    }
+
     private let executionQueue = DispatchQueue(label: "com.emwaver.script.engine")
     private var context: JSContext?
     private var callbackRegistry: [String: JSValue] = [:]
@@ -20,6 +37,10 @@ public final class ScriptEngine {
     // Access only from executionQueue.
     private var nextTimeoutId: Int = 1
     private var timeouts: [Int: DispatchWorkItem] = [:]
+
+    private let userScriptSourcePath = "/emwaver-user-script.emw"
+    private let bootstrapSourcePath = "/script_bootstrap.emw"
+    private let userScriptWrapperPrefixLineCount = 2
 
     public init() {}
 
@@ -60,9 +81,7 @@ public final class ScriptEngine {
 
     private func installHostPrimitives(into context: JSContext) {
         context.exceptionHandler = { [weak self] _, exception in
-            if let message = exception?.toString() {
-                self?.emitError("Script error: \(message)")
-            }
+            self?.emitError(self?.formatScriptError(from: exception) ?? "Script error: Unknown JavaScript exception")
         }
 
         let renderBlock: @convention(block) (JSValue) -> Void = { [weak self] value in
@@ -572,7 +591,7 @@ public final class ScriptEngine {
 \(script)
 })();
 """
-            context.evaluateScript(wrappedScript)
+            context.evaluateScript(wrappedScript, withSourceURL: URL(fileURLWithPath: self.userScriptSourcePath))
 
             if let completion {
                 DispatchQueue.main.async { completion() }
@@ -621,7 +640,7 @@ public final class ScriptEngine {
 
         do {
             let source = try String(contentsOf: url, encoding: .utf8)
-            context.evaluateScript(source)
+            context.evaluateScript(source, withSourceURL: URL(fileURLWithPath: bootstrapSourcePath))
         } catch {
             emitError("Failed to load script bootstrap: \(error)")
         }
@@ -635,12 +654,20 @@ public final class ScriptEngine {
 
     private func handleRender(nodeValue: JSValue) {
         guard let renderHandler else { return }
-        guard let rootNode = buildNode(from: nodeValue) else {
-            emitError("Script render received invalid node")
+        guard let resolvedNodeValue = resolvedNodeValue(from: nodeValue) else {
+            emitError("Script render received invalid node payload")
             return
         }
 
-        let metadataValue = nodeValue.forProperty("metadata")
+        let rootNode: ScriptNode
+        do {
+            rootNode = try buildNode(from: resolvedNodeValue)
+        } catch {
+            emitError("Script render error: \(error.localizedDescription)")
+            return
+        }
+
+        let metadataValue = resolvedNodeValue.forProperty("metadata")
         var metadata: [String: Any] = [:]
         if metadataValue?.isUndefined == false,
            let dict = metadataValue?.toDictionary() as? [String: Any] {
@@ -651,10 +678,30 @@ public final class ScriptEngine {
         DispatchQueue.main.async { renderHandler(tree) }
     }
 
-    private func buildNode(from value: JSValue, path: [Int] = []) -> ScriptNode? {
-        guard let typeString = value.forProperty("type")?.toString(),
-              let nodeType = ScriptNodeType(rawValue: typeString) else {
-            return nil
+    private func resolvedNodeValue(from value: JSValue) -> JSValue? {
+        if value.isString {
+            guard
+                let context = value.context,
+                let payload = value.toString(),
+                let parse = context.objectForKeyedSubscript("JSON")?.forProperty("parse")
+            else {
+                return nil
+            }
+            return parse.call(withArguments: [payload])
+        }
+        return value
+    }
+
+    private func buildNode(from value: JSValue, path: [Int] = []) throws -> ScriptNode {
+        let pathString = debugPathString(for: path)
+        guard value.isObject else {
+            throw RenderNodeError.invalidObject(path: pathString)
+        }
+        guard let typeString = value.forProperty("type")?.toString() else {
+            throw RenderNodeError.missingType(path: pathString)
+        }
+        guard let nodeType = ScriptNodeType(rawValue: typeString) else {
+            throw RenderNodeError.unsupportedType(path: pathString, type: typeString)
         }
 
         let rawId = value.forProperty("id")?.toString() ?? ""
@@ -680,8 +727,8 @@ public final class ScriptEngine {
         if let childrenValue = value.forProperty("children"), childrenValue.isArray {
             let count = childrenValue.forProperty("length")?.toInt32() ?? 0
             for index in 0..<count {
-                if let childValue = childrenValue.atIndex(Int(index)),
-                   let childNode = buildNode(from: childValue, path: path + [Int(index)]) {
+                if let childValue = childrenValue.atIndex(Int(index)) {
+                    let childNode = try buildNode(from: childValue, path: path + [Int(index)])
                     childNodes.append(childNode)
                 }
             }
@@ -689,6 +736,108 @@ public final class ScriptEngine {
 
         let props = ScriptNodeProps(raw: rawProps, eventHandlers: eventHandlers)
         return ScriptNode(id: id, type: nodeType, props: props, children: childNodes)
+    }
+
+    private func debugPathString(for path: [Int]) -> String {
+        guard !path.isEmpty else { return "root" }
+        return "root" + path.map { "[\($0)]" }.joined()
+    }
+
+    private struct ScriptStackLocation {
+        let sourceURL: String
+        let line: Int32?
+        let column: Int32?
+    }
+
+    private func formatScriptError(from exception: JSValue?) -> String {
+        guard let exception else { return "Script error: Unknown JavaScript exception" }
+
+        let message = exception.forProperty("message")?.toString() ?? exception.toString() ?? "Unknown JavaScript exception"
+        let sourceURL = exception.forProperty("sourceURL")?.toString() ?? exception.forProperty("fileName")?.toString()
+        let rawLine = exception.forProperty("line")?.toInt32()
+            ?? exception.forProperty("lineNumber")?.toInt32()
+        let column = exception.forProperty("column")?.toInt32()
+            ?? exception.forProperty("columnNumber")?.toInt32()
+        let stack = exception.forProperty("stack")?.toString()
+
+        var location = ScriptStackLocation(
+            sourceURL: sourceURL ?? "script",
+            line: rawLine,
+            column: column
+        )
+
+        if let stack,
+           let firstUserLocation = firstStackLocation(in: stack, matchingSourceSuffix: userScriptSourcePath) {
+            location = firstUserLocation
+        }
+
+        let normalizedLine = normalizedLineNumber(for: location)
+        let locationString = formattedLocation(sourceURL: location.sourceURL, line: normalizedLine, column: location.column)
+
+        var lines: [String] = ["Script error: \(message)"]
+        lines.append("Location: \(locationString)")
+
+        if let stack, !stack.isEmpty {
+            lines.append("Stack:\n\(stack)")
+        }
+
+        return lines.joined(separator: "\n")
+    }
+
+    private func normalizedLineNumber(for location: ScriptStackLocation) -> Int32? {
+        guard let line = location.line else { return nil }
+        if location.sourceURL.hasSuffix(userScriptSourcePath), line > Int32(userScriptWrapperPrefixLineCount) {
+            return line - Int32(userScriptWrapperPrefixLineCount)
+        }
+        return line
+    }
+
+    private func formattedLocation(sourceURL: String, line: Int32?, column: Int32?) -> String {
+        var location = sourceURL
+        if let line {
+            location += ":\(line)"
+            if let column {
+                location += ":\(column)"
+            }
+        }
+        return location
+    }
+
+    private func firstStackLocation(in stack: String, matchingSourceSuffix suffix: String) -> ScriptStackLocation? {
+        for rawLine in stack.split(separator: "\n") {
+            let line = String(rawLine)
+            guard line.contains(suffix) else { continue }
+            if let parsed = parseStackLocation(from: line) {
+                return parsed
+            }
+        }
+        return nil
+    }
+
+    private func parseStackLocation(from stackLine: String) -> ScriptStackLocation? {
+        guard let atIndex = stackLine.lastIndex(of: "@") else { return nil }
+        let locationPart = stackLine[stackLine.index(after: atIndex)...]
+        let components = locationPart.split(separator: ":")
+        guard !components.isEmpty else { return nil }
+
+        if components.count >= 3 {
+            let columnPart = String(components.last ?? "")
+            let linePart = String(components[components.count - 2])
+            if let column = Int32(columnPart),
+               let line = Int32(linePart) {
+                let source = components.dropLast(2).joined(separator: ":")
+                return ScriptStackLocation(sourceURL: source, line: line, column: column)
+            }
+        }
+
+        if components.count >= 2 {
+            let linePart = String(components.last ?? "")
+            guard let line = Int32(linePart) else { return nil }
+            let source = components.dropLast(1).joined(separator: ":")
+            return ScriptStackLocation(sourceURL: source, line: line, column: nil)
+        }
+
+        return ScriptStackLocation(sourceURL: String(locationPart), line: nil, column: nil)
     }
 
     private func makeStableIdentifier(rawId: String, nodeType: ScriptNodeType, path: [Int]) -> String {
