@@ -15,12 +15,12 @@ internal sealed class AgentApi
 {
     internal sealed record Conversation(string Id, string? Title, long CreatedAtMs, long UpdatedAtMs)
     {
-        internal string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title!.Trim() : Id;
+        public string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title!.Trim() : Id;
     }
 
     internal sealed record Message(string Id, string Role, string Content, long CreatedAtMs);
 
-    internal enum StreamEventKind { Delta, Done, Error }
+    internal enum StreamEventKind { Delta, Done, Tool, Error }
 
     internal sealed record StreamEvent(StreamEventKind Kind, string Text, Message? DoneMessage, string? Model);
 
@@ -151,9 +151,33 @@ internal sealed class AgentApi
 
     internal async Task ChatStreamAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
     {
-        var tok = await RequireIdTokenAsync(ct);
+        await ChatStreamAsyncInternal("/v1/agent/chat/stream", conversationId, message, onEvent, ct);
+    }
 
-        using var req = new HttpRequestMessage(HttpMethod.Post, Build("/v1/agent/chat/stream"));
+    internal async Task ChatStreamWithToolsAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
+    {
+        try
+        {
+            await ChatStreamAsyncInternal("/v1/agent/chat/stream_tools", conversationId, message, onEvent, ct);
+        }
+        catch (InvalidOperationException ex)
+        {
+            var msg = ex.Message ?? "";
+            if (msg.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase) || msg.Contains("Not Found", StringComparison.OrdinalIgnoreCase))
+            {
+                await ChatStreamAsyncInternal("/v1/agent/chat/stream", conversationId, message, onEvent, ct);
+                return;
+            }
+
+            throw;
+        }
+    }
+
+    private async Task ChatStreamAsyncInternal(string path, string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
+    {
+        var tok = RequireIdToken();
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, Build(path));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
         req.Content = new StringContent(JsonSerializer.Serialize(new { conversation_id = conversationId, message }), Encoding.UTF8, "application/json");
@@ -224,6 +248,24 @@ internal sealed class AgentApi
             {
                 var e = doc.RootElement.TryGetProperty("error", out var er) ? (er.GetString() ?? "error") : "error";
                 onEvent(new StreamEvent(StreamEventKind.Error, e, null, null));
+                return;
+            }
+
+            if (ev == "tool")
+            {
+                var name = doc.RootElement.TryGetProperty("name", out var nm) ? (nm.GetString() ?? "tool") : "tool";
+                string details = "";
+                if (doc.RootElement.TryGetProperty("arguments", out var argsEl))
+                {
+                    details = argsEl.ValueKind == JsonValueKind.String ? (argsEl.GetString() ?? "") : argsEl.GetRawText();
+                }
+                else if (doc.RootElement.TryGetProperty("result", out var resultEl))
+                {
+                    details = resultEl.GetRawText();
+                }
+
+                var t = "[tool] " + name + (string.IsNullOrWhiteSpace(details) ? "" : (" " + details));
+                onEvent(new StreamEvent(StreamEventKind.Tool, t, null, null));
                 return;
             }
 
