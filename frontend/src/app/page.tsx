@@ -59,7 +59,7 @@ export default function HomePage() {
                 {/* TODO: replace with a real hero product shot — device plugged into phone, rich UI on screen */}
                 <img
                   src="/banner.jpeg"
-                  alt="EMWaver platform — device plugged into a smartphone with rich script UI"
+                  alt="EMWaver platform banner showing Android, iOS, Linux, Mac, and Windows"
                   className="h-auto w-full rounded-2xl border border-[color:var(--line)] object-cover"
                 />
               </div>
