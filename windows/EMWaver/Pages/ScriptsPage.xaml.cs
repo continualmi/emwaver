@@ -927,6 +927,7 @@ public sealed partial class ScriptsPage : Page
     private ContentDialog? _syncDialog;
     private ProgressBar? _syncProgress;
     private TextBlock? _syncStatus;
+    private CancellationTokenSource? _syncCts;
 
     private async Task ShowSyncProgressAsync(string status)
     {
@@ -958,8 +959,14 @@ public sealed partial class ScriptsPage : Page
                     Title = "Sync",
                     Content = panel,
                     PrimaryButtonText = string.Empty,
-                    CloseButtonText = string.Empty,
+                    CloseButtonText = "Cancel",
                     DefaultButton = ContentDialogButton.None,
+                };
+
+                _syncDialog.CloseButtonClick += (_, __) =>
+                {
+                    try { _syncCts?.Cancel(); }
+                    catch { }
                 };
 
                 // ShowAsync is modeless-ish; we don't await it so sync can run.
@@ -1038,7 +1045,10 @@ public sealed partial class ScriptsPage : Page
             );
 
             var engine = new CloudSyncEngine(AppServices.CloudFiles);
-            var cts2 = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
+            using var userCts = new CancellationTokenSource();
+            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, userCts.Token);
+            _syncCts = userCts;
 
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] baseUrl={baseUrl} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
             System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] scriptsDir={scriptsDir}");
@@ -1053,7 +1063,7 @@ public sealed partial class ScriptsPage : Page
                     new CloudSyncEngine.FileKindSpec(Kind: "script", Ext: ".emw", ContentType: "text/plain"),
                 },
                 policy: CloudSyncPolicy.PreferLocal,
-                ct: cts2.Token
+                ct: linkedCts.Token
             );
 
             await ShowSyncProgressAsync("Syncing signals…");
@@ -1067,7 +1077,7 @@ public sealed partial class ScriptsPage : Page
                     new CloudSyncEngine.FileKindSpec(Kind: "signal_text", Ext: ".txt", ContentType: "text/plain"),
                 },
                 policy: CloudSyncPolicy.PreferLocal,
-                ct: cts2.Token
+                ct: linkedCts.Token
             );
 
             var total = s1.Add(s2);
@@ -1079,6 +1089,12 @@ public sealed partial class ScriptsPage : Page
                 $"Uploaded: {total.Uploaded}, Downloaded: {total.Downloaded}, Conflicts: {total.Conflicts}"
             );
         }
+        catch (OperationCanceledException)
+        {
+            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] canceled by user or timeout");
+            await HideSyncProgressAsync();
+            await ShowInfoAsync("Sync", "Sync canceled.");
+        }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] failed: " + ex);
@@ -1087,6 +1103,8 @@ public sealed partial class ScriptsPage : Page
         }
         finally
         {
+            try { _syncCts?.Dispose(); } catch { }
+            _syncCts = null;
             await HideSyncProgressAsync();
             _syncInProgress = false;
         }
