@@ -743,6 +743,12 @@ public final class ScriptEngine {
         return "root" + path.map { "[\($0)]" }.joined()
     }
 
+    private struct ScriptStackLocation {
+        let sourceURL: String
+        let line: Int32?
+        let column: Int32?
+    }
+
     private func formatScriptError(from exception: JSValue?) -> String {
         guard let exception else { return "Script error: Unknown JavaScript exception" }
 
@@ -754,31 +760,83 @@ public final class ScriptEngine {
             ?? exception.forProperty("columnNumber")?.toInt32()
         let stack = exception.forProperty("stack")?.toString()
 
-        var locationLine = rawLine
-        if sourceURL?.hasSuffix(userScriptSourcePath) == true,
-           let rawLine,
-           rawLine > Int32(userScriptWrapperPrefixLineCount) {
-            locationLine = rawLine - Int32(userScriptWrapperPrefixLineCount)
+        var location = ScriptStackLocation(
+            sourceURL: sourceURL ?? "script",
+            line: rawLine,
+            column: column
+        )
+
+        if let stack,
+           let firstUserLocation = firstStackLocation(in: stack, matchingSourceSuffix: userScriptSourcePath) {
+            location = firstUserLocation
         }
+
+        let normalizedLine = normalizedLineNumber(for: location)
+        let locationString = formattedLocation(sourceURL: location.sourceURL, line: normalizedLine, column: location.column)
 
         var lines: [String] = ["Script error: \(message)"]
-
-        if sourceURL != nil || locationLine != nil || column != nil {
-            var location = sourceURL ?? "script"
-            if let locationLine {
-                location += ":\(locationLine)"
-                if let column {
-                    location += ":\(column)"
-                }
-            }
-            lines.append("Location: \(location)")
-        }
+        lines.append("Location: \(locationString)")
 
         if let stack, !stack.isEmpty {
             lines.append("Stack:\n\(stack)")
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    private func normalizedLineNumber(for location: ScriptStackLocation) -> Int32? {
+        guard let line = location.line else { return nil }
+        if location.sourceURL.hasSuffix(userScriptSourcePath), line > Int32(userScriptWrapperPrefixLineCount) {
+            return line - Int32(userScriptWrapperPrefixLineCount)
+        }
+        return line
+    }
+
+    private func formattedLocation(sourceURL: String, line: Int32?, column: Int32?) -> String {
+        var location = sourceURL
+        if let line {
+            location += ":\(line)"
+            if let column {
+                location += ":\(column)"
+            }
+        }
+        return location
+    }
+
+    private func firstStackLocation(in stack: String, matchingSourceSuffix suffix: String) -> ScriptStackLocation? {
+        for rawLine in stack.split(separator: "\n") {
+            let line = String(rawLine)
+            guard line.contains(suffix) else { continue }
+            if let parsed = parseStackLocation(from: line) {
+                return parsed
+            }
+        }
+        return nil
+    }
+
+    private func parseStackLocation(from stackLine: String) -> ScriptStackLocation? {
+        guard let atIndex = stackLine.lastIndex(of: "@") else { return nil }
+        let locationPart = stackLine[stackLine.index(after: atIndex)...]
+        let components = locationPart.split(separator: ":")
+        guard !components.isEmpty else { return nil }
+
+        if components.count >= 3,
+           let columnPart = String(components.last ?? ""),
+           let column = Int32(columnPart),
+           let linePart = String(components[components.count - 2]),
+           let line = Int32(linePart) {
+            let source = components.dropLast(2).joined(separator: ":")
+            return ScriptStackLocation(sourceURL: source, line: line, column: column)
+        }
+
+        if components.count >= 2 {
+            let linePart = String(components.last ?? "")
+            guard let line = Int32(linePart) else { return nil }
+            let source = components.dropLast(1).joined(separator: ":")
+            return ScriptStackLocation(sourceURL: source, line: line, column: nil)
+        }
+
+        return ScriptStackLocation(sourceURL: String(locationPart), line: nil, column: nil)
     }
 
     private func makeStableIdentifier(rawId: String, nodeType: ScriptNodeType, path: [Int]) -> String {
