@@ -16,11 +16,16 @@ import android.content.Context;
  */
 public final class CloudConfig {
     private static final String DEFAULT_BACKEND_URL = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
+    private static final String DEFAULT_FRONTEND_URL = "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
 
     private CloudConfig() {}
 
     public static String getBackendBaseUrl(Context context) {
         return DEFAULT_BACKEND_URL;
+    }
+
+    public static String getFrontendBaseUrl(Context context) {
+        return DEFAULT_FRONTEND_URL;
     }
 
     public static boolean allowAnonSync() {
