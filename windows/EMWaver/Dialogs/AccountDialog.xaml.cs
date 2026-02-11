@@ -26,7 +26,10 @@ public sealed partial class AccountDialog : ContentDialog
         AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
         AuthDetailText.Text = message ?? string.Empty;
 
-        SignInButton.IsEnabled = !signedIn;
+        SignInButton.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
+        HandoffPanel.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
+
+        SignOutButton.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
         SignOutButton.IsEnabled = signedIn;
     }
 
