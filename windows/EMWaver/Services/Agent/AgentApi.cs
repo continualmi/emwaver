@@ -45,9 +45,9 @@ internal sealed class AgentApi
         return new Uri(baseUrl, path);
     }
 
-    private string RequireIdToken()
+    private async Task<string> RequireIdTokenAsync(CancellationToken ct)
     {
-        var tok = _auth.GetIdToken() ?? "";
+        var tok = (await _auth.GetValidIdTokenAsync(ct, interactiveSignIn: false)) ?? "";
         if (string.IsNullOrWhiteSpace(tok))
         {
             throw new InvalidOperationException("Please sign in to chat.");
@@ -57,7 +57,7 @@ internal sealed class AgentApi
 
     internal async Task<List<Conversation>> ListConversationsAsync(CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
         using var req = new HttpRequestMessage(HttpMethod.Get, Build("/v1/agent/conversations"));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
@@ -86,7 +86,7 @@ internal sealed class AgentApi
 
     internal async Task<Conversation> CreateConversationAsync(string? title, CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
         using var req = new HttpRequestMessage(HttpMethod.Post, Build("/v1/agent/conversations"));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
@@ -109,7 +109,7 @@ internal sealed class AgentApi
 
     internal async Task DeleteConversationAsync(string conversationId, CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
         using var req = new HttpRequestMessage(HttpMethod.Delete, Build($"/v1/agent/conversations/{conversationId}"));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
@@ -122,7 +122,7 @@ internal sealed class AgentApi
 
     internal async Task<List<Message>> ListMessagesAsync(string conversationId, CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
         using var req = new HttpRequestMessage(HttpMethod.Get, Build($"/v1/agent/conversations/{conversationId}/messages"));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
@@ -151,7 +151,7 @@ internal sealed class AgentApi
 
     internal async Task ChatStreamAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, Build("/v1/agent/chat/stream"));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));

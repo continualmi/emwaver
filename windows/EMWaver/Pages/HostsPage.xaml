@@ -9,6 +9,7 @@
         <StackPanel Padding="16" Spacing="12" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
 
             <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Button Content="Back" Click="OnBackClick" />
                 <TextBlock Text="Hosts" FontSize="20" FontWeight="SemiBold" />
                 <Button Content="Refresh" Click="OnRefreshClick" />
                 <Button x:Name="GetProButton" Content="Get EMWaver Pro…" Click="OnGetProClick" Visibility="Collapsed" />

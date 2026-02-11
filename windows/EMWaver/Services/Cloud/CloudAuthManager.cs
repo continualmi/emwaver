@@ -18,6 +18,7 @@ internal sealed class CloudAuthManager
     private readonly CloudConfig _cfg;
     private readonly FirebaseAuthService _firebase;
     private readonly HttpClient _http = new();
+    private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
 
     private string? _idToken;
     private string? _refreshToken;
@@ -64,13 +65,65 @@ internal sealed class CloudAuthManager
 
     internal async Task<string> EnsureSignedInAsync(CancellationToken ct)
     {
-        var existing = GetIdToken();
+        var existing = await GetValidIdTokenAsync(ct, interactiveSignIn: false);
         if (!string.IsNullOrWhiteSpace(existing))
         {
             return existing!;
         }
 
         return await SignInInteractiveAsync(ct);
+    }
+
+    internal async Task<string?> GetValidIdTokenAsync(CancellationToken ct, bool interactiveSignIn)
+    {
+        var token = GetIdToken();
+        if (!string.IsNullOrWhiteSpace(token) && !IsLikelyExpired(token!))
+        {
+            return token;
+        }
+
+        await _tokenRefreshLock.WaitAsync(ct);
+        try
+        {
+            token = GetIdToken();
+            if (!string.IsNullOrWhiteSpace(token) && !IsLikelyExpired(token!))
+            {
+                return token;
+            }
+
+            var refresh = GetRefreshToken();
+            if (!string.IsNullOrWhiteSpace(refresh) && !string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
+            {
+                try
+                {
+                    var session = await _firebase.RefreshIdTokenAsync(_cfg.FirebaseWebApiKey, refresh!, ct);
+                    _idToken = session.IdToken;
+                    _refreshToken = session.RefreshToken;
+
+                    TryWriteLocalSetting(KeyIdToken, _idToken);
+                    TryWriteLocalSetting(KeyRefreshToken, _refreshToken);
+                    TrySavePersisted();
+
+                    return _idToken;
+                }
+                catch
+                {
+                    // Ignore refresh failures; caller decides whether to prompt sign-in.
+                }
+            }
+
+            if (interactiveSignIn)
+            {
+                return await SignInInteractiveAsync(ct);
+            }
+
+            // If we couldn't refresh, do not return an expired token.
+            return null;
+        }
+        finally
+        {
+            _tokenRefreshLock.Release();
+        }
     }
 
     internal Task<string> SignInInteractiveAsync(CancellationToken ct)
@@ -176,6 +229,63 @@ internal sealed class CloudAuthManager
         }
         catch
         {
+        }
+    }
+
+    private string? GetRefreshToken()
+    {
+        if (!string.IsNullOrWhiteSpace(_refreshToken))
+        {
+            return _refreshToken;
+        }
+
+        var ls = TryReadLocalSetting(KeyRefreshToken);
+        if (!string.IsNullOrWhiteSpace(ls))
+        {
+            _refreshToken = ls;
+            return _refreshToken;
+        }
+
+        TryLoadPersisted();
+        return _refreshToken;
+    }
+
+    private static bool IsLikelyExpired(string jwt)
+    {
+        try
+        {
+            var parts = jwt.Split('.');
+            if (parts.Length < 2) return false;
+
+            var payload = parts[1]
+                .Replace('-', '+')
+                .Replace('_', '/');
+            payload = payload.PadRight(payload.Length + ((4 - payload.Length % 4) % 4), '=');
+
+            var bytes = Convert.FromBase64String(payload);
+            using var doc = JsonDocument.Parse(bytes);
+            if (!doc.RootElement.TryGetProperty("exp", out var expEl)) return false;
+
+            long expSeconds;
+            if (expEl.ValueKind == JsonValueKind.Number)
+            {
+                if (!expEl.TryGetInt64(out expSeconds)) return false;
+            }
+            else if (expEl.ValueKind == JsonValueKind.String && long.TryParse(expEl.GetString(), out var parsed))
+            {
+                expSeconds = parsed;
+            }
+            else
+            {
+                return false;
+            }
+
+            var expAt = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
+            return expAt <= DateTimeOffset.UtcNow.AddMinutes(2);
+        }
+        catch
+        {
+            return false;
         }
     }
 
