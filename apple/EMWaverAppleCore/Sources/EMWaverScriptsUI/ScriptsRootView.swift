@@ -65,6 +65,8 @@ public struct ScriptsRootView: View {
     @State private var signalRenamePrompt: NamePrompt?
     @State private var signalDeleteTarget: DeletionTarget?
     @State private var showingSignalDeleteConfirmation = false
+    @State private var pendingScriptPreviewId: String?
+    @State private var showingSwitchScriptConfirmation = false
 
     #if os(macOS)
     @State private var showingAgentPanel = false
@@ -172,8 +174,7 @@ public struct ScriptsRootView: View {
         .alert(item: $previewManager.dialog) { dialog in
             Alert(title: Text(dialog.title), message: Text(dialog.message), dismissButton: .default(Text("OK")))
         }
-        .alert(
-            "Script Error",
+        .sheet(
             isPresented: Binding(
                 get: { previewManager.scriptError != nil },
                 set: { presented in
@@ -181,9 +182,21 @@ public struct ScriptsRootView: View {
                 }
             )
         ) {
-            Button("OK", role: .cancel) {}
+            scriptErrorSheet
+        }
+        .confirmationDialog(
+            "Stop current script?",
+            isPresented: $showingSwitchScriptConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Stop & Run", role: .destructive) {
+                startPendingScriptPreview()
+            }
+            Button("Cancel", role: .cancel) {
+                pendingScriptPreviewId = nil
+            }
         } message: {
-            Text(previewManager.scriptError ?? "")
+            Text(switchScriptConfirmationMessage)
         }
         .sheet(item: $namePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
@@ -488,6 +501,22 @@ public struct ScriptsRootView: View {
     }
 
     private func previewScript(_ id: String) {
+        if shouldConfirmSwitchBeforePreview(id: id) {
+            pendingScriptPreviewId = id
+            showingSwitchScriptConfirmation = true
+            return
+        }
+        startPreviewScript(id)
+    }
+
+    private func startPendingScriptPreview() {
+        guard let id = pendingScriptPreviewId else { return }
+        pendingScriptPreviewId = nil
+        previewManager.exitPreview()
+        startPreviewScript(id)
+    }
+
+    private func startPreviewScript(_ id: String) {
         // Track whether we launched from the editor or main screen
         let wasInEditor = showingEditor
         if showingEditor, let currentId = currentScriptId {
@@ -508,6 +537,20 @@ public struct ScriptsRootView: View {
                 showingEditor = false
             }
         }
+    }
+
+    private func shouldConfirmSwitchBeforePreview(id: String) -> Bool {
+        guard let runningName = previewManager.activeScriptName, !runningName.isEmpty else {
+            return false
+        }
+        let targetName = viewModel.scriptName(for: id)
+        return runningName != targetName
+    }
+
+    private var switchScriptConfirmationMessage: String {
+        let runningName = previewManager.activeScriptName ?? "current script"
+        let targetName = pendingScriptPreviewId.map { viewModel.scriptName(for: $0) } ?? "selected script"
+        return "\(runningName) is still running in the background. Stop it and run \(targetName)?"
     }
 
     private func openEditor(for id: String) {
@@ -1001,6 +1044,40 @@ public struct ScriptsRootView: View {
         return NSPasteboard.general.string(forType: .string)
         #else
         return nil
+        #endif
+    }
+
+    @ViewBuilder
+    private var scriptErrorSheet: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Script Error")
+                    .font(.title3.weight(.semibold))
+
+                ScrollView {
+                    Text(previewManager.scriptError ?? "")
+                        .font(.system(.body, design: .monospaced))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .textSelection(.enabled)
+                }
+                .padding(12)
+                .background(Self.secondaryBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                HStack {
+                    Button("Copy") {
+                        copyToPasteboard(previewManager.scriptError ?? "")
+                    }
+                    Spacer()
+                    Button("Close") {
+                        previewManager.scriptError = nil
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            }
+            .padding(16)
+        }
+        #if os(macOS)
+        .frame(minWidth: 620, minHeight: 340)
         #endif
     }
 }
