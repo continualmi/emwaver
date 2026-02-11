@@ -32,7 +32,7 @@ public sealed partial class ScriptsPage : Page
     private const double DefaultAgentPaneWidth = 380;
 
     public event Action<bool>? PreviewModeChanged;
-    public event Action<bool, string?>? RemoteControlStatusChanged;
+    public event Action<bool, string?>? RunningScriptStatusChanged;
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
     private sealed class AgentMessageRow
@@ -681,8 +681,8 @@ public sealed partial class ScriptsPage : Page
     private bool _isPreviewMode;
     private int _renderGeneration;
     private int _activeRenderGeneration;
-    private bool _remoteControlActive;
-    private string? _remoteActiveScriptName;
+    private bool _hasActiveRunningScript;
+    private string? _activeRunningScriptName;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
 
@@ -763,16 +763,17 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private void NotifyRemoteControlStatusChanged()
+    private void NotifyRunningScriptStatusChanged()
     {
-        RemoteControlStatusChanged?.Invoke(_remoteControlActive, _remoteActiveScriptName);
+        var showIndicator = _hasActiveRunningScript && !_isPreviewMode;
+        RunningScriptStatusChanged?.Invoke(showIndicator, _activeRunningScriptName);
     }
 
-    private void SetRemoteControlUiState(bool active, string? activeScriptName)
+    private void SetRunningScriptState(bool isRunning, string? scriptName)
     {
-        _remoteControlActive = active;
-        _remoteActiveScriptName = active ? activeScriptName : null;
-        NotifyRemoteControlStatusChanged();
+        _hasActiveRunningScript = isRunning;
+        _activeRunningScriptName = isRunning ? scriptName : null;
+        NotifyRunningScriptStatusChanged();
     }
 
     private void SetPreviewMode(bool preview)
@@ -824,6 +825,7 @@ public sealed partial class ScriptsPage : Page
             RenderPreview(_lastRenderedTree);
         }
 
+        NotifyRunningScriptStatusChanged();
         PreviewModeChanged?.Invoke(preview);
     }
 
@@ -1758,6 +1760,25 @@ public sealed partial class ScriptsPage : Page
 
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
 
+        var nextScriptName = _current.Name;
+        if (_hasActiveRunningScript &&
+            !string.IsNullOrWhiteSpace(_activeRunningScriptName) &&
+            !string.Equals(_activeRunningScriptName, nextScriptName, StringComparison.Ordinal))
+        {
+            var stopOk = await ConfirmAsync(
+                title: "Stop running script?",
+                message: $"'{_activeRunningScriptName}' is currently running. Stop it and run '{nextScriptName}'?",
+                primaryButtonText: "Stop and Run",
+                closeButtonText: "Cancel"
+            );
+
+            if (!stopOk)
+            {
+                SetPreviewMode(false);
+                return;
+            }
+        }
+
         // Switch to preview mode on Run.
         SetPreviewMode(true);
 
@@ -1777,9 +1798,7 @@ public sealed partial class ScriptsPage : Page
         var text = GetEditorTextNormalized();
         await Task.CompletedTask;
 
-        _remoteActiveScriptName = _current.Name;
-        NotifyRemoteControlStatusChanged();
-
+        SetRunningScriptState(true, nextScriptName);
         _scriptEngine.Execute(text);
     }
 
