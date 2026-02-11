@@ -175,7 +175,7 @@ internal sealed class AgentApi
 
     private async Task ChatStreamAsyncInternal(string path, string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
     {
-        var tok = RequireIdToken();
+        var tok = await RequireIdTokenAsync(ct);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, Build(path));
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
