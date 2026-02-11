@@ -820,13 +820,14 @@ public final class ScriptEngine {
         let components = locationPart.split(separator: ":")
         guard !components.isEmpty else { return nil }
 
-        if components.count >= 3,
-           let columnPart = String(components.last ?? ""),
-           let column = Int32(columnPart),
-           let linePart = String(components[components.count - 2]),
-           let line = Int32(linePart) {
-            let source = components.dropLast(2).joined(separator: ":")
-            return ScriptStackLocation(sourceURL: source, line: line, column: column)
+        if components.count >= 3 {
+            let columnPart = String(components.last ?? "")
+            let linePart = String(components[components.count - 2])
+            if let column = Int32(columnPart),
+               let line = Int32(linePart) {
+                let source = components.dropLast(2).joined(separator: ":")
+                return ScriptStackLocation(sourceURL: source, line: line, column: column)
+            }
         }
 
         if components.count >= 2 {
