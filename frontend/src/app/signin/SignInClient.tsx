@@ -8,19 +8,36 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
-function normalizeRedirect(raw: string | null): string {
-  if (!raw) return "/cloud";
-  // Only allow same-site relative paths.
-  if (!raw.startsWith("/")) return "/cloud";
-  if (raw.startsWith("//")) return "/cloud";
-  return raw;
+type RedirectTarget =
+  | { kind: "internal"; target: string }
+  | { kind: "external"; target: string };
+
+function normalizeRedirect(raw: string | null): RedirectTarget {
+  if (!raw) return { kind: "internal", target: "/cloud" };
+
+  // Allow same-site relative paths.
+  if (raw.startsWith("/") && !raw.startsWith("//")) {
+    return { kind: "internal", target: raw };
+  }
+
+  // Allow strict native-app deep-link callback target used by Android handoff.
+  try {
+    const url = new URL(raw);
+    if (url.protocol === "emwaver:" && url.hostname === "oauth" && url.pathname === "/callback") {
+      return { kind: "external", target: raw };
+    }
+  } catch {
+    // Invalid URL; fallback below.
+  }
+
+  return { kind: "internal", target: "/cloud" };
 }
 
 export default function SignInClient() {
   const params = useSearchParams();
   const router = useRouter();
 
-  const redirectTo = normalizeRedirect(params.get("redirect"));
+  const redirectTo = useMemo(() => normalizeRedirect(params.get("redirect")), [params]);
 
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [busy, setBusy] = useState(false);
@@ -36,7 +53,11 @@ export default function SignInClient() {
       }
       setUserEmail(u.email || u.displayName || "Signed in");
       // If already signed in, continue.
-      router.replace(redirectTo);
+      if (redirectTo.kind === "external") {
+        window.location.assign(redirectTo.target);
+      } else {
+        router.replace(redirectTo.target);
+      }
     });
   }, [auth, router, redirectTo]);
 
@@ -88,7 +109,7 @@ export default function SignInClient() {
 
             {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
 
-            <div className="pt-5 text-xs text-[color:var(--ink-dim)]">After sign-in you’ll be redirected to {redirectTo}.</div>
+            <div className="pt-5 text-xs text-[color:var(--ink-dim)]">After sign-in you’ll be redirected to {redirectTo.target}.</div>
           </div>
         </div>
       </main>
