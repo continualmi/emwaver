@@ -98,7 +98,7 @@ impl Device {
 
         let out_conn = midi_out
             .connect(&out_ports[out_idx], "emwaver-host-out")
-            .context("failed to connect MIDI out")?;
+            .map_err(|e| anyhow::anyhow!("failed to connect MIDI out: {e}"))?;
 
         let dev = Arc::clone(self);
         let in_conn = midi_in
@@ -110,7 +110,7 @@ impl Device {
                 },
                 (),
             )
-            .context("failed to connect MIDI in")?;
+            .map_err(|e| anyhow::anyhow!("failed to connect MIDI in: {e}"))?;
 
         *self.out_conn.lock().unwrap() = Some(out_conn);
         *self._in_conn.lock().unwrap() = Some(in_conn);
