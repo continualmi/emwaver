@@ -144,6 +144,73 @@ EMWaver’s in-house models are called **ELMs** (**E**lectronics **L**anguage **
 
 ELMs are trained to be EMWaver-native: hardware exploration, scripting, bus protocols, UI workflows, and device/host control.
 
+#### ELM turn contract (single-turn, stateless)
+
+For autonomous script/UI control, ELM execution should support a strict **single-turn JSON contract**:
+
+- **No implicit conversation state**: every model call is stateless and fully reset.
+- **Input is minimal and complete**: only current time, current user query, full current UI tree, and symbolic state.
+- **Output is minimal and actionable**: one action, one assistant message, and sparse/incremental symbolic edits.
+
+Canonical naming:
+- State registry is called `symbolic`.
+- Registry edit stream is called `symbolic_ops` (incremental/sparse updates, never full replacement).
+- Assistant text output field is `assistant`.
+
+Time contract:
+- Use human-readable UTC timestamp (`now_utc`) instead of Unix time.
+- Include heartbeat cadence with `period_ms` and monotonic `tick_id`.
+
+Canonical example:
+
+Input:
+```json
+{
+  "time": {
+    "now_utc": "2026-02-11T21:29:00Z",
+    "heartbeat": { "period_ms": 1000, "tick_id": 2843 }
+  },
+  "user": { "query": "make blink faster and confirm if running" },
+  "ui_tree": {
+    "id": "root",
+    "type": "column",
+    "props": {},
+    "children": []
+  },
+  "symbolic": [
+    { "id": "k1", "text": "Button label 'Stop' indicates blinking is active." }
+  ]
+}
+```
+
+Output:
+```json
+{
+  "action": {
+    "type": "ui.event",
+    "target_node_id": "blink.period",
+    "name": "submit",
+    "payload": { "value": 100 }
+  },
+  "assistant": "Blink is running. I set it faster.",
+  "symbolic_ops": [
+    { "op": "upsert", "id": "k2", "fields": { "text": "At tick 2843, set period to 100ms." } }
+  ]
+}
+```
+
+Brief implementation plan:
+- Define and freeze `elm-turn-v1` JSON schema for input/output validation.
+- Build runtime loop: host/controller packages current `time + user + ui_tree + symbolic` and executes one turn per heartbeat tick.
+- Apply `symbolic_ops` with bounded policies (upsert/delete/merge) to keep long-run state compact.
+- Keep transport/model adapters thin so the same contract works across mobile/desktop/web/controller surfaces.
+
+Reasoning:
+- Prevents ever-growing conversation context and token bloat.
+- Makes time explicit and controllable for periodic/cron-like agent behavior.
+- Preserves deterministic behavior by anchoring decisions to the full current UI tree each tick.
+- Enables infinite-horizon operation via explicit symbolic compression instead of hidden prompt history.
+
 #### Agent conversation storage + training data policy (important)
 
 - **Conversation sync (storage) is a Pro feature.**
