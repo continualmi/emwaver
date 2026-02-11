@@ -21,7 +21,7 @@
 
             <!-- Scripts list -->
             <Border Grid.Column="0" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8" Padding="8" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged">
+                <ListView x:Name="ScriptsList" SelectionMode="Single" SelectionChanged="OnSelectionChanged" RightTapped="OnScriptsListRightTapped">
                     <ListView.Resources>
                         <DataTemplate x:Key="ScriptItemTemplate">
                             <Grid ColumnSpacing="8">
@@ -69,6 +69,13 @@
                             </GroupStyle.HeaderTemplate>
                         </GroupStyle>
                     </ListView.GroupStyle>
+
+                    <ListView.ContextFlyout>
+                        <MenuFlyout Opening="OnScriptsListContextOpening">
+                            <MenuFlyoutItem x:Name="ScriptsContextRenameItem" Text="Rename" Click="OnScriptsContextRenameClick" />
+                            <MenuFlyoutItem x:Name="ScriptsContextDeleteItem" Text="Delete" Click="OnScriptsContextDeleteClick" />
+                        </MenuFlyout>
+                    </ListView.ContextFlyout>
                 </ListView>
             </Border>
 
