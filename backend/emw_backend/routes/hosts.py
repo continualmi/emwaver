@@ -20,6 +20,28 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _host_fingerprint(row: HostSession) -> str:
+    """Best-effort identity used to collapse duplicate rows for the same machine install."""
+    platform = (row.platform or "").strip().lower()
+    device_name = (row.device_name or "").strip().lower()
+
+    # Deliberately ignore port/script state so the same desktop install collapses
+    # even if status fields vary between heartbeats.
+    return f"{platform}|{device_name}"
+
+
+def _dedupe_rows(rows: list[HostSession]) -> list[HostSession]:
+    """Keep only newest row per machine fingerprint to hide/repair historic duplicates."""
+    by_fp: Dict[str, HostSession] = {}
+    for r in rows:
+        fp = _host_fingerprint(r)
+        prev = by_fp.get(fp)
+        if prev is None or (r.last_seen_at_ms or 0) > (prev.last_seen_at_ms or 0):
+            by_fp[fp] = r
+
+    return sorted(by_fp.values(), key=lambda r: r.last_seen_at_ms or 0, reverse=True)
+
+
 def _require_identity(config: Config):
     ident = verify_request_identity(request, config)
     if not ident:
@@ -51,7 +73,8 @@ def list_hosts():
         )
 
     hosts = []
-    for r in rows:
+    deduped = _dedupe_rows(rows)
+    for r in deduped:
         try:
             caps = json.loads(r.capabilities_json or "{}")
         except Exception:
@@ -137,6 +160,28 @@ def heartbeat():
                 last_seen_at_ms=now,
             )
             db.add(row)
+
+            # Best-effort cleanup: remove stale duplicates for same machine fingerprint
+            # when host_session_id changed across app runs.
+            try:
+                all_rows = (
+                    db.execute(
+                        select(HostSession)
+                        .where(HostSession.firebase_uid == ident.uid)
+                        .where(HostSession.platform == platform_s)
+                        .where(HostSession.device_name == device_name_s)
+                    )
+                    .scalars()
+                    .all()
+                )
+                keep = _dedupe_rows(all_rows)
+                keep_ids = {k.id for k in keep}
+                for r in all_rows:
+                    if r.id not in keep_ids:
+                        db.delete(r)
+            except Exception:
+                pass
+
             db.commit()
             return jsonify({"ok": True, "created": True, "server_time_ms": now})
 
