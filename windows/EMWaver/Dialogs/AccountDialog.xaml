@@ -1,0 +1,29 @@
+<ContentDialog
+    x:Class="EMWaver.Dialogs.AccountDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Account"
+    PrimaryButtonText="Close"
+    DefaultButton="Primary"
+    MinWidth="520">
+
+    <StackPanel Spacing="10">
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <TextBlock Text="Status:" />
+            <TextBlock x:Name="AuthStatusText" Text="Signed out" />
+        </StackPanel>
+
+        <TextBlock x:Name="AuthDetailText" Text="" Opacity="0.75" TextWrapping="Wrap" />
+
+        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <TextBlock Text="Handoff code:" />
+            <TextBox x:Name="HandoffCodeBox" Width="240" PlaceholderText="EMW-XXXXXX" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
+            <Button x:Name="ConsumeHandoffButton" Content="Continue" Click="OnConsumeHandoffClick" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <Button x:Name="SignInButton" Content="Open web sign-in" Click="OnSignInClick" />
+            <Button x:Name="SignOutButton" Content="Sign out" Click="OnSignOutClick" IsEnabled="False" />
+        </StackPanel>
+    </StackPanel>
+</ContentDialog>

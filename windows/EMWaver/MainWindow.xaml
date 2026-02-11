@@ -131,7 +131,10 @@
                 <!-- Device status moved to the left (DeviceMenuButton) -->
 
                 <CommandBar x:Name="AppCommandBar" Grid.Column="1" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
-                    <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
+                    <AppBarButton x:Name="AccountButton" Label="Account" Icon="Contact" Click="OnAccountClick" />
+                    <CommandBar.SecondaryCommands>
+                        <AppBarButton x:Name="TopSettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
+                    </CommandBar.SecondaryCommands>
                 </CommandBar>
             </Grid>
             </Grid>

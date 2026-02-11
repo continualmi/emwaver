@@ -182,6 +182,16 @@ public sealed partial class MainWindow : Window
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 
+    private async void OnAccountClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AccountDialog
+        {
+            XamlRoot = Content.XamlRoot
+        };
+
+        await dialog.ShowAsync();
+    }
+
     private void RunOnUi(Action action)
     {
         if (DispatcherQueue.HasThreadAccess)
