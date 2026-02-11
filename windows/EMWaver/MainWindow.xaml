@@ -115,6 +115,15 @@
 
                     <AppBarSeparator />
 
+                    <AppBarButton
+                        x:Name="RemoteActiveScriptButton"
+                        Label=""
+                        Icon="Play"
+                        Visibility="Collapsed"
+                        Click="OnRemoteActiveScriptClick" />
+
+                    <AppBarSeparator />
+
                     <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="ELM" Click="OnScriptAgentToggleClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Message" />

@@ -32,6 +32,7 @@ public sealed partial class ScriptsPage : Page
     private const double DefaultAgentPaneWidth = 380;
 
     public event Action<bool>? PreviewModeChanged;
+    public event Action<bool, string?>? RemoteControlStatusChanged;
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
     private sealed class AgentMessageRow
@@ -196,10 +197,7 @@ public sealed partial class ScriptsPage : Page
                 var gen = _activeRenderGeneration;
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_isPreviewMode && gen == _activeRenderGeneration)
-                    {
-                        RenderPreview(tree);
-                    }
+                    HandleScriptTreeRender(tree, gen);
                 });
             },
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
@@ -683,6 +681,8 @@ public sealed partial class ScriptsPage : Page
     private bool _isPreviewMode;
     private int _renderGeneration;
     private int _activeRenderGeneration;
+    private bool _remoteControlActive;
+    private string? _remoteActiveScriptName;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
 
@@ -750,6 +750,31 @@ public sealed partial class ScriptsPage : Page
         _editorFocusTimer.Tick -= OnEditorFocusTimerTick;
     }
 
+    private void HandleScriptTreeRender(ScriptTree tree, int generation)
+    {
+        _lastRenderedTree = tree;
+
+        // Keep remote controller state live even when user switches back to code mode locally.
+        AppServices.RemoteControlHost.PublishUiSnapshotIfRemoteControlled();
+
+        if (_isPreviewMode && generation == _activeRenderGeneration)
+        {
+            RenderPreview(tree);
+        }
+    }
+
+    private void NotifyRemoteControlStatusChanged()
+    {
+        RemoteControlStatusChanged?.Invoke(_remoteControlActive, _remoteActiveScriptName);
+    }
+
+    private void SetRemoteControlUiState(bool active, string? activeScriptName)
+    {
+        _remoteControlActive = active;
+        _remoteActiveScriptName = active ? activeScriptName : null;
+        NotifyRemoteControlStatusChanged();
+    }
+
     private void SetPreviewMode(bool preview)
     {
         // Must be on UI thread; otherwise WinUI will throw RPC_E_WRONG_THREAD (0x8001010E).
@@ -793,6 +818,10 @@ public sealed partial class ScriptsPage : Page
             {
                 QueueEditorFocus();
             });
+        }
+        else if (_lastRenderedTree != null)
+        {
+            RenderPreview(_lastRenderedTree);
         }
 
         PreviewModeChanged?.Invoke(preview);
@@ -1747,6 +1776,9 @@ public sealed partial class ScriptsPage : Page
         // Run the current editor buffer (even if dirty) so iteration is fast.
         var text = GetEditorTextNormalized();
         await Task.CompletedTask;
+
+        _remoteActiveScriptName = _current.Name;
+        NotifyRemoteControlStatusChanged();
 
         _scriptEngine.Execute(text);
     }

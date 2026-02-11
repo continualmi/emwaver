@@ -138,6 +138,7 @@ public sealed partial class MainWindow : Window
         {
             _scriptsPage.ToolbarStateChanged -= OnScriptsToolbarStateChanged;
             _scriptsPage.PreviewModeChanged -= OnScriptsPreviewModeChanged;
+            _scriptsPage.RemoteControlStatusChanged -= OnRemoteControlStatusChanged;
         }
 
         _scriptsPage = e.Content as ScriptsPage;
@@ -145,13 +146,16 @@ public sealed partial class MainWindow : Window
         {
             _scriptsPage.ToolbarStateChanged += OnScriptsToolbarStateChanged;
             _scriptsPage.PreviewModeChanged += OnScriptsPreviewModeChanged;
+            _scriptsPage.RemoteControlStatusChanged += OnRemoteControlStatusChanged;
             OnScriptsToolbarStateChanged(_scriptsPage.CurrentToolbarState);
             OnScriptsPreviewModeChanged(false);
+            OnRemoteControlStatusChanged(false, null);
             ScriptsCommandBar.Visibility = Visibility.Visible;
         }
         else
         {
             ScriptsCommandBar.Visibility = Visibility.Collapsed;
+            OnRemoteControlStatusChanged(false, null);
         }
 
         // Top-level navigation UX
@@ -400,6 +404,22 @@ public sealed partial class MainWindow : Window
         {
             _suppressScriptModeUi = false;
         }
+    }
+
+    private void OnRemoteControlStatusChanged(bool active, string? activeScriptName)
+    {
+        var label = string.IsNullOrWhiteSpace(activeScriptName) ? "Remote script running" : $"Remote: {activeScriptName}";
+
+        RemoteActiveScriptButton.Label = label;
+        RemoteActiveScriptButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+        RemoteActiveScriptButton.IsEnabled = active;
+    }
+
+    private void OnRemoteActiveScriptClick(object sender, RoutedEventArgs e)
+    {
+        // Return to currently running script UI without forcing a re-run.
+        _scriptsPage?.HandleToolbarPreviewToggle(true);
+        SetScriptModeUi(preview: true);
     }
 
     private void OnScriptCodeModeClick(object sender, RoutedEventArgs e)
