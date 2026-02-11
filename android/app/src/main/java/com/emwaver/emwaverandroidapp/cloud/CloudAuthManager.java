@@ -87,7 +87,9 @@ public final class CloudAuthManager {
 
     public void beginWebSignIn(@NonNull Context context) {
         String base = CloudConfig.getFrontendBaseUrl(context).trim();
-        String redirect = Uri.encode("emwaver://oauth/callback");
+        // Android uses the same handoff UX as desktop: sign in on web, copy one-time code,
+        // then paste it back in-app. Keep deep-link callback support as optional fallback.
+        String redirect = Uri.encode("/auth/handoff");
         String url = base + "/signin?redirect=" + redirect;
         Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         browser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
