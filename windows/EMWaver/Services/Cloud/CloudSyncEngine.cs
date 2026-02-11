@@ -167,7 +167,9 @@ internal sealed class CloudSyncEngine
 
                     if (localMtime is long lm && cloudMtime is long cm)
                     {
-                        if (lm == cm)
+                        // Many filesystems only provide 1s mtime resolution, while cloud mtimes are ms-precise.
+                        // Treat same-second timestamps as equal to avoid endless cloud-newer/local-newer churn.
+                        if (lm == cm || (lm / 1000) == (cm / 1000))
                         {
                             globalProcessed += 1;
                             progress?.Report(new CloudSyncProgress(spec.Kind, name, CloudSyncProgressAction.Skipped, globalProcessed, globalTotal, summary.Uploaded, summary.Downloaded, summary.Conflicts));

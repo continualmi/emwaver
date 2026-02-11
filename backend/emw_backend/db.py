@@ -60,6 +60,11 @@ def init_db(database_url: str) -> None:
                     if "integer" in size_t and "bigint" not in size_t:
                         conn.execute(text("ALTER TABLE user_files ALTER COLUMN size_bytes TYPE BIGINT"))
 
+            # Add inline file bytes column for Postgres-backed storage migration.
+            if "content" not in ucols:
+                with _ENGINE.begin() as conn:
+                    conn.execute(text("ALTER TABLE user_files ADD COLUMN content BLOB" if getattr(dialect, "name", "") == "sqlite" else "ALTER TABLE user_files ADD COLUMN content BYTEA"))
+
         # Society: add columns when running against an existing DB (create_all won't ALTER).
         if insp.has_table("society_posts"):
             cols = {c["name"] for c in insp.get_columns("society_posts")}

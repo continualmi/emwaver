@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Optional
 
-from sqlalchemy import BigInteger, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Index, Integer, LargeBinary, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from emw_backend.db import Base
@@ -73,7 +73,7 @@ Index("idx_user_credit_balances_updated", UserCreditBalance.updated_at_ms)
 
 
 class UserFileIndex(Base):
-    """Current file index (Postgres): bytes in Azure Blob, metadata/index in SQL.
+    """Current file store/index in Postgres.
 
     We intentionally store firebase_uid directly to avoid joins for list/sync.
     """
@@ -85,6 +85,7 @@ class UserFileIndex(Base):
 
     name: Mapped[str] = mapped_column(String(512))
     blob_key: Mapped[str] = mapped_column(String(768))
+    content: Mapped[Optional[bytes]] = mapped_column(LargeBinary, nullable=True)
 
     mtime_ms: Mapped[int] = mapped_column(BigInteger)
     size_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
