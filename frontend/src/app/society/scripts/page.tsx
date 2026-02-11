@@ -23,10 +23,18 @@ async function fetchScripts(): Promise<SocietyPost[]> {
 
 export default async function SocietyScriptsPage() {
   const scripts = await fetchScripts();
+  const namingIdeas = [
+    "EMWaver Flows",
+    "EMWaver Routines",
+    "EMWaver Patches",
+    "EMWaver Labs",
+    "EMWaver Scenes",
+    "EMWaver Runs",
+  ];
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-4">
+    <div className="space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
         <div>
           <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Library</div>
           <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
@@ -40,6 +48,23 @@ export default async function SocietyScriptsPage() {
         >
           Sign in to publish
         </Link>
+      </div>
+
+      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+        <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Branding ideas</div>
+        <p className="mt-1 text-sm text-[color:var(--ink-dim)]">
+          Alternatives to “EMWaver Scripts” you can explore for this section:
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          {namingIdeas.map((name) => (
+            <span
+              key={name}
+              className="inline-flex items-center rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] px-3 py-1.5 text-sm font-medium text-[color:var(--ink)]"
+            >
+              {name}
+            </span>
+          ))}
+        </div>
       </div>
 
       {scripts.length === 0 ? (
