@@ -15,7 +15,7 @@ internal sealed class AgentApi
 {
     internal sealed record Conversation(string Id, string? Title, long CreatedAtMs, long UpdatedAtMs)
     {
-        internal string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title!.Trim() : Id;
+        public string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title!.Trim() : Id;
     }
 
     internal sealed record Message(string Id, string Role, string Content, long CreatedAtMs);
