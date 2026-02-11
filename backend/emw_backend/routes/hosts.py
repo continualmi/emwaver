@@ -84,33 +84,44 @@ def list_hosts():
         if deleted_any:
             try:
                 db.commit()
+                rows = (
+                    db.execute(
+                        select(HostSession)
+                        .where(HostSession.firebase_uid == ident.uid)
+                        .order_by(desc(HostSession.last_seen_at_ms))
+                        .limit(200)
+                    )
+                    .scalars()
+                    .all()
+                )
+                deduped = _dedupe_rows(rows)
             except Exception:
                 db.rollback()
 
-    hosts = []
-    for r in deduped:
-        try:
-            caps = json.loads(r.capabilities_json or "{}")
-        except Exception:
-            caps = {}
-        try:
-            status = json.loads(r.status_json or "{}")
-        except Exception:
-            status = {}
+        hosts = []
+        for r in deduped:
+            try:
+                caps = json.loads(r.capabilities_json or "{}")
+            except Exception:
+                caps = {}
+            try:
+                status = json.loads(r.status_json or "{}")
+            except Exception:
+                status = {}
 
-        hosts.append(
-            {
-                "id": r.id,
-                "platform": r.platform,
-                "device_name": r.device_name,
-                "app_version": r.app_version,
-                "capabilities": caps,
-                "status": status,
-                "created_at_ms": r.created_at_ms,
-                "last_seen_at_ms": r.last_seen_at_ms,
-                "online": (now - (r.last_seen_at_ms or 0)) < 30_000,
-            }
-        )
+            hosts.append(
+                {
+                    "id": r.id,
+                    "platform": r.platform,
+                    "device_name": r.device_name,
+                    "app_version": r.app_version,
+                    "capabilities": caps,
+                    "status": status,
+                    "created_at_ms": r.created_at_ms,
+                    "last_seen_at_ms": r.last_seen_at_ms,
+                    "online": (now - (r.last_seen_at_ms or 0)) < 30_000,
+                }
+            )
 
     return jsonify({"hosts": hosts, "now_ms": now})
 
