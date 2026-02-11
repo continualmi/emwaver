@@ -1,9 +1,12 @@
 package com.emwaver.emwaverandroidapp.ui.auth;
 
 import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
@@ -22,6 +25,7 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
     private TextView errorText;
     private TextView notConfiguredText;
     private MaterialButton continueButton;
+    private EditText handoffCodeInput;
 
     private boolean isBusy = false;
     @Nullable private String lastError;
@@ -47,6 +51,14 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         continueButton = view.findViewById(R.id.sign_in_google);
         errorText = view.findViewById(R.id.sign_in_error);
         notConfiguredText = view.findViewById(R.id.sign_in_not_configured);
+        handoffCodeInput = view.findViewById(R.id.sign_in_code_input);
+        if (handoffCodeInput != null) {
+            handoffCodeInput.addTextChangedListener(new TextWatcher() {
+                @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
+                @Override public void onTextChanged(CharSequence s, int start, int before, int count) { applyStateToUi(); }
+                @Override public void afterTextChanged(Editable s) {}
+            });
+        }
 
         notNow.setOnClickListener(v -> dismiss());
 
@@ -57,11 +69,21 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
             if (isBusy) return;
             lastError = null;
             applyStateToUi();
+
+            String enteredCode = handoffCodeInput != null ? handoffCodeInput.getText().toString().trim() : "";
+            if (!enteredCode.isEmpty()) {
+                consumeHandoffCode(enteredCode);
+                return;
+            }
+
             auth.beginWebSignIn(requireContext());
         });
 
         String handoffCode = getArguments() != null ? getArguments().getString(ARG_HANDOFF_CODE, "") : "";
         if (handoffCode != null && !handoffCode.trim().isEmpty()) {
+            if (handoffCodeInput != null) {
+                handoffCodeInput.setText(handoffCode.trim());
+            }
             consumeHandoffCode(handoffCode);
         }
 
@@ -88,11 +110,17 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
     private void applyStateToUi() {
         if (notConfiguredText != null) {
             notConfiguredText.setVisibility(View.VISIBLE);
-            notConfiguredText.setText("Sign-in opens the EMWaver website in your browser and returns with a one-time code.");
+            notConfiguredText.setText("Sign-in opens the EMWaver website in your browser. Copy the one-time code shown there, then paste it here.");
         }
         if (continueButton != null) {
             continueButton.setEnabled(!isBusy);
-            continueButton.setText(isBusy ? "Completing sign in..." : "Continue in Browser");
+            boolean hasCode = handoffCodeInput != null
+                    && handoffCodeInput.getText() != null
+                    && handoffCodeInput.getText().toString().trim().length() > 0;
+            continueButton.setText(isBusy ? "Completing sign in..." : (hasCode ? "Continue with Code" : "Open Browser"));
+        }
+        if (handoffCodeInput != null) {
+            handoffCodeInput.setEnabled(!isBusy);
         }
         if (errorText != null) {
             if (lastError != null && !lastError.isEmpty()) {
