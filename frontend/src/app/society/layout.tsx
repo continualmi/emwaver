@@ -23,7 +23,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
               <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">EMWaver</div>
               <div className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Society</div>
               <p className="text-sm leading-6 text-[color:var(--ink-dim)]">
-                Posts, scripts, and videos.
+                Posts, forums, script drops, and videos.
                 <br />
                 Comments require a device-attached account.
               </p>
@@ -33,10 +33,10 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
               <SocietyTabs />
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-2">
+            <div className="mt-6 border-t border-[color:var(--line)] pt-4">
               <Link
                 href="/account"
-                className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.10)]"
+                className="inline-flex w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[rgba(255,255,255,0.10)]"
               >
                 My account
               </Link>
