@@ -166,7 +166,6 @@ public sealed partial class MainWindow : Window
         // Settings is a "focused" page: hide device/connect + script toolbar clutter.
         DeviceMenuButton.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
         ScriptsCommandBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
-        AppCommandBar.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
 
         TopBackButton.Visibility = isSettings ? Visibility.Visible : Visibility.Collapsed;
 
@@ -186,6 +185,16 @@ public sealed partial class MainWindow : Window
     {
         ContentFrame.Navigate(typeof(SettingsPage));
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private async void OnAccountClick(object sender, RoutedEventArgs e)
+    {
+        var dialog = new AccountDialog
+        {
+            XamlRoot = Content.XamlRoot
+        };
+
+        await dialog.ShowAsync();
     }
 
     private void RunOnUi(Action action)

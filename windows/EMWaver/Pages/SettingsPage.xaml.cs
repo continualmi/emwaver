@@ -25,24 +25,16 @@ public sealed partial class SettingsPage : Page
         _ = RefreshProStatusAsync();
     }
 
-    private void RefreshUi(string? message = null)
+    private void RefreshUi()
     {
         void Apply()
         {
-            var signedIn = AppServices.CloudAuth.IsSignedIn;
-            AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
-            AuthDetailText.Text = message ?? string.Empty;
-
-            SignInButton.IsEnabled = !signedIn;
-            SignOutButton.IsEnabled = signedIn;
-
             BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
             FrontendUrlText.Text = FrontendUrl.Resolve();
 
             _suppressModeSelectionEvents = true;
             try
             {
-                // Backend mode
                 var prod = AppServices.Settings.UseProductionBackend;
                 var desiredTag = prod ? "prod" : "local";
                 foreach (var item in BackendModeCombo.Items)
@@ -71,7 +63,6 @@ public sealed partial class SettingsPage : Page
             }
         }
 
-        // UI updates must happen on the UI thread.
         if (DispatcherQueue.HasThreadAccess)
         {
             Apply();
@@ -132,42 +123,6 @@ public sealed partial class SettingsPage : Page
         }
     }
 
-    private async void OnSignInClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var url = AppServices.CloudAuth.BuildSigninUrl();
-            await Windows.System.Launcher.LaunchUriAsync(url);
-            RefreshUi("Complete sign-in in browser, then paste the one-time handoff code and press Continue.");
-        }
-        catch (Exception ex)
-        {
-            RefreshUi(ex.Message);
-        }
-    }
-
-    private async void OnConsumeHandoffClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var code = (HandoffCodeBox.Text ?? "").Trim();
-            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            await AppServices.CloudAuth.SignInWithHandoffCodeAsync(code, cts.Token);
-            HandoffCodeBox.Text = string.Empty;
-            RefreshUi("Signed in.");
-        }
-        catch (Exception ex)
-        {
-            RefreshUi(ex.Message);
-        }
-    }
-
-    private void OnSignOutClick(object sender, RoutedEventArgs e)
-    {
-        AppServices.CloudAuth.SignOut();
-        RefreshUi("Signed out.");
-    }
-
     private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressModeSelectionEvents)
@@ -190,11 +145,10 @@ public sealed partial class SettingsPage : Page
 
         AppServices.Settings.UseProductionBackend = useProd;
 
-        // Backend change: sign out + restart cloud stack.
         AppServices.CloudAuth.SignOut();
         AppServices.ReloadCloud();
 
-        RefreshUi("Backend updated.");
+        RefreshUi();
     }
 
     private void OnFrontendModeChanged(object sender, SelectionChangedEventArgs e)
@@ -218,7 +172,7 @@ public sealed partial class SettingsPage : Page
         }
 
         AppServices.Settings.UseProductionFrontend = useProd;
-        RefreshUi("Frontend updated.");
+        RefreshUi();
     }
 
     private async void OnGetProClick(object sender, RoutedEventArgs e)
@@ -230,7 +184,7 @@ public sealed partial class SettingsPage : Page
         }
         catch (Exception ex)
         {
-            RefreshUi(ex.Message);
+            ProStatusText.Text = ex.Message;
         }
     }
 

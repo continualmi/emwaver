@@ -89,7 +89,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <CommandBar x:Name="ScriptsCommandBar" Grid.Column="0" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
+                <CommandBar x:Name="ScriptsCommandBar" Grid.ColumnSpan="2" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
                     <!-- Script modes (mutually exclusive): Code vs Preview -->
                     <AppBarToggleButton x:Name="ScriptCodeToggleButton" Label="Code" IsEnabled="False" Click="OnScriptCodeModeClick">
                         <AppBarToggleButton.Icon>
@@ -105,14 +105,12 @@
 
                     <AppBarSeparator />
 
-                    <AppBarButton x:Name="ScriptNewButton" Label="New" Icon="Add" Click="OnScriptNewClick" />
-                    <AppBarButton x:Name="ScriptSyncButton" Label="Sync" Icon="Refresh" Click="OnScriptSyncClick" />
+                    <AppBarButton x:Name="ScriptSyncButton" Label="Sync" Click="OnScriptSyncClick">
+                        <AppBarButton.Icon>
+                            <FontIcon Glyph="&#xE753;" />
+                        </AppBarButton.Icon>
+                    </AppBarButton>
                     <AppBarButton x:Name="HostsButton" Label="Hosts" Icon="Globe" Click="OnHostsClick" />
-                    <AppBarButton x:Name="ScriptSaveButton" Label="Save" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptCopyButton" Label="Copy" Icon="Copy" Click="OnScriptCopyClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptRenameButton" Label="Rename" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
-                    <AppBarButton x:Name="ScriptDeleteButton" Label="Delete" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
-
                     <AppBarSeparator />
 
                     <AppBarElementContainer x:Name="RunningScriptContainer" Visibility="Collapsed">
@@ -145,13 +143,21 @@
                             <SymbolIcon Symbol="Message" />
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
+
+                    <AppBarButton x:Name="AccountButton" Label="Account" Icon="Contact" Click="OnAccountClick" />
+
+                    <CommandBar.SecondaryCommands>
+                        <AppBarButton x:Name="ScriptNewButton" Label="New Script" Icon="Add" Click="OnScriptNewClick" />
+                        <AppBarButton x:Name="ScriptCopyButton" Label="Copy Script" Icon="Copy" Click="OnScriptCopyClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptSaveButton" Label="Save Script" Icon="Save" Click="OnScriptSaveClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptRenameButton" Label="Edit Script Name" Icon="Edit" Click="OnScriptRenameClick" IsEnabled="False" />
+                        <AppBarButton x:Name="ScriptDeleteButton" Label="Delete Script" Icon="Delete" Click="OnScriptDeleteClick" IsEnabled="False" />
+                        <AppBarSeparator />
+                        <AppBarButton x:Name="TopSettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
+                    </CommandBar.SecondaryCommands>
                 </CommandBar>
 
                 <!-- Device status moved to the left (DeviceMenuButton) -->
-
-                <CommandBar x:Name="AppCommandBar" Grid.Column="1" DefaultLabelPosition="Collapsed" HorizontalAlignment="Right">
-                    <AppBarButton x:Name="SettingsButton" Label="Settings" Icon="Setting" Click="OnTopSettingsClick" />
-                </CommandBar>
             </Grid>
             </Grid>
         </Border>
