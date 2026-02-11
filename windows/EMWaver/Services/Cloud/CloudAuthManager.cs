@@ -117,7 +117,8 @@ internal sealed class CloudAuthManager
                 return await SignInInteractiveAsync(ct);
             }
 
-            return token;
+            // If we couldn't refresh, do not return an expired token.
+            return null;
         }
         finally
         {
