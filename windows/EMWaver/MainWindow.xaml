@@ -116,11 +116,11 @@
                     <AppBarSeparator />
 
                     <AppBarButton
-                        x:Name="RemoteActiveScriptButton"
+                        x:Name="RunningScriptButton"
                         Label=""
                         Icon="Play"
                         Visibility="Collapsed"
-                        Click="OnRemoteActiveScriptClick" />
+                        Click="OnRunningScriptClick" />
 
                     <AppBarSeparator />
 

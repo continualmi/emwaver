@@ -138,7 +138,7 @@ public sealed partial class MainWindow : Window
         {
             _scriptsPage.ToolbarStateChanged -= OnScriptsToolbarStateChanged;
             _scriptsPage.PreviewModeChanged -= OnScriptsPreviewModeChanged;
-            _scriptsPage.RemoteControlStatusChanged -= OnRemoteControlStatusChanged;
+            _scriptsPage.RunningScriptStatusChanged -= OnRunningScriptStatusChanged;
         }
 
         _scriptsPage = e.Content as ScriptsPage;
@@ -146,16 +146,16 @@ public sealed partial class MainWindow : Window
         {
             _scriptsPage.ToolbarStateChanged += OnScriptsToolbarStateChanged;
             _scriptsPage.PreviewModeChanged += OnScriptsPreviewModeChanged;
-            _scriptsPage.RemoteControlStatusChanged += OnRemoteControlStatusChanged;
+            _scriptsPage.RunningScriptStatusChanged += OnRunningScriptStatusChanged;
             OnScriptsToolbarStateChanged(_scriptsPage.CurrentToolbarState);
             OnScriptsPreviewModeChanged(false);
-            OnRemoteControlStatusChanged(false, null);
+            OnRunningScriptStatusChanged(false, null);
             ScriptsCommandBar.Visibility = Visibility.Visible;
         }
         else
         {
             ScriptsCommandBar.Visibility = Visibility.Collapsed;
-            OnRemoteControlStatusChanged(false, null);
+            OnRunningScriptStatusChanged(false, null);
         }
 
         // Top-level navigation UX
@@ -406,16 +406,16 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OnRemoteControlStatusChanged(bool active, string? activeScriptName)
+    private void OnRunningScriptStatusChanged(bool showIndicator, string? activeScriptName)
     {
-        var label = string.IsNullOrWhiteSpace(activeScriptName) ? "Remote script running" : $"Remote: {activeScriptName}";
+        var label = string.IsNullOrWhiteSpace(activeScriptName) ? "Script running" : $"Running: {activeScriptName}";
 
-        RemoteActiveScriptButton.Label = label;
-        RemoteActiveScriptButton.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
-        RemoteActiveScriptButton.IsEnabled = active;
+        RunningScriptButton.Label = label;
+        RunningScriptButton.Visibility = showIndicator ? Visibility.Visible : Visibility.Collapsed;
+        RunningScriptButton.IsEnabled = showIndicator;
     }
 
-    private void OnRemoteActiveScriptClick(object sender, RoutedEventArgs e)
+    private void OnRunningScriptClick(object sender, RoutedEventArgs e)
     {
         // Return to currently running script UI without forcing a re-run.
         _scriptsPage?.HandleToolbarPreviewToggle(true);

@@ -22,7 +22,7 @@ public sealed partial class ScriptsPage
         {
             _ = _page.DispatcherQueue.TryEnqueue(() =>
             {
-                _page.SetRemoteControlUiState(active, _page._remoteActiveScriptName);
+                _page.NotifyRunningScriptStatusChanged();
             });
         }
 
@@ -51,7 +51,7 @@ public sealed partial class ScriptsPage
                         ShadowsBundled: false
                     );
 
-                    _page.SetRemoteControlUiState(true, scriptName);
+                    _page.SetRunningScriptState(true, scriptName);
 
                     // Execute.
                     _page._scriptEngine.Execute(source);
