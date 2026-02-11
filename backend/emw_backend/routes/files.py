@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import time
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -94,6 +95,47 @@ def _file_json_from_blob(blob: Any) -> Dict[str, Any]:
     }
 
 
+def _dedupe_user_file_rows(db: Any, uid: str) -> None:
+    """Best-effort cleanup for legacy duplicate rows by (firebase_uid, name).
+
+    The schema uses a unique index on (firebase_uid, name), but some older/manual DB states
+    may still contain duplicates. Keep the newest row and delete older ones.
+    """
+    from emw_backend.models import UserFileIndex
+
+    rows = (
+        db.query(UserFileIndex)
+        .filter(UserFileIndex.firebase_uid == uid)
+        .order_by(UserFileIndex.name.asc(), UserFileIndex.updated_at.desc(), UserFileIndex.created_at.desc())
+        .all()
+    )
+
+    if not rows:
+        return
+
+    by_name: Dict[str, List[Any]] = defaultdict(list)
+    for row in rows:
+        by_name[row.name].append(row)
+
+    duplicate_ids: List[str] = []
+    for same_name_rows in by_name.values():
+        if len(same_name_rows) <= 1:
+            continue
+        # Rows are already sorted newest-first for each name.
+        for older in same_name_rows[1:]:
+            duplicate_ids.append(older.id)
+
+    if not duplicate_ids:
+        return
+
+    (
+        db.query(UserFileIndex)
+        .filter(UserFileIndex.id.in_(duplicate_ids))
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+
+
 @files_bp.get("/files")
 def list_files():
     """List all user files from Postgres index (bytes live in Azure Blob)."""
@@ -107,6 +149,7 @@ def list_files():
 
     db = SessionLocal()
     try:
+        _dedupe_user_file_rows(db, uid)
         rows = (
             db.query(UserFileIndex)
             .filter(UserFileIndex.firebase_uid == uid)
