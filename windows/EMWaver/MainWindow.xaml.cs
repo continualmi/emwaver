@@ -23,6 +23,8 @@ namespace EMWaver;
 public sealed partial class MainWindow : Window
 {
     private ScriptsPage? _scriptsPage;
+    private DispatcherQueueTimer? _runningPulseTimer;
+    private bool _runningPulseBright = true;
 
     public MainWindow()
     {
@@ -406,13 +408,55 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void StartRunningPulse()
+    {
+        _runningPulseTimer ??= DispatcherQueue.CreateTimer();
+        _runningPulseTimer.IsRepeating = true;
+        _runningPulseTimer.Interval = TimeSpan.FromMilliseconds(550);
+        _runningPulseTimer.Tick -= OnRunningPulseTick;
+        _runningPulseTimer.Tick += OnRunningPulseTick;
+        _runningPulseBright = true;
+        RunningPulseDot.Opacity = 1;
+        _runningPulseTimer.Start();
+    }
+
+    private void StopRunningPulse()
+    {
+        if (_runningPulseTimer == null)
+        {
+            return;
+        }
+
+        _runningPulseTimer.Stop();
+        _runningPulseTimer.Tick -= OnRunningPulseTick;
+        RunningPulseDot.Opacity = 1;
+    }
+
+    private void OnRunningPulseTick(DispatcherQueueTimer sender, object args)
+    {
+        _runningPulseBright = !_runningPulseBright;
+        RunningPulseDot.Opacity = _runningPulseBright ? 1 : 0.35;
+    }
+
     private void OnRunningScriptStatusChanged(bool showIndicator, string? activeScriptName)
     {
-        var label = string.IsNullOrWhiteSpace(activeScriptName) ? "Script running" : $"Running: {activeScriptName}";
+        var label = string.IsNullOrWhiteSpace(activeScriptName) ? "Running script" : $"Running: {activeScriptName}";
 
-        RunningScriptButton.Label = label;
-        RunningScriptButton.Visibility = showIndicator ? Visibility.Visible : Visibility.Collapsed;
+        RunningScriptText.Text = label;
+        RunningScriptContainer.Visibility = showIndicator ? Visibility.Visible : Visibility.Collapsed;
         RunningScriptButton.IsEnabled = showIndicator;
+
+        StopRunningScriptButton.Visibility = showIndicator ? Visibility.Visible : Visibility.Collapsed;
+        StopRunningScriptButton.IsEnabled = showIndicator;
+
+        if (showIndicator)
+        {
+            StartRunningPulse();
+        }
+        else
+        {
+            StopRunningPulse();
+        }
     }
 
     private void OnRunningScriptClick(object sender, RoutedEventArgs e)
@@ -420,6 +464,16 @@ public sealed partial class MainWindow : Window
         // Return to currently running script UI without forcing a re-run.
         _scriptsPage?.HandleToolbarPreviewToggle(true);
         SetScriptModeUi(preview: true);
+    }
+
+    private async void OnStopRunningScriptClick(object sender, RoutedEventArgs e)
+    {
+        if (_scriptsPage == null)
+        {
+            return;
+        }
+
+        await _scriptsPage.HandleToolbarStopRunningAsync();
     }
 
     private void OnScriptCodeModeClick(object sender, RoutedEventArgs e)

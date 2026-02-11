@@ -765,7 +765,7 @@ public sealed partial class ScriptsPage : Page
 
     private void NotifyRunningScriptStatusChanged()
     {
-        var showIndicator = _hasActiveRunningScript && !_isPreviewMode;
+        var showIndicator = _hasActiveRunningScript;
         RunningScriptStatusChanged?.Invoke(showIndicator, _activeRunningScriptName);
     }
 
@@ -867,6 +867,7 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarSync() => _ = SyncNowAsync();
     internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
+    internal Task HandleToolbarStopRunningAsync() => StopRunningScriptWithConfirmationAsync();
 
     private void SetAgentPaneVisibility(bool show)
     {
@@ -1751,6 +1752,42 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
+    private async Task StopRunningScriptWithConfirmationAsync()
+    {
+        if (!_hasActiveRunningScript)
+        {
+            return;
+        }
+
+        var runningName = string.IsNullOrWhiteSpace(_activeRunningScriptName) ? "script" : _activeRunningScriptName;
+        var stopOk = await ConfirmAsync(
+            title: "Stop running script?",
+            message: $"Stop '{runningName}'?",
+            primaryButtonText: "Stop",
+            closeButtonText: "Cancel"
+        );
+
+        if (!stopOk)
+        {
+            return;
+        }
+
+        _scriptEngine.Stop();
+        SetRunningScriptState(false, null);
+
+        await RunOnUiAsync(async () =>
+        {
+            try
+            {
+                PreviewHost.Children.Clear();
+                PreviewHint.Visibility = Visibility.Visible;
+            }
+            catch { }
+
+            await Task.CompletedTask;
+        });
+    }
+
     private async void OnRunClick(object sender, RoutedEventArgs e)
     {
         if (_current == null)
@@ -1777,6 +1814,9 @@ public sealed partial class ScriptsPage : Page
                 SetPreviewMode(false);
                 return;
             }
+
+            _scriptEngine.Stop();
+            SetRunningScriptState(false, null);
         }
 
         // Switch to preview mode on Run.
