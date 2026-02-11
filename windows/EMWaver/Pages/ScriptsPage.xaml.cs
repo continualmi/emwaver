@@ -301,8 +301,9 @@ public sealed partial class ScriptsPage : Page
     private void OnScriptsListContextOpening(object sender, object e)
     {
         var canEditScript = _current != null && !_current.IsBundled;
+        var canDeleteSignal = _currentSignal != null;
         ScriptsContextRenameItem.IsEnabled = canEditScript;
-        ScriptsContextDeleteItem.IsEnabled = canEditScript;
+        ScriptsContextDeleteItem.IsEnabled = canEditScript || canDeleteSignal;
     }
 
     private void OnScriptsContextRenameClick(object sender, RoutedEventArgs e)
@@ -1323,6 +1324,40 @@ public sealed partial class ScriptsPage : Page
 
     private async void OnDeleteClick(object sender, RoutedEventArgs e)
     {
+        if (_currentSignal != null)
+        {
+            var okSignal = await ConfirmAsync(
+                title: "Delete signal?",
+                message: $"Delete '{_currentSignal.FileName}'?",
+                primaryButtonText: "Delete",
+                closeButtonText: "Cancel"
+            );
+
+            if (!okSignal)
+            {
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(_currentSignal.FullPath))
+                {
+                    File.Delete(_currentSignal.FullPath);
+                }
+
+                _currentSignal = null;
+                _current = null;
+                _isDirty = false;
+                await RefreshAsync();
+            }
+            catch (Exception ex)
+            {
+                await ShowInfoAsync("Delete", ex.Message);
+            }
+
+            return;
+        }
+
         if (_current == null || _current.IsBundled)
         {
             return;
