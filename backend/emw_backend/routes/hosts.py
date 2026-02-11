@@ -72,8 +72,22 @@ def list_hosts():
             .all()
         )
 
+        # Best-effort cleanup pass: when duplicates exist for same machine fingerprint,
+        # keep newest and remove older rows immediately.
+        deduped = _dedupe_rows(rows)
+        keep_ids = {r.id for r in deduped}
+        deleted_any = False
+        for r in rows:
+            if r.id not in keep_ids:
+                db.delete(r)
+                deleted_any = True
+        if deleted_any:
+            try:
+                db.commit()
+            except Exception:
+                db.rollback()
+
     hosts = []
-    deduped = _dedupe_rows(rows)
     for r in deduped:
         try:
             caps = json.loads(r.capabilities_json or "{}")
