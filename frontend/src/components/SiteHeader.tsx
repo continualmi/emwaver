@@ -27,7 +27,7 @@ export function SiteHeader() {
               EMWaver
             </div>
             <div className="text-[12px] text-[color:var(--ink-dim)]">
-              Script-first hardware exploration
+              The future of electronics
             </div>
           </div>
         </Link>

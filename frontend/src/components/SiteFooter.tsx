@@ -5,7 +5,7 @@ export function SiteFooter() {
         <div className="space-y-3">
           <div className="text-sm font-semibold text-[color:var(--ink)]">EMWaver</div>
           <p className="text-sm text-[color:var(--ink-dim)]">
-            One board. Scripts + UI together.
+            The future of electronics development.
           </p>
         </div>
 

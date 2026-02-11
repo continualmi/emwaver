@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · EMWaver",
   },
   description:
-    "Script-first hardware exploration: build UI + device workflows in one file, no reflash loops.",
+    "EMWaver is the future of electronics development — a tiny USB device that turns any phone or laptop into a full-power electronics lab, powered by AI.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 
