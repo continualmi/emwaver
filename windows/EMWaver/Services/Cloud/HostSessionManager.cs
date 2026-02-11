@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using System;
+using System.IO;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
@@ -55,20 +56,69 @@ internal sealed class HostSessionManager
 
     private static string GetOrCreateHostSessionId()
     {
+        var fileId = ReadHostSessionIdFromFile();
+        if (!string.IsNullOrWhiteSpace(fileId))
+        {
+            return fileId!;
+        }
+
         try
         {
             var ls = ApplicationData.Current.LocalSettings;
             if (ls.Values.TryGetValue(HostSessionIdKey, out var v) && v is string s && !string.IsNullOrWhiteSpace(s))
             {
+                TryWriteHostSessionIdToFile(s);
                 return s;
             }
             var id = Guid.NewGuid().ToString();
             ls.Values[HostSessionIdKey] = id;
+            TryWriteHostSessionIdToFile(id);
             return id;
         }
         catch
         {
-            return Guid.NewGuid().ToString();
+            var id = Guid.NewGuid().ToString();
+            TryWriteHostSessionIdToFile(id);
+            return id;
+        }
+    }
+
+    private static string HostSessionIdFilePath()
+    {
+        var dir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "EMWaver"
+        );
+        return Path.Combine(dir, "host_session_id.txt");
+    }
+
+    private static string? ReadHostSessionIdFromFile()
+    {
+        try
+        {
+            var path = HostSessionIdFilePath();
+            if (!File.Exists(path)) return null;
+
+            var id = (File.ReadAllText(path) ?? "").Trim();
+            return string.IsNullOrWhiteSpace(id) ? null : id;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static void TryWriteHostSessionIdToFile(string id)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(id)) return;
+            var path = HostSessionIdFilePath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
+            File.WriteAllText(path, id.Trim());
+        }
+        catch
+        {
         }
     }
 
@@ -77,7 +127,7 @@ internal sealed class HostSessionManager
         try
         {
             var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-            var tok = _auth.GetIdToken();
+            var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
             if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
             {
                 return;
