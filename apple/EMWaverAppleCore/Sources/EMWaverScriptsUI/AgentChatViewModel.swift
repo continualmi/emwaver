@@ -127,6 +127,7 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var mode: AgentMode = .llm {
         didSet {
             guard !isRestoringModeState else { return }
+            applyModeToSelectedConversation()
             if mode == .elm {
                 ensureCodexForElmMode()
             }
@@ -150,6 +151,7 @@ public final class AgentChatViewModel: ObservableObject {
             restartElmTickLoopIfNeeded()
         }
     }
+    @Published public private(set) var elmDebugTurns: [ElmDebugTurn] = []
 
     private var assistantPlaceholderId: UUID?
     private var toolBubbleMessageIdByCallId: [String: UUID] = [:]
@@ -171,6 +173,8 @@ public final class AgentChatViewModel: ObservableObject {
     private let selectedConversationKey = "emwaver.agent.local.selected_conversation_id"
     private let preferredModelKey = "emwaver.agent.local.preferred_model_id"
     private let preferredProviderKey = "emwaver.agent.local.preferred_provider_id"
+    private let preferredCodexModelKey = "emwaver.agent.local.preferred_model_id.codex"
+    private let preferredOpenRouterModelKey = "emwaver.agent.local.preferred_model_id.openrouter"
     private let modeKey = "emwaver.agent.local.mode"
     private let elmTickActiveKey = "emwaver.agent.local.elm_tick_active"
     private let elmTickPeriodSecondsKey = "emwaver.agent.local.elm_tick_period_seconds"
@@ -189,6 +193,32 @@ public final class AgentChatViewModel: ObservableObject {
 
     private static let defaultElmState = ElmState(tickId: 0, symbolic: [], emwFilesOpen: [])
     private var elmState = defaultElmState
+    private let elmDebugTurnLimit = 100
+
+    public struct ElmDebugTurn: Identifiable, Equatable {
+        public let id: UUID
+        public let createdAt: Date
+        public let tickId: Int
+        public let inputJSON: String
+        public let outputJSON: String?
+        public let errorText: String?
+
+        public init(
+            id: UUID = UUID(),
+            createdAt: Date = Date(),
+            tickId: Int,
+            inputJSON: String,
+            outputJSON: String?,
+            errorText: String?
+        ) {
+            self.id = id
+            self.createdAt = createdAt
+            self.tickId = tickId
+            self.inputJSON = inputJSON
+            self.outputJSON = outputJSON
+            self.errorText = errorText
+        }
+    }
 
     public init(host: AgentHost, cloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
         self.host = host
@@ -284,9 +314,11 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         let id = UUID()
+        let chatType = mode
         let conv = Conversation(
             id: id,
-            title: nil,
+            title: conversationTitle(for: chatType),
+            agentType: chatType,
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
@@ -308,6 +340,12 @@ public final class AgentChatViewModel: ObservableObject {
         selectedConversationId = id
 
         if cloudProvider != nil {
+            if let info = conversations.first(where: { $0.id == id }) {
+                isRestoringModeState = true
+                mode = info.agentType
+                isRestoringModeState = false
+                restartElmTickLoopIfNeeded()
+            }
             if mode == .elm {
                 ensureCodexForElmMode()
             }
@@ -315,7 +353,14 @@ public final class AgentChatViewModel: ObservableObject {
             return
         }
 
-        messages = conversation(id: id)?.messages ?? []
+        if let conv = conversation(id: id) {
+            isRestoringModeState = true
+            mode = conv.agentType
+            isRestoringModeState = false
+            messages = conv.messages
+        } else {
+            messages = []
+        }
         if mode == .elm {
             ensureCodexForElmMode()
         }
@@ -327,7 +372,7 @@ public final class AgentChatViewModel: ObservableObject {
         guard let conv = conversation(id: id) else { return }
         let allowed = allowedModels(for: conv.providerId)
         guard allowed.contains(modelId) else { return }
-        UserDefaults.standard.set(modelId, forKey: preferredModelKey)
+        persistPreferredModel(modelId, for: conv.providerId)
         updateConversation(id: id) { conv in
             conv.modelId = modelId
             conv.updatedAt = Date()
@@ -359,9 +404,8 @@ public final class AgentChatViewModel: ObservableObject {
         guard let id = selectedConversationId else { return }
         UserDefaults.standard.set(provider.rawValue, forKey: preferredProviderKey)
 
-        // If current model isn't valid for this provider, switch to provider default.
-        let allowed = allowedModels(for: provider)
-        let nextModel = allowed.contains(selectedModelId) ? selectedModelId : (allowed.first ?? Self.defaultModelId)
+        // Keep provider-specific preferred model across switches/restarts.
+        let nextModel = preferredModelId(for: provider)
 
         updateConversation(id: id) { conv in
             conv.providerId = provider
@@ -649,39 +693,60 @@ public final class AgentChatViewModel: ObservableObject {
         let emwFileOps: [FileOp]
     }
 
+    private struct ElmParseResult {
+        let output: ElmTurnOutput
+        let rawObject: [String: Any]
+    }
+
     private func runElmTurn(userText: String) async throws -> ElmTurnOutput {
         let model = Self.allowedCodexModelIds.contains(selectedModelId) ? selectedModelId : (Self.allowedCodexModelIds.first ?? Self.defaultModelId)
         let inputPayload = try await buildElmInput(userText: userText)
         let inputJSON = jsonString(inputPayload)
+        let inputPretty = prettyJSONString(inputPayload)
+        let tickId = elmState.tickId
 
         dbg("elm turn model=\(model) tick=\(elmState.tickId) open_files=\(elmState.emwFilesOpen.count)")
 
-        let resp = try await codex.send(
-            model: model,
-            instructions: elmSystemPrompt(),
-            input: [Self.codexUserMessageItem(text: inputJSON)],
-            tools: [],
-            sessionId: nil
-        )
+        var responseText: String?
 
-        let outputItems = Self.extractResponsesOutputItems(resp)
-        let text = outputItems
-            .filter { ($0["type"] as? String) == "message" }
-            .map { Self.extractTextFromMessageItem($0) }
-            .joined(separator: "\n\n")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        do {
+            let resp = try await codex.send(
+                model: model,
+                instructions: elmSystemPrompt(),
+                input: [Self.codexUserMessageItem(text: inputJSON)],
+                tools: [],
+                sessionId: nil
+            )
 
-        guard !text.isEmpty else {
-            throw AgentBackendError.serverError("ELM produced no output")
+            let outputItems = Self.extractResponsesOutputItems(resp)
+            let text = outputItems
+                .filter { ($0["type"] as? String) == "message" }
+                .map { Self.extractTextFromMessageItem($0) }
+                .joined(separator: "\n\n")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            responseText = text
+
+            guard !text.isEmpty else {
+                throw AgentBackendError.serverError("ELM produced no output")
+            }
+
+            let parsed = try parseElmTurnOutput(text: text)
+            try await applyElmTurnOutput(parsed.output)
+            appendElmDebugTurn(tickId: tickId, inputJSON: inputPretty, outputJSON: prettyJSONString(parsed.rawObject), errorText: nil)
+            persistElmPreferences()
+            return parsed.output
+        } catch {
+            appendElmDebugTurn(
+                tickId: tickId,
+                inputJSON: inputPretty,
+                outputJSON: responseText.map { normalizeDebugOutputText($0) },
+                errorText: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            )
+            throw error
         }
-
-        let parsed = try parseElmTurnOutput(text: text)
-        try await applyElmTurnOutput(parsed)
-        persistElmPreferences()
-        return parsed
     }
 
-    private func parseElmTurnOutput(text: String) throws -> ElmTurnOutput {
+    private func parseElmTurnOutput(text: String) throws -> ElmParseResult {
         let obj = try parseJSONObject(text: text)
 
         var action: ElmTurnOutput.Action?
@@ -726,11 +791,14 @@ public final class AgentChatViewModel: ObservableObject {
             }
         }
 
-        return ElmTurnOutput(
-            action: action,
-            assistant: assistant,
-            symbolicOps: symbolicOps,
-            emwFileOps: emwFileOps
+        return ElmParseResult(
+            output: ElmTurnOutput(
+                action: action,
+                assistant: assistant,
+                symbolicOps: symbolicOps,
+                emwFileOps: emwFileOps
+            ),
+            rawObject: obj
         )
     }
 
@@ -1460,17 +1528,52 @@ If no user-visible update is needed, omit assistant.
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
+    private func prettyJSONString(_ obj: Any) -> String {
+        guard JSONSerialization.isValidJSONObject(obj),
+              let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
+              let text = String(data: data, encoding: .utf8) else {
+            return jsonString(obj)
+        }
+        return text
+    }
+
+    private func normalizeDebugOutputText(_ text: String) -> String {
+        if let obj = try? parseJSONObject(text: text) {
+            return prettyJSONString(obj)
+        }
+        return text
+    }
+
+    private func appendElmDebugTurn(tickId: Int, inputJSON: String, outputJSON: String?, errorText: String?) {
+        let row = ElmDebugTurn(
+            tickId: tickId,
+            inputJSON: inputJSON,
+            outputJSON: outputJSON,
+            errorText: errorText
+        )
+        elmDebugTurns.insert(row, at: 0)
+        if elmDebugTurns.count > elmDebugTurnLimit {
+            elmDebugTurns.removeLast(elmDebugTurns.count - elmDebugTurnLimit)
+        }
+    }
+
+    public func clearElmDebugTurns() {
+        elmDebugTurns.removeAll()
+    }
+
     // MARK: - Local persistence (multiple conversations)
 
     public struct ConversationInfo: Identifiable, Equatable {
         public let id: UUID
         public let title: String
+        public let agentType: AgentMode
         public let updatedAt: Date
     }
 
     private struct Conversation: Identifiable, Codable, Equatable {
         let id: UUID
         var title: String?
+        var agentType: AgentMode
         let createdAt: Date
         var updatedAt: Date
         var sessionId: String
@@ -1493,6 +1596,7 @@ If no user-visible update is needed, omit assistant.
         init(
             id: UUID,
             title: String?,
+            agentType: AgentMode,
             createdAt: Date,
             updatedAt: Date,
             sessionId: String,
@@ -1504,6 +1608,7 @@ If no user-visible update is needed, omit assistant.
         ) {
             self.id = id
             self.title = title
+            self.agentType = agentType
             self.createdAt = createdAt
             self.updatedAt = updatedAt
             self.sessionId = sessionId
@@ -1518,6 +1623,7 @@ If no user-visible update is needed, omit assistant.
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(UUID.self, forKey: .id)
             title = try c.decodeIfPresent(String.self, forKey: .title)
+            agentType = try c.decodeIfPresent(AgentMode.self, forKey: .agentType) ?? .llm
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
             updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? UUID().uuidString
@@ -1582,9 +1688,31 @@ If no user-visible update is needed, omit assistant.
         conversations = all.map {
             ConversationInfo(
                 id: $0.id,
-                title: $0.title ?? "Chat",
+                title: $0.title ?? conversationTitle(for: $0.agentType),
+                agentType: $0.agentType,
                 updatedAt: $0.updatedAt
             )
+        }
+    }
+
+    private func conversationTitle(for mode: AgentMode) -> String {
+        switch mode {
+        case .llm: return "LLM Chat"
+        case .elm: return "ELM Chat"
+        }
+    }
+
+    private func applyModeToSelectedConversation() {
+        guard let id = selectedConversationId else { return }
+        let newTitle = conversationTitle(for: mode)
+        updateConversation(id: id) { conv in
+            conv.agentType = mode
+            conv.title = newTitle
+            conv.updatedAt = Date()
+        }
+
+        if cloudProvider != nil {
+            Task { await self.updateCloudConversationMetadata(conversationId: id, title: newTitle, agentType: mode.rawValue) }
         }
     }
 
@@ -1615,11 +1743,42 @@ If no user-visible update is needed, omit assistant.
     }
 
     private func preferredModelId() -> String {
-        let provider = preferredProviderId()
+        preferredModelId(for: preferredProviderId())
+    }
+
+    private func preferredModelId(for provider: ProviderId) -> String {
         let allowed = allowedModels(for: provider)
         let fallback = allowed.first ?? Self.defaultModelId
-        let m = UserDefaults.standard.string(forKey: preferredModelKey) ?? fallback
-        return allowed.contains(m) ? m : fallback
+
+        let specificKey: String = {
+            switch provider {
+            case .chatgptCodex: return preferredCodexModelKey
+            case .openrouter: return preferredOpenRouterModelKey
+            }
+        }()
+
+        let direct = UserDefaults.standard.string(forKey: specificKey)
+        if let direct, allowed.contains(direct) {
+            return direct
+        }
+
+        // Legacy fallback for older installs that only stored one preferred model key.
+        let legacy = UserDefaults.standard.string(forKey: preferredModelKey)
+        if let legacy, allowed.contains(legacy) {
+            return legacy
+        }
+
+        return fallback
+    }
+
+    private func persistPreferredModel(_ modelId: String, for provider: ProviderId) {
+        UserDefaults.standard.set(modelId, forKey: preferredModelKey)
+        switch provider {
+        case .chatgptCodex:
+            UserDefaults.standard.set(modelId, forKey: preferredCodexModelKey)
+        case .openrouter:
+            UserDefaults.standard.set(modelId, forKey: preferredOpenRouterModelKey)
+        }
     }
 
     private func loadElmPreferences() {
@@ -1661,9 +1820,6 @@ If no user-visible update is needed, omit assistant.
 
     private func ensureCodexForElmMode() {
         UserDefaults.standard.set(ProviderId.chatgptCodex.rawValue, forKey: preferredProviderKey)
-        if let fallback = Self.allowedCodexModelIds.first {
-            UserDefaults.standard.set(fallback, forKey: preferredModelKey)
-        }
 
         guard let id = selectedConversationId else { return }
         guard let conv = conversation(id: id) else { return }
@@ -1686,7 +1842,8 @@ If no user-visible update is needed, omit assistant.
                 let id = UUID()
                 let conv = Conversation(
                     id: id,
-                    title: nil,
+                    title: conversationTitle(for: .llm),
+                    agentType: .llm,
                     createdAt: Date(),
                     updatedAt: Date(),
                     sessionId: UUID().uuidString,
@@ -2038,9 +2195,11 @@ extension AgentChatViewModel {
 
             let infos: [ConversationInfo] = rows.compactMap { r in
                 guard let id = UUID(uuidString: r.id) else { return nil }
+                let mode = AgentMode(rawValue: (r.agent_type ?? "llm").lowercased()) ?? .llm
                 return ConversationInfo(
                     id: id,
-                    title: r.title ?? "Chat",
+                    title: r.title ?? conversationTitle(for: mode),
+                    agentType: mode,
                     updatedAt: Date(timeIntervalSince1970: TimeInterval(r.updated_at_ms) / 1000.0)
                 )
             }
@@ -2055,6 +2214,12 @@ extension AgentChatViewModel {
                     // Create an initial conversation.
                     await self.createCloudConversation()
                 }
+            } else if let sid = self.selectedConversationId,
+                      let selected = infos.first(where: { $0.id == sid }) {
+                self.isRestoringModeState = true
+                self.mode = selected.agentType
+                self.isRestoringModeState = false
+                self.restartElmTickLoopIfNeeded()
             }
 
         } catch {
@@ -2070,7 +2235,12 @@ extension AgentChatViewModel {
 
         do {
             let api = AgentCloudAPI()
-            let c = try await api.createConversation(baseURL: ctx.baseURL, token: ctx.accessToken, title: nil)
+            let c = try await api.createConversation(
+                baseURL: ctx.baseURL,
+                token: ctx.accessToken,
+                title: conversationTitle(for: mode),
+                agentType: mode.rawValue
+            )
             guard let id = UUID(uuidString: c.id) else {
                 throw NSError(domain: "AgentCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid conversation id"]) 
             }
@@ -2156,6 +2326,26 @@ extension AgentChatViewModel {
         }
     }
 
+    func updateCloudConversationMetadata(conversationId: UUID, title: String?, agentType: String?) async {
+        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            return
+        }
+
+        do {
+            let api = AgentCloudAPI()
+            _ = try await api.updateConversation(
+                baseURL: ctx.baseURL,
+                token: ctx.accessToken,
+                conversationId: conversationId.uuidString.lowercased(),
+                title: title,
+                agentType: agentType
+            )
+            await refreshCloudConversations()
+        } catch {
+            // Best-effort metadata sync.
+        }
+    }
+
     private func ensureShadowLocalConversationExists(id: UUID) {
         // Create a local shadow conversation if missing. This stores provider/model/session state
         // (Codex input items / OpenRouter messages) so local inference can reuse cloud history.
@@ -2163,7 +2353,8 @@ extension AgentChatViewModel {
 
         let conv = Conversation(
             id: id,
-            title: nil,
+            title: conversationTitle(for: mode),
+            agentType: mode,
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,

@@ -77,6 +77,7 @@ def list_conversations():
                     {
                         "id": r.id,
                         "title": r.title,
+                        "agent_type": (r.agent_type or "llm"),
                         "created_at_ms": r.created_at_ms,
                         "updated_at_ms": r.updated_at_ms,
                     }
@@ -102,8 +103,17 @@ def create_conversation():
         return jsonify({"error": "Invalid 'title'"}), 400
     title = (title or "").strip() or None
 
+    agent_type = payload.get("agent_type")
+    if agent_type is None:
+        agent_type = "llm"
+    if not isinstance(agent_type, str):
+        return jsonify({"error": "Invalid 'agent_type'"}), 400
+    agent_type = agent_type.strip().lower()
+    if agent_type not in ("llm", "elm"):
+        return jsonify({"error": "Invalid 'agent_type'"}), 400
+
     now = _now_ms()
-    c = AgentConversation(firebase_uid=ident.uid, title=title, created_at_ms=now, updated_at_ms=now)
+    c = AgentConversation(firebase_uid=ident.uid, title=title, agent_type=agent_type, created_at_ms=now, updated_at_ms=now)
 
     with SessionLocal() as db:
         db.add(c)
@@ -115,8 +125,61 @@ def create_conversation():
             "conversation": {
                 "id": c.id,
                 "title": c.title,
+                "agent_type": (c.agent_type or "llm"),
                 "created_at_ms": c.created_at_ms,
                 "updated_at_ms": c.updated_at_ms,
+            }
+        }
+    )
+
+
+@agent_bp.patch("/v1/agent/conversations/<conversation_id>")
+def update_conversation(conversation_id: str):
+    config: Config = current_app.config["EMWAVER_CONFIG"]
+    ident, err = _require_identity(config)
+    if err:
+        return err
+
+    payload = request.get_json(force=True, silent=True) or {}
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Invalid JSON payload"}), 400
+
+    agent_type = payload.get("agent_type")
+    if agent_type is not None:
+        if not isinstance(agent_type, str):
+            return jsonify({"error": "Invalid 'agent_type'"}), 400
+        agent_type = agent_type.strip().lower()
+        if agent_type not in ("llm", "elm"):
+            return jsonify({"error": "Invalid 'agent_type'"}), 400
+
+    title = payload.get("title")
+    if title is not None and not isinstance(title, str):
+        return jsonify({"error": "Invalid 'title'"}), 400
+    if isinstance(title, str):
+        title = title.strip() or None
+
+    with SessionLocal() as db:
+        convo = db.get(AgentConversation, conversation_id)
+        if not convo or convo.firebase_uid != ident.uid:
+            return jsonify({"error": "Not found"}), 404
+
+        if agent_type is not None:
+            convo.agent_type = agent_type
+        if "title" in payload:
+            convo.title = title
+        convo.updated_at_ms = _now_ms()
+        db.add(convo)
+        db.commit()
+        db.refresh(convo)
+
+    return jsonify(
+        {
+            "conversation": {
+                "id": convo.id,
+                "title": convo.title,
+                "agent_type": (convo.agent_type or "llm"),
+                "created_at_ms": convo.created_at_ms,
+                "updated_at_ms": convo.updated_at_ms,
             }
         }
     )
