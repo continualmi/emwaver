@@ -322,8 +322,7 @@
                                       SelectionMode="None"
                                       IsItemClickEnabled="False"
                                       ScrollViewer.VerticalScrollBarVisibility="Auto"
-                                      ScrollViewer.VerticalScrollMode="Enabled"
-                                      ScrollViewer.VerticalScrollChainingMode="Auto">
+                                      ScrollViewer.VerticalScrollMode="Enabled">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem">
                                         <Setter Property="Padding" Value="0" />
