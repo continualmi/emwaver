@@ -17,7 +17,7 @@
                 <ColumnDefinition Width="320" />
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
-                <ColumnDefinition x:Name="AgentColumn" Width="0" MinWidth="280" />
+                <ColumnDefinition x:Name="AgentColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
             <!-- Scripts list -->
