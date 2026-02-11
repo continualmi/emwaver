@@ -1,6 +1,5 @@
 using EMWaver.Services.Cloud;
 using Microsoft.UI;
-using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -140,7 +139,7 @@ public sealed partial class HostsPage : Page
         }
 
         var tcs = new TaskCompletionSource<object?>();
-        if (!DispatcherQueue.TryEnqueue(DispatcherQueuePriority.Normal, () =>
+        if (!DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Normal, () =>
         {
             try
             {
