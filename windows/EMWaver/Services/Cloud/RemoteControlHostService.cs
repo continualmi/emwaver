@@ -80,7 +80,7 @@ internal sealed class RemoteControlHostService
     private async Task ConnectOnceAsync(CancellationToken ct)
     {
         var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-        var tok = _auth.GetIdToken();
+        var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
         if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
         {
             return;

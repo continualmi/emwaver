@@ -83,7 +83,7 @@ internal sealed class EntitlementsManager
 
         var cfg = _config();
         var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-        var token = _auth().GetIdToken() ?? "";
+        var token = (await _auth().GetValidIdTokenAsync(ct, interactiveSignIn: false)) ?? "";
         if (string.IsNullOrWhiteSpace(token) && !allowAnon)
         {
             _last = new Snapshot();
