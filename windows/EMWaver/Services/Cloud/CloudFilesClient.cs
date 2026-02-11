@@ -255,6 +255,14 @@ internal sealed class CloudFilesClient
         return await res.Content.ReadAsByteArrayAsync(ct);
     }
 
+    internal async Task DeleteByNameViaBackendAsync(string name, string? accessToken, CancellationToken ct)
+    {
+        var path = $"/v1/files?name={Uri.EscapeDataString(name)}";
+        using var req = await MakeRequestAsync(HttpMethod.Delete, path, accessToken, ct);
+        using var res = await _http.SendAsync(req, ct);
+        await EnsureSuccessAsync(res, ct, "Delete file");
+    }
+
     internal sealed record CloudFileMetadata(FileMetadata Metadata);
 
     private static CloudFile ParseFile(JsonElement el)

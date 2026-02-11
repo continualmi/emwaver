@@ -1692,14 +1692,15 @@ public sealed partial class ScriptsPage : Page
     {
         if (_currentSignal != null)
         {
-            var okSignal = await ConfirmAsync(
+            var signalName = _currentSignal.FileName;
+            var deleteSignalChoice = await ConfirmDeleteWithCloudOptionAsync(
                 title: "Delete signal?",
-                message: $"Delete '{_currentSignal.FileName}'?",
+                message: $"Delete '{signalName}'?",
                 primaryButtonText: "Delete",
                 closeButtonText: "Cancel"
             );
 
-            if (!okSignal)
+            if (!deleteSignalChoice.Confirmed)
             {
                 return;
             }
@@ -1709,6 +1710,11 @@ public sealed partial class ScriptsPage : Page
                 if (File.Exists(_currentSignal.FullPath))
                 {
                     File.Delete(_currentSignal.FullPath);
+                }
+
+                if (deleteSignalChoice.DeleteFromCloud)
+                {
+                    await DeleteFromCloudBestEffortAsync(signalName);
                 }
 
                 _currentSignal = null;
@@ -1729,14 +1735,15 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        var ok = await ConfirmAsync(
+        var scriptName = _current.Name;
+        var deleteScriptChoice = await ConfirmDeleteWithCloudOptionAsync(
             title: "Delete script?",
-            message: $"Delete '{_current.Name}'?",
+            message: $"Delete '{scriptName}'?",
             primaryButtonText: "Delete",
             closeButtonText: "Cancel"
         );
 
-        if (!ok)
+        if (!deleteScriptChoice.Confirmed)
         {
             return;
         }
@@ -1744,11 +1751,28 @@ public sealed partial class ScriptsPage : Page
         try
         {
             await AppServices.Scripts.DeleteLocalScriptAsync(_current);
+            if (deleteScriptChoice.DeleteFromCloud)
+            {
+                await DeleteFromCloudBestEffortAsync(scriptName);
+            }
             await RefreshAsync();
         }
         catch (Exception ex)
         {
             await ShowInfoAsync("Delete", ex.Message);
+        }
+    }
+
+    private async Task DeleteFromCloudBestEffortAsync(string name)
+    {
+        try
+        {
+            await AppServices.CloudFiles.DeleteByNameViaBackendAsync(name, accessToken: null, CancellationToken.None);
+            await ShowInfoAsync("Delete", $"Deleted from cloud: {name}");
+        }
+        catch (Exception ex)
+        {
+            await ShowInfoAsync("Delete", "Failed to delete from cloud: " + ex.Message);
         }
     }
 
@@ -1883,6 +1907,44 @@ public sealed partial class ScriptsPage : Page
 
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary;
+    }
+
+    private sealed record DeleteDialogResult(bool Confirmed, bool DeleteFromCloud);
+
+    private async Task<DeleteDialogResult> ConfirmDeleteWithCloudOptionAsync(string title, string message, string primaryButtonText, string closeButtonText)
+    {
+        var signedIn = AppServices.CloudAuth.IsSignedIn;
+        var deleteFromCloudCheckbox = new CheckBox
+        {
+            Content = "Also delete from cloud",
+            IsChecked = signedIn,
+            IsEnabled = signedIn,
+            Opacity = signedIn ? 1.0 : 0.6,
+            Margin = new Thickness(0, 8, 0, 0),
+        };
+
+        var panel = new StackPanel { Spacing = 6 };
+        panel.Children.Add(new TextBlock
+        {
+            Text = message,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        panel.Children.Add(deleteFromCloudCheckbox);
+
+        var dialog = new ContentDialog
+        {
+            Title = title,
+            Content = panel,
+            PrimaryButtonText = primaryButtonText,
+            CloseButtonText = closeButtonText,
+            XamlRoot = XamlRoot
+        };
+
+        var result = await dialog.ShowAsync();
+        return new DeleteDialogResult(
+            Confirmed: result == ContentDialogResult.Primary,
+            DeleteFromCloud: signedIn && deleteFromCloudCheckbox.IsChecked == true
+        );
     }
 
     private readonly SemaphoreSlim _infoDialogLock = new(1, 1);
