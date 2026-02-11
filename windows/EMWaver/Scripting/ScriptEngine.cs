@@ -110,6 +110,16 @@ public sealed class ScriptEngine : IDisposable
         });
     }
 
+    public void Stop()
+    {
+        Enqueue(() =>
+        {
+            _haltedUntilNextExecute = true;
+            CancelAllTimeoutsLocked();
+            _callbacks.Clear();
+        });
+    }
+
     public void Invoke(string token, IReadOnlyList<object?> arguments)
     {
         if (string.IsNullOrWhiteSpace(token))

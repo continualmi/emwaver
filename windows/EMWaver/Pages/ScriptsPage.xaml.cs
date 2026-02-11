@@ -32,6 +32,7 @@ public sealed partial class ScriptsPage : Page
     private const double DefaultAgentPaneWidth = 380;
 
     public event Action<bool>? PreviewModeChanged;
+    public event Action<bool, string?>? RunningScriptStatusChanged;
 
     private readonly ObservableCollection<Models.ScriptListSection> _sections = new();
     private sealed class AgentMessageRow
@@ -196,10 +197,7 @@ public sealed partial class ScriptsPage : Page
                 var gen = _activeRenderGeneration;
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
-                    if (_isPreviewMode && gen == _activeRenderGeneration)
-                    {
-                        RenderPreview(tree);
-                    }
+                    HandleScriptTreeRender(tree, gen);
                 });
             },
             sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
@@ -683,6 +681,8 @@ public sealed partial class ScriptsPage : Page
     private bool _isPreviewMode;
     private int _renderGeneration;
     private int _activeRenderGeneration;
+    private bool _hasActiveRunningScript;
+    private string? _activeRunningScriptName;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
 
@@ -750,6 +750,32 @@ public sealed partial class ScriptsPage : Page
         _editorFocusTimer.Tick -= OnEditorFocusTimerTick;
     }
 
+    private void HandleScriptTreeRender(ScriptTree tree, int generation)
+    {
+        _lastRenderedTree = tree;
+
+        // Keep remote controller state live even when user switches back to code mode locally.
+        AppServices.RemoteControlHost.PublishUiSnapshotIfRemoteControlled();
+
+        if (_isPreviewMode && generation == _activeRenderGeneration)
+        {
+            RenderPreview(tree);
+        }
+    }
+
+    private void NotifyRunningScriptStatusChanged()
+    {
+        var showIndicator = _hasActiveRunningScript;
+        RunningScriptStatusChanged?.Invoke(showIndicator, _activeRunningScriptName);
+    }
+
+    private void SetRunningScriptState(bool isRunning, string? scriptName)
+    {
+        _hasActiveRunningScript = isRunning;
+        _activeRunningScriptName = isRunning ? scriptName : null;
+        NotifyRunningScriptStatusChanged();
+    }
+
     private void SetPreviewMode(bool preview)
     {
         // Must be on UI thread; otherwise WinUI will throw RPC_E_WRONG_THREAD (0x8001010E).
@@ -794,7 +820,12 @@ public sealed partial class ScriptsPage : Page
                 QueueEditorFocus();
             });
         }
+        else if (_lastRenderedTree != null)
+        {
+            RenderPreview(_lastRenderedTree);
+        }
 
+        NotifyRunningScriptStatusChanged();
         PreviewModeChanged?.Invoke(preview);
     }
 
@@ -836,6 +867,7 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarSync() => _ = SyncNowAsync();
     internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
+    internal Task HandleToolbarStopRunningAsync() => StopRunningScriptWithConfirmationAsync();
 
     private void SetAgentPaneVisibility(bool show)
     {
@@ -1720,6 +1752,42 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
+    private async Task StopRunningScriptWithConfirmationAsync()
+    {
+        if (!_hasActiveRunningScript)
+        {
+            return;
+        }
+
+        var runningName = string.IsNullOrWhiteSpace(_activeRunningScriptName) ? "script" : _activeRunningScriptName;
+        var stopOk = await ConfirmAsync(
+            title: "Stop running script?",
+            message: $"Stop '{runningName}'?",
+            primaryButtonText: "Stop",
+            closeButtonText: "Cancel"
+        );
+
+        if (!stopOk)
+        {
+            return;
+        }
+
+        _scriptEngine.Stop();
+        SetRunningScriptState(false, null);
+
+        await RunOnUiAsync(async () =>
+        {
+            try
+            {
+                PreviewHost.Children.Clear();
+                PreviewHint.Visibility = Visibility.Visible;
+            }
+            catch { }
+
+            await Task.CompletedTask;
+        });
+    }
+
     private async void OnRunClick(object sender, RoutedEventArgs e)
     {
         if (_current == null)
@@ -1728,6 +1796,28 @@ public sealed partial class ScriptsPage : Page
         }
 
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
+
+        var nextScriptName = _current.Name;
+        if (_hasActiveRunningScript &&
+            !string.IsNullOrWhiteSpace(_activeRunningScriptName) &&
+            !string.Equals(_activeRunningScriptName, nextScriptName, StringComparison.Ordinal))
+        {
+            var stopOk = await ConfirmAsync(
+                title: "Stop running script?",
+                message: $"'{_activeRunningScriptName}' is currently running. Stop it and run '{nextScriptName}'?",
+                primaryButtonText: "Stop and Run",
+                closeButtonText: "Cancel"
+            );
+
+            if (!stopOk)
+            {
+                SetPreviewMode(false);
+                return;
+            }
+
+            _scriptEngine.Stop();
+            SetRunningScriptState(false, null);
+        }
 
         // Switch to preview mode on Run.
         SetPreviewMode(true);
@@ -1748,6 +1838,7 @@ public sealed partial class ScriptsPage : Page
         var text = GetEditorTextNormalized();
         await Task.CompletedTask;
 
+        SetRunningScriptState(true, nextScriptName);
         _scriptEngine.Execute(text);
     }
 
