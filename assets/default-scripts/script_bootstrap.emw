@@ -755,6 +755,7 @@ __scriptDefineBoardPin('A6', 6);
 __scriptDefineBoardPin('A7', 7);
 __scriptDefineBoardPin('A13', 13);
 __scriptDefineBoardPin('A14', 14);
+__scriptDefineBoardPin('A15', 15);
 __scriptDefineBoardPin('B6', 16 + 6);
 __scriptDefineBoardPin('B7', 16 + 7);
 
@@ -830,6 +831,10 @@ if (typeof A13 === 'undefined') {
 if (typeof A14 === 'undefined') {
   var A14 = 'A14';
   __scriptGlobal.A14 = A14;
+}
+if (typeof A15 === 'undefined') {
+  var A15 = 'A15';
+  __scriptGlobal.A15 = A15;
 }
 if (typeof B6 === 'undefined') {
   var B6 = 'B6';

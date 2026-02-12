@@ -17,6 +17,7 @@ const PINS = [
   { label: "MOSI (A7)", value: MOSI },
   { label: "SWCLK (A13)", value: SWCLK },
   { label: "SWDIO (A14)", value: SWDIO },
+  { label: "A15", value: A15 },
   { label: "UART_TX (B6)", value: UART_TX },
   { label: "UART_RX (B7)", value: UART_RX },
 ];
