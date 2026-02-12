@@ -25,6 +25,7 @@ const allow = [
   "sampler.emw",
   "cc1101.emw",
   "ism.emw",
+  "rfid.emw",
   "chart.emw",
 ];
 

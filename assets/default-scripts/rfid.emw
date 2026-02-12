@@ -1,0 +1,58 @@
+const MFRC522_VERSION_REG = 0x37;
+const MFRC522_CS = A15;
+const MFRC522_RST = B6;
+const MFRC522_IRQ = B7;
+
+let statusText = "Ready";
+let versionText = "--";
+
+function hexByte(value) {
+  const v = Number(value) & 0xff;
+  const s = v.toString(16).toUpperCase();
+  return s.length === 1 ? "0" + s : s;
+}
+
+function readRegister(reg) {
+  const cmd = (((Number(reg) & 0xff) << 1) & 0x7e) | 0x80;
+  const response = SPI.transfer([cmd, 0x00], { cs: MFRC522_CS, rxLength: 2 });
+  return response && response.length >= 2 ? (response[1] & 0xff) : -1;
+}
+
+function probeVersion() {
+  pinMode(MFRC522_RST, OUTPUT);
+  digitalWrite(MFRC522_RST, HIGH);
+  pinMode(MFRC522_IRQ, INPUT);
+
+  statusText = "Reading VersionReg...";
+  render();
+
+  const version = readRegister(MFRC522_VERSION_REG);
+  if (version < 0) {
+    versionText = "--";
+    statusText = "No SPI response";
+    render();
+    return;
+  }
+
+  versionText = "0x" + hexByte(version);
+  statusText = (version === 0x91 || version === 0x92) ? "MFRC522 detected" : "Unexpected version";
+  render();
+}
+
+function render() {
+  UI.render(
+    UI.column({
+      padding: 16,
+      spacing: 12,
+      children: [
+        UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7" }),
+        UI.button({ label: "Read VersionReg", onTap: probeVersion }),
+        UI.text({ text: "Version: " + versionText, fontWeight: "medium" }),
+        UI.text({ text: statusText, foregroundColor: "#9CA3AF" }),
+      ],
+    }),
+  );
+}
+
+render();

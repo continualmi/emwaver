@@ -70,7 +70,7 @@ Pins can be referenced as:
 
 Common named pins:
 
-- `A0..A7`, `A13`, `A14`, `B6`, `B7`
+- `A0..A7`, `A13`, `A14`, `A15`, `B6`, `B7`
 - Convenience aliases:
   - `IR_RX`, `IR_TX`
   - `GDO0`, `GDO2`

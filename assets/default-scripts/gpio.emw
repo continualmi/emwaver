@@ -9,6 +9,7 @@ const PINS = [
     { label: "A7 (MOSI)", value: A7 },
     { label: "A13 (SWCLK)", value: A13 },
     { label: "A14 (SWDIO)", value: A14 },
+    { label: "A15", value: A15 },
     { label: "B6 (UART TX / I2C SCL)", value: B6 },
     { label: "B7 (UART RX / I2C SDA)", value: B7 },
 ];

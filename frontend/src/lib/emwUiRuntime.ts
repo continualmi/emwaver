@@ -101,6 +101,7 @@ function ensureBootstrapGlobals() {
     "A7",
     "A13",
     "A14",
+    "A15",
     "B6",
     "B7",
     "IR_RX",
