@@ -79,9 +79,6 @@ public struct ScriptRenderView: View {
                     textView = textView.fontDesign(mapped)
                 }
             }
-            if let color = node.props.foregroundColor {
-                textView = textView.foregroundColor(color)
-            }
             return AnyView(textView.applyScriptModifiers(node.props))
         case .button:
             return AnyView(
@@ -185,8 +182,6 @@ private struct ScriptButtonView: View {
     let invokeHandler: (String, [Any]) -> Void
 
     var body: some View {
-        let backgroundColorProvided = node.props.backgroundColor != nil
-        let labelColor = node.props.foregroundColor ?? (backgroundColorProvided ? .white : nil)
         let button = Button(action: {
             if let token = node.props.handlerId(for: .tap) {
                 invokeHandler(token, [])
@@ -194,56 +189,16 @@ private struct ScriptButtonView: View {
         }) {
             ScriptButtonLabel(
                 node: node,
-                labelColor: labelColor,
-                fillsWidth: node.props.fillsWidth,
-                controlSize: node.props.controlSize
+                fillsWidth: node.props.fillsWidth
             )
         }
-        let styledButton = configureButtonStyle(button, backgroundColorProvided: backgroundColorProvided)
-        return styledButton.applyControlSize(node.props.controlSize)
-    }
-
-    private func configureButtonStyle(_ button: Button<ScriptButtonLabel>, backgroundColorProvided: Bool) -> AnyView {
-        if let style = node.props.buttonStyle {
-            switch style {
-            case .plain:
-                return AnyView(button.buttonStyle(PlainButtonStyle()))
-            case .bordered:
-                if #available(iOS 15.0, macOS 12.0, *) {
-                    return AnyView(button.buttonStyle(.bordered))
-                } else {
-                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
-                }
-            case .borderedProminent:
-                if #available(iOS 15.0, macOS 12.0, *) {
-                    return AnyView(button.buttonStyle(.borderedProminent))
-                } else {
-                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
-                }
-            case .automatic:
-                if #available(iOS 15.0, macOS 12.0, *) {
-                    return AnyView(button.buttonStyle(.automatic))
-                } else {
-                    return AnyView(button.buttonStyle(DefaultButtonStyle()))
-                }
-            }
-        }
-
-        if backgroundColorProvided {
-            return AnyView(button.buttonStyle(PlainButtonStyle()))
-        }
-        if #available(iOS 15.0, macOS 12.0, *) {
-            return AnyView(button.buttonStyle(.borderedProminent))
-        }
-        return AnyView(button.buttonStyle(DefaultButtonStyle()))
+        return AnyView(button.applyControlSize(node.props.controlSize))
     }
 }
 
 private struct ScriptButtonLabel: View {
     let node: ScriptNode
-    let labelColor: Color?
     let fillsWidth: Bool
-    let controlSize: ControlSize?
 
     var body: some View {
         let baseLabel = HStack(spacing: 8) {
@@ -253,43 +208,7 @@ private struct ScriptButtonLabel: View {
             Text(node.props.label ?? "Button")
                 .frame(maxWidth: fillsWidth ? .infinity : nil, alignment: .center)
         }
-        .padding(.vertical, verticalPadding)
-        .padding(.horizontal, horizontalPadding)
-
-        var labelView: AnyView = AnyView(baseLabel)
-
-        if let labelColor {
-            labelView = AnyView(labelView.foregroundColor(labelColor))
-        }
-
-        return labelView
-    }
-
-    private var verticalPadding: CGFloat {
-        guard let controlSize else { return 12 }
-        switch controlSize {
-        case .mini: return 6
-        case .small: return 8
-        case .regular: return 12
-        case .large: return 14
-        case .extraLarge: return 16
-        @unknown default:
-            return 12
-        }
-    }
-
-    private var horizontalPadding: CGFloat {
-        guard let controlSize else { return 16 }
-        switch controlSize {
-        case .mini: return 10
-        case .small: return 12
-        case .regular: return 16
-        case .large: return 20
-        case .extraLarge:
-            return 24
-        @unknown default:
-            return 16
-        }
+        return baseLabel
     }
 }
 
@@ -361,7 +280,7 @@ private struct ScriptLogViewerView: View {
                 .font(.system(.footnote, design: .monospaced))
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .background(node.props.backgroundColor ?? Color.gray.opacity(0.08))
+        .background(Color.gray.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 8))
     }
 }
@@ -399,7 +318,7 @@ private struct ScriptCardView: View {
             }
         }
         .padding(padding)
-        .background((node.props.backgroundColor ?? Color.gray.opacity(0.08)))
+        .background(Color.gray.opacity(0.08))
         .clipShape(RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous)
@@ -439,7 +358,7 @@ private struct ScriptTileView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background((node.props.backgroundColor ?? Color.gray.opacity(0.06)))
+        .background(Color.gray.opacity(0.06))
         .clipShape(RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: node.props.cornerRadius ?? 10, style: .continuous)
@@ -941,14 +860,8 @@ private extension View {
                 )
             )
         }
-        if let background = props.backgroundColor {
-            modified = AnyView(modified.background(background))
-        }
         if let cornerRadius = props.cornerRadius {
             modified = AnyView(modified.cornerRadius(cornerRadius))
-        }
-        if let foreground = props.foregroundColor {
-            modified = AnyView(modified.foregroundColor(foreground))
         }
         if let priority = props.layoutPriority {
             modified = AnyView(modified.layoutPriority(priority))

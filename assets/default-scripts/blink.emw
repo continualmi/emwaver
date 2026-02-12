@@ -99,8 +99,6 @@ function render() {
         UI.button({
           id: "blink.toggle",
           label: isBlinking ? "Stop" : "Start",
-          backgroundColor: isBlinking ? "rgba(244, 63, 94, 0.18)" : "rgba(16, 185, 129, 0.18)",
-          foregroundColor: isBlinking ? "#FFE4E6" : "#D1FAE5",
           onTap: toggleBlink,
         }),
       ],

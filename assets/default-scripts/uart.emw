@@ -128,7 +128,7 @@ function render() {
       spacing: 12,
       children: [
         UI.text({ text: "UART (B6/B7)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1.", foregroundColor: "#9CA3AF" }),
+        UI.text({ text: "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1." }),
 
         UI.row({
           spacing: 12,
@@ -141,7 +141,7 @@ function render() {
                 render();
               },
             }),
-            UI.button({ label: "Open", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: openUart }),
+            UI.button({ label: "Open", onTap: openUart }),
             UI.button({ label: "Close", onTap: closeUart }),
           ],
         }),
@@ -174,7 +174,7 @@ function render() {
                 writeText = String(v);
               },
             }),
-        UI.button({ label: "Write", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: writeUart }),
+        UI.button({ label: "Write", onTap: writeUart }),
 
         UI.text({ text: "Read", fontWeight: "medium" }),
         UI.row({
@@ -190,16 +190,14 @@ function render() {
                 render();
               },
             }),
-            UI.text({ text: String(readLen) + " bytes", foregroundColor: "#9CA3AF" }),
-            UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: readUart }),
+            UI.text({ text: String(readLen) + " bytes" }),
+            UI.button({ label: "Read", onTap: readUart }),
           ],
         }),
 
         statusText
           ? UI.text({
               text: statusText,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
               cornerRadius: 8,
             })

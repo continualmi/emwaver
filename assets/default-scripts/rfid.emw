@@ -372,7 +372,7 @@ function render() {
     spacing: 10,
     children: [
       UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
-      UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7", foregroundColor: "#9CA3AF" }),
+      UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7" }),
       UI.row({
         spacing: 8,
         children: [
@@ -380,7 +380,7 @@ function render() {
           UI.button({ label: "Scan UID", onTap: actionScanUid }),
         ],
       }),
-      UI.text({ text: "Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText, font: "caption", foregroundColor: "#9CA3AF" }),
+      UI.text({ text: "Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText, font: "caption" }),
       UI.row({
         spacing: 8,
         children: [
@@ -411,11 +411,11 @@ function render() {
       UI.row({
         spacing: 8,
         children: [
-          UI.button({ label: "Read Block", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: actionReadBlock }),
-          UI.button({ label: "Write Block", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: actionWriteBlock }),
+          UI.button({ label: "Read Block", onTap: actionReadBlock }),
+          UI.button({ label: "Write Block", onTap: actionWriteBlock }),
         ],
       }),
-      UI.text({ text: statusText, foregroundColor: statusText.indexOf("failed") >= 0 ? "#EF4444" : "#9CA3AF" }),
+      UI.text({ text: statusText }),
     ],
   }));
 }

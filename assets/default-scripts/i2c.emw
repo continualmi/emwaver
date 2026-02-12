@@ -196,7 +196,7 @@ function render() {
       spacing: 12,
       children: [
         UI.text({ text: "I2C (B6/B7)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Note: B6/B7 are shared with USART1; using I2C will switch the pins to I2C1.", foregroundColor: "#9CA3AF" }),
+        UI.text({ text: "Note: B6/B7 are shared with USART1; using I2C will switch the pins to I2C1." }),
 
         UI.row({
           spacing: 12,
@@ -209,7 +209,7 @@ function render() {
                 render();
               },
             }),
-            UI.button({ label: "Open", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: openI2c }),
+            UI.button({ label: "Open", onTap: openI2c }),
             UI.button({ label: "Close", onTap: closeI2c }),
           ],
         }),
@@ -249,7 +249,7 @@ function render() {
                 render();
               },
             }),
-            UI.text({ text: String(rxLen) + " rx", foregroundColor: "#9CA3AF" }),
+            UI.text({ text: String(rxLen) + " rx" }),
           ],
         }),
         UI.textField({
@@ -262,17 +262,15 @@ function render() {
         UI.row({
           spacing: 12,
           children: [
-            UI.button({ label: "Write", backgroundColor: "#059669", foregroundColor: "#FFFFFF", onTap: writeI2c }),
-            UI.button({ label: "Read", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: readI2c }),
-            UI.button({ label: "Xfer", backgroundColor: "#7C3AED", foregroundColor: "#FFFFFF", onTap: xferI2c }),
+            UI.button({ label: "Write", onTap: writeI2c }),
+            UI.button({ label: "Read", onTap: readI2c }),
+            UI.button({ label: "Xfer", onTap: xferI2c }),
           ],
         }),
 
         statusText
           ? UI.text({
               text: statusText,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
               cornerRadius: 8,
             })

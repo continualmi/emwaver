@@ -5,7 +5,6 @@ UI.render(
     children: [
       UI.text({
         text: "hello",
-        foregroundColor: "#E2E8F0",
       }),
     ],
   })

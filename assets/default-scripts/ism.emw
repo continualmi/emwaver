@@ -688,7 +688,7 @@ function render() {
           spacing: 4,
           children: [
             UI.text({ text: "ISM", font: "title2", fontWeight: "semibold" }),
-            UI.text({ text: "CC1101 control and registers", foregroundColor: "#94A3B8", font: "caption" }),
+            UI.text({ text: "CC1101 control and registers", font: "caption" }),
           ],
         }),
 
@@ -765,7 +765,7 @@ function render() {
                       text: "TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.",
                       font: "caption",
                     }),
-                    statusMessage ? UI.text({ text: statusMessage, foregroundColor: "#FBBF24", font: "caption" }) : null,
+                    statusMessage ? UI.text({ text: statusMessage, font: "caption" }) : null,
                   ],
                 }),
 
@@ -864,7 +864,7 @@ function render() {
             UI.card({
               title: "Registers",
               children: [
-                UI.text({ text: "CONFIG", foregroundColor: "#94A3B8", font: "caption", fontWeight: "semibold" }),
+                UI.text({ text: "CONFIG", font: "caption", fontWeight: "semibold" }),
                 UI.grid({
                   minColumnWidth: 150,
                   spacing: 8,
@@ -882,7 +882,7 @@ function render() {
 
                 UI.divider({}),
 
-                UI.text({ text: "STATUS", foregroundColor: "#94A3B8", font: "caption", fontWeight: "semibold" }),
+                UI.text({ text: "STATUS", font: "caption", fontWeight: "semibold" }),
                 UI.grid({
                   minColumnWidth: 150,
                   spacing: 8,
@@ -900,7 +900,7 @@ function render() {
 
                 UI.divider({}),
 
-                UI.text({ text: "PA TABLE", foregroundColor: "#94A3B8", font: "caption", fontWeight: "semibold" }),
+                UI.text({ text: "PA TABLE", font: "caption", fontWeight: "semibold" }),
                 UI.grid({
                   minColumnWidth: 150,
                   spacing: 8,
