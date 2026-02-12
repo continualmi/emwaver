@@ -31,6 +31,7 @@ const FIFODataReg = 0x09;
 const FIFOLevelReg = 0x0A;
 const ControlReg = 0x0C;
 const BitFramingReg = 0x0D;
+const CollReg = 0x0E;
 const ModeReg = 0x11;
 const TxControlReg = 0x14;
 const TxAutoReg = 0x15;
@@ -145,6 +146,24 @@ function calculateCRC(data) {
   return [readReg(CRCResultRegL), readReg(CRCResultRegM)];
 }
 
+function readFifoBytes(count) {
+  var n = Number(count) | 0;
+  if (n <= 0) return [];
+  if (n > MAX_FIFO_READ) n = MAX_FIFO_READ;
+  var readCmd = (((FIFODataReg & 0xFF) << 1) & 0x7E) | 0x80;
+  var tx = [readCmd];
+  var i = 0;
+  while (i < (n - 1)) {
+    tx.push(readCmd);
+    i += 1;
+  }
+  tx.push(0x00);
+  var resp = SPI.transfer(tx, { cs: MFRC522_CS, rxLength: tx.length });
+  var out = [];
+  for (var k = 1; k < resp.length; k += 1) out.push(resp[k] & 0xFF);
+  return out;
+}
+
 function toCard(command, sendData) {
   var irqEn = 0x00;
   var waitIRq = 0x00;
@@ -185,17 +204,14 @@ function toCard(command, sendData) {
     backBits = lastBits ? ((level - 1) * 8 + lastBits) : (level * 8);
     if (level <= 0) level = 1;
     if (level > MAX_FIFO_READ) level = MAX_FIFO_READ;
-    var readCmd = (((FIFODataReg & 0xFF) << 1) & 0x7E) | 0x80;
-    var tx = [readCmd];
-    for (var j = 0; j < level; j += 1) tx.push(0x00);
-    var resp = SPI.transfer(tx, { cs: MFRC522_CS, rxLength: tx.length });
-    for (var k = 1; k < resp.length; k += 1) backData.push(resp[k] & 0xFF);
+    backData = readFifoBytes(level);
   }
 
   return { status: MI_OK, backBits: backBits, backData: backData };
 }
 
 function request(reqMode) {
+  stopCrypto1();
   writeReg(BitFramingReg, 0x07);
   var result = toCard(PCD_TRANSCEIVE, [reqMode & 0xFF]);
   if (result.status !== MI_OK || result.backBits !== 0x10 || result.backData.length < 2) return null;
@@ -203,6 +219,7 @@ function request(reqMode) {
 }
 
 function anticoll() {
+  clearBitMask(CollReg, 0x80);
   writeReg(BitFramingReg, 0x00);
   var result = toCard(PCD_TRANSCEIVE, [PICC_ANTICOLL, 0x20]);
   if (result.status !== MI_OK || result.backData.length < 5) return null;
