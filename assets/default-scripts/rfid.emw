@@ -351,58 +351,55 @@ function actionWriteBlock() {
 
 function render() {
   UI.render(UI.scroll({
-    child: UI.column({
-      padding: 16,
-      spacing: 10,
-      children: [
-        UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7", foregroundColor: "#9CA3AF" }),
-        UI.row({
-          spacing: 8,
-          children: [
-            UI.button({ label: "Probe", onTap: actionProbe }),
-            UI.button({ label: "Scan UID", onTap: actionScanUid }),
-          ],
-        }),
-        UI.text({ text: "Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText, font: "caption", foregroundColor: "#9CA3AF" }),
-        UI.row({
-          spacing: 8,
-          children: [
-            UI.picker({
-              style: "segmented",
-              selected: keyMode,
-              options: [{ label: "Key A (0x60)", value: "A" }, { label: "Key B (0x61)", value: "B" }],
-              onChange: function (v) { keyMode = String(v || "A") === "B" ? "B" : "A"; render(); },
-            }),
-            UI.textField({
-              label: "Block (0..63)",
-              text: blockText,
-              onChange: function (v) { blockText = String(v || ""); render(); },
-            }),
-          ],
-        }),
-        UI.textField({
-          label: "Key (6 bytes hex)",
-          text: keyHex,
-          placeholder: "FF FF FF FF FF FF",
-          onChange: function (v) { keyHex = String(v || ""); render(); },
-        }),
-        UI.textEditor({
-          label: "Data (16 bytes hex)",
-          text: writeHex,
-          minHeight: 90,
-          onChange: function (v) { writeHex = String(v || ""); render(); },
-        }),
-        UI.row({
-          spacing: 8,
-          children: [
-            UI.button({ label: "Read Block", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: actionReadBlock }),
-            UI.button({ label: "Write Block", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: actionWriteBlock }),
-          ],
-        }),
-        UI.text({ text: statusText, foregroundColor: statusText.indexOf("failed") >= 0 ? "#EF4444" : "#9CA3AF" }),
-      ],
-    }),
+    padding: 16,
+    spacing: 10,
+    children: [
+      UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
+      UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7", foregroundColor: "#9CA3AF" }),
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.button({ label: "Probe", onTap: actionProbe }),
+          UI.button({ label: "Scan UID", onTap: actionScanUid }),
+        ],
+      }),
+      UI.text({ text: "Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText, font: "caption", foregroundColor: "#9CA3AF" }),
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.picker({
+            style: "segmented",
+            selected: keyMode,
+            options: [{ label: "Key A (0x60)", value: "A" }, { label: "Key B (0x61)", value: "B" }],
+            onChange: function (v) { keyMode = String(v || "A") === "B" ? "B" : "A"; render(); },
+          }),
+          UI.textField({
+            value: blockText,
+            placeholder: "Block (0..63)",
+            onChange: function (v) { blockText = String(v || ""); render(); },
+          }),
+        ],
+      }),
+      UI.textField({
+        value: keyHex,
+        placeholder: "Key (6 bytes hex, default FF FF FF FF FF FF)",
+        onChange: function (v) { keyHex = String(v || ""); render(); },
+      }),
+      UI.textEditor({
+        value: writeHex,
+        placeholder: "Data (16 bytes hex)",
+        minHeight: 90,
+        onChange: function (v) { writeHex = String(v || ""); render(); },
+      }),
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.button({ label: "Read Block", backgroundColor: "#2563EB", foregroundColor: "#FFFFFF", onTap: actionReadBlock }),
+          UI.button({ label: "Write Block", backgroundColor: "#DC2626", foregroundColor: "#FFFFFF", onTap: actionWriteBlock }),
+        ],
+      }),
+      UI.text({ text: statusText, foregroundColor: statusText.indexOf("failed") >= 0 ? "#EF4444" : "#9CA3AF" }),
+    ],
   }));
 }
 
