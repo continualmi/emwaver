@@ -120,16 +120,12 @@ function render() {
 
         UI.button({
           label: "Read",
-          backgroundColor: "#2563EB",
-          foregroundColor: "#FFFFFF",
           onTap: readAdc,
         }),
 
         statusText
           ? UI.text({
               text: statusText,
-              backgroundColor: "#111827",
-              foregroundColor: "#FFFFFF",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
               cornerRadius: 8,
             })
@@ -138,8 +134,6 @@ function render() {
         lastResponse
           ? UI.text({
               text: lastResponse,
-              backgroundColor: "#0B1220",
-              foregroundColor: "#E5E7EB",
               padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
               cornerRadius: 8,
             })

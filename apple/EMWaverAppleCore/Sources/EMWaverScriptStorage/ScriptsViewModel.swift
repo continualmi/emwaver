@@ -650,8 +650,8 @@ public final class ScriptsViewModel: ObservableObject {
         "        spacing: 12,\n" +
         "        children: [\n" +
         "            UI.text({ text: 'Script Title', font: 'title2', fontWeight: 'semibold' }),\n" +
-        "            UI.text({ text: 'Customize this script to add controls and logic.', foregroundColor: '#6B7280' }),\n" +
-        "            UI.logViewer({ text: logLines.join('\\n'), minHeight: 160, backgroundColor: '#111827', foregroundColor: '#F9FAFB', padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
+        "            UI.text({ text: 'Customize this script to add controls and logic.' }),\n" +
+        "            UI.logViewer({ text: logLines.join('\\n'), minHeight: 160, padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
         "        ]\n" +
         "    }));\n" +
         "}\n"

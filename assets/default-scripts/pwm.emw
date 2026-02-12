@@ -121,11 +121,9 @@ function render() {
         UI.text({
           text:
             "Simple duty-cycle PWM. For servos: typically 50 Hz; duty controls pulse width indirectly (use a servo-focused script if needed).",
-          foregroundColor: "#6B7280",
         }),
         UI.text({
           text: "Note: A3 is TIM3-based and disabled (TIM3 is reserved for sampling/transmit timing).",
-          foregroundColor: "#6B7280",
         }),
 
         UI.text({ text: "Pin", fontWeight: "medium" }),
@@ -150,7 +148,7 @@ function render() {
             render();
           },
         }),
-        UI.text({ text: "Using " + String(hz) + " Hz", foregroundColor: "#6B7280" }),
+        UI.text({ text: "Using " + String(hz) + " Hz" }),
 
         UI.text({ text: "Duty: " + String(dutyPercent) + "%  (u12=" + String(u12) + ")", fontWeight: "medium" }),
         UI.slider({
@@ -176,8 +174,8 @@ function render() {
           ],
         }),
 
-        statusText ? UI.text({ text: statusText, foregroundColor: statusText.indexOf("Error") === 0 ? "#B91C1C" : "#6B7280" }) : null,
-        lastAction ? UI.text({ text: lastAction, font: "caption", foregroundColor: "#6B7280" }) : null,
+        statusText ? UI.text({ text: statusText }) : null,
+        lastAction ? UI.text({ text: lastAction, font: "caption" }) : null,
       ].filter(Boolean),
     })
   );

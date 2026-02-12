@@ -373,7 +373,7 @@ function render() {
           spacing: 4,
           children: [
             UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
-            UI.text({ text: "Quick init + sanity TX (native UI)", font: "caption", foregroundColor: "#94A3B8" }),
+            UI.text({ text: "Quick init + sanity TX (native UI)", font: "caption" }),
           ],
         }),
 
@@ -405,7 +405,6 @@ function render() {
             UI.text({
               text: "GDO0 is set to Serial Data (IOCFG0=0x0D). RX: modem out. TX: modem in (drive GDO0 to gate carrier).",
               font: "caption",
-              foregroundColor: "#94A3B8",
             }),
           ],
         }),
