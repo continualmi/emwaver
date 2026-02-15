@@ -15,9 +15,7 @@ const PINS = [
   { label: "SCK (A5)", value: SCK },
   { label: "MISO (A6)", value: MISO },
   { label: "MOSI (A7)", value: MOSI },
-  { label: "SWCLK (A13)", value: SWCLK },
-  { label: "SWDIO (A14)", value: SWDIO },
-  { label: "A15", value: A15 },
+  // Note: SWD pins (A13/A14) and A15 are not exposed on the shipping board.
   { label: "UART_TX (B6)", value: UART_TX },
   { label: "UART_RX (B7)", value: UART_RX },
 ];
