@@ -40,7 +40,42 @@ The shipped EMWaver board is intentionally a general-purpose hardware exploratio
   - **ADC** inputs
   - **PWM / timers**
   - plus the usual digital GPIO modes (in/out, pull-ups, etc.)
-- **External modules are expected:** e.g. **CC1101**, **MFRC522**, and similar “plug-on” hardware via SPI/I2C/UART/GPIO.
+- **External modules are expected:** e.g. **MFRC522**, sensors, displays, and similar “plug-on” hardware via SPI/I2C/UART/GPIO.
+- **No sub‑GHz/433 MHz RF capability** is included on the final single EMWaver device (no CC1101-style radio onboard).
+
+#### Final single-device board (physical + connectors)
+
+This repo should treat the following as the **only** shipping EMWaver hardware form factor:
+
+- **USB:**
+  - **1× USB male plug** (board-mounted) oriented **perpendicular** to the PCB (“signature EMWaver style”) for direct plug-in power + comms.
+  - **1× USB female port** (for convenience/extension; still the same single USB link).
+- **Protocol:** single USB transport, **USB MIDI SysEx** with fixed 64-byte frames (custom EMWaver protocol).
+- **Infrared:** on-board **IR LED (TX)** + **IR receiver (RX)**.
+- **MCU:** **STM32F042G6Ux** (same as the previous device).
+- **Enclosure:** **two-piece case**, **5× self-tapping screws**.
+
+#### GPIO / header pinout (final board)
+
+From the final schematic/photo provided:
+
+- **CN1 (2×4, 2.54mm; part: PM254-2-04-S-8.5):** exposes power + SPI + 3 GPIO lines (**pinout aligns with common 2×4 “CC1101 module” headers**, even though EMWaver itself has no sub‑GHz radio)
+  - **VCC**
+  - **GND**
+  - **SPI:** **NSS**, **SCK**, **MOSI**, **MISO**
+  - **GPIO:** **GDO0**, **GDO1**, **GDO2**
+
+- **U4 (1×8; part: X6511FRS-08-C85D30):** (**pinout aligns with common 1×8 “RC522/RFID module” headers**)
+  - **VCC**
+  - **PB6**
+  - **BOOT0**
+  - **MISO**
+  - **MOSI**
+  - **NSS1** *(label in schematic; confirm exact net name if we standardize this in docs/firmware)*
+  - **SCL**
+  - **PB7**
+
+Both **CN1** and **U4** are **user-exposed** in the shipped product: these headers are the primary way EMWaver connects to and controls external hardware modules.
 
 ### Hardware cloning deterrence & device authenticity (strategy)
 
