@@ -9,9 +9,7 @@ var PINS = [
   { label: 'A5 (SCK)', value: '5' },
   { label: 'A6 (MISO)', value: '6' },
   { label: 'A7 (MOSI)', value: '7' },
-  { label: 'A13 (SWCLK)', value: '13' },
-  { label: 'A14 (SWDIO)', value: '14' },
-  { label: 'A15', value: '15' },
+  // Note: SWD pins (A13/A14) and A15 are not exposed on the shipping board.
   { label: 'B6 (UART TX / I2C SCL)', value: String(16 + 6) },
   { label: 'B7 (UART RX / I2C SDA)', value: String(16 + 7) },
 ];

@@ -731,7 +731,7 @@ if (typeof OUTPUT === 'undefined') {
 // Board pins.
 //
 // Pins are encoded the same way as firmware `decode_encoded_pin`:
-// - A0..A15 => 0..15
+// - A0..A7 => 0..7
 // - B0..B15 => 16..31
 //
 // We expose both MCU-ish names (A0, B6, ...) and board aliases (GDO0, IR_RX, ...)
@@ -753,9 +753,6 @@ __scriptDefineBoardPin('A4', 4);
 __scriptDefineBoardPin('A5', 5);
 __scriptDefineBoardPin('A6', 6);
 __scriptDefineBoardPin('A7', 7);
-__scriptDefineBoardPin('A13', 13);
-__scriptDefineBoardPin('A14', 14);
-__scriptDefineBoardPin('A15', 15);
 __scriptDefineBoardPin('B6', 16 + 6);
 __scriptDefineBoardPin('B7', 16 + 7);
 
@@ -767,8 +764,6 @@ __scriptDefineBoardPin('NSS', 4);
 __scriptDefineBoardPin('SCK', 5);
 __scriptDefineBoardPin('MISO', 6);
 __scriptDefineBoardPin('MOSI', 7);
-__scriptDefineBoardPin('SWCLK', 13);
-__scriptDefineBoardPin('SWDIO', 14);
 __scriptDefineBoardPin('UART_TX', 16 + 6);
 __scriptDefineBoardPin('UART_RX', 16 + 7);
 __scriptDefineBoardPin('I2C_SCL', 16 + 6);
@@ -824,18 +819,6 @@ if (typeof A7 === 'undefined') {
   var A7 = 'A7';
   __scriptGlobal.A7 = A7;
 }
-if (typeof A13 === 'undefined') {
-  var A13 = 'A13';
-  __scriptGlobal.A13 = A13;
-}
-if (typeof A14 === 'undefined') {
-  var A14 = 'A14';
-  __scriptGlobal.A14 = A14;
-}
-if (typeof A15 === 'undefined') {
-  var A15 = 'A15';
-  __scriptGlobal.A15 = A15;
-}
 if (typeof B6 === 'undefined') {
   var B6 = 'B6';
   __scriptGlobal.B6 = B6;
@@ -876,14 +859,6 @@ if (typeof MISO === 'undefined') {
 if (typeof MOSI === 'undefined') {
   var MOSI = 'MOSI';
   __scriptGlobal.MOSI = MOSI;
-}
-if (typeof SWCLK === 'undefined') {
-  var SWCLK = 'SWCLK';
-  __scriptGlobal.SWCLK = SWCLK;
-}
-if (typeof SWDIO === 'undefined') {
-  var SWDIO = 'SWDIO';
-  __scriptGlobal.SWDIO = SWDIO;
 }
 if (typeof UART_TX === 'undefined') {
   var UART_TX = 'UART_TX';

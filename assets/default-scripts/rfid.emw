@@ -1,4 +1,4 @@
-const MFRC522_CS = A15;
+const MFRC522_CS = NSS; // A4 on the shipping board
 const MFRC522_RST = B6;
 const MFRC522_IRQ = B7;
 
@@ -372,7 +372,7 @@ function render() {
     spacing: 10,
     children: [
       UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
-      UI.text({ text: "SDA/CS=A15, RST=B6, IRQ=B7" }),
+      UI.text({ text: "SDA/CS=NSS (A4), RST=B6, IRQ=B7" }),
       UI.row({
         spacing: 8,
         children: [
