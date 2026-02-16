@@ -17,7 +17,7 @@ Principles:
 
 ### Definition of Done (must be demo-able)
 - [ ] `rfid.emw`: block reads/writes working; UID magic card clone works end-to-end.
-- [ ] Casing for new EMWaver finalized and ordered on JLC3DP.
+- [x] Casing for new EMWaver finalized and ordered on JLC3DP.
 - [ ] `pwm.emw`: servo control working with UI slider; full 0→180° range.
 - [ ] (Bonus) Remote-control tests completed for blink sampler + CC1101.
 - [ ] Test plan cleanup: remove MFRC522 and “agent stuff” from testing.
@@ -30,7 +30,7 @@ Principles:
 ### Status (fill during/at end of week)
 - **Outcome:** (shipped / partial / slipped)
 - **What shipped:**
-  - 
+  - Casing design completed and JLC3DP order placed.
 - **What changed / decisions:**
   - 
 - **Blockers / risks:**
