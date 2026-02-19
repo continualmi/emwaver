@@ -1,18 +1,35 @@
 #!/usr/bin/env bash
-SESSION=$1
-PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )"; pwd )"
+
+set -euo pipefail
+
+SESSION="${1:-emwaver}"
+PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if ! tmux has-session -t="$SESSION" 2>/dev/null; then
+  tmux new-session -ds "$SESSION" -c "$PROJECT_DIR"
+fi
+
+# If layout already exists, skip re-creating panes/windows.
+if tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -qx 'dev'; then
+  if [[ -z "${TMUX:-}" ]]; then
+    tmux attach-session -t "$SESSION"
+  else
+    tmux switch-client -t "$SESSION"
+  fi
+  exit 0
+fi
 
 # Window 1: Dev (lazygit + backend + frontend) — 3 panes, all auto-run
 # Force the first pane to the correct directory just in case
-tmux send-keys -t $SESSION:1 'cd ' "$PROJECT_DIR" C-m
-tmux clear-history -t $SESSION:1
+tmux send-keys -t "$SESSION:1" 'cd ' "$PROJECT_DIR" C-m
+tmux clear-history -t "$SESSION:1"
 
-tmux rename-window -t $SESSION:1 'dev'
+tmux rename-window -t "$SESSION:1" 'dev'
 
 # Layout:
 #   [ lazygit ] | [ backend ]
 #              | [ frontend ]
-PANE_GIT=$(tmux display-message -p -t $SESSION:1.1 '#{pane_id}')
+PANE_GIT=$(tmux display-message -p -t "$SESSION:1.1" '#{pane_id}')
 # Make lazygit pane narrower (left), leave more space for backend/frontend
 PANE_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
@@ -33,7 +50,7 @@ tmux send-keys -t "$PANE_FRONTEND" 'npm run dev' C-m
 # Android | SecureWaver (tauri)
 # emwaver.sh | emwaver daemon TUI
 
-PANE_TOP_LEFT=$(tmux new-window -t $SESSION -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_TOP_LEFT=$(tmux new-window -t "$SESSION" -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_BOTTOM_LEFT=$(tmux split-window -v -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
@@ -48,7 +65,7 @@ tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
 # Window 3: Codex (2x2 Grid) — runs in all panes
-PANE_CODEX_TL=$(tmux new-window -t $SESSION -n 'codex' -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_CODEX_TL=$(tmux new-window -t "$SESSION" -n 'codex' -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_CODEX_TR=$(tmux split-window -h -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_CODEX_BL=$(tmux split-window -v -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_CODEX_BR=$(tmux split-window -v -l 50% -t "$PANE_CODEX_TR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
@@ -62,3 +79,9 @@ done
 
 tmux select-window -t "$SESSION:1"
 tmux select-pane -t "$SESSION:1.1"
+
+if [[ -z "${TMUX:-}" ]]; then
+  tmux attach-session -t "$SESSION"
+else
+  tmux switch-client -t "$SESSION"
+fi

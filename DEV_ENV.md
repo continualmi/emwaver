@@ -28,7 +28,7 @@ Common (shell):
 
 From the repo root:
 
-Note: this repo includes `.tmux-init` which opens `vi` automatically; set up `vi -> nvim` first (see Neovim section).
+Note: this repo includes `tmux.sh` which opens `vi` automatically in one pane; set up `vi -> nvim` first (see Neovim section).
 
 ```bash
 # Backend (Flask)
@@ -199,7 +199,7 @@ gradle --version
 ```
 
 Notes:
-- The repo root `.tmux-init` opens a `lazygit` pane; install it so the layout works out of the box.
+- The repo root `tmux.sh` opens a `lazygit` pane; install it so the layout works out of the box.
 - Some Ubuntu distros/repos may not include `lazygit` (or may ship an older version). If `lazygit` is missing, install the latest binary to `~/.local/bin`:
 
 ```bash
@@ -420,85 +420,18 @@ tmux source-file ~/.config/tmux/tmux.conf
 
 Install plugins: `Prefix` + `I`.
 
-## 5) Tmux Sessionizer (EMWaver)
+## 5) Tmux Layout Bootstrap (EMWaver)
 
-This is the fast project switcher (bound to Ctrl+f). It will:
-- select a project folder
-- create a tmux session if missing
-- run the repo-local `.tmux-init` if present and executable
-
-### Install the script
-
-Create `/usr/local/bin/tmux-sessionizer` (and make it executable):
+From the repo root, run:
 
 ```bash
-sudo mkdir -p /usr/local/bin
-sudo $EDITOR /usr/local/bin/tmux-sessionizer
-sudo chmod +x /usr/local/bin/tmux-sessionizer
+bash tmux.sh
 ```
 
-Script contents (macOS + WSL):
-
-```bash
-#!/usr/bin/env bash
-
-set -euo pipefail
-
-selected="${1:-}"
-
-if [[ -z "$selected" ]]; then
-  # macOS default: ~/emwaver
-  # WSL default: /mnt/c/Users/<you>/emwaver
-  EMWAVER_ROOT="${EMWAVER_ROOT:-${HOME}/emwaver}"
-  selected=$(find "$EMWAVER_ROOT" -mindepth 0 -maxdepth 0 -type d 2>/dev/null | fzf)
-fi
-
-if [[ -z "$selected" ]]; then
-  exit 0
-fi
-
-selected_name="$(basename "$selected" | tr . _)"
-
-ensure_session_exists() {
-  if ! tmux has-session -t="$selected_name" 2>/dev/null; then
-    tmux new-session -ds "$selected_name" -c "$selected"
-
-    # Project-local layout hook
-    if [[ -f "$selected/.tmux-init" && -x "$selected/.tmux-init" ]]; then
-      "$selected/.tmux-init" "$selected_name"
-    fi
-  fi
-}
-
-ensure_session_exists
-
-if [[ -z "${TMUX:-}" ]]; then
-  tmux attach-session -t "$selected_name"
-else
-  tmux switch-client -t "$selected_name"
-fi
-```
-
-WSL note:
-- Set `EMWAVER_ROOT` to your Windows user path in WSL, for example:
-
-```bash
-export EMWAVER_ROOT="/mnt/c/Users/alice/emwaver"
-```
-
-### Bind Ctrl+f
-
-macOS (zsh `~/.zshrc`):
-
-```bash
-bindkey -s '^f' 'tmux-sessionizer\n'
-```
-
-WSL (bash `~/.bashrc`):
-
-```bash
-bind -x '"\C-f":tmux-sessionizer'
-```
+Optional:
+- pass a custom session name: `bash tmux.sh mysession`
+- if the session already exists, `tmux.sh` attaches/switches to it
+- if the layout does not exist yet, `tmux.sh` creates the EMWaver multi-window layout
 
 ## 6) Neovim
 
@@ -710,11 +643,9 @@ dotnet --version
 
 ## 9) Repo-local conveniences
 
-### .tmux-init
+### tmux.sh
 
-This repo includes `.tmux-init` in the root; it sets up a multi-pane dev layout.
-
-If you use the sessionizer above, it will run `.tmux-init` automatically when the tmux session is created.
+This repo includes `tmux.sh` in the root; it sets up and attaches to the EMWaver tmux layout.
 
 ### Secrets
 
