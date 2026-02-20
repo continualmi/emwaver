@@ -64,17 +64,6 @@ tmux send-keys -t "$PANE_TOP_RIGHT" 'npm run tauri'
 tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
-# Window 3: Codex (2x2 Grid) — runs in all panes
-PANE_CODEX_TL=$(tmux new-window -t "$SESSION" -n 'codex' -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_CODEX_TR=$(tmux split-window -h -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_CODEX_BL=$(tmux split-window -v -l 50% -t "$PANE_CODEX_TL" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_CODEX_BR=$(tmux split-window -v -l 50% -t "$PANE_CODEX_TR" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-
-# Run codex in all panes
-for P in "$PANE_CODEX_TL" "$PANE_CODEX_TR" "$PANE_CODEX_BL" "$PANE_CODEX_BR"; do
-  tmux send-keys -t "$P" 'codex' C-m
-done
-
 # Start on git window
 
 tmux select-window -t "$SESSION:1"
