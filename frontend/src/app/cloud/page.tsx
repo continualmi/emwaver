@@ -67,6 +67,14 @@ function bytesToHexView(bytes: Uint8Array, limit = 256 * 1024) {
   return lines.join("\n");
 }
 
+function formatUiError(input: unknown): string {
+  const raw = String((input as any)?.message ?? input ?? "Request failed");
+  const withoutTags = raw.replace(/<[^>]*>/g, " ");
+  const singleLine = withoutTags.replace(/\s+/g, " ").trim();
+  if (!singleLine) return "Request failed";
+  return singleLine.length > 220 ? `${singleLine.slice(0, 220)}…` : singleLine;
+}
+
 export default function CloudPage() {
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -189,7 +197,7 @@ export default function CloudPage() {
       } catch (e: any) {
         setIsPro(false);
         setEntitlementsOk(false);
-        setError(String(e?.message || e));
+        setError(formatUiError(e));
       }
     });
   }, [auth]);
@@ -209,7 +217,7 @@ export default function CloudPage() {
       const msg = e?.message ? String(e.message) : String(e);
       // Common in prod when the deployed domain isn't whitelisted in Firebase Auth.
       // Shows up as auth/unauthorized-domain.
-      setError(code ? `${code}: ${msg}` : msg);
+      setError(formatUiError(code ? `${code}: ${msg}` : msg));
     }
   }
 
@@ -395,7 +403,7 @@ export default function CloudPage() {
           return;
         }
         if (msg.type === "host.error") {
-          setError(`host error: ${msg.error}`);
+          setError(formatUiError(`host error: ${msg.error}`));
           setAttachedHostId("");
           attachedRef.current = "";
 
@@ -478,12 +486,12 @@ export default function CloudPage() {
           return;
         }
         if (msg.type === "script.error") {
-          setError(`script error: ${msg.error}`);
+          setError(formatUiError(`script error: ${msg.error}`));
           return;
         }
         if (msg.type === "error") {
           const errText = String((msg as any).error || "error");
-          setError(errText);
+          setError(formatUiError(errText));
 
           // If backend rejects WS auth/protocol, it will usually close immediately.
           // Avoid an infinite reconnect loop in that case.
@@ -571,7 +579,7 @@ export default function CloudPage() {
         setViewerText(text);
       }
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setIsBusy(false);
     }
@@ -591,7 +599,7 @@ export default function CloudPage() {
       await uploadFile(selected, bytes, ct, Date.now(), idToken);
       await refresh(idToken);
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setIsBusy(false);
     }
@@ -608,7 +616,7 @@ export default function CloudPage() {
       setViewerText("");
       await refresh(idToken);
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setIsBusy(false);
     }
@@ -625,7 +633,7 @@ export default function CloudPage() {
       await uploadFile(file.name, bytes, ct, Date.now(), idToken);
       await refresh(idToken);
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setIsBusy(false);
     }
