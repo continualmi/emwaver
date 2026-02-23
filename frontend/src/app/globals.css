@@ -58,9 +58,9 @@ body {
   inset: 0;
   pointer-events: none;
   background:
-    radial-gradient(900px 500px at 20% 0%, rgba(78, 231, 199, 0.10), transparent 60%),
-    radial-gradient(900px 600px at 85% 15%, rgba(91, 192, 255, 0.08), transparent 62%),
-    linear-gradient(180deg, rgba(7, 10, 18, 0.78) 0%, rgba(4, 5, 12, 0.84) 100%);
+    radial-gradient(900px 500px at 20% 0%, rgba(78, 231, 199, 0.08), transparent 60%),
+    radial-gradient(900px 600px at 85% 15%, rgba(91, 192, 255, 0.06), transparent 62%),
+    linear-gradient(180deg, rgba(7, 10, 18, 0.46) 0%, rgba(4, 5, 12, 0.58) 100%);
   opacity: 1;
   z-index: -1;
 }
@@ -71,11 +71,23 @@ body {
   inset: 0;
   pointer-events: none;
   background-image:
-    linear-gradient(rgba(233, 238, 252, 0.05) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(233, 238, 252, 0.035) 1px, transparent 1px);
+    linear-gradient(rgba(233, 238, 252, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(233, 238, 252, 0.03) 1px, transparent 1px);
   background-size: 64px 64px;
-  opacity: 0.06;
+  opacity: 0.04;
   z-index: -1;
+}
+
+/* Make docs/news sections reveal more of the global background image. */
+body:has(.docs-mode) .global-bg-image {
+  opacity: 0.26;
+}
+
+body:has(.docs-mode) .global-bg-overlay {
+  background:
+    radial-gradient(1000px 600px at 20% 0%, rgba(78, 231, 199, 0.09), transparent 62%),
+    radial-gradient(900px 600px at 85% 20%, rgba(91, 192, 255, 0.06), transparent 62%),
+    linear-gradient(to bottom, rgba(2, 3, 8, 0.52), rgba(2, 3, 8, 0.60));
 }
 
 /* Simple, purpose-built prose styling (no typography plugin). */

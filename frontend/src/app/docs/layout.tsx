@@ -11,10 +11,12 @@ export default function DocsLayout({
     <div className="app-shell-fixed docs-mode">
       <SiteHeader />
 
-      <main className="app-shell-main w-full px-5 py-6 md:py-8">
+      <main className="app-shell-main w-full px-5 py-4 md:py-6">
         <div className="grid h-full min-h-0 gap-6 md:grid-cols-[280px_minmax(0,1fr)] md:gap-8">
-          <aside className="hidden min-h-0 overflow-y-auto md:block">
-            <DocsSidebar />
+          <aside className="hidden min-h-0 md:block">
+            <div className="h-full overflow-y-auto pr-1 pb-3">
+              <DocsSidebar />
+            </div>
           </aside>
 
           <div className="min-w-0 min-h-0 overflow-hidden">
