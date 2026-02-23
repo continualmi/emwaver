@@ -638,7 +638,7 @@ export default function CloudPage() {
     <div className="app-shell-fixed">
       <SiteHeader />
 
-      <main className="app-shell-main w-full overflow-y-auto px-5 pt-10 pb-14">
+      <main className="app-shell-main flex w-full min-h-0 flex-col overflow-hidden px-5 pt-10 pb-6">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Dashboard</h1>
@@ -803,8 +803,8 @@ export default function CloudPage() {
           </div>
         ) : null}
 
-        <div className="grid gap-4 md:grid-cols-[340px_1fr]">
-          <aside className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[340px_1fr]">
+          <aside className="flex min-h-0 flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[color:var(--ink)]">Scripts</div>
               <button
@@ -830,64 +830,66 @@ export default function CloudPage() {
               />
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-xl border border-[color:var(--line)]">
-              <div className="border-b border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
-                Example Scripts
-              </div>
-              <ul className="divide-y divide-[color:var(--line)]">
-                {exampleEmwScripts.map((s) => (
-                  <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
-                    <button
-                      type="button"
-                      onClick={() => openExample(s.name, s.source)}
-                      className="w-full p-3 text-left"
-                    >
-                      <div className="font-semibold text-[color:var(--ink)]">{s.name}</div>
-                      <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">Bundled example</div>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-
-              <div className="border-y border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
-                Cloud Files
-              </div>
-
-              {files.length === 0 ? (
-                <div className="p-3 text-sm text-[color:var(--ink-dim)]">
-                  No files indexed yet. First sync/upload will populate Postgres.
+            <div className="mt-4 min-h-0 flex-1 overflow-hidden rounded-xl border border-[color:var(--line)]">
+              <div className="h-full overflow-y-auto">
+                <div className="border-b border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                  Example Scripts
                 </div>
-              ) : (
                 <ul className="divide-y divide-[color:var(--line)]">
-                  {files.map((f) => (
-                    <li key={f.name} className={selected === f.name ? "bg-[rgba(91,192,255,0.10)]" : ""}>
-                      <div className="flex items-start justify-between gap-3 p-3">
-                        <button
-                          onClick={() => void openFile(f.name)}
-                          className="flex-1 text-left"
-                          disabled={!proAccess || isBusy}
-                        >
-                          <div className="font-semibold text-[color:var(--ink)]">{f.name}</div>
-                          <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">{(f.size_bytes ?? 0).toLocaleString()} bytes</div>
-                        </button>
-                        <button
-                          disabled={!proAccess || isBusy}
-                          onClick={() => void doDelete(f.name)}
-                          className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)] disabled:opacity-50"
-                        >
-                          Delete
-                        </button>
-                      </div>
+                  {exampleEmwScripts.map((s) => (
+                    <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
+                      <button
+                        type="button"
+                        onClick={() => openExample(s.name, s.source)}
+                        className="w-full p-3 text-left"
+                      >
+                        <div className="font-semibold text-[color:var(--ink)]">{s.name}</div>
+                        <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">Bundled example</div>
+                      </button>
                     </li>
                   ))}
                 </ul>
-              )}
+
+                <div className="border-y border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                  Cloud Files
+                </div>
+
+                {files.length === 0 ? (
+                  <div className="p-3 text-sm text-[color:var(--ink-dim)]">
+                    No files indexed yet. First sync/upload will populate Postgres.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-[color:var(--line)]">
+                    {files.map((f) => (
+                      <li key={f.name} className={selected === f.name ? "bg-[rgba(91,192,255,0.10)]" : ""}>
+                        <div className="flex items-start justify-between gap-3 p-3">
+                          <button
+                            onClick={() => void openFile(f.name)}
+                            className="flex-1 text-left"
+                            disabled={!proAccess || isBusy}
+                          >
+                            <div className="font-semibold text-[color:var(--ink)]">{f.name}</div>
+                            <div className="pt-0.5 text-xs text-[color:var(--ink-dim)]">{(f.size_bytes ?? 0).toLocaleString()} bytes</div>
+                          </button>
+                          <button
+                            disabled={!proAccess || isBusy}
+                            onClick={() => void doDelete(f.name)}
+                            className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)] disabled:opacity-50"
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             {error ? <div className="mt-3 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
           </aside>
 
-<section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
+          <section className="flex min-h-0 flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-4">
               <div className="text-sm font-semibold text-[color:var(--ink)]">{selected ? selected : "Viewer"}</div>
               <div className="flex items-center gap-2">
@@ -939,7 +941,7 @@ export default function CloudPage() {
             </div>
 
             {selected && isEmw(selected) && emwMode === "preview" ? (
-              <div className="mt-3 space-y-3">
+              <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto">
 
                 {attachedHostId && remoteUiRoot ? (
                   <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
@@ -993,7 +995,7 @@ export default function CloudPage() {
                   setUiError(null);
                 }}
                 readOnly={selected ? isRaw(selected) : true}
-                className="mt-3 h-[calc(100vh-360px)] w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
+                className="mt-3 min-h-0 flex-1 w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
               />
             )}
 
