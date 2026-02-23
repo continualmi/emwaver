@@ -88,7 +88,7 @@ We intentionally give up:
 
 ---
 
-## 4) What stays in AGENTS vs README
+## 4) Documentation Ownership
 
 ## Keep in `AGENTS.md`
 - Vision and long-term direction.
@@ -96,7 +96,7 @@ We intentionally give up:
 - Repo-wide guardrails.
 - Folder documentation map.
 
-## Move to folder `README.md`
+## Keep in folder `README.md`
 - Architecture internals.
 - File/class breakdowns.
 - Protocol/opcode specifics.
@@ -163,13 +163,3 @@ Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits,
 - push changes (open PR branch if main push blocked).
-
----
-
-## 9) Documentation Maintenance Rule (important)
-
-When details are added to `AGENTS.md` by accident:
-1. move those details into the appropriate folder README,
-2. keep only a short summary/pointer in `AGENTS.md`.
-
-Target state: `AGENTS.md` stays concise; folder READMEs hold depth.
