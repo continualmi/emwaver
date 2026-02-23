@@ -33,13 +33,13 @@ export default function RootLayout({
     <html lang="en">
       <body className={`${displaySans.variable} ${mono.variable} antialiased`}>
         {/* Global background (subtle). Landing + Society can override with stronger styling. */}
-        <div className="pointer-events-none fixed inset-0 -z-20">
+        <div className="global-bg pointer-events-none fixed inset-0 -z-20">
           <img
             src="/2015_upscale.jpg"
             alt=""
-            className="h-full w-full object-cover opacity-[0.16]"
+            className="global-bg-image h-full w-full object-cover opacity-[0.16]"
           />
-          <div className="absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.12),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.08),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.88),rgba(2,3,8,0.92))]" />
+          <div className="global-bg-overlay absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.12),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.08),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.88),rgba(2,3,8,0.92))]" />
         </div>
 
         {children}
