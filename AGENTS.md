@@ -1207,7 +1207,7 @@ Provisioning (internal):
 - Before starting work, **sync your branch** (`git pull --rebase` or equivalent) so you don’t build on stale `main`.
 - Prefer making changes in the working tree first and showing a diff/summary.
 - **Do not run builds/tests on your own** (e.g. `./gradlew`, Android Studio builds, `xcodebuild`, MSBuild) unless the user explicitly asks. This environment often can’t build anyway.
-- **Never read `.env` files** (`.env`, `.env.*`) unless the user explicitly asks you to inspect them in this chat.
+- **Never read env secret files** (`.env`, `.env.*`, `secrets/.env*`) unless the user explicitly asks you to inspect them in this chat.
 - If you change code, **always `git commit` + `git push`** (don’t wait to be asked), unless the user explicitly says not to push (or asks you to keep changes uncommitted).
   - If pushing to `main` is rejected (branch protection / permissions / remote error), **push to a new branch** (e.g. `fix/windows-startup-errors`) and **open a PR** immediately. Never leave local-only commits.
 
