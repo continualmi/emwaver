@@ -1,5 +1,28 @@
 # EMWaver Repository Guidelines
 
+## Documentation Migration Note (important)
+
+We are migrating deep implementation docs to folder-level `README.md` files while keeping `AGENTS.md` as the repo-wide source of truth for vision, policy, and high-level structure.
+
+**Rule for this migration:** do not delete important content from `AGENTS.md`; treat folder READMEs as the detailed local references and keep summaries/canonical decisions here.
+
+## Documentation Map (folder READMEs)
+
+Use these first when working in a specific area:
+
+- `stm/README.md` — full STM firmware workspace + protocol/implementation details
+- `backend/README.md` — Flask backend architecture, routes, auth, storage, WS relay, provisioning
+- `frontend/README.md` — Next.js web app structure, backend contracts, remote session client behavior
+- `securewaver/README.md` — internal provisioning tool, DFU flows, identity verification/mint integration
+- `daemon/README.md` — headless host daemon runtime/CLI/protocol model
+- `windows/README.md` — Windows app structure, pages/services/runtime notes
+- `apple/README.md` — shared Apple Swift package (cross-platform core modules)
+- `ios/README.md` — iOS app structure/managers/views/assets
+- `macos/README.md` — macOS app structure/host flows/update integration
+- `android/README.md` — Android app structure/transport/resources/assets
+
+When details differ, update both the local README and relevant AGENTS summary so they stay in sync.
+
 ## Current Product Direction
 
 **EMWaver is the future of electronics development**: a host-powered, AI-first platform that turns any phone, laptop, or Raspberry Pi into a full-power electronics lab.
@@ -400,11 +423,25 @@ No build/flash loops, and no user-facing wrappers on top of MCU toolchains as a 
 ## Repository Overview
 
 - **STM32 Firmware:** `stm/emwaver-firmware/` (single firmware)
+  - Deep docs: `stm/README.md`
 - **Android:** `android/`
+  - Deep docs: `android/README.md`
 - **iOS:** `ios/`
+  - Deep docs: `ios/README.md`
 - **Apple Shared (iOS + macOS):** `apple/` (Swift packages)
+  - Deep docs: `apple/README.md`
 - **macOS App (defacto):** `macos/` (SwiftUI)
+  - Deep docs: `macos/README.md`
+- **Windows App:** `windows/`
+  - Deep docs: `windows/README.md`
+- **Headless host daemon:** `daemon/`
+  - Deep docs: `daemon/README.md`
+- **Backend API:** `backend/`
+  - Deep docs: `backend/README.md`
+- **Frontend website/web client:** `frontend/`
+  - Deep docs: `frontend/README.md`
 - **Provisioning (internal, manufacturer-only; not shipped to end users):** `securewaver/` (SecureWaver device provisioning app: root key mgmt, mint DeviceID+Proof, DFU flash identity/firmware)
+  - Deep docs: `securewaver/README.md`
   - SecureWaver is an **internal manufacturing tool**. It is **not** part of the user recovery UX; end users use the EMWaver apps only.
 - **Shared assets:** `assets/` (default scripts, etc.)
 - **Videos (planning + originals):** `videos/`
