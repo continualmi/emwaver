@@ -660,7 +660,7 @@ export default function CloudPage() {
   const showProPreview = !userEmail || (entitlementsOk && !proAccess);
 
   return (
-    <div className="app-shell-fixed">
+    <div className="app-shell-fixed dashboard-mode">
       <SiteHeader />
 
       <main className="app-shell-main flex w-full min-h-0 flex-col overflow-hidden px-5 pt-10 pb-6">
