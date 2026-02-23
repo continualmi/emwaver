@@ -8,27 +8,26 @@ export default function DocsLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-dvh docs-mode">
+    <div className="app-shell-fixed docs-mode">
       <SiteHeader />
 
-      <main className="w-full px-5 py-10">
-        <div className="grid h-full gap-8 md:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="hidden overflow-y-auto md:block">
+      <main className="app-shell-main w-full px-5 py-6 md:py-8">
+        <div className="grid h-full min-h-0 gap-6 md:grid-cols-[280px_minmax(0,1fr)] md:gap-8">
+          <aside className="hidden min-h-0 overflow-y-auto md:block">
             <DocsSidebar />
           </aside>
 
-          <div className="min-w-0 overflow-hidden">
+          <div className="min-w-0 min-h-0 overflow-hidden">
             <div className="md:hidden">
               <DocsMobileNav />
             </div>
 
-            <div className="mt-6 h-full overflow-y-auto md:mt-0">
-              <article className="prose-emw pb-16">{children}</article>
+            <div className="mt-4 h-full min-h-0 overflow-y-auto md:mt-0">
+              <article className="prose-emw pb-10">{children}</article>
             </div>
           </div>
         </div>
       </main>
-
     </div>
   );
 }
