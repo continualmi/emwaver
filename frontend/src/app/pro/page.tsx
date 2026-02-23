@@ -29,6 +29,16 @@ type Entitlements = {
 
 function formatUiError(input: unknown): string {
   const raw = String((input as any)?.message ?? input ?? "Request failed");
+  const lower = raw.toLowerCase();
+  if (
+    lower.includes("<!doctype html") ||
+    lower.includes("<html") ||
+    lower.includes("404: this page could not be found") ||
+    lower.includes("next-error-h1")
+  ) {
+    return "Backend endpoint returned an HTML 404 page. Check backend URL / route configuration.";
+  }
+
   const withoutTags = raw.replace(/<[^>]*>/g, " ");
   const singleLine = withoutTags.replace(/\s+/g, " ").trim();
   if (!singleLine) return "Request failed";
