@@ -96,7 +96,7 @@ export default function HomePage() {
 
         {/* ─── HOST-POWERED ELECTRONICS ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-2 md:items-center">
               <div className="space-y-5">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
@@ -162,7 +162,7 @@ export default function HomePage() {
 
         {/* ─── AI-FIRST ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-[1.05fr_0.95fr] md:items-start">
               <div className="space-y-5">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--sky)]">
@@ -193,7 +193,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-5 shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-5 backdrop-blur-md shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
                 <div className="flex items-center justify-between gap-4">
                   <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">
                     Agent workflow
@@ -236,7 +236,7 @@ export default function HomePage() {
 
         {/* ─── EMWAVER SCRIPTS ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-2 md:items-center">
               <div className="space-y-5">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--copper)]">
@@ -269,7 +269,7 @@ export default function HomePage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.6)] p-5">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.6)] p-5 backdrop-blur-md">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">
                   One script, every platform
                 </div>
@@ -329,7 +329,7 @@ UI.render(UI.column({
 
         {/* ─── BEGINNER-FRIENDLY / HACKING MULTITOOL ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="space-y-5 text-center">
               <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
                 The best hacking multitool on the planet
@@ -380,7 +380,7 @@ UI.render(UI.column({
 
         {/* ─── VS FLIPPER ZERO ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-2 md:items-center">
               <div className="space-y-5">
                 <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
@@ -441,7 +441,7 @@ UI.render(UI.column({
 
         {/* ─── CLOUD + REMOTE CONTROL ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-2 md:items-center">
               <div className="space-y-5">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--sky)]">
@@ -469,7 +469,7 @@ UI.render(UI.column({
                 </div>
               </div>
 
-              <div className="space-y-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6">
+              <div className="space-y-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6 backdrop-blur-md">
                 <div className="text-xs font-semibold text-[color:var(--ink-dim)]">How it works</div>
                 <div className="space-y-4 text-sm text-[color:var(--ink-dim)]">
                   <div className="flex items-start gap-3">
@@ -496,7 +496,7 @@ UI.render(UI.column({
 
         {/* ─── EVERY PLATFORM ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 text-center">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md text-center">
             <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
               One device. Every platform.
             </h2>
@@ -523,7 +523,7 @@ UI.render(UI.column({
 
         {/* ─── CTA ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-16">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="flex items-end justify-between gap-6">
               <div>
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">

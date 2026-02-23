@@ -41,7 +41,7 @@ export default async function SocietyForumPage() {
       </div>
 
       {threads.length === 0 ? (
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5">
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No discussions yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
             We’ll open posting soon (device-attached accounts only).
@@ -53,7 +53,7 @@ export default async function SocietyForumPage() {
             <Link
               key={t.id}
               href={`/society/posts/${encodeURIComponent(t.id)}`}
-              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 hover:bg-[rgba(255,255,255,0.05)]"
+              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md hover:bg-[rgba(255,255,255,0.05)]"
             >
               <div className="text-lg font-semibold text-[color:var(--ink)]">{t.title}</div>
               {t.summary ? <div className="mt-2 text-sm text-[color:var(--ink-dim)]">{t.summary}</div> : null}

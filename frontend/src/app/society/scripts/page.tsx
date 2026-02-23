@@ -34,7 +34,7 @@ export default async function SocietyScriptsPage() {
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+      <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4 backdrop-blur-md">
         <div>
           <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Library</div>
           <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
@@ -50,7 +50,7 @@ export default async function SocietyScriptsPage() {
         </Link>
       </div>
 
-      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4">
+      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4 backdrop-blur-md">
         <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Branding ideas</div>
         <p className="mt-1 text-sm text-[color:var(--ink-dim)]">
           Alternatives to “EMWaver Scripts” you can explore for this section:
@@ -68,7 +68,7 @@ export default async function SocietyScriptsPage() {
       </div>
 
       {scripts.length === 0 ? (
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5">
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No scripts published yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
             First wave will be curated. Then we’ll open submissions.
@@ -80,7 +80,7 @@ export default async function SocietyScriptsPage() {
             <Link
               key={s.id}
               href={`/society/posts/${encodeURIComponent(s.id)}`}
-              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 hover:bg-[rgba(255,255,255,0.05)]"
+              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md hover:bg-[rgba(255,255,255,0.05)]"
             >
               <div className="text-lg font-semibold text-[color:var(--ink)]">{s.title}</div>
               {s.summary ? <div className="mt-2 text-sm text-[color:var(--ink-dim)]">{s.summary}</div> : null}
