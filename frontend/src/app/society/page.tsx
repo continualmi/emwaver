@@ -12,10 +12,17 @@ type SocietyPost = {
   author?: { display_name?: string | null };
 };
 
-async function fetchPosts(kind?: string): Promise<SocietyPost[]> {
-  const url = new URL(`${backendBaseUrl()}/v1/society/posts`);
+function buildSocietyPostsUrl(kind?: string): string {
+  const rawBase = (backendBaseUrl() || "").trim();
+  const fallback = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
+  const base = (rawBase || fallback).replace(/\/+$/, "");
+  const url = new URL(`${base}/v1/society/posts`);
   if (kind) url.searchParams.set("kind", kind);
-  const res = await fetch(url.toString(), { cache: "no-store" });
+  return url.toString();
+}
+
+async function fetchPosts(kind?: string): Promise<SocietyPost[]> {
+  const res = await fetch(buildSocietyPostsUrl(kind), { cache: "no-store" });
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
   const json = JSON.parse(text);
@@ -23,7 +30,12 @@ async function fetchPosts(kind?: string): Promise<SocietyPost[]> {
 }
 
 export default async function SocietyPage() {
-  const posts = await fetchPosts();
+  let posts: SocietyPost[] = [];
+  try {
+    posts = await fetchPosts();
+  } catch {
+    posts = [];
+  }
 
   return (
     <div className="space-y-4">
