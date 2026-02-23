@@ -6,11 +6,9 @@ import { SocietyTabs } from "@/app/society/societyTabs";
 export default function SocietyLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="relative app-shell-fixed">
-      {/* Society has its own vibe + the 2015 background (visible, then blur on top — no dark fade). */}
+      {/* Society has its own vibe + visible 2015 background (no dark overlay, no blur). */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.72]" />
-        {/* keep a tiny contrast helper, but avoid the heavy dark overlay */}
-        <div className="absolute inset-0 bg-[radial-gradient(900px_600px_at_15%_0%,rgba(255,255,255,0.10),transparent_60%),radial-gradient(900px_600px_at_85%_10%,rgba(78,231,199,0.10),transparent_62%)]" />
+        <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.78]" />
       </div>
 
       <SiteHeader />
@@ -18,7 +16,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
       <main className="app-shell-main w-full px-5 py-10">
         <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-start">
           {/* Left rail (distinct Society layout) */}
-          <aside className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:sticky md:top-24">
+          <aside className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 md:sticky md:top-24">
             <div className="space-y-3">
               <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">EMWaver</div>
               <div className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Society</div>
@@ -44,7 +42,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
           </aside>
 
           {/* Main content */}
-          <section className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:p-8">
+          <section className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 md:p-8">
             {children}
           </section>
         </div>

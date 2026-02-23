@@ -37,9 +37,9 @@ export default function RootLayout({
           <img
             src="/2015_upscale.jpg"
             alt=""
-            className="global-bg-image h-full w-full object-cover opacity-[0.16]"
+            className="global-bg-image h-full w-full object-cover opacity-[0.30]"
           />
-          <div className="global-bg-overlay absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.12),transparent_60%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.08),transparent_62%),linear-gradient(to_bottom,rgba(2,3,8,0.88),rgba(2,3,8,0.92))]" />
+          <div className="global-bg-overlay absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.08),transparent_62%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.06),transparent_64%),linear-gradient(to_bottom,rgba(2,3,8,0.52),rgba(2,3,8,0.60))]" />
         </div>
 
         {children}
