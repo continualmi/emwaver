@@ -1,0 +1,2 @@
+WRN 2026-02-21T17:30:28.129 ?.35058    server_start:199: Failed to start server: operation not permitted: /var/folders/d0/sfsx_l_111bc23vb9flsm1980000gn/T/nvim.luisml/Ra3sFE/nvim.35058.0
+WRN 2026-02-22T09:31:36.681 ?.5942     server_start:199: Failed to start server: operation not permitted: /var/folders/d0/sfsx_l_111bc23vb9flsm1980000gn/T/nvim.luisml/hpH3PQ/nvim.5942.0

@@ -9,6 +9,9 @@ if ! tmux has-session -t="$SESSION" 2>/dev/null; then
   tmux new-session -ds "$SESSION" -c "$PROJECT_DIR"
 fi
 
+FIRST_WINDOW_INDEX="$(tmux list-windows -t "$SESSION" -F '#{window_index}' | head -n1)"
+FIRST_WINDOW_TARGET="$SESSION:$FIRST_WINDOW_INDEX"
+
 # If layout already exists, skip re-creating panes/windows.
 if tmux list-windows -t "$SESSION" -F '#{window_name}' | grep -qx 'dev'; then
   if [[ -z "${TMUX:-}" ]]; then
@@ -21,15 +24,15 @@ fi
 
 # Window 1: Dev (lazygit + backend + frontend) — 3 panes, all auto-run
 # Force the first pane to the correct directory just in case
-tmux send-keys -t "$SESSION:1" 'cd ' "$PROJECT_DIR" C-m
-tmux clear-history -t "$SESSION:1"
+tmux send-keys -t "$FIRST_WINDOW_TARGET" 'cd ' "$PROJECT_DIR" C-m
+tmux clear-history -t "$FIRST_WINDOW_TARGET"
 
-tmux rename-window -t "$SESSION:1" 'dev'
+tmux rename-window -t "$FIRST_WINDOW_TARGET" 'dev'
 
 # Layout:
 #   [ lazygit ] | [ backend ]
 #              | [ frontend ]
-PANE_GIT=$(tmux display-message -p -t "$SESSION:1.1" '#{pane_id}')
+PANE_GIT=$(tmux display-message -p -t "$FIRST_WINDOW_TARGET" '#{pane_id}')
 # Make lazygit pane narrower (left), leave more space for backend/frontend
 PANE_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
 PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
@@ -66,8 +69,8 @@ tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
 # Start on git window
 
-tmux select-window -t "$SESSION:1"
-tmux select-pane -t "$SESSION:1.1"
+tmux select-window -t "$SESSION:dev"
+tmux select-pane -t "$PANE_GIT"
 
 if [[ -z "${TMUX:-}" ]]; then
   tmux attach-session -t "$SESSION"
