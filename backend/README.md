@@ -1,90 +1,228 @@
-## EMWaver Backend (Flask)
+# EMWaver Backend (`/backend`)
 
-This folder hosts a minimal HTTP backend used by the apps for agent chat.
+Flask backend for EMWaver cloud features:
+- auth and identity-bound APIs,
+- file sync storage APIs,
+- agent chat/message persistence,
+- host session presence + WebSocket relay,
+- store/provisioning/device authenticity endpoints.
 
-This backend is also the home for **cloud sync** (scripts + signals). Login is **optional**: apps must continue to work fully without sign-in; when signed in, the app syncs/backs up to cloud.
+This service is deployed to Azure Container Apps and is authoritative for cloud entitlements and account-bound operations.
 
-Endpoints
+---
 
-- `GET /health` -> `{ "ok": true }`
-- `POST /api/agent/chat` -> `{ "content": "...", "model": "..." }`
+## 1) Folder purpose
 
-Cloud sync (v1)
+`/backend` contains the production backend implementation and entrypoints:
 
-Files are stored in **Azure Blob Storage**. Postgres/SQLite stores metadata + indexing.
+- `app.py` / `wsgi.py` entry stubs.
+- `emw_backend/` package with all runtime code.
+- `Dockerfile` for containerized deployment.
 
-- `GET /v1/files?kind=...&ext=...` (metadata only)
-- `GET /v1/files/<id>` (metadata only)
-- `POST /v1/files/init-upload` -> `{ file, upload_url }`
-- `POST /v1/files/<id>/commit-upload` (requires `etag`)
-- `GET /v1/files/<id>/download` -> `{ download_url }`
-- `POST /v1/files/<id>/rename`
-- `DELETE /v1/files/<id>?etag=...`
+The core app factory is `emw_backend/app.py:create_app()`.
 
-Environment
+---
 
-- `OPENROUTER_API_KEY` (required) - server-side key custody
-- `OPENROUTER_MODEL` (optional, default: `x-ai/grok-4.1-fast`)
-- `CORS_ORIGINS` (optional, default: `*`) - comma-separated
-- `PORT` (optional, default: `8787`)
+## 2) High-level architecture
 
-Auth / cloud sync
+### 2.1 App boot sequence
 
-- `FIREBASE_PROJECT_ID` (required for auth in prod) - used to verify Firebase ID tokens
-- Auth is always enforced via Firebase ID tokens.
-- `DATABASE_URL` (optional, default: `sqlite:///./emwaver.db`) - Azure Postgres in prod (use `postgresql+psycopg://...`)
+`create_app()` does:
+1. best-effort `.env` loading (`backend/.env`, then repo `.env`) for local dev,
+2. parse runtime config from environment (`Config.from_env()`),
+3. configure CORS,
+4. initialize DB,
+5. register REST blueprints,
+6. attach WebSocket endpoint (`/v1/ws`) via `flask-sock`.
 
-Azure Blob storage
+### 2.2 Main code modules
 
-- `AZURE_STORAGE_ACCOUNT` (required in prod)
-- `AZURE_STORAGE_KEY` (required in prod; prefer Azure Key Vault in deployment)
-- `AZURE_BLOB_CONTAINER` (optional, default: `emwaver-user-files`)
+- `config.py` — environment model and parsing.
+- `auth.py` — Firebase token verification / identity extraction.
+- `db.py`, `models.py` — SQLAlchemy setup and schema models.
+- `storage_azure.py` — Azure Blob helpers (for storage integrations/migrations).
+- `agent_*` files — agent prompt/tool logic and schemas.
+- `routes/*.py` — HTTP route groups and WebSocket router.
 
-Env loading
+---
 
-- On startup the backend loads `<repo_root>/.env` automatically (and optionally `backend/.env`), without overriding existing environment variables.
+## 3) Route map (current)
 
-Run locally
+Registered route modules in `emw_backend/routes/`:
 
-1) Create a venv + install deps:
+- `health.py` — health + runtime config diagnostics.
+- `files.py` — user file list/upload/download/delete.
+- `agent.py`, `agent_messages.py` — conversation + message APIs, chat/streaming.
+- `hosts.py` — host session heartbeat/listing.
+- `ws.py` — authenticated WebSocket relay between web controllers and hosts.
+- `devices.py` — attach/list/label SecureWaver devices.
+- `provisioning.py` — mint DeviceID+Proof (internal/manufacturing endpoint).
+- `entitlements.py`, `pro.py`, `credits.py`, `billing.py`, `store.py` — Pro/store/billing flows.
+- `auth_handoff.py` — auth bridge/handoff endpoints.
+- `society.py` — additional product-specific API surface.
+- `admin.py` — admin operations.
+- `docs.py` — API docs routes.
+
+---
+
+## 4) Auth and identity model
+
+Auth is Firebase-token-based for protected APIs.
+
+- Bearer token expected on HTTP endpoints that require identity.
+- WS endpoint allows either `Authorization: Bearer ...` or `?token=...` (browser WS limitation).
+- User-scoped data is keyed by Firebase UID.
+
+`/health/config` exposes non-secret readiness flags to debug deployment state (auth/storage env readiness).
+
+---
+
+## 5) File sync API behavior
+
+Implemented in `routes/files.py` (`/v1/*`).
+
+Current model (important):
+- File metadata **and bytes** are currently persisted in DB (`UserFileIndex.content`).
+- APIs are auth-scoped per user UID.
+- Flat namespace by filename (no slash paths yet).
+- Upsert behavior for upload (Postgres/SQLite conflict handling).
+
+Key endpoints:
+- `GET /v1/files`
+- `GET /v1/files/content?name=...`
+- `POST /v1/files/upload`
+- `DELETE /v1/files?name=...`
+
+Defensive behaviors present:
+- filename sanitization,
+- duplicate-row cleanup for legacy states,
+- strict base64 validation for uploads.
+
+---
+
+## 6) Remote hosts + WS relay
+
+### 6.1 Host presence
+
+`routes/hosts.py`:
+- `POST /v1/hosts/heartbeat` upserts host session state.
+- `GET /v1/hosts` returns host sessions for authenticated user.
+- Includes dedupe logic by machine fingerprint (`platform|device_name`) to collapse stale duplicates.
+
+### 6.2 WebSocket transport
+
+`routes/ws.py` exposes `/v1/ws`.
+
+Handshake model:
+1. authenticate token,
+2. first message must be `hello` with role `host` or `web`,
+3. host must provide known `hostSessionId`,
+4. router binds host<->web flows by user uid + host session id.
+
+Message routing:
+- web -> host: forwarded when host is online.
+- host -> subscribed web clients: broadcast to current subscribers.
+- router tracks latest `script.started` and `ui.snapshot` in memory for tooling/observability.
+
+Operational caveat:
+- WS state is in-memory; multi-instance deployments need sticky/session-aware strategy or shared state layer for full cross-instance routing.
+
+---
+
+## 7) SecureWaver authenticity + provisioning
+
+### 7.1 Provisioning mint endpoint
+
+`routes/provisioning.py` (`/provisioning/mint`):
+- gated by provisioning-enabled flag + allowlist,
+- signs random 16-byte DeviceID with root ed25519 private key,
+- returns `{device_id_b64, proof_b64}`.
+
+Environment gates:
+- `EMWAVER_PROVISIONING_ENABLED`
+- `EMWAVER_PROVISIONING_ALLOWED_UIDS` (preferred)
+- `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64`
+- optional mint RPM limit.
+
+### 7.2 Device attach/verify endpoints
+
+`routes/devices.py` (`/v1/devices/*`):
+- verifies Proof against root public key (`EMWAVER_ROOT_PUBLIC_KEY_B64`),
+- allows attach/seen/list/label flows,
+- prevents re-claim of already-attached device by another user.
+
+---
+
+## 8) Configuration reference
+
+`Config.from_env()` keys include:
+
+Core:
+- `DATABASE_URL`
+- `CORS_ORIGINS`
+
+Auth:
+- `FIREBASE_PROJECT_ID`
+- `EMWAVER_AUTH_DEBUG`
+
+Provisioning:
+- `EMWAVER_PROVISIONING_ENABLED`
+- `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64`
+- `EMWAVER_PROVISIONING_ALLOWED_UIDS`
+- `EMWAVER_PROVISIONING_ALLOWED_EMAIL` (legacy fallback)
+- `EMWAVER_PROVISIONING_MINT_RPM`
+
+Device authenticity:
+- `EMWAVER_ROOT_PUBLIC_KEY_B64`
+
+OpenAI-compatible agent upstream:
+- `OPENAI_BASE_URL`
+- `OPENAI_API_KEY`
+- `OPENAI_MODEL`
+
+Azure storage:
+- `AZURE_STORAGE_ACCOUNT`
+- `AZURE_STORAGE_KEY`
+- `AZURE_BLOB_CONTAINER`
+
+Store/pro billing:
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `STORE_STRIPE_PRICE_ID`, `STORE_SUCCESS_URL`, `STORE_CANCEL_URL`, `STORE_SHIPPING_COUNTRIES`
+- `PRO_STRIPE_PRICE_ID`, `PRO_SUCCESS_URL`, `PRO_CANCEL_URL`
+
+---
+
+## 9) Local development
+
+From repo root:
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-pip install -r ../requirements.txt
-
-# Postgres driver
-#
-# If DATABASE_URL points at Postgres, you must install the Postgres driver.
-# This repo uses psycopg3 (psycopg[binary]) by default.
-# (No longer needed) Postgres driver is included in repo-root requirements.txt now.
-# pip install -r ../requirements-postgres.txt
-```
-
-2) Export env vars (or use your shell env manager):
-
-```bash
-export OPENROUTER_API_KEY=...
-export CORS_ORIGINS=http://localhost,http://127.0.0.1
-```
-
-3) Start the server:
-
-```bash
+pip install -r requirements.txt
+cd backend
 python app.py
 ```
 
-Client integration (optional)
+Default local port is configured by app/env (commonly `8787`).
 
-- Point your client at `http://127.0.0.1:8787`.
+If running frontend locally, point frontend backend URL settings to this backend.
 
-Notes
+---
 
-- This is a development-friendly starting point. Cloud sync endpoints exist, but client-side sync UX is still evolving.
-- For Azure later: this app is compatible with `gunicorn` (see `requirements.txt`).
- - For Azure later: this app is compatible with `gunicorn` (see `requirements.txt`).
+## 10) Deployment model
 
-Auth note
+- Containerized Flask app (`backend/Dockerfile`).
+- Deployed on Azure Container Apps.
+- CI/CD handled via repo GitHub Actions workflows (see root/AGENTS docs for pipeline refs).
 
-- For v1, the backend expects `Authorization: Bearer <firebase_id_token>` on cloud sync endpoints.
-- For local dev, set `FIREBASE_PROJECT_ID` and ensure you have a valid Firebase ID token.
+---
+
+## 11) Guardrails for contributors
+
+1. Any new endpoint must be user/tenant scoped where applicable.
+2. Cloud entitlements must be enforced server-side (not UI-only).
+3. Keep `/health/config` non-sensitive (flags only, never secrets).
+4. Keep route docs updated here whenever APIs change.
+5. For WebSocket protocol changes, update both backend and all host/controller clients in lockstep.
