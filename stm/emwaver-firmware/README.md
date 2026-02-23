@@ -1,5 +1,8 @@
 # EMWaver STM32 Firmware
 
+> Detailed, code-level documentation for the whole STM workspace now lives at `../README.md`.
+> Keep this file as a quick project-local summary.
+
 This directory contains the STM32F042G6UX EMWaver firmware implementation using STM32CubeIDE.
 
 ## Structure
