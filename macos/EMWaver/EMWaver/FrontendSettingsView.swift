@@ -1,14 +1,11 @@
 import SwiftUI
 
-/// macOS-only web frontend selector.
-///
-/// Mirrors BackendSettingsView so we can keep a web-first purchase flow for Pro,
-/// while still allowing local dev testing.
+/// macOS-only web frontend selector (staff-facing).
+/// Uses fixed cloud/local URLs from env.
 struct FrontendSettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var useProduction: Bool = UserDefaults.standard.bool(forKey: FrontendUrl.keyUseProduction)
-    @State private var localUrlText: String = UserDefaults.standard.string(forKey: FrontendUrl.keyLocalUrl) ?? "http://127.0.0.1:3000"
 
     private var effectiveUrl: String {
         FrontendUrl.effectiveString()
@@ -16,7 +13,7 @@ struct FrontendSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Web Frontend")
+            Text("Staff Only · Web Frontend")
                 .font(.title3)
                 .fontWeight(.semibold)
 
@@ -33,49 +30,31 @@ struct FrontendSettingsView: View {
 
             Picker("Mode", selection: $useProduction) {
                 Text("Local").tag(false)
-                Text("Azure (prod)").tag(true)
+                Text("Cloud").tag(true)
             }
             .pickerStyle(.segmented)
             .onChange(of: useProduction) { _, _ in save() }
 
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Local frontend URL")
+            Group {
+                Text("Cloud URL")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                Text(FrontendUrl.productionAzure)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
 
-                TextField("http://127.0.0.1:3000", text: $localUrlText)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.body, design: .monospaced))
-                    .disabled(useProduction)
-
-                HStack(spacing: 10) {
-                    Button("Use localhost") {
-                        localUrlText = "http://127.0.0.1:3000"
-                        useProduction = false
-                        save()
-                    }
-                    .disabled(useProduction)
-
-                    Button("Use LAN IP") {
-                        localUrlText = "http://192.168.1.130:3000"
-                        useProduction = false
-                        save()
-                    }
-                    .disabled(useProduction)
-
-                    Button("Clear") {
-                        localUrlText = ""
-                        useProduction = false
-                        save()
-                    }
-                    .disabled(useProduction)
-                }
+                Text("Local URL")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(FrontendUrl.localDefault)
+                    .font(.system(.caption, design: .monospaced))
+                    .textSelection(.enabled)
             }
 
             Spacer(minLength: 0)
 
             HStack {
-                Text("Note: Pro purchase is web-first for now. Eligibility is still enforced by the backend.")
+                Text("Staff-only frontend mode switch.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -88,9 +67,7 @@ struct FrontendSettingsView: View {
     }
 
     private func save() {
-        let d = UserDefaults.standard
-        d.set(useProduction, forKey: FrontendUrl.keyUseProduction)
-        d.set(localUrlText.trimmingCharacters(in: .whitespacesAndNewlines), forKey: FrontendUrl.keyLocalUrl)
+        UserDefaults.standard.set(useProduction, forKey: FrontendUrl.keyUseProduction)
     }
 }
 

@@ -7,30 +7,43 @@
 package com.emwaver.emwaverandroidapp.cloud;
 
 import android.content.Context;
+import android.content.SharedPreferences;
+
+import com.emwaver.emwaverandroidapp.BuildConfig;
 
 /**
- * Backend config.
- *
- * Product direction: Android talks to the fixed production backend.
- * (No user-configurable backend URL in Settings.)
+ * Backend/frontend config with staff-only cloud/local switching.
  */
 public final class CloudConfig {
-    private static final String DEFAULT_BACKEND_URL = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
-    private static final String DEFAULT_FRONTEND_URL = "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
+    private static final String PREFS = "emwaver";
+    private static final String KEY_BACKEND_MODE = "staff.backend.mode";   // cloud | local
+    private static final String KEY_FRONTEND_MODE = "staff.frontend.mode"; // cloud | local
 
     private CloudConfig() {}
 
+    public static boolean isStaffOnlyEnabled() {
+        return BuildConfig.EMWAVER_STAFF_ONLY;
+    }
+
+    private static String readMode(Context context, String key) {
+        SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        return p.getString(key, "cloud");
+    }
+
     public static String getBackendBaseUrl(Context context) {
-        return DEFAULT_BACKEND_URL;
+        String mode = readMode(context, KEY_BACKEND_MODE);
+        if ("local".equalsIgnoreCase(mode)) return BuildConfig.EMWAVER_BACKEND_URL_LOCAL;
+        return BuildConfig.EMWAVER_BACKEND_URL_CLOUD;
     }
 
     public static String getFrontendBaseUrl(Context context) {
-        return DEFAULT_FRONTEND_URL;
+        String mode = readMode(context, KEY_FRONTEND_MODE);
+        if ("local".equalsIgnoreCase(mode)) return BuildConfig.EMWAVER_FRONTEND_URL_LOCAL;
+        return BuildConfig.EMWAVER_FRONTEND_URL_CLOUD;
     }
 
     public static boolean allowAnonSync() {
         // Android sign-in isn't wired yet; anon sync is the default dev behavior.
-        // Keeping this as an always-on toggle avoids requiring env flags on-device.
         return true;
     }
 }

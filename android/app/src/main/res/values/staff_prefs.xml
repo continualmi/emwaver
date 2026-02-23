@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="staff_mode_entries">
+        <item>Cloud</item>
+        <item>Local</item>
+    </string-array>
+
+    <string-array name="staff_mode_values">
+        <item>cloud</item>
+        <item>local</item>
+    </string-array>
+</resources>

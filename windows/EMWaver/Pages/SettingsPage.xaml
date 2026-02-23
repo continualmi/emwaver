@@ -29,13 +29,14 @@
                 </StackPanel>
             </Border>
 
-            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            <Border x:Name="StaffBackendSection"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Cloud" FontWeight="SemiBold" />
+                    <TextBlock Text="Staff Only · Cloud" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <TextBlock Text="Backend:" />
@@ -54,13 +55,14 @@
                 </StackPanel>
             </Border>
 
-            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+            <Border x:Name="StaffFrontendSection"
+                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"
                     CornerRadius="8"
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
-                    <TextBlock Text="Web Frontend" FontWeight="SemiBold" />
+                    <TextBlock Text="Staff Only · Web Frontend" FontWeight="SemiBold" />
 
                     <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
                         <TextBlock Text="Frontend:" />

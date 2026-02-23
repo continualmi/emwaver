@@ -1,15 +1,21 @@
 const KEY = "emwaver.cloud.backendUrlOverride";
 
-// Canonical production backend (Azure Container Apps).
-export const AZURE_PRODUCTION_BACKEND_URL = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
+export const CLOUD_BACKEND_URL = (
+  process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL_CLOUD ||
+  process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL ||
+  process.env.EMWAVER_BACKEND_URL ||
+  "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io"
+).trim().replace(/\/+$/, "");
+
+export const LOCAL_BACKEND_URL = (
+  process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL_LOCAL ||
+  "http://127.0.0.1:8787"
+).trim().replace(/\/+$/, "");
+
+export const STAFF_ONLY_ENABLED = ((process.env.NEXT_PUBLIC_EMWAVER_STAFF_ONLY || "0").trim() === "1");
 
 export function defaultBackendBaseUrl(): string {
-  // Prefer build-time injected URL (prod/deployed backend by default).
-  const raw = (process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || process.env.EMWAVER_BACKEND_URL || "").trim();
-  if (!raw) {
-    throw new Error("Missing NEXT_PUBLIC_EMWAVER_BACKEND_URL");
-  }
-  return raw.replace(/\/+$/, "");
+  return CLOUD_BACKEND_URL;
 }
 
 export function getBackendBaseUrl(): string {

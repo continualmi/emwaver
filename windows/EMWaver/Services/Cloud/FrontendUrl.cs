@@ -2,18 +2,19 @@ namespace EMWaver.Services.Cloud;
 
 internal static class FrontendUrl
 {
-    internal const string AzureProduction = "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
-    internal const string Localhost = "http://localhost:3000";
+    internal static string Cloud =>
+        (System.Environment.GetEnvironmentVariable("EMWAVER_FRONTEND_URL_CLOUD") ?? "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io").Trim();
+
+    internal static string Local =>
+        (System.Environment.GetEnvironmentVariable("EMWAVER_FRONTEND_URL_LOCAL") ?? "http://127.0.0.1:3000").Trim();
 
     internal static string Resolve()
     {
         if (AppServices.Settings.UseProductionFrontend)
         {
-            return AzureProduction;
+            return Cloud;
         }
 
-        // Local mode is intentionally fixed to localhost to avoid stale/cached custom URLs
-        // and ensure consistent web handoff behavior.
-        return Localhost;
+        return Local;
     }
 }

@@ -29,4 +29,29 @@
 
     </PreferenceCategory>
 
+    <PreferenceCategory
+        android:key="staff_only_category"
+        android:title="Staff Only"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            android:key="staff.backend.mode"
+            android:title="Backend mode"
+            android:entries="@array/staff_mode_entries"
+            android:entryValues="@array/staff_mode_values"
+            android:defaultValue="cloud"
+            android:summary="Switch between cloud and local backend URLs"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
+            android:key="staff.frontend.mode"
+            android:title="Frontend mode"
+            android:entries="@array/staff_mode_entries"
+            android:entryValues="@array/staff_mode_values"
+            android:defaultValue="cloud"
+            android:summary="Switch between cloud and local frontend URLs"
+            app:useSimpleSummaryProvider="true" />
+
+    </PreferenceCategory>
+
 </PreferenceScreen>

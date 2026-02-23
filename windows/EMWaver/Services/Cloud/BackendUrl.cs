@@ -2,18 +2,20 @@ namespace EMWaver.Services.Cloud;
 
 internal static class BackendUrl
 {
-    internal const string AzureProduction = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io";
-    internal const string Localhost = "http://localhost:8787";
+    internal static string Cloud =>
+        (System.Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL_CLOUD") ?? "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io").Trim();
+
+    internal static string Local =>
+        (System.Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL_LOCAL") ?? "http://127.0.0.1:8787").Trim();
 
     internal static string Resolve()
     {
-        // Hard switch controlled by app settings.
+        // Hard switch controlled by settings (staff-only section).
         if (AppServices.Settings.UseProductionBackend)
         {
-            return AzureProduction;
+            return Cloud;
         }
 
-        // Local mode is intentionally fixed to localhost to avoid stale/cached custom URLs.
-        return Localhost;
+        return Local;
     }
 }

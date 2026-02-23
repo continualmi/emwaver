@@ -10,6 +10,10 @@ struct SettingsView: View {
 
     @State private var suppressAttachPrompt: Bool = UserDefaults.standard.bool(forKey: "emwaver.deviceAttachPrompt.suppress")
 
+    private var staffOnlyEnabled: Bool {
+        (ProcessInfo.processInfo.environment["EMWAVER_STAFF_ONLY"] ?? "") == "1"
+    }
+
     var body: some View {
         NavigationStack {
             Form {
@@ -27,12 +31,14 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Backend") {
-                    BackendSettingsView()
-                }
+                if staffOnlyEnabled {
+                    Section("Staff Only · Backend") {
+                        BackendSettingsView()
+                    }
 
-                Section("Web Frontend") {
-                    FrontendSettingsView()
+                    Section("Staff Only · Web Frontend") {
+                        FrontendSettingsView()
+                    }
                 }
             }
             .formStyle(.grouped)
