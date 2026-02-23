@@ -2,9 +2,10 @@
 
 This document is the contract.
 
-- Every variable is listed below with its **canonical definition file**.
+- Every variable is listed below with its **single canonical definition file**.
 - Each platform/host has an explicit list of env files it must load.
 - Platforms should load **only** the files listed for that platform.
+- Goal: **no duplicated keys across env files**.
 
 ---
 
@@ -35,7 +36,6 @@ This document is the contract.
 - `PORT`
 - `FLASK_APP`
 - `DATABASE_URL`
-- `FIREBASE_PROJECT_ID`
 - `FIREBASE_ADMIN_JSON_B64`
 - `FIREBASE_SERVICE_ACCOUNT_JSON`
 
@@ -79,33 +79,20 @@ This document is the contract.
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `NODE_ENV`
 
-### targets/apps.env
-- `EMWAVER_BACKEND_URL`
-- `EMWAVER_FRONTEND_URL`
-- `EMWAVER_ALLOW_ANON_SYNC`
-- `EMWAVER_FIREBASE_WEB_API_KEY`
-- `EMWAVER_GOOGLE_CLIENT_ID`
-- `EMWAVER_GOOGLE_CLIENT_SECRET`
-- `EMWAVER_GOOGLE_REDIRECT_URI`
-- `EMWAVER_ROOT_PUBLIC_KEY_B64`
-
 ### targets/securewaver.env
-- `EMWAVER_BACKEND_URL`
-- `EMWAVER_FIREBASE_WEB_API_KEY`
-- `EMWAVER_GOOGLE_CLIENT_ID`
-- `EMWAVER_GOOGLE_CLIENT_SECRET`
-- `EMWAVER_ROOT_PUBLIC_KEY_B64`
 - `VITE_FIREBASE_API_KEY`
 - `VITE_FIREBASE_AUTH_DOMAIN`
 - `VITE_FIREBASE_PROJECT_ID`
 - `VITE_FIREBASE_APP_ID`
 
 ### targets/daemon.env
-- `EMWAVER_BACKEND_URL`
 - `EMWAVER_ID_TOKEN`
 - `EMWAVER_HOST_SESSION_ID`
 - `EMWAVER_BOOTSTRAP_PATH`
 - `RUST_LOG`
+
+### targets/apps.env
+- _(currently empty by design; reserved for future native-app-only keys)_
 
 ### ci/azure.env
 - `AZURE_CLIENT_ID`
