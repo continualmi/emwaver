@@ -7,8 +7,7 @@
 .DS_Store
 
 # Local environment (secrets)
-.env
-.env.*
+# Intentionally tracking env files in this repo workflow.
 
 # ESP-IDF managed components (generated)
 managed_components/
