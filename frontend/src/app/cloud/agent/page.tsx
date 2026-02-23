@@ -188,10 +188,10 @@ export default function AgentChatPage() {
   }
 
   return (
-    <div className="app-shell-fixed">
+    <div className="min-h-dvh">
       <SiteHeader />
 
-      <main className="app-shell-main w-full overflow-y-auto px-5 pt-10 pb-14">
+      <main className="w-full overflow-y-auto px-5 pt-10 pb-14">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Agent</h1>

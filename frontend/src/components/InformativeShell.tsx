@@ -50,10 +50,10 @@ export function InformativeShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="app-shell-fixed docs-mode">
+    <div className="min-h-dvh docs-mode">
       <SiteHeader />
 
-      <main className="app-shell-main w-full px-5 py-10">
+      <main className="w-full px-5 py-10">
         <div className="grid gap-6 md:grid-cols-[260px_minmax(0,1fr)] md:items-start">
           <aside className="hidden md:block">
             <div className="sticky top-24">
