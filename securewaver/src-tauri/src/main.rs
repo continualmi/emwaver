@@ -14,10 +14,10 @@ mod update_mode;
 mod update_mode_identity;
 mod usb_midi_sysex;
 
-// Dev convenience: load env vars from a local .env file when present.
-// Note: packaged apps should rely on configured environment/launchd, not .env.
+// Dev convenience: load env vars from repo secrets files when present.
+// Note: packaged apps should rely on configured environment/launchd.
 #[allow(unused_imports)]
-use dotenvy::dotenv;
+use dotenvy::{dotenv, from_path};
 
 use base64::{engine::general_purpose::STANDARD as B64, Engine as _};
 use serde::{Deserialize, Serialize};
@@ -436,7 +436,11 @@ async fn auth_firebase_refresh(app: tauri::AppHandle, refresh_token: String) -> 
 }
 
 fn main() {
-    let _ = dotenvy::dotenv();
+    let _ = dotenv();
+    let _ = from_path("../secrets/shared/core.env");
+    let _ = from_path("../secrets/shared/firebase.env");
+    let _ = from_path("../secrets/shared/oauth.env");
+    let _ = from_path("../secrets/targets/securewaver.env");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())

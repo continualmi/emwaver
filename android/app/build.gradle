@@ -6,6 +6,50 @@ plugins {
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
 def emwaverSharedScriptAssetsDir = new File(emwaverRepoRootDir, "assets/default-scripts")
 
+def emwaverEnvMap = [:]
+
+def parseEnvFile = { File f ->
+    if (!f.exists()) return
+    f.eachLine('UTF-8') { raw ->
+        def s = raw.trim()
+        if (!s || s.startsWith('#') || !s.contains('=')) return
+        def idx = s.indexOf('=')
+        def k = s.substring(0, idx).trim()
+        def v = s.substring(idx + 1).trim()
+        if (!k) return
+        if (!emwaverEnvMap.containsKey(k)) {
+            emwaverEnvMap[k] = v
+        }
+    }
+}
+
+def expandEnv = { String input ->
+    def out = input
+    0.upto(4) {
+        out = out.replaceAll(/\$\{([A-Z0-9_]+)\}/) { all, key ->
+            return (System.getenv(key) ?: emwaverEnvMap[key] ?: '')
+        }
+    }
+    return out
+}
+
+[
+        'secrets/shared/core.env',
+        'secrets/shared/firebase.env',
+        'secrets/shared/oauth.env',
+        'secrets/targets/apps.env'
+].each { rel ->
+    parseEnvFile(new File(emwaverRepoRootDir, rel))
+}
+
+def envOr = { String key, String fallback ->
+    def sys = System.getenv(key)
+    if (sys != null && !sys.trim().isEmpty()) return sys.trim()
+    def local = emwaverEnvMap[key]
+    if (local != null && !local.trim().isEmpty()) return expandEnv(local.trim())
+    return fallback
+}
+
 // Keep Android UI in sync with the bundled firmware version (from STM source-of-truth).
 def emwaverStmMainC = new File(emwaverRepoRootDir, "stm/emwaver-firmware/Core/Src/main.c")
 def emwaverBundledFwVersion = "unknown"
@@ -31,11 +75,11 @@ android {
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
-        def cloudBackend = (System.getenv("EMWAVER_BACKEND_URL_CLOUD") ?: "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
-        def localBackend = (System.getenv("EMWAVER_BACKEND_URL_LOCAL") ?: "http://127.0.0.1:8787")
-        def cloudFrontend = (System.getenv("EMWAVER_FRONTEND_URL_CLOUD") ?: "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
-        def localFrontend = (System.getenv("EMWAVER_FRONTEND_URL_LOCAL") ?: "http://127.0.0.1:3000")
-        def staffOnly = (System.getenv("EMWAVER_STAFF_ONLY") ?: "0")
+        def cloudBackend = envOr("EMWAVER_BACKEND_URL_CLOUD", "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def localBackend = envOr("EMWAVER_BACKEND_URL_LOCAL", "http://127.0.0.1:8787")
+        def cloudFrontend = envOr("EMWAVER_FRONTEND_URL_CLOUD", "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def localFrontend = envOr("EMWAVER_FRONTEND_URL_LOCAL", "http://127.0.0.1:3000")
+        def staffOnly = envOr("EMWAVER_STAFF_ONLY", "0")
 
         buildConfigField "String", "EMWAVER_BACKEND_URL_CLOUD", '"' + cloudBackend + '"'
         buildConfigField "String", "EMWAVER_BACKEND_URL_LOCAL", '"' + localBackend + '"'

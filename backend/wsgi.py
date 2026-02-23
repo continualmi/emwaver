@@ -2,11 +2,6 @@
 
 Why: Flask's built-in dev server (Werkzeug) does not reliably support WebSockets.
 Remote control uses /v1/ws, so run with Gunicorn + gevent-websocket for local dev.
-
-Example:
-  gunicorn -b 0.0.0.0:8787 -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker wsgi:app
-
-This file also loads .env (repo root + backend/.env) like backend/app.py does.
 """
 
 import os
@@ -15,7 +10,7 @@ from pathlib import Path
 from emw_backend.app import create_app
 
 
-def _load_dotenv_from_repo_root() -> None:
+def _load_env_files_from_repo_root() -> None:
     def load_env_file(path: Path) -> None:
         if not path.exists() or not path.is_file():
             return
@@ -44,10 +39,20 @@ def _load_dotenv_from_repo_root() -> None:
             os.environ.setdefault(key, val)
 
     repo_root = Path(__file__).resolve().parent.parent
-    load_env_file(repo_root / ".env")
-    load_env_file(Path(__file__).resolve().parent / ".env")
+    files = [
+        "secrets/shared/core.env",
+        "secrets/shared/firebase.env",
+        "secrets/shared/oauth.env",
+        "secrets/server/backend.env",
+        "secrets/server/ai.env",
+        "secrets/server/billing.env",
+        "secrets/server/storage.env",
+        "secrets/server/provisioning.env",
+    ]
+    for rel in files:
+        load_env_file(repo_root / rel)
 
 
-_load_dotenv_from_repo_root()
+_load_env_files_from_repo_root()
 
 app = create_app()
