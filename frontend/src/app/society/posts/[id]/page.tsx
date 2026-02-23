@@ -57,7 +57,7 @@ export default async function SocietyPostPage({ params }: { params: Promise<{ id
         ← Back
       </Link>
 
-      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6">
+      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6 backdrop-blur-md">
         <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">{post.kind}</div>
         <div className="mt-2 text-2xl font-semibold text-[color:var(--ink)]">{post.title}</div>
         {post.summary ? <div className="mt-2 text-sm text-[color:var(--ink-dim)]">{post.summary}</div> : null}
@@ -69,7 +69,7 @@ export default async function SocietyPostPage({ params }: { params: Promise<{ id
         ) : null}
       </div>
 
-      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6">
+      <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-6 backdrop-blur-md">
         <div className="flex items-center justify-between gap-4">
           <div className="text-sm font-semibold text-[color:var(--ink)]">Comments</div>
           <Link

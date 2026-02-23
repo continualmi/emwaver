@@ -42,7 +42,7 @@ export default async function SocietyPage() {
       <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Latest</div>
 
       {posts.length === 0 ? (
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5">
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No posts yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
             EMWaver Society is live, but we haven’t published posts yet.
@@ -68,7 +68,7 @@ export default async function SocietyPage() {
             <Link
               key={p.id}
               href={`/society/posts/${encodeURIComponent(p.id)}`}
-              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 hover:bg-[rgba(255,255,255,0.05)]"
+              className="block rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md hover:bg-[rgba(255,255,255,0.05)]"
             >
               <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{p.kind}</div>
               <div className="mt-2 text-lg font-semibold text-[color:var(--ink)]">{p.title}</div>
