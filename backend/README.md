@@ -9,6 +9,9 @@ Flask backend for EMWaver cloud features:
 
 This service is deployed to Azure Container Apps and is authoritative for cloud entitlements and account-bound operations.
 
+Historical policy note migrated from AGENTS:
+- **Backend is authoritative**: apps may gate UI/UX, but server-side checks are the security boundary for Pro/entitlements/cloud feature access.
+
 ---
 
 ## 1) Folder purpose
@@ -87,6 +90,9 @@ Current model (important):
 - Flat namespace by filename (no slash paths yet).
 - Upsert behavior for upload (Postgres/SQLite conflict handling).
 
+Safety rule migrated from AGENTS:
+- `script_bootstrap.emw` is internal engine/bootstrap logic and must never be treated as a user script for cloud upload/sync/share.
+
 Key endpoints:
 - `GET /v1/files`
 - `GET /v1/files/content?name=...`
@@ -137,6 +143,10 @@ Operational caveat:
 - gated by provisioning-enabled flag + allowlist,
 - signs random 16-byte DeviceID with root ed25519 private key,
 - returns `{device_id_b64, proof_b64}`.
+
+Policy notes migrated from AGENTS:
+- Device attach/verification requires forwarding `DeviceID + Proof` to backend; backend repeats verification and enforces anti-abuse policy.
+- Pro purchase eligibility depends on signed-in user having at least one verified genuine device attached.
 
 Environment gates:
 - `EMWAVER_PROVISIONING_ENABLED`

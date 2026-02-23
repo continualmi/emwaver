@@ -21,6 +21,33 @@ If you only read one thing first, read:
 
 This folder does **not** own host/cloud logic; it is strictly MCU-side firmware and build helpers.
 
+### Historical hardware notes migrated from AGENTS
+
+**MCU note (do not forget):** current shipped board uses **STM32F042G6Ux**.
+- CubeMX/datasheet show many pins have timer alternate-functions (e.g. PB7 can expose TIM16/TIM17 complementary outputs on some configs), but **current firmware PWM support is limited to TIM2 on PA0–PA3** (see firmware `tim2_channel_from_pin`).
+- Expanding PWM to more pins requires firmware work: mapping additional timers/channels + correct AF selection + managing peripheral conflicts.
+
+**CubeMX pin→timer notes (STM32F042G6Ux):**
+- A0 → TIM2 CH1
+- A1 → TIM2 CH2
+- A2 → TIM2 CH3
+- A3 → TIM3 CH4
+- A4 → TIM14 CH1
+- A5 → TIM2 CH1
+- A6 → TIM16 CH1, TIM3 CH1
+- A7 → TIM14 CH1, TIM17 CH1, TIM1 CH1N, TIM3 CH2
+- B6 → TIM16 CH1N
+- B7 → TIM17 CH1N
+- B8 → TIM16 CH1
+
+**Final single-device board / connector notes:**
+- CN1 (2×4) exposes VCC/GND + SPI (`NSS`, `SCK`, `MOSI`, `MISO`) + GPIO (`GDO0`, `GDO1`, `GDO2`) and aligns with common CC1101-style 2×4 module headers.
+- U4 (1×8) exposes `VCC`, `PB6`, `BOOT0`, `MISO`, `MOSI`, `NSS1`, `SCL`, `PB7` and aligns with common RC522-style 1×8 module headers.
+
+**Important dev workflow:** app updaters flash a **`.bin`**, not firmware `.elf` directly.
+After building `stm/emwaver-firmware/Release/emwaver-firmware.elf`, update bundled `emwaver.bin` copies with:
+- `stm/update_firmware_bins.sh` (optionally pass an `.elf` path).
+
 ---
 
 ## 2) Current structure
