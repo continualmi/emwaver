@@ -27,6 +27,14 @@ type Entitlements = {
   features?: { [k: string]: boolean };
 };
 
+function formatUiError(input: unknown): string {
+  const raw = String((input as any)?.message ?? input ?? "Request failed");
+  const withoutTags = raw.replace(/<[^>]*>/g, " ");
+  const singleLine = withoutTags.replace(/\s+/g, " ").trim();
+  if (!singleLine) return "Request failed";
+  return singleLine.length > 220 ? `${singleLine.slice(0, 220)}…` : singleLine;
+}
+
 export default function ProPage() {
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
 
@@ -75,7 +83,7 @@ export default function ProPage() {
       if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
       setEligibility(JSON.parse(text) as Eligibility);
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     }
   }
 
@@ -116,7 +124,7 @@ export default function ProPage() {
       setBusy(true);
       await signInWithPopup(auth, googleProvider());
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setBusy(false);
     }
@@ -143,7 +151,7 @@ export default function ProPage() {
       const data = JSON.parse(text) as { url: string };
       window.location.href = data.url;
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setBusy(false);
     }
@@ -166,7 +174,7 @@ export default function ProPage() {
       const data = JSON.parse(text) as { url: string };
       window.location.href = data.url;
     } catch (e: any) {
-      setError(String(e?.message || e));
+      setError(formatUiError(e));
     } finally {
       setBusy(false);
     }
