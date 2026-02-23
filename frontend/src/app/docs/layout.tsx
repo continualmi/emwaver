@@ -1,4 +1,3 @@
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DocsMobileNav } from "@/components/docs/DocsMobileNav";
 import { DocsSidebar } from "@/components/docs/DocsSidebar";
@@ -30,7 +29,6 @@ export default function DocsLayout({
         </div>
       </main>
 
-      <SiteFooter />
     </div>
   );
 }
