@@ -12,9 +12,6 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
 | `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[x]` | macOS | `2026-02-07` |
 | `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
-| `007_SECURE_DEVICE_CONNECTION` | `[ ]` | macOS, Windows, Android | |
-| `008_SECURE_DEVICE_FIRMWARE_UPDATE_GATING` | `[ ]` | macOS, Windows, Android | |
-| `009_DEVICE_IDENTITY_RECOVERY_REPROVISION` | `[ ]` | macOS, Windows, Android | |
 
 ## Remote Case Matrix
 
@@ -102,55 +99,3 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 - Steps: run the same servo PWM flow through remote host control across the full remote case matrix.
 - Expected: matches local `004` in all cases.
-
-## `007_SECURE_DEVICE_CONNECTION`
-
-### Local
-
-- Systems: macOS, Windows, Android.
-- Purpose: verify SecureWaver-minted devices connect as **secure**, and non-minted devices are rejected.
-
-Steps:
-
-1) Use **SecureWaver** to provision a device identity (DeviceID + Proof) onto a device.
-2) In the EMWaver app, connect that device.
-   - Expected: app performs identity read (`EMW_OP_IDENTITY_GET`) and verifies `Proof` against the embedded Root public key.
-   - Expected: app shows a **secure connected** badge/glyph.
-3) Connect an **unsecured** device (no DeviceID/Proof provisioned; or identity page erased).
-   - Expected: app rejects device (no secure badge; connection blocked or marked non-genuine).
-
-## `008_SECURE_DEVICE_FIRMWARE_UPDATE_GATING`
-
-### Local
-
-- Systems: macOS, Windows, Android.
-- Purpose: firmware updates are only offered/performed for **secured** devices.
-
-Steps:
-
-1) Use **SecureWaver** to provision a device identity (DeviceID + Proof) onto a device.
-2) In the EMWaver app, open firmware update.
-   - Expected: app checks device identity first.
-   - Expected: app offers and performs update for secured device.
-3) Connect an **unsecured** device (no DeviceID/Proof).
-   - Expected: firmware update is **not offered** (or is blocked with an explicit message).
-
-## `009_DEVICE_IDENTITY_RECOVERY_REPROVISION`
-
-### Local
-
-- Systems: macOS, Windows, Android.
-- Purpose: allow a legitimate owner to recover a device identity (DeviceID + Proof) from the backend when identity is missing/invalid, then retry the firmware update successfully.
-
-Steps:
-
-1) Sign into the EMWaver app.
-2) App checks backend that the account has an eligible **EMWaver purchase** / entitlement.
-3) Connect a device in a "needs recovery" state (missing/invalid identity page).
-4) Open the firmware update modal.
-   - Expected: app detects missing/invalid identity and offers **Recover device**.
-5) User triggers recovery.
-   - Expected: app requests a new `(DeviceID, Proof)` from backend for this account/device.
-   - Expected: app flashes **only the identity page** (DeviceID+Proof) onto the device.
-6) App prompts user to retry firmware update.
-   - Expected: update now proceeds normally (device passes identity verification).
