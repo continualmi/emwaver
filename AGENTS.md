@@ -163,4 +163,4 @@ If a folder has a README, detailed documentation should live there.
 Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits,
-- push changes (open PR branch if main push blocked).
+- push changes after making updates (open PR branch if main push blocked).
