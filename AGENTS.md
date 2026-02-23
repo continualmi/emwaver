@@ -49,6 +49,7 @@ Core direction:
 
 Use the local README first when working in a folder:
 
+- `README.md` (repo root) — cross-cutting product/business/platform notes migrated out of historical AGENTS details
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
