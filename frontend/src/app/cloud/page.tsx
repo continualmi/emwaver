@@ -67,15 +67,19 @@ function bytesToHexView(bytes: Uint8Array, limit = 256 * 1024) {
   return lines.join("\n");
 }
 
-function formatUiError(input: unknown): string {
-  const raw = String((input as any)?.message ?? input ?? "Request failed");
-  const lower = raw.toLowerCase();
-  if (
+function looksLikeNextHtml404(text: string): boolean {
+  const lower = String(text || "").toLowerCase();
+  return (
     lower.includes("<!doctype html") ||
     lower.includes("<html") ||
     lower.includes("404: this page could not be found") ||
     lower.includes("next-error-h1")
-  ) {
+  );
+}
+
+function formatUiError(input: unknown): string {
+  const raw = String((input as any)?.message ?? input ?? "Request failed");
+  if (looksLikeNextHtml404(raw)) {
     return "Backend endpoint returned an HTML 404 page. Check backend URL / route configuration.";
   }
 
@@ -586,6 +590,9 @@ export default function CloudPage() {
       } else {
         // try utf-8
         const text = new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+        if (looksLikeNextHtml404(text)) {
+          throw new Error("Received HTML 404 page instead of script content.");
+        }
         setViewerText(text);
       }
     } catch (e: any) {
