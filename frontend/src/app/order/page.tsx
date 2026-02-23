@@ -92,7 +92,7 @@ export default function OrderPage() {
   return (
     <div className="app-shell-fixed docs-mode">
       <SiteHeader />
-      <main className="app-shell-main mx-auto max-w-6xl px-5 py-10">
+      <main className="app-shell-main w-full px-5 py-10">
         <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
           <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
             <div>

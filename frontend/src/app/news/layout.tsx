@@ -12,7 +12,7 @@ export default function NewsLayout({
     <div className="app-shell-fixed docs-mode">
       <SiteHeader />
 
-      <main className="app-shell-main mx-auto w-full max-w-6xl px-5 py-10">
+      <main className="app-shell-main w-full px-5 py-10">
         <div className="grid h-full gap-8 md:grid-cols-[280px_minmax(0,1fr)]">
           <aside className="hidden overflow-y-auto md:block">
             <NewsSidebar />
