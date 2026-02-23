@@ -49,7 +49,7 @@ Core direction:
 
 Use the local README first when working in a folder:
 
-- `README.md` (repo root) — cross-cutting product/business/platform notes migrated out of historical AGENTS details
+- `README.md` (repo root) — concise repo overview + doc index
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
@@ -86,6 +86,8 @@ If a folder has a README, detailed documentation should live there.
 4. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
 5. **Backend is authoritative** for cloud entitlements/feature gating.
 6. **Provisioning/minting flows are internal-only** (SecureWaver/manufacturing scope).
+7. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
+8. **CI/Releases policy**: GitHub Actions are for frontend/backend CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
 
 ---
 

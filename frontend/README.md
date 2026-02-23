@@ -128,6 +128,10 @@ Direction reflected in repo docs:
 - claim/recovery flows are web-managed,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
+Store distribution policy migrated from AGENTS:
+- Apple App Store (iOS/macOS), Google Play Store (Android), Microsoft Store (Windows).
+- Do not position direct `.dmg` / `.apk` / `.exe` distribution as default end-user channel.
+
 ---
 
 ## 7) Assets and branding notes

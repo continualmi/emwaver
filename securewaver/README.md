@@ -56,6 +56,9 @@ SecureWaver exists to operationalize the EMWaver anti-cloning/authenticity strat
 
 SecureWaver consumes (does not define) the authenticity model:
 
+- Maintain a single **global Root private key** (offline, kept by owner). This Root key is never shipped in apps.
+- Apps/backend ship/use the corresponding Root public key for verification.
+
 - device stores `DeviceID(16B)` + `Proof(64B signature)` in flash identity page,
 - proof is verified against root public key,
 - minting requires backend policy gates.
