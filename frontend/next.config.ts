@@ -3,6 +3,17 @@ import path from "path";
 import fs from "fs";
 import dotenv from "dotenv";
 
+function expandVars(input?: string): string | undefined {
+  if (!input) return input;
+  let out = input;
+  for (let i = 0; i < 6; i += 1) {
+    const next = out.replace(/\$\{([A-Z0-9_]+)\}/g, (_m, key: string) => process.env[key] ?? "");
+    if (next === out) break;
+    out = next;
+  }
+  return out;
+}
+
 function loadEnvFiles() {
   const repoRoot = path.resolve(__dirname, "..");
   const files = [
@@ -17,6 +28,25 @@ function loadEnvFiles() {
     if (fs.existsSync(p)) {
       dotenv.config({ path: p, override: false });
     }
+  }
+
+  const keysToExpand = [
+    "EMWAVER_BACKEND_URL",
+    "EMWAVER_BACKEND_URL_CLOUD",
+    "EMWAVER_BACKEND_URL_LOCAL",
+    "EMWAVER_FRONTEND_URL",
+    "EMWAVER_FRONTEND_URL_CLOUD",
+    "EMWAVER_FRONTEND_URL_LOCAL",
+    "NEXT_PUBLIC_EMWAVER_BACKEND_URL",
+    "NEXT_PUBLIC_EMWAVER_BACKEND_URL_CLOUD",
+    "NEXT_PUBLIC_EMWAVER_BACKEND_URL_LOCAL",
+    "NEXT_PUBLIC_EMWAVER_STAFF_ONLY",
+  ];
+
+  for (const key of keysToExpand) {
+    const val = process.env[key];
+    const expanded = expandVars(val);
+    if (expanded !== undefined) process.env[key] = expanded;
   }
 }
 
