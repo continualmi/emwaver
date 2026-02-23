@@ -11,7 +11,8 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` |
 | `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
 | `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[x]` | macOS | `2026-02-07` |
-| `004_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
+| `004_MFRC522_READ_WRITE_RFID_CARD` | `[ ]` |  | |
+| `005_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
 
 ## Remote Case Matrix
 
@@ -20,29 +21,29 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 - Rule: frontend is controller-only (never host).
 - Rule: Linux is host-only (never controller).
 
-| Case | Controller | Host | `001R` | `002R` | `003R` | `004R` |
-| --- | --- | --- | --- | --- | --- | --- |
-| `MW` | macOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `MI` | macOS | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `MA` | macOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WM` | Windows | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WI` | Windows | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WA` | Windows | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IM` | iOS | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IW` | iOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IA` | iOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AM` | Android | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AW` | Android | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AI` | Android | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FM` | Frontend | macOS | `[x]` | `[x]` | `[x]` | `[ ]` |
-| `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `ML` | macOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WL` | Windows | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IL` | iOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AL` | Android | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FL` | Frontend | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| Case | Controller | Host | `001R` | `002R` | `003R` | `004R` | `005R` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `MW` | macOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `MI` | macOS | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `MA` | macOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WM` | Windows | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WI` | Windows | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WA` | Windows | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IM` | iOS | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IW` | iOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IA` | iOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AM` | Android | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AW` | Android | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AI` | Android | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FM` | Frontend | macOS | `[x]` | `[x]` | `[x]` | `[ ]` | `[ ]` |
+| `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `ML` | macOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `WL` | Windows | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `IL` | iOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `AL` | Android | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+| `FL` | Frontend | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 
 ## `001_BLINK_LED_HOST_DEVICE_COMMS`
 
@@ -86,7 +87,22 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 - Steps: run the same sampler capture/retransmit flow through remote host control across the full remote case matrix.
 - Expected: matches local `003` in all cases.
 
-## `004_SERVO_PWM_POSITION_CONTROL`
+## `004_MFRC522_READ_WRITE_RFID_CARD`
+
+### Local
+
+- Script target: `mfrc522_read_write.emw`
+- Setup: wire MFRC522 (RC522) to EMWaver over SPI and place a valid RFID/NFC card near reader.
+- Steps: run the script; read card UID; select block + key; write test payload; read back same block and verify exact match.
+- Tests: MFRC522 SPI comms, card detect/select, auth, block write, readback verification.
+- Expected: UID is read reliably and written block reads back exactly as written.
+
+### Remote (`004R_REMOTE_MFRC522_READ_WRITE_RFID_CARD`)
+
+- Steps: run the same MFRC522 read/write/verify flow through remote host control across the full remote case matrix.
+- Expected: matches local `004` in all cases.
+
+## `005_SERVO_PWM_POSITION_CONTROL`
 
 ### Local
 
@@ -95,7 +111,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 - Tests: PWM servo control on real hardware, preset positions, freeform position setting.
 - Expected: servo reaches distinct Min/Center/Max positions and tracks slider-selected positions consistently.
 
-### Remote (`004R_REMOTE_SERVO_PWM_POSITION_CONTROL`)
+### Remote (`005R_REMOTE_SERVO_PWM_POSITION_CONTROL`)
 
 - Steps: run the same servo PWM flow through remote host control across the full remote case matrix.
-- Expected: matches local `004` in all cases.
+- Expected: matches local `005` in all cases.
