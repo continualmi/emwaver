@@ -19,6 +19,7 @@ This document is the contract.
 - `EMWAVER_BACKEND_URL` (active/default; points to cloud by default)
 - `EMWAVER_FRONTEND_URL` (active/default; points to cloud by default)
 - `EMWAVER_ALLOW_ANON_SYNC`
+- `EMWAVER_STAFF_ONLY`
 - `EMWAVER_ROOT_PUBLIC_KEY_B64`
 
 ### shared/firebase.env
@@ -77,6 +78,9 @@ This document is the contract.
 
 ### targets/frontend.env
 - `NEXT_PUBLIC_EMWAVER_BACKEND_URL`
+- `NEXT_PUBLIC_EMWAVER_BACKEND_URL_CLOUD`
+- `NEXT_PUBLIC_EMWAVER_BACKEND_URL_LOCAL`
+- `NEXT_PUBLIC_EMWAVER_STAFF_ONLY`
 - `NEXT_PUBLIC_FIREBASE_API_KEY`
 - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
 - `NEXT_PUBLIC_FIREBASE_PROJECT_ID`

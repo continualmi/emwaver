@@ -10,33 +10,23 @@ import Foundation
 /// 2) explicit UI local URL
 /// 3) EMWAVER_FRONTEND_URL env var
 enum FrontendUrl {
-    static let productionAzure = "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io"
-
     // Keys
     static let keyUseProduction = "emwaver.frontend.useProduction"
-    static let keyLocalUrl = "emwaver.frontend.localURL"
+
+    static var productionAzure: String {
+        (ProcessInfo.processInfo.environment["EMWAVER_FRONTEND_URL_CLOUD"] ??
+         "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static var localDefault: String {
+        (ProcessInfo.processInfo.environment["EMWAVER_FRONTEND_URL_LOCAL"] ?? "http://127.0.0.1:3000")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
 
     static func resolve() -> URL? {
         let defaults = UserDefaults.standard
-
-        if defaults.bool(forKey: keyUseProduction) {
-            return URL(string: productionAzure)
-        }
-
-        let local = (defaults.string(forKey: keyLocalUrl) ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !local.isEmpty {
-            return URL(string: local)
-        }
-
-        let envURL = (ProcessInfo.processInfo.environment["EMWAVER_FRONTEND_URL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !envURL.isEmpty {
-            return URL(string: envURL)
-        }
-
-        // Default to local dev.
-        return URL(string: "http://127.0.0.1:3000")
+        return URL(string: defaults.bool(forKey: keyUseProduction) ? productionAzure : localDefault)
     }
 
     static func effectiveString() -> String {

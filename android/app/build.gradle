@@ -31,6 +31,18 @@ android {
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
+        def cloudBackend = (System.getenv("EMWAVER_BACKEND_URL_CLOUD") ?: "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def localBackend = (System.getenv("EMWAVER_BACKEND_URL_LOCAL") ?: "http://127.0.0.1:8787")
+        def cloudFrontend = (System.getenv("EMWAVER_FRONTEND_URL_CLOUD") ?: "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def localFrontend = (System.getenv("EMWAVER_FRONTEND_URL_LOCAL") ?: "http://127.0.0.1:3000")
+        def staffOnly = (System.getenv("EMWAVER_STAFF_ONLY") ?: "0")
+
+        buildConfigField "String", "EMWAVER_BACKEND_URL_CLOUD", '"' + cloudBackend + '"'
+        buildConfigField "String", "EMWAVER_BACKEND_URL_LOCAL", '"' + localBackend + '"'
+        buildConfigField "String", "EMWAVER_FRONTEND_URL_CLOUD", '"' + cloudFrontend + '"'
+        buildConfigField "String", "EMWAVER_FRONTEND_URL_LOCAL", '"' + localFrontend + '"'
+        buildConfigField "boolean", "EMWAVER_STAFF_ONLY", (staffOnly == "1" ? "true" : "false")
+
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 

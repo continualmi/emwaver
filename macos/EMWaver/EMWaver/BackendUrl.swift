@@ -1,44 +1,25 @@
 import Foundation
 
 enum BackendUrl {
-    static let productionAzure = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io"
-
     // Keys
     static let keyUseProduction = "emwaver.backend.useProduction"
-    static let keyLocalUrl = "emwaver.backend.localURL"
 
-    /// Resolve backend base URL.
-    ///
-    /// Order:
-    /// 1) explicit UI switch: useProduction
-    /// 2) explicit UI local URL
-    /// 3) EMWAVER_BACKEND_URL env var (scheme override)
-    /// 4) legacy UserDefaults key: emwaver.agent.backendURL
+    static var productionAzure: String {
+        (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL_CLOUD"] ??
+         "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    static var localDefault: String {
+        (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL_LOCAL"] ?? "http://127.0.0.1:8787")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Resolve backend base URL from fixed cloud/local choices.
     static func resolve() -> URL? {
         let defaults = UserDefaults.standard
-
-        if defaults.bool(forKey: keyUseProduction) {
-            return URL(string: productionAzure)
-        }
-
-        let local = (defaults.string(forKey: keyLocalUrl) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        if !local.isEmpty {
-            return URL(string: local)
-        }
-
-        let envURL = (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !envURL.isEmpty {
-            return URL(string: envURL)
-        }
-
-        let legacy = (defaults.string(forKey: "emwaver.agent.backendURL") ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if !legacy.isEmpty {
-            return URL(string: legacy)
-        }
-
-        return nil
+        let selected = defaults.bool(forKey: keyUseProduction) ? productionAzure : localDefault
+        return URL(string: selected)
     }
 
     static func effectiveString() -> String {

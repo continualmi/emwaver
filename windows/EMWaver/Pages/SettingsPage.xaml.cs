@@ -21,6 +21,11 @@ public sealed partial class SettingsPage : Page
     private void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
+
+        var isStaff = string.Equals((Environment.GetEnvironmentVariable("EMWAVER_STAFF_ONLY") ?? "").Trim(), "1", StringComparison.Ordinal);
+        StaffBackendSection.Visibility = isStaff ? Visibility.Visible : Visibility.Collapsed;
+        StaffFrontendSection.Visibility = isStaff ? Visibility.Visible : Visibility.Collapsed;
+
         RefreshUi();
         _ = RefreshProStatusAsync();
     }
