@@ -22,6 +22,24 @@ function loadEnvFiles() {
 
 loadEnvFiles();
 
+function expandEnvReferences() {
+  const varPattern = /\$\{([A-Z0-9_]+)\}/gi;
+  for (let i = 0; i < 10; i++) {
+    let changed = false;
+    for (const [key, value] of Object.entries(process.env)) {
+      if (typeof value !== "string" || !value.includes("${")) continue;
+      const next = value.replace(varPattern, (_, varName: string) => process.env[varName] || "");
+      if (next !== value) {
+        process.env[key] = next;
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+}
+
+expandEnvReferences();
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   outputFileTracingRoot: path.resolve(__dirname, ".."),
