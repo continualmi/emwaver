@@ -33,6 +33,20 @@ body {
   font-family: var(--font-display);
 }
 
+/* Fixed app shell: disable page-level scrolling, keep scrolling inside content/cards. */
+.app-shell-fixed {
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* Docs-mode: tighter, more technical atmosphere (separate from landing vibe). */
 .docs-mode {
   position: relative;

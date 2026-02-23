@@ -5,7 +5,7 @@ import { SocietyTabs } from "@/app/society/societyTabs";
 
 export default function SocietyLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-dvh overflow-hidden">
+    <div className="relative app-shell-fixed">
       {/* Society has its own vibe + the 2015 background (visible, then blur on top — no dark fade). */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.72]" />
@@ -15,7 +15,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
 
       <SiteHeader />
 
-      <main className="mx-auto max-w-6xl px-5 py-10">
+      <main className="app-shell-main mx-auto max-w-6xl px-5 py-10">
         <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-start">
           {/* Left rail (distinct Society layout) */}
           <aside className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:sticky md:top-24">
