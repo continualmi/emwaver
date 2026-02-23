@@ -1,41 +1,165 @@
-# EMWaver Host Daemon (Headless) — Beta
+# EMWaver Headless Daemon (`/daemon`)
 
-Goal: a **cross-platform** headless host you run from the terminal (starting with **macOS**), where the EMWaver device is plugged into the machine over USB, and a remote controller (web/macOS/Windows/iOS/Android) attaches to that host.
+Rust-based headless host for EMWaver.
 
-This ships as a daemon + CLI with a single entrypoint: `emwaver …`.
+This is the terminal/service runtime that keeps USB ownership local to a machine (Mac/Linux target direction), while exposing remote control through EMWaver cloud protocols.
 
-Scope for the first milestone: **secure connection + host presence + remote attach**, plus simple daemon management UX.
-**Firmware updates are intentionally out of scope** for the daemon (the GUI apps handle that).
+---
 
-## Architectural decision (Model 1)
+## 1) Purpose
 
-- The daemon runs the **script runtime + UI state machine headlessly** (no GUI).
-- It streams `ui.snapshot` updates and accepts `ui.event` inputs from the controller.
-- The controller renders the UI and forwards user interactions as `ui.event`.
-- The daemon owns the USB connection to the device.
+The daemon is the **no-UI host runtime**:
+- owns USB MIDI connection to the EMWaver hardware,
+- runs the script runtime and UI state machine headlessly,
+- forwards snapshots/events over WebSocket (`/v1/ws`) to remote controllers.
 
-This mirrors the existing remote-host protocol used by the desktop apps; the daemon simply does not present UI.
+It is intended for always-on hosts (desktop, laptop, Raspberry Pi), not as a replacement for native GUI apps.
 
-## Distribution constraints
+Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 
-We still want a **store-only** distribution model for end-user apps, but the daemon is a terminal/service component.
+---
 
-Target UX:
-- `emwaver daemon start|stop|status` for service control.
-- `emwaver devices` to see whether an EMWaver USB-MIDI port is visible.
-- Runs as a background service:
-  - macOS: `launchd` (later)
-  - Linux: `systemd` + installer (later)
-- Good headless UX for secure connection.
+## 2) Workspace layout
 
-## Dev quickstart
+- `emwaver/` — CLI binary (`emwaver`) for daemon/device/status operations.
+- `emwaver-host/` — long-running daemon runtime.
+- `dev` — convenience build/run wrapper.
+- `install/install.sh` — install helper (Linux-oriented path).
+- `systemd/emwaver-host.service` — sample service unit.
+- `TODO.md` — active daemon backlog.
+
+---
+
+## 3) Runtime architecture
+
+## 3.1 `emwaver` CLI
+
+Main command groups (`emwaver/src/main.rs`):
+- `emwaver daemon start|stop|status|autostart`
+- `emwaver devices`
+- `emwaver tui`
+- `emwaver paths`
+
+State paths are resolved via `directories::ProjectDirs`:
+- pidfile (daemon process id)
+- logfile
+- local data dir
+
+CLI can start `emwaver-host` in background, pass env overrides, and provide a minimal status TUI.
+
+## 3.2 `emwaver-host` daemon
+
+Entry (`emwaver-host/src/main.rs`) does:
+1. load config from env (`EMWAVER_BACKEND_URL`, token, host session id),
+2. read bootstrap script,
+3. auto-connect local MIDI device (`device.connect_auto()`),
+4. initialize script engine,
+5. heartbeat host presence (`/v1/hosts/heartbeat`),
+6. connect WS (`/v1/ws`) as `role=host`,
+7. process incoming remote commands and publish UI snapshots.
+
+Reconnect loop is built-in with retry delay.
+
+## 3.3 Script/UI engine
+
+`emwaver-host/src/engine.rs`:
+- uses Boa JS runtime,
+- loads script bootstrap,
+- registers host bridge callbacks (`_scriptRender`, `_scriptSendPacket`, callback registry),
+- stores latest UI tree and metadata,
+- dispatches UI events by handler token.
+
+This is model-1 parity behavior: headless host still owns authoritative UI state machine.
+
+---
+
+## 4) Protocol and remote control behavior
+
+Inbound WS messages handled include:
+- `hello.ack`
+- `host.attach`
+- `script.run`
+- `ui.event`
+
+Outbound host messages include:
+- `script.started`
+- `ui.snapshot`
+- `script.error` (when appropriate)
+
+Snapshots are sent when tree changes (revision increments).
+
+---
+
+## 5) Device/transport ownership
+
+Daemon-side transport is local USB MIDI.
+
+- Device detection/listing uses MIDI port enumeration.
+- Device command path routes through local `Device` abstraction and packet send/response semantics.
+- Remote side never directly owns USB — only forwards commands/events through daemon session.
+
+---
+
+## 6) Autostart/service posture
+
+Current support posture:
+- macOS: launchd detection/check path in CLI (plist presence check)
+- Linux: systemd unit detection/check path
+
+Planned direction:
+- polished launchd/systemd setup flows,
+- single-command installer UX for Linux hosts.
+
+---
+
+## 7) Development workflow
 
 From repo root:
 
-- `./daemon/dev devices`
-- `./daemon/dev daemon start`
-- `./daemon/dev daemon status`
+```bash
+./daemon/dev devices
+./daemon/dev daemon start
+./daemon/dev daemon status
+```
 
-This is the "npm run dev" equivalent: it builds `emwaver-host` + `emwaver` and runs the CLI.
+`daemon/dev` compiles both daemon binaries and executes CLI commands (fast iterative workflow).
 
-Status: beta / experimental.
+Alternative direct cargo usage:
+
+```bash
+cd daemon
+cargo run -p emwaver -- daemon status
+cargo run -p emwaver-host
+```
+
+---
+
+## 8) Environment variables
+
+Common runtime envs:
+- `EMWAVER_BACKEND_URL`
+- `EMWAVER_ID_TOKEN`
+- `EMWAVER_HOST_SESSION_ID`
+- `EMWAVER_BOOTSTRAP_PATH`
+- `RUST_LOG`
+
+If auth token is missing, behavior may work only in limited/dev scenarios depending on backend auth mode.
+
+---
+
+## 9) Design constraints
+
+1. USB ownership is local to daemon host.
+2. Daemon is headless by design (no rendered UI surface).
+3. WS protocol compatibility with backend host routing is mandatory.
+4. Keep reconnection and heartbeat robust for unattended service operation.
+5. Avoid coupling daemon update flows with GUI firmware update features.
+
+---
+
+## 10) Documentation maintenance rule
+
+When changing daemon protocol, runtime loop, or service lifecycle behavior:
+- update `daemon/README.md`,
+- update backend WS/hosts docs if server expectations changed,
+- update any controller-side docs that depend on message contract.
