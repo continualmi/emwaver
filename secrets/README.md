@@ -12,8 +12,12 @@ This document is the contract.
 ## 1) Canonical variable map (variable -> file)
 
 ### shared/core.env
-- `EMWAVER_BACKEND_URL`
-- `EMWAVER_FRONTEND_URL`
+- `EMWAVER_BACKEND_URL_CLOUD`
+- `EMWAVER_FRONTEND_URL_CLOUD`
+- `EMWAVER_BACKEND_URL_LOCAL`
+- `EMWAVER_FRONTEND_URL_LOCAL`
+- `EMWAVER_BACKEND_URL` (active/default; points to cloud by default)
+- `EMWAVER_FRONTEND_URL` (active/default; points to cloud by default)
 - `EMWAVER_ALLOW_ANON_SYNC`
 - `EMWAVER_ROOT_PUBLIC_KEY_B64`
 
@@ -154,3 +158,12 @@ Load files in this order.
 - `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64` is **server-only** (never ship to client bundles/apps).
 - `NEXT_PUBLIC_*` and `VITE_*` are **public build-time** values (compiled into clients).
 - `EMWAVER_ROOT_PUBLIC_KEY_B64` is public by design and safe for clients.
+
+## 4) Cloud vs Local endpoint policy (Staff settings)
+
+Keep both endpoint pairs in `shared/core.env`:
+- `EMWAVER_BACKEND_URL_CLOUD` / `EMWAVER_FRONTEND_URL_CLOUD`
+- `EMWAVER_BACKEND_URL_LOCAL` / `EMWAVER_FRONTEND_URL_LOCAL`
+
+`EMWAVER_BACKEND_URL` and `EMWAVER_FRONTEND_URL` are the active/default values.
+Staff-only settings can switch between cloud/local behavior by selecting the matching pair.
