@@ -7,7 +7,7 @@ export default function HardwarePage() {
     <div className="app-shell-fixed">
       <SiteHeader />
 
-      <main className="app-shell-main mx-auto max-w-6xl px-5 py-10">
+      <main className="app-shell-main w-full px-5 py-10">
         <div className="grid gap-8 md:grid-cols-[1.15fr_0.85fr] md:items-start">
           <div className="space-y-5">
             <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">

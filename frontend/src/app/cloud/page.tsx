@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
@@ -639,7 +638,7 @@ export default function CloudPage() {
     <div className="app-shell-fixed">
       <SiteHeader />
 
-      <main className="app-shell-main mx-auto max-w-6xl overflow-y-auto px-5 pt-10 pb-14">
+      <main className="app-shell-main w-full overflow-y-auto px-5 pt-10 pb-14">
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Dashboard</h1>
@@ -1006,7 +1005,6 @@ export default function CloudPage() {
         </div>
       </main>
 
-      <SiteFooter />
     </div>
   );
 }

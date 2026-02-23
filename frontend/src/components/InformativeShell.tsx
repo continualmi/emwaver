@@ -53,7 +53,7 @@ export function InformativeShell({
     <div className="app-shell-fixed docs-mode">
       <SiteHeader />
 
-      <main className="app-shell-main mx-auto max-w-6xl px-5 py-10">
+      <main className="app-shell-main w-full px-5 py-10">
         <div className="grid gap-6 md:grid-cols-[260px_minmax(0,1fr)] md:items-start">
           <aside className="hidden md:block">
             <div className="sticky top-24">

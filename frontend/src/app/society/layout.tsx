@@ -15,7 +15,7 @@ export default function SocietyLayout({ children }: { children: React.ReactNode 
 
       <SiteHeader />
 
-      <main className="app-shell-main mx-auto max-w-6xl px-5 py-10">
+      <main className="app-shell-main w-full px-5 py-10">
         <div className="grid gap-6 md:grid-cols-[280px_1fr] md:items-start">
           {/* Left rail (distinct Society layout) */}
           <aside className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.07)] p-6 backdrop-blur-xl md:sticky md:top-24">
