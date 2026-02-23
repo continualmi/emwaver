@@ -4,9 +4,7 @@ from pathlib import Path
 from emw_backend.app import create_app
 
 
-def _load_dotenv_from_repo_root() -> None:
-    # backend/app.py lives at: <repo_root>/backend/app.py
-    # Prefer loading the repo root .env for local dev.
+def _load_env_files_from_repo_root() -> None:
     def load_env_file(path: Path) -> None:
         if not path.exists() or not path.is_file():
             return
@@ -32,22 +30,27 @@ def _load_dotenv_from_repo_root() -> None:
             if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
                 val = val[1:-1]
 
-            # Do not override existing environment variables.
             os.environ.setdefault(key, val)
 
     repo_root = Path(__file__).resolve().parent.parent
-    load_env_file(repo_root / ".env")
-    # Optional backend-local .env (e.g. for Azure or local overrides).
-    load_env_file(Path(__file__).resolve().parent / ".env")
+    files = [
+        "secrets/shared/core.env",
+        "secrets/shared/firebase.env",
+        "secrets/shared/oauth.env",
+        "secrets/server/backend.env",
+        "secrets/server/ai.env",
+        "secrets/server/billing.env",
+        "secrets/server/storage.env",
+        "secrets/server/provisioning.env",
+    ]
+    for rel in files:
+        load_env_file(repo_root / rel)
 
 
-_load_dotenv_from_repo_root()
-
+_load_env_files_from_repo_root()
 
 app = create_app()
 
-
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", "8787"))
-    # Bind to LAN for local phone testing.
     app.run(host="0.0.0.0", port=port, debug=True)

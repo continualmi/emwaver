@@ -1,4 +1,5 @@
 using Microsoft.UI.Xaml;
+using EMWaver.Services;
 
 namespace EMWaver;
 
@@ -10,6 +11,7 @@ public partial class App : Application
 
     public App()
     {
+        EnvBootstrap.LoadForDevIfAvailable();
         InitializeComponent();
     }
 
