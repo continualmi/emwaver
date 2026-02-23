@@ -1,10 +1,11 @@
 # EMWaver Repository Guidelines
 
-This file is intentionally short.
+This file is intentionally concise, but it must preserve EMWaver’s core vision and strategic product direction.
 
 `AGENTS.md` is the repo-wide source of truth for:
 - product vision,
 - non-negotiable platform decisions,
+- high-level business/platform strategy,
 - documentation routing (which folder README to use),
 - contribution guardrails.
 
@@ -12,7 +13,7 @@ Implementation details belong in folder-level `README.md` files.
 
 ---
 
-## 1) Product Vision (core only)
+## 1) Product Vision (core)
 
 EMWaver is a host-powered, AI-first electronics platform that turns phones/laptops/desktop hosts into a full hardware lab.
 
@@ -27,7 +28,67 @@ Core direction:
 
 ---
 
-## 2) What stays in AGENTS vs README
+## 2) Platform Thesis
+
+### The Core Thesis
+
+1. **Host-powered electronics** — EMWaver uses the host (phone/laptop/desktop) for compute, UI, storage, and connectivity.
+2. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
+3. **Best beginner experience** — plug in and start exploring without firmware toolchains.
+
+### Explicit Tradeoffs
+
+We intentionally give up:
+- on-device wireless-first UX,
+- end-user firmware build/flash customization loops,
+- “MCU toolchain as required user workflow.”
+
+### What We Gain
+
+- One board / one firmware track.
+- Cross-platform apps (Android/iOS/macOS/Windows).
+- Cloud-connected remote workflows.
+- Agent-driven exploration loops.
+
+---
+
+## 3) Important Strategic Notes (high-level)
+
+### Hardware authenticity (anti-clone posture)
+
+- Genuine-device verification uses `DeviceID + Proof` anchored in a root-key trust model.
+- Official apps/backend verify authenticity; backend enforces cloud policy.
+- Cloud features/Pro are designed around verified genuine hardware.
+
+(Implementation details live in `securewaver/README.md` and `backend/README.md`.)
+
+### EMWaver Pro (business model direction)
+
+- **EMWaver Pro** unlocks cloud-heavy capabilities and the full Agent experience.
+- Backend-issued entitlements are authoritative for Pro/cloud feature access.
+
+### ELM direction (model strategy)
+
+- EMWaver in-house model line is **ELM** (Electronics Language Models).
+- LLM conversational mode and ELM control-turn mode are product-level complementary modes.
+
+### Linux host scope
+
+- Linux support is **headless host (beta)**, not a Linux GUI app.
+- Remote controller surfaces render and control; host owns USB/runtime state.
+
+### Distribution and release posture
+
+- End-user app distribution is store-first (Apple App Store, Google Play, Microsoft Store).
+- GitHub Releases are not the primary end-user app distribution channel.
+
+### Long-term hardware direction
+
+- Keep room for future hardware evolution (e.g., EMArm direction) without fragmenting current one-device product UX.
+
+---
+
+## 4) What stays in AGENTS vs README
 
 ## Keep in `AGENTS.md`
 - Vision and long-term direction.
@@ -45,11 +106,11 @@ Core direction:
 
 ---
 
-## 3) Documentation Map (authoritative)
+## 5) Documentation Map (authoritative)
 
 Use the local README first when working in a folder:
 
-- `README.md` (repo root) — concise repo overview + doc index
+- `README.txt` (repo root) — concise repo overview + doc index
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
@@ -65,7 +126,7 @@ If a folder has a README, detailed documentation should live there.
 
 ---
 
-## 4) Repo Overview (high level)
+## 6) Repo Overview (high level)
 
 - `stm/` — firmware and firmware-related tooling.
 - `backend/` — cloud/backend services.
@@ -78,7 +139,7 @@ If a folder has a README, detailed documentation should live there.
 
 ---
 
-## 5) Non-negotiable Platform Policies
+## 7) Non-negotiable Platform Policies
 
 1. **USB-first architecture**: core device comms are USB MIDI SysEx.
 2. **Host-centric model**: heavy logic lives on host/apps, not on-device UX complexity.
@@ -91,7 +152,7 @@ If a folder has a README, detailed documentation should live there.
 
 ---
 
-## 6) Contribution Guardrails
+## 8) Contribution Guardrails
 
 - Prefer docs and code updates in the same PR when behavior changes.
 - When changing a specific subsystem, update that folder’s README.
@@ -105,10 +166,10 @@ Workflow:
 
 ---
 
-## 7) Documentation Maintenance Rule (important)
+## 9) Documentation Maintenance Rule (important)
 
 When details are added to `AGENTS.md` by accident:
 1. move those details into the appropriate folder README,
 2. keep only a short summary/pointer in `AGENTS.md`.
 
-Target state: `AGENTS.md` stays short; folder READMEs hold depth.
+Target state: `AGENTS.md` stays concise; folder READMEs hold depth.
