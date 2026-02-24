@@ -5,6 +5,7 @@ set -euo pipefail
 SESSION="${1:-emwaver}"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CHECKOUTS_DIR="$PROJECT_DIR/.dev-checkouts"
+BASE_WORKTREE_REF="${EMWAVER_WORKTREE_REF:-main}"
 
 checkout_path() {
   local n="$1"
@@ -27,8 +28,13 @@ attach_or_switch() {
 ensure_dev_checkouts() {
   mkdir -p "$CHECKOUTS_DIR"
 
+  if ! git -C "$PROJECT_DIR" rev-parse --verify "$BASE_WORKTREE_REF" >/dev/null 2>&1; then
+    echo "error: base ref '$BASE_WORKTREE_REF' not found in $PROJECT_DIR"
+    exit 1
+  fi
+
   local i checkout
-  for i in 1 2 3 4; do
+  for i in 1 2; do
     checkout="$(checkout_path "$i")"
 
     if [[ -e "$checkout" ]]; then
@@ -39,29 +45,23 @@ ensure_dev_checkouts() {
       exit 1
     fi
 
-    git -C "$PROJECT_DIR" worktree add --detach "$checkout" HEAD >/dev/null
+    git -C "$PROJECT_DIR" worktree add --detach "$checkout" "$BASE_WORKTREE_REF" >/dev/null
   done
 }
 
 create_codex_window() {
   ensure_dev_checkouts
 
-  local c1 c2 c3 c4
+  local c1 c2
   c1="$(checkout_path 1)"
   c2="$(checkout_path 2)"
-  c3="$(checkout_path 3)"
-  c4="$(checkout_path 4)"
 
-  local pane_top_left pane_top_right pane_bottom_left pane_bottom_right
-  pane_top_left=$(tmux new-window -t "$SESSION" -n 'codex' -c "$c1" -P -F '#{pane_id}')
-  pane_top_right=$(tmux split-window -h -l 50% -t "$pane_top_left" -c "$c2" -P -F '#{pane_id}')
-  pane_bottom_left=$(tmux split-window -v -l 50% -t "$pane_top_left" -c "$c3" -P -F '#{pane_id}')
-  pane_bottom_right=$(tmux split-window -v -l 50% -t "$pane_top_right" -c "$c4" -P -F '#{pane_id}')
+  local pane_left pane_right
+  pane_left=$(tmux new-window -t "$SESSION" -n 'codex' -c "$c1" -P -F '#{pane_id}')
+  pane_right=$(tmux split-window -h -l 50% -t "$pane_left" -c "$c2" -P -F '#{pane_id}')
 
-  tmux send-keys -t "$pane_top_left" 'codex' C-m
-  tmux send-keys -t "$pane_top_right" 'codex' C-m
-  tmux send-keys -t "$pane_bottom_left" 'codex' C-m
-  tmux send-keys -t "$pane_bottom_right" 'codex' C-m
+  tmux send-keys -t "$pane_left" 'codex' C-m
+  tmux send-keys -t "$pane_right" 'codex' C-m
 }
 
 if ! tmux has-session -t="$SESSION" 2>/dev/null; then
@@ -80,7 +80,7 @@ if window_exists 'dev'; then
   exit 0
 fi
 
-# Window 1: Dev (lazygit + backend + frontend) — 3 panes, all auto-run
+# Window 1: Dev (codex + lazygit + backend + frontend) — 4 panes, all auto-run
 # Force the first pane to the correct directory just in case
 tmux send-keys -t "$FIRST_WINDOW_TARGET" 'cd ' "$PROJECT_DIR" C-m
 tmux clear-history -t "$FIRST_WINDOW_TARGET"
@@ -88,13 +88,16 @@ tmux clear-history -t "$FIRST_WINDOW_TARGET"
 tmux rename-window -t "$FIRST_WINDOW_TARGET" 'dev'
 
 # Layout:
-#   [ lazygit ] | [ backend ]
-#              | [ frontend ]
-PANE_GIT=$(tmux display-message -p -t "$FIRST_WINDOW_TARGET" '#{pane_id}')
-# Make lazygit pane narrower (left), leave more space for backend/frontend
-PANE_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_FRONTEND=$(tmux split-window -v -l 50% -t "$PANE_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-PANE_BACKEND="$PANE_RIGHT"
+#   [ codex ] | [ lazygit  ]
+#             | [ backend  ]
+#             | [ frontend ]
+PANE_CODEX=$(tmux display-message -p -t "$FIRST_WINDOW_TARGET" '#{pane_id}')
+PANE_GIT=$(tmux split-window -h -t "$PANE_CODEX" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_BACKEND=$(tmux split-window -v -t "$PANE_GIT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+PANE_FRONTEND=$(tmux split-window -v -t "$PANE_BACKEND" -c "$PROJECT_DIR" -P -F '#{pane_id}')
+
+# codex
+tmux send-keys -t "$PANE_CODEX" 'codex' C-m
 
 # lazygit
 tmux send-keys -t "$PANE_GIT" 'lazygit' C-m
@@ -125,12 +128,12 @@ tmux send-keys -t "$PANE_TOP_RIGHT" 'npm run tauri'
 tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
 tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 
-# Window 3: Codex (2x2 Grid) — 4 independent checkouts, each starts codex
+# Window 3: Codex (2 panes) — 2 independent checkouts, each starts codex
 create_codex_window
 
 # Start on git window
 
 tmux select-window -t "$SESSION:dev"
-tmux select-pane -t "$PANE_GIT"
+tmux select-pane -t "$PANE_CODEX"
 
 attach_or_switch
