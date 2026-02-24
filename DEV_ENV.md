@@ -647,6 +647,13 @@ dotnet --version
 
 This repo includes `tmux.sh` in the root; it sets up and attaches to the EMWaver tmux layout.
 
+Current layout:
+- `dev` window: left `codex`; right column with `lazygit` (top), `backend` (middle), `frontend` (bottom).
+- `dev-ops` window: Android/SecureWaver/CLI helper panes.
+- `codex` window: 2 panes, each running `codex` in a separate local worktree.
+
+Local worktrees are created on-demand in `.dev-checkouts/emwaver-1..2` from `main` (or `EMWAVER_WORKTREE_REF` if set) and are git-ignored.
+
 ### Secrets
 
 Do not commit secrets.
