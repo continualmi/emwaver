@@ -97,6 +97,7 @@ crates/**/Cargo.lock
 
 # Git worktrees (local developer checkouts)
 worktrees/
+.dev-checkouts/
 prompt.txt
 
 # Notes (keep tracked)
