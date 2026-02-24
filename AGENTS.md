@@ -111,6 +111,8 @@ We intentionally give up:
 Use the local README first when working in a folder:
 
 - `README.txt` (repo root) — concise repo overview + doc index
+- `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
+- `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
@@ -162,4 +164,4 @@ If a folder has a README, detailed documentation should live there.
 Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits,
-- push changes (open PR branch if main push blocked).
+- push changes after making updates (open PR branch if main push blocked).
