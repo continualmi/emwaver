@@ -51,6 +51,7 @@ import com.google.android.material.textfield.TextInputLayout;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -78,6 +79,7 @@ public final class ScriptRenderView extends FrameLayout {
 
     private EventListener eventListener;
     private RemoteEventListener remoteEventListener;
+    private final Map<String, double[]> plotViewportCache = new HashMap<>();
     private final float density;
     public ScriptRenderView(@NonNull Context context) {
         this(context, null);
@@ -99,6 +101,7 @@ public final class ScriptRenderView extends FrameLayout {
 
     public void clear() {
         removeAllViews();
+        plotViewportCache.clear();
     }
 
     public void render(@Nullable ScriptTree tree) {
@@ -635,6 +638,7 @@ public final class ScriptRenderView extends FrameLayout {
     private View buildPlot(ScriptNode node) {
         ScriptNodeProps props = node.getProps();
         PlotView plotView = new PlotView(getContext());
+        String nodeId = node.getId();
 
         int desiredHeight = dpToPx(220);
         Double height = props.getDouble("height");
@@ -650,9 +654,17 @@ public final class ScriptRenderView extends FrameLayout {
         double yMin = props.getDouble("yMin") != null ? props.getDouble("yMin") : 0d;
         double yMax = props.getDouble("yMax") != null ? props.getDouble("yMax") : 255d;
         String errorText = props.getString("errorText");
+        double[] cachedViewport = nodeId != null ? plotViewportCache.get(nodeId) : null;
+        if (cachedViewport != null && cachedViewport.length >= 2) {
+            xMin = cachedViewport[0];
+            xMax = cachedViewport[1];
+        }
 
         String viewportToken = props.getHandlerToken(ScriptEventType.VIEWPORT);
         plotView.setViewportListener((min, max) -> {
+            if (nodeId != null) {
+                plotViewportCache.put(nodeId, new double[] {min, max});
+            }
             if (viewportToken == null) {
                 return;
             }
@@ -663,6 +675,11 @@ public final class ScriptRenderView extends FrameLayout {
                 remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.VIEWPORT, viewport);
             } else {
                 dispatchEvent(viewportToken, Collections.singletonList(viewport));
+            }
+        });
+        plotView.setViewportStateListener((min, max) -> {
+            if (nodeId != null) {
+                plotViewportCache.put(nodeId, new double[] {min, max});
             }
         });
 
@@ -1086,6 +1103,9 @@ public final class ScriptRenderView extends FrameLayout {
         interface ViewportListener {
             void onViewportChanged(double min, double max);
         }
+        interface ViewportStateListener {
+            void onViewportState(double min, double max);
+        }
 
         private static final int DEFAULT_BINS = 900;
         private static final double EPS = 1e-6;
@@ -1108,6 +1128,7 @@ public final class ScriptRenderView extends FrameLayout {
         private double yMax = 255;
         private String errorText = "";
         private ViewportListener viewportListener;
+        private ViewportStateListener viewportStateListener;
         private boolean userInteracting = false;
         private boolean pendingExternalViewport = false;
         private double pendingExternalMin = 0;
@@ -1117,25 +1138,9 @@ public final class ScriptRenderView extends FrameLayout {
         private float[] plotY = new float[0];
         private int dataBits = 0;
         private float lastPanX = Float.NaN;
-        private double pendingDispatchMin = 0;
-        private double pendingDispatchMax = 0;
-        private boolean dispatchQueued = false;
+        private boolean viewportDirtyDuringInteraction = false;
         private double lastDispatchedMin = Double.NaN;
         private double lastDispatchedMax = Double.NaN;
-        private final Runnable dispatchViewportRunnable = () -> {
-            dispatchQueued = false;
-            if (viewportListener == null) {
-                return;
-            }
-            if (!Double.isNaN(lastDispatchedMin)
-                && Math.abs(lastDispatchedMin - pendingDispatchMin) < 0.5
-                && Math.abs(lastDispatchedMax - pendingDispatchMax) < 0.5) {
-                return;
-            }
-            lastDispatchedMin = pendingDispatchMin;
-            lastDispatchedMax = pendingDispatchMax;
-            viewportListener.onViewportChanged(pendingDispatchMin, pendingDispatchMax);
-        };
 
         PlotView(@NonNull Context context) {
             super(context);
@@ -1180,7 +1185,7 @@ public final class ScriptRenderView extends FrameLayout {
 
                     double newMin = focusDataX - newSpan * focusRatio;
                     double newMax = newMin + newSpan;
-                    setViewport(clampViewport(newMin, newMax, dataBits), true);
+                    setViewport(clampViewport(newMin, newMax, dataBits), false);
                     return true;
                 }
             });
@@ -1188,6 +1193,9 @@ public final class ScriptRenderView extends FrameLayout {
 
         void setViewportListener(ViewportListener listener) {
             this.viewportListener = listener;
+        }
+        void setViewportStateListener(ViewportStateListener listener) {
+            this.viewportStateListener = listener;
         }
 
         void bind(String sourceId, int bins, double xMin, double xMax, double yMin, double yMax, String errorText) {
@@ -1220,6 +1228,9 @@ public final class ScriptRenderView extends FrameLayout {
             } else {
                 this.xMin = viewport[0];
                 this.xMax = viewport[1];
+                if (viewportStateListener != null) {
+                    viewportStateListener.onViewportState(this.xMin, this.xMax);
+                }
                 recomputePlotData(data);
             }
             invalidate();
@@ -1281,6 +1292,7 @@ public final class ScriptRenderView extends FrameLayout {
             switch (action) {
                 case MotionEvent.ACTION_DOWN:
                     lastPanX = event.getX();
+                    viewportDirtyDuringInteraction = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
                     if (scaleGestureDetector.isInProgress() || event.getPointerCount() > 1) {
@@ -1300,11 +1312,19 @@ public final class ScriptRenderView extends FrameLayout {
                 case MotionEvent.ACTION_CANCEL:
                     requestDisallowParentIntercept(false);
                     userInteracting = false;
+                    if (viewportDirtyDuringInteraction) {
+                        emitViewportIfChanged(xMin, xMax);
+                        pendingExternalViewport = false;
+                        viewportDirtyDuringInteraction = false;
+                    }
                     if (pendingExternalViewport) {
                         pendingExternalViewport = false;
                         double[] viewport = clampViewport(pendingExternalMin, pendingExternalMax, dataBits);
                         xMin = viewport[0];
                         xMax = viewport[1];
+                        if (viewportStateListener != null) {
+                            viewportStateListener.onViewportState(xMin, xMax);
+                        }
                         recomputePlotData(ScriptPlotBufferStore.resolve(sourceId));
                         invalidate();
                     }
@@ -1336,7 +1356,7 @@ public final class ScriptRenderView extends FrameLayout {
             double span = Math.max(EPS, xMax - xMin);
             double delta = -(dx / contentRect.width()) * span;
             double[] viewport = clampViewport(xMin + delta, xMax + delta, dataBits);
-            setViewport(viewport, true);
+            setViewport(viewport, false);
         }
 
         private void setViewport(double[] viewport, boolean notify) {
@@ -1345,21 +1365,31 @@ public final class ScriptRenderView extends FrameLayout {
             }
             xMin = viewport[0];
             xMax = viewport[1];
+            if (viewportStateListener != null) {
+                viewportStateListener.onViewportState(xMin, xMax);
+            }
             recomputePlotData(ScriptPlotBufferStore.resolve(sourceId));
             invalidate();
+            if (userInteracting) {
+                viewportDirtyDuringInteraction = true;
+            }
             if (notify && viewportListener != null) {
-                queueViewportDispatch(xMin, xMax);
+                emitViewportIfChanged(xMin, xMax);
             }
         }
 
-        private void queueViewportDispatch(double min, double max) {
-            pendingDispatchMin = min;
-            pendingDispatchMax = max;
-            if (dispatchQueued) {
+        private void emitViewportIfChanged(double min, double max) {
+            if (viewportListener == null) {
                 return;
             }
-            dispatchQueued = true;
-            postDelayed(dispatchViewportRunnable, 60);
+            if (!Double.isNaN(lastDispatchedMin)
+                && Math.abs(lastDispatchedMin - min) < 0.5
+                && Math.abs(lastDispatchedMax - max) < 0.5) {
+                return;
+            }
+            lastDispatchedMin = min;
+            lastDispatchedMax = max;
+            viewportListener.onViewportChanged(min, max);
         }
 
         private void recomputePlotData(byte[] data) {
