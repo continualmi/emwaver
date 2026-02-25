@@ -1109,6 +1109,8 @@ public final class ScriptRenderView extends FrameLayout {
 
         private static final int DEFAULT_BINS = 900;
         private static final double EPS = 1e-6;
+        private static final double PINCH_ZOOM_EXPONENT = 1.8;
+        private static final double MIN_VIEWPORT_SPAN_BITS = 8.0;
 
         private final float density;
         private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -1178,8 +1180,10 @@ public final class ScriptRenderView extends FrameLayout {
                         return false;
                     }
 
-                    double newSpan = span / factor;
-                    newSpan = clamp(newSpan, 16, Math.max(16, dataBits));
+                    // Make pinch zoom more responsive than the detector's raw incremental factor.
+                    double adjustedFactor = Math.pow(factor, PINCH_ZOOM_EXPONENT);
+                    double newSpan = span / adjustedFactor;
+                    newSpan = clamp(newSpan, MIN_VIEWPORT_SPAN_BITS, Math.max(MIN_VIEWPORT_SPAN_BITS, dataBits));
                     // Match macOS behavior: magnification is centered on the current viewport,
                     // not anchored to moving touch focus coordinates.
                     double center = (xMin + xMax) * 0.5;
