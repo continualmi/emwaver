@@ -8,7 +8,11 @@ package com.emwaver.emwaverandroidapp.scripts;
 
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.Path;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.text.Editable;
@@ -18,8 +22,11 @@ import android.text.method.PasswordTransformationMethod;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
+import android.view.ScaleGestureDetector;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -130,6 +137,8 @@ public final class ScriptRenderView extends FrameLayout {
                 return buildPicker(node);
             case GRID:
                 return buildGrid(node);
+            case PLOT:
+                return buildPlot(node);
             case SPACER:
                 return buildSpacer(node, parentOrientation);
             case DIVIDER:
@@ -164,25 +173,70 @@ public final class ScriptRenderView extends FrameLayout {
     }
 
     private View buildRow(ScriptNode node) {
+        boolean compactScreen = false;
+        try {
+            int screenWidthDp = getResources().getConfiguration().screenWidthDp;
+            compactScreen = screenWidthDp > 0 && screenWidthDp <= 600;
+        } catch (Exception ignored) {
+        }
+
+        boolean stackOnCompact = compactScreen
+            && node.getChildren().size() >= 3
+            && rowContainsPicker(node);
+
         LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setOrientation(stackOnCompact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         layout.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        configureAlignment(layout, node.getProps(), Orientation.HORIZONTAL);
+        configureAlignment(layout, node.getProps(), stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
         int spacingPx = spacingPx(node.getProps());
         for (ScriptNode child : node.getChildren()) {
-            View childView = buildView(child, Orientation.HORIZONTAL);
+            View childView = buildView(child, stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
             if (childView == null) {
                 continue;
             }
-            LinearLayout.LayoutParams params = buildChildLayoutParams(child.getProps(), Orientation.HORIZONTAL);
-            if (spacingPx > 0 && layout.getChildCount() > 0) {
+            LinearLayout.LayoutParams params = buildChildLayoutParams(child.getProps(), stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
+            if (spacingPx > 0 && layout.getChildCount() > 0 && !stackOnCompact) {
                 params.leftMargin = spacingPx;
+            }
+            if (spacingPx > 0 && layout.getChildCount() > 0 && stackOnCompact) {
+                params.topMargin = spacingPx;
             }
             applySizeConstraints(childView, child.getProps());
             layout.addView(childView, params);
         }
-        applyCommonStyles(layout, node.getProps());
+        ScriptNodeProps props = node.getProps();
+        if (compactScreen && !stackOnCompact) {
+            HorizontalScrollView scroll = new HorizontalScrollView(getContext());
+            scroll.setHorizontalScrollBarEnabled(false);
+            scroll.addView(layout, new HorizontalScrollView.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+            applyCommonStyles(scroll, props);
+            return scroll;
+        }
+
+        applyCommonStyles(layout, props);
         return layout;
+    }
+
+    private boolean rowContainsPicker(ScriptNode node) {
+        if (node == null) {
+            return false;
+        }
+        if (node.getType() == ScriptNodeType.PICKER) {
+            return true;
+        }
+        List<ScriptNode> children = node.getChildren();
+        if (children == null || children.isEmpty()) {
+            return false;
+        }
+        for (ScriptNode child : children) {
+            if (rowContainsPicker(child)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private View buildText(ScriptNode node) {
@@ -437,9 +491,16 @@ public final class ScriptRenderView extends FrameLayout {
     private View buildPicker(ScriptNode node) {
         ScriptNodeProps props = node.getProps();
         List<PickerOption> options = parseOptions(props.getList("options"));
+        if (options.isEmpty()) {
+            List<PickerOption> fallback = new ArrayList<>();
+            fallback.add(new PickerOption("New signal", ""));
+            options = fallback;
+        }
+        final List<PickerOption> pickerOptions = options;
         String selectedValue = props.getString("selected");
         String token = props.getHandlerToken(ScriptEventType.CHANGE);
         String style = props.getString("style");
+        String label = props.getString("label");
 
         if (style != null && style.equalsIgnoreCase("segmented")) {
             MaterialButtonToggleGroup group = new MaterialButtonToggleGroup(getContext());
@@ -481,11 +542,24 @@ public final class ScriptRenderView extends FrameLayout {
             applyCommonStyles(group, props);
             return group;
         } else {
+            LinearLayout container = new LinearLayout(getContext());
+            container.setOrientation(LinearLayout.VERTICAL);
+            if (label != null && !label.isEmpty()) {
+                TextView labelView = new TextView(getContext());
+                labelView.setText(label);
+                labelView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+                labelView.setTextColor(Color.GRAY);
+                container.addView(labelView, new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                ));
+            }
+
             Spinner spinner = new Spinner(getContext());
             List<String> labels = new ArrayList<>();
             int selectedIndex = 0;
-            for (int i = 0; i < options.size(); i++) {
-                PickerOption option = options.get(i);
+            for (int i = 0; i < pickerOptions.size(); i++) {
+                PickerOption option = pickerOptions.get(i);
                 labels.add(option.label);
                 if (option.value.equals(selectedValue)) {
                     selectedIndex = i;
@@ -507,7 +581,10 @@ public final class ScriptRenderView extends FrameLayout {
                                 return;
                             }
                         }
-                        Object value = options.get(position).value;
+                        if (position < 0 || position >= pickerOptions.size()) {
+                            return;
+                        }
+                        Object value = pickerOptions.get(position).value;
                         if (remoteEventListener != null) {
                             remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.CHANGE, value);
                         } else {
@@ -516,8 +593,12 @@ public final class ScriptRenderView extends FrameLayout {
                     }
                 });
             }
-            applyCommonStyles(spinner, props);
-            return spinner;
+            container.addView(spinner, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+            applyCommonStyles(container, props);
+            return container;
         }
     }
 
@@ -549,6 +630,45 @@ public final class ScriptRenderView extends FrameLayout {
         }
         applyCommonStyles(grid, props);
         return grid;
+    }
+
+    private View buildPlot(ScriptNode node) {
+        ScriptNodeProps props = node.getProps();
+        PlotView plotView = new PlotView(getContext());
+
+        int desiredHeight = dpToPx(220);
+        Double height = props.getDouble("height");
+        if (height != null && height > 0) {
+            desiredHeight = dpToPx(height);
+        }
+        plotView.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, desiredHeight));
+
+        String sourceId = props.getString("source");
+        int bins = clampInt(ScriptValueUtils.asInteger(props.get("bins"), 900), 16, 10000);
+        double xMin = props.getDouble("xMin") != null ? props.getDouble("xMin") : 0d;
+        double xMax = props.getDouble("xMax") != null ? props.getDouble("xMax") : 0d;
+        double yMin = props.getDouble("yMin") != null ? props.getDouble("yMin") : 0d;
+        double yMax = props.getDouble("yMax") != null ? props.getDouble("yMax") : 255d;
+        String errorText = props.getString("errorText");
+
+        String viewportToken = props.getHandlerToken(ScriptEventType.VIEWPORT);
+        plotView.setViewportListener((min, max) -> {
+            if (viewportToken == null) {
+                return;
+            }
+            Map<String, Object> viewport = new java.util.HashMap<>();
+            viewport.put("min", min);
+            viewport.put("max", max);
+            if (remoteEventListener != null) {
+                remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.VIEWPORT, viewport);
+            } else {
+                dispatchEvent(viewportToken, Collections.singletonList(viewport));
+            }
+        });
+
+        plotView.bind(sourceId, bins, xMin, xMax, yMin, yMax, errorText);
+        applyCommonStyles(plotView, props);
+        return plotView;
     }
 
     private View buildSpacer(ScriptNode node, @Nullable Orientation parentOrientation) {
@@ -943,6 +1063,11 @@ public final class ScriptRenderView extends FrameLayout {
         return spacing != null ? dpToPx(spacing) : 0;
     }
 
+    private int clampInt(int value, int lo, int hi) {
+        if (value < lo) return lo;
+        return Math.min(value, hi);
+    }
+
     private List<PickerOption> parseOptions(List<Object> rawOptions) {
         List<PickerOption> options = new ArrayList<>();
         for (Object option : rawOptions) {
@@ -955,6 +1080,358 @@ public final class ScriptRenderView extends FrameLayout {
             }
         }
         return options;
+    }
+
+    private static final class PlotView extends View {
+        interface ViewportListener {
+            void onViewportChanged(double min, double max);
+        }
+
+        private static final int DEFAULT_BINS = 900;
+        private static final double EPS = 1e-6;
+
+        private final float density;
+        private final Paint backgroundPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint axisPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint linePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint textPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint borderPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Path path = new Path();
+        private final RectF contentRect = new RectF();
+        private final ScaleGestureDetector scaleGestureDetector;
+
+        private String sourceId = "";
+        private int bins = DEFAULT_BINS;
+        private double xMin = 0;
+        private double xMax = 0;
+        private double yMin = 0;
+        private double yMax = 255;
+        private String errorText = "";
+        private ViewportListener viewportListener;
+
+        private float[] plotX = new float[0];
+        private float[] plotY = new float[0];
+        private int dataBits = 0;
+        private float lastPanX = Float.NaN;
+
+        PlotView(@NonNull Context context) {
+            super(context);
+            density = context.getResources().getDisplayMetrics().density;
+
+            backgroundPaint.setStyle(Paint.Style.FILL);
+            backgroundPaint.setColor(Color.parseColor("#F9FAFB"));
+
+            axisPaint.setStyle(Paint.Style.STROKE);
+            axisPaint.setColor(Color.parseColor("#D1D5DB"));
+            axisPaint.setStrokeWidth(Math.max(1f, density));
+
+            linePaint.setStyle(Paint.Style.STROKE);
+            linePaint.setColor(Color.parseColor("#1D4ED8"));
+            linePaint.setStrokeWidth(Math.max(1.25f, 1.25f * density));
+
+            textPaint.setStyle(Paint.Style.FILL);
+            textPaint.setColor(Color.parseColor("#6B7280"));
+            textPaint.setTextSize(12f * density);
+
+            borderPaint.setStyle(Paint.Style.STROKE);
+            borderPaint.setColor(Color.parseColor("#E5E7EB"));
+            borderPaint.setStrokeWidth(Math.max(1f, density));
+
+            scaleGestureDetector = new ScaleGestureDetector(context, new ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                @Override
+                public boolean onScale(ScaleGestureDetector detector) {
+                    if (dataBits <= 1 || contentRect.width() <= 1f) {
+                        return false;
+                    }
+                    double span = Math.max(EPS, xMax - xMin);
+                    double factor = detector.getScaleFactor();
+                    if (!Double.isFinite(factor) || factor <= 0) {
+                        return false;
+                    }
+
+                    double newSpan = span / factor;
+                    newSpan = clamp(newSpan, 16, Math.max(16, dataBits));
+
+                    double focusRatio = clamp((detector.getFocusX() - contentRect.left) / Math.max(1f, contentRect.width()), 0, 1);
+                    double focusDataX = xMin + span * focusRatio;
+
+                    double newMin = focusDataX - newSpan * focusRatio;
+                    double newMax = newMin + newSpan;
+                    setViewport(clampViewport(newMin, newMax, dataBits), true);
+                    return true;
+                }
+            });
+        }
+
+        void setViewportListener(ViewportListener listener) {
+            this.viewportListener = listener;
+        }
+
+        void bind(String sourceId, int bins, double xMin, double xMax, double yMin, double yMax, String errorText) {
+            this.sourceId = sourceId != null ? sourceId : "";
+            this.bins = clamp((int) Math.max(16, bins), 16, 10000);
+            this.yMin = Double.isFinite(yMin) ? yMin : 0;
+            this.yMax = Double.isFinite(yMax) ? yMax : 255;
+            this.errorText = errorText != null ? errorText : "";
+
+            byte[] data = ScriptPlotBufferStore.resolve(this.sourceId);
+            dataBits = Math.max(0, data.length * 8);
+
+            if (dataBits <= 0) {
+                this.xMin = 0;
+                this.xMax = 0;
+                plotX = new float[0];
+                plotY = new float[0];
+                invalidate();
+                return;
+            }
+
+            double safeMin = Double.isFinite(xMin) ? xMin : 0;
+            double safeMax = Double.isFinite(xMax) && xMax > safeMin ? xMax : Math.min(10000d, dataBits);
+            double[] viewport = clampViewport(safeMin, safeMax, dataBits);
+            this.xMin = viewport[0];
+            this.xMax = viewport[1];
+            recomputePlotData(data);
+            invalidate();
+        }
+
+        @Override
+        protected void onDraw(Canvas canvas) {
+            super.onDraw(canvas);
+
+            contentRect.set(
+                getPaddingLeft(),
+                getPaddingTop(),
+                getWidth() - getPaddingRight(),
+                getHeight() - getPaddingBottom()
+            );
+            if (contentRect.width() <= 1f || contentRect.height() <= 1f) {
+                return;
+            }
+
+            canvas.drawRect(contentRect, backgroundPaint);
+            canvas.drawRect(contentRect, borderPaint);
+
+            float y0 = mapY(0);
+            canvas.drawLine(contentRect.left, y0, contentRect.right, y0, axisPaint);
+
+            if (!errorText.isEmpty()) {
+                canvas.drawText(errorText, contentRect.left + 8f * density, contentRect.top + 18f * density, textPaint);
+            }
+
+            if (plotX.length <= 1) {
+                String msg = dataBits <= 0 ? "No samples" : "Drag to pan, pinch to zoom";
+                canvas.drawText(msg, contentRect.left + 8f * density, contentRect.bottom - 8f * density, textPaint);
+                return;
+            }
+
+            path.reset();
+            path.moveTo(mapX(plotX[0]), mapY(plotY[0]));
+            for (int i = 1; i < plotX.length; i++) {
+                path.lineTo(mapX(plotX[i]), mapY(plotY[i]));
+            }
+            canvas.drawPath(path, linePaint);
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent event) {
+            if (event == null) {
+                return false;
+            }
+            if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                requestDisallowParentIntercept(true);
+            }
+            boolean scaled = scaleGestureDetector.onTouchEvent(event);
+            if (scaleGestureDetector.isInProgress()) {
+                requestDisallowParentIntercept(true);
+            }
+
+            int action = event.getActionMasked();
+            switch (action) {
+                case MotionEvent.ACTION_DOWN:
+                    lastPanX = event.getX();
+                    return true;
+                case MotionEvent.ACTION_MOVE:
+                    if (scaleGestureDetector.isInProgress() || event.getPointerCount() > 1) {
+                        requestDisallowParentIntercept(true);
+                        return true;
+                    }
+                    float x = event.getX();
+                    if (Float.isNaN(lastPanX)) {
+                        lastPanX = x;
+                        return true;
+                    }
+                    float dx = x - lastPanX;
+                    lastPanX = x;
+                    panByPixels(dx);
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    requestDisallowParentIntercept(false);
+                    lastPanX = Float.NaN;
+                    performClick();
+                    return true;
+                default:
+                    return scaled || super.onTouchEvent(event);
+            }
+        }
+
+        @Override
+        public boolean performClick() {
+            return super.performClick();
+        }
+
+        private void requestDisallowParentIntercept(boolean disallow) {
+            ViewParent parent = getParent();
+            while (parent != null) {
+                parent.requestDisallowInterceptTouchEvent(disallow);
+                parent = parent.getParent();
+            }
+        }
+
+        private void panByPixels(float dx) {
+            if (dataBits <= 1 || contentRect.width() <= 1f) {
+                return;
+            }
+            double span = Math.max(EPS, xMax - xMin);
+            double delta = -(dx / contentRect.width()) * span;
+            double[] viewport = clampViewport(xMin + delta, xMax + delta, dataBits);
+            setViewport(viewport, true);
+        }
+
+        private void setViewport(double[] viewport, boolean notify) {
+            if (viewport == null || viewport.length < 2) {
+                return;
+            }
+            xMin = viewport[0];
+            xMax = viewport[1];
+            recomputePlotData(ScriptPlotBufferStore.resolve(sourceId));
+            invalidate();
+            if (notify && viewportListener != null) {
+                viewportListener.onViewportChanged(xMin, xMax);
+            }
+        }
+
+        private void recomputePlotData(byte[] data) {
+            if (data == null || data.length == 0) {
+                plotX = new float[0];
+                plotY = new float[0];
+                return;
+            }
+            int totalBits = data.length * 8;
+            int start = clamp((int) Math.round(xMin), 0, totalBits);
+            int end = clamp((int) Math.round(xMax), 0, totalBits);
+            if (end <= start) {
+                end = Math.min(totalBits, start + 1);
+            }
+            int span = end - start;
+            if (span <= 0) {
+                plotX = new float[0];
+                plotY = new float[0];
+                return;
+            }
+
+            int maxBins = Math.max(16, bins);
+            if (span <= maxBins * 2) {
+                plotX = new float[span];
+                plotY = new float[span];
+                for (int i = 0; i < span; i++) {
+                    int bitIndex = start + i;
+                    plotX[i] = bitIndex;
+                    plotY[i] = bitAt(data, bitIndex) == 1 ? 255f : 0f;
+                }
+                return;
+            }
+
+            float[] tTmp = new float[maxBins * 2];
+            float[] vTmp = new float[maxBins * 2];
+            int outCount = 0;
+            double binWidth = (double) span / (double) maxBins;
+
+            for (int bin = 0; bin < maxBins; bin++) {
+                int binStart = (int) Math.floor(start + (double) bin * binWidth);
+                int binEnd = (int) Math.floor(binStart + binWidth);
+                if (binEnd > end) binEnd = end;
+                if (binEnd <= binStart) continue;
+
+                boolean hasLow = false;
+                boolean hasHigh = false;
+                for (int i = binStart; i < binEnd; i++) {
+                    if (bitAt(data, i) == 1) hasHigh = true; else hasLow = true;
+                    if (hasLow && hasHigh) break;
+                }
+
+                if (outCount + 2 > tTmp.length) {
+                    break;
+                }
+                tTmp[outCount] = binStart;
+                vTmp[outCount] = hasLow ? 0f : 255f;
+                outCount++;
+                tTmp[outCount] = binEnd - 1;
+                vTmp[outCount] = hasHigh ? 255f : 0f;
+                outCount++;
+            }
+
+            plotX = java.util.Arrays.copyOf(tTmp, outCount);
+            plotY = java.util.Arrays.copyOf(vTmp, outCount);
+        }
+
+        private int bitAt(byte[] data, int bitIndex) {
+            if (bitIndex < 0) {
+                return 0;
+            }
+            int byteIndex = bitIndex >> 3;
+            if (byteIndex < 0 || byteIndex >= data.length) {
+                return 0;
+            }
+            int shift = bitIndex & 7;
+            return ((data[byteIndex] >> shift) & 0x01);
+        }
+
+        private float mapX(float x) {
+            double span = Math.max(EPS, xMax - xMin);
+            double ratio = (x - xMin) / span;
+            return (float) (contentRect.left + clamp(ratio, 0, 1) * contentRect.width());
+        }
+
+        private float mapY(float y) {
+            double ySpan = Math.max(EPS, yMax - yMin);
+            double ratio = (y - yMin) / ySpan;
+            return (float) (contentRect.bottom - clamp(ratio, 0, 1) * contentRect.height());
+        }
+
+        private double[] clampViewport(double min, double max, int totalBits) {
+            if (totalBits <= 0) {
+                return new double[] {0, 0};
+            }
+            double desiredSpan = Math.max(1, max - min);
+            desiredSpan = Math.min(desiredSpan, totalBits);
+
+            double lo = min;
+            double hi = lo + desiredSpan;
+            if (lo < 0) {
+                lo = 0;
+                hi = desiredSpan;
+            }
+            if (hi > totalBits) {
+                hi = totalBits;
+                lo = hi - desiredSpan;
+            }
+            if (hi <= lo) {
+                hi = Math.min(totalBits, lo + 1);
+            }
+            return new double[] {lo, hi};
+        }
+
+        private static int clamp(int value, int lo, int hi) {
+            if (value < lo) return lo;
+            return Math.min(value, hi);
+        }
+
+        private static double clamp(double value, double lo, double hi) {
+            if (value < lo) return lo;
+            return Math.min(value, hi);
+        }
     }
 
     private abstract static class FocusAwareTextWatcher implements TextWatcher {

@@ -20,8 +20,13 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.Wrapper;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -29,6 +34,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -67,6 +73,9 @@ public final class ScriptEngine {
     private volatile Scriptable scope;
     private volatile boolean initialized;
     private volatile String bootstrapSource = "";
+    private volatile File appDataDir;
+    private volatile List<File> legacySignalDirs = Collections.emptyList();
+    private volatile byte[] samplerManualBuffer;
 
     private RenderCallback renderCallback;
     private ErrorCallback errorCallback;
@@ -77,6 +86,24 @@ public final class ScriptEngine {
 
     public void setDeviceConnection(ScriptDeviceConnection deviceConnection) {
         this.deviceConnection = deviceConnection;
+    }
+
+    public void setAppDataDir(File appDataDir) {
+        this.appDataDir = appDataDir;
+    }
+
+    public void setLegacySignalDirs(List<File> legacyDirs) {
+        if (legacyDirs == null || legacyDirs.isEmpty()) {
+            this.legacySignalDirs = Collections.emptyList();
+            return;
+        }
+        List<File> sanitized = new ArrayList<>();
+        for (File d : legacyDirs) {
+            if (d != null) {
+                sanitized.add(d);
+            }
+        }
+        this.legacySignalDirs = sanitized;
     }
 
     public void setup(RenderCallback renderCallback, Map<String, Object> bindings, ErrorCallback errorCallback) {
@@ -248,12 +275,30 @@ public final class ScriptEngine {
         ScriptableObject.putProperty(scope, "_scriptRender", new BaseFunction() {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
-                if (args.length == 0 || !(args[0] instanceof Scriptable)) {
+                Scriptable rootNode = null;
+                if (args.length > 0) {
+                    if (args[0] instanceof Scriptable) {
+                        rootNode = (Scriptable) args[0];
+                    } else if (args[0] instanceof CharSequence) {
+                        String json = String.valueOf(args[0]).trim();
+                        if (!json.isEmpty()) {
+                            try {
+                                Object parsed = cx.evaluateString(scope, "(" + json + ")", "ScriptRenderJSON", 1, null);
+                                if (parsed instanceof Scriptable) {
+                                    rootNode = (Scriptable) parsed;
+                                }
+                            } catch (Exception ignored) {
+                            }
+                        }
+                    }
+                }
+
+                if (rootNode == null) {
                     String message = "Script render called with invalid node";
                     dispatchError(message);
                     return Context.getUndefinedValue();
                 }
-                ScriptTree tree = buildTreeFromJs((Scriptable) args[0]);
+                ScriptTree tree = buildTreeFromJs(rootNode);
                 if (tree != null) {
                     dispatchRender(tree);
                 } else {
@@ -335,6 +380,407 @@ public final class ScriptEngine {
                 return Context.getUndefinedValue();
             }
         });
+
+        ScriptableObject.putProperty(scope, "_scriptSamplerBufferGetPacketCount", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                byte[] data = readSamplerBytesSnapshot();
+                if (data.length <= 0) {
+                    return 0;
+                }
+                return (data.length + 63) / 64;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptSamplerBufferGetLenBytes", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return readSamplerBytesSnapshot().length;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptSamplerBufferGetBytes", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return toJsByteArray(cx, scope, readSamplerBytesSnapshot());
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptSamplerBufferClear", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                samplerManualBuffer = null;
+                ScriptDeviceConnection connection = deviceConnection;
+                if (connection != null) {
+                    connection.clearBuffer();
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptSamplerBufferReadPacketsSince", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                int packetIndex = 0;
+                int maxPackets = 1;
+                if (args.length >= 1 && args[0] instanceof Number) {
+                    packetIndex = Math.max(0, ((Number) args[0]).intValue());
+                }
+                if (args.length >= 2 && args[1] instanceof Number) {
+                    maxPackets = Math.max(1, ((Number) args[1]).intValue());
+                }
+
+                byte[] data = readSamplerBytesSnapshot();
+                int totalPackets = (data.length + 63) / 64;
+                int startPacket = Math.min(packetIndex, totalPackets);
+                int availablePackets = Math.max(0, totalPackets - startPacket);
+                int toRead = Math.max(0, Math.min(availablePackets, maxPackets));
+
+                int startByte = startPacket * 64;
+                int endByte = Math.min(data.length, startByte + toRead * 64);
+                byte[] slice = endByte > startByte ? java.util.Arrays.copyOfRange(data, startByte, endByte) : new byte[0];
+
+                Scriptable out = cx.newObject(scope);
+                ScriptableObject.putProperty(out, "data", toJsByteArray(cx, scope, slice));
+                ScriptableObject.putProperty(out, "nextPacketIndex", startPacket + toRead);
+                ScriptableObject.putProperty(out, "availablePackets", availablePackets);
+                return out;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptPlotBufferSet", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return "";
+                }
+                byte[] data = coerceToByteArray(args[0]);
+                if (data == null) {
+                    return "";
+                }
+                String id = "buf:" + UUID.randomUUID();
+                ScriptPlotBufferStore.setBuffer(id, data);
+                return id;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptBufferSetBytes", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return 0;
+                }
+                byte[] data = coerceToByteArray(args[0]);
+                if (data == null) {
+                    return 0;
+                }
+                ScriptDeviceConnection connection = deviceConnection;
+                if (connection == null) {
+                    return 0;
+                }
+                samplerManualBuffer = Arrays.copyOf(data, data.length);
+                connection.loadBuffer(data);
+                return data.length;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptBufferSaveBytesFile", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                String path = String.valueOf(args[0] != null ? args[0] : "").trim();
+                if (path.isEmpty()) {
+                    return Context.getUndefinedValue();
+                }
+                try {
+                    File file = new File(path);
+                    File parent = file.getParentFile();
+                    if (parent != null && !parent.exists()) {
+                        //noinspection ResultOfMethodCallIgnored
+                        parent.mkdirs();
+                    }
+                    byte[] data = readSamplerBytesSnapshot();
+                    try (FileOutputStream fos = new FileOutputStream(file, false)) {
+                        fos.write(data);
+                        fos.flush();
+                    }
+                } catch (Exception ex) {
+                    dispatchError("Script error: save buffer failed: " + ex.getMessage());
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptBufferBuildSignedRawTimings", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                int samplePeriodUs = 1;
+                if (args.length >= 1 && args[0] instanceof Number) {
+                    samplePeriodUs = Math.max(1, ((Number) args[0]).intValue());
+                }
+                return buildSignedRawTimings(readSamplerBytesSnapshot(), samplePeriodUs);
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptDeviceTransmitBufferStart", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return 0;
+                }
+                byte[] data = coerceToByteArray(args[0]);
+                if (data == null) {
+                    return 0;
+                }
+
+                ScriptDeviceConnection connection = deviceConnection;
+                if (connection == null || !connection.isConnected()) {
+                    return 0;
+                }
+
+                int pin = 1;
+                int dutyPercent = 100;
+                int tickUs = 10;
+                long freqHz = 0;
+
+                if (args.length >= 2) {
+                    Map<String, Object> opts = coerceToMap(args[1]);
+                    if (opts != null) {
+                        pin = clamp(ScriptValueUtils.asInteger(opts.get("pin"), pin), 0, 255);
+                        dutyPercent = clamp(ScriptValueUtils.asInteger(opts.get("dutyPercent"), dutyPercent), 1, 100);
+                        tickUs = clamp(ScriptValueUtils.asInteger(opts.get("tickUs"), tickUs), 5, 255);
+                        Integer hzInt = ScriptValueUtils.asInteger(opts.get("freqHz"), null);
+                        if (hzInt != null) {
+                            freqHz = hzInt & 0xFFFFFFFFL;
+                        }
+                    }
+                }
+
+                byte[] pkt = new byte[9];
+                pkt[0] = (byte) 0x80;
+                pkt[1] = (byte) 0x00;
+                pkt[2] = (byte) (pin & 0xFF);
+                pkt[3] = (byte) (dutyPercent & 0xFF);
+                pkt[4] = (byte) (freqHz & 0xFF);
+                pkt[5] = (byte) ((freqHz >> 8) & 0xFF);
+                pkt[6] = (byte) ((freqHz >> 16) & 0xFF);
+                pkt[7] = (byte) ((freqHz >> 24) & 0xFF);
+                pkt[8] = (byte) (tickUs & 0xFF);
+
+                try {
+                    byte[] resp = connection.sendPacket(pkt, 1500);
+                    if (!isOkResponse(resp)) {
+                        dispatchError("Script error: transmit start failed");
+                        return 0;
+                    }
+                    samplerManualBuffer = Arrays.copyOf(data, data.length);
+                    connection.loadBuffer(data);
+                    connection.transmitBuffer();
+
+                    String doneToken = null;
+                    if (args.length >= 3 && args[2] != null && args[2] != Undefined.instance) {
+                        doneToken = String.valueOf(args[2]);
+                    }
+                    if (doneToken != null && !doneToken.isEmpty()) {
+                        invokeRegisteredCallback(cx, doneToken);
+                    }
+                } catch (Exception ex) {
+                    dispatchError("Script error: transmit failed: " + ex.getMessage());
+                    return 0;
+                }
+                return data.length;
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptAppDataDir", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                File root = getAppDataDir();
+                return root.getAbsolutePath();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptPathJoin", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return "";
+                }
+                List<String> parts = coerceToStringList(args[0]);
+                if (parts.isEmpty()) {
+                    return "";
+                }
+                File joined = null;
+                for (String part : parts) {
+                    String p = part != null ? part : "";
+                    if (joined == null) {
+                        joined = new File(p);
+                    } else {
+                        joined = new File(joined, p);
+                    }
+                }
+                return joined != null ? joined.getPath() : "";
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptEnsureDir", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                File dir = resolveWithinAppData(String.valueOf(args[0]), true);
+                if (!dir.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    dir.mkdirs();
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptReadDir", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                String raw = args.length >= 1 ? String.valueOf(args[0]) : "";
+                File dir = resolveWithinAppData(raw, true);
+                List<String> names = new ArrayList<>();
+
+                File[] files = dir.listFiles();
+                if (files != null) {
+                    for (File f : files) {
+                        if (f != null) {
+                            names.add(f.getName());
+                        }
+                    }
+                }
+
+                if (isPrimarySignalsDir(dir)) {
+                    List<File> legacyDirs = legacySignalDirs;
+                    for (File legacy : legacyDirs) {
+                        try {
+                            if (legacy == null || !legacy.exists() || !legacy.isDirectory()) {
+                                continue;
+                            }
+                            File[] legacyFiles = legacy.listFiles();
+                            if (legacyFiles == null) {
+                                continue;
+                            }
+                            for (File f : legacyFiles) {
+                                if (f != null) {
+                                    names.add(f.getName());
+                                }
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                }
+
+                if (names.isEmpty()) {
+                    return cx.newArray(scope, new Object[0]);
+                }
+                java.util.LinkedHashSet<String> unique = new java.util.LinkedHashSet<>(names);
+                names = new ArrayList<>(unique);
+                Collections.sort(names, String::compareToIgnoreCase);
+                return cx.newArray(scope, names.toArray(new Object[0]));
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptReadFileText", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return "";
+                }
+                String rawPath = String.valueOf(args[0]);
+                File file = resolveExistingReadableFile(rawPath);
+                byte[] bytes = readAllBytes(file);
+                return new String(bytes, StandardCharsets.UTF_8);
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptWriteFileText", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                String content = args.length >= 2 ? String.valueOf(args[1]) : "";
+                File file = resolveWithinAppData(String.valueOf(args[0]), false);
+                writeAllBytes(file, content.getBytes(StandardCharsets.UTF_8));
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptReadFileBytes", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return cx.newArray(scope, new Object[0]);
+                }
+                String rawPath = String.valueOf(args[0]);
+                File file = resolveExistingReadableFile(rawPath);
+                return toJsByteArray(cx, scope, readAllBytes(file));
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptWriteFileBytes", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                byte[] data = args.length >= 2 ? coerceToByteArray(args[1]) : new byte[0];
+                if (data == null) {
+                    data = new byte[0];
+                }
+                File file = resolveWithinAppData(String.valueOf(args[0]), false);
+                writeAllBytes(file, data);
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptRemovePath", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    return Context.getUndefinedValue();
+                }
+                File file = resolveWithinAppData(String.valueOf(args[0]), false);
+                deleteRecursively(file);
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptRenamePath", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 2) {
+                    return Context.getUndefinedValue();
+                }
+                File from = resolveWithinAppData(String.valueOf(args[0]), false);
+                File to = resolveWithinAppData(String.valueOf(args[1]), false);
+                File parent = to.getParentFile();
+                if (parent != null && !parent.exists()) {
+                    //noinspection ResultOfMethodCallIgnored
+                    parent.mkdirs();
+                }
+                if (!from.renameTo(to)) {
+                    throw new EvaluatorException("rename failed");
+                }
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptableObject.putProperty(scope, "_scriptRevealInFinder", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                return Context.getUndefinedValue();
+            }
+        });
+
+        ScriptPlotBufferStore.setProvider("samplerBits", this::readSamplerBytesSnapshot);
 
         // Minimal timer API: setTimeout/clearTimeout.
         // Important: scheduled callback execution is always marshaled back onto the ScriptEngine executor
@@ -485,6 +931,268 @@ public final class ScriptEngine {
         } catch (Exception ignored) {
         }
         return null;
+    }
+
+    private Map<String, Object> coerceToMap(Object value) {
+        if (value == null || value == Undefined.instance) {
+            return null;
+        }
+        if (value instanceof Wrapper) {
+            value = ((Wrapper) value).unwrap();
+        }
+        if (value instanceof Map<?, ?>) {
+            Map<String, Object> out = new HashMap<>();
+            Map<?, ?> map = (Map<?, ?>) value;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (entry.getKey() != null) {
+                    out.put(String.valueOf(entry.getKey()), entry.getValue());
+                }
+            }
+            return out;
+        }
+        if (value instanceof Scriptable) {
+            return toJavaMap((Scriptable) value);
+        }
+        return null;
+    }
+
+    private byte[] readSamplerBytesSnapshot() {
+        byte[] manual = samplerManualBuffer;
+        if (manual != null) {
+            return Arrays.copyOf(manual, manual.length);
+        }
+        ScriptDeviceConnection connection = deviceConnection;
+        if (connection == null) {
+            return new byte[0];
+        }
+        byte[] data = connection.getBuffer();
+        return data != null ? data : new byte[0];
+    }
+
+    private void invokeRegisteredCallback(Context cx, String token) {
+        if (token == null || token.isEmpty()) {
+            return;
+        }
+        Function fn = callbackRegistry.get(token);
+        if (fn == null || scope == null) {
+            return;
+        }
+        fn.call(cx, scope, scope, Context.emptyArgs);
+    }
+
+    private boolean isOkResponse(byte[] resp) {
+        return resp != null && resp.length > 0 && (resp[0] & 0xFF) == 0x80;
+    }
+
+    private int clamp(Integer value, int lo, int hi) {
+        int n = value != null ? value : lo;
+        if (n < lo) return lo;
+        return Math.min(n, hi);
+    }
+
+    private String buildSignedRawTimings(byte[] data, int samplePeriodUs) {
+        if (data == null || data.length == 0) {
+            return "";
+        }
+        int period = Math.max(1, samplePeriodUs);
+        int totalBits = data.length * 8;
+        StringBuilder out = new StringBuilder(Math.max(64, totalBits / 8));
+
+        boolean currentState = ((data[0] & 0x01) == 1);
+        int count = 0;
+
+        for (int i = 0; i < totalBits; i++) {
+            int byteIndex = i >> 3;
+            int bitIndex = i & 7;
+            boolean bit = (((data[byteIndex] >> bitIndex) & 0x01) == 1);
+            if (bit == currentState) {
+                count++;
+            } else {
+                appendTiming(out, currentState, count * period);
+                currentState = bit;
+                count = 1;
+            }
+        }
+        appendTiming(out, currentState, count * period);
+        return out.toString();
+    }
+
+    private void appendTiming(StringBuilder out, boolean stateHigh, int microseconds) {
+        if (microseconds <= 0) {
+            return;
+        }
+        if (out.length() > 0) {
+            out.append(' ');
+        }
+        if (!stateHigh) {
+            out.append('-');
+        }
+        out.append(microseconds);
+    }
+
+    private File getAppDataDir() {
+        File configured = appDataDir;
+        if (configured != null) {
+            if (!configured.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                configured.mkdirs();
+            }
+            return configured;
+        }
+        File fallback = new File(System.getProperty("java.io.tmpdir"), "emwaver-script-data");
+        if (!fallback.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            fallback.mkdirs();
+        }
+        return fallback;
+    }
+
+    private File resolveWithinAppData(String rawPath, boolean treatAsDirectory) {
+        File root = getAppDataDir();
+        String raw = rawPath != null ? rawPath.trim() : "";
+        File candidate = raw.isEmpty() ? root : new File(raw);
+        if (!candidate.isAbsolute()) {
+            candidate = new File(root, raw);
+        }
+
+        try {
+            File rootCanonical = root.getCanonicalFile();
+            File candidateCanonical = candidate.getCanonicalFile();
+            if (!isWithinRoot(rootCanonical, candidateCanonical)) {
+                throw new EvaluatorException("Path escapes app data directory");
+            }
+            if (treatAsDirectory && !candidateCanonical.exists()) {
+                //noinspection ResultOfMethodCallIgnored
+                candidateCanonical.mkdirs();
+            }
+            return candidateCanonical;
+        } catch (IOException e) {
+            throw new EvaluatorException("Path resolution failed: " + e.getMessage());
+        }
+    }
+
+    private boolean isPrimarySignalsDir(File dir) {
+        if (dir == null) {
+            return false;
+        }
+        try {
+            File primary = getAppDataDir().getCanonicalFile();
+            return dir.getCanonicalFile().equals(primary);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private File resolveExistingReadableFile(String rawPath) {
+        File primary = resolveWithinAppData(rawPath, false);
+        if (primary.exists() && primary.isFile()) {
+            return primary;
+        }
+
+        File appRoot = getAppDataDir();
+        if (primary.getParentFile() != null && primary.getParentFile().equals(appRoot)) {
+            String baseName = primary.getName();
+            if (!baseName.isEmpty()) {
+                for (File legacyDir : legacySignalDirs) {
+                    try {
+                        if (legacyDir == null || !legacyDir.exists() || !legacyDir.isDirectory()) {
+                            continue;
+                        }
+                        File candidate = new File(legacyDir, baseName);
+                        if (candidate.exists() && candidate.isFile()) {
+                            return candidate;
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            }
+        }
+        return primary;
+    }
+
+    private boolean isWithinRoot(File root, File child) {
+        String rootPath = root.getPath();
+        String childPath = child.getPath();
+        if (childPath.equals(rootPath)) {
+            return true;
+        }
+        return childPath.startsWith(rootPath + File.separator);
+    }
+
+    private byte[] readAllBytes(File file) {
+        if (file == null || !file.exists() || !file.isFile()) {
+            return new byte[0];
+        }
+        try (FileInputStream fis = new FileInputStream(file)) {
+            byte[] buffer = new byte[4096];
+            int read;
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            while ((read = fis.read(buffer)) != -1) {
+                if (read > 0) {
+                    bos.write(buffer, 0, read);
+                }
+            }
+            return bos.toByteArray();
+        } catch (IOException e) {
+            throw new EvaluatorException("Read failed: " + e.getMessage());
+        }
+    }
+
+    private void writeAllBytes(File file, byte[] data) {
+        if (file == null) {
+            return;
+        }
+        File parent = file.getParentFile();
+        if (parent != null && !parent.exists()) {
+            //noinspection ResultOfMethodCallIgnored
+            parent.mkdirs();
+        }
+        try (FileOutputStream fos = new FileOutputStream(file, false)) {
+            fos.write(data != null ? data : new byte[0]);
+            fos.flush();
+        } catch (IOException e) {
+            throw new EvaluatorException("Write failed: " + e.getMessage());
+        }
+    }
+
+    private void deleteRecursively(File file) {
+        if (file == null || !file.exists()) {
+            return;
+        }
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) {
+                for (File child : children) {
+                    deleteRecursively(child);
+                }
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        file.delete();
+    }
+
+    private List<String> coerceToStringList(Object value) {
+        List<String> out = new ArrayList<>();
+        if (value == null || value == Undefined.instance) {
+            return out;
+        }
+        if (value instanceof NativeArray) {
+            NativeArray array = (NativeArray) value;
+            int length = (int) array.getLength();
+            for (int i = 0; i < length; i++) {
+                Object v = array.get(i, array);
+                out.add(v != null && v != Undefined.instance ? String.valueOf(v) : "");
+            }
+            return out;
+        }
+        if (value instanceof List<?>) {
+            for (Object v : (List<?>) value) {
+                out.add(v != null ? String.valueOf(v) : "");
+            }
+            return out;
+        }
+        out.add(String.valueOf(value));
+        return out;
     }
 
     private void injectDsl(Context cx, Scriptable scope) {

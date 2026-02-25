@@ -34,6 +34,7 @@ Key components:
 - `DeviceConnectionManager.java` / `DeviceConnectionService.java` — connection lifecycle.
 - `CommandSender.java` — command dispatch path.
 - `NativeBuffer.java` — native/buffer integration surface.
+- `scripts/ScriptEngine.java` + `scripts/ScriptRenderView.java` — Rhino bridge + native script UI rendering (including Sampler buffer bridges and native `UI.plot` waveform rendering for `sampler.emw` parity).
 - Activities for primary UX and settings.
 
 ---

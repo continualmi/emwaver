@@ -9,7 +9,8 @@ package com.emwaver.emwaverandroidapp.scripts;
 public enum ScriptEventType {
     TAP("tap"),
     CHANGE("change"),
-    SUBMIT("submit");
+    SUBMIT("submit"),
+    VIEWPORT("viewport");
 
     private final String rawValue;
 
