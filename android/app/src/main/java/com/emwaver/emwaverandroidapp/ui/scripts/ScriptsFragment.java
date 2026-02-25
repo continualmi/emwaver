@@ -18,6 +18,7 @@ import android.content.ServiceConnection;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.provider.OpenableColumns;
 import android.text.Editable;
@@ -951,6 +952,33 @@ public class ScriptsFragment extends Fragment {
 
     private java.io.File getSignalsDir() {
         return new java.io.File(requireContext().getFilesDir(), SIGNALS_DIR_NAME);
+    }
+
+    private List<java.io.File> getLegacySignalDirs() {
+        List<java.io.File> dirs = new ArrayList<>();
+
+        try {
+            java.io.File root = Environment.getExternalStorageDirectory();
+            if (root != null) {
+                dirs.add(new java.io.File(root, "emwaver"));
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            java.io.File appExternal = requireContext().getExternalFilesDir(null);
+            if (appExternal != null) {
+                dirs.add(new java.io.File(appExternal, "emwaver"));
+            }
+        } catch (Exception ignored) {
+        }
+
+        try {
+            dirs.add(new java.io.File(requireContext().getFilesDir(), "emwaver"));
+        } catch (Exception ignored) {
+        }
+
+        return dirs;
     }
 
     private void loadSignalFiles() {
@@ -2218,6 +2246,8 @@ public class ScriptsFragment extends Fragment {
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
             scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.emw"));
+            scriptEngine.setAppDataDir(getSignalsDir());
+            scriptEngine.setLegacySignalDirs(getLegacySignalDirs());
             if (scriptDeviceConnection == null && isAdded()) {
                 scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
             }

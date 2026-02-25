@@ -18,6 +18,7 @@ public enum ScriptNodeType {
     TEXT_EDITOR("textEditor"),
     PICKER("picker"),
     GRID("grid"),
+    PLOT("plot"),
     SPACER("spacer"),
     DIVIDER("divider"),
     PROGRESS("progress");

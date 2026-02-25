@@ -73,6 +73,47 @@ public final class ScriptDeviceConnection {
         service.write(bytes);
     }
 
+    public void transmitBuffer() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return;
+        }
+        service.transmitBuffer();
+    }
+
+    public void clearBuffer() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return;
+        }
+        service.clearBuffer();
+    }
+
+    public int getBufferLength() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return 0;
+        }
+        return Math.max(0, service.getBufferLength());
+    }
+
+    @Nullable
+    public byte[] getBuffer() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return null;
+        }
+        return service.getBuffer();
+    }
+
+    public void loadBuffer(byte[] data) {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return;
+        }
+        service.loadBuffer(data);
+    }
+
     public void disconnect() {
         if (connectionManager != null) {
             connectionManager.disconnect();
