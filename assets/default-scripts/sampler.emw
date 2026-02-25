@@ -230,11 +230,7 @@ function clearBuffer() {
   status = '';
   chartErr = '';
   try {
-    // If we're currently sampling, stop first to avoid immediately refilling.
-    try { Sampler.stop(recordId); } catch (e0) {}
-    recording = false;
-    recordId = null;
-
+    // Clear captured data without affecting the active recording session.
     Sampler.clear();
 
     bufLen = 0;
