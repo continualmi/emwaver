@@ -1139,6 +1139,7 @@ public final class ScriptRenderView extends FrameLayout {
         private int dataBits = 0;
         private float lastPanX = Float.NaN;
         private boolean viewportDirtyDuringInteraction = false;
+        private boolean blockPanUntilNextDown = false;
         private double lastDispatchedMin = Double.NaN;
         private double lastDispatchedMax = Double.NaN;
 
@@ -1281,10 +1282,13 @@ public final class ScriptRenderView extends FrameLayout {
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
                 userInteracting = true;
                 requestDisallowParentIntercept(true);
+                blockPanUntilNextDown = false;
             }
             boolean scaled = scaleGestureDetector.onTouchEvent(event);
             if (scaleGestureDetector.isInProgress()) {
                 requestDisallowParentIntercept(true);
+                blockPanUntilNextDown = true;
+                lastPanX = Float.NaN;
             }
 
             int action = event.getActionMasked();
@@ -1293,9 +1297,19 @@ public final class ScriptRenderView extends FrameLayout {
                     lastPanX = event.getX();
                     viewportDirtyDuringInteraction = false;
                     return true;
+                case MotionEvent.ACTION_POINTER_DOWN:
+                case MotionEvent.ACTION_POINTER_UP:
+                    blockPanUntilNextDown = true;
+                    lastPanX = Float.NaN;
+                    return true;
                 case MotionEvent.ACTION_MOVE:
                     if (scaleGestureDetector.isInProgress() || event.getPointerCount() > 1) {
                         requestDisallowParentIntercept(true);
+                        blockPanUntilNextDown = true;
+                        lastPanX = Float.NaN;
+                        return true;
+                    }
+                    if (blockPanUntilNextDown) {
                         return true;
                     }
                     float x = event.getX();
