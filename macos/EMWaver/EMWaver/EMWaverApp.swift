@@ -7,9 +7,14 @@
 
 import SwiftUI
 import EMWaverScriptRuntime
+#if canImport(AppKit)
+import AppKit
+#endif
 
 @main
 struct EMWaverApp: App {
+    @State private var didActivateApp = false
+
     init() {
         EnvBootstrap.loadForDevIfAvailable()
     }
@@ -44,6 +49,9 @@ struct EMWaverApp: App {
 
                     // Pro entitlements/eligibility.
                     await entitlements.refresh(auth: auth, force: true)
+                }
+                .onAppear {
+                    activateAppIfNeeded()
                 }
         }
         .commands {
@@ -140,16 +148,31 @@ struct EMWaverApp: App {
             }
         }
     }
+
+    private func activateAppIfNeeded() {
+        guard !didActivateApp else { return }
+        didActivateApp = true
+#if canImport(AppKit)
+        NSApp.setActivationPolicy(.regular)
+        NSApp.activate(ignoringOtherApps: true)
+#endif
+    }
 }
 
 /// Loads repo env files for local development (no Xcode scheme env required).
 /// Best-effort only; does not override already-set process env values.
 private enum EnvBootstrap {
-    static func loadForDevIfAvailable() {
-        let fm = FileManager.default
-        let start = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+    private static let requiredEnvMarker = "secrets/shared/core.env"
 
-        guard let repoRoot = findRepoRoot(from: start) else { return }
+    static func loadForDevIfAvailable() {
+        // Escape hatch for startup regressions while keeping auto-env for local dev.
+        if ProcessInfo.processInfo.environment["EMWAVER_DISABLE_ENV_BOOTSTRAP"] == "1" {
+            return
+        }
+#if !DEBUG
+        return
+#endif
+        guard let repoRoot = findRepoRoot() else { return }
 
         let files = [
             "secrets/shared/core.env",
@@ -206,15 +229,30 @@ private enum EnvBootstrap {
         return out
     }
 
-    private static func findRepoRoot(from start: URL) -> URL? {
+    private static func findRepoRoot() -> URL? {
+        // Prefer a deterministic source-file anchor so startup doesn't depend on Xcode run cwd.
+        let sourceAnchor = URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        if let r = findRepoRoot(from: sourceAnchor, maxDepth: 12) {
+            return r
+        }
+
+        // Fallback for unusual layouts.
+        let fm = FileManager.default
+        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+        return findRepoRoot(from: cwd, maxDepth: 16)
+    }
+
+    private static func findRepoRoot(from start: URL, maxDepth: Int) -> URL? {
         let fm = FileManager.default
         var current: URL? = start
-        while let c = current {
-            if fm.fileExists(atPath: c.appendingPathComponent("secrets/shared/core.env").path) {
+        var depth = 0
+        while let c = current, depth <= maxDepth {
+            if fm.fileExists(atPath: c.appendingPathComponent(requiredEnvMarker).path) {
                 return c
             }
             let parent = c.deletingLastPathComponent()
             current = (parent.path == c.path) ? nil : parent
+            depth += 1
         }
         return nil
     }
