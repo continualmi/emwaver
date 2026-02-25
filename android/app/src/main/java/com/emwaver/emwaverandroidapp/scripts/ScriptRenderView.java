@@ -1179,12 +1179,11 @@ public final class ScriptRenderView extends FrameLayout {
 
                     double newSpan = span / factor;
                     newSpan = clamp(newSpan, 16, Math.max(16, dataBits));
-
-                    double focusRatio = clamp((detector.getFocusX() - contentRect.left) / Math.max(1f, contentRect.width()), 0, 1);
-                    double focusDataX = xMin + span * focusRatio;
-
-                    double newMin = focusDataX - newSpan * focusRatio;
-                    double newMax = newMin + newSpan;
+                    // Match macOS behavior: magnification is centered on the current viewport,
+                    // not anchored to moving touch focus coordinates.
+                    double center = (xMin + xMax) * 0.5;
+                    double newMin = center - newSpan * 0.5;
+                    double newMax = center + newSpan * 0.5;
                     setViewport(clampViewport(newMin, newMax, dataBits), false);
                     return true;
                 }
