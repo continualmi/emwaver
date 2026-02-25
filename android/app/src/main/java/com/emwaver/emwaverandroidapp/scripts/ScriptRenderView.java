@@ -1108,11 +1108,34 @@ public final class ScriptRenderView extends FrameLayout {
         private double yMax = 255;
         private String errorText = "";
         private ViewportListener viewportListener;
+        private boolean userInteracting = false;
+        private boolean pendingExternalViewport = false;
+        private double pendingExternalMin = 0;
+        private double pendingExternalMax = 0;
 
         private float[] plotX = new float[0];
         private float[] plotY = new float[0];
         private int dataBits = 0;
         private float lastPanX = Float.NaN;
+        private double pendingDispatchMin = 0;
+        private double pendingDispatchMax = 0;
+        private boolean dispatchQueued = false;
+        private double lastDispatchedMin = Double.NaN;
+        private double lastDispatchedMax = Double.NaN;
+        private final Runnable dispatchViewportRunnable = () -> {
+            dispatchQueued = false;
+            if (viewportListener == null) {
+                return;
+            }
+            if (!Double.isNaN(lastDispatchedMin)
+                && Math.abs(lastDispatchedMin - pendingDispatchMin) < 0.5
+                && Math.abs(lastDispatchedMax - pendingDispatchMax) < 0.5) {
+                return;
+            }
+            lastDispatchedMin = pendingDispatchMin;
+            lastDispatchedMax = pendingDispatchMax;
+            viewportListener.onViewportChanged(pendingDispatchMin, pendingDispatchMax);
+        };
 
         PlotView(@NonNull Context context) {
             super(context);
@@ -1189,9 +1212,16 @@ public final class ScriptRenderView extends FrameLayout {
             double safeMin = Double.isFinite(xMin) ? xMin : 0;
             double safeMax = Double.isFinite(xMax) && xMax > safeMin ? xMax : Math.min(10000d, dataBits);
             double[] viewport = clampViewport(safeMin, safeMax, dataBits);
-            this.xMin = viewport[0];
-            this.xMax = viewport[1];
-            recomputePlotData(data);
+            if (userInteracting) {
+                pendingExternalViewport = true;
+                pendingExternalMin = viewport[0];
+                pendingExternalMax = viewport[1];
+                recomputePlotData(data);
+            } else {
+                this.xMin = viewport[0];
+                this.xMax = viewport[1];
+                recomputePlotData(data);
+            }
             invalidate();
         }
 
@@ -1239,6 +1269,7 @@ public final class ScriptRenderView extends FrameLayout {
                 return false;
             }
             if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                userInteracting = true;
                 requestDisallowParentIntercept(true);
             }
             boolean scaled = scaleGestureDetector.onTouchEvent(event);
@@ -1268,6 +1299,15 @@ public final class ScriptRenderView extends FrameLayout {
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
                     requestDisallowParentIntercept(false);
+                    userInteracting = false;
+                    if (pendingExternalViewport) {
+                        pendingExternalViewport = false;
+                        double[] viewport = clampViewport(pendingExternalMin, pendingExternalMax, dataBits);
+                        xMin = viewport[0];
+                        xMax = viewport[1];
+                        recomputePlotData(ScriptPlotBufferStore.resolve(sourceId));
+                        invalidate();
+                    }
                     lastPanX = Float.NaN;
                     performClick();
                     return true;
@@ -1308,8 +1348,18 @@ public final class ScriptRenderView extends FrameLayout {
             recomputePlotData(ScriptPlotBufferStore.resolve(sourceId));
             invalidate();
             if (notify && viewportListener != null) {
-                viewportListener.onViewportChanged(xMin, xMax);
+                queueViewportDispatch(xMin, xMax);
             }
+        }
+
+        private void queueViewportDispatch(double min, double max) {
+            pendingDispatchMin = min;
+            pendingDispatchMax = max;
+            if (dispatchQueued) {
+                return;
+            }
+            dispatchQueued = true;
+            postDelayed(dispatchViewportRunnable, 60);
         }
 
         private void recomputePlotData(byte[] data) {
