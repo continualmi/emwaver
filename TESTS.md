@@ -63,8 +63,8 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 ### Local
 
-- Scripts: `cc1101.emw` + `ism.emw`
-- Steps: in `cc1101.emw` press `initRx` or `initTx`; in `ism.emw` press `Initialize` and read all registers.
+- Script: `cc1101.emw`
+- Steps: in `cc1101.emw` press `Init RX` or `Init TX`, then `Initialize & Read` to read all registers.
 - Tests: SPI path, CC1101 init path, register write/readback integrity.
 - Expected: `115000` baud, `433.92 MHz`, `ASK/OOK`, and no repeated-init garbage.
 
