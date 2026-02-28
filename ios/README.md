@@ -48,7 +48,8 @@ Responsibilities:
 Responsibilities:
 - USB MIDI SysEx device communication,
 - runtime host session behavior,
-- remote control integration.
+- remote control integration,
+- sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
 
 ## 2.3 Views
 
