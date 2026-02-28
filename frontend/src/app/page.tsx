@@ -331,6 +331,65 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ─── BEGINNER-FRIENDLY / HACKING MULTITOOL ─── */}
+        <section className="mx-auto max-w-6xl px-5 pb-14">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
+            <div className="space-y-5 text-center">
+              <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
+                The best hacking multitool on the planet
+              </div>
+              <h2 className="mx-auto max-w-3xl text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
+                Plug into your phone. Start hacking.{" "}
+                <span className="text-[color:var(--aqua)]">No prerequisites.</span>
+              </h2>
+              <p className="mx-auto max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
+                EMWaver comes with built-in infrared receiver and transmitter. Plug it into your
+                smartphone, open the app, and immediately start capturing, analyzing, cloning, and
+                retransmitting IR signals. No cables, no setup, no prior knowledge required.
+              </p>
+            </div>
+
+            <div className="mx-auto mt-8 max-w-2xl overflow-hidden rounded-2xl border border-[color:var(--line)]">
+              <img
+                src="/multitool.png"
+                alt="EMWaver with CC1101 and RC522 modules attached"
+                className="block h-auto w-full"
+              />
+            </div>
+
+            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+                <div className="text-2xl">📡</div>
+                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">IR built-in</div>
+                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
+                  Capture and clone TV remotes, AC controllers, LED strips — anything infrared. Out of the box.
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+                <div className="text-2xl">🧩</div>
+                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Easy add-on modules</div>
+                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
+                  Add capabilities with external modules like CC1101 radios, RC522 RFID, sensors, displays, and more.
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+                <div className="text-2xl">🚌</div>
+                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Native bus access</div>
+                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
+                  SPI, I2C, UART, ADC, PWM, and GPIO are exposed directly so scripts can talk to real hardware without firmware rebuilds.
+                </div>
+              </div>
+              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+                <div className="text-2xl">⚡</div>
+                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Host-powered workflow</div>
+                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
+                  Plug into your phone or computer and use the host for UI, compute, storage, and iteration speed.
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* ─── AI-FIRST ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
           <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
@@ -399,57 +458,6 @@ export default function HomePage() {
                       <div>Scans addresses, identifies the sensor, builds a bring-up UI with live readings, then tests the controls against hardware.</div>
                     </div>
                   </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* ─── BEGINNER-FRIENDLY / HACKING MULTITOOL ─── */}
-        <section className="mx-auto max-w-6xl px-5 pb-14">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
-            <div className="space-y-5 text-center">
-              <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
-                The best hacking multitool on the planet
-              </div>
-              <h2 className="mx-auto max-w-3xl text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
-                Plug into your phone. Start hacking.{" "}
-                <span className="text-[color:var(--aqua)]">No prerequisites.</span>
-              </h2>
-              <p className="mx-auto max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                EMWaver comes with built-in infrared receiver and transmitter. Plug it into your
-                smartphone, open the app, and immediately start capturing, analyzing, cloning, and
-                retransmitting IR signals. No cables, no setup, no prior knowledge required.
-              </p>
-            </div>
-
-            <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-                <div className="text-2xl">📡</div>
-                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">IR built-in</div>
-                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
-                  Capture and clone TV remotes, AC controllers, LED strips — anything infrared. Out of the box.
-                </div>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-                <div className="text-2xl">🧩</div>
-                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Easy add-on modules</div>
-                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
-                  Add capabilities with external modules like CC1101 radios, RC522 RFID, sensors, displays, and more.
-                </div>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-                <div className="text-2xl">🚌</div>
-                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Native bus access</div>
-                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
-                  SPI, I2C, UART, ADC, PWM, and GPIO are exposed directly so scripts can talk to real hardware without firmware rebuilds.
-                </div>
-              </div>
-              <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-                <div className="text-2xl">⚡</div>
-                <div className="pt-3 text-sm font-semibold text-[color:var(--ink)]">Host-powered workflow</div>
-                <div className="pt-2 text-xs leading-5 text-[color:var(--ink-dim)]">
-                  Plug into your phone or computer and use the host for UI, compute, storage, and iteration speed.
                 </div>
               </div>
             </div>
