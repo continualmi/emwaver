@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using EMWaver.Services;
 using EMWaver.Services.Cloud;
 using Windows.System;
 
@@ -40,6 +41,21 @@ public sealed partial class SettingsPage : Page
             _suppressModeSelectionEvents = true;
             try
             {
+                var themeTag = AppServices.Settings.Theme switch
+                {
+                    AppThemeMode.Light => "light",
+                    AppThemeMode.Dark => "dark",
+                    _ => "system",
+                };
+                foreach (var item in ThemeModeCombo.Items)
+                {
+                    if (item is ComboBoxItem cbi && (cbi.Tag as string) == themeTag)
+                    {
+                        ThemeModeCombo.SelectedItem = cbi;
+                        break;
+                    }
+                }
+
                 var prod = AppServices.Settings.UseProductionBackend;
                 var desiredTag = prod ? "prod" : "local";
                 foreach (var item in BackendModeCombo.Items)
@@ -126,6 +142,34 @@ public sealed partial class SettingsPage : Page
                 _ = DispatcherQueue.TryEnqueue(() => ProStatusText.Text = ex.Message);
             }
         }
+    }
+
+    private void OnThemeModeChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressModeSelectionEvents)
+        {
+            return;
+        }
+
+        if (ThemeModeCombo.SelectedItem is not ComboBoxItem item)
+        {
+            return;
+        }
+
+        var selectedTheme = ((item.Tag as string) ?? "system") switch
+        {
+            "light" => AppThemeMode.Light,
+            "dark" => AppThemeMode.Dark,
+            _ => AppThemeMode.System,
+        };
+
+        if (AppServices.Settings.Theme == selectedTheme)
+        {
+            return;
+        }
+
+        AppServices.Settings.Theme = selectedTheme;
+        RefreshUi();
     }
 
     private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)

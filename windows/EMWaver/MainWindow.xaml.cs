@@ -2,6 +2,7 @@ using EMWaver.Dialogs;
 using EMWaver.Interop;
 using EMWaver.Models;
 using EMWaver.Pages;
+using EMWaver.Services;
 using EMWaver.Services.Cloud;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -30,8 +31,8 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
 
-        // Dark-mode only (Windows app).
-        RootGrid.RequestedTheme = ElementTheme.Dark;
+        ApplyTheme(AppServices.Settings.Theme);
+        AppServices.Settings.Changed += OnSettingsChanged;
 
         // Ensure the window/titlebar icon matches the app icon.
         TrySetWindowIcon();
@@ -59,6 +60,29 @@ public sealed partial class MainWindow : Window
             UpdateDeviceStatus();
             RebuildConnectMenu();
         });
+
+        Closed += OnClosed;
+    }
+
+    private void OnClosed(object sender, WindowEventArgs args)
+    {
+        Closed -= OnClosed;
+        AppServices.Settings.Changed -= OnSettingsChanged;
+    }
+
+    private void OnSettingsChanged()
+    {
+        RunOnUi(() => ApplyTheme(AppServices.Settings.Theme));
+    }
+
+    private void ApplyTheme(AppThemeMode theme)
+    {
+        RootGrid.RequestedTheme = theme switch
+        {
+            AppThemeMode.Light => ElementTheme.Light,
+            AppThemeMode.Dark => ElementTheme.Dark,
+            _ => ElementTheme.Default,
+        };
     }
 
     private void TrySetWindowIcon()
