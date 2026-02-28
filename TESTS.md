@@ -10,7 +10,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | --- | --- | --- | --- |
 | `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` |
 | `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
-| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[x]` | macOS | `2026-02-07` |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | macOS, iOS | |
 | `004_MFRC522_READ_WRITE_RFID_CARD` | `[ ]` |  | |
 | `005_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
 
@@ -78,13 +78,14 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 ### Local
 
 - Scripts: `sampler.emw` + `cc1101.emw`
-- Steps: in `cc1101.emw` press `initRx`; capture a real 433 MHz signal in `sampler.emw`; confirm chart capture is continuous; switch to `initTx`; press `Retransmit`.
-- Tests: sampler capture integrity, uninterrupted recording, TX replay, flow-control retransmit path.
-- Expected: retransmit causes same real-world effect as original remote; optional RTL-SDR check within about 5-10 us pulse-width margin for current sampler resolution.
+- Systems: macOS, iOS
+- Steps: in `cc1101.emw` press `initRx`; capture a real 433 MHz signal in `sampler.emw`; confirm chart capture is continuous, including idle-low or sparse regions; save `.raw`; clear and reload; save timings `.txt`; switch to `initTx`; press `Retransmit`.
+- Tests: sampler capture integrity, uninterrupted recording, all-zero lane continuity, `.raw` reload parity, timings export/import parity, TX replay, flow-control retransmit path.
+- Expected: chart keeps advancing during active sampling even when the signal is idle-low; reloaded captures match the original waveform; retransmit causes same real-world effect as original remote; optional RTL-SDR check within about 5-10 us pulse-width margin for current sampler resolution.
 
 ### Remote (`003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY`)
 
-- Steps: run the same sampler capture/retransmit flow through remote host control across the full remote case matrix.
+- Steps: run the same sampler capture/retransmit flow through remote host control across the full remote case matrix, including iOS host cases where supported.
 - Expected: matches local `003` in all cases.
 
 ## `004_MFRC522_READ_WRITE_RFID_CARD`
