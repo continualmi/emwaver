@@ -28,7 +28,7 @@
                     <Button x:Name="RunButton" Content="Run" Click="OnRunClick" />
                     <TextBlock x:Name="AttachText" Text="" Opacity="0.75" VerticalAlignment="Center" />
                 </StackPanel>
-                <TextBlock x:Name="ErrorText" Text="" Foreground="Tomato" TextWrapping="Wrap" />
+                <TextBlock x:Name="ErrorText" Text="" Foreground="{ThemeResource AppErrorTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
 

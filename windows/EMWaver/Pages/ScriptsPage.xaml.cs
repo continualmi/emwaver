@@ -55,12 +55,12 @@ public sealed partial class ScriptsPage : Page
         public string IconGlyph => IsUser ? "" : (IsTool ? "" : "");
 
         public Brush BubbleBackground => IsUser
-            ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(36, 0, 120, 212))
+            ? ThemeResources.Brush("AgentUserBubbleBrush", Microsoft.UI.ColorHelper.FromArgb(36, 0, 120, 212))
             : (IsTool
-                ? new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(25, 140, 140, 140))
-                : new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(18, 128, 128, 128)));
+                ? ThemeResources.Brush("AgentToolBubbleBrush", Microsoft.UI.ColorHelper.FromArgb(25, 140, 140, 140))
+                : ThemeResources.Brush("AgentAssistantBubbleBrush", Microsoft.UI.ColorHelper.FromArgb(18, 128, 128, 128)));
 
-        public Brush BubbleBorderBrush => new SolidColorBrush(Microsoft.UI.ColorHelper.FromArgb(36, 80, 80, 80));
+        public Brush BubbleBorderBrush => ThemeResources.Brush("AgentBubbleBorderBrush", Microsoft.UI.ColorHelper.FromArgb(36, 80, 80, 80));
 
         public HorizontalAlignment BubbleAlignment => IsUser ? HorizontalAlignment.Right : HorizontalAlignment.Left;
 
@@ -208,6 +208,7 @@ public sealed partial class ScriptsPage : Page
         );
 
         Loaded += OnLoaded;
+        ActualThemeChanged += OnActualThemeChanged;
 
         // Default: editor-first.
         SetPreviewMode(false);
@@ -232,6 +233,17 @@ public sealed partial class ScriptsPage : Page
         await RefreshEntitlementsUiAsync(force: true);
         await RefreshAsync();
         QueueEditorFocus();
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        if (_isPreviewMode && _lastRenderedTree != null)
+        {
+            RenderPreview(_lastRenderedTree);
+        }
+
+        AgentMessagesList.ItemsSource = null;
+        AgentMessagesList.ItemsSource = _agentMessages;
     }
 
     // Monaco/WebView2 removed on Windows (unstable and non-native).

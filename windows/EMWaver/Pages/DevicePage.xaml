@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:EMWaver.Pages">
 
-    <Grid Padding="16">
+    <Grid Padding="16" Background="{ThemeResource SolidBackgroundFillColorBaseBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -36,11 +36,11 @@
             <StackPanel Grid.Column="1" Spacing="10" Margin="16,0,0,0">
                 <TextBlock Text="Status" FontWeight="SemiBold" />
                 <TextBlock x:Name="StatusText" Text="Disconnected" />
-                <TextBlock x:Name="VersionText" Foreground="Gray" />
-                <TextBlock x:Name="SecureText" Foreground="Gray" />
-                <TextBlock x:Name="DeviceIdText" Foreground="Gray" TextWrapping="Wrap" />
-                <TextBlock x:Name="DfuText" Foreground="Gray" />
-                <TextBlock x:Name="ErrorText" Foreground="DarkRed" TextWrapping="Wrap" />
+                <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="SecureText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="DeviceIdText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="DfuText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                <TextBlock x:Name="ErrorText" Foreground="{ThemeResource AppErrorTextBrush}" TextWrapping="Wrap" />
             </StackPanel>
         </Grid>
     </Grid>
