@@ -33,8 +33,8 @@ export default function HomePage() {
     },
     {
       name: "Windows",
-      detail: "Windows render preview",
-      src: "/script_desktop.png",
+      detail: "Native desktop shell",
+      src: "/script_windows.jpeg",
       alt: "Script UI rendered on Windows",
       frameClassName: "aspect-[16/10]",
       imageClassName: "h-full w-full object-contain p-4",

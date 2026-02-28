@@ -76,10 +76,14 @@ private enum EnvBootstrap {
     private static func candidateRoots() -> [URL] {
         let fm = FileManager.default
         let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
-        let sourceDir = URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        let sourceFile = URL(fileURLWithPath: #filePath, isDirectory: false)
+        let sourceDir = sourceFile.deletingLastPathComponent()
+        let repoFromSource = sourceDir
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
         let bundleDir = Bundle.main.bundleURL.deletingLastPathComponent()
 
-        return [cwd, sourceDir, bundleDir]
+        return [repoFromSource, cwd, sourceDir, bundleDir]
     }
 
     private static func expand(_ input: String, resolved: [String: String]) -> String {
@@ -106,13 +110,16 @@ private enum EnvBootstrap {
 
     private static func findRepoRoot(from start: URL) -> URL? {
         let fm = FileManager.default
-        var current: URL? = start
-        while let c = current {
+        var current: URL? = start.standardizedFileURL
+        var steps = 0
+
+        while let c = current, steps < 8 {
             if fm.fileExists(atPath: c.appendingPathComponent("secrets/shared/core.env").path) {
                 return c
             }
             let parent = c.deletingLastPathComponent()
             current = (parent.path == c.path) ? nil : parent
+            steps += 1
         }
         return nil
     }
