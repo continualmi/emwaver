@@ -10,6 +10,29 @@
 
             <TextBlock Text="Settings" FontSize="20" FontWeight="SemiBold" />
 
+            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Appearance" FontWeight="SemiBold" />
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                        <TextBlock Text="Mode:" />
+                        <ComboBox x:Name="ThemeModeCombo" SelectionChanged="OnThemeModeChanged" Width="220" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
+                            <ComboBoxItem Content="System" Tag="system" />
+                            <ComboBoxItem Content="Light" Tag="light" />
+                            <ComboBoxItem Content="Dark" Tag="dark" />
+                        </ComboBox>
+                    </StackPanel>
+
+                    <TextBlock Text="System is the default and follows the device appearance setting."
+                               Opacity="0.75"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
 
             <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
                     BorderThickness="1"

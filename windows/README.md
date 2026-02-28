@@ -81,6 +81,12 @@ Firmware update dialogs/managers are present:
 
 Bundled firmware assets live under `Assets/Firmware` (updated via repo tooling).
 
+## 3.5 App settings and appearance
+
+Settings surface includes app-level preferences such as:
+- appearance mode (`System`, `Light`, `Dark`),
+- staff-only backend/frontend environment switching.
+
 ---
 
 ## 4) Interop note
