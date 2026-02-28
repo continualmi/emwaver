@@ -38,10 +38,7 @@ struct EMWaverApp: App {
 /// Loads repo env files for local development (no Xcode scheme env required).
 private enum EnvBootstrap {
     static func loadForDevIfAvailable() {
-        let fm = FileManager.default
-        let start = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
-
-        guard let repoRoot = findRepoRoot(from: start) else { return }
+        guard let repoRoot = candidateRoots().compactMap(findRepoRoot(from:)).first else { return }
 
         let files = [
             "secrets/shared/core.env",
@@ -74,6 +71,15 @@ private enum EnvBootstrap {
                 }
             }
         }
+    }
+
+    private static func candidateRoots() -> [URL] {
+        let fm = FileManager.default
+        let cwd = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+        let sourceDir = URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        let bundleDir = Bundle.main.bundleURL.deletingLastPathComponent()
+
+        return [cwd, sourceDir, bundleDir]
     }
 
     private static func expand(_ input: String, resolved: [String: String]) -> String {
