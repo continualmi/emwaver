@@ -134,7 +134,7 @@ export default function HomePage() {
                 {/* TODO: replace with a real photo showing EMWaver plugged into a laptop with modules attached */}
                 <div className="overflow-hidden rounded-2xl border border-[color:var(--line)]">
                   <img
-                    src="/landing3.jpeg"
+                    src="/landing3.png"
                     alt="EMWaver connected to laptop with modules"
                     className="h-auto w-full object-cover"
                   />
@@ -142,7 +142,7 @@ export default function HomePage() {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="overflow-hidden rounded-2xl border border-[color:var(--line)]">
                     <img
-                      src="/landing2.jpeg"
+                      src="/landing2.png"
                       alt="EMWaver device close-up"
                       className="h-36 w-full object-cover"
                     />
