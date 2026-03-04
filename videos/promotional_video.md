@@ -4,7 +4,7 @@ Drive folder name: `EMWaver Videos`
 
 Drive Account: emwavers@gmail.com
 
-Drive folder link: `TBD`
+Drive folder link: `https://drive.google.com/drive/u/2/folders/1hPoiWPKId1ZUcjdpcH-nkf51kpWupgdW`
 
 ## Source Clips
 
