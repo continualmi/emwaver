@@ -283,10 +283,7 @@ public final class ScriptEngine {
                         String json = String.valueOf(args[0]).trim();
                         if (!json.isEmpty()) {
                             try {
-                                Object parsed = cx.evaluateString(scope, "(" + json + ")", "ScriptRenderJSON", 1, null);
-                                if (parsed instanceof Scriptable) {
-                                    rootNode = (Scriptable) parsed;
-                                }
+                                rootNode = parseJsonNode(cx, scope, json);
                             } catch (Exception ignored) {
                             }
                         }
@@ -854,6 +851,26 @@ public final class ScriptEngine {
                 return Context.getUndefinedValue();
             }
         });
+    }
+
+    private Scriptable parseJsonNode(Context cx, Scriptable scope, String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        Object jsonObj = ScriptableObject.getProperty(scope, "JSON");
+        if (!(jsonObj instanceof Scriptable)) {
+            return null;
+        }
+        Scriptable jsonScriptable = (Scriptable) jsonObj;
+        Object parseObj = ScriptableObject.getProperty(jsonScriptable, "parse");
+        if (!(parseObj instanceof Function)) {
+            return null;
+        }
+        Object parsed = ((Function) parseObj).call(cx, scope, jsonScriptable, new Object[]{json});
+        if (parsed instanceof Scriptable) {
+            return (Scriptable) parsed;
+        }
+        return null;
     }
 
     private boolean containsAsyncTokens(String script) {
