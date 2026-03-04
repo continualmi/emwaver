@@ -87,6 +87,14 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
+Google sign-in config is bundled at build time from repo env files:
+- `secrets/shared/core.env`
+- `secrets/shared/firebase.env`
+- `secrets/shared/oauth.env`
+- `secrets/targets/apps.env`
+
+The iOS target writes a generated `EMWaverEnv.plist` into the app bundle and patches the built app `Info.plist` with the Google callback URL scheme. Scheme environment variables still override bundled values when present.
+
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 
 ---
