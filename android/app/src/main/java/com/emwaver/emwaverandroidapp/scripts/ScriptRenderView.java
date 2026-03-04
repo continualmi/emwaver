@@ -146,6 +146,10 @@ public final class ScriptRenderView extends FrameLayout {
                 return buildSpacer(node, parentOrientation);
             case DIVIDER:
                 return buildDivider(node);
+            case CARD:
+                return buildCard(node);
+            case TILE:
+                return buildTile(node);
             case PROGRESS:
                 return buildProgress(node);
             default:
@@ -608,6 +612,14 @@ public final class ScriptRenderView extends FrameLayout {
     private View buildGrid(ScriptNode node) {
         ScriptNodeProps props = node.getProps();
         int columns = props.getDouble("columns") != null ? props.getDouble("columns").intValue() : 2;
+
+        Double minColumnWidth = props.getDouble("minColumnWidth");
+        if (minColumnWidth != null && minColumnWidth > 0) {
+            int screenWidth = getResources().getConfiguration().screenWidthDp;
+            int calculatedColumns = Math.max(1, screenWidth / minColumnWidth.intValue());
+            columns = Math.max(columns, calculatedColumns);
+        }
+
         int spacingPx = spacingPx(props);
         GridLayout grid = new GridLayout(getContext());
         grid.setColumnCount(Math.max(columns, 1));
@@ -712,6 +724,149 @@ public final class ScriptRenderView extends FrameLayout {
         }
         applyCommonStyles(divider, props);
         return divider;
+    }
+
+    private View buildCard(ScriptNode node) {
+        ScriptNodeProps props = node.getProps();
+        LinearLayout container = new LinearLayout(getContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+
+        String title = props.getString("title");
+        if (title != null && !title.isEmpty()) {
+            TextView titleView = new TextView(getContext());
+            titleView.setText(title);
+            titleView.setTypeface(Typeface.DEFAULT_BOLD);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            Integer titleColor = ScriptValueUtils.parseColor(props.get("titleColor"));
+            if (titleColor != null) {
+                titleView.setTextColor(titleColor);
+            }
+            container.addView(titleView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+        }
+
+        String subtitle = props.getString("subtitle");
+        if (subtitle != null && !subtitle.isEmpty()) {
+            TextView subtitleView = new TextView(getContext());
+            subtitleView.setText(subtitle);
+            subtitleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
+            subtitleView.setTextColor(Color.GRAY);
+            container.addView(subtitleView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+        }
+
+        List<ScriptNode> children = node.getChildren();
+        if (children != null && !children.isEmpty()) {
+            int spacingPx = dpToPx(12);
+            for (ScriptNode child : children) {
+                View childView = buildView(child, Orientation.VERTICAL);
+                if (childView == null) {
+                    continue;
+                }
+                LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT
+                );
+                if (container.getChildCount() > 0) {
+                    params.topMargin = spacingPx;
+                }
+                container.addView(childView, params);
+            }
+        }
+
+        Integer backgroundColor = ScriptValueUtils.parseColor(props.get("backgroundColor"));
+        Double cornerRadius = props.getDouble("cornerRadius");
+        if (backgroundColor != null || cornerRadius != null) {
+            GradientDrawable drawable = new GradientDrawable();
+            drawable.setColor(backgroundColor != null ? backgroundColor : Color.TRANSPARENT);
+            if (cornerRadius != null) {
+                drawable.setCornerRadius((float) (cornerRadius * density));
+            }
+            container.setBackground(drawable);
+        }
+
+        int paddingPx = dpToPx(16);
+        container.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
+        return container;
+    }
+
+    private View buildTile(ScriptNode node) {
+        ScriptNodeProps props = node.getProps();
+        LinearLayout container = new LinearLayout(getContext());
+        container.setOrientation(LinearLayout.VERTICAL);
+        container.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+
+        String title = props.getString("title");
+        if (title != null && !title.isEmpty()) {
+            TextView titleView = new TextView(getContext());
+            titleView.setText(title);
+            titleView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12);
+            Integer titleColor = ScriptValueUtils.parseColor(props.get("foregroundColor"));
+            if (titleColor != null) {
+                titleView.setTextColor(titleColor);
+            } else {
+                titleView.setTextColor(Color.GRAY);
+            }
+            container.addView(titleView, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
+            ));
+        }
+
+        String value = props.getString("value");
+        TextView valueView = new TextView(getContext());
+        valueView.setText(value != null ? value : "");
+        valueView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        Boolean monospaceValue = props.getBoolean("monospaceValue");
+        if (monospaceValue != null && monospaceValue) {
+            valueView.setTypeface(Typeface.MONOSPACE);
+        }
+        Integer valueColor = ScriptValueUtils.parseColor(props.get("valueColor"));
+        if (valueColor != null) {
+            valueView.setTextColor(valueColor);
+        }
+        container.addView(valueView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ));
+
+        Boolean disabled = props.getBoolean("disabled");
+        if (disabled != null && disabled) {
+            container.setAlpha(0.5f);
+        }
+
+        String token = props.getHandlerToken(ScriptEventType.TAP);
+        if (token != null) {
+            container.setClickable(true);
+            container.setFocusable(true);
+            container.setOnClickListener(v -> {
+                if (remoteEventListener != null) {
+                    remoteEventListener.onRemoteEvent(node.getId(), ScriptEventType.TAP, null);
+                } else {
+                    dispatchEvent(token, Collections.emptyList());
+                }
+            });
+        }
+
+        Integer backgroundColor = ScriptValueUtils.parseColor(props.get("backgroundColor"));
+        Double cornerRadius = props.getDouble("cornerRadius");
+        if (backgroundColor != null || cornerRadius != null) {
+            GradientDrawable drawable = new GradientDrawable();
+            drawable.setColor(backgroundColor != null ? backgroundColor : Color.TRANSPARENT);
+            if (cornerRadius != null) {
+                drawable.setCornerRadius((float) (cornerRadius * density));
+            }
+            container.setBackground(drawable);
+        }
+
+        int paddingPx = dpToPx(12);
+        container.setPadding(paddingPx, paddingPx, paddingPx, paddingPx);
+        return container;
     }
 
     private View buildProgress(ScriptNode node) {
