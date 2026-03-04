@@ -187,63 +187,38 @@ public final class ScriptRenderView extends FrameLayout {
         } catch (Exception ignored) {
         }
 
-        boolean stackOnCompact = compactScreen
-            && node.getChildren().size() >= 3
-            && rowContainsPicker(node);
+        ScriptNodeProps props = node.getProps();
+        String compactLayout = props.getString("compactLayout");
+        boolean forceRowOnCompact = "row".equalsIgnoreCase(compactLayout)
+            || "horizontal".equalsIgnoreCase(compactLayout);
+        boolean forceStack = "stack".equalsIgnoreCase(compactLayout)
+            || "column".equalsIgnoreCase(compactLayout)
+            || "vertical".equalsIgnoreCase(compactLayout);
+
+        boolean useVertical = forceStack || (compactScreen && !forceRowOnCompact);
 
         LinearLayout layout = new LinearLayout(getContext());
-        layout.setOrientation(stackOnCompact ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
+        layout.setOrientation(useVertical ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
         layout.setLayoutParams(new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        configureAlignment(layout, node.getProps(), stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
+        configureAlignment(layout, props, useVertical ? Orientation.VERTICAL : Orientation.HORIZONTAL);
         int spacingPx = spacingPx(node.getProps());
         for (ScriptNode child : node.getChildren()) {
-            View childView = buildView(child, stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
+            View childView = buildView(child, useVertical ? Orientation.VERTICAL : Orientation.HORIZONTAL);
             if (childView == null) {
                 continue;
             }
-            LinearLayout.LayoutParams params = buildChildLayoutParams(child.getProps(), stackOnCompact ? Orientation.VERTICAL : Orientation.HORIZONTAL);
-            if (spacingPx > 0 && layout.getChildCount() > 0 && !stackOnCompact) {
+            LinearLayout.LayoutParams params = buildChildLayoutParams(child.getProps(), useVertical ? Orientation.VERTICAL : Orientation.HORIZONTAL);
+            if (spacingPx > 0 && layout.getChildCount() > 0 && !useVertical) {
                 params.leftMargin = spacingPx;
             }
-            if (spacingPx > 0 && layout.getChildCount() > 0 && stackOnCompact) {
+            if (spacingPx > 0 && layout.getChildCount() > 0 && useVertical) {
                 params.topMargin = spacingPx;
             }
             applySizeConstraints(childView, child.getProps());
             layout.addView(childView, params);
         }
-        ScriptNodeProps props = node.getProps();
-        if (compactScreen && !stackOnCompact) {
-            HorizontalScrollView scroll = new HorizontalScrollView(getContext());
-            scroll.setHorizontalScrollBarEnabled(false);
-            scroll.addView(layout, new HorizontalScrollView.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ));
-            applyCommonStyles(scroll, props);
-            return scroll;
-        }
-
         applyCommonStyles(layout, props);
         return layout;
-    }
-
-    private boolean rowContainsPicker(ScriptNode node) {
-        if (node == null) {
-            return false;
-        }
-        if (node.getType() == ScriptNodeType.PICKER) {
-            return true;
-        }
-        List<ScriptNode> children = node.getChildren();
-        if (children == null || children.isEmpty()) {
-            return false;
-        }
-        for (ScriptNode child : children) {
-            if (rowContainsPicker(child)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private View buildText(ScriptNode node) {
