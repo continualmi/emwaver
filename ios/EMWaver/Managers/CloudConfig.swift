@@ -11,8 +11,7 @@ enum CloudConfig {
 
     static func allowAnonSync() -> Bool {
         // Parity with macOS/Windows: anon sync is only enabled explicitly.
-        let env = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let env = AppEnvironment.string("EMWAVER_ALLOW_ANON_SYNC")
         return env == "1"
     }
 }
