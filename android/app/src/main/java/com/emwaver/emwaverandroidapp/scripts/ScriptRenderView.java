@@ -679,8 +679,13 @@ public final class ScriptRenderView extends FrameLayout {
         String errorText = props.getString("errorText");
         double[] cachedViewport = nodeId != null ? plotViewportCache.get(nodeId) : null;
         if (cachedViewport != null && cachedViewport.length >= 2) {
-            xMin = cachedViewport[0];
-            xMax = cachedViewport[1];
+            boolean hasExplicitViewport = Double.isFinite(xMax) && xMax > xMin;
+            boolean scriptChangedViewport = hasExplicitViewport
+                && (Math.abs(cachedViewport[0] - xMin) > 0.5 || Math.abs(cachedViewport[1] - xMax) > 0.5);
+            if (!scriptChangedViewport) {
+                xMin = cachedViewport[0];
+                xMax = cachedViewport[1];
+            }
         }
 
         String viewportToken = props.getHandlerToken(ScriptEventType.VIEWPORT);

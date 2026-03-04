@@ -149,6 +149,10 @@ public final class ScriptEngine {
                 cx.setOptimizationLevel(-1);
                 cx.setLanguageVersion(Context.VERSION_ES6);
                 ensureScope(cx);
+                // Bootstrap hides host primitives after capturing them.
+                // Reinstall bridge functions before each run.
+                installBridge(scope);
+                applyGlobalBindings(cx, scope);
                 callbackRegistry.clear();
                 clearAllTimeouts();
                 injectDsl(cx, scope);

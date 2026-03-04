@@ -54,6 +54,11 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_USB_VENDOR_ID = 1155;   // 0x0483
     private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
 
+    // Sampler opcodes.
+    private static final int EMW_OP_SAMPLE = 0x60;
+    private static final int EMW_SAMPLE_START = 0x00;
+    private static final int EMW_SAMPLE_STOP = 0x01;
+
     private final IBinder binder = new LocalBinder();
 
     // DFU/flash (USB control transfers)
@@ -69,6 +74,9 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiOutputPort midiOut;
 
     private final Object midiLock = new Object();
+
+    // Keep all-zero stream lanes while sampler stream mode is active.
+    private volatile boolean isSamplerStreamingActive = false;
 
     private volatile boolean secureConnected = false;
     private volatile String secureDeviceIdB64 = null;
@@ -129,6 +137,22 @@ public class USBService extends Service implements DeviceConnectionService {
             if (b != 0) return false;
         }
         return true;
+    }
+
+    private void updateSamplerStreamingState(byte[] lane) {
+        if (lane == null || lane.length < 2) {
+            return;
+        }
+        int opcode = lane[0] & 0xFF;
+        if (opcode != EMW_OP_SAMPLE) {
+            return;
+        }
+        int sub = lane[1] & 0xFF;
+        if (sub == EMW_SAMPLE_START) {
+            isSamplerStreamingActive = true;
+        } else if (sub == EMW_SAMPLE_STOP) {
+            isSamplerStreamingActive = false;
+        }
     }
 
     private void writeFrame(byte[] cmdLane18, byte[] streamLane18) {
@@ -254,7 +278,7 @@ public class USBService extends Service implements DeviceConnectionService {
                     if (!isLaneEmpty(cmdLane)) {
                         storeBulkPkt(cmdLane, tsMs);
                     }
-                    if (!isLaneEmpty(streamLane)) {
+                    if (!isLaneEmpty(streamLane) || isSamplerStreamingActive) {
                         storeBulkPkt(streamLane, tsMs);
                     }
                 }
@@ -445,6 +469,7 @@ public class USBService extends Service implements DeviceConnectionService {
         midiOut = null;
         midiIn = null;
         midiDevice = null;
+        isSamplerStreamingActive = false;
     }
 
     @Override
@@ -452,6 +477,9 @@ public class USBService extends Service implements DeviceConnectionService {
         if (bytes == null) {
             return;
         }
+
+        updateSamplerStreamingState(bytes);
+
         // Treat generic write as a cmd-lane injection.
         byte[] cmdLane = bytes.length == UsbMidiSysex.LANE_SIZE ? bytes : makeLanePacket(bytes);
         if (cmdLane == null || cmdLane.length != UsbMidiSysex.LANE_SIZE) {
