@@ -15,6 +15,8 @@ import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
@@ -80,6 +82,11 @@ public final class ScriptRenderView extends FrameLayout {
     private EventListener eventListener;
     private RemoteEventListener remoteEventListener;
     private final Map<String, double[]> plotViewportCache = new HashMap<>();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable applyPendingRenderRunnable = this::applyPendingRender;
+    @Nullable
+    private ScriptTree pendingTree;
+    private boolean renderScheduled;
     private final float density;
     public ScriptRenderView(@NonNull Context context) {
         this(context, null);
@@ -100,11 +107,33 @@ public final class ScriptRenderView extends FrameLayout {
     }
 
     public void clear() {
+        synchronized (this) {
+            pendingTree = null;
+            renderScheduled = false;
+        }
+        mainHandler.removeCallbacks(applyPendingRenderRunnable);
         removeAllViews();
         plotViewportCache.clear();
     }
 
     public void render(@Nullable ScriptTree tree) {
+        synchronized (this) {
+            pendingTree = tree;
+            if (renderScheduled) {
+                return;
+            }
+            renderScheduled = true;
+        }
+        mainHandler.post(applyPendingRenderRunnable);
+    }
+
+    private void applyPendingRender() {
+        ScriptTree tree;
+        synchronized (this) {
+            tree = pendingTree;
+            pendingTree = null;
+            renderScheduled = false;
+        }
         removeAllViews();
         if (tree == null || tree.getRoot() == null) {
             return;
@@ -113,6 +142,13 @@ public final class ScriptRenderView extends FrameLayout {
         if (root != null) {
             LayoutParams params = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
             addView(root, params);
+        }
+
+        synchronized (this) {
+            if (pendingTree != null && !renderScheduled) {
+                renderScheduled = true;
+                mainHandler.post(applyPendingRenderRunnable);
+            }
         }
     }
 
