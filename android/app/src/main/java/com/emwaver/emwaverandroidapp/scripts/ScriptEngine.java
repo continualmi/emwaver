@@ -1330,9 +1330,27 @@ public final class ScriptEngine {
     private Map<String, Object> extractProps(Scriptable value) {
         Object propsObj = ScriptableObject.getProperty(value, "props");
         if (propsObj instanceof Scriptable) {
-            return toJavaMap((Scriptable) propsObj);
+            return sanitizeLayoutProps(toJavaMap((Scriptable) propsObj));
         }
         return new HashMap<>();
+    }
+
+    private Map<String, Object> sanitizeLayoutProps(Map<String, Object> props) {
+        if (props == null || props.isEmpty()) {
+            return props;
+        }
+        Map<String, Object> cleaned = new HashMap<>(props);
+        cleaned.remove("x");
+        cleaned.remove("y");
+        cleaned.remove("left");
+        cleaned.remove("top");
+        cleaned.remove("right");
+        cleaned.remove("bottom");
+        Object position = cleaned.get("position");
+        if (position != null && "absolute".equalsIgnoreCase(String.valueOf(position))) {
+            cleaned.remove("position");
+        }
+        return cleaned;
     }
 
     private Map<String, Object> attachHandlerMetadata(Map<String, Object> props, Map<ScriptEventType, String> handlers) {
