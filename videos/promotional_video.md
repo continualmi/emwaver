@@ -6,6 +6,12 @@ Drive Account: emwavers@gmail.com
 
 Drive folder link: `https://drive.google.com/drive/u/2/folders/1hPoiWPKId1ZUcjdpcH-nkf51kpWupgdW`
 
+## Progress
+
+Overall completion: `37%` (`10/27` clips done)
+
+`[#######-------------]`
+
 ## Source Clips
 
 | File name | Date recorded | Status | Notes |
@@ -16,12 +22,12 @@ Drive folder link: `https://drive.google.com/drive/u/2/folders/1hPoiWPKId1ZUcjdp
 | `clip_004_ir_capture_tv_remote.MOV` | `2026-03-04` | `done` | Repeat the same capture flow in `sampler.emw` using a TV remote, including a clear zoom on the sampled signal to highlight consistency across different IR remotes. |
 | `clip_005_ir_retransmit_light_sequence.MOV` | `TBD` | `pending` | Using `sampler.emw` signal picker, retransmit the lamp command sequence in one realistic flow (power on, then power off) to demonstrate practical playback behavior end to end. |
 | `clip_006_ir_retransmit_tv_channel_up.MOV` | `TBD` | `pending` | Using `sampler.emw` signal picker, retransmit the TV `Channel Up` command and show the TV reacting immediately so the clip verifies successful IR replay in a familiar scenario. |
-| `clip_007_cc1101_module_insert_into_emwaver.MOV` | `TBD` | `pending` | Show only the physical CC1101 module insertion into the EMWaver device (no phone connection yet), with a tight close-up that clearly shows alignment and seating. |
-| `clip_008_cc1101_emwaver_into_phone.MOV` | `TBD` | `pending` | Start with CC1101 already inserted, then plug EMWaver into the phone and hold on connection confirmation in the app to complete the two-step setup story. |
-| `clip_009_rc522_module_insert_into_emwaver.MOV` | `TBD` | `pending` | Show only the physical RC522 module insertion into the EMWaver device (no phone connection yet), matching the same framing style used for CC1101. |
-| `clip_010_rc522_emwaver_into_phone.MOV` | `TBD` | `pending` | Start with RC522 already inserted, then plug EMWaver into the phone and show app-side connection confirmation to mirror the CC1101 flow. |
-| `clip_011_dual_module_insert_into_emwaver.MOV` | `TBD` | `pending` | Show EMWaver with both module slots populated (CC1101 + RC522) as a fully kitted configuration before host connection, emphasizing compact expansion readiness. |
-| `clip_012_dual_module_emwaver_into_phone.MOV` | `TBD` | `pending` | Start with both modules installed, then plug the fully kitted EMWaver into the phone and confirm the connected runtime state in-app. |
+| `clip_007_cc1101_module_insert_into_emwaver.MOV` | `2026-03-05` | `done` | Show only the physical CC1101 module insertion into the EMWaver device (no phone connection yet), with a tight close-up that clearly shows alignment and seating. |
+| `clip_008_cc1101_emwaver_into_phone.MOV` | `2026-03-05` | `done` | Start with CC1101 already inserted, then plug EMWaver into the phone and hold on connection confirmation in the app to complete the two-step setup story. |
+| `clip_009_rc522_module_insert_into_emwaver.MOV` | `2026-03-05` | `done` | Show only the physical RC522 module insertion into the EMWaver device (no phone connection yet), matching the same framing style used for CC1101. |
+| `clip_010_rc522_emwaver_into_phone.MOV` | `2026-03-05` | `done` | Start with RC522 already inserted, then plug EMWaver into the phone and show app-side connection confirmation to mirror the CC1101 flow. |
+| `clip_011_dual_module_insert_into_emwaver.MOV` | `2026-03-05` | `done` | Show EMWaver with both module slots populated (CC1101 + RC522) as a fully kitted configuration before host connection, emphasizing compact expansion readiness. |
+| `clip_012_dual_module_emwaver_into_phone.MOV` | `2026-03-05` | `done` | Start with both modules installed, then plug the fully kitted EMWaver into the phone and confirm the connected runtime state in-app. |
 | `clip_013_cc1101_capture_garage_remote_signal.MOV` | `TBD` | `pending` | With the CC1101 module connected, capture a garage remote RF signal in `sampler.emw`, mirroring the earlier IR capture flow but now demonstrating sub-GHz acquisition. |
 | `clip_014_cc1101_retransmit_garage_open.MOV` | `TBD` | `pending` | Outdoors near a real garage, retransmit the captured garage signal from `sampler.emw` and show the garage door beginning to open as visual proof of replay success. |
 | `clip_015_cc1101_capture_tesla_charge_port_signal.MOV` | `TBD` | `pending` | Capture the Tesla charging port open signal from the charging cable remote action using CC1101, with clear framing of the source action and sampled signal state. |
