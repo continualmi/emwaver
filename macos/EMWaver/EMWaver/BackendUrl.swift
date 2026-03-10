@@ -11,7 +11,7 @@ enum BackendUrl {
     }
 
     static var localDefault: String {
-        (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL_LOCAL"] ?? "http://127.0.0.1:8787")
+        (ProcessInfo.processInfo.environment["EMWAVER_BACKEND_URL_LOCAL"] ?? "http://127.0.0.1:3201")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

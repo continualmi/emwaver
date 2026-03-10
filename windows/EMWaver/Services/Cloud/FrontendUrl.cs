@@ -6,7 +6,7 @@ internal static class FrontendUrl
         (System.Environment.GetEnvironmentVariable("EMWAVER_FRONTEND_URL_CLOUD") ?? "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io").Trim();
 
     internal static string Local =>
-        (System.Environment.GetEnvironmentVariable("EMWAVER_FRONTEND_URL_LOCAL") ?? "http://127.0.0.1:3000").Trim();
+        (System.Environment.GetEnvironmentVariable("EMWAVER_FRONTEND_URL_LOCAL") ?? "http://127.0.0.1:3200").Trim();
 
     internal static string Resolve()
     {

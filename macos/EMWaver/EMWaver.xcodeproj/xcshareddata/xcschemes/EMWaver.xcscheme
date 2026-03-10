@@ -92,7 +92,7 @@
          </EnvironmentVariable>
          <EnvironmentVariable
             key = "EMWAVER_BACKEND_URL"
-            value = "http://127.0.0.1:8787"
+            value = "http://127.0.0.1:3201"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable

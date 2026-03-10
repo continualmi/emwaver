@@ -20,7 +20,7 @@ enum FrontendUrl {
     }
 
     static var localDefault: String {
-        (ProcessInfo.processInfo.environment["EMWAVER_FRONTEND_URL_LOCAL"] ?? "http://127.0.0.1:3000")
+        (ProcessInfo.processInfo.environment["EMWAVER_FRONTEND_URL_LOCAL"] ?? "http://127.0.0.1:3200")
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 

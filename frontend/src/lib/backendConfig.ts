@@ -9,7 +9,7 @@ export const CLOUD_BACKEND_URL = (
 
 export const LOCAL_BACKEND_URL = (
   process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL_LOCAL ||
-  "http://127.0.0.1:8787"
+  "http://127.0.0.1:3201"
 ).trim().replace(/\/+$/, "");
 
 export const STAFF_ONLY_ENABLED = ((process.env.NEXT_PUBLIC_EMWAVER_STAFF_ONLY || "0").trim() === "1");
