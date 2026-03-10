@@ -174,8 +174,8 @@ __attribute__((noreturn, noinline, section(".RamFunc"))) static void emw_enter_r
 #define USER_DATA_FLASH_ADDR 0x08007C00
 #define DEVICE_NAME_MAX_LEN 32
 
-// SecureWaver identity blob (DeviceID + Proof) is provisioned into the page below USER_DATA_FLASH_ADDR.
-// Layout must match securewaver/src-tauri/src/main.rs.
+// Signed identity blob (DeviceID + Proof) is provisioned into the page below USER_DATA_FLASH_ADDR.
+// Layout must match the main-app provisioning flow.
 #define EMW_IDENTITY_FLASH_ADDR 0x08007800
 #define EMW_IDENTITY_MAGIC0 'E'
 #define EMW_IDENTITY_MAGIC1 'M'
@@ -1749,7 +1749,7 @@ int main(void)
           }
 
           case EMW_OP_IDENTITY_GET: {
-              // Returns SecureWaver-provisioned identity bytes.
+              // Returns provisioned signed identity bytes.
               // Request format: [opcode, which, chunk]
               // - which: 0 = DeviceID (16 bytes), 1 = Proof chunk (16 bytes)
               // - chunk: 0..3 (only used when which=1)

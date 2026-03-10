@@ -45,7 +45,7 @@ def _parse_b64(name: str, v: Any, expected_len: Optional[int] = None) -> bytes:
 
 @devices_bp.post("/attach")
 def attach_device():
-    """Attach a SecureWaver-minted device identity to the authenticated user.
+    """Attach a backend-minted device identity to the authenticated user.
 
     Payload: { device_id_b64, proof_b64 }
 

@@ -60,7 +60,7 @@ Registered route modules in `emw_backend/routes/`:
 - `agent.py`, `agent_messages.py` — conversation + message APIs, chat/streaming.
 - `hosts.py` — host session heartbeat/listing.
 - `ws.py` — authenticated WebSocket relay between web controllers and hosts.
-- `devices.py` — attach/list/label SecureWaver devices.
+- `devices.py` — attach/list/label minted devices.
 - `provisioning.py` — mint DeviceID+Proof (paid platform activation endpoint).
 - `entitlements.py`, `pro.py`, `credits.py`, `billing.py`, `store.py` — Pro/store/billing flows.
 - `auth_handoff.py` — auth bridge/handoff endpoints.

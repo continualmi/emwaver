@@ -4,6 +4,8 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB workflows, remote host control, cloud/auth integrations, and firmware/update UX on macOS.
 
+It is now the canonical desktop surface for device activation and DFU provisioning: the macOS app requests backend-authoritative `DeviceID + Proof`, enters DFU/update mode, flashes firmware, verifies device authenticity in both run/update paths, and provisions or restores the signed identity page.
+
 ---
 
 ## 1) Project layout
@@ -46,7 +48,9 @@ Core files include:
 Responsibilities:
 - local USB host operation,
 - remote attach/control pathways,
-- host presence and cloud session integration.
+- host presence and cloud session integration,
+- device authenticity verification and account attach,
+- mint/provision handoff into DFU update tooling for first-party activation on macOS.
 
 ## 2.3 UI surfaces
 
@@ -67,7 +71,7 @@ Representative views:
 
 ---
 
-## 3) Firmware update and tooling
+## 3) Firmware update, activation, and tooling
 
 Firmware update UI/logic:
 - `FirmwareUpdateManager.swift`
@@ -78,6 +82,15 @@ Tooling helper path:
 - `macos/EMWaver/Tools/README.md`
 
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
+
+Current macOS responsibility in this area:
+- secure-device firmware update with identity preservation,
+- first-party mint + provision flow for unsecured devices,
+- backend-tethered activation using `/provisioning/mint`,
+- writing/restoring the flash identity page after DFU flash,
+- explicit authenticity verification in Run Mode and Update Mode,
+- bundled or operator-selected custom firmware images,
+- operator-readable progress and diagnostic logging for provisioning/update sessions.
 
 ---
 
@@ -101,7 +114,7 @@ As with other app folders, avoid relying on Linux agent environment for native a
 
 1. Keep macOS-specific host UI and settings here; move shared logic to `/apple`.
 2. Keep remote-control protocol compatibility aligned with backend and other clients.
-3. Ensure firmware update helper integration remains stable when changing update flow.
+3. Ensure firmware update helper integration remains stable when changing update or activation flow.
 4. Document any new app-level env/config toggles in this README.
 
 ---

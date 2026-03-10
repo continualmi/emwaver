@@ -206,7 +206,7 @@ export default function AccountPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-[color:var(--ink)]">My devices</div>
-                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Attached SecureWaver identities</div>
+                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Attached EMWaver device identities</div>
                 </div>
                 <button
                   onClick={() => void refresh()}

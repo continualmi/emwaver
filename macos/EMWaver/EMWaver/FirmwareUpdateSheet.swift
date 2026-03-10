@@ -7,13 +7,19 @@ struct FirmwareUpdateSheet: View {
 
     @State private var updateModeRequested: Bool = false
 
+    private var isSecureWorkflow: Bool {
+        device.isSecureConnected
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Update EMWaver")
+                    Text(isSecureWorkflow ? "Update EMWaver" : "Activate EMWaver")
                         .font(.title3.weight(.semibold))
-                    Text("Update your device to the latest EMWaver version.")
+                    Text(isSecureWorkflow
+                         ? "Update your device to the latest EMWaver version."
+                         : "Mint the device with the backend, flash bundled firmware, and write its signed identity.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -40,18 +46,12 @@ struct FirmwareUpdateSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("Firmware update is blocked until the device is secured.")
+                        Text("This board is not activated yet. Activation uses the backend minting flow to issue a valid DeviceID + Proof before the app provisions firmware in Update Mode.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
-                        if auth.isSignedIn {
-                            Button("Recover device identity") {
-                                updater.startRecovery(auth: auth, device: device)
-                            }
-                            .disabled(updater.isFlashing)
-                            .font(.caption)
-                        } else {
-                            Text("Sign in to recover a device identity.")
+                        if !auth.isSignedIn {
+                            Text("Sign in to mint and activate this device.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -66,6 +66,61 @@ struct FirmwareUpdateSheet: View {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.secondary.opacity(0.08))
                 )
+            }
+
+            GroupBox("Verification") {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Run authenticity checks in both Run Mode and Update Mode.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    HStack {
+                        Button("Verify in Run Mode") {
+                            updater.verifyRunModeIdentity(device: device)
+                        }
+                        .disabled(!device.isConnected || updater.isFlashing)
+
+                        Button("Verify in Update Mode") {
+                            updater.verifyUpdateModeIdentity()
+                        }
+                        .disabled(!updater.dfuConnected || updater.isFlashing)
+                    }
+
+                    if let verification = updater.lastVerification {
+                        Text(verification.ok ? "Certified original EMWaver device." : "Device is not certified.")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(verification.ok ? Color.green : Color.red)
+
+                        Text(verification.transport)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            GroupBox("Firmware source") {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Button(updater.firmwareSourceUsesCustom ? "Use bundled firmware" : "Use custom firmware…") {
+                            updater.toggleFirmwareSource()
+                        }
+                        .disabled(updater.isFlashing)
+
+                        if updater.firmwareSourceUsesCustom {
+                            Button("Select .bin…") {
+                                updater.selectCustomFirmware()
+                            }
+                            .disabled(updater.isFlashing)
+                        }
+                    }
+
+                    Text("Current firmware: \(updater.firmwareSummary)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                }
+                .padding(.vertical, 4)
             }
 
             if !updater.dfuConnected && !updater.updateDone {
@@ -151,11 +206,36 @@ struct FirmwareUpdateSheet: View {
                 }
             }
 
+            GroupBox("Activity log") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Text("Latest provisioning and verification details.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Clear") {
+                            updater.clearLogs()
+                        }
+                        .disabled(updater.isFlashing)
+                    }
+
+                    ScrollView {
+                        Text(updater.logLines.isEmpty ? "No activity yet." : updater.logLines.joined(separator: "\n"))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(minHeight: 140, maxHeight: 180)
+                }
+                .padding(.vertical, 4)
+            }
+
             if updater.updateDone {
                 HStack(alignment: .firstTextBaseline, spacing: 10) {
                     Image(systemName: "checkmark.seal.fill")
                         .foregroundStyle(Color.green)
-                    Text("Update complete. Reconnect the device to use it.")
+                    Text(updater.completionMessage)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -171,16 +251,24 @@ struct FirmwareUpdateSheet: View {
             HStack {
                 Spacer()
                 if !updater.updateDone {
-                    Button("Update device") {
-                        updater.startUpdate(device: device)
+                    Button(isSecureWorkflow ? "Update device" : "Mint and activate device") {
+                        if isSecureWorkflow {
+                            updater.startUpdate(device: device)
+                        } else {
+                            updater.startMintAndProvision(auth: auth, device: device)
+                        }
                     }
-                    .disabled((!device.isConnected && !updater.dfuConnected) || updater.isFlashing || (device.isConnected && !device.isSecureConnected))
+                    .disabled(
+                        (!device.isConnected && !updater.dfuConnected)
+                        || updater.isFlashing
+                        || (!isSecureWorkflow && !auth.isSignedIn)
+                    )
                     .keyboardShortcut(.defaultAction)
                 }
             }
         }
         .padding(16)
-        .frame(minWidth: 520, minHeight: 360)
+        .frame(minWidth: 560, minHeight: 640)
         .onAppear {
             updateModeRequested = false
             updater.refreshDfuPresence()

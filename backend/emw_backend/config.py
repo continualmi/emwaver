@@ -50,7 +50,7 @@ class Config:
     pro_success_url: str
     pro_cancel_url: str
 
-    # SecureWaver / device authenticity
+    # Signed device identity / authenticity
     root_public_key_b64: str
 
     @staticmethod

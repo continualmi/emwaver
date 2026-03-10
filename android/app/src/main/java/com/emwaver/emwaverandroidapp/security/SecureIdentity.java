@@ -12,7 +12,7 @@ import org.bouncycastle.crypto.params.Ed25519PublicKeyParameters;
 import org.bouncycastle.crypto.signers.Ed25519Signer;
 
 /**
- * SecureWaver identity verification (Ed25519 signature of DeviceID).
+ * Signed device identity verification (Ed25519 signature of DeviceID).
  */
 public final class SecureIdentity {
     private SecureIdentity() {}

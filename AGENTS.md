@@ -77,7 +77,7 @@ We intentionally give up:
 - Unminted boards have no platform access — minting is the activation gate.
 - Backend enforces minting policy, rate limits, and payment verification.
 
-(Implementation details live in `securewaver/README.md` and `backend/README.md`.)
+(Implementation details live in `macos/README.md` and `backend/README.md`.)
 
 ### Supported boards
 
@@ -136,7 +136,6 @@ Use the local README first when working in a folder:
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
-- `securewaver/README.md` — device minting/provisioning/DFU tool (**being retired** — merging into main apps)
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
@@ -156,7 +155,6 @@ If a folder has a README, detailed documentation should live there.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
-- `securewaver/` — device minting/provisioning tool (**being retired** — minting flows are moving into the main apps).
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 
 ---
