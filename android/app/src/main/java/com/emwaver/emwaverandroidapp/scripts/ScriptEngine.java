@@ -149,6 +149,10 @@ public final class ScriptEngine {
                 cx.setOptimizationLevel(-1);
                 cx.setLanguageVersion(Context.VERSION_ES6);
                 ensureScope(cx);
+                // Bootstrap hides host primitives after capturing them.
+                // Reinstall bridge functions before each run.
+                installBridge(scope);
+                applyGlobalBindings(cx, scope);
                 callbackRegistry.clear();
                 clearAllTimeouts();
                 injectDsl(cx, scope);
@@ -283,10 +287,7 @@ public final class ScriptEngine {
                         String json = String.valueOf(args[0]).trim();
                         if (!json.isEmpty()) {
                             try {
-                                Object parsed = cx.evaluateString(scope, "(" + json + ")", "ScriptRenderJSON", 1, null);
-                                if (parsed instanceof Scriptable) {
-                                    rootNode = (Scriptable) parsed;
-                                }
+                                rootNode = parseJsonNode(cx, scope, json);
                             } catch (Exception ignored) {
                             }
                         }
@@ -856,6 +857,26 @@ public final class ScriptEngine {
         });
     }
 
+    private Scriptable parseJsonNode(Context cx, Scriptable scope, String json) {
+        if (json == null || json.isEmpty()) {
+            return null;
+        }
+        Object jsonObj = ScriptableObject.getProperty(scope, "JSON");
+        if (!(jsonObj instanceof Scriptable)) {
+            return null;
+        }
+        Scriptable jsonScriptable = (Scriptable) jsonObj;
+        Object parseObj = ScriptableObject.getProperty(jsonScriptable, "parse");
+        if (!(parseObj instanceof Function)) {
+            return null;
+        }
+        Object parsed = ((Function) parseObj).call(cx, scope, jsonScriptable, new Object[]{json});
+        if (parsed instanceof Scriptable) {
+            return (Scriptable) parsed;
+        }
+        return null;
+    }
+
     private boolean containsAsyncTokens(String script) {
         if (script == null || script.isEmpty()) {
             return false;
@@ -1330,9 +1351,27 @@ public final class ScriptEngine {
     private Map<String, Object> extractProps(Scriptable value) {
         Object propsObj = ScriptableObject.getProperty(value, "props");
         if (propsObj instanceof Scriptable) {
-            return toJavaMap((Scriptable) propsObj);
+            return sanitizeLayoutProps(toJavaMap((Scriptable) propsObj));
         }
         return new HashMap<>();
+    }
+
+    private Map<String, Object> sanitizeLayoutProps(Map<String, Object> props) {
+        if (props == null || props.isEmpty()) {
+            return props;
+        }
+        Map<String, Object> cleaned = new HashMap<>(props);
+        cleaned.remove("x");
+        cleaned.remove("y");
+        cleaned.remove("left");
+        cleaned.remove("top");
+        cleaned.remove("right");
+        cleaned.remove("bottom");
+        Object position = cleaned.get("position");
+        if (position != null && "absolute".equalsIgnoreCase(String.valueOf(position))) {
+            cleaned.remove("position");
+        }
+        return cleaned;
     }
 
     private Map<String, Object> attachHandlerMetadata(Map<String, Object> props, Map<ScriptEventType, String> handlers) {

@@ -37,11 +37,16 @@ struct EMWaverApp: App {
 
 /// Loads repo env files for local development (no Xcode scheme env required).
 private enum EnvBootstrap {
-    static func loadForDevIfAvailable() {
-        let fm = FileManager.default
-        let start = URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true)
+    private static let requiredEnvMarker = "secrets/shared/core.env"
 
-        guard let repoRoot = findRepoRoot(from: start) else { return }
+    static func loadForDevIfAvailable() {
+        if ProcessInfo.processInfo.environment["EMWAVER_DISABLE_ENV_BOOTSTRAP"] == "1" {
+            return
+        }
+#if !DEBUG
+        return
+#endif
+        guard let repoRoot = findRepoRoot() else { return }
 
         let files = [
             "secrets/shared/core.env",
@@ -76,6 +81,16 @@ private enum EnvBootstrap {
         }
     }
 
+    private static func findRepoRoot() -> URL? {
+        let sourceAnchor = URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent()
+        if let repoRoot = findRepoRoot(from: sourceAnchor, maxDepth: 12) {
+            return repoRoot
+        }
+
+        let cwd = URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        return findRepoRoot(from: cwd, maxDepth: 16)
+    }
+
     private static func expand(_ input: String, resolved: [String: String]) -> String {
         var out = input
         guard let regex = try? NSRegularExpression(pattern: #"\$\{([A-Z0-9_]+)\}"#) else { return out }
@@ -98,15 +113,18 @@ private enum EnvBootstrap {
         return out
     }
 
-    private static func findRepoRoot(from start: URL) -> URL? {
+    private static func findRepoRoot(from start: URL, maxDepth: Int) -> URL? {
         let fm = FileManager.default
-        var current: URL? = start
-        while let c = current {
-            if fm.fileExists(atPath: c.appendingPathComponent("secrets/shared/core.env").path) {
+        var current: URL? = start.standardizedFileURL
+        var steps = 0
+
+        while let c = current, steps <= maxDepth {
+            if fm.fileExists(atPath: c.appendingPathComponent(requiredEnvMarker).path) {
                 return c
             }
             let parent = c.deletingLastPathComponent()
             current = (parent.path == c.path) ? nil : parent
+            steps += 1
         }
         return nil
     }

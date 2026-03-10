@@ -118,8 +118,8 @@
                             x:Name="ReadOnlyBanner"
                             Grid.Row="0"
                             CornerRadius="6"
-                            Background="#242424"
-                            BorderBrush="#3A3A3A"
+                            Background="{ThemeResource ReadOnlyBannerBackgroundBrush}"
+                            BorderBrush="{ThemeResource ReadOnlyBannerBorderBrush}"
                             BorderThickness="1"
                             Padding="10"
                             Visibility="Collapsed">
@@ -144,8 +144,8 @@
                             <TextBox
                                 x:Name="EditorBox"
                                 BorderThickness="0"
-                                Background="#1E1E1E"
-                                Foreground="#D4D4D4"
+                                Background="{ThemeResource EditorSurfaceBackgroundBrush}"
+                                Foreground="{ThemeResource EditorTextForegroundBrush}"
                                 FontFamily="Consolas"
                                 FontSize="13"
                                 TextWrapping="NoWrap"
@@ -167,7 +167,11 @@
 
                     <!-- PREVIEW PANE -->
                     <Grid x:Name="PreviewPane" Visibility="Collapsed">
-                        <Border CornerRadius="6" BorderThickness="1" BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}" Background="#1E1E1E" Padding="10">
+                        <Border CornerRadius="6"
+                                BorderThickness="1"
+                                BorderBrush="{ThemeResource PreviewSurfaceBorderBrush}"
+                                Background="{ThemeResource PreviewSurfaceBackgroundBrush}"
+                                Padding="10">
                             <Grid>
                                 <ScrollViewer>
                                     <StackPanel x:Name="PreviewHost" />

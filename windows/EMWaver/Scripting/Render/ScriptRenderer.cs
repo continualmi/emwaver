@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using EMWaver.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -66,7 +67,7 @@ public sealed class ScriptRenderer
             ScriptNodeType.Plot => RenderPlot(node),
             ScriptNodeType.Modal => new Grid(), // handled separately
             ScriptNodeType.Spacer => RenderSpacer(node),
-            ScriptNodeType.Divider => new Border { Height = 1, Background = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)) },
+            ScriptNodeType.Divider => new Border { Height = 1, Background = ThemeResources.Brush("GeneratedDividerBrush", Color.FromArgb(40, 255, 255, 255)) },
             ScriptNodeType.Progress => RenderProgress(node),
             _ => new Grid(),
         };
@@ -211,8 +212,8 @@ public sealed class ScriptRenderer
         {
             Padding = padding,
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 10),
-            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? TryThemeBrush("CardBackgroundFillColorDefaultBrush") ?? new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
-            BorderBrush = TryThemeBrush("ControlStrokeColorDefaultBrush") ?? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? ThemeResources.Brush("GeneratedSurfaceBackgroundBrush", Color.FromArgb(20, 255, 255, 255)),
+            BorderBrush = ThemeResources.Brush("GeneratedSurfaceBorderBrush", Color.FromArgb(40, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Child = content,
         };
@@ -254,8 +255,8 @@ public sealed class ScriptRenderer
         {
             Padding = new Thickness(10),
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 10),
-            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? new SolidColorBrush(Color.FromArgb(20, 255, 255, 255)),
-            BorderBrush = TryThemeBrush("ControlStrokeColorDefaultBrush") ?? new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? ThemeResources.Brush("GeneratedSurfaceBackgroundBrush", Color.FromArgb(20, 255, 255, 255)),
+            BorderBrush = ThemeResources.Brush("GeneratedSurfaceBorderBrush", Color.FromArgb(40, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Child = stack,
             Opacity = disabled ? 0.6 : 1.0,
@@ -275,18 +276,6 @@ public sealed class ScriptRenderer
         }
 
         return tileBody;
-    }
-
-    private static Brush? TryThemeBrush(string key)
-    {
-        try
-        {
-            return Application.Current?.Resources?[key] as Brush;
-        }
-        catch
-        {
-            return null;
-        }
     }
 
     private UIElement RenderText(ScriptNode node)
@@ -409,7 +398,7 @@ public sealed class ScriptRenderer
         {
             Padding = new Thickness(8),
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 8),
-            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
+            Background = ScriptPropParsers.ParseBrush(raw, "backgroundColor") ?? ThemeResources.Brush("GeneratedSurfaceBackgroundBrush", Color.FromArgb(18, 255, 255, 255)),
             Child = new ScrollViewer
             {
                 Content = tb,

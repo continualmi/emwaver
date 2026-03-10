@@ -32,12 +32,22 @@
                 </StackPanel>
             </Border>
 
-            <Border x:Name="DfuDetectedPanel" CornerRadius="10" Padding="12" Background="#1AFFA500" BorderBrush="#26FFA500" BorderThickness="1">
-                <TextBlock Text="Device connected in Update Mode." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+            <Border x:Name="DfuDetectedPanel"
+                    CornerRadius="10"
+                    Padding="12"
+                    Background="{ThemeResource StatusWarningBackgroundBrush}"
+                    BorderBrush="{ThemeResource StatusWarningBorderBrush}"
+                    BorderThickness="1">
+                <TextBlock Text="Device connected in Update Mode." Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
             </Border>
 
-            <Border x:Name="ErrorPanel" CornerRadius="10" Padding="12" Background="#1AFF0000" BorderBrush="#26FF0000" BorderThickness="1">
-                <TextBlock x:Name="ErrorText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <Border x:Name="ErrorPanel"
+                    CornerRadius="10"
+                    Padding="12"
+                    Background="{ThemeResource StatusErrorBackgroundBrush}"
+                    BorderBrush="{ThemeResource StatusErrorBorderBrush}"
+                    BorderThickness="1">
+                <TextBlock x:Name="ErrorText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
             </Border>
 
             <StackPanel x:Name="ProgressPanel" Spacing="8">
@@ -52,8 +62,13 @@
                 <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0" />
             </StackPanel>
 
-            <Border x:Name="DonePanel" CornerRadius="10" Padding="12" Background="#1A00C853" BorderBrush="#2600C853" BorderThickness="1">
-                <TextBlock Text="Update complete. Reconnect the device to use it." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+            <Border x:Name="DonePanel"
+                    CornerRadius="10"
+                    Padding="12"
+                    Background="{ThemeResource StatusSuccessBackgroundBrush}"
+                    BorderBrush="{ThemeResource StatusSuccessBorderBrush}"
+                    BorderThickness="1">
+                <TextBlock Text="Update complete. Reconnect the device to use it." Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
             </Border>
         </StackPanel>
     </ScrollViewer>

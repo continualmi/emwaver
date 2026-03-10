@@ -52,7 +52,7 @@ struct SignInSheet: View {
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(auth.isSigningIn)
+                .disabled(auth.isSigningIn || !auth.canSignInWithGoogle)
             }
         }
         .padding(20)
