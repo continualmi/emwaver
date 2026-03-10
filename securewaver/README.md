@@ -1,34 +1,35 @@
 # SecureWaver (`/securewaver`)
 
-Internal provisioning desktop app for EMWaver manufacturing/service flows.
+Device minting and provisioning desktop app for the EMWaver platform (a **Continuous ML** project).
 
-SecureWaver is **not** a consumer app. It is an internal tool used to:
-- validate device authenticity,
-- mint/attach identity materials through backend provisioning flow,
-- flash/update firmware in DFU update mode,
-- preserve or restore identity page during updates.
+SecureWaver is the tool used to activate (mint) supported MCU boards as EMWaver devices. It handles:
+- paid device minting through backend provisioning flow (DeviceID + Proof),
+- firmware flashing in DFU update mode,
+- device authenticity verification,
+- firmware updates while preserving device identity.
+
+**This tool is being retired.** Minting, firmware flashing, and device activation flows are being embedded directly into the main EMWaver apps (Windows, Android, macOS). Once migration is complete, this folder will be deleted. The backend minting API and device trust model remain unchanged — only the client surface moves.
 
 ---
 
 ## 1) Purpose and boundaries
 
-SecureWaver exists to operationalize the EMWaver anti-cloning/authenticity strategy.
+SecureWaver operationalizes the EMWaver device trust model — minting is the activation gate for platform access.
 
 ### In scope
-- Detect EMWaver in run mode (USB MIDI) and update mode (DFU).
+- Detect supported boards in run mode (USB MIDI) and update mode (DFU).
 - Verify authenticity from either:
   - run mode identity opcode path, or
   - update mode identity page read path.
 - Request transition to update mode from run mode.
-- Flash firmware in update mode.
+- Flash firmware for the detected board target in update mode.
 - Write identity blob (`DeviceID + Proof`) to dedicated flash page.
 - Update while preserving existing identity page.
-- Operator sign-in (Google/Firebase) and session persistence.
+- Operator/user sign-in (Google/Firebase) and session persistence.
 
 ### Out of scope
-- End-user runtime features.
-- Public app-store distribution usage.
-- Replacing backend authority for minting policy.
+- End-user runtime features (scripts, UI, AI — those live in the main apps).
+- Replacing backend authority for minting policy and payment verification.
 
 ---
 
@@ -52,16 +53,16 @@ SecureWaver exists to operationalize the EMWaver anti-cloning/authenticity strat
 
 ---
 
-## 3) Security and authenticity model in app
+## 3) Device trust model in app
 
-SecureWaver consumes (does not define) the authenticity model:
+SecureWaver consumes (does not define) the trust model:
 
 - Maintain a single **global Root private key** (offline, kept by owner). This Root key is never shipped in apps.
 - Apps/backend ship/use the corresponding Root public key for verification.
 
 - device stores `DeviceID(16B)` + `Proof(64B signature)` in flash identity page,
 - proof is verified against root public key,
-- minting requires backend policy gates.
+- minting requires backend policy gates (payment verification, rate limits).
 
 ### 3.1 Identity page format
 
@@ -108,15 +109,15 @@ Auth/session:
 ## 5.1 Mint + provision path
 
 UI flow (`App.tsx`) does:
-1. ensure operator is signed in,
-2. call backend `/provisioning/mint` with bearer ID token,
+1. ensure user is signed in,
+2. call backend `/provisioning/mint` with bearer ID token (payment-gated),
 3. receive `{device_id_b64, proof_b64}`,
 4. open DFU device,
-5. flash firmware (mass erase implied),
+5. flash firmware for the target board (mass erase implied),
 6. write identity page after flashing,
 7. emit progress to UI via `emw_flash_progress` events.
 
-Minting is backend-authoritative and policy-gated.
+Minting is backend-authoritative, payment-gated, and rate-limited.
 
 ## 5.2 Update preserving identity
 
@@ -143,7 +144,7 @@ Two verification paths are surfaced:
    - reads identity page through DFU upload path,
    - verifies same cryptographic proof semantics.
 
-UI labels status as certified/non-certified based on verification result.
+UI labels status as minted/unminted based on verification result.
 
 ---
 

@@ -1,6 +1,8 @@
 # EMWaver Repository Guidelines
 
-This file is intentionally concise, but it must preserve EMWaver’s core vision and strategic product direction.
+This file is intentionally concise, but it must preserve EMWaver's core vision and strategic product direction.
+
+EMWaver is a **Continuous ML** project.
 
 `AGENTS.md` is the repo-wide source of truth for:
 - product vision,
@@ -15,12 +17,13 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a host-powered, AI-first electronics platform that turns phones/laptops/desktop hosts into a full hardware lab.
+EMWaver is a **software-first**, host-powered, AI-first electronics platform by **Continuous ML**. It turns phones/laptops/desktop hosts into a full hardware lab using supported MCU boards.
 
 Core direction:
+- **Business model:** software-first — revenue from paid device minting, platform services (Pro), and AI usage. No dependency on selling hardware to launch or operate.
 - **Transport:** USB-only using class-compliant **USB MIDI SysEx** with fixed 64-byte frames.
-- **Hardware:** one primary **STM32** device line (currently STM32F042-based board).
-- **Firmware:** one user-facing firmware track (no public board matrix/variants UX).
+- **Hardware:** multiple supported MCU boards (currently STM32-based; e.g., STM32F042 EMWaver board, STM32F103 BluePill). Users bring their own compatible board.
+- **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** agent-assisted workflows are first-class.
 - **Client surfaces:** Android, iOS, macOS, Windows.
@@ -33,39 +36,55 @@ Core direction:
 ### The Core Thesis
 
 1. **Host-powered electronics** — EMWaver uses the host (phone/laptop/desktop) for compute, UI, storage, and connectivity.
-2. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
-3. **Best beginner experience** — plug in and start exploring without firmware toolchains.
+2. **Software-first platform** — the product is the software stack (apps, firmware, cloud, AI), not the hardware. Users supply their own supported MCU board.
+3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
+4. **Best beginner experience** — buy a cheap supported board, install the app, plug in, activate, and start exploring without firmware toolchains.
 
 ### Explicit Tradeoffs
 
 We intentionally give up:
+- dependency on hardware sales for revenue or launch,
+- single-board hardware monopoly,
 - on-device wireless-first UX,
 - end-user firmware build/flash customization loops,
-- “MCU toolchain as required user workflow.”
+- "MCU toolchain as required user workflow."
 
 ### What We Gain
 
-- One board / one firmware track.
+- Launch without hardware supply chain.
+- Revenue from day one via minting + Pro + AI.
+- Multiple supported boards, one unified UX.
 - Cross-platform apps (Android/iOS/macOS/Windows).
 - Cloud-connected remote workflows.
 - Agent-driven exploration loops.
+- Larger addressable market (every compatible board owner).
 
 ---
 
 ## 3) Important Strategic Notes (high-level)
 
-### Hardware authenticity (anti-clone posture)
+### Business model (software-first)
 
-- Genuine-device verification uses `DeviceID + Proof` anchored in a root-key trust model.
-- Official apps/backend verify authenticity; backend enforces cloud policy.
-- Cloud features/Pro are designed around verified genuine hardware.
+- **Paid device minting**: users pay to activate (mint) a supported board as an EMWaver device. Minting is the entry point to the platform.
+- **EMWaver Pro**: unlocks cloud-heavy capabilities and the full Agent experience. Backend-issued entitlements are authoritative.
+- **AI credits/usage**: AI agent services are a revenue stream.
+- **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
+
+### Device trust model
+
+- Minted devices receive `DeviceID + Proof` signed by root ed25519 key.
+- Apps/backend verify proof against root public key.
+- Unminted boards have no platform access — minting is the activation gate.
+- Backend enforces minting policy, rate limits, and payment verification.
 
 (Implementation details live in `securewaver/README.md` and `backend/README.md`.)
 
-### EMWaver Pro (business model direction)
+### Supported boards
 
-- **EMWaver Pro** unlocks cloud-heavy capabilities and the full Agent experience.
-- Backend-issued entitlements are authoritative for Pro/cloud feature access.
+- The platform supports multiple MCU targets. Each target needs a firmware implementation of the USB MIDI SysEx transport, identity page, and script runtime.
+- Current/planned targets: STM32F042 (EMWaver board — coming soon), STM32F103 (BluePill).
+- Adding a new supported board = porting firmware + adding its binary to the app bundle.
+- Users see a unified experience regardless of which board they use.
 
 ### ELM direction (model strategy)
 
@@ -84,7 +103,8 @@ We intentionally give up:
 
 ### Long-term hardware direction
 
-- Keep room for future hardware evolution (e.g., EMArm direction) without fragmenting current one-device product UX.
+- The EMWaver board may ship as a premium, purpose-built option when ready.
+- Future hardware evolution (e.g., EMArm direction) should not fragment the multi-board platform UX.
 
 ---
 
@@ -116,7 +136,7 @@ Use the local README first when working in a folder:
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
-- `securewaver/README.md` — internal provisioning/minting/DFU tool
+- `securewaver/README.md` — device minting/provisioning/DFU tool (**being retired** — merging into main apps)
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
@@ -130,14 +150,14 @@ If a folder has a README, detailed documentation should live there.
 
 ## 6) Repo Overview (high level)
 
-- `stm/` — firmware and firmware-related tooling.
-- `backend/` — cloud/backend services.
+- `stm/` — firmware and firmware-related tooling (multi-board targets).
+- `backend/` — cloud/backend services (minting, entitlements, AI, sync).
 - `frontend/` — website/web surfaces.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
-- `securewaver/` — internal manufacturing/provisioning tool (not end-user app).
-- `firmware/` — bundled firmware payloads consumed by apps.
+- `securewaver/` — device minting/provisioning tool (**being retired** — minting flows are moving into the main apps).
+- `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 
 ---
 
@@ -145,19 +165,21 @@ If a folder has a README, detailed documentation should live there.
 
 1. **USB-first architecture**: core device comms are USB MIDI SysEx.
 2. **Host-centric model**: heavy logic lives on host/apps, not on-device UX complexity.
-3. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
-4. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
-5. **Backend is authoritative** for cloud entitlements/feature gating.
-6. **Provisioning/minting flows are internal-only** (SecureWaver/manufacturing scope).
-7. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
-8. **CI/Releases policy**: GitHub Actions are for frontend/backend CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
+3. **Software-first business**: revenue comes from minting, Pro, and AI — not hardware sales.
+4. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
+5. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
+6. **Backend is authoritative** for minting policy, cloud entitlements, and feature gating.
+7. **Minting is the activation gate**: unminted boards get no platform/cloud access.
+8. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
+9. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
+10. **CI/Releases policy**: GitHub Actions are for frontend/backend CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
 
 ---
 
 ## 8) Contribution Guardrails
 
 - Prefer docs and code updates in the same PR when behavior changes.
-- When changing a specific subsystem, update that folder’s README.
+- When changing a specific subsystem, update that folder's README.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
 

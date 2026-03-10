@@ -1,4 +1,4 @@
-# EMWaver Current Hardware Test Suite
+# EMWaver Hardware Test Suite
 
 This document tracks only the active manual tests.
 
