@@ -45,7 +45,7 @@ export default async function SocietyPage() {
         <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No posts yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
-            EMWaver Society is live, but we haven’t published posts yet.
+            EMWaver Society is live, but we haven&apos;t published posts yet.
           </p>
           <div className="mt-4 flex flex-wrap gap-2">
             <Link

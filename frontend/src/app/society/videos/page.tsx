@@ -46,7 +46,7 @@ export default async function SocietyVideosPage() {
         <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No videos yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
-            We’ll publish bring-up demos and deep dives here.
+            We&apos;ll publish bring-up demos and deep dives here.
           </p>
         </div>
       ) : (
