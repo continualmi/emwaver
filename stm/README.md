@@ -1,6 +1,8 @@
 # STM Firmware Workspace (`/stm`)
 
-This folder contains the STM32 firmware source project and helper scripts used to build/export firmware artifacts for EMWaver.
+This folder contains the STM32 firmware source projects and helper scripts used to build/export firmware artifacts for EMWaver (a **Continuous ML** project).
+
+The platform supports multiple MCU board targets. This workspace currently contains the STM32F042 firmware; additional board targets (e.g., STM32F103 BluePill) will be added as separate projects within this workspace.
 
 If you only read one thing first, read:
 - `emwaver-firmware/Core/Src/main.c` (runtime behavior + protocol handling)
@@ -11,7 +13,7 @@ If you only read one thing first, read:
 
 ## 1) Scope and role in the repo
 
-`/stm` is the **firmware-authoring workspace** for the EMWaver board (STM32F042G6Ux). It is responsible for:
+`/stm` is the **firmware-authoring workspace** for EMWaver supported boards. The current active project targets the STM32F042G6Ux (EMWaver board). It is responsible for:
 
 - Device-side command execution (GPIO, ADC, PWM, SPI, UART, I2C).
 - USB MIDI SysEx transport (fixed 64-byte USB packets).
@@ -21,9 +23,9 @@ If you only read one thing first, read:
 
 This folder does **not** own host/cloud logic; it is strictly MCU-side firmware and build helpers.
 
-### Historical hardware notes migrated from AGENTS
+### Board-specific notes (STM32F042 — EMWaver board)
 
-**MCU note (do not forget):** current shipped board uses **STM32F042G6Ux**.
+**MCU note:** the EMWaver board (coming soon) uses **STM32F042G6Ux**. The notes below are specific to this target.
 - CubeMX/datasheet show many pins have timer alternate-functions (e.g. PB7 can expose TIM16/TIM17 complementary outputs on some configs), but **current firmware PWM support is limited to TIM2 on PA0–PA3** (see firmware `tim2_channel_from_pin`).
 - Expanding PWM to more pins requires firmware work: mapping additional timers/channels + correct AF selection + managing peripheral conflicts.
 
@@ -40,7 +42,7 @@ This folder does **not** own host/cloud logic; it is strictly MCU-side firmware 
 - B7 → TIM17 CH1N
 - B8 → TIM16 CH1
 
-**Final single-device board / connector notes:**
+**EMWaver board connector notes:**
 - CN1 (2×4) exposes VCC/GND + SPI (`NSS`, `SCK`, `MOSI`, `MISO`) + GPIO (`GDO0`, `GDO1`, `GDO2`) and aligns with common CC1101-style 2×4 module headers.
 - U4 (1×8) exposes `VCC`, `PB6`, `BOOT0`, `MISO`, `MOSI`, `NSS1`, `SCL`, `PB7` and aligns with common RC522-style 1×8 module headers.
 

@@ -1,16 +1,18 @@
 # EMWaver Backend (`/backend`)
 
-Flask backend for EMWaver cloud features:
+Flask backend for EMWaver cloud features (a **Continuous ML** project):
 - auth and identity-bound APIs,
 - file sync storage APIs,
 - agent chat/message persistence,
 - host session presence + WebSocket relay,
-- store/provisioning/device authenticity endpoints.
+- device minting/provisioning and authenticity endpoints,
+- store/billing/entitlements endpoints.
 
-This service is deployed to Azure Container Apps and is authoritative for cloud entitlements and account-bound operations.
+This service is deployed to Azure Container Apps and is authoritative for cloud entitlements, minting policy, and account-bound operations.
 
-Historical policy note migrated from AGENTS:
-- **Backend is authoritative**: apps may gate UI/UX, but server-side checks are the security boundary for Pro/entitlements/cloud feature access.
+Policy notes:
+- **Backend is authoritative**: apps may gate UI/UX, but server-side checks are the security boundary for minting, Pro/entitlements, and cloud feature access.
+- **Minting is the platform activation gate**: all supported boards must be minted (paid) through the backend before they receive platform/cloud access.
 
 ---
 
@@ -59,7 +61,7 @@ Registered route modules in `emw_backend/routes/`:
 - `hosts.py` — host session heartbeat/listing.
 - `ws.py` — authenticated WebSocket relay between web controllers and hosts.
 - `devices.py` — attach/list/label SecureWaver devices.
-- `provisioning.py` — mint DeviceID+Proof (internal/manufacturing endpoint).
+- `provisioning.py` — mint DeviceID+Proof (paid platform activation endpoint).
 - `entitlements.py`, `pro.py`, `credits.py`, `billing.py`, `store.py` — Pro/store/billing flows.
 - `auth_handoff.py` — auth bridge/handoff endpoints.
 - `society.py` — additional product-specific API surface.
@@ -135,22 +137,24 @@ Operational caveat:
 
 ---
 
-## 7) SecureWaver authenticity + provisioning
+## 7) Device minting + authenticity
 
-### 7.1 Provisioning mint endpoint
+### 7.1 Minting endpoint
 
 `routes/provisioning.py` (`/provisioning/mint`):
-- gated by provisioning-enabled flag + allowlist,
 - signs random 16-byte DeviceID with root ed25519 private key,
-- returns `{device_id_b64, proof_b64}`.
+- returns `{device_id_b64, proof_b64}`,
+- gated by payment verification and minting policy (rate limits, per-user caps).
 
-Policy notes migrated from AGENTS:
-- Device attach/verification requires forwarding `DeviceID + Proof` to backend; backend repeats verification and enforces anti-abuse policy.
-- Pro purchase eligibility depends on signed-in user having at least one verified genuine device attached.
+Minting is the platform entry point. Users pay to mint a supported board, which activates it as an EMWaver device with full platform access.
+
+Policy notes:
+- Device attach/verification requires forwarding `DeviceID + Proof` to backend; backend repeats verification and enforces policy.
+- Pro purchase eligibility depends on signed-in user having at least one minted device attached.
 
 Environment gates:
 - `EMWAVER_PROVISIONING_ENABLED`
-- `EMWAVER_PROVISIONING_ALLOWED_UIDS` (preferred)
+- `EMWAVER_PROVISIONING_ALLOWED_UIDS` (operator override / internal use)
 - `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64`
 - optional mint RPM limit.
 
