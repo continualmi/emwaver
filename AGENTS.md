@@ -2,7 +2,7 @@
 
 This file is intentionally concise, but it must preserve EMWaver's core vision and strategic product direction.
 
-EMWaver is a **Continuous ML** project.
+EMWaver is a **Continual MI** project.
 
 `AGENTS.md` is the repo-wide source of truth for:
 - product vision,
@@ -17,7 +17,7 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **software-first**, host-powered, AI-first electronics platform by **Continuous ML**. It turns phones/laptops/desktop hosts into a full hardware lab using supported MCU boards.
+EMWaver is a **software-first**, host-powered, AI-first electronics platform by **Continual MI**. It turns phones/laptops/desktop hosts into a full hardware lab using supported MCU boards.
 
 Core direction:
 - **Business model:** software-first — revenue from paid device minting, platform services (Pro), and AI usage. No dependency on selling hardware to launch or operate.
@@ -185,3 +185,11 @@ Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits,
 - push changes after making updates (open PR branch if main push blocked).
+
+## 9) Org Workspace
+
+- The Continual MI organization workspace on this machine is rooted at `/Users/luisml/continualmi`.
+- Related organization repos are expected to be cloned inside that directory, for example `/Users/luisml/continualmi/emwaver`, `/Users/luisml/continualmi/society`, `/Users/luisml/continualmi/mdl`, `/Users/luisml/continualmi/imgpt`, `/Users/luisml/continualmi/mgpt`, and `/Users/luisml/continualmi/cua`.
+- From this repository, the other organization repos are available one directory up and down again as sibling paths such as `../society`, `../mdl`, `../imgpt`, `../mgpt`, and `../cua`.
+- Agents working in this repo may inspect and modify files across those sibling repositories when a task requires coordinated cross-repo changes.
+- Keep cross-repo edits intentional and update the relevant local docs in each touched repository.

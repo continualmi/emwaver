@@ -6,13 +6,13 @@ export function SiteFooter() {
           <div className="flex items-center gap-2">
             <img
               src="/continuous-logo.png"
-              alt="Continuous ML"
+              alt="Continual MI"
               className="h-6 w-6 object-contain"
             />
             <div className="text-sm font-semibold text-[color:var(--ink)]">EMWaver</div>
           </div>
           <p className="text-sm text-[color:var(--ink-dim)]">
-            A software-first electronics platform by Continuous ML.
+            A software-first electronics platform by Continual MI.
           </p>
         </div>
 
@@ -33,7 +33,7 @@ export function SiteFooter() {
       </div>
 
       <div className="mx-auto w-full max-w-6xl px-5 pb-5 text-xs text-[color:var(--ink-dim)]">
-        © {new Date().getFullYear()} EMWaver · Continuous ML
+        © {new Date().getFullYear()} EMWaver · Continual MI
       </div>
     </footer>
   );

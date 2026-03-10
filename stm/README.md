@@ -1,6 +1,6 @@
 # STM Firmware Workspace (`/stm`)
 
-This folder contains the STM32 firmware source projects and helper scripts used to build/export firmware artifacts for EMWaver (a **Continuous ML** project).
+This folder contains the STM32 firmware source projects and helper scripts used to build/export firmware artifacts for EMWaver (a **Continual MI** project).
 
 The platform supports multiple MCU board targets. This workspace currently contains the STM32F042 firmware; additional board targets (e.g., STM32F103 BluePill) will be added as separate projects within this workspace.
 
