@@ -32,10 +32,10 @@ Local dev (recommended)
 
 4) Smoke tests:
 
-  curl http://127.0.0.1:8787/health
+  curl http://127.0.0.1:3201/health
 
   # In dev auth-bypass mode, this should return an empty list initially.
-  curl "http://127.0.0.1:8787/v1/files?kind=script&ext=.emw&include_content=0"
+  curl "http://127.0.0.1:3201/v1/files?kind=script&ext=.emw&include_content=0"
 
 
 Auth (Firebase)
@@ -52,13 +52,13 @@ Docker
   # Build from repo root so Docker can access repo-wide requirements.txt
   docker build -f backend/Dockerfile -t emwaver-backend .
 
-  docker run --rm -p 8787:8787 \
+  docker run --rm -p 3201:3201 \
     -e FIREBASE_PROJECT_ID=... \
     -e CORS_ORIGINS='*' \
     emwaver-backend
 
   # With agent chat enabled
-  docker run --rm -p 8787:8787 \
+  docker run --rm -p 3201:3201 \
     -e FIREBASE_PROJECT_ID=... \
     -e OPENROUTER_API_KEY=... \
     emwaver-backend

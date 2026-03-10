@@ -219,7 +219,7 @@ cd backend
 python app.py
 ```
 
-Default local port is configured by app/env (commonly `8787`).
+Default local port is configured by app/env (commonly `3201`).
 
 If running frontend locally, point frontend backend URL settings to this backend.
 

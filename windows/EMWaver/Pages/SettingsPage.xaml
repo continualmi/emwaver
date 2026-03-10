@@ -74,7 +74,7 @@
                         </ComboBox>
                     </StackPanel>
 
-                    <TextBlock Text="Local mode uses hardcoded http://localhost:8787. Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Local mode uses hardcoded http://localhost:3201. Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
@@ -100,7 +100,7 @@
                         </ComboBox>
                     </StackPanel>
 
-                    <TextBlock Text="Local mode uses hardcoded http://localhost:3000." Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Local mode uses hardcoded http://localhost:3200." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 

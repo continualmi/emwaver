@@ -13,7 +13,7 @@ B) Full remote-control dev (HTTP + WebSockets):
   python3.14 -m pip install gunicorn gevent gevent-websocket
 
   # run
-  gunicorn -b 0.0.0.0:8787 \
+  gunicorn -b 0.0.0.0:3201 \
     -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker \
     --access-logfile - \
     --error-logfile - \
@@ -21,7 +21,7 @@ B) Full remote-control dev (HTTP + WebSockets):
     wsgi:app
 
 Notes:
-- Use http://<your-mac-ip>:8787 from Android (not https).
+- Use http://<your-mac-ip>:3201 from Android (not https).
 - If you want auth debug logs (applies to both):
 
   EMWAVER_AUTH_DEBUG=1 ...

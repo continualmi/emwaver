@@ -156,7 +156,7 @@ npm install
 npm run dev
 ```
 
-Open: `http://localhost:3000`
+Open: `http://localhost:3200`
 
 If testing backend-dependent flows, ensure backend is running and configured in frontend env/config helpers.
 
