@@ -126,9 +126,9 @@ WS URL conversion logic:
 This frontend is where order/account hardware-related web flows live.
 
 Direction reflected in repo docs:
-- `/order` flow is email-first and store-integrated,
+- `/order` is the device availability / purchase-intent page and can route users into the hardware self-build flow while direct sales are not open,
 - `/account` handles attached-device/account relationship UX,
-- `/hardware` hosts the restored STM32 hardware catalog and historical EMWaver builder flow,
+- `/hardware` hosts the restored STM32 hardware catalog and the self-build / JLCPCB-oriented EMWaver builder flow,
 - claim/recovery flows are web-managed,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 

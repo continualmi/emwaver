@@ -92,20 +92,25 @@ export default function HardwarePage() {
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
               <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
-              Restored hardware catalog
+              Hardware catalog and build path
             </div>
 
             <h1 className="pt-5 text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-6xl">
-              STM32 boards, modules, and the original EMWaver builder
+              Browse the boards, then build from JLCPCB-oriented files
             </h1>
 
             <p className="max-w-2xl pt-5 text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              This brings back the historical hardware catalog, narrowed to the STM32 side of the platform and the module ecosystem that pairs with it. The current-gen EMWaver board builder keeps the filtered BOM, JLCPCB files, and rough price estimation flow.
+              This is the practical route while direct device sales are still marked coming soon.
+              Browse the current EMWaver boards, inspect the historical hardware catalog, and use
+              the builder flow for BOM, fabrication files, and JLCPCB-oriented output.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <Link href="/hardware/emwaver" className="rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-95">
-                Open EMWaver
+              <Link href="/hardware/EMWAVER_DIY" className="rounded-2xl bg-[color:var(--ink)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-95">
+                Open EMWaver DIY
+              </Link>
+              <Link href="/order" className="rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[rgba(240,166,106,0.14)]">
+                Device availability
               </Link>
               <Link href="/docs/hardware/device" className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
                 Current device docs

@@ -1,259 +1,162 @@
-"use client";
-
-import { useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import Link from "next/link";
 
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
-import { createCheckoutSession } from "@/lib/store";
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
-function isValidEmail(s: string): boolean {
-  const v = (s || "").trim();
-  return v.includes("@") && v.includes(".") && v.length >= 6;
-}
+const devices = [
+  {
+    title: "EMWaver DIY",
+    status: "Coming soon",
+    image: "/EMWAVER.png",
+    alt: "EMWaver DIY device",
+    description:
+      "The current hands-on EMWaver board. Built for expansion with the newer EMWaver DIY layout and intended as the practical module-ready device.",
+    detail: "This will be sold directly when orders open.",
+  },
+  {
+    title: "EMWaver",
+    status: "Coming soon",
+    image: "/EMWAVER-old.jpg",
+    alt: "EMWaver integrated device",
+    description:
+      "The integrated EMWaver device stays visible as the flagship hardware direction, but it is not available for direct purchase yet.",
+    detail: "This will also be sold directly once the hardware launch is ready.",
+  },
+];
+
+const buildSteps = [
+  "Open the hardware catalog and pick the board you want to build.",
+  "Review the gallery, board details, and build files.",
+  "Use the builder flow for BOM, fabrication files, and JLCPCB-oriented output.",
+];
 
 export default function OrderPage() {
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
-
-  const [email, setEmail] = useState<string>("");
-  const [quantity, setQuantity] = useState<number>(1);
-
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [idToken, setIdToken] = useState<string>("");
-
-  const [phase, setPhase] = useState<"email" | "options">("email");
-  const [busy, setBusy] = useState<boolean>(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, async (u) => {
-      if (!u) {
-        setUserEmail(null);
-        setIdToken("");
-        return;
-      }
-      setUserEmail(u.email || u.displayName || "Signed in");
-      const tok = await u.getIdToken();
-      setIdToken(tok);
-      // If user signs in and email field is empty, default it.
-      if (!email && u.email) setEmail(u.email);
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [auth]);
-
-  async function doSignIn() {
-    setError(null);
-    if (!auth) {
-      setError(
-        "Google sign-in is not configured yet (missing NEXT_PUBLIC_FIREBASE_* env). You can still checkout as guest." 
-      );
-      return;
-    }
-    try {
-      await signInWithPopup(auth, googleProvider());
-    } catch (e: any) {
-      const code = e?.code ? String(e.code) : "";
-      const msg = e?.message ? String(e.message) : String(e);
-      setError(code ? `${code}: ${msg}` : msg);
-    }
-  }
-
-  async function doSignOut() {
-    setError(null);
-    if (!auth) return;
-    await signOut(auth);
-  }
-
-  async function startCheckout(mode: "guest" | "account") {
-    setError(null);
-    if (!isValidEmail(email)) {
-      setError("Please enter a valid email.");
-      return;
-    }
-    if (mode === "account" && !idToken) {
-      setError("Please sign in first (or choose guest checkout).");
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const r = await createCheckoutSession({ email: email.trim(), quantity, idToken: mode === "account" ? idToken : "" });
-      if (!r.url) throw new Error("Missing Stripe Checkout URL");
-      window.location.href = r.url;
-    } catch (e: any) {
-      setError(String(e?.message || e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   return (
     <div className="min-h-dvh docs-mode">
       <SiteHeader />
       <main className="w-full px-5 py-10">
-        <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
-          <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">Buy EMWaver</h1>
-              <p className="pt-3 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                Single-product checkout. Enter your email first, then choose guest checkout or sign in with Google to keep your orders tied to your EMWaver account.
+        <div className="mx-auto max-w-7xl space-y-8">
+          <section className="overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[radial-gradient(circle_at_top_left,rgba(78,231,199,0.16),rgba(255,255,255,0.03)_38%,rgba(255,255,255,0.02)_100%)] p-6 shadow-[0_30px_80px_rgba(0,0,0,0.32)] md:p-10">
+            <div className="max-w-4xl">
+              <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] px-4 py-1.5 text-xs font-semibold text-[color:var(--ink-dim)]">
+                <span className="inline-block h-2 w-2 rounded-full bg-[color:var(--copper)]" />
+                Direct sales not open yet
+              </div>
+
+              <h1 className="pt-5 text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-6xl">
+                Two EMWaver devices are planned for sale.
+              </h1>
+
+              <p className="max-w-3xl pt-5 text-[16px] leading-8 text-[color:var(--ink-dim)]">
+                `EMWaver DIY` and `EMWaver` are both staying on the roadmap as hardware products,
+                but for now they are marked <strong className="text-[color:var(--ink)]">Coming soon</strong>.
+                Until direct sales open, the clearest path is the hardware section where you can
+                inspect the boards and build from JLCPCB-oriented files.
               </p>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <a
-                href="/device"
-                className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Link
+                  href="/hardware"
+                  className="rounded-2xl bg-[color:var(--ink)] px-5 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-95"
+                >
+                  Build from hardware section
+                </Link>
+                <Link
+                  href="/hardware/EMWAVER_DIY"
+                  className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.05)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[rgba(255,255,255,0.08)]"
+                >
+                  Open EMWaver DIY
+                </Link>
+              </div>
+            </div>
+          </section>
+
+          <section className="grid gap-5 lg:grid-cols-2">
+            {devices.map((device) => (
+              <div
+                key={device.title}
+                className="overflow-hidden rounded-[1.8rem] border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] shadow-[0_24px_60px_rgba(0,0,0,0.22)]"
               >
-                Device
-              </a>
-              <a
-                href="/pinout"
-                className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-              >
-                Pinout
-              </a>
-            </div>
-          </div>
+                <div className="aspect-[4/3] overflow-hidden border-b border-[color:var(--line)] bg-[rgba(3,7,18,0.5)]">
+                  <img src={device.image} alt={device.alt} className="h-full w-full object-cover" />
+                </div>
+                <div className="space-y-4 p-6">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-2xl font-semibold text-[color:var(--ink)]">{device.title}</div>
+                    <div className="rounded-full border border-[rgba(240,166,106,0.35)] bg-[rgba(240,166,106,0.10)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
+                      {device.status}
+                    </div>
+                  </div>
+                  <p className="text-[15px] leading-7 text-[color:var(--ink-dim)]">{device.description}</p>
+                  <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4 text-sm leading-6 text-[color:var(--ink-dim)]">
+                    {device.detail}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </section>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-              <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">What ships</div>
-              <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">One board + apps</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Script-first exploration on mobile + desktop.</div>
-            </div>
+          <section className="grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+            <div className="rounded-[1.8rem] border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-8">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
+                Build now
+              </div>
+              <h2 className="pt-3 text-2xl font-semibold text-[color:var(--ink)] md:text-3xl">
+                Use the hardware section if you want to make one now.
+              </h2>
+              <p className="max-w-2xl pt-4 text-[15px] leading-7 text-[color:var(--ink-dim)]">
+                The hardware catalog is the practical route today. It should read like: browse the
+                device, inspect the files, then move into the builder/JLCPCB flow without guessing
+                whether you are ordering from EMWaver or building it yourself.
+              </p>
 
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5">
-              <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">Accounts</div>
-              <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Optional Google sign-in</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Sign in to attach devices to your account and manage Pro (cloud features are Pro-only).</div>
-            </div>
-
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5">
-              <div className="text-xs font-semibold tracking-wide text-[color:var(--copper)]">Shipping</div>
-              <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Worldwide (configurable)</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Final rates and regions will be enabled when sales open.</div>
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-4 md:grid-cols-[1.2fr_0.8fr]">
-            <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface)] p-6">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Checkout</div>
-
-              {phase === "email" ? (
-                <div className="mt-4 space-y-3">
-                  <label className="block">
-                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Email</div>
-                    <input
-                      value={email}
-                      onChange={(e) => setEmail(String(e.target.value || ""))}
-                      placeholder="you@domain.com"
-                      className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2 text-sm text-[color:var(--ink)]"
-                    />
-                  </label>
-
-                  <label className="block">
-                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Quantity</div>
-                    <select
-                      value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, Math.min(5, parseInt(String(e.target.value || "1"), 10) || 1)))}
-                      className="mt-2 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2 text-sm text-[color:var(--ink)]"
-                    >
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      setError(null);
-                      if (!isValidEmail(email)) {
-                        setError("Please enter a valid email.");
-                        return;
-                      }
-                      setPhase("options");
-                    }}
-                    className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
+              <div className="mt-6 space-y-3">
+                {buildSteps.map((step, index) => (
+                  <div
+                    key={step}
+                    className="flex items-start gap-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.32)] p-4"
                   >
-                    Continue
-                  </button>
-
-                  <div className="text-xs text-[color:var(--ink-dim)]">
-                    We’ll use this email for receipts and shipping updates.
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-4 space-y-3">
-                  <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.02)] p-4">
-                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Email</div>
-                    <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">{email.trim()}</div>
-                    <button
-                      disabled={busy}
-                      onClick={() => setPhase("email")}
-                      className="mt-2 text-xs font-semibold text-[color:var(--aqua)] hover:underline disabled:opacity-50"
-                    >
-                      Change
-                    </button>
-                  </div>
-
-                  <div className="grid gap-2">
-                    <button
-                      disabled={busy}
-                      onClick={() => void startCheckout("guest")}
-                      className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-3)] disabled:opacity-50"
-                    >
-                      Checkout as guest
-                    </button>
-
-                    <button
-                      disabled={busy}
-                      onClick={() => void (idToken ? startCheckout("account") : doSignIn())}
-                      className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
-                      title={idToken ? "Checkout with account" : "Sign in with Google"}
-                    >
-                      {idToken ? "Checkout with EMWaver account" : "Sign in with Google"}
-                    </button>
-                  </div>
-
-                  {userEmail ? (
-                    <div className="flex items-center justify-between gap-3 rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.06)] p-4">
-                      <div>
-                        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Signed in</div>
-                        <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">{userEmail}</div>
-                      </div>
-                      <button
-                        onClick={() => void doSignOut()}
-                        disabled={busy}
-                        className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
-                      >
-                        Log out
-                      </button>
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[rgba(78,231,199,0.14)] text-sm font-semibold text-[color:var(--aqua)]">
+                      {index + 1}
                     </div>
-                  ) : (
-                    <div className="text-xs text-[color:var(--ink-dim)]">
-                      Signing in is optional, but recommended if you want order history + recovery.
-                    </div>
-                  )}
-                </div>
-              )}
+                    <div className="pt-1 text-sm leading-6 text-[color:var(--ink-dim)]">{step}</div>
+                  </div>
+                ))}
+              </div>
 
-              {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
-
-              <div className="mt-6 text-xs text-[color:var(--ink-dim)]">
-                Note: purchases are not open yet. This flow is being built ahead of CE certification.
+              <div className="mt-6 flex flex-wrap gap-3">
+                <Link
+                  href="/hardware"
+                  className="rounded-2xl bg-[color:var(--aqua)] px-5 py-3 text-sm font-semibold text-[rgb(5,12,18)] transition hover:opacity-95"
+                >
+                  Open hardware catalog
+                </Link>
+                <Link
+                  href="/hardware/emwaver"
+                  className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
+                >
+                  View EMWaver
+                </Link>
               </div>
             </div>
 
-            <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-              <img src="/EMWAVER.png" alt="EMWaver device" className="h-auto w-full object-cover" />
+            <div className="rounded-[1.8rem] border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-8">
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
+                What this page means
+              </div>
+              <div className="mt-4 space-y-4 text-sm leading-7 text-[color:var(--ink-dim)]">
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                  `Order` now means product availability and direction, not an active checkout.
+                </div>
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                  Both hardware products remain visible so users understand what will be sold later.
+                </div>
+                <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                  The hardware section is the immediate action path for self-build and JLCPCB-based fabrication.
+                </div>
+              </div>
             </div>
-          </div>
+          </section>
         </div>
       </main>
       <SiteFooter />
