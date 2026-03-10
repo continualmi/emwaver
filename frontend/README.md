@@ -11,6 +11,7 @@ This folder is the single public-facing documentation/marketing/web-dashboard su
 `/frontend` currently contains:
 - public landing/site pages,
 - install/order/account/store UX surfaces,
+- hardware catalog + builder web surfaces,
 - web integrations for backend APIs,
 - remote host/web-session client pieces,
 - shared UI runtime renderers for remote script UI previews.
@@ -65,6 +66,8 @@ Homepage content currently carries product narrative blocks:
 - platform coverage,
 - remote/cloud control narrative,
 - CTA routes (`/order`, `/install`, `/scripts`).
+
+Society routes remain first-party in this frontend under `/society/*`.
 
 ## 4.2 Components
 
@@ -125,6 +128,7 @@ This frontend is where order/account hardware-related web flows live.
 Direction reflected in repo docs:
 - `/order` flow is email-first and store-integrated,
 - `/account` handles attached-device/account relationship UX,
+- `/hardware` hosts the restored STM32 hardware catalog and historical EMWaver builder flow,
 - claim/recovery flows are web-managed,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 

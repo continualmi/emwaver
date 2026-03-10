@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const nav = [
+  { href: "/hardware", label: "Hardware" },
   { href: "/order", label: "Order" },
   { href: "/docs", label: "Documentation" },
   { href: "/society", label: "Society" },
@@ -19,19 +20,28 @@ export function SiteHeader() {
     <header className="sticky top-0 z-50 border-b border-[color:var(--line)] bg-[rgba(6,8,16,0.7)] backdrop-blur">
       <div className="flex w-full items-center justify-between px-5 py-4">
         <Link href="/" className="flex items-center gap-3">
-          <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
-            <img
-              src="/logo.png"
-              alt="EMWaver"
-              className="h-full w-full object-cover"
-            />
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1">
+              <img
+                src="/continuous-logo.png"
+                alt="Continuous ML"
+                className="h-full w-full object-contain"
+              />
+            </div>
+            <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
+              <img
+                src="/logo.png"
+                alt="EMWaver"
+                className="h-full w-full object-cover"
+              />
+            </div>
           </div>
           <div className="leading-tight">
             <div className="text-[15px] font-semibold tracking-tight text-[color:var(--ink)]">
               EMWaver
             </div>
             <div className="text-[12px] text-[color:var(--ink-dim)]">
-              The future of electronics
+              A Continuous ML platform
             </div>
           </div>
         </Link>

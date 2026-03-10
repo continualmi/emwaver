@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · EMWaver",
   },
   description:
-    "EMWaver is the future of electronics development — a tiny USB device that turns any phone or laptop into a full-power electronics lab, powered by AI.",
+    "EMWaver is a Continuous ML platform for host-powered electronics on supported STM32 boards, with app-managed firmware and AI-first workflows.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 

@@ -53,7 +53,7 @@ export default async function SocietyScriptsPage() {
       <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-4 backdrop-blur-md">
         <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Branding ideas</div>
         <p className="mt-1 text-sm text-[color:var(--ink-dim)]">
-          Alternatives to “EMWaver Scripts” you can explore for this section:
+          Alternatives to &ldquo;EMWaver Scripts&rdquo; you can explore for this section:
         </p>
         <div className="mt-3 flex flex-wrap gap-2">
           {namingIdeas.map((name) => (
@@ -71,7 +71,7 @@ export default async function SocietyScriptsPage() {
         <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-5 backdrop-blur-md">
           <div className="text-sm font-semibold text-[color:var(--ink)]">No scripts published yet</div>
           <p className="mt-2 text-sm text-[color:var(--ink-dim)]">
-            First wave will be curated. Then we’ll open submissions.
+            First wave will be curated. Then we&apos;ll open submissions.
           </p>
         </div>
       ) : (
