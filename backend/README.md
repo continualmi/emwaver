@@ -1,6 +1,6 @@
 # EMWaver Backend (`/backend`)
 
-Flask backend for EMWaver cloud features (a **Continuous ML** project):
+Flask backend for EMWaver cloud features (a **Continual MI** project):
 - auth and identity-bound APIs,
 - file sync storage APIs,
 - agent chat/message persistence,

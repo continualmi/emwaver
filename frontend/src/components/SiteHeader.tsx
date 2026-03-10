@@ -24,7 +24,7 @@ export function SiteHeader() {
             <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1">
               <img
                 src="/continuous-logo.png"
-                alt="Continuous ML"
+                alt="Continual MI"
                 className="h-full w-full object-contain"
               />
             </div>
@@ -41,7 +41,7 @@ export function SiteHeader() {
               EMWaver
             </div>
             <div className="text-[12px] text-[color:var(--ink-dim)]">
-              A Continuous ML platform
+              A Continual MI platform
             </div>
           </div>
         </Link>
