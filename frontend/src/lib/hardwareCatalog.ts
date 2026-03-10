@@ -37,9 +37,9 @@ const STM32_MODULE_IDS = new Set([
   "RFID_WAVER",
 ]);
 
-const FEATURED_IDS = ["emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER", "RFID_WAVER", "EMW1"];
+const FEATURED_IDS = ["EMWAVER_DIY", "emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER", "RFID_WAVER"];
 
-const CURRENT_BOARD_IDS = ["emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
+const CURRENT_BOARD_IDS = ["EMWAVER_DIY", "emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
 
 function normalizeString(value: unknown): string {
   return String(value || "").trim();
