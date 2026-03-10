@@ -1,4 +1,5 @@
 using EMWaver.Services.Cloud;
+using EMWaver.Services;
 using EMWaver.Scripting;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -16,6 +17,7 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
     private string _hostSessionId = "";
     private string? _scriptInstanceId;
     private int _uiRev;
+    private ScriptTree? _lastTree;
 
     private readonly RemoteUiRenderer _renderer;
 
@@ -28,6 +30,7 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
 
         Loaded += OnLoaded;
         Unloaded += OnUnloaded;
+        ActualThemeChanged += OnActualThemeChanged;
     }
 
     private void OnLoaded(object sender, RoutedEventArgs e)
@@ -119,19 +122,11 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
     {
         _scriptInstanceId = scriptInstanceId;
         _uiRev = rev;
+        _lastTree = tree;
 
         _ = DispatcherQueue.TryEnqueue(() =>
         {
-            UiHost.Children.Clear();
-            if (tree?.Root != null)
-            {
-                UiHost.Children.Add(_renderer.Render(tree));
-                UiHint.Visibility = Visibility.Collapsed;
-            }
-            else
-            {
-                UiHint.Visibility = Visibility.Visible;
-            }
+            RenderTree(tree);
         });
     }
 
@@ -148,6 +143,25 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
         var scriptId = _scriptInstanceId;
         if (string.IsNullOrWhiteSpace(scriptId)) return;
         AppServices.RemoteControlClient.SendUiEvent(scriptId, _uiRev, targetNodeId, ev.ToRaw(), value);
+    }
+
+    private void OnActualThemeChanged(FrameworkElement sender, object args)
+    {
+        RenderTree(_lastTree);
+    }
+
+    private void RenderTree(ScriptTree? tree)
+    {
+        UiHost.Children.Clear();
+        if (tree?.Root != null)
+        {
+            UiHost.Children.Add(_renderer.Render(tree));
+            UiHint.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            UiHint.Visibility = Visibility.Visible;
+        }
     }
 
     // --- Remote renderer ---
@@ -201,7 +215,7 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
                     return new TextBlock { Text = GetString(node.Props, "text") ?? "", TextWrapping = TextWrapping.Wrap };
 
                 case ScriptNodeType.Divider:
-                    return new Border { Height = 1, Background = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 255, 255, 255)) };
+                    return new Border { Height = 1, Background = ThemeResources.Brush("GeneratedDividerBrush", Windows.UI.Color.FromArgb(40, 255, 255, 255)) };
 
                 case ScriptNodeType.Button:
                     {
@@ -297,8 +311,8 @@ public sealed partial class RemoteHostControlPage : Page, RemoteControlClientSer
                         {
                             Height = GetDouble(node.Props, "height") ?? 240,
                             BorderThickness = new Thickness(1),
-                            BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(40, 255, 255, 255)),
-                            Background = new SolidColorBrush(Windows.UI.Color.FromArgb(18, 255, 255, 255)),
+                            BorderBrush = ThemeResources.Brush("GeneratedSurfaceBorderBrush", Windows.UI.Color.FromArgb(40, 255, 255, 255)),
+                            Background = ThemeResources.Brush("GeneratedSurfaceBackgroundBrush", Windows.UI.Color.FromArgb(18, 255, 255, 255)),
                             CornerRadius = new CornerRadius(8),
                             Padding = new Thickness(10),
                         };

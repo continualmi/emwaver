@@ -251,7 +251,7 @@ export default function OrderPage() {
             </div>
 
             <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-              <img src="/EMWAVER.jpg" alt="EMWaver device" className="h-auto w-full object-cover" />
+              <img src="/EMWAVER.png" alt="EMWaver device" className="h-auto w-full object-cover" />
             </div>
           </div>
         </div>

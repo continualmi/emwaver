@@ -1307,6 +1307,15 @@ if (typeof analogWrite !== 'function') {
 
     var normalizeProps = function (type, props) {
       var assigned = props ? Object.assign({}, props) : {};
+      delete assigned.x;
+      delete assigned.y;
+      delete assigned.left;
+      delete assigned.top;
+      delete assigned.right;
+      delete assigned.bottom;
+      if (typeof assigned.position === 'string' && assigned.position.toLowerCase() === 'absolute') {
+        delete assigned.position;
+      }
       var children = Array.isArray(assigned.children) ? assigned.children : [];
       delete assigned.children;
       var id = ensureId(type, assigned);

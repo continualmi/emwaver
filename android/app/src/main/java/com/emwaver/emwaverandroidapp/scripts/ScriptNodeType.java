@@ -21,7 +21,9 @@ public enum ScriptNodeType {
     PLOT("plot"),
     SPACER("spacer"),
     DIVIDER("divider"),
-    PROGRESS("progress");
+    PROGRESS("progress"),
+    CARD("card"),
+    TILE("tile");
 
     private final String rawValue;
 

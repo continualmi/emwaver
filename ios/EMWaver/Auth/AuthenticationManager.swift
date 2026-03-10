@@ -82,8 +82,7 @@ final class AuthenticationManager: ObservableObject {
         guard session == nil else { return }
 
         do {
-            let apiKey = (ProcessInfo.processInfo.environment["EMWAVER_FIREBASE_WEB_API_KEY"] ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let apiKey = AppEnvironment.string("EMWAVER_FIREBASE_WEB_API_KEY")
             guard !apiKey.isEmpty else { return }
 
             guard let refresh = try KeychainStore.getString(account: refreshTokenAccount), !refresh.isEmpty else {
@@ -118,4 +117,3 @@ final class AuthenticationManager: ObservableObject {
         }
     }
 }
-

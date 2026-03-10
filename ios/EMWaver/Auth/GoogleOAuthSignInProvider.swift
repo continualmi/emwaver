@@ -179,7 +179,7 @@ final class GoogleOAuthSignInProvider: NSObject, GoogleSignInProviding {
     }
 
     private func env(_ key: String) -> String {
-        (ProcessInfo.processInfo.environment[key] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        AppEnvironment.string(key)
     }
 
     private func effectiveRedirectURI(redirectURI: String, googleClientId: String) -> String {

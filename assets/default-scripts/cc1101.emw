@@ -997,8 +997,7 @@ function render() {
             })
           : null,
 
-        UI.grid({
-          minColumnWidth: 420,
+        UI.column({
           spacing: 16,
           children: [
             UI.column({
@@ -1023,14 +1022,16 @@ function render() {
                   title: "Quick Presets",
                   subtitle: "Known-good ASK/OOK setup and carrier gate",
                   children: [
-                    UI.row({
+                    UI.grid({
+                      minColumnWidth: 220,
                       spacing: 12,
                       children: [
                         UI.button({ label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
                         UI.button({ label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
                       ],
                     }),
-                    UI.row({
+                    UI.grid({
+                      minColumnWidth: 160,
                       spacing: 12,
                       children: [
                         UI.button({ label: txCarrierOn ? "Carrier OFF" : "Carrier ON", onTap: toggleCarrier }),
@@ -1148,10 +1149,12 @@ function render() {
                   title: "Packet Mode (optional)",
                   subtitle: "Quick fixed-length packet TX sanity check",
                   children: [
-                    UI.row({
+                    UI.grid({
+                      minColumnWidth: 160,
                       spacing: 12,
                       children: [
                         UI.textField({
+                          fillsWidth: true,
                           value: String(packetCsPin),
                           placeholder: "CS pin (default CC1101_CS)",
                           onChange: function (v) {
@@ -1164,10 +1167,12 @@ function render() {
                         UI.button({ label: "Send", onTap: packetSend }),
                       ],
                     }),
-                    UI.row({
+                    UI.grid({
+                      minColumnWidth: 220,
                       spacing: 12,
                       children: [
                         UI.textField({
+                          fillsWidth: true,
                           value: String(packetFreqMHz),
                           placeholder: "Freq MHz (433.92)",
                           onChange: function (v) {
@@ -1177,6 +1182,7 @@ function render() {
                           },
                         }),
                         UI.textField({
+                          fillsWidth: true,
                           value: String(packetDataRateBps),
                           placeholder: "Data rate bps (100000)",
                           onChange: function (v) {
@@ -1196,19 +1202,15 @@ function render() {
                         render();
                       },
                       minHeight: 56,
+                      fillsWidth: true,
                     }),
                     packetStatus ? UI.text({ text: packetStatus, font: "caption" }) : null,
-                    UI.row({
-                      spacing: 12,
-                      children: [
-                        UI.button({
-                          label: "Clear Log",
-                          onTap: function () {
-                            packetLogLines = [];
-                            render();
-                          },
-                        }),
-                      ],
+                    UI.button({
+                      label: "Clear Log",
+                      onTap: function () {
+                        packetLogLines = [];
+                        render();
+                      },
                     }),
                     UI.logViewer({ text: packetLogLines.join("\n"), minHeight: 120 }),
                   ],

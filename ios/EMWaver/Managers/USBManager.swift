@@ -10,6 +10,52 @@ import SwiftUI
 import os
 import CryptoKit
 
+struct SamplerLanePolicy {
+    enum EmwOpcode {
+        static let sample: UInt8 = 0x60
+        static let sampleStart: UInt8 = 0x00
+        static let sampleStop: UInt8 = 0x01
+    }
+
+    let shouldStoreCommandLane: Bool
+    let shouldStoreStreamLane: Bool
+    let nextSamplerStreamingActive: Bool
+
+    static func forOutgoingPacket(_ data: Data, samplerStreamingActive: Bool) -> SamplerLanePolicy {
+        var nextSamplerStreamingActive = samplerStreamingActive
+
+        if data.count >= 2, data[data.startIndex] == EmwOpcode.sample {
+            let subOpcode = data[data.startIndex.advanced(by: 1)]
+            if subOpcode == EmwOpcode.sampleStart {
+                nextSamplerStreamingActive = true
+            } else if subOpcode == EmwOpcode.sampleStop {
+                nextSamplerStreamingActive = false
+            }
+        }
+
+        return SamplerLanePolicy(
+            shouldStoreCommandLane: false,
+            shouldStoreStreamLane: false,
+            nextSamplerStreamingActive: nextSamplerStreamingActive
+        )
+    }
+
+    static func forIncomingSuperframe(
+        commandLane: Data,
+        streamLane: Data,
+        samplerStreamingActive: Bool
+    ) -> SamplerLanePolicy {
+        let commandEmpty = commandLane.allSatisfy { $0 == 0 }
+        let streamEmpty = streamLane.allSatisfy { $0 == 0 }
+
+        return SamplerLanePolicy(
+            shouldStoreCommandLane: !commandEmpty,
+            shouldStoreStreamLane: !streamEmpty || samplerStreamingActive,
+            nextSamplerStreamingActive: samplerStreamingActive
+        )
+    }
+}
+
 /// NOTE: Despite the historical name, this is now a **USB MIDI (CoreMIDI)** transport.
 /// We keep the `USBManager` API surface to minimize churn across the iOS codebase.
 final class USBManager: ObservableObject {
@@ -71,6 +117,7 @@ final class USBManager: ObservableObject {
 
     // SysEx receive accumulator (CoreMIDI may chunk messages)
     private var sysexAccumulator = UsbMidiSysexAccumulator()
+    private var isSamplerStreamingActive = false
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -327,6 +374,9 @@ final class USBManager: ObservableObject {
                 self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
                 return
             }
+
+            let policy = SamplerLanePolicy.forOutgoingPacket(data, samplerStreamingActive: self.isSamplerStreamingActive)
+            self.isSamplerStreamingActive = policy.nextSamplerStreamingActive
             
             // Log command lane transmission
             self.withBufferQueueSync {
@@ -811,6 +861,7 @@ final class USBManager: ObservableObject {
         }
         connectedSource = 0
         connectedDestination = 0
+        isSamplerStreamingActive = false
 
         DispatchQueue.main.async {
             self.isConnected = false
@@ -1006,18 +1057,19 @@ final class USBManager: ObservableObject {
             
             let cmdLane = superframe.subdata(in: 0..<Self.laneSizeBytes)
             let streamLane = superframe.subdata(in: Self.laneSizeBytes..<Self.superframeSizeBytes)
-            
-            // Push non-empty lanes to the shared buffer
-            // Check for empty (all zeros) logic
-            let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
-            let streamEmpty = streamLane.allSatisfy { $0 == 0 }
-            
-            if !cmdEmpty {
+
+            let policy = SamplerLanePolicy.forIncomingSuperframe(
+                commandLane: cmdLane,
+                streamLane: streamLane,
+                samplerStreamingActive: isSamplerStreamingActive
+            )
+
+            if policy.shouldStoreCommandLane {
                 dbg("RX: Demux CMD lane")
                 storeBulkPkt(cmdLane)
             }
-            
-            if !streamEmpty {
+
+            if policy.shouldStoreStreamLane {
                 dbg("RX: Demux STREAM lane")
                 storeBulkPkt(streamLane)
             }

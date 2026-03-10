@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
+using EMWaver.Services;
 using System;
 using System.Collections.Generic;
 using Windows.UI;
@@ -31,7 +32,7 @@ public sealed class ScriptPlotControl : UserControl
         _canvas = new Canvas();
         _line = new Polyline
         {
-            Stroke = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255)),
+            Stroke = ThemeResources.Brush("PlotLineBrush", Color.FromArgb(255, 255, 255, 255)),
             StrokeThickness = 1.5,
             StrokeLineJoin = PenLineJoin.Round,
         };
@@ -40,8 +41,8 @@ public sealed class ScriptPlotControl : UserControl
         _frame = new Border
         {
             CornerRadius = new CornerRadius(10),
-            Background = new SolidColorBrush(Color.FromArgb(18, 255, 255, 255)),
-            BorderBrush = new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)),
+            Background = ThemeResources.Brush("GeneratedSurfaceBackgroundBrush", Color.FromArgb(18, 255, 255, 255)),
+            BorderBrush = ThemeResources.Brush("GeneratedSurfaceBorderBrush", Color.FromArgb(40, 255, 255, 255)),
             BorderThickness = new Thickness(1),
             Child = _canvas,
         };
