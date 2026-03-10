@@ -56,7 +56,7 @@ else
 fi
 
 # Window 2: Dev Ops (2x2 Grid) — typed only
-# Android | SecureWaver (tauri)
+# Android | macOS app build
 # emwaver.sh | emwaver daemon TUI
 if window_exists 'dev-ops'; then
   PANE_TOP_LEFT=$(tmux display-message -p -t "$SESSION:dev-ops" '#{pane_id}')
@@ -70,8 +70,8 @@ else
   tmux send-keys -t "$PANE_TOP_LEFT" 'cd android' C-m
   tmux send-keys -t "$PANE_TOP_LEFT" './gradlew installDebug'
 
-  tmux send-keys -t "$PANE_TOP_RIGHT" 'cd securewaver' C-m
-  tmux send-keys -t "$PANE_TOP_RIGHT" 'npm run tauri'
+  tmux send-keys -t "$PANE_TOP_RIGHT" 'cd macos/EMWaver' C-m
+  tmux send-keys -t "$PANE_TOP_RIGHT" 'xcodebuild -project EMWaver.xcodeproj -scheme EMWaver CODE_SIGNING_ALLOWED=NO build'
   tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
   tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
 fi

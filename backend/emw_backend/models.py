@@ -201,7 +201,7 @@ class StoreOrder(Base):
         }
 
 
-# --- User devices (SecureWaver identity binding) ---
+# --- User devices (signed device identity binding) ---
 
 
 # --- Auth handoff (web sign-in -> native apps) ---

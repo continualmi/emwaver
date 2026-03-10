@@ -47,7 +47,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var isSecureConnected: Bool = false
     @Published var secureDeviceIdHex: String? = nil
 
-    // SecureWaver identity (base64) for account attach flows.
+    // Signed device identity (base64) for account attach flows.
     @Published var secureDeviceIdB64: String? = nil
     @Published var secureDeviceProofB64: String? = nil
 
@@ -400,7 +400,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
 
         // Mirror the desktop app behavior: query the device version automatically on connect,
-        // then require a valid SecureWaver identity.
+        // then require a valid signed device identity.
         DispatchQueue.global(qos: .userInitiated).async {
             var v = self.queryDeviceVersion(timeoutMs: 1500)
             if v == nil {

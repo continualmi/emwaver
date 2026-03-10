@@ -87,12 +87,6 @@ This document is the contract.
 - `NEXT_PUBLIC_FIREBASE_APP_ID`
 - `NODE_ENV`
 
-### targets/securewaver.env
-- `VITE_FIREBASE_API_KEY`
-- `VITE_FIREBASE_AUTH_DOMAIN`
-- `VITE_FIREBASE_PROJECT_ID`
-- `VITE_FIREBASE_APP_ID`
-
 ### targets/daemon.env
 - `EMWAVER_ID_TOKEN`
 - `EMWAVER_HOST_SESSION_ID`
@@ -142,12 +136,6 @@ Load files in this order.
 3. `secrets/shared/oauth.env`
 4. `secrets/targets/apps.env`
 
-### SecureWaver (Tauri)
-1. `secrets/shared/core.env`
-2. `secrets/shared/firebase.env`
-3. `secrets/shared/oauth.env`
-4. `secrets/targets/securewaver.env`
-
 ### Daemon / Headless host
 1. `secrets/shared/core.env`
 2. `secrets/targets/daemon.env`
@@ -160,7 +148,7 @@ Load files in this order.
 ## 3) Hard boundaries
 
 - `EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64` is **server-only** (never ship to client bundles/apps).
-- `NEXT_PUBLIC_*` and `VITE_*` are **public build-time** values (compiled into clients).
+- `NEXT_PUBLIC_*` are **public build-time** values (compiled into clients).
 - `EMWAVER_ROOT_PUBLIC_KEY_B64` is public by design and safe for clients.
 
 ## 4) Cloud vs Local endpoint policy (Staff settings)

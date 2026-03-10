@@ -277,7 +277,7 @@ struct ContentView: View {
                 device.needsLoginToSaveDevice = false
             }
         } message: {
-            Text("This EMWaver device is genuine (SecureWaver identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro. You can attach the device later from the Device panel.")
+            Text("This EMWaver device is genuine (signed identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro. You can attach the device later from the Device panel.")
         }
         .alert("Connect an EMWaver device to sign in", isPresented: $showingSignInRequiresDeviceAlert) {
             Button("Open Device…") {

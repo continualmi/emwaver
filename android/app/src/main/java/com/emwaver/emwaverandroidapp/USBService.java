@@ -328,7 +328,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
-            // Verify SecureWaver identity in Run mode to mark connection as secure.
+            // Verify the signed device identity in Run mode to mark connection as secure.
             verifySecureIdentityAsync();
             queryFirmwareVersionAsync();
         }, midiHandler);

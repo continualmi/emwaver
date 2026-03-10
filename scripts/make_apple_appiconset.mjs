@@ -19,8 +19,13 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createRequire } from 'module';
 
-const require = createRequire(new URL('../securewaver/package.json', import.meta.url));
-const sharp = require('sharp');
+const require = createRequire(import.meta.url);
+let sharp;
+try {
+  sharp = require('sharp');
+} catch {
+  throw new Error('Missing dependency: sharp. Install it in a Node workspace before running this script.');
+}
 
 const SCALE = Number(process.env.ICON_SCALE ?? '0.84');
 const RADIUS_1024 = Number(process.env.ICON_RADIUS ?? '200');

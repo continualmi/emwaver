@@ -26,7 +26,7 @@
 #define EMW_OP_ENTER_DFU 0x06u
 
 // Device identity
-// Reads provisioned DeviceID/Proof (minted by SecureWaver) from flash.
+// Reads provisioned DeviceID/Proof from flash.
 #define EMW_OP_IDENTITY_GET 0x07u
 #define EMW_IDENTITY_DEVICE_ID 0x00u
 #define EMW_IDENTITY_PROOF     0x01u

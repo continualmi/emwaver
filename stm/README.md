@@ -18,7 +18,7 @@ If you only read one thing first, read:
 - Device-side command execution (GPIO, ADC, PWM, SPI, UART, I2C).
 - USB MIDI SysEx transport (fixed 64-byte USB packets).
 - Streaming modes used for high-rate sampling/retransmit behavior.
-- Device metadata endpoints (firmware version, device name, SecureWaver identity reads).
+- Device metadata endpoints (firmware version, device name, signed identity reads).
 - Building/exporting `.elf` and `.bin` artifacts for app bundling.
 
 This folder does **not** own host/cloud logic; it is strictly MCU-side firmware and build helpers.
@@ -194,7 +194,7 @@ Opcode constants are in `Core/Inc/emw_proto.h`; handling is in `Core/Src/main.c`
 ## 6.2 Device identity and naming
 
 - `EMW_OP_IDENTITY_GET (0x07)`
-  - reads SecureWaver provisioned blob from flash page at `0x08007800`.
+  - reads signed identity blob from flash page at `0x08007800`.
   - supports:
     - `which=0` device id (16 bytes)
     - `which=1` proof chunk (16 bytes per chunk, 4 chunks total)
@@ -336,7 +336,7 @@ Firmware enforces single bus owner (`BUS_OWNER_*`).
 ## 8) Flash layout used by firmware
 
 - `0x08000000` start of application flash.
-- `0x08007800` SecureWaver identity blob (magic + metadata + DeviceID + Proof).
+- `0x08007800` signed identity blob (magic + metadata + DeviceID + Proof).
 - `0x08007C00` user device name page.
 
 DFU entry routine intentionally erases early flash pages (starting at app base) so ROM empty-check falls into system DFU bootloader.

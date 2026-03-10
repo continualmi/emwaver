@@ -115,7 +115,7 @@ struct EMWaverApp: App {
 
                 Divider()
 
-                Button("Update Firmware…") {
+                Button(device.isSecureConnected ? "Update Firmware…" : "Activate Device…") {
                     firmwareUpdater.present()
                 }
 

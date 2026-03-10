@@ -95,7 +95,7 @@ struct DeviceConnectionSheet: View {
 
             GroupBox("Firmware") {
                 VStack(alignment: .leading, spacing: 10) {
-                    Button("Update firmware…") {
+                    Button(device.isSecureConnected ? "Update firmware…" : "Activate device…") {
                         // Avoid sheet-on-sheet. Dismiss the device sheet first,
                         // then present the firmware update sheet from the app root.
                         dismiss()
@@ -115,6 +115,12 @@ struct DeviceConnectionSheet: View {
                     Text(firmwareUpdater.dfuConnected ? "Update Mode: Detected" : "Update Mode: Not detected")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    if !device.isSecureConnected {
+                        Text("Activation is backend-authoritative: the macOS app requests a signed DeviceID + Proof, then provisions the device in Update Mode.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .padding(.vertical, 4)
             }
