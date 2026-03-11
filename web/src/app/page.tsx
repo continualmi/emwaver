@@ -43,7 +43,7 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="relative min-h-dvh overflow-hidden">
+    <div className="relative min-h-dvh overflow-x-clip">
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.72]" />
