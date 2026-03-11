@@ -2,7 +2,7 @@
 
 Next.js + Node unified web app for EMWaver’s public web surface and web-based cloud flows.
 
-This folder is the new canonical web surface in the repo. It starts from the existing Next.js frontend and is the landing zone for the backend migration from Flask/Python to TypeScript/Node.
+This folder is the canonical EMWaver web surface in the repo. It now owns the public website, web APIs, agent endpoints, store/account flows, and the WebSocket relay under one Next.js + Node deployment.
 
 ---
 
@@ -45,7 +45,7 @@ Key scripts (`package.json`):
 - `src/lib/`
   - client-side API helpers, remote session/websocket helpers, config utilities
 - `src/server/`
-  - Node-side config/auth/WebSocket/backend migration modules
+  - Node-side config/auth/WebSocket/backend modules
 - `server.ts`
   - unified Next.js + Node runtime entrypoint
 - `public/`
@@ -99,26 +99,59 @@ Important shared components include:
 
 ## 5) Backend integration contract
 
-The app is being migrated toward same-origin backend routes under `/v1/*` and related service endpoints. During migration, route contracts should remain stable even while implementation moves from Flask to Node/TypeScript.
+The app serves the same-origin backend routes under `/v1/*` and related service endpoints.
 
-Current TypeScript-backed routes already present in this folder:
+Current server routes in this folder include:
 - `GET /health`
 - `GET /health/config`
+- `GET /openapi.json`
+- `GET /docs-api`
 - `GET /v1/health/config`
 - `GET /v1/entitlements`
+- `GET /v1/credits`
+- `GET /v1/hosts`
+- `POST /v1/hosts/heartbeat`
 - `GET /v1/files`
 - `GET /v1/files/content?name=...`
 - `POST /v1/files/upload`
 - `DELETE /v1/files?name=...`
-- `GET /v1/hosts`
-- `POST /v1/hosts/heartbeat`
+- `POST /v1/devices/attach`
+- `POST /v1/devices/seen`
+- `GET /v1/devices/my`
+- `POST /v1/devices/label`
+- `POST /provisioning/mint`
+- `POST /v1/auth/handoff/start`
+- `POST /v1/auth/handoff/consume`
+- `GET /v1/agent/conversations`
+- `POST /v1/agent/conversations`
+- `PATCH /v1/agent/conversations/:conversationId`
+- `DELETE /v1/agent/conversations/:conversationId`
+- `GET /v1/agent/conversations/:conversationId/messages`
+- `POST /v1/agent/conversations/:conversationId/messages`
+- `POST /v1/agent/chat`
+- `POST /v1/agent/chat/stream`
+- `POST /v1/agent/chat/stream_tools`
+- `POST /v1/store/checkout_session`
+- `GET /v1/store/orders/my`
+- `POST /v1/store/orders/claim`
+- `POST /v1/store/stripe/webhook`
+- `POST /v1/pro/checkout_session`
+- `POST /v1/pro/portal`
+- `POST /v1/pro/stripe/webhook`
+- `POST /v1/admin/grant_pro`
+- `GET /v1/society/posts`
+- `GET /v1/society/posts/:postId`
+- `GET /v1/society/posts/:postId/comments`
+- `POST /v1/society/posts/:postId/comments`
+- `POST /v1/society/forum/threads`
 - `GET /v1/ws?token=...` (custom server upgrade path)
 
-Current migration notes:
+Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- entitlements are temporarily in-memory with optional `EMWAVER_DEFAULT_PRO=1` development override,
+- account/store/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
+- entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,
 - host presence and WebSocket routing are currently single-instance in-memory,
-- billing, minting, devices, agent chat/SSE, and admin/store routes still need porting.
+- the current shape is suitable for a single-instance deployment and should move to shared state if multi-instance scaling is needed later.
 
 ### 5.1 Files
 
@@ -179,21 +212,21 @@ Store distribution policy migrated from AGENTS:
 From repo root:
 
 ```bash
-cd frontend
+cd web
 npm install
 npm run dev
 ```
 
 Open: `http://localhost:3200`
 
-If testing backend-dependent flows, ensure backend is running and configured in frontend env/config helpers.
+This single app is the backend for the web surface, so backend-dependent flows run from the same process. The custom `server.ts` entrypoint is required for `/v1/ws`.
 
 ---
 
 ## 9) Deployment
 
-- Intended deployment target is a single Node-capable app service/container app.
-- CI/CD should converge on a single deployment unit for this folder.
+- Deployed as a single Azure App Service Node container.
+- GitHub Actions builds and deploys this folder as the unified web/backend service.
 
 Keep deployment assumptions aligned with:
 - same-origin backend base URL resolution,
