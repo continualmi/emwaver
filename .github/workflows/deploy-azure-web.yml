@@ -1,0 +1,101 @@
+name: Deploy Web (Azure App Service)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - web/**
+      - .dockerignore
+      - .github/workflows/deploy-azure-web.yml
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: azure-web-app-service
+  cancel-in-progress: true
+
+env:
+  AZURE_WEBAPP_NAME: emwaver-web
+  AZURE_RESOURCE_GROUP: emwaver
+  IMAGE_NAME: emwaver-web
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Log in to Azure Container Registry
+        run: az acr login --name "${{ secrets.AZURE_ACR_NAME }}"
+
+      - name: Compute image tags
+        id: meta
+        run: |
+          BRANCH_TAG=$(echo "${GITHUB_REF_NAME}" | tr '[:upper:]' '[:lower:]' | tr '/' '-')
+          echo "branch_tag=${BRANCH_TAG}" >> "$GITHUB_OUTPUT"
+          echo "sha_tag=sha-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+          echo "image=${{ secrets.AZURE_ACR_LOGIN_SERVER }}/${IMAGE_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_EMWAVER_BACKEND_URL=${{ secrets.NEXT_PUBLIC_EMWAVER_BACKEND_URL }}
+            NEXT_PUBLIC_FIREBASE_API_KEY=${{ secrets.NEXT_PUBLIC_FIREBASE_API_KEY }}
+            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ secrets.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
+            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
+            NEXT_PUBLIC_FIREBASE_APP_ID=${{ secrets.NEXT_PUBLIC_FIREBASE_APP_ID }}
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.branch_tag }}
+
+      - name: Read ACR credentials
+        id: acr
+        run: |
+          echo "username=$(az acr credential show -n '${{ secrets.AZURE_ACR_NAME }}' --query 'username' -o tsv)" >> "$GITHUB_OUTPUT"
+          echo "password=$(az acr credential show -n '${{ secrets.AZURE_ACR_NAME }}' --query 'passwords[0].value' -o tsv)" >> "$GITHUB_OUTPUT"
+
+      - name: Configure Azure Web App container
+        run: |
+          az webapp config container set \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --container-image-name "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" \
+            --container-registry-url "https://${{ secrets.AZURE_ACR_LOGIN_SERVER }}" \
+            --container-registry-user "${{ steps.acr.outputs.username }}" \
+            --container-registry-password "${{ steps.acr.outputs.password }}"
+
+      - name: Configure runtime settings
+        run: |
+          az webapp config appsettings set \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}" \
+            --settings \
+              WEBSITES_PORT=3000 \
+              WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
+              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
+              ENABLE_ORYX_BUILD=false
+
+      - name: Restart Azure Web App
+        run: |
+          az webapp restart \
+            --resource-group "${AZURE_RESOURCE_GROUP}" \
+            --name "${AZURE_WEBAPP_NAME}"
