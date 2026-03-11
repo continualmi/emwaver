@@ -4,11 +4,13 @@ Rust-based headless host for EMWaver.
 
 This is the terminal/service runtime that keeps USB ownership local to a machine (Mac/Linux target direction), while exposing remote control through EMWaver cloud protocols.
 
+It is one remote-control path in the platform, not the only remote architecture. Autonomous board classes such as future ESP32 direct-to-cloud targets can bypass the daemon entirely.
+
 ---
 
 ## 1) Purpose
 
-The daemon is the **no-UI host runtime**:
+The daemon is the **no-UI host runtime** for host-backed boards:
 - owns USB MIDI connection to the EMWaver hardware,
 - runs the script runtime and UI state machine headlessly,
 - forwards snapshots/events over WebSocket (`/v1/ws`) to remote controllers.
@@ -98,6 +100,8 @@ Daemon-side transport is local USB MIDI.
 - Device command path routes through local `Device` abstraction and packet send/response semantics.
 - Remote side never directly owns USB — only forwards commands/events through daemon session.
 
+This model applies to host-backed boards. Autonomous Wi-Fi-capable boards are expected to use a different direct session model once implemented.
+
 ---
 
 ## 6) Autostart/service posture
@@ -149,7 +153,7 @@ If auth token is missing, behavior may work only in limited/dev scenarios depend
 
 ## 9) Design constraints
 
-1. USB ownership is local to daemon host.
+1. USB ownership is local to daemon host for host-backed boards.
 2. Daemon is headless by design (no rendered UI surface).
 3. WS protocol compatibility with backend host routing is mandatory.
 4. Keep reconnection and heartbeat robust for unattended service operation.

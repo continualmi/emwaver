@@ -17,12 +17,12 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **software-first**, host-powered, AI-first electronics platform by **Continual MI**. It turns phones/laptops/desktop hosts into a full hardware lab using supported MCU boards.
+EMWaver is a **software-first**, AI-first electronics platform by **Continual MI**. It turns supported MCU boards into a full hardware lab through EMWaver-managed host-backed and autonomous device flows.
 
 Core direction:
 - **Business model:** software-first — revenue from paid device minting, platform services (Pro), and AI usage. No dependency on selling hardware to launch or operate.
-- **Transport:** USB-only using class-compliant **USB MIDI SysEx** with fixed 64-byte frames.
-- **Hardware:** multiple supported MCU boards (currently STM32-based; e.g., STM32F042 EMWaver board, STM32F103 BluePill). Users bring their own compatible board.
+- **Transport:** managed multi-transport platform. USB MIDI SysEx remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
+- **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board, STM32F103 BluePill, ESP32-S3 class devices). Users bring their own compatible board.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** agent-assisted workflows are first-class.
@@ -35,7 +35,7 @@ Core direction:
 
 ### The Core Thesis
 
-1. **Host-powered electronics** — EMWaver uses the host (phone/laptop/desktop) for compute, UI, storage, and connectivity.
+1. **Managed electronics platform** — EMWaver uses host apps where that is the best fit, and supports autonomous board classes where direct cloud/device operation is the better product.
 2. **Software-first platform** — the product is the software stack (apps, firmware, cloud, AI), not the hardware. Users supply their own supported MCU board.
 3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
 4. **Best beginner experience** — buy a cheap supported board, install the app, plug in, activate, and start exploring without firmware toolchains.
@@ -45,7 +45,6 @@ Core direction:
 We intentionally give up:
 - dependency on hardware sales for revenue or launch,
 - single-board hardware monopoly,
-- on-device wireless-first UX,
 - end-user firmware build/flash customization loops,
 - "MCU toolchain as required user workflow."
 
@@ -81,8 +80,8 @@ We intentionally give up:
 
 ### Supported boards
 
-- The platform supports multiple MCU targets. Each target needs a firmware implementation of the USB MIDI SysEx transport, identity page, and script runtime.
-- Current/planned targets: STM32F042 (EMWaver board — coming soon), STM32F103 (BluePill).
+- The platform supports multiple MCU targets. Each target needs a firmware implementation of the transport/runtime model appropriate to that board class, plus platform identity and managed update support.
+- Current/planned targets: STM32F042 (EMWaver board — coming soon), STM32F103 (BluePill), ESP32-S3 class targets.
 - Adding a new supported board = porting firmware + adding its binary to the app bundle.
 - Users see a unified experience regardless of which board they use.
 
@@ -94,7 +93,7 @@ We intentionally give up:
 ### Linux host scope
 
 - Linux support is **headless host (beta)**, not a Linux GUI app.
-- Remote controller surfaces render and control; host owns USB/runtime state.
+- Remote controller surfaces render and control; host-backed boards keep runtime state on the host, while autonomous board classes may connect directly without a host.
 
 ### Distribution and release posture
 
@@ -134,6 +133,7 @@ Use the local README first when working in a folder:
 - `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
+- `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
 - `frontend/README.md` — website/web client structure and backend contracts
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
@@ -150,6 +150,7 @@ If a folder has a README, detailed documentation should live there.
 ## 6) Repo Overview (high level)
 
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
+- `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
 - `backend/` — cloud/backend services (minting, entitlements, AI, sync).
 - `frontend/` — website/web surfaces.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
@@ -161,8 +162,8 @@ If a folder has a README, detailed documentation should live there.
 
 ## 7) Non-negotiable Platform Policies
 
-1. **USB-first architecture**: core device comms are USB MIDI SysEx.
-2. **Host-centric model**: heavy logic lives on host/apps, not on-device UX complexity.
+1. **Managed transport architecture**: USB MIDI SysEx is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
+2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
 3. **Software-first business**: revenue comes from minting, Pro, and AI — not hardware sales.
 4. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
 5. **Store distribution for end-user apps**: no alternative distribution as default product strategy.

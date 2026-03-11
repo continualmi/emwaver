@@ -12,6 +12,13 @@ import {
   getPreviousBoards,
 } from "@/lib/hardwareCatalog";
 
+function getMetaLabel(group: string): string {
+  if (group === "module") return "Module";
+  if (group === "esp32") return "ESP32";
+  if (group === "stm32") return "STM32";
+  return group || "Device";
+}
+
 function HardwareCard({
   href,
   image,
@@ -68,7 +75,7 @@ function HardwareSection({
             image={item.image}
             title={item.title}
             description={item.description}
-            meta={item.group === "module" ? "Module" : "STM32"}
+            meta={getMetaLabel(item.group)}
           />
         ))}
       </div>
@@ -101,7 +108,7 @@ export default function HardwarePage() {
 
             <p className="max-w-2xl pt-5 text-[15px] leading-7 text-[color:var(--ink-dim)]">
               This is the practical route while direct device sales are still marked coming soon.
-              Browse the current EMWaver boards, inspect the historical hardware catalog, and use
+              Browse the current EMWaver boards across STM32 and ESP32 lines, inspect the historical hardware catalog, and use
               the builder flow for BOM, fabrication files, and JLCPCB-oriented output.
             </p>
 
@@ -124,25 +131,25 @@ export default function HardwarePage() {
 
           <HardwareSection
             title="Featured"
-            description="The main STM32 boards and modules worth surfacing first."
+            description="The main EMWaver boards and modules worth surfacing first across the current catalog."
             items={featured}
           />
 
           <HardwareSection
             title="Current boards"
-            description="Primary STM32 boards from the catalog."
+            description="Primary boards currently worth highlighting across STM32 and ESP32 device families."
             items={currentBoards}
           />
 
           <HardwareSection
             title="Modules"
-            description="Add-on modules and experimental connectors that sit inside the STM32 hardware ecosystem."
+            description="Add-on modules, carriers, and connectors that belong in the broader EMWaver hardware ecosystem."
             items={modules}
           />
 
           <HardwareSection
             title="Previous revisions"
-            description="Archived STM32 board revisions that still belong in the hardware history."
+            description="Archived board revisions that still belong in the EMWaver hardware history."
             items={previousBoards}
           />
 

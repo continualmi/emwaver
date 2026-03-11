@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s · EMWaver",
   },
   description:
-    "EMWaver is a Continual MI platform for host-powered electronics on supported STM32 boards, with app-managed firmware and AI-first workflows.",
+    "EMWaver is a Continual MI electronics platform with app-managed firmware, AI-first workflows, and host-backed or autonomous supported boards.",
   icons: [{ rel: "icon", url: "/favicon.ico" }],
 };
 

@@ -14,20 +14,20 @@ export const NEWS_POSTS: NewsPost[] = [
     title: "Welcome to EMWaver",
     date: "2026-02-01",
     summary:
-      "What EMWaver is now: one STM32 board, USB-only, scripts + UI as the product.",
+      "What EMWaver is now: managed firmware, scripts + UI as the product, and board-specific transport paths.",
     Content: function WelcomeToEmwaverPost() {
       return (
         <>
           <h1>Welcome to EMWaver</h1>
           <p>
             EMWaver is a focused platform for hardware exploration. The product is the app experience:
-            scripts render real UI and talk to the device over a stable USB protocol.
+            scripts render real UI and talk to the device through EMWaver-managed transports.
           </p>
 
           <h2>What ships (the platform)</h2>
           <ul>
             <li>One current-gen STM32 board</li>
-            <li>USB only (class-compliant USB MIDI SysEx, fixed 64-byte frames)</li>
+            <li>USB is first-class today, with ESP32 multi-transport support returning</li>
             <li>One firmware binary for the platform</li>
             <li>Apps on Android / iOS / macOS / Windows</li>
           </ul>

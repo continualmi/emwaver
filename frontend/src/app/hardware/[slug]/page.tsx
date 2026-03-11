@@ -7,6 +7,20 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { GalleryClient } from "@/app/hardware/GalleryClient";
 import { getHardwareCatalog, getHardwareDevice, getRelatedHardware } from "@/lib/hardwareCatalog";
 
+function getBoardLabel(group: string): string {
+  if (group === "module") return "Module";
+  if (group === "esp32") return "ESP32 board";
+  if (group === "stm32") return "STM32 board";
+  return "Board";
+}
+
+function getPlatformLabel(group: string): string {
+  if (group === "module") return "Module / add-on";
+  if (group === "esp32") return "ESP32-based";
+  if (group === "stm32") return "STM32-based";
+  return group || "Not specified";
+}
+
 export async function generateStaticParams() {
   return getHardwareCatalog().map((device) => ({ slug: device.slug }));
 }
@@ -44,7 +58,7 @@ export default async function HardwareDevicePage({
             <div className="space-y-5">
               <div className="flex flex-wrap items-center gap-3">
                 <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">
-                  {device.group === "module" ? "Module" : "STM32 board"}
+                  {getBoardLabel(device.group)}
                 </span>
                 {device.experimental ? (
                   <span className="rounded-full border border-[rgba(91,192,255,0.35)] bg-[rgba(91,192,255,0.10)] px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
@@ -75,7 +89,7 @@ export default async function HardwareDevicePage({
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-5">
                   <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Platform</div>
-                  <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">{device.group === "module" ? "Module / add-on" : "STM32-based"}</div>
+                  <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">{getPlatformLabel(device.group)}</div>
                   <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
                     {device.appSupport.length ? device.appSupport.join(" • ") : "App support metadata not set"}
                   </div>

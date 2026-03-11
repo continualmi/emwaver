@@ -30,16 +30,18 @@ type DeviceManifest = Partial<HardwareDevice> & {
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
 const MANIFEST_FILE = path.join(PUBLIC_ROOT, "devices.json");
 
-const STM32_MODULE_IDS = new Set([
-  "EMW1",
-  "GPIO_WAVER_MODULE",
-  "DUPLEX_WAVER_MODULE",
+const FEATURED_IDS = [
+  "EMWAVER_DIY",
+  "emwaver",
+  "emwaver-v2",
+  "ISM_WAVER",
+  "GPIO_WAVER",
+  "INFRARED_WAVER",
   "RFID_WAVER",
-]);
+  "EMWAVER_SHIELD",
+];
 
-const FEATURED_IDS = ["EMWAVER_DIY", "emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER", "RFID_WAVER"];
-
-const CURRENT_BOARD_IDS = ["EMWAVER_DIY", "emwaver", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
+const CURRENT_BOARD_IDS = ["EMWAVER_DIY", "emwaver", "emwaver-v2", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
 
 function normalizeString(value: unknown): string {
   return String(value || "").trim();
@@ -74,7 +76,8 @@ function parseManifest(slug: string): HardwareDevice {
     title: normalizeString(data.displayTitle || data.title || slug),
     group: normalizeString(data.group),
     status: normalizeString(data.status || "device"),
-    experimental: Boolean(data.experimental),
+    experimental:
+      Boolean(data.experimental) || normalizeString((data as { lifecycle?: unknown }).lifecycle).toLowerCase() === "experimental",
     description: normalizeString(data.description),
     image: primaryImage,
     images: normalizedImages.length ? normalizedImages : [primaryImage],
@@ -97,17 +100,10 @@ function parseManifest(slug: string): HardwareDevice {
   };
 }
 
-function shouldKeepDevice(slug: string, device: HardwareDevice): boolean {
-  if (device.group === "stm32") return true;
-  if (device.group !== "module") return false;
-  return STM32_MODULE_IDS.has(slug);
-}
-
 function loadAllDevices(): HardwareDevice[] {
   const ids = JSON.parse(fs.readFileSync(MANIFEST_FILE, "utf8")) as string[];
   return ids
     .map((slug) => parseManifest(slug))
-    .filter((device) => shouldKeepDevice(device.slug, device))
     .sort((a, b) => a.title.localeCompare(b.title));
 }
 
@@ -135,7 +131,7 @@ export function getCurrentBoards(): HardwareDevice[] {
 
 export function getPreviousBoards(): HardwareDevice[] {
   return getHardwareCatalog().filter(
-    (device) => device.group === "stm32" && !CURRENT_BOARD_IDS.includes(device.slug) && !device.experimental,
+    (device) => device.group !== "module" && !CURRENT_BOARD_IDS.includes(device.slug) && !device.experimental,
   );
 }
 
