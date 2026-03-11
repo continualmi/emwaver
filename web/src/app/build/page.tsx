@@ -4,9 +4,7 @@ import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getCurrentBoards,
-  getPreviousBoards,
-  getModuleDevices,
-  getExperimentalDevices,
+  getArchiveDevices,
   type HardwareDevice,
 } from "@/lib/hardwareCatalog";
 import { BuilderClient } from "@/app/hardware/BuilderClient";
@@ -100,9 +98,7 @@ function DeviceSection({
 
 export default function BuildPage() {
   const currentBoards = getCurrentBoards();
-  const previousBoards = getPreviousBoards();
-  const modules = getModuleDevices();
-  const experimental = getExperimentalDevices();
+  const archive = getArchiveDevices();
 
   return (
     <div className="min-h-dvh">
@@ -162,7 +158,7 @@ export default function BuildPage() {
         {/* ─── CURRENT BOARDS (with images) ─── */}
         <DeviceSection
           title="Current boards"
-          subtitle="Open-hardware EMWaver boards available in the catalog. Browse design files, schematics, and fabrication outputs."
+          subtitle="The boards we actually build and use today."
           devices={currentBoards}
         />
 
@@ -179,24 +175,22 @@ export default function BuildPage() {
           <BuilderClient />
         </section>
 
-        {/* ─── PREVIOUS / MODULES / EXPERIMENTAL ─── */}
-        <DeviceSection
-          title="Previous boards"
-          subtitle="Older board revisions kept for reference."
-          devices={previousBoards}
-        />
-
-        <DeviceSection
-          title="Modules"
-          subtitle="Add-on modules designed to extend EMWaver boards."
-          devices={modules}
-        />
-
-        <DeviceSection
-          title="Experimental"
-          subtitle="Prototype and experimental designs."
-          devices={experimental}
-        />
+        {/* ─── ARCHIVE (collapsed) ─── */}
+        {archive.length > 0 && (
+          <section className="border-t border-[color:var(--line)] pt-8 pb-12">
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-2 text-sm text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] [&::-webkit-details-marker]:hidden">
+                <span className="transition group-open:rotate-90">&#9654;</span>
+                Older designs and prototypes ({archive.length})
+              </summary>
+              <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {archive.map((device) => (
+                  <DeviceCard key={device.slug} device={device} />
+                ))}
+              </div>
+            </details>
+          </section>
+        )}
       </main>
 
       <SiteFooter />

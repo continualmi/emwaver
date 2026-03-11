@@ -30,7 +30,17 @@ type DeviceManifest = Partial<HardwareDevice> & {
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
 const MANIFEST_FILE = path.join(PUBLIC_ROOT, "devices.json");
 
-const CURRENT_BOARD_IDS = ["EMWAVER_DIY", "emwaver", "emwaver-v2", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
+const CURRENT_BOARD_IDS = [
+  "EMWAVER_DIY",
+  "EMWAVER_DIY_V1",
+  "EMWAVER_SHIELD",
+  "RFID_WAVER",
+  "emwaver",
+  "emwaver-v2",
+  "ISM_WAVER",
+  "GPIO_WAVER",
+  "INFRARED_WAVER",
+];
 
 function normalizeString(value: unknown): string {
   return String(value || "").trim();
@@ -111,18 +121,10 @@ export function getCurrentBoards(): HardwareDevice[] {
   );
 }
 
-export function getPreviousBoards(): HardwareDevice[] {
+export function getArchiveDevices(): HardwareDevice[] {
   return getHardwareCatalog().filter(
-    (device) => device.group !== "module" && !CURRENT_BOARD_IDS.includes(device.slug) && !device.experimental,
+    (device) => !CURRENT_BOARD_IDS.includes(device.slug),
   );
-}
-
-export function getModuleDevices(): HardwareDevice[] {
-  return getHardwareCatalog().filter((device) => device.group === "module");
-}
-
-export function getExperimentalDevices(): HardwareDevice[] {
-  return getHardwareCatalog().filter((device) => device.experimental);
 }
 
 export function getRelatedHardware(device: HardwareDevice): HardwareDevice[] {
