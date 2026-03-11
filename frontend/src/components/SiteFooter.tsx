@@ -1,3 +1,6 @@
+import Link from "next/link";
+import { societyRouteUrl } from "@/lib/societySite";
+
 export function SiteFooter() {
   return (
     <footer className="border-t border-[color:var(--line)] bg-[rgba(2,3,8,0.4)]">
@@ -17,17 +20,17 @@ export function SiteFooter() {
         </div>
 
         <div className="space-y-2 text-sm text-[color:var(--ink-dim)]">
-          <a className="block hover:text-[color:var(--ink)]" href="/docs">
+          <Link className="block hover:text-[color:var(--ink)]" href="/docs">
             Documentation
-          </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/order">
+          </Link>
+          <Link className="block hover:text-[color:var(--ink)]" href="/order">
             Order
+          </Link>
+          <a className="block hover:text-[color:var(--ink)]" href={societyRouteUrl("/society")}>
+            Continual Society
           </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/society">
-            EMWaver Society
-          </a>
-          <a className="block hover:text-[color:var(--ink)]" href="/society/videos">
-            Videos
+          <a className="block hover:text-[color:var(--ink)]" href={societyRouteUrl("/society/videos")}>
+            Society videos
           </a>
         </div>
       </div>

@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-// News has moved to EMWaver Society.
+import { societyRouteUrl } from "@/lib/societySite";
+// News has moved to the Society frontend.
 
 function isActive(pathname: string, href: string) {
   return pathname === href;
@@ -14,12 +14,12 @@ export function NewsSidebar() {
   return (
     <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-4 backdrop-blur">
       <div className="mb-3 text-xs font-semibold tracking-wide text-[color:var(--ink)]">
-        EMWaver Society
+        Continual Society
       </div>
 
       <div className="space-y-1">
-        <Link
-          href="/society"
+        <a
+          href={societyRouteUrl("/society")}
           className={
             "block rounded-xl px-3 py-2 text-sm font-semibold transition " +
             (isActive(pathname, "/society")
@@ -28,12 +28,12 @@ export function NewsSidebar() {
           }
         >
           Society
-        </Link>
+        </a>
 
         <div className="my-3 border-t border-[color:var(--line)]" />
 
         <div className="rounded-xl px-3 py-2 text-sm text-[color:var(--ink-dim)]">
-          News has moved to EMWaver Society.
+          News has moved to the Society frontend.
         </div>
       </div>
     </div>
