@@ -16,7 +16,7 @@ This folder is the single public-facing documentation/marketing/web-dashboard su
 - remote host/web-session client pieces,
 - shared UI runtime renderers for remote script UI previews.
 
-It does **not** host firmware/device logic directly; hardware operations happen through host apps + backend APIs.
+It does **not** host firmware/device logic directly; hardware operations happen through host apps, autonomous devices, and backend APIs.
 
 ---
 
@@ -60,7 +60,7 @@ Key scripts (`package.json`):
 - `src/app/page.tsx` is the main marketing/positioning landing page.
 
 Homepage content currently carries product narrative blocks:
-- host-powered model,
+- host-backed and autonomous device model,
 - AI-first agent workflows,
 - script-centric workflow,
 - platform coverage,
@@ -115,6 +115,8 @@ Used by `backend.ts`:
 
 - `GET /v1/hosts` for host discovery/presence
 - WebSocket `GET /v1/ws?token=...` for web<->host session traffic
+
+Current remote-web implementation targets host sessions. Future autonomous device sessions will need their own presence/attach UX and client helpers.
 
 WS URL conversion logic:
 - backend `https` => `wss`

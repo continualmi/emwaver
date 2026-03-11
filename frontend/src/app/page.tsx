@@ -133,21 +133,21 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* ─── HOST-POWERED ELECTRONICS ─── */}
+        {/* ─── MANAGED DEVICE PLATFORM ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
           <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
             <div className="grid gap-10 md:grid-cols-2 md:items-center">
               <div className="space-y-5">
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
-                  Why host-powered changes everything
+                  Why managed device flows change everything
                 </div>
                 <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)] md:text-3xl">
                   Stop being limited by your MCU.
                 </h2>
                 <p className="text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                  Traditional dev boards do everything on-chip: limited RAM, tiny screens,
-                  constrained connectivity. EMWaver flips this — the device handles hardware I/O,
-                  while your host provides everything else.
+                  Traditional dev boards force one rigid execution model. EMWaver splits the problem
+                  properly: host-backed boards lean on the app/desktop when that is best, while
+                  autonomous targets can stay online directly when remote control matters more.
                 </p>
                 <div className="space-y-3 text-sm text-[color:var(--ink-dim)]">
                   <div className="flex items-start gap-3">

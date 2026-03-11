@@ -49,6 +49,8 @@ The core app factory is `emw_backend/app.py:create_app()`.
 - `agent_*` files — agent prompt/tool logic and schemas.
 - `routes/*.py` — HTTP route groups and WebSocket router.
 
+Current remote-control implementation is host-session-centric. Planned ESP32 direct-to-cloud support will extend this model with device-direct sessions rather than replacing host sessions.
+
 ---
 
 ## 3) Route map (current)
@@ -127,6 +129,10 @@ Handshake model:
 3. host must provide known `hostSessionId`,
 4. router binds host<->web flows by user uid + host session id.
 
+Current implementation note:
+- direct device roles are not yet implemented in this WS contract.
+- ESP32 direct-to-cloud support will require an additional authenticated device-session role and routing path.
+
 Message routing:
 - web -> host: forwarded when host is online.
 - host -> subscribed web clients: broadcast to current subscribers.
@@ -151,6 +157,7 @@ Minting is the platform entry point. Users pay to mint a supported board, which 
 Policy notes:
 - Device attach/verification requires forwarding `DeviceID + Proof` to backend; backend repeats verification and enforces policy.
 - Pro purchase eligibility depends on signed-in user having at least one minted device attached.
+- This same minting/authenticity model is expected to gate future autonomous ESP32 board access.
 
 Environment gates:
 - `EMWAVER_PROVISIONING_ENABLED`

@@ -7,7 +7,7 @@
 package com.emwaver.emwaverandroidapp;
 
 /**
- * Common interface for device connections (USB-only).
+ * Common interface for device connections. Current Android implementation is USB-backed.
  */
 public interface DeviceConnectionService {
     
