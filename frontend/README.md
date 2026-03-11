@@ -1,5 +1,7 @@
 # EMWaver Website / Web App (`/frontend`)
 
+Legacy Next.js frontend folder. Active consolidation work is moving the web surface and backend migration target into [`/Users/luisml/continualmi/emwaver/web`](/Users/luisml/continualmi/emwaver/web).
+
 Next.js frontend for EMWaver’s public web surface and web-based cloud flows.
 
 This folder is the single public-facing documentation/marketing/web-dashboard surface in the repo.

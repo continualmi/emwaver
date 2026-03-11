@@ -1,0 +1,16 @@
+{
+  "title": "DUPLEX_WAVER_MODULE",
+  "displayTitle": "Duplex Waver Module",
+  "group": "module",
+  "parent": "GPIO_WAVER_V1",
+  "status": "module",
+  "image": "DUPLEX_WAVER_MODULE.png",
+  "lifecycle": "old",
+  "description": "Duplex add-on module (requires GPIO Waver V1; description coming soon).",
+  "designDate": "2024-07-17",
+  "tags": ["Duplex", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "",
+  "githubUrl": "",
+  "schematicUrl": ""
+}

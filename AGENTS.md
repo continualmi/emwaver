@@ -134,8 +134,9 @@ Use the local README first when working in a folder:
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
-- `backend/README.md` — backend architecture, routes, auth, storage, WS relay, provisioning APIs
-- `frontend/README.md` — website/web client structure and backend contracts
+- `backend/README.md` — current Flask backend architecture, routes, auth, storage, WS relay, provisioning APIs
+- `frontend/README.md` — legacy Next.js frontend structure during migration to the unified web app
+- `web/README.md` — unified Next.js + Node web app and TypeScript backend migration target
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
@@ -152,7 +153,8 @@ If a folder has a README, detailed documentation should live there.
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
 - `backend/` — cloud/backend services (minting, entitlements, AI, sync).
-- `frontend/` — website/web surfaces.
+- `frontend/` — legacy website/web surface during migration into `web/`.
+- `web/` — unified website/web app target (Next.js + Node, single deployment direction).
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
@@ -171,7 +173,7 @@ If a folder has a README, detailed documentation should live there.
 7. **Minting is the activation gate**: unminted boards get no platform/cloud access.
 8. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
 9. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
-10. **CI/Releases policy**: GitHub Actions are for frontend/backend CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
+10. **CI/Releases policy**: GitHub Actions are for web/frontend/backend CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
 
 ---
 
