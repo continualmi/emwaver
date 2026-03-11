@@ -58,6 +58,7 @@ Key scripts (`package.json`):
 
 - `src/app/layout.tsx` defines global layout shell.
 - `src/app/page.tsx` is the main marketing/positioning landing page.
+- The app shell includes a fixed under-construction banner at first load so the public deployment communicates incomplete surface areas clearly.
 
 Homepage content currently carries product narrative blocks:
 - host-backed and autonomous device model,
