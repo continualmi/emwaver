@@ -30,17 +30,6 @@ type DeviceManifest = Partial<HardwareDevice> & {
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
 const MANIFEST_FILE = path.join(PUBLIC_ROOT, "devices.json");
 
-const FEATURED_IDS = [
-  "EMWAVER_DIY",
-  "emwaver",
-  "emwaver-v2",
-  "ISM_WAVER",
-  "GPIO_WAVER",
-  "INFRARED_WAVER",
-  "RFID_WAVER",
-  "EMWAVER_SHIELD",
-];
-
 const CURRENT_BOARD_IDS = ["EMWAVER_DIY", "emwaver", "emwaver-v2", "ISM_WAVER", "GPIO_WAVER", "INFRARED_WAVER"];
 
 function normalizeString(value: unknown): string {
@@ -113,13 +102,6 @@ export function getHardwareCatalog(): HardwareDevice[] {
 
 export function getHardwareDevice(slug: string): HardwareDevice | null {
   return getHardwareCatalog().find((device) => device.slug === slug) || null;
-}
-
-export function getFeaturedHardware(): HardwareDevice[] {
-  const devices = getHardwareCatalog();
-  return FEATURED_IDS.map((slug) => devices.find((device) => device.slug === slug)).filter(
-    (device): device is HardwareDevice => Boolean(device),
-  );
 }
 
 export function getCurrentBoards(): HardwareDevice[] {
