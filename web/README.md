@@ -101,6 +101,25 @@ Important shared components include:
 
 The app is being migrated toward same-origin backend routes under `/v1/*` and related service endpoints. During migration, route contracts should remain stable even while implementation moves from Flask to Node/TypeScript.
 
+Current TypeScript-backed routes already present in this folder:
+- `GET /health`
+- `GET /health/config`
+- `GET /v1/health/config`
+- `GET /v1/entitlements`
+- `GET /v1/files`
+- `GET /v1/files/content?name=...`
+- `POST /v1/files/upload`
+- `DELETE /v1/files?name=...`
+- `GET /v1/hosts`
+- `POST /v1/hosts/heartbeat`
+- `GET /v1/ws?token=...` (custom server upgrade path)
+
+Current migration notes:
+- file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
+- entitlements are temporarily in-memory with optional `EMWAVER_DEFAULT_PRO=1` development override,
+- host presence and WebSocket routing are currently single-instance in-memory,
+- billing, minting, devices, agent chat/SSE, and admin/store routes still need porting.
+
 ### 5.1 Files
 
 Used by `backend.ts`:

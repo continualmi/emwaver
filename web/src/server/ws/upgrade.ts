@@ -3,6 +3,7 @@ import type { Duplex } from "node:stream";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 
 import { verifyIdToken } from "../auth";
+import { hostSessionsStore } from "../store/hostSessions";
 import type { RemoteConnection, RemoteSessionState } from "./state";
 
 type UpgradeContext = {
@@ -76,6 +77,11 @@ export async function handleWebSocketUpgrade({ req, socket, head, wsServer, remo
       if (connection.role === "host") {
         if (!hostSessionId) {
           sendJson(ws, { type: "error", error: "missing_hostSessionId" });
+          ws.close();
+          return;
+        }
+        if (!hostSessionsStore.belongsTo(identity.uid, hostSessionId)) {
+          sendJson(ws, { type: "error", error: "unknown_hostSessionId" });
           ws.close();
           return;
         }
