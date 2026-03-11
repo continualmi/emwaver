@@ -5,7 +5,7 @@ import { WebSocketServer } from "ws";
 
 import { env } from "./src/server/env";
 import { handleWebSocketUpgrade } from "./src/server/ws/upgrade";
-import { memoryRemoteSessionState } from "./src/server/ws/state";
+import { getRemoteSessionState } from "./src/server/ws/state";
 
 const dev = env.nodeEnv !== "production";
 const app = next({ dev, dir: process.cwd() });
@@ -15,7 +15,7 @@ async function main() {
   await app.prepare();
 
   const wsServer = new WebSocketServer({ noServer: true });
-  const remoteState = memoryRemoteSessionState();
+  const remoteState = getRemoteSessionState();
 
   const server = createServer((req, res) => {
     const parsedUrl = parse(req.url || "", true);
