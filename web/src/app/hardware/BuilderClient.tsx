@@ -127,7 +127,6 @@ function FeatureToggle({
 }
 
 export function BuilderClient() {
-  const [customize, setCustomize] = useState(false);
   const [gpio, setGpio] = useState(true);
   const [cc1101, setCc1101] = useState(true);
   const [ir, setIr] = useState(true);
@@ -182,14 +181,12 @@ export function BuilderClient() {
   }
 
   function pickVariantKey(): string {
-    if (!customize) return "all__usbBoth";
     return `${pickFeatureKey()}__${pickUsbKey()}`;
   }
 
   function pickImage(): string {
     const feature = pickFeatureKey();
     const usb = pickUsbKey();
-    if (!customize) return BOARD_IMAGES.all;
 
     const map: Record<string, string> = {
       all__usbBoth: BOARD_IMAGES.all,
@@ -218,7 +215,6 @@ export function BuilderClient() {
   }
 
   const filteredRows = bomRows.filter((row) => {
-    if (!customize) return true;
     const removals: Set<string>[] = [];
     if (!ir) removals.push(BOM_REMOVALS.ir);
     if (!cc1101) removals.push(BOM_REMOVALS.ism);
@@ -230,7 +226,7 @@ export function BuilderClient() {
   });
 
   const estimate = (() => {
-    const rows = customize ? filteredRows.length : bomRows.length;
+    const rows = filteredRows.length;
     const delta = rows - COST_MODEL.baseRows;
     const two = Math.max(0, Math.round(COST_MODEL.baseCost2 + delta * COST_MODEL.dollarsPerRow));
     const five = Math.max(0, Math.round(COST_MODEL.baseCost5 + delta * COST_MODEL.dollarsPerRow));
@@ -291,114 +287,83 @@ export function BuilderClient() {
     window.setTimeout(() => URL.revokeObjectURL(anchor.href), 2000);
   }
 
+  const allOn = gpio && cc1101 && ir && usbMale && usbFemale;
+
   return (
     <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+      {/* Board preview */}
       <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
-        <div className="border-b border-[color:var(--line)] px-5 py-4">
-          <div className="text-xs font-semibold tracking-[0.18em] text-[color:var(--sky)]">Current STM32 board</div>
-          <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">EMWaver builder</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Restore the JLCPCB flow: choose the assembled sections, preview the board variant, and download the matching BOM.
-          </div>
-        </div>
-
         <div className="p-5">
           <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
             <div className="relative h-[320px] w-full md:h-[420px]">
-              <Image src={pickImage()} alt="EMWaver builder preview" fill unoptimized className="object-cover" />
+              <Image src={pickImage()} alt="EMWaver board preview" fill unoptimized className="object-cover" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between border-t border-[color:var(--line)] px-5 py-3">
+          <div className="text-xs text-[color:var(--ink-dim)]">
+            {bomLoaded ? `${filteredRows.length} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM…"}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
+              ~{formatCurrency(estimate.two)} / 2 pcs
+            </div>
+            <div className="rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
+              ~{formatCurrency(estimate.five)} / 5 pcs
             </div>
           </div>
         </div>
       </div>
 
-      <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-5">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-sm font-semibold text-[color:var(--ink)]">Assembly options</div>
-            <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Keep at least one core feature and one USB connector selected.</div>
-          </div>
+      {/* Controls */}
+      <div className="space-y-5 rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-5">
+        <div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Assembly sections</div>
+          <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Toggle sections on or off to customize the board. At least one core feature and one USB connector must stay selected.</div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <FeatureToggle checked={gpio} label="GPIO headers" detail="Board headers for module expansion." onChange={() => toggleFeature("gpio", !gpio)} />
+          <FeatureToggle checked={cc1101} label="CC1101 radio" detail="Sub-GHz radio section and antenna path." onChange={() => toggleFeature("cc1101", !cc1101)} />
+          <FeatureToggle checked={ir} label="Infrared RX/TX" detail="IR receiver, LEDs, and driver parts." onChange={() => toggleFeature("ir", !ir)} />
+          <FeatureToggle checked={usbMale} label="USB-C male" detail="Direct plug-in for phone-first use." onChange={() => toggleFeature("usbMale", !usbMale)} />
+          <FeatureToggle checked={usbFemale} label="USB-C female" detail="Cable-based desktop and bench use." onChange={() => toggleFeature("usbFemale", !usbFemale)} />
+        </div>
+
+        {!allOn && (
           <button
             type="button"
-            onClick={() => setCustomize((value) => !value)}
-            className={`rounded-full border px-4 py-2 text-xs font-semibold transition ${
-              customize
-                ? "border-[color:var(--aqua)] bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]"
-                : "border-[color:var(--line)] bg-[color:var(--surface)] text-[color:var(--ink-dim)]"
-            }`}
+            onClick={() => { setGpio(true); setCc1101(true); setIr(true); setUsbMale(true); setUsbFemale(true); }}
+            className="text-xs font-semibold text-[color:var(--aqua)] hover:underline"
           >
-            {customize ? "Customization on" : "Customization off"}
+            Reset to full board
           </button>
-        </div>
+        )}
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {customize ? (
-            <>
-              <FeatureToggle checked={gpio} label="GPIO headers" detail="Expose the board headers for module expansion." onChange={() => toggleFeature("gpio", !gpio)} />
-              <FeatureToggle checked={cc1101} label="CC1101 radio" detail="Include the Sub-GHz radio section and antenna path." onChange={() => toggleFeature("cc1101", !cc1101)} />
-              <FeatureToggle checked={ir} label="Infrared RX/TX" detail="Assemble the IR receiver, LEDs, and driver parts." onChange={() => toggleFeature("ir", !ir)} />
-              <FeatureToggle checked={usbMale} label="USB-C male" detail="Direct plug-in form factor for phone-first use." onChange={() => toggleFeature("usbMale", !usbMale)} />
-              <FeatureToggle checked={usbFemale} label="USB-C female" detail="Cable-based workflow for desktop and bench usage." onChange={() => toggleFeature("usbFemale", !usbFemale)} />
-            </>
-          ) : (
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4 text-sm text-[color:var(--ink-dim)] sm:col-span-2">
-              Customization is off. Enable it to choose which sections get assembled and to preview the variant-specific board render.
-            </div>
-          )}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <a href={GERBER_URL} className="rounded-2xl bg-[color:var(--sky)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
-            Download Gerbers
+        <div className="grid gap-3 sm:grid-cols-2">
+          <a href={GERBER_URL} className="rounded-2xl bg-[color:var(--sky)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
+            Gerbers
           </a>
           <button type="button" onClick={downloadFilteredBom} className="rounded-2xl bg-[color:var(--aqua)] px-4 py-3 text-sm font-semibold text-[color:var(--paper)] transition hover:opacity-90">
-            Download filtered BOM
+            BOM{!allOn ? " (filtered)" : ""}
           </button>
-          <a href={CPL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
-            Download CPL
+          <a href={CPL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
+            CPL
           </a>
-          <a href={STL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
-            Download STL
+          <a href={STL_URL} className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3 text-center text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]">
+            Case STL
           </a>
         </div>
 
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
-            <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">2 units</div>
-            <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">{formatCurrency(estimate.two)}</div>
-            <div className="pt-1 text-xs text-[color:var(--ink-dim)]">{formatCurrency(Number((estimate.two / 2).toFixed(2)))} each</div>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
-            <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">5 units</div>
-            <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">{formatCurrency(estimate.five)}</div>
-            <div className="pt-1 text-xs text-[color:var(--ink-dim)]">{formatCurrency(Number((estimate.five / 5).toFixed(2)))} each</div>
-          </div>
-        </div>
+        {bomError && <div className="text-xs text-[color:var(--danger)]">{bomError}</div>}
 
-        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Builder output</div>
-              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
-                Variant: <span className="font-mono text-[color:var(--ink)]">{pickVariantKey()}</span>
-              </div>
-            </div>
-            <div className="rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold text-[color:var(--ink-dim)]">
-              {bomLoaded ? `${filteredRows.length} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM…"}
-            </div>
-          </div>
-
-          <div className="pt-3 text-sm text-[color:var(--ink-dim)]">
-            Rough estimate calibrated from the historical JLCPCB flow. BOM filtering removes the obvious designators for the disabled sections before download.
-          </div>
-          {bomError ? <div className="pt-2 text-xs text-[color:var(--danger)]">{bomError}</div> : null}
-        </div>
-
-        <div className="mt-5 flex flex-wrap gap-3 text-sm">
+        <div className="flex flex-wrap gap-3 text-sm">
           <a href="https://jlcpcb.com/quote" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">
-            Open JLCPCB quote
+            JLCPCB quote
           </a>
           <a href="https://jlc3dp.com/" target="_blank" rel="noreferrer" className="text-[color:var(--sky)] hover:underline">
-            Open JLC3DP
+            JLC3DP
           </a>
         </div>
       </div>
