@@ -10,7 +10,7 @@ This folder is the canonical EMWaver web surface in the repo. It now owns the pu
 
 `/web` currently contains:
 - public landing/site pages,
-- install/order/account/store UX surfaces,
+- install/build/account/store UX surfaces,
 - hardware catalog + builder web surfaces,
 - web integrations for backend APIs,
 - remote host/web-session client pieces,
@@ -71,7 +71,7 @@ Homepage content currently carries product narrative blocks:
 - script-centric workflow,
 - platform coverage,
 - remote/cloud control narrative,
-- CTA routes (`/order`, `/install`, `/scripts`).
+- CTA routes (`/build`, `/install`, `/scripts`).
 
 Society routes no longer render first-party in this frontend; `/society/*` now redirects to the dedicated Society frontend.
 Configure `SOCIETY_SITE_URL` or `NEXT_PUBLIC_SOCIETY_SITE_URL` if the redirect target is not the default `https://continualmi.com`.
@@ -184,12 +184,12 @@ WS URL conversion logic:
 
 ## 6) Product pages and store/account direction
 
-This frontend is where order/account hardware-related web flows live.
+This frontend is where build/account hardware-related web flows live.
 
 Direction reflected in repo docs:
-- `/order` is the device availability / purchase-intent page and can route users into the hardware self-build flow while direct sales are not open,
+- `/build` is the primary board catalog + self-build page,
 - `/account` handles attached-device/account relationship UX,
-- `/hardware` hosts the restored STM32 hardware catalog and the self-build / JLCPCB-oriented EMWaver builder flow,
+- `/order` and `/hardware` redirect into `/build` for legacy links,
 - claim/recovery flows are web-managed,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 

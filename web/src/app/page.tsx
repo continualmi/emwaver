@@ -76,10 +76,10 @@ export default function HomePage() {
 
             <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
               <Link
-                href="/order"
+                href="/build"
                 className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-6 py-3.5 text-sm font-semibold text-[color:var(--paper)] shadow-[0_18px_40px_var(--shadow)] hover:opacity-95"
               >
-                Get EMWaver
+                Build EMWaver
               </Link>
               <Link
                 href="/scripts"
@@ -627,22 +627,22 @@ export default function HomePage() {
                   Ready to reimagine electronics?
                 </h2>
                 <p className="pt-2 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                  Order a device, install the app, and start building. It&apos;s that simple.
+                  Build a supported board, install the app, and start exploring. It&apos;s that simple.
                 </p>
               </div>
             </div>
 
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               <Link
-                href="/order"
+                href="/build"
                 className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5 hover:bg-[rgba(78,231,199,0.12)]"
               >
                 <div className="text-xs font-semibold text-[color:var(--aqua)]">Step 1</div>
                 <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-                  Order EMWaver
+                  Open Build
                 </div>
                 <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                  Get the device shipped to your door.
+                  Pick a supported board and open the build files.
                 </div>
               </Link>
 

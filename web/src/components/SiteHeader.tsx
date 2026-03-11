@@ -5,8 +5,7 @@ import { usePathname } from "next/navigation";
 import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
-  { href: "/hardware", label: "Hardware" },
-  { href: "/order", label: "Order" },
+  { href: "/build", label: "Build" },
   { href: "/docs", label: "Documentation" },
   { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },

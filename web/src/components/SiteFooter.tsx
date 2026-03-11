@@ -23,8 +23,8 @@ export function SiteFooter() {
           <Link className="block hover:text-[color:var(--ink)]" href="/docs">
             Documentation
           </Link>
-          <Link className="block hover:text-[color:var(--ink)]" href="/order">
-            Order
+          <Link className="block hover:text-[color:var(--ink)]" href="/build">
+            Build
           </Link>
           <a className="block hover:text-[color:var(--ink)]" href={societyRouteUrl("/society")}>
             Continual Society
