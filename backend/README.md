@@ -1,6 +1,8 @@
 # EMWaver Backend (`/backend`)
 
-Flask backend for EMWaver cloud features (a **Continual MI** project):
+Legacy Flask backend retained for reference during the TypeScript consolidation into [`/Users/luisml/continualmi/emwaver/web`](/Users/luisml/continualmi/emwaver/web).
+
+Historically this service handled EMWaver cloud features:
 - auth and identity-bound APIs,
 - file sync storage APIs,
 - agent chat/message persistence,
@@ -8,7 +10,7 @@ Flask backend for EMWaver cloud features (a **Continual MI** project):
 - device minting/provisioning and authenticity endpoints,
 - store/billing/entitlements endpoints.
 
-This service is deployed to Azure Container Apps and is authoritative for cloud entitlements, minting policy, and account-bound operations.
+It is no longer the primary deployed web/backend surface. The active unified deployment is the `web/` app.
 
 Policy notes:
 - **Backend is authoritative**: apps may gate UI/UX, but server-side checks are the security boundary for minting, Pro/entitlements, and cloud feature access.
@@ -18,13 +20,15 @@ Policy notes:
 
 ## 1) Folder purpose
 
-`/backend` contains the production backend implementation and entrypoints:
+`/backend` contains the previous Flask backend implementation and entrypoints:
 
 - `app.py` / `wsgi.py` entry stubs.
 - `emw_backend/` package with all runtime code.
 - `Dockerfile` for containerized deployment.
 
 The core app factory is `emw_backend/app.py:create_app()`.
+
+Use this folder mainly for reference while validating parity or porting behavior into `web/`.
 
 ---
 

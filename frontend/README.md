@@ -1,10 +1,10 @@
 # EMWaver Website / Web App (`/frontend`)
 
-Legacy Next.js frontend folder. Active consolidation work is moving the web surface and backend migration target into [`/Users/luisml/continualmi/emwaver/web`](/Users/luisml/continualmi/emwaver/web).
+Legacy Next.js frontend folder. The canonical EMWaver web app now lives in [`/Users/luisml/continualmi/emwaver/web`](/Users/luisml/continualmi/emwaver/web).
 
 Next.js frontend for EMWaver’s public web surface and web-based cloud flows.
 
-This folder is the single public-facing documentation/marketing/web-dashboard surface in the repo.
+This folder is kept as a legacy snapshot/reference during the consolidation into `web/`.
 
 ---
 
@@ -170,8 +170,8 @@ If testing backend-dependent flows, ensure backend is running and configured in 
 
 ## 9) Deployment
 
-- Built/deployed as container app (Azure Container Apps).
-- CI/CD references exist in repo workflows (frontend deploy pipeline).
+- This folder is no longer the primary deployment target.
+- The active deployment path is the unified `web/` GitHub Actions workflow to Azure App Service.
 
 Keep deployment assumptions aligned with:
 - backend base URL resolution,
