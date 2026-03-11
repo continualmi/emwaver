@@ -23,7 +23,7 @@ function firebaseServiceAccount(): ServiceAccount | null {
   return null;
 }
 
-function ensureFirebaseAdmin() {
+export function getFirebaseAdminApp() {
   if (getApps().length > 0) return getApps()[0];
   const serviceAccount = firebaseServiceAccount();
   if (!serviceAccount) {
@@ -43,7 +43,7 @@ export async function verifyIdToken(token: string): Promise<VerifiedIdentity | n
   if (!token || !env.firebaseProjectId) return null;
 
   try {
-    const app = ensureFirebaseAdmin();
+    const app = getFirebaseAdminApp();
     const decoded = await getAuth(app).verifyIdToken(token);
     return {
       uid: decoded.uid,
