@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
   { href: "/hardware", label: "Hardware" },
   { href: "/order", label: "Order" },
   { href: "/docs", label: "Documentation" },
-  { href: "/society", label: "Society" },
+  { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },
   { href: "/cloud", label: "Dashboard" },
   { href: "/account", label: "Account" },

@@ -67,7 +67,8 @@ Homepage content currently carries product narrative blocks:
 - remote/cloud control narrative,
 - CTA routes (`/order`, `/install`, `/scripts`).
 
-Society routes remain first-party in this frontend under `/society/*`.
+Society routes no longer render first-party in this frontend; `/society/*` now redirects to the dedicated Society frontend.
+Configure `SOCIETY_SITE_URL` or `NEXT_PUBLIC_SOCIETY_SITE_URL` if the redirect target is not the default `https://continualmi.com`.
 
 ## 4.2 Components
 

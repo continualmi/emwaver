@@ -1,12 +1,12 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-// News has moved to EMWaver Society.
+import { societyRouteUrl } from "@/lib/societySite";
+// News has moved to the Society frontend.
 
 function currentLabel(pathname: string) {
-  if (pathname === "/society") return "EMWaver Society";
-  return "EMWaver Society";
+  if (pathname === "/society") return "Continual Society";
+  return "Continual Society";
 }
 
 export function NewsMobileNav() {
@@ -23,12 +23,12 @@ export function NewsMobileNav() {
       </summary>
 
       <div className="mt-3 grid gap-1">
-        <Link
-          href="/society"
+        <a
+          href={societyRouteUrl("/society")}
           className="rounded-xl px-3 py-2 text-sm text-[color:var(--ink-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[color:var(--ink)]"
         >
-          Open EMWaver Society
-        </Link>
+          Open Continual Society
+        </a>
       </div>
     </details>
   );

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { societyRouteUrl } from "@/lib/societySite";
 
 export default function ScriptsDocPage() {
   return (
@@ -32,12 +33,12 @@ export default function ScriptsDocPage() {
           <div className="pt-2 text-sm text-[color:var(--ink-dim)]">GPIO numbering + headers.</div>
         </Link>
         <Link
-          href="/society"
+          href={societyRouteUrl("/society")}
           className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
         >
           <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Community</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">EMWaver Society</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Announcements + scripts + discussions.</div>
+          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Continual Society</div>
+          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Announcements, scripts, videos, and discussions.</div>
         </Link>
       </div>
 
