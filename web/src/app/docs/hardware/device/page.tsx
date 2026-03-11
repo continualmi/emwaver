@@ -18,12 +18,12 @@ export default function DeviceDocPage() {
           <div className="pt-2 text-sm text-[color:var(--ink-dim)]">SPI/I2C/UART + internal pins.</div>
         </Link>
         <Link
-          href="/order"
+          href="/build"
           className="no-underline rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-5 hover:bg-[rgba(240,166,106,0.14)]"
         >
           <div className="text-xs font-semibold text-[color:var(--copper)]">Builder</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Order</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Device orders coming soon.</div>
+          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Build</div>
+          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Open the board catalog and build files.</div>
         </Link>
       </div>
 
