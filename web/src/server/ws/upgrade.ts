@@ -131,6 +131,7 @@ export async function handleWebSocketUpgrade({ req, socket, head, wsServer, remo
 
         const hostSessionId = connection.hostSessionId;
         if (!hostSessionId) return;
+        remoteState.recordHostMessage(connection.uid, hostSessionId, message);
         for (const web of remoteState.getSubscribedWebs(connection.uid, hostSessionId)) {
           forwardJson(web.socket, message);
         }

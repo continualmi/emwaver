@@ -8,6 +8,11 @@ export const env = {
   port: Number.parseInt(process.env.PORT || "3200", 10),
   firebaseProjectId: (process.env.FIREBASE_PROJECT_ID || "").trim(),
   authDebug: parseBool(process.env.EMWAVER_AUTH_DEBUG),
+  provisioningAllowedEmail: (process.env.EMWAVER_PROVISIONING_ALLOWED_EMAIL || "").trim().toLowerCase(),
+  provisioningAllowedUids: (process.env.EMWAVER_PROVISIONING_ALLOWED_UIDS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean),
 };
 
 export function hasEnv(name: string): boolean {
