@@ -32,8 +32,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${displaySans.variable} ${mono.variable} pt-12 antialiased`}>
-        <div className="fixed inset-x-0 top-0 z-[60] border-b border-amber-300/20 bg-amber-500/12 backdrop-blur-md">
-          <div className="mx-auto flex min-h-12 max-w-7xl items-center justify-center px-4 py-2 text-center text-xs font-medium tracking-[0.18em] text-amber-100 uppercase sm:text-sm">
+        <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-center bg-amber-500/12 px-4 shadow-[0_1px_0_rgba(251,191,36,0.15)] backdrop-blur-md">
+          <div className="text-center text-xs font-medium tracking-[0.18em] text-amber-100 uppercase sm:text-sm">
             Under construction: EMWaver is still being finished and some pages or features may be incomplete.
           </div>
         </div>
