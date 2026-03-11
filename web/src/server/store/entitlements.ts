@@ -1,3 +1,5 @@
+import { readCollection, writeCollection } from "./jsonStore";
+
 type EntitlementRecord = {
   pro_active: boolean;
   pro_expires_at_ms: number | null;
@@ -5,7 +7,7 @@ type EntitlementRecord = {
 };
 
 class EntitlementsStore {
-  private readonly rows = new Map<string, EntitlementRecord>();
+  private readonly rows = new Map<string, EntitlementRecord>(Object.entries(readCollection<Record<string, EntitlementRecord>>("entitlements", {})));
 
   get(uid: string) {
     const existing = this.rows.get(uid);
@@ -29,6 +31,7 @@ class EntitlementsStore {
 
   set(uid: string, record: EntitlementRecord) {
     this.rows.set(uid, record);
+    writeCollection("entitlements", Object.fromEntries(this.rows.entries()));
   }
 }
 
