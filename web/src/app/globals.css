@@ -1,0 +1,223 @@
+@import "tailwindcss";
+
+:root {
+  --paper: #070a12;
+  --paper-2: #0b1020;
+  --ink: #e9eefc;
+  --ink-dim: rgba(233, 238, 252, 0.72);
+  --line: rgba(233, 238, 252, 0.12);
+
+  --aqua: #4ee7c7;
+  --sky: #5bc0ff;
+  --copper: #f0a66a;
+  --danger: #ff4d6d;
+
+  --surface: rgba(255, 255, 255, 0.06);
+  --surface-2: rgba(255, 255, 255, 0.09);
+  --shadow: rgba(0, 0, 0, 0.35);
+}
+
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background: radial-gradient(1200px 700px at 15% 0%, rgba(91, 192, 255, 0.22), transparent 55%),
+    radial-gradient(900px 600px at 70% 20%, rgba(78, 231, 199, 0.18), transparent 60%),
+    radial-gradient(900px 700px at 40% 100%, rgba(240, 166, 106, 0.14), transparent 55%),
+    linear-gradient(180deg, var(--paper) 0%, #050712 60%, #04050c 100%);
+  color: var(--ink);
+  font-family: var(--font-display);
+}
+
+/* Fixed app shell: disable page-level scrolling, keep scrolling inside content/cards. */
+.app-shell-fixed {
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Docs-mode: tighter, more technical atmosphere (separate from landing vibe). */
+.docs-mode {
+  position: relative;
+}
+
+.docs-mode::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 500px at 20% 0%, rgba(78, 231, 199, 0.08), transparent 60%),
+    radial-gradient(900px 600px at 85% 15%, rgba(91, 192, 255, 0.06), transparent 62%),
+    linear-gradient(180deg, rgba(7, 10, 18, 0.46) 0%, rgba(4, 5, 12, 0.58) 100%);
+  opacity: 1;
+  z-index: -1;
+}
+
+.docs-mode::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(233, 238, 252, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(233, 238, 252, 0.03) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: 0.04;
+  z-index: -1;
+}
+
+/* Make docs/news sections reveal more of the global background image. */
+body:has(.docs-mode) .global-bg-image {
+  opacity: 0.26;
+}
+
+body:has(.docs-mode) .global-bg-overlay {
+  background:
+    radial-gradient(1000px 600px at 20% 0%, rgba(78, 231, 199, 0.09), transparent 62%),
+    radial-gradient(900px 600px at 85% 20%, rgba(91, 192, 255, 0.06), transparent 62%),
+    linear-gradient(to bottom, rgba(2, 3, 8, 0.52), rgba(2, 3, 8, 0.60));
+}
+
+/* Dashboard can stay darker for focus/contrast. */
+body:has(.dashboard-mode) .global-bg-image {
+  opacity: 0.20;
+}
+
+body:has(.dashboard-mode) .global-bg-overlay {
+  background:
+    radial-gradient(1000px 600px at 20% 0%, rgba(78, 231, 199, 0.12), transparent 60%),
+    radial-gradient(900px 600px at 85% 20%, rgba(91, 192, 255, 0.08), transparent 62%),
+    linear-gradient(to bottom, rgba(2, 3, 8, 0.78), rgba(2, 3, 8, 0.84));
+}
+
+/* Simple, purpose-built prose styling (no typography plugin). */
+.prose-emw {
+  max-width: 78ch;
+  color: var(--ink-dim);
+}
+
+.prose-emw h1,
+.prose-emw h2,
+.prose-emw h3,
+.prose-emw h4 {
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.prose-emw h1 {
+  font-size: 2.2rem;
+  line-height: 1.1;
+  margin: 0 0 1rem;
+}
+
+.prose-emw h2 {
+  font-size: 1.6rem;
+  line-height: 1.2;
+  margin: 2.2rem 0 0.75rem;
+}
+
+.prose-emw h3 {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  margin: 1.6rem 0 0.6rem;
+}
+
+.prose-emw p {
+  margin: 0.9rem 0;
+}
+
+.prose-emw a {
+  color: var(--sky);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(91, 192, 255, 0.35);
+}
+
+.prose-emw a:hover {
+  border-bottom-color: rgba(91, 192, 255, 0.8);
+}
+
+.prose-emw code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border: 1px solid rgba(233, 238, 252, 0.14);
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  color: rgba(233, 238, 252, 0.92);
+}
+
+.prose-emw pre {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: rgba(2, 4, 10, 0.75);
+  border: 1px solid rgba(233, 238, 252, 0.12);
+  border-radius: 14px;
+  overflow: auto;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+.prose-emw pre code {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.prose-emw ul,
+.prose-emw ol {
+  padding-left: 1.25rem;
+  margin: 0.8rem 0;
+}
+
+.prose-emw li {
+  margin: 0.3rem 0;
+}
+
+.prose-emw blockquote {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border-left: 3px solid rgba(78, 231, 199, 0.65);
+  background: rgba(78, 231, 199, 0.07);
+  border-radius: 10px;
+  color: rgba(233, 238, 252, 0.78);
+}
+
+.prose-emw table {
+  width: 100%;
+  margin: 1rem 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid rgba(233, 238, 252, 0.12);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.prose-emw th,
+.prose-emw td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid rgba(233, 238, 252, 0.08);
+}
+
+.prose-emw th {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(233, 238, 252, 0.88);
+  text-align: left;
+  font-weight: 600;
+}
+
+.prose-emw hr {
+  border: none;
+  border-top: 1px solid rgba(233, 238, 252, 0.12);
+  margin: 1.8rem 0;
+}

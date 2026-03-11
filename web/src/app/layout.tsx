@@ -1,0 +1,54 @@
+import type { Metadata } from "next";
+import { IBM_Plex_Mono, Space_Grotesk } from "next/font/google";
+import "./globals.css";
+
+const displaySans = Space_Grotesk({
+  variable: "--font-display",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+});
+
+const mono = IBM_Plex_Mono({
+  variable: "--font-mono",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+});
+
+export const metadata: Metadata = {
+  title: {
+    default: "EMWaver",
+    template: "%s · EMWaver",
+  },
+  description:
+    "EMWaver is a Continual MI electronics platform with app-managed firmware, AI-first workflows, and host-backed or autonomous supported boards.",
+  icons: [{ rel: "icon", url: "/favicon.ico" }],
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    <html lang="en">
+      <body className={`${displaySans.variable} ${mono.variable} pt-12 antialiased`}>
+        <div className="fixed inset-x-0 top-0 z-[60] border-b border-amber-300/20 bg-amber-500/12 backdrop-blur-md">
+          <div className="mx-auto flex min-h-12 max-w-7xl items-center justify-center px-4 py-2 text-center text-xs font-medium tracking-[0.18em] text-amber-100 uppercase sm:text-sm">
+            Under construction: EMWaver is still being finished and some pages or features may be incomplete.
+          </div>
+        </div>
+        {/* Global background (subtle). Landing + Society can override with stronger styling. */}
+        <div className="global-bg pointer-events-none fixed inset-0 -z-20">
+          <img
+            src="/2015_upscale.jpg"
+            alt=""
+            className="global-bg-image h-full w-full object-cover opacity-[0.30]"
+          />
+          <div className="global-bg-overlay absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.08),transparent_62%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.06),transparent_64%),linear-gradient(to_bottom,rgba(2,3,8,0.52),rgba(2,3,8,0.60))]" />
+        </div>
+
+        {children}
+      </body>
+    </html>
+  );
+}

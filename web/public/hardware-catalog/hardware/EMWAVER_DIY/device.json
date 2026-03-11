@@ -1,0 +1,20 @@
+{
+  "title": "EMWAVER_DIY",
+  "displayTitle": "EMWaver DIY",
+  "group": "stm32",
+  "status": "current",
+  "image": "EMWAVER.png",
+  "images": [
+    "EMWAVER.png"
+  ],
+  "designDate": "2026-03-10",
+  "description": "Current EMWaver DIY board. This is the newer device with two GPIO blocks and infrared support, intended as the current hands-on EMWaver board while the older integrated EMWaver device is kept separate.",
+  "tags": ["DIY", "GPIO", "IR", "USB"],
+  "requires": [],
+  "appSupport": ["android", "ios", "desktop"],
+  "oshwLabUrl": "",
+  "easyEdaUrl": "",
+  "githubUrl": "",
+  "schematicUrl": "",
+  "reproductionCost": null
+}
