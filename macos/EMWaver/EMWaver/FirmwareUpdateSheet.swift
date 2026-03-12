@@ -6,42 +6,154 @@ struct FirmwareUpdateSheet: View {
     @ObservedObject var updater: FirmwareUpdateManager
 
     @State private var updateModeRequested: Bool = false
-    @State private var showingEspBootloaderInstructions: Bool = false
+    @State private var showActivityLog: Bool = false
 
     private var isSecureWorkflow: Bool {
         device.isSecureConnected
     }
 
     private var boardType: String {
-        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        updater.presentedBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
 
     private var isEspWorkflow: Bool {
-        boardType.caseInsensitiveCompare("esp32s3") == .orderedSame
+        if updater.espBootloaderConnected || updater.espBootloaderPort != nil {
+            return true
+        }
+        return boardType.caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
     private var canStartPrimaryAction: Bool {
         if updater.isFlashing {
             return false
         }
+        if isEspWorkflow {
+            return updater.espBootloaderConnected || updater.espBootloaderPort != nil
+        }
         if !isSecureWorkflow {
             return device.isConnected && auth.isSignedIn
-        }
-        if isEspWorkflow {
-            return true
         }
         return device.isConnected || updater.dfuConnected
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        if isEspWorkflow {
+            espBody
+        } else {
+            defaultBody
+        }
+    }
+
+    private var espBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Flash ESP32-S3")
+                            .font(.title3.weight(.semibold))
+                        Text("Use the board's flash-capable serial USB connection.")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Button("Close") {
+                        updater.dismiss()
+                    }
+                    .disabled(updater.isFlashing)
+                }
+
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Bootloader")
+                        .font(.subheadline.weight(.semibold))
+                    Text(espBootloaderDetectedText)
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle((updater.espBootloaderConnected || updater.espBootloaderPort != nil) ? Color.green : .secondary)
+
+                    Text("1. Hold BOOT")
+                    Text("2. Press and release RESET")
+                    Text("3. Release BOOT")
+                        .padding(.bottom, 4)
+
+                    HStack(spacing: 10) {
+                        Button("Refresh") {
+                            updater.refreshDfuPresence()
+                        }
+                        .disabled(updater.isFlashing)
+
+                        Button("Flash firmware") {
+                            updater.startUpdate(device: device)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canStartPrimaryAction)
+                    }
+                }
+                .padding(14)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+
+                if let err = updater.updateError, !err.isEmpty {
+                    Text(err)
+                        .textSelection(.enabled)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .fill(Color.red.opacity(0.12))
+                        )
+                }
+
+                if updater.isFlashing {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(updater.progressMessage.isEmpty ? "Updating..." : updater.progressMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int(updater.progressPct.rounded()))%")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        ProgressView(value: updater.progressPct, total: 100)
+                            .progressViewStyle(.linear)
+                    }
+                }
+
+                DisclosureGroup("Details", isExpanded: $showActivityLog) {
+                    ScrollView {
+                        Text(updater.logLines.isEmpty ? "No activity yet." : updater.logLines.joined(separator: "\n"))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .textSelection(.enabled)
+                    }
+                    .frame(minHeight: 140, maxHeight: 180)
+                }
+
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(16)
+        .frame(width: 540, height: 460)
+        .onAppear {
+            updateModeRequested = false
+            showActivityLog = false
+            updater.refreshDfuPresence()
+        }
+    }
+
+    private var defaultBody: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(isSecureWorkflow ? "Update EMWaver" : "Activate EMWaver")
+                    Text(isSecureWorkflow ? "Update EMWaver" : "Set Up EMWaver")
                         .font(.title3.weight(.semibold))
                     Text(isSecureWorkflow
                          ? "Update your device to the latest EMWaver version."
-                         : "Mint the device with the backend, flash bundled firmware, and write its signed identity.")
+                         : "Flash bundled firmware and finish device setup.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                 }
@@ -72,12 +184,12 @@ struct FirmwareUpdateSheet: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     } else {
-                        Text("This board is not activated yet. Activation uses the backend minting flow to issue a valid DeviceID + Proof before the app provisions firmware in Update Mode.")
+                        Text("This board is not set up yet. The app will register it and then provision firmware in Update Mode.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
 
                         if !auth.isSignedIn {
-                            Text("Sign in to mint and activate this device.")
+                            Text("Sign in to set up this device.")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -154,14 +266,36 @@ struct FirmwareUpdateSheet: View {
                     Text("Put the ESP32-S3 into bootloader mode")
                         .font(.subheadline.weight(.semibold))
 
-                    Text("Use the BOOT and RESET buttons before starting the update. EMWaver will flash the serial port after the board is already in bootloader mode.")
+                    Text("Hold BOOT, press and release RESET, then release BOOT.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Button("Show bootloader steps") {
-                        showingEspBootloaderInstructions = true
+                    if firmwareUpdaterHasEspBootloader {
+                        Text(espBootloaderDetectedText)
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Text("Use the board's serial or flash-capable USB port, then click Refresh bootloader.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
-                    .disabled(updater.isFlashing)
+
+                    HStack(spacing: 10) {
+                        Button("Refresh bootloader") {
+                            updater.refreshDfuPresence()
+                        }
+                        .disabled(updater.isFlashing)
+
+                        Button(isSecureWorkflow ? "Update device" : "Set up device") {
+                            if isSecureWorkflow {
+                                updater.startUpdate(device: device)
+                            } else {
+                                updater.startMintAndProvision(auth: auth, device: device)
+                            }
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .disabled(!canStartPrimaryAction)
+                    }
                 }
                 .padding(12)
                 .background(
@@ -210,16 +344,7 @@ struct FirmwareUpdateSheet: View {
                 )
             }
 
-            if isEspWorkflow && firmwareUpdaterHasEspBootloader && !updater.updateDone {
-                Text(espBootloaderDetectedText)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
-                    .background(
-                        RoundedRectangle(cornerRadius: 10)
-                            .fill(Color.orange.opacity(0.12))
-                    )
-            } else if updater.dfuConnected && !updater.updateDone {
+            if !isEspWorkflow && updater.dfuConnected && !updater.updateDone {
                 Text("Device detected in Update Mode.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -263,7 +388,7 @@ struct FirmwareUpdateSheet: View {
             GroupBox("Activity log") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Latest provisioning and verification details.")
+                        Text("Latest setup, update, and verification details.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -301,11 +426,12 @@ struct FirmwareUpdateSheet: View {
             }
 
             Spacer(minLength: 0)
+            }
 
             HStack {
                 Spacer()
                 if !updater.updateDone {
-                    Button(isSecureWorkflow ? "Update device" : "Mint and activate device") {
+                    Button(isSecureWorkflow ? "Update device" : "Set up device") {
                         if isSecureWorkflow {
                             updater.startUpdate(device: device)
                         } else {
@@ -318,13 +444,10 @@ struct FirmwareUpdateSheet: View {
             }
         }
         .padding(16)
-        .frame(minWidth: 560, minHeight: 640)
+        .frame(width: 620, height: 560)
         .onAppear {
             updateModeRequested = false
             updater.refreshDfuPresence()
-        }
-        .sheet(isPresented: $showingEspBootloaderInstructions) {
-            EspBootloaderInstructionsSheet()
         }
     }
 
@@ -334,8 +457,11 @@ struct FirmwareUpdateSheet: View {
 
     private var espBootloaderDetectedText: String {
         if let port = updater.espBootloaderPort, !port.isEmpty {
-            return "ESP bootloader detected on \(port)."
+            return "Detected on \(port)."
         }
-        return "ESP bootloader detected."
+        if updater.espBootloaderConnected {
+            return "Detected."
+        }
+        return "Not detected yet. Put the board in bootloader mode, then click Refresh."
     }
 }

@@ -18,4 +18,4 @@ Expected output:
 - macOS/Linux: `tools/emwaver-esp-helper/dist/emwaver-esp-helper`
 - Windows: `tools/emwaver-esp-helper/dist/emwaver-esp-helper.exe`
 
-`macos/EMWaver/Tools/emwaver-esp-helper` is the committed prebuilt macOS frozen binary consumed by the app bundle when packaging or CI is not rebuilding the helper locally.
+The generated `build/` and `dist/` folders are local artifacts and should stay out of git.

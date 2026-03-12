@@ -6,7 +6,6 @@ struct DeviceConnectionSheet: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var accountDevices: AccountDevicesService
     @Environment(\.dismiss) private var dismiss
-    @State private var showingEspBootloaderInstructions = false
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
@@ -65,6 +64,10 @@ struct DeviceConnectionSheet: View {
         currentBoardType.caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
+    private var showsEspFirmwareFlow: Bool {
+        isEspBoard || firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -88,9 +91,6 @@ struct DeviceConnectionSheet: View {
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
             accountDevices.refresh(auth: auth)
-        }
-        .sheet(isPresented: $showingEspBootloaderInstructions) {
-            EspBootloaderInstructionsSheet()
         }
     }
 
@@ -201,18 +201,21 @@ struct DeviceConnectionSheet: View {
         detailSection(title: "Firmware") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Button(currentDeviceIsRegistered ? "Update firmware…" : "Activate device…") {
+                    Button(showsEspFirmwareFlow ? "Flash firmware…" : (currentDeviceIsRegistered ? "Update firmware…" : "Set up device…")) {
                         dismiss()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            firmwareUpdater.present()
+                            firmwareUpdater.present(boardType: showsEspFirmwareFlow ? "esp32s3" : currentBoardType)
                         }
                     }
                     .buttonStyle(.borderedProminent)
 
                     if device.isConnected {
                         Button("Enter Update Mode") {
-                            if isEspBoard {
-                                showingEspBootloaderInstructions = true
+                            if showsEspFirmwareFlow {
+                                dismiss()
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                                    firmwareUpdater.present(boardType: "esp32s3")
+                                }
                             } else {
                                 device.requestEnterUpdateMode()
                                 device.disconnect()
@@ -223,11 +226,11 @@ struct DeviceConnectionSheet: View {
                     }
                 }
 
-                Text(espStatusText)
+                Text(showsEspFirmwareFlow ? espFlashStatusText : espStatusText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if !currentDeviceIsRegistered {
+                if !showsEspFirmwareFlow && !currentDeviceIsRegistered {
                     Text("Activation reads the hardware UID, registers the board with the backend, and prepares it for use in the app.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -250,6 +253,13 @@ struct DeviceConnectionSheet: View {
             return "This device is connected, but it is not registered to your device list yet."
         }
         return "This device is connected, but it is not registered yet. Sign in to activate and sync it."
+    }
+
+    private var espFlashStatusText: String {
+        if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
+            return "Bootloader detected on \(port). Open the flash window to continue."
+        }
+        return "ESP32-S3 firmware flashing uses the board's serial or flash-capable USB connection."
     }
 
     private var devicesIntroText: String {

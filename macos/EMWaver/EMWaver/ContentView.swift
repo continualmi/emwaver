@@ -37,6 +37,20 @@ struct ContentView: View {
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
 
+    private var toolbarDeviceStatus: (icon: String, text: String) {
+        if device.isConnected {
+            return ("cable.connector", device.connectedPortName ?? "Connected")
+        }
+        if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame,
+           firmwareUpdater.espBootloaderConnected {
+            return ("cpu", "ESP Bootloader")
+        }
+        if firmwareUpdater.dfuConnected {
+            return ("arrow.triangle.2.circlepath", "Update Mode")
+        }
+        return ("cable.connector.slash", "Disconnected")
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -144,21 +158,19 @@ struct ContentView: View {
                     showingDeviceSheet = true
                 } label: {
                     HStack(spacing: 8) {
-                        if device.isConnected {
-                            Label(device.connectedPortName ?? "Connected", systemImage: "cable.connector")
-                        } else if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
-                            Label("ESP Bootloader", systemImage: "cpu")
-                        } else if firmwareUpdater.dfuConnected {
-                            Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
-                        } else {
-                            Label("Disconnected", systemImage: "cable.connector.slash")
-                        }
+                        Image(systemName: toolbarDeviceStatus.icon)
+                            .imageScale(.medium)
+                            .frame(width: 14, alignment: .center)
+
+                        Text(toolbarDeviceStatus.text)
 
                         if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
                             Text("EMWaver \(v)")
                                 .foregroundStyle(.secondary)
                         }
                     }
+                    .padding(.leading, 6)
+                    .padding(.trailing, 2)
                 }
                 .buttonStyle(.plain)
                 .help("Device / connection options")
