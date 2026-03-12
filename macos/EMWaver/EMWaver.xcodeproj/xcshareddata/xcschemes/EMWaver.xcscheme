@@ -74,33 +74,6 @@
             ReferencedContainer = "container:EMWaver.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
-      <EnvironmentVariables>
-         <EnvironmentVariable
-            key = "EMWAVER_FIREBASE_WEB_API_KEY"
-            value = "AIzaSyAFmZR2SoTMoaG_85fMDMVezDhQSZ75TGs"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EMWAVER_GOOGLE_CLIENT_ID"
-            value = " 834211675695-ito5mh57p3q5648ab5qu78e5se420q14.apps.googleusercontent.com"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EMWAVER_GOOGLE_CLIENT_SECRET"
-            value = "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"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EMWAVER_BACKEND_URL"
-            value = "http://127.0.0.1:3920"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "EMWAVER_ROOT_PUBLIC_KEY_B64"
-            value = "Hc1UAlc+CXh9bLPLWCqV3I8FyQVKxr7U7S+L7Nycm4s="
-            isEnabled = "YES">
-         </EnvironmentVariable>
-      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"

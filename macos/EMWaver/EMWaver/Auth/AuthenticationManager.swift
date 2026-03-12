@@ -125,9 +125,10 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
+        var consumeURL = base
+
         do {
             // Consume handoff code -> custom token.
-            var consumeURL = base
             consumeURL.appendPathComponent("v1")
             consumeURL.appendPathComponent("auth")
             consumeURL.appendPathComponent("handoff")
@@ -142,7 +143,8 @@ final class AuthenticationManager: ObservableObject {
             let http = (res as? HTTPURLResponse)?.statusCode ?? -1
             if http < 200 || http >= 300 {
                 let msg = String(data: data, encoding: .utf8) ?? ""
-                throw AuthError.failed(msg.isEmpty ? "HTTP \(http)" : msg)
+                let detail = msg.isEmpty ? "HTTP \(http)" : msg
+                throw AuthError.failed("Handoff consume failed at \(consumeURL.absoluteString): \(detail)")
             }
 
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -170,8 +172,15 @@ final class AuthenticationManager: ObservableObject {
             try KeychainStore.setString(profileStr, account: profileAccount)
 
             session = newSession
+        } catch let urlError as URLError {
+            lastError = "Could not reach \(consumeURL.absoluteString): \(urlError.localizedDescription)"
         } catch {
-            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            if message.isEmpty {
+                lastError = "Handoff consume failed at \(consumeURL.absoluteString)"
+            } else {
+                lastError = message
+            }
         }
     }
 
