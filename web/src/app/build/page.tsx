@@ -11,22 +11,16 @@ import { BuilderClient } from "@/app/hardware/BuilderClient";
 
 const SUPPORTED_BOARDS = [
   {
-    name: "STM32 BluePill",
-    description:
-      "Widely available STM32F103 dev board with USB and a rich peripheral set. The most accessible way to get started with EMWaver.",
-    tags: ["STM32F103", "USB", "SPI", "I2C", "UART"],
-  },
-  {
     name: "ESP32-S3",
     description:
-      "Wi-Fi and BLE-capable target for autonomous and multi-transport workflows. Ideal for wireless operation without a tethered host.",
+      "Supported for EMWaver. A simple way to get started with USB, Wi-Fi, and BLE on one board.",
     tags: ["ESP32-S3", "Wi-Fi", "BLE", "USB"],
   },
   {
-    name: "Arduino Uno / Nano",
+    name: "EMWaver STM32 board",
     description:
-      "Classic ATmega-based boards for simple GPIO, sensor, and bus experiments through the familiar Arduino form factor.",
-    tags: ["ATmega328P", "USB", "GPIO"],
+      "Custom EMWaver hardware you can build from the fabrication files below.",
+    tags: ["STM32", "Custom board", "Builder"],
   },
 ];
 
@@ -112,10 +106,10 @@ export default function BuildPage() {
           </h1>
           <p className="max-w-2xl pt-4 text-[16px] leading-8 text-[color:var(--ink-dim)]">
             EMWaver turns supported dev boards into a full electronics lab — no
-            firmware toolchains, no build-flash loops. Grab a BluePill, ESP32-S3,
-            or Arduino, install the app, and start exploring. For advanced users,
-            the hardware catalog below includes open fabrication files to build
-            custom EMWaver boards from scratch.
+            firmware toolchains, no build-flash loops. Start with an ESP32-S3 and
+            the EMWaver app, then explore hardware directly. If you want to go
+            further, the hardware catalog below includes fabrication files for
+            custom EMWaver boards.
           </p>
         </section>
 
@@ -125,10 +119,10 @@ export default function BuildPage() {
             Supported boards
           </h2>
           <p className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            These dev boards work with EMWaver out of the box. Pick one up, flash
-            the managed firmware through the app, and you&apos;re ready.
+            Pick an ESP32-S3 to get started, or build one of the custom EMWaver
+            boards from the hardware catalog.
           </p>
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
             {SUPPORTED_BOARDS.map((board) => (
               <div
                 key={board.name}
@@ -168,9 +162,9 @@ export default function BuildPage() {
             Board builder
           </h2>
           <p className="max-w-2xl pb-6 pt-2 text-sm text-[color:var(--ink-dim)]">
-            Configure and download fabrication files for the current STM32
-            EMWaver board. Choose which sections to include, preview the variant,
-            and download matching BOM and Gerber files.
+            Configure and download fabrication files for the EMWaver STM32 board.
+            Choose which sections to include, preview the variant, and download
+            matching BOM and Gerber files.
           </p>
           <BuilderClient />
         </section>
