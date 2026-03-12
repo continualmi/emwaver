@@ -50,6 +50,9 @@ android/app/src/main/jniLibs/
 # ESP-IDF build output (generated)
 /build/
 /esp/build/
+tools/emwaver-esp-helper/build/
+tools/emwaver-esp-helper/dist/
+macos/EMWaver/Tools/emwaver-esp-helper/
 
 # Backup files
 *.bak

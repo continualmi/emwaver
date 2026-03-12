@@ -14,7 +14,6 @@ import AppKit
 @main
 struct EMWaverApp: App {
     @State private var didActivateApp = false
-    @State private var showingEspBootloaderInstructions = false
 
     init() {
         EnvBootstrap.loadForDevIfAvailable()
@@ -38,9 +37,6 @@ struct EMWaverApp: App {
                 .environmentObject(accountDevices)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
-                }
-                .sheet(isPresented: $showingEspBootloaderInstructions) {
-                    EspBootloaderInstructionsSheet()
                 }
                 .task {
                     // Best-effort background heartbeat + host discovery.
@@ -125,15 +121,16 @@ struct EMWaverApp: App {
 
                 Divider()
 
-                Button(device.isSecureConnected ? "Update Firmware…" : "Activate Device…") {
-                    firmwareUpdater.present()
+                Button(device.connectedBoardType?.caseInsensitiveCompare("esp32s3") == .orderedSame || firmwareUpdater.espBootloaderConnected ? "Flash Firmware…" : (device.isSecureConnected ? "Update Firmware…" : "Set Up Device…")) {
+                    let boardType = firmwareUpdater.espBootloaderConnected ? "esp32s3" : (device.connectedBoardType ?? device.lastDetectedBoardType)
+                    firmwareUpdater.present(boardType: boardType)
                 }
 
                 if device.isConnected {
                     Button("Enter Update Mode") {
                         let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
                         if boardType.caseInsensitiveCompare("esp32s3") == .orderedSame {
-                            showingEspBootloaderInstructions = true
+                            firmwareUpdater.present(boardType: "esp32s3")
                         } else {
                             device.requestEnterUpdateMode()
                             device.disconnect()

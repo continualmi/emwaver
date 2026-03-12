@@ -2,26 +2,24 @@
 from __future__ import annotations
 
 import argparse
-import runpy
 import sys
 from pathlib import Path
 
+import esptool
 from serial.tools import list_ports
 
 
 def _run_esptool(argv: list[str]) -> int:
-    saved = sys.argv[:]
     try:
-        sys.argv = ["esptool", *argv]
-        runpy.run_module("esptool", run_name="__main__")
+        result = esptool.main(argv)
+        return 0 if result is None else int(result)
     except SystemExit as exc:
         code = exc.code
         if isinstance(code, int):
             return code
         return 1 if code else 0
-    finally:
-        sys.argv = saved
-    return 0
+    except Exception:
+        return 1
 
 
 def cmd_list_ports(_: argparse.Namespace) -> int:
@@ -33,7 +31,7 @@ def cmd_list_ports(_: argparse.Namespace) -> int:
 
 
 def cmd_chip_id(args: argparse.Namespace) -> int:
-    argv = ["--chip", "esp32s3", "--port", args.port]
+    argv = ["--chip", "esp32s3", "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
     if args.baud:
         argv.extend(["--baud", str(args.baud)])
     if args.no_stub:

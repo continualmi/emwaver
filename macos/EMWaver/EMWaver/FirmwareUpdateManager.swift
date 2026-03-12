@@ -24,6 +24,7 @@ final class FirmwareUpdateManager: ObservableObject {
     @Published var dfuConnected: Bool = false
     @Published var espBootloaderConnected: Bool = false
     @Published var espBootloaderPort: String? = nil
+    @Published var presentedBoardType: String? = nil
     @Published var isFlashing: Bool = false
     @Published var progressPct: Double = 0
     @Published var progressMessage: String = ""
@@ -40,6 +41,7 @@ final class FirmwareUpdateManager: ObservableObject {
     private var flashProcess: Process? = nil
     private var flashStdoutBuffer = Data()
     private var flashStderrBuffer = Data()
+    private var flashOutputBuffer = Data()
 
     init() {
         startDfuPolling()
@@ -51,7 +53,7 @@ final class FirmwareUpdateManager: ObservableObject {
         dfuPollTimer = nil
     }
 
-    func present() {
+    func present(boardType: String? = nil) {
         updateError = nil
         updateDone = false
         progressPct = 0
@@ -59,6 +61,7 @@ final class FirmwareUpdateManager: ObservableObject {
         preservedIdentity = nil
         identityToWriteAfterFlash = nil
         completionMessage = "Update complete. Reconnect the device to use it."
+        presentedBoardType = boardType
         isPresented = true
     }
 
@@ -78,8 +81,8 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
-        if isEspBoardType(boardType) {
+        let boardType = effectiveBoardType(for: device)
+        if isEspBoardType(boardType) || espBootloaderConnected || espBootloaderPort != nil {
             do {
                 try startEspSerialUpdate(device: device)
             } catch {
@@ -483,6 +486,9 @@ final class FirmwareUpdateManager: ObservableObject {
                 DispatchQueue.main.async {
                     self.espBootloaderConnected = (port != nil)
                     self.espBootloaderPort = port
+                    if port != nil {
+                        self.presentedBoardType = "esp32s3"
+                    }
                 }
             } catch {
                 DispatchQueue.main.async {
@@ -508,6 +514,16 @@ final class FirmwareUpdateManager: ObservableObject {
         (boardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
+    private func effectiveBoardType(for device: MacUSBManager) -> String {
+        if isEspBoardType(presentedBoardType) {
+            return "esp32s3"
+        }
+        if espBootloaderConnected || espBootloaderPort != nil {
+            return "esp32s3"
+        }
+        return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
     private func helperURL(name: String) throws -> URL {
         if let url = Bundle.main.url(forResource: name, withExtension: nil) {
             return url
@@ -524,7 +540,48 @@ final class FirmwareUpdateManager: ObservableObject {
     }
 
     private func espHelperURL() throws -> URL {
-        try helperURL(name: "emwaver-esp-helper")
+        #if DEBUG
+        if let repoRoot = debugRepoRoot() {
+            let repoDistHelper = repoRoot
+                .appendingPathComponent("tools/emwaver-esp-helper/dist/emwaver-esp-helper/emwaver-esp-helper", isDirectory: false)
+            if FileManager.default.isExecutableFile(atPath: repoDistHelper.path) {
+                return repoDistHelper
+            }
+        }
+        #endif
+
+        if let bundled = Bundle.main.resourceURL?
+            .appendingPathComponent("emwaver-esp-helper", isDirectory: true)
+            .appendingPathComponent("emwaver-esp-helper", isDirectory: false),
+           FileManager.default.isExecutableFile(atPath: bundled.path) {
+            return bundled
+        }
+        return try helperURL(name: "emwaver-esp-helper")
+    }
+
+    private func debugRepoRoot() -> URL? {
+        let fm = FileManager.default
+        let startPoints: [URL] = [
+            URL(fileURLWithPath: fm.currentDirectoryPath, isDirectory: true).standardizedFileURL,
+            URL(fileURLWithPath: #filePath, isDirectory: false).deletingLastPathComponent(),
+            Bundle.main.bundleURL.deletingLastPathComponent()
+        ]
+
+        for start in startPoints {
+            var candidate = start
+            for _ in 0..<10 {
+                let helper = candidate.appendingPathComponent("tools/emwaver-esp-helper/dist/emwaver-esp-helper/emwaver-esp-helper", isDirectory: false)
+                if fm.isExecutableFile(atPath: helper.path) {
+                    return candidate
+                }
+
+                let parent = candidate.deletingLastPathComponent()
+                if parent.path == candidate.path { break }
+                candidate = parent
+            }
+        }
+
+        return nil
     }
 
     private func espFirmwareURLs() throws -> (bootloader: URL, partitionTable: URL, otaData: URL, app: URL) {
@@ -673,6 +730,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         flashStdoutBuffer = Data()
         flashStderrBuffer = Data()
+        flashOutputBuffer = Data()
         flashProcess = process
 
         stdout.fileHandleForReading.readabilityHandler = { [weak self] fh in
@@ -690,6 +748,7 @@ final class FirmwareUpdateManager: ObservableObject {
             if data.isEmpty { return }
             DispatchQueue.main.async {
                 self.flashStderrBuffer.append(data)
+                self.ingestFlashOutput(data)
             }
         }
 
@@ -864,6 +923,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         flashStdoutBuffer = Data()
         flashStderrBuffer = Data()
+        flashOutputBuffer = Data()
         flashProcess = process
 
         stdout.fileHandleForReading.readabilityHandler = { [weak self] fh in
@@ -881,6 +941,7 @@ final class FirmwareUpdateManager: ObservableObject {
             if data.isEmpty { return }
             DispatchQueue.main.async {
                 self.flashStderrBuffer.append(data)
+                self.ingestFlashOutput(data)
             }
         }
 
@@ -936,11 +997,17 @@ final class FirmwareUpdateManager: ObservableObject {
 
     private func ingestFlashStdout(_ data: Data) {
         flashStdoutBuffer.append(data)
+        ingestFlashOutput(data)
+    }
+
+    private func ingestFlashOutput(_ data: Data) {
+        let normalized = Data(data.map { $0 == 0x0D ? 0x0A : $0 })
+        flashOutputBuffer.append(normalized)
 
         while true {
-            guard let nlRange = flashStdoutBuffer.range(of: Data([0x0A])) else { break }
-            let lineData = flashStdoutBuffer.subdata(in: 0..<nlRange.lowerBound)
-            flashStdoutBuffer.removeSubrange(0..<nlRange.upperBound)
+            guard let nlRange = flashOutputBuffer.range(of: Data([0x0A])) else { break }
+            let lineData = flashOutputBuffer.subdata(in: 0..<nlRange.lowerBound)
+            flashOutputBuffer.removeSubrange(0..<nlRange.upperBound)
 
             let line = (String(data: lineData, encoding: .utf8) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if line.isEmpty { continue }
@@ -950,17 +1017,31 @@ final class FirmwareUpdateManager: ObservableObject {
     }
 
     private func handleProgressLine(_ line: String) {
-        progressMessage = line.replacingOccurrences(of: #"\s*\(\d+%\)\s*$"#, with: "", options: .regularExpression)
+        let cleaned = line
+            .replacingOccurrences(of: #"\s*\(?\s*\d{1,3}\s*%\s*\)?\s*$"#, with: "", options: .regularExpression)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
 
-        if let m = line.range(of: #"\((\d+)%\)"#, options: .regularExpression) {
-            let s = String(line[m])
-            let digits = s
-                .replacingOccurrences(of: "(", with: "")
-                .replacingOccurrences(of: ")", with: "")
-                .replacingOccurrences(of: "%", with: "")
+        if !cleaned.isEmpty {
+            progressMessage = cleaned
+        }
+
+        if let match = line.range(of: #"\(?\s*(\d{1,3})\s*%\s*\)?"#, options: .regularExpression) {
+            let token = String(line[match])
+            let digits = token.filter(\.isNumber)
             if let pct = Int(digits) {
                 progressPct = Double(max(0, min(100, pct)))
             }
+            return
+        }
+
+        let lower = line.lowercased()
+        if lower.contains("writing at") || lower.contains("writing flash") {
+            progressMessage = "Writing firmware..."
+        } else if lower.contains("hash of data verified") || lower.contains("hard resetting via") {
+            progressPct = max(progressPct, 100)
+        } else if lower.contains("erasing flash") {
+            progressPct = max(progressPct, 2)
+            progressMessage = "Erasing flash..."
         }
     }
 

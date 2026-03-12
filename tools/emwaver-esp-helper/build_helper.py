@@ -21,7 +21,7 @@ def main() -> int:
         "PyInstaller",
         "--noconfirm",
         "--clean",
-        "--onefile",
+        "--onedir",
         "--name",
         name,
         "--distpath",
@@ -42,7 +42,7 @@ def main() -> int:
     print(f"[emwaver-esp-helper] dist={dist_dir}")
     subprocess.run(cmd, check=True)
     suffix = ".exe" if sys.platform.startswith("win") else ""
-    out = dist_dir / f"{name}{suffix}"
+    out = dist_dir / name / f"{name}{suffix}"
     print(f"[emwaver-esp-helper] output={out}")
     return 0
 
