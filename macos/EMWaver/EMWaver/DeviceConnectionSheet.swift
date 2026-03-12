@@ -6,6 +6,7 @@ struct DeviceConnectionSheet: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var accountDevices: AccountDevicesService
     @Environment(\.dismiss) private var dismiss
+    @State private var showingEspBootloaderInstructions = false
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
@@ -54,7 +55,11 @@ struct DeviceConnectionSheet: View {
     }
 
     private var currentBoardType: String {
-        device.connectedBoardType ?? "stm32f042"
+        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var isEspBoard: Bool {
+        currentBoardType.caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
     var body: some View {
@@ -80,6 +85,9 @@ struct DeviceConnectionSheet: View {
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
             accountDevices.refresh(auth: auth)
+        }
+        .sheet(isPresented: $showingEspBootloaderInstructions) {
+            EspBootloaderInstructionsSheet()
         }
     }
 
@@ -200,15 +208,19 @@ struct DeviceConnectionSheet: View {
 
                     if device.isConnected {
                         Button("Enter Update Mode") {
-                            device.requestEnterUpdateMode()
-                            device.disconnect()
-                            firmwareUpdater.refreshDfuPresence()
+                            if isEspBoard {
+                                showingEspBootloaderInstructions = true
+                            } else {
+                                device.requestEnterUpdateMode()
+                                device.disconnect()
+                                firmwareUpdater.refreshDfuPresence()
+                            }
                         }
                         .buttonStyle(.bordered)
                     }
                 }
 
-                Text(firmwareUpdater.dfuConnected ? "Update Mode detected." : "Update Mode not detected.")
+                Text(isEspBoard ? "ESP32-S3 updates require manual bootloader entry on the serial flashing port." : (firmwareUpdater.dfuConnected ? "Update Mode detected." : "Update Mode not detected."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

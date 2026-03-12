@@ -76,7 +76,7 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        let boardType = device.connectedBoardType ?? "stm32f042"
+        let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
         if isEspBoardType(boardType) {
             do {
                 try startEspSerialUpdate(device: device)

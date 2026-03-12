@@ -111,7 +111,8 @@ ESP32-S3 update flow:
 - flashing is performed over the board's flash-capable USB serial port,
 - the app should bundle a small helper based on `esptool` behavior,
 - the app should use prebuilt firmware images rather than ESP-IDF project logic,
-- manual bootloader entry is acceptable for the first shipping version on boards where automatic entry is unreliable.
+- manual bootloader entry is acceptable for the first shipping version on boards where automatic entry is unreliable,
+- when an ESP32-S3 is connected, "Enter Update Mode" should present the BOOT/RESET sequence instead of sending the STM32 DFU opcode.
 
 Explicit non-goal:
 - do not bundle `idf.py` or the full ESP-IDF inside the macOS app.
