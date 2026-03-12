@@ -18,7 +18,7 @@
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1343:19:HAL_PCD_DevConnect	16	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1357:19:HAL_PCD_DevDisconnect	16	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1372:19:HAL_PCD_SetAddress	16	static
-../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1007:6:HAL_PCD_IRQHandler	40	static
+../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1007:6:HAL_PCD_IRQHandler	48	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1389:19:HAL_PCD_EP_Open	16	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1429:19:HAL_PCD_EP_Close	16	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_hal_pcd.c:1460:19:HAL_PCD_EP_Receive	16	static

@@ -189,7 +189,7 @@ final class FirmwareUpdateManager: ObservableObject {
         updateError = nil
         updateDone = false
         progressPct = 0
-        progressMessage = "Requesting backend mint..."
+        progressMessage = "Reading hardware UID..."
         completionMessage = "Activation complete. Reconnect the device to use it."
 
         if isFlashing {
@@ -216,19 +216,39 @@ final class FirmwareUpdateManager: ObservableObject {
             appendLog(updateError ?? "Activation failed")
             return
         }
+        if !device.isConnected {
+            updateError = "Activation currently requires a device connected in Run mode so macOS can read its hardware UID."
+            appendLog(updateError ?? "Activation failed")
+            return
+        }
 
-        // Step 1: request a new DeviceID+Proof.
+        // Step 1: claim or restore an identity for this physical board using its hardware UID.
         struct MintResponse: Decodable {
             let device_id_b64: String
             let proof_b64: String
+            let board_type: String?
+            let hardware_uid: String?
+            let created: Bool?
         }
 
         Task {
             do {
+                guard let hardwareUid = device.readHardwareUid(timeoutMs: 1200) else {
+                    throw NSError(domain: "FirmwareUpdateManager", code: 1001, userInfo: [
+                        NSLocalizedDescriptionKey: "Failed to read hardware UID from device."
+                    ])
+                }
+                let hardwareUidHex = hardwareUid.map { String(format: "%02X", $0) }.joined()
+
                 let url = baseURL.appendingPathComponent("provisioning/mint")
                 var req = URLRequest(url: url)
                 req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.httpBody = try JSONSerialization.data(withJSONObject: [
+                    "board_type": "stm32f042",
+                    "hardware_uid": hardwareUidHex,
+                ])
 
                 let (data, res) = try await URLSession.shared.data(for: req)
                 let code = (res as? HTTPURLResponse)?.statusCode ?? -1
@@ -239,7 +259,9 @@ final class FirmwareUpdateManager: ObservableObject {
                 let mint = try JSONDecoder().decode(MintResponse.self, from: data)
                 let mintedIdentity = try self.decodeIdentity(deviceIdB64: mint.device_id_b64, proofB64: mint.proof_b64)
                 await MainActor.run {
-                    self.appendLog("Backend mint succeeded")
+                    self.progressMessage = "Claiming device..."
+                    self.appendLog((mint.created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded")
+                    self.appendLog("Hardware UID: \(hardwareUidHex)")
                     self.appendLog("DeviceID: \(mint.device_id_b64.prefix(16))…")
                     self.appendLog("Proof: \(mint.proof_b64.prefix(16))…")
                 }

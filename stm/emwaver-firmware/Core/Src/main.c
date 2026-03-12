@@ -1783,6 +1783,28 @@ int main(void)
               break;
           }
 
+          case EMW_OP_HARDWARE_UID_GET: {
+              uint32_t uid0 = HAL_GetUIDw0();
+              uint32_t uid1 = HAL_GetUIDw1();
+              uint32_t uid2 = HAL_GetUIDw2();
+              uint8_t out[12] = {
+                  (uint8_t)(uid0 & 0xFFu),
+                  (uint8_t)((uid0 >> 8) & 0xFFu),
+                  (uint8_t)((uid0 >> 16) & 0xFFu),
+                  (uint8_t)((uid0 >> 24) & 0xFFu),
+                  (uint8_t)(uid1 & 0xFFu),
+                  (uint8_t)((uid1 >> 8) & 0xFFu),
+                  (uint8_t)((uid1 >> 16) & 0xFFu),
+                  (uint8_t)((uid1 >> 24) & 0xFFu),
+                  (uint8_t)(uid2 & 0xFFu),
+                  (uint8_t)((uid2 >> 8) & 0xFFu),
+                  (uint8_t)((uid2 >> 16) & 0xFFu),
+                  (uint8_t)((uid2 >> 24) & 0xFFu),
+              };
+              command_send_ok(out, sizeof(out));
+              break;
+          }
+
           case EMW_OP_NAME_GET: {
               char name[DEVICE_NAME_MAX_LEN + 1];
               get_device_name(name, sizeof(name));

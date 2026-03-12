@@ -4,7 +4,7 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB workflows, remote host control, cloud/auth integrations, and firmware/update UX on macOS.
 
-It is now the canonical desktop surface for device activation and DFU provisioning: the macOS app requests backend-authoritative `DeviceID + Proof`, enters DFU/update mode, flashes firmware, verifies device authenticity in both run/update paths, and provisions or restores the signed identity page.
+It is now the canonical desktop surface for device activation and DFU provisioning: the macOS app reads the board hardware UID, requests backend-authoritative claim/restore plus `DeviceID + Proof`, enters DFU/update mode, flashes firmware, verifies device authenticity in both run/update paths, and provisions or restores the signed identity page.
 
 ---
 
@@ -85,8 +85,9 @@ The helper is bundled for update flows and should be version-synced with firmwar
 
 Current macOS responsibility in this area:
 - secure-device firmware update with identity preservation,
-- first-party mint + provision flow for unsecured devices,
-- backend-tethered activation using `/provisioning/mint`,
+- first-party claim/restore + provision flow for supported devices,
+- backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
+- reading supported-board hardware UID in Run Mode before activation,
 - writing/restoring the flash identity page after DFU flash,
 - explicit authenticity verification in Run Mode and Update Mode,
 - bundled or operator-selected custom firmware images,

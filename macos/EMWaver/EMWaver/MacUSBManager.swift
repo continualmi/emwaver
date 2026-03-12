@@ -25,6 +25,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
         static let identityGet: UInt8 = 0x07
+        static let hardwareUidGet: UInt8 = 0x08
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
@@ -46,6 +47,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     @Published var isSecureConnected: Bool = false
     @Published var secureDeviceIdHex: String? = nil
+    @Published var hardwareUidHex: String? = nil
 
     // Signed device identity (base64) for account attach flows.
     @Published var secureDeviceIdB64: String? = nil
@@ -409,10 +411,12 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             }
 
             let identityOk = (v != nil) ? self.verifySecureIdentity(timeoutMs: 1800) : false
+            let hardwareUid = (v != nil) ? self.readHardwareUid(timeoutMs: 1200) : nil
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
                 self.isSecureConnected = identityOk
+                self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
                 if identityOk {
                     // Cache identity for account attach (DeviceID+Proof already verified locally).
                     if let ident = self.readDeviceIdentity(timeoutMs: 1800) {
@@ -440,6 +444,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.deviceEmwaverVersion = nil
             self.isSecureConnected = false
             self.secureDeviceIdHex = nil
+            self.hardwareUidHex = nil
             self.secureDeviceIdB64 = nil
             self.secureDeviceProofB64 = nil
             self.needsLoginToSaveDevice = false
@@ -472,6 +477,16 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
         var deviceIdB64: String { deviceId.base64EncodedString() }
         var proofB64: String { proof.base64EncodedString() }
+    }
+
+    func readHardwareUid(timeoutMs: Int) -> Data? {
+        guard let lane = sendCommandInternal(
+            Data([EmwOpcode.hardwareUidGet]),
+            timeout: timeoutMs,
+            responsePredicate: { lane in lane.count >= 13 && lane[0] == 0x80 }
+        ) else { return nil }
+        if lane[0] != 0x80 { return nil }
+        return Data(lane[1..<13])
     }
 
     func readDeviceIdentity(timeoutMs: Int) -> DeviceIdentity? {
