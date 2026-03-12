@@ -17,14 +17,21 @@
 
 #include "main.h"
 
+#include <stdio.h>
 #include <string.h>
 
-#include "ble_server.h"
 #include "command_registry.h"
+#include "emw_proto.h"
+#include "driver/ledc.h"
 #include "driver/gpio.h"
+#include "esp_adc/adc_oneshot.h"
 #include "esp_err.h"
 #include "esp_heap_caps.h"
+#include "esp_chip_info.h"
 #include "esp_log.h"
+#include "esp_mac.h"
+#include "esp_system.h"
+#include "nvs.h"
 #include "sdkconfig.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -44,12 +51,41 @@
 #define STARTUP_LED GPIO_NUM_1
 #define IR_TX_PIN_SHIELD GPIO_NUM_37
 #define IR_TX_PIN_DEFAULT GPIO_NUM_4
+#define FW_VERSION_MAJOR 1u
+#define FW_VERSION_MINOR 0u
+#define DEVICE_NAME_NAMESPACE "emwaver"
+#define DEVICE_NAME_KEY "device_name"
+#define DEVICE_NAME_MAX_LEN 16u
+#define PWM_DEFAULT_FREQ_HZ 1000u
+#define PWM_LED_TIMER LEDC_TIMER_1
+#define PWM_LED_MODE LEDC_LOW_SPEED_MODE
+#define PWM_LED_CHANNEL LEDC_CHANNEL_1
+#define PWM_DUTY_MAX 4095u
 
 static const char *TAG = "INIT";
 static QueueHandle_t cmd_queue;
 static TaskHandle_t command_task_handle;
+static uint32_t pwm_freq_hz = PWM_DEFAULT_FREQ_HZ;
+static int pwm_active_pin = -1;
+static bool pwm_configured = false;
 
 static void command_task(void *pv_parameters);
+static bool handle_binary_packet(const command_t *cmd);
+static void send_binary_ok(const uint8_t *payload, size_t len);
+static void send_binary_err(void);
+static void restart_task(void *arg);
+static void handle_name_get(void);
+static void handle_name_set(const command_t *cmd);
+static void get_default_device_name(char *out, size_t out_len);
+static void load_device_name(char *out, size_t out_len);
+static bool validate_gpio_pin(uint8_t pin, gpio_num_t *out_gpio);
+static void handle_gpio_opcode(const command_t *cmd);
+static void handle_spi_opcode(const command_t *cmd);
+static void handle_sample_opcode(const command_t *cmd);
+static void handle_transmit_opcode(const command_t *cmd);
+static void handle_pwm_opcode(const command_t *cmd);
+static void handle_adc_opcode(const command_t *cmd);
+static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz);
 static void register_core_commands(void);
 static void version_command(void);
 static void ble_status_command(void);
@@ -92,13 +128,12 @@ void emwaver_init(void)
     cc1101_register_commands();
     gpio_register_commands();
     sampler_register_commands();
-    usb_register_commands();
     register_core_commands();
 
     cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(command_t));
     configASSERT(cmd_queue != NULL);
 
-    ble_server_init(cmd_queue);
+    usb_init(cmd_queue);
 
     BaseType_t created = xTaskCreatePinnedToCore(command_task,
                                                 "cmd_task",
@@ -131,6 +166,10 @@ static void command_task(void *pv_parameters)
     for (;;) {
         if (xQueueReceive(cmd_queue, &cmd, portMAX_DELAY) == pdTRUE) {
             if (cmd.length == 0) {
+                continue;
+            }
+
+            if (handle_binary_packet(&cmd)) {
                 continue;
             }
 
@@ -167,6 +206,569 @@ static void command_task(void *pv_parameters)
     }
 }
 
+static bool handle_binary_packet(const command_t *cmd)
+{
+    if (!cmd || cmd->length != EMW_USB_CMD_LANE_SIZE) {
+        return false;
+    }
+
+    const uint8_t opcode = cmd->data[0];
+    switch (opcode) {
+        case EMW_OP_VERSION: {
+            const uint8_t out[] = {FW_VERSION_MAJOR, FW_VERSION_MINOR};
+            send_binary_ok(out, sizeof(out));
+            return true;
+        }
+        case EMW_OP_RESET:
+        case EMW_OP_HELP:
+            send_binary_ok(NULL, 0);
+            if (opcode == EMW_OP_RESET) {
+                (void)xTaskCreate(restart_task, "emw_restart", 2048, NULL, 5, NULL);
+            }
+            return true;
+        case EMW_OP_HARDWARE_UID_GET: {
+            uint8_t mac[6] = {0};
+            if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+                send_binary_err();
+                return true;
+            }
+            esp_chip_info_t chip_info = {0};
+            esp_chip_info(&chip_info);
+            uint8_t uid[12] = {
+                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
+                (uint8_t)chip_info.model,
+                (uint8_t)chip_info.revision,
+                (uint8_t)(chip_info.features & 0xFFu),
+                (uint8_t)((chip_info.features >> 8) & 0xFFu),
+                (uint8_t)(chip_info.cores & 0xFFu),
+                0x53u,
+            };
+            send_binary_ok(uid, sizeof(uid));
+            return true;
+        }
+        case EMW_OP_NAME_GET:
+            handle_name_get();
+            return true;
+        case EMW_OP_NAME_SET:
+            handle_name_set(cmd);
+            return true;
+        case EMW_OP_GPIO:
+            handle_gpio_opcode(cmd);
+            return true;
+        case EMW_OP_ADC_READ:
+            handle_adc_opcode(cmd);
+            return true;
+        case EMW_OP_SPI_XFER:
+            handle_spi_opcode(cmd);
+            return true;
+        case EMW_OP_SAMPLE:
+            handle_sample_opcode(cmd);
+            return true;
+        case EMW_OP_PWM:
+            handle_pwm_opcode(cmd);
+            return true;
+        case EMW_OP_TRANSMIT:
+            handle_transmit_opcode(cmd);
+            return true;
+        case EMW_OP_ENTER_DFU:
+        case EMW_OP_IDENTITY_GET:
+            send_binary_err();
+            return true;
+        default:
+            send_binary_err();
+            return true;
+    }
+}
+
+static void send_binary_ok(const uint8_t *payload, size_t len)
+{
+    if (usb_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send USB OK response");
+    }
+}
+
+static void send_binary_err(void)
+{
+    if (usb_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send USB ERR response");
+    }
+}
+
+static void restart_task(void *arg)
+{
+    (void)arg;
+    vTaskDelay(pdMS_TO_TICKS(25));
+    esp_restart();
+}
+
+static void handle_name_get(void)
+{
+    char name[DEVICE_NAME_MAX_LEN + 1];
+    load_device_name(name, sizeof(name));
+    send_binary_ok((const uint8_t *)name, strlen(name));
+}
+
+static void handle_name_set(const command_t *cmd)
+{
+    uint8_t len = cmd->data[1];
+    uint8_t max_len = (uint8_t)(EMW_USB_CMD_LANE_SIZE - 2u);
+    if (len > max_len) {
+        len = max_len;
+    }
+    if (len > DEVICE_NAME_MAX_LEN) {
+        len = DEVICE_NAME_MAX_LEN;
+    }
+
+    char name[DEVICE_NAME_MAX_LEN + 1];
+    memset(name, 0, sizeof(name));
+    if (len > 0) {
+        memcpy(name, &cmd->data[2], len);
+    }
+
+    nvs_handle_t nvs = 0;
+    esp_err_t err = nvs_open(DEVICE_NAME_NAMESPACE, NVS_READWRITE, &nvs);
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    err = nvs_set_str(nvs, DEVICE_NAME_KEY, name);
+    if (err == ESP_OK) {
+        err = nvs_commit(nvs);
+    }
+    nvs_close(nvs);
+
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    send_binary_ok(NULL, 0);
+}
+
+static void get_default_device_name(char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return;
+    }
+
+    uint8_t mac[6] = {0};
+    if (esp_efuse_mac_get_default(mac) != ESP_OK) {
+        strlcpy(out, "ESP32-S3", out_len);
+        return;
+    }
+
+    snprintf(out, out_len, "ESP32-S3-%02X%02X", mac[4], mac[5]);
+}
+
+static void load_device_name(char *out, size_t out_len)
+{
+    if (!out || out_len == 0) {
+        return;
+    }
+
+    nvs_handle_t nvs = 0;
+    esp_err_t err = nvs_open(DEVICE_NAME_NAMESPACE, NVS_READONLY, &nvs);
+    if (err != ESP_OK) {
+        get_default_device_name(out, out_len);
+        return;
+    }
+
+    size_t len = out_len;
+    err = nvs_get_str(nvs, DEVICE_NAME_KEY, out, &len);
+    nvs_close(nvs);
+
+    if (err != ESP_OK || out[0] == '\0') {
+        get_default_device_name(out, out_len);
+    }
+}
+
+static bool validate_gpio_pin(uint8_t pin, gpio_num_t *out_gpio)
+{
+    if (!out_gpio || pin > 48u) {
+        return false;
+    }
+
+    *out_gpio = (gpio_num_t)pin;
+    return true;
+}
+
+static void handle_gpio_opcode(const command_t *cmd)
+{
+    gpio_num_t gpio = GPIO_NUM_NC;
+    if (!validate_gpio_pin(cmd->data[2], &gpio)) {
+        send_binary_err();
+        return;
+    }
+
+    esp_err_t err = ESP_OK;
+    uint8_t sub = cmd->data[1];
+    switch (sub) {
+        case EMW_GPIO_IN:
+            gpio_reset_pin(gpio);
+            err = gpio_set_direction(gpio, GPIO_MODE_INPUT);
+            break;
+        case EMW_GPIO_OUT:
+            gpio_reset_pin(gpio);
+            err = gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+            break;
+        case EMW_GPIO_PULL: {
+            uint8_t pull = cmd->data[3];
+            gpio_pull_mode_t mode = GPIO_FLOATING;
+            if (pull == 1u) {
+                mode = GPIO_PULLUP_ONLY;
+            } else if (pull == 2u) {
+                mode = GPIO_PULLDOWN_ONLY;
+            } else if (pull != 0u) {
+                send_binary_err();
+                return;
+            }
+            gpio_reset_pin(gpio);
+            err = gpio_set_direction(gpio, GPIO_MODE_INPUT);
+            if (err == ESP_OK) {
+                err = gpio_set_pull_mode(gpio, mode);
+            }
+            break;
+        }
+        case EMW_GPIO_READ: {
+            err = gpio_set_direction(gpio, GPIO_MODE_INPUT);
+            if (err != ESP_OK) {
+                send_binary_err();
+                return;
+            }
+            uint8_t out = (uint8_t)(gpio_get_level(gpio) != 0);
+            send_binary_ok(&out, 1);
+            return;
+        }
+        case EMW_GPIO_HIGH:
+        case EMW_GPIO_LOW: {
+            uint32_t level = (sub == EMW_GPIO_HIGH) ? 1u : 0u;
+            err = gpio_set_direction(gpio, GPIO_MODE_OUTPUT);
+            if (err == ESP_OK) {
+                err = gpio_set_level(gpio, (uint32_t)level);
+            }
+            if (err != ESP_OK) {
+                send_binary_err();
+                return;
+            }
+            uint8_t out = (uint8_t)level;
+            send_binary_ok(&out, 1);
+            return;
+        }
+        case EMW_GPIO_INFO: {
+            uint8_t level = (uint8_t)(gpio_get_level(gpio) != 0);
+            uint8_t response[6] = {0, 0, 0, 0, level, level};
+            send_binary_ok(response, sizeof(response));
+            return;
+        }
+        default:
+            send_binary_err();
+            return;
+    }
+
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    send_binary_ok(NULL, 0);
+}
+
+static void handle_adc_opcode(const command_t *cmd)
+{
+    if (cmd->data[1] != EMW_ADC_SRC_PIN) {
+        send_binary_err();
+        return;
+    }
+
+    gpio_num_t gpio = GPIO_NUM_NC;
+    if (!validate_gpio_pin(cmd->data[2], &gpio)) {
+        send_binary_err();
+        return;
+    }
+
+    uint8_t samples = cmd->data[3];
+    if (samples < 1u) {
+        samples = 1u;
+    }
+    if (samples > 64u) {
+        samples = 64u;
+    }
+
+    adc_unit_t unit_id = ADC_UNIT_1;
+    adc_channel_t channel = ADC_CHANNEL_0;
+    esp_err_t err = adc_oneshot_io_to_channel((int)gpio, &unit_id, &channel);
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    adc_oneshot_unit_handle_t adc = NULL;
+    adc_oneshot_unit_init_cfg_t init_cfg = {
+        .unit_id = unit_id,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+    err = adc_oneshot_new_unit(&init_cfg, &adc);
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    adc_oneshot_chan_cfg_t chan_cfg = {
+        .atten = ADC_ATTEN_DB_12,
+        .bitwidth = ADC_BITWIDTH_12,
+    };
+    err = adc_oneshot_config_channel(adc, channel, &chan_cfg);
+    if (err != ESP_OK) {
+        adc_oneshot_del_unit(adc);
+        send_binary_err();
+        return;
+    }
+
+    uint32_t sum = 0;
+    for (uint8_t i = 0; i < samples; ++i) {
+        int raw = 0;
+        err = adc_oneshot_read(adc, channel, &raw);
+        if (err != ESP_OK) {
+            adc_oneshot_del_unit(adc);
+            send_binary_err();
+            return;
+        }
+        if (raw < 0) {
+            raw = 0;
+        }
+        sum += (uint32_t)raw;
+    }
+
+    adc_oneshot_del_unit(adc);
+
+    uint16_t avg = (uint16_t)((sum + (uint32_t)(samples / 2u)) / (uint32_t)samples);
+    uint8_t out[2] = {
+        (uint8_t)(avg & 0xFFu),
+        (uint8_t)((avg >> 8) & 0xFFu),
+    };
+    send_binary_ok(out, sizeof(out));
+}
+
+static void handle_spi_opcode(const command_t *cmd)
+{
+    gpio_num_t cs_gpio = GPIO_NUM_NC;
+    if (!validate_gpio_pin(cmd->data[1], &cs_gpio)) {
+        send_binary_err();
+        return;
+    }
+
+    uint8_t requested_rx = cmd->data[2];
+    uint8_t tx_len = cmd->data[3];
+    uint8_t max_tx = (uint8_t)(EMW_USB_CMD_LANE_SIZE - 4u);
+    if (tx_len > max_tx) {
+        tx_len = max_tx;
+    }
+
+    if (requested_rx == 0u) {
+        requested_rx = tx_len;
+    }
+    if (requested_rx > EMW_RESP_MAX_PAYLOAD) {
+        requested_rx = (uint8_t)EMW_RESP_MAX_PAYLOAD;
+    }
+
+    uint8_t total_len = tx_len > requested_rx ? tx_len : requested_rx;
+    if (total_len == 0u || requested_rx == 0u) {
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    uint8_t tx_buf[EMW_RESP_MAX_PAYLOAD] = {0};
+    uint8_t rx_buf[EMW_RESP_MAX_PAYLOAD] = {0};
+    if (tx_len > 0u) {
+        memcpy(tx_buf, &cmd->data[4], tx_len);
+    }
+
+    esp_err_t err = spi_transfer_once((int)cs_gpio,
+                                      0,
+                                      0,
+                                      false,
+                                      tx_buf,
+                                      total_len,
+                                      rx_buf,
+                                      requested_rx);
+    if (err != ESP_OK) {
+        send_binary_err();
+        return;
+    }
+
+    send_binary_ok(rx_buf, requested_rx);
+}
+
+static void handle_sample_opcode(const command_t *cmd)
+{
+    uint8_t sub = cmd->data[1];
+    if (sub == EMW_SAMPLE_START) {
+        gpio_num_t gpio = GPIO_NUM_NC;
+        if (!validate_gpio_pin(cmd->data[2], &gpio) || !sampler_start_sampling((int)gpio)) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_SAMPLE_STOP) {
+        if (!sampler_stop_sampling()) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    send_binary_err();
+}
+
+static void handle_transmit_opcode(const command_t *cmd)
+{
+    uint8_t sub = cmd->data[1];
+    if (sub == EMW_TRANSMIT_STOP) {
+        if (!sampler_stop_transmission()) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_TRANSMIT_START) {
+        gpio_num_t gpio = GPIO_NUM_NC;
+        if (!validate_gpio_pin(cmd->data[2], &gpio) || !sampler_start_transmission((int)gpio)) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    send_binary_err();
+}
+
+static void handle_pwm_opcode(const command_t *cmd)
+{
+    uint8_t sub = cmd->data[1];
+    if (sub == EMW_PWM_FREQ) {
+        uint32_t hz = (uint32_t)cmd->data[2]
+                    | ((uint32_t)cmd->data[3] << 8)
+                    | ((uint32_t)cmd->data[4] << 16)
+                    | ((uint32_t)cmd->data[5] << 24);
+        if (hz == 0u) {
+            send_binary_err();
+            return;
+        }
+        pwm_freq_hz = hz;
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    gpio_num_t gpio = GPIO_NUM_NC;
+    if (!validate_gpio_pin(cmd->data[2], &gpio)) {
+        send_binary_err();
+        return;
+    }
+
+    if (sub == EMW_PWM_STOP) {
+        if (pwm_active_pin == (int)gpio && pwm_configured) {
+            ledc_stop(PWM_LED_MODE, PWM_LED_CHANNEL, 0);
+            pwm_configured = false;
+            pwm_active_pin = -1;
+        }
+        gpio_reset_pin(gpio);
+        if (gpio_set_direction(gpio, GPIO_MODE_OUTPUT) != ESP_OK || gpio_set_level(gpio, 0) != ESP_OK) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    if (sub == EMW_PWM_WRITE) {
+        uint16_t value = (uint16_t)cmd->data[3] | ((uint16_t)cmd->data[4] << 8);
+        uint32_t hz = (uint32_t)cmd->data[5]
+                    | ((uint32_t)cmd->data[6] << 8)
+                    | ((uint32_t)cmd->data[7] << 16)
+                    | ((uint32_t)cmd->data[8] << 24);
+        if (value > PWM_DUTY_MAX) {
+            value = PWM_DUTY_MAX;
+        }
+        if (hz == 0u) {
+            hz = pwm_freq_hz;
+        }
+        if (!pwm_apply_output(gpio, value, hz)) {
+            send_binary_err();
+            return;
+        }
+        send_binary_ok(NULL, 0);
+        return;
+    }
+
+    send_binary_err();
+}
+
+static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz)
+{
+    if (hz == 0u) {
+        return false;
+    }
+
+    if (duty_u12 == 0u || duty_u12 >= PWM_DUTY_MAX) {
+        if (pwm_configured) {
+            ledc_stop(PWM_LED_MODE, PWM_LED_CHANNEL, 0);
+            pwm_configured = false;
+        }
+        pwm_active_pin = -1;
+        if (gpio_reset_pin(gpio) != ESP_OK) {
+            return false;
+        }
+        if (gpio_set_direction(gpio, GPIO_MODE_OUTPUT) != ESP_OK) {
+            return false;
+        }
+        return gpio_set_level(gpio, duty_u12 >= PWM_DUTY_MAX ? 1 : 0) == ESP_OK;
+    }
+
+    ledc_timer_config_t timer_cfg = {
+        .speed_mode = PWM_LED_MODE,
+        .timer_num = PWM_LED_TIMER,
+        .duty_resolution = LEDC_TIMER_12_BIT,
+        .freq_hz = hz,
+        .clk_cfg = LEDC_AUTO_CLK,
+    };
+    if (ledc_timer_config(&timer_cfg) != ESP_OK) {
+        return false;
+    }
+
+    ledc_channel_config_t channel_cfg = {
+        .gpio_num = (int)gpio,
+        .speed_mode = PWM_LED_MODE,
+        .channel = PWM_LED_CHANNEL,
+        .intr_type = LEDC_INTR_DISABLE,
+        .timer_sel = PWM_LED_TIMER,
+        .duty = duty_u12,
+        .hpoint = 0,
+    };
+    if (ledc_channel_config(&channel_cfg) != ESP_OK) {
+        return false;
+    }
+
+    if (ledc_set_duty(PWM_LED_MODE, PWM_LED_CHANNEL, duty_u12) != ESP_OK) {
+        return false;
+    }
+    if (ledc_update_duty(PWM_LED_MODE, PWM_LED_CHANNEL) != ESP_OK) {
+        return false;
+    }
+
+    pwm_freq_hz = hz;
+    pwm_active_pin = (int)gpio;
+    pwm_configured = true;
+    return true;
+}
+
 static void register_core_commands(void)
 {
     bool ok = true;
@@ -197,12 +799,12 @@ static void register_core_commands(void)
 static void version_command(void)
 {
     static const char msg[] = EMWAVER_FIRMWARE_WELCOME " " FIRMWARE_VERSION;
-    ble_server_notify((const uint8_t *)msg, (uint16_t)(sizeof(msg) - 1u));
+    command_send_ok((const uint8_t *)msg, sizeof(msg) - 1u);
 }
 
 static void ble_status_command(void)
 {
-    static const char status[] = "on";
+    static const char status[] = "off";
     command_send_ok((const uint8_t *)status, strlen(status));
 }
 

@@ -42,7 +42,7 @@ struct DeviceConnectionSheet: View {
     private var currentDeviceOfflineStatus: String? {
         guard accountDevices.isOfflineMode else { return nil }
         guard let hardwareUid = device.hardwareUidHex, !hardwareUid.isEmpty else { return nil }
-        if accountDevices.hasOfflineAccess(boardType: "stm32f042", hardwareUid: hardwareUid) {
+        if accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid) {
             return "This device is available in Offline Mode."
         }
         return "This device needs online activation before it can be used in Offline Mode."
@@ -50,7 +50,11 @@ struct DeviceConnectionSheet: View {
 
     private var currentDeviceIsRegistered: Bool {
         guard let hardwareUid = device.hardwareUidHex, !hardwareUid.isEmpty else { return false }
-        return accountDevices.hasOfflineAccess(boardType: "stm32f042", hardwareUid: hardwareUid)
+        return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
+    }
+
+    private var currentBoardType: String {
+        device.connectedBoardType ?? "stm32f042"
     }
 
     var body: some View {

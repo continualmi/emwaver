@@ -245,8 +245,9 @@ final class FirmwareUpdateManager: ObservableObject {
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                let boardType = device.connectedBoardType ?? "stm32f042"
                 req.httpBody = try JSONSerialization.data(withJSONObject: [
-                    "board_type": "stm32f042",
+                    "board_type": boardType,
                     "hardware_uid": hardwareUidHex,
                 ])
 
@@ -261,6 +262,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 await MainActor.run {
                     self.progressMessage = "Claiming device..."
                     self.appendLog((mint.created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded")
+                    self.appendLog("Board type: \(boardType)")
                     self.appendLog("Hardware UID: \(hardwareUidHex)")
                     self.appendLog("DeviceID: \(mint.device_id_b64.prefix(16))…")
                     self.appendLog("Proof: \(mint.proof_b64.prefix(16))…")
