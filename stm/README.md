@@ -203,6 +203,9 @@ Opcode constants are in `Core/Inc/emw_proto.h`; handling is in `Core/Src/main.c`
   - returns the STM32 factory-programmed 96-bit unique device identifier (12 bytes).
   - current implementation reads `HAL_GetUIDw0/1/2()` and returns the three 32-bit words in little-endian byte order.
   - intended use: app/backend device claiming keyed by immutable per-board hardware UID before or alongside signed EMWaver identity provisioning.
+- `EMW_OP_BOARD_GET (0x09)`
+  - returns the short board slug `stm32f042`.
+  - intended use: script/UI code can differentiate supported MCU targets without overloading the signed identity flow.
 - `EMW_OP_NAME_GET (0x04)`
   - reads user device name from `0x08007C00` (up to 32 bytes).
 - `EMW_OP_NAME_SET (0x05)`

@@ -1,4 +1,18 @@
 // Simple UART test script for STM32F042 (USART1 on B6/B7)
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+const boardType = detectBoardType();
 let baud = "115200";
 let readLen = 16;
 let writeMode = "text"; // "text" | "hex"
@@ -6,6 +20,15 @@ let writeText = "hello\n";
 let writeHex = "48 65 6C 6C 6F 0A";
 let statusText = "";
 let logLines = [];
+
+function ensureSupported() {
+  if (boardType === "esp32s3") {
+    statusText = "UART script support is currently wired for STM32F042 only.";
+    render();
+    return false;
+  }
+  return true;
+}
 
 function pushLog(line) {
   logLines.push(String(line));
@@ -32,6 +55,7 @@ function fmtAscii(bytes) {
 }
 
 function openUart() {
+  if (!ensureSupported()) return;
   statusText = "Opening...";
   render();
   var b = parseInt(baud, 10);
@@ -55,6 +79,7 @@ function openUart() {
 }
 
 function closeUart() {
+  if (!ensureSupported()) return;
   statusText = "Closing...";
   render();
   var resp = Serial.end();
@@ -72,6 +97,7 @@ function closeUart() {
 }
 
 function writeUart() {
+  if (!ensureSupported()) return;
   statusText = "Writing...";
   render();
 
@@ -94,6 +120,7 @@ function writeUart() {
 }
 
 function readUart() {
+  if (!ensureSupported()) return;
   statusText = "Reading...";
   render();
 
@@ -128,7 +155,16 @@ function render() {
       spacing: 12,
       children: [
         UI.text({ text: "UART (B6/B7)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1." }),
+        UI.text({
+          text:
+            (boardType === "stm32f042"
+              ? "Detected MCU: STM32F042. "
+              : "Detected MCU: ESP32-S3. ") +
+            (
+            boardType === "stm32f042"
+              ? "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1."
+              : "ESP32-S3 UART pin routing is not exposed through this script yet."),
+        }),
 
         UI.row({
           spacing: 12,

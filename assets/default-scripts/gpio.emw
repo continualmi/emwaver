@@ -33,11 +33,6 @@ function firstPin(options) {
     return options.length ? String(options[0].value) : "0";
 }
 
-const MCU_OPTIONS = [
-    { label: "STM32F042", value: "stm32f042" },
-    { label: "ESP32-S3", value: "esp32s3" },
-];
-
 const PINS_BY_BOARD = {
     stm32f042: [
         { label: "A0 (IR_RX)", value: A0 },
@@ -54,20 +49,11 @@ const PINS_BY_BOARD = {
     esp32s3: buildEspPins(),
 };
 
-let boardType = detectBoardType();
+const boardType = detectBoardType();
 let pin = firstPin(PINS_BY_BOARD[boardType]);
 
 function boardPins() {
     return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
-}
-
-function syncPin() {
-    var options = boardPins();
-    var current = String(pin);
-    for (var i = 0; i < options.length; i += 1) {
-        if (String(options[i].value) === current) return;
-    }
-    pin = firstPin(options);
 }
 
 function writeHigh() {
@@ -85,17 +71,7 @@ function render() {
         padding: 16,
         spacing: 12,
         children: [
-            UI.text({ text: "MCU", fontWeight: "medium" }),
-            UI.picker({
-                style: "segmented",
-                selected: boardType,
-                options: MCU_OPTIONS,
-                onChange: function (value) {
-                    boardType = normalizeBoardType(value);
-                    syncPin();
-                    render();
-                },
-            }),
+            UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
             UI.picker({
                 style: "menu",
                 selected: pin,

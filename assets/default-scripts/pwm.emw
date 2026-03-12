@@ -1,25 +1,71 @@
 // PWM test script (duty-cycle based)
 // Firmware: supports TIM2/TIM14/TIM16/TIM17 routes; TIM3 is excluded (A3 disabled).
 
-let selectedPin = "0";
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+function espPinLabel(pin) {
+  if (pin === 4) return "GPIO4 (IR_TX default)";
+  if (pin === 10) return "GPIO10 (SPI CS default)";
+  if (pin === 11) return "GPIO11 (SPI MOSI default)";
+  if (pin === 12) return "GPIO12 (SPI SCK default)";
+  if (pin === 13) return "GPIO13 (SPI MISO default)";
+  if (pin === 37) return "GPIO37 (IR_TX shield)";
+  return "GPIO" + String(pin);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var pin = 0; pin <= 48; pin += 1) {
+    out.push({ label: espPinLabel(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function firstEnabledPin(options) {
+  for (var i = 0; i < options.length; i += 1) {
+    if (!options[i].disabled) return String(options[i].value);
+  }
+  return options.length ? String(options[0].value) : "0";
+}
+
+const PINS_BY_BOARD = {
+  stm32f042: [
+    { label: "A0 / TIM2_CH1 (pin 0)", value: "0" },
+    { label: "A1 / TIM2_CH2 (pin 1)", value: "1" },
+    { label: "A2 / TIM2_CH3 (pin 2)", value: "2" },
+    { label: "A3 (TIM3) - not supported", value: "3", disabled: true },
+    { label: "A4 / TIM14_CH1 (pin 4)", value: "4" },
+    { label: "A5 / TIM2_CH1 (pin 5, shared w/ A0)", value: "5" },
+    { label: "A6 / TIM16_CH1 (pin 6)", value: "6" },
+    { label: "A7 / TIM17_CH1 (pin 7)", value: "7" },
+    { label: "B6 / TIM16_CH1N (pin 22)", value: "22" },
+    { label: "B7 / TIM17_CH1N (pin 23)", value: "23" },
+    { label: "B8 / TIM16_CH1 (pin 24)", value: "24" },
+  ],
+  esp32s3: buildEspPins(),
+};
+
+const boardType = detectBoardType();
+let selectedPin = firstEnabledPin(PINS_BY_BOARD[boardType]);
 let hzText = "50";
 let dutyPercent = 50;
 let statusText = "";
 let lastAction = "";
 
-const PINS = [
-  { label: "A0 / TIM2_CH1 (pin 0)", value: "0" },
-  { label: "A1 / TIM2_CH2 (pin 1)", value: "1" },
-  { label: "A2 / TIM2_CH3 (pin 2)", value: "2" },
-  { label: "A3 (TIM3) - not supported", value: "3", disabled: true },
-  { label: "A4 / TIM14_CH1 (pin 4)", value: "4" },
-  { label: "A5 / TIM2_CH1 (pin 5, shared w/ A0)", value: "5" },
-  { label: "A6 / TIM16_CH1 (pin 6)", value: "6" },
-  { label: "A7 / TIM17_CH1 (pin 7)", value: "7" },
-  { label: "B6 / TIM16_CH1N (pin 22)", value: "22" },
-  { label: "B7 / TIM17_CH1N (pin 23)", value: "23" },
-  { label: "B8 / TIM16_CH1 (pin 24)", value: "24" },
-];
+function boardPins() {
+  return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
 
 function clampInt(v, min, max) {
   const n = Number(v);
@@ -118,19 +164,26 @@ function render() {
       spacing: 14,
       children: [
         UI.text({ text: "PWM", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
         UI.text({
           text:
-            "Simple duty-cycle PWM. For servos: typically 50 Hz; duty controls pulse width indirectly (use a servo-focused script if needed).",
+            boardType === "stm32f042"
+              ? "Simple duty-cycle PWM. For servos: typically 50 Hz; duty controls pulse width indirectly (use a servo-focused script if needed)."
+              : "Simple duty-cycle PWM using ESP32-S3 LEDC-backed output.",
         }),
-        UI.text({
-          text: "Note: A3 is TIM3-based and disabled (TIM3 is reserved for sampling/transmit timing).",
-        }),
+        boardType === "stm32f042"
+          ? UI.text({
+              text: "Note: A3 is TIM3-based and disabled (TIM3 is reserved for sampling/transmit timing).",
+            })
+          : UI.text({
+              text: "ESP32-S3 firmware currently accepts raw GPIO numbers for PWM output.",
+            }),
 
         UI.text({ text: "Pin", fontWeight: "medium" }),
         UI.picker({
           style: "menu",
           selected: String(selectedPin),
-          options: PINS,
+          options: boardPins(),
           onChange: function (v) {
             selectedPin = String(v);
             render();

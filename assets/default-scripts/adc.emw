@@ -1,27 +1,60 @@
-// Simple ADC (analogRead) test script for STM32F042
-let mode = "pin"; // "pin" | "internal"
-let selectedPin = "0";
-let internalSrc = "vrefint"; // "vrefint" | "temp" | "vbat"
-let samples = 1;
-let statusText = "";
-let lastResponse = "";
+// Simple ADC (analogRead) test script with STM32F042 / ESP32-S3 selection.
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
 
-const ADC_PINS = [
-  { label: "A0 / ADC_IN0", value: "0" },
-  { label: "A1 / ADC_IN1", value: "1" },
-  { label: "A2 / ADC_IN2", value: "2" },
-  { label: "A3 / ADC_IN3", value: "3" },
-  { label: "A4 / ADC_IN4", value: "4" },
-  { label: "A5 / ADC_IN5", value: "5" },
-  { label: "A6 / ADC_IN6", value: "6" },
-  { label: "A7 / ADC_IN7", value: "7" },
-];
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+function buildEspAdcPins() {
+  var out = [];
+  for (var pin = 1; pin <= 20; pin += 1) {
+    out.push({ label: "GPIO" + String(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function firstPin(options) {
+  return options.length ? String(options[0].value) : "0";
+}
+
+const ADC_PINS_BY_BOARD = {
+  stm32f042: [
+    { label: "A0 / ADC_IN0", value: "0" },
+    { label: "A1 / ADC_IN1", value: "1" },
+    { label: "A2 / ADC_IN2", value: "2" },
+    { label: "A3 / ADC_IN3", value: "3" },
+    { label: "A4 / ADC_IN4", value: "4" },
+    { label: "A5 / ADC_IN5", value: "5" },
+    { label: "A6 / ADC_IN6", value: "6" },
+    { label: "A7 / ADC_IN7", value: "7" },
+  ],
+  esp32s3: buildEspAdcPins(),
+};
 
 const INTERNAL_SOURCES = [
   { label: "VREFINT (internal reference)", value: "vrefint" },
   { label: "TEMP (die temperature sensor)", value: "temp" },
   { label: "VBAT (battery domain)", value: "vbat" },
 ];
+
+const boardType = detectBoardType();
+let mode = "pin"; // "pin" | "internal"
+let selectedPin = boardType === "esp32s3" ? "4" : "0";
+let internalSrc = "vrefint"; // "vrefint" | "temp" | "vbat"
+let samples = 1;
+let statusText = "";
+let lastResponse = "";
+
+function adcPins() {
+  return ADC_PINS_BY_BOARD[boardType] || ADC_PINS_BY_BOARD.stm32f042;
+}
 
 function readAdc() {
   statusText = "Reading...";
@@ -33,6 +66,11 @@ function readAdc() {
   let result;
   let cmd;
   if (mode === "internal") {
+    if (boardType !== "stm32f042") {
+      statusText = "Internal ADC sources are only available on STM32F042.";
+      render();
+      return;
+    }
     cmd = "adc read --src=" + internalSrc + (nSamples !== 1 ? " --samples=" + nSamples : "");
     if (internalSrc === "vrefint") result = analogReadVrefint({ samples: nSamples });
     else if (internalSrc === "temp") result = analogReadTemp({ samples: nSamples });
@@ -62,15 +100,19 @@ function render() {
       spacing: 16,
       children: [
         UI.text({ text: "ADC / analogRead", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
 
         UI.text({ text: "Source", fontWeight: "medium" }),
         UI.picker({
           style: "segmented",
           selected: mode,
-          options: [
-            { label: "Pin", value: "pin" },
-            { label: "Internal", value: "internal" },
-          ],
+          options:
+            boardType === "stm32f042"
+              ? [
+                  { label: "Pin", value: "pin" },
+                  { label: "Internal", value: "internal" },
+                ]
+              : [{ label: "Pin", value: "pin" }],
           onChange: function (value) {
             mode = value;
             render();
@@ -85,7 +127,7 @@ function render() {
                 UI.picker({
                   style: "menu",
                   selected: String(selectedPin),
-                  options: ADC_PINS,
+                  options: adcPins(),
                   onChange: function (value) {
                     selectedPin = value;
                   },
@@ -106,6 +148,13 @@ function render() {
                 }),
               ],
             }),
+
+        boardType === "esp32s3"
+          ? UI.text({
+              text: "ESP32-S3 uses GPIO ADC channels here; internal VREF/TEMP/VBAT sources are not exposed in the current firmware.",
+              font: "caption",
+            })
+          : null,
 
         UI.text({ text: "Samples (averaged)", fontWeight: "medium" }),
         UI.slider({
