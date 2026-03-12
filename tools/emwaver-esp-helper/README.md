@@ -18,4 +18,4 @@ Expected output:
 - macOS/Linux: `tools/emwaver-esp-helper/dist/emwaver-esp-helper`
 - Windows: `tools/emwaver-esp-helper/dist/emwaver-esp-helper.exe`
 
-The current repo still keeps `macos/EMWaver/Tools/emwaver-esp-helper` as a development fallback until the frozen helper binaries are generated in CI/packaging.
+`macos/EMWaver/Tools/emwaver-esp-helper` is the committed prebuilt macOS frozen binary consumed by the app bundle when packaging or CI is not rebuilding the helper locally.
