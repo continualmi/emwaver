@@ -27,8 +27,6 @@ struct ContentView: View {
 
     @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
-    @State private var showingBackendSettings: Bool = false
-    @State private var showingFrontendSettings: Bool = false
     @State private var showingSettings: Bool = false
 
     @State private var showingProUpgrade: Bool = false
@@ -46,7 +44,7 @@ struct ContentView: View {
                     previewManager: previewManager,
                     device: device,
                     syncProvider: {
-                        // Backend base URL is controlled by BackendUrl (supports a hard switch to Azure prod).
+                        // Local testing uses the repo root .env bootstrap.
                         guard let base = BackendUrl.resolve() else { return nil }
 
                         // For local dev: allow sync without sign-in when backend auth is disabled.
@@ -253,12 +251,6 @@ struct ContentView: View {
                 }
             }
             .frame(minWidth: 560, minHeight: 520)
-        }
-        .sheet(isPresented: $showingBackendSettings) {
-            BackendSettingsView()
-        }
-        .sheet(isPresented: $showingFrontendSettings) {
-            FrontendSettingsView()
         }
         .sheet(isPresented: $showingSettings) {
             SettingsView(device: device)
