@@ -18,18 +18,24 @@
 #ifndef USB_H
 #define USB_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
+
+#include "esp_err.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "command_registry.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void usb_register_commands(void);
-void usb_install(void);
-int usb_send_report(uint8_t modifiers, const uint8_t *keycodes, uint8_t key_count);
-int usb_send_string(const char *str);
-void usb_set_char_delay(uint32_t char_delay);
+#define EMW_USB_CMD_LANE_SIZE 18u
+
+void usb_init(QueueHandle_t cmd_queue);
+bool usb_is_ready(void);
+esp_err_t usb_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len);
 
 #ifdef __cplusplus
 }

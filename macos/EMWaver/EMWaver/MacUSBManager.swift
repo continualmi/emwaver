@@ -48,6 +48,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var isSecureConnected: Bool = false
     @Published var secureDeviceIdHex: String? = nil
     @Published var hardwareUidHex: String? = nil
+    @Published var connectedBoardType: String? = nil
 
     // Signed device identity (base64) for account attach flows.
     @Published var secureDeviceIdB64: String? = nil
@@ -113,6 +114,17 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             return connectedSource != 0 && connectedDestination != 0
         }
         return midiQueue.sync { connectedSource != 0 && connectedDestination != 0 }
+    }
+
+    private func inferBoardType(portName: String?, hardwareUid: Data?) -> String {
+        let name = (portName ?? "").lowercased()
+        if name.contains("esp32") || name.contains("s3") {
+            return "esp32s3"
+        }
+        if let hardwareUid, hardwareUid.count == 12, name.contains("emwaver esp") {
+            return "esp32s3"
+        }
+        return "stm32f042"
     }
 
     // MARK: - ScriptDevice (buffer)
@@ -412,11 +424,13 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
             let identityOk = (v != nil) ? self.verifySecureIdentity(timeoutMs: 1800) : false
             let hardwareUid = (v != nil) ? self.readHardwareUid(timeoutMs: 1200) : nil
+            let boardType = self.inferBoardType(portName: displayName ?? candidate.name, hardwareUid: hardwareUid)
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
                 self.isSecureConnected = identityOk
                 self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
+                self.connectedBoardType = boardType
                 if identityOk {
                     // Cache identity for account attach (DeviceID+Proof already verified locally).
                     if let ident = self.readDeviceIdentity(timeoutMs: 1800) {
@@ -424,8 +438,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                         self.secureDeviceProofB64 = ident.proofB64
                     }
                 } else {
-                    self.lastErrorText = "Device is not secured (missing/invalid DeviceID proof)"
-                    self.disconnect()
+                    self.lastErrorText = "Device is not secured yet. Local USB use is allowed, but activation/update flows still require provisioning."
                 }
             }
         }
@@ -445,6 +458,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.isSecureConnected = false
             self.secureDeviceIdHex = nil
             self.hardwareUidHex = nil
+            self.connectedBoardType = nil
             self.secureDeviceIdB64 = nil
             self.secureDeviceProofB64 = nil
             self.needsLoginToSaveDevice = false

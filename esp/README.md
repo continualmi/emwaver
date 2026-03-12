@@ -129,6 +129,14 @@ Current restored codebase includes historical support for:
 - Wi-Fi OTA support
 - USB support components
 
+Current reintegration status:
+- USB is now the active first transport for the restored ESP32-S3 target.
+- Firmware now enumerates as USB MIDI and accepts STM32-style EMWaver SysEx framing.
+- BLE is intentionally not active in the current bring-up path.
+- Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
+- The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
+- macOS now allows an unsecured ESP32-S3 USB session to stay connected for local use and activation, instead of immediately disconnecting on missing `DeviceID + Proof`.
+
 Planned EMWaver direction for ESP32:
 - BLE remains available for direct nearby workflows.
 - Wi-Fi is the path for remote autonomous control without a host.
