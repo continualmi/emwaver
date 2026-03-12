@@ -40,6 +40,12 @@ class ProvisionedDevicesStore {
     return this.rows.get(makeKey(boardType, hardwareUid)) || null;
   }
 
+  listByUser(firebaseUid: string) {
+    return [...this.rows.values()]
+      .filter((row) => row.owner_firebase_uid === firebaseUid)
+      .sort((a, b) => b.created_at_ms - a.created_at_ms);
+  }
+
   claimOrRestore(input: {
     boardType: string;
     hardwareUid: string;

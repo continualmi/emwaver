@@ -109,7 +109,7 @@
 			buildConfigurationList = 4635BDFE2F2B896D00A7489D /* Build configuration list for PBXNativeTarget "EMWaver" */;
 			buildPhases = (
 				A1E0A1B22F6B4D7C8E9F1003 /* Sync Script Assets */,
-				A1E0A1B22F6B4D7C8E9F2001 /* Bundle Firmware + DFU Helper (prebuilt) */,
+				A1E0A1B22F6B4D7C8E9F2001 /* Bundle Firmware + DFU Helper */,
 				4635BDD92F2B896400A7489D /* Sources */,
 				4635BDDA2F2B896400A7489D /* Frameworks */,
 				4635BDDB2F2B896400A7489D /* Resources */,
