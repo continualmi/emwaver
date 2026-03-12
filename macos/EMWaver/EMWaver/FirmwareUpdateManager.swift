@@ -22,6 +22,8 @@ final class FirmwareUpdateManager: ObservableObject {
 
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
+    @Published var espBootloaderConnected: Bool = false
+    @Published var espBootloaderPort: String? = nil
     @Published var isFlashing: Bool = false
     @Published var progressPct: Double = 0
     @Published var progressMessage: String = ""
@@ -475,6 +477,19 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.updateError = String(describing: error)
                 }
             }
+
+            do {
+                let port = try self.detectEspBootloaderPort()
+                DispatchQueue.main.async {
+                    self.espBootloaderConnected = (port != nil)
+                    self.espBootloaderPort = port
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.espBootloaderConnected = false
+                    self.espBootloaderPort = nil
+                }
+            }
         }
     }
 
@@ -553,6 +568,10 @@ final class FirmwareUpdateManager: ObservableObject {
     }
 
     private func resolveEspFlashPort() throws -> String {
+        if let detected = try detectEspBootloaderPort() {
+            return detected
+        }
+
         let ports = try espFlashPortCandidates()
         let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
         if preferred.count == 1, let port = preferred.first {
@@ -566,6 +585,21 @@ final class FirmwareUpdateManager: ObservableObject {
             code: 18,
             userInfo: [NSLocalizedDescriptionKey: "Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry."]
         )
+    }
+
+    private func detectEspBootloaderPort() throws -> String? {
+        let ports = try espFlashPortCandidates()
+        let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
+        let candidates = preferred.isEmpty ? ports : preferred
+
+        for port in candidates {
+            let (code, _, _) = try runEspHelperAndWait(arguments: ["chip-id", "--port", port, "--baud", "115200", "--no-stub"])
+            if code == 0 {
+                return port
+            }
+        }
+
+        return nil
     }
 
     private func startEspSerialUpdate(device: MacUSBManager) throws {

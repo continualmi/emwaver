@@ -146,6 +146,8 @@ struct ContentView: View {
                     HStack(spacing: 8) {
                         if device.isConnected {
                             Label(device.connectedPortName ?? "Connected", systemImage: "cable.connector")
+                        } else if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
+                            Label("ESP Bootloader", systemImage: "cpu")
                         } else if firmwareUpdater.dfuConnected {
                             Label("Update Mode", systemImage: "arrow.triangle.2.circlepath")
                         } else {
