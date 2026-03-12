@@ -76,6 +76,18 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
+        let boardType = device.connectedBoardType ?? "stm32f042"
+        if isEspBoardType(boardType) {
+            do {
+                try startEspSerialUpdate(device: device)
+            } catch {
+                updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                progressMessage = ""
+                appendLog(updateError ?? "ESP update failed")
+            }
+            return
+        }
+
         // Gate: only secured devices can be updated.
         // For run-mode devices we can use the already-verified secure connection state.
         if device.isConnected && !device.isSecureConnected {
@@ -221,6 +233,12 @@ final class FirmwareUpdateManager: ObservableObject {
             appendLog(updateError ?? "Activation failed")
             return
         }
+        let boardType = device.connectedBoardType ?? "stm32f042"
+        if isEspBoardType(boardType) {
+            updateError = "ESP activation is not wired yet. ESP update now uses serial flashing, but identity provisioning/restore for ESP still needs a board-specific implementation."
+            appendLog(updateError ?? "Activation failed")
+            return
+        }
 
         // Step 1: claim or restore an identity for this physical board using its hardware UID.
         struct MintResponse: Decodable {
@@ -245,7 +263,6 @@ final class FirmwareUpdateManager: ObservableObject {
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
                 req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
-                let boardType = device.connectedBoardType ?? "stm32f042"
                 req.httpBody = try JSONSerialization.data(withJSONObject: [
                     "board_type": boardType,
                     "hardware_uid": hardwareUidHex,
@@ -472,15 +489,201 @@ final class FirmwareUpdateManager: ObservableObject {
         }
     }
 
-    private func helperURL() throws -> URL {
-        if let url = Bundle.main.url(forResource: "emwaver-dfu-helper", withExtension: nil) {
+    private func isEspBoardType(_ boardType: String?) -> Bool {
+        (boardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame
+    }
+
+    private func helperURL(name: String) throws -> URL {
+        if let url = Bundle.main.url(forResource: name, withExtension: nil) {
             return url
         }
         throw NSError(
             domain: "FirmwareUpdateManager",
             code: 1,
-            userInfo: [NSLocalizedDescriptionKey: "Missing bundled DFU helper (emwaver-dfu-helper)."]
+            userInfo: [NSLocalizedDescriptionKey: "Missing bundled helper (\(name))."]
         )
+    }
+
+    private func helperURL() throws -> URL {
+        try helperURL(name: "emwaver-dfu-helper")
+    }
+
+    private func espHelperURL() throws -> URL {
+        try helperURL(name: "emwaver-esp-helper")
+    }
+
+    private func espFirmwareURLs() throws -> (bootloader: URL, partitionTable: URL, otaData: URL, app: URL) {
+        func require(_ name: String) throws -> URL {
+            if let url = Bundle.main.url(forResource: name, withExtension: "bin") {
+                return url
+            }
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 17,
+                userInfo: [NSLocalizedDescriptionKey: "Missing bundled ESP firmware asset (\(name).bin)."]
+            )
+        }
+
+        return (
+            bootloader: try require("emwaver-esp32s3-bootloader"),
+            partitionTable: try require("emwaver-esp32s3-partition-table"),
+            otaData: try require("emwaver-esp32s3-ota-data"),
+            app: try require("emwaver-esp32s3-app")
+        )
+    }
+
+    private func espFlashPortCandidates() throws -> [String] {
+        let (code, stdout, stderr) = try runEspHelperAndWait(arguments: ["list-ports"])
+        if code != 0 {
+            let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: Int(code),
+                userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Failed to list ESP serial ports." : msg]
+            )
+        }
+
+        let ports = stdout.split(separator: "\n").compactMap { line -> String? in
+            guard let field = line.split(separator: "\t").first,
+                  field.starts(with: "PORT=") else { return nil }
+            let port = String(field.dropFirst(5)).trimmingCharacters(in: .whitespacesAndNewlines)
+            return port.isEmpty ? nil : port
+        }
+        return ports
+    }
+
+    private func resolveEspFlashPort() throws -> String {
+        let ports = try espFlashPortCandidates()
+        let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
+        if preferred.count == 1, let port = preferred.first {
+            return port
+        }
+        if ports.count == 1, let port = ports.first {
+            return port
+        }
+        throw NSError(
+            domain: "FirmwareUpdateManager",
+            code: 18,
+            userInfo: [NSLocalizedDescriptionKey: "Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry."]
+        )
+    }
+
+    private func startEspSerialUpdate(device: MacUSBManager) throws {
+        progressMessage = "Preparing ESP serial update..."
+        completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
+        appendLog("ESP32-S3 update selected")
+        appendLog("ESP flashing uses the serial helper, not DFU.")
+        if device.isConnected {
+            appendLog("Run Mode remains separate from flashing; using serial port discovery.")
+        }
+
+        let port = try resolveEspFlashPort()
+        appendLog("ESP flash port: \(port)")
+        try runEspFlash(port: port)
+    }
+
+    private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
+        let process = Process()
+        process.executableURL = try espHelperURL()
+        process.arguments = arguments
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        try process.run()
+        process.waitUntilExit()
+
+        let stdoutData = stdout.fileHandleForReading.readDataToEndOfFile()
+        let stderrData = stderr.fileHandleForReading.readDataToEndOfFile()
+        let stdoutStr = String(data: stdoutData, encoding: .utf8) ?? ""
+        let stderrStr = String(data: stderrData, encoding: .utf8) ?? ""
+        return (process.terminationStatus, stdoutStr, stderrStr)
+    }
+
+    private func runEspFlash(port: String) throws {
+        if flashProcess != nil {
+            return
+        }
+
+        let assets = try espFirmwareURLs()
+        appendLog("ESP bootloader: \(assets.bootloader.lastPathComponent)")
+        appendLog("ESP partition table: \(assets.partitionTable.lastPathComponent)")
+        appendLog("ESP OTA data: \(assets.otaData.lastPathComponent)")
+        appendLog("ESP app image: \(assets.app.lastPathComponent)")
+
+        isFlashing = true
+        progressMessage = "Flashing ESP firmware..."
+        progressPct = 0
+
+        let process = Process()
+        process.executableURL = try espHelperURL()
+        process.arguments = [
+            "flash",
+            "--port", port,
+            "--baud", "115200",
+            "--before", "no_reset",
+            "--after", "hard_reset",
+            "--no-stub",
+            "--bootloader", assets.bootloader.path,
+            "--partition-table", assets.partitionTable.path,
+            "--ota-data", assets.otaData.path,
+            "--app", assets.app.path,
+        ]
+
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+
+        flashStdoutBuffer = Data()
+        flashStderrBuffer = Data()
+        flashProcess = process
+
+        stdout.fileHandleForReading.readabilityHandler = { [weak self] fh in
+            guard let self else { return }
+            let data = fh.availableData
+            if data.isEmpty { return }
+            DispatchQueue.main.async {
+                self.ingestFlashStdout(data)
+            }
+        }
+
+        stderr.fileHandleForReading.readabilityHandler = { [weak self] fh in
+            guard let self else { return }
+            let data = fh.availableData
+            if data.isEmpty { return }
+            DispatchQueue.main.async {
+                self.flashStderrBuffer.append(data)
+            }
+        }
+
+        process.terminationHandler = { [weak self] proc in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                stdout.fileHandleForReading.readabilityHandler = nil
+                stderr.fileHandleForReading.readabilityHandler = nil
+
+                self.flashProcess = nil
+                self.isFlashing = false
+
+                if proc.terminationStatus == 0 {
+                    self.progressPct = 100
+                    self.progressMessage = ""
+                    self.updateDone = true
+                    self.appendLog(self.completionMessage)
+                } else {
+                    let err = String(data: self.flashStderrBuffer, encoding: .utf8) ?? ""
+                    let msg = err.trimmingCharacters(in: .whitespacesAndNewlines)
+                    self.updateError = msg.isEmpty ? "ESP firmware update failed (exit code: \(proc.terminationStatus))." : msg
+                    self.progressMessage = ""
+                    self.appendLog(self.updateError ?? "ESP firmware update failed")
+                }
+            }
+        }
+
+        try process.run()
     }
 
     private func firmwareURL() throws -> URL {

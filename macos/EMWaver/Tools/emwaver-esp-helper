@@ -1,0 +1,155 @@
+#!/bin/sh
+set -eu
+
+find_python() {
+  if [ -n "${EMWAVER_ESP_PYTHON:-}" ] && [ -x "${EMWAVER_ESP_PYTHON}" ]; then
+    printf '%s\n' "${EMWAVER_ESP_PYTHON}"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    command -v python
+    return 0
+  fi
+  return 1
+}
+
+require_python() {
+  if ! PYTHON_BIN="$(find_python)"; then
+    echo "Missing Python runtime for ESP helper." >&2
+    exit 2
+  fi
+}
+
+require_module() {
+  require_python
+  if ! "${PYTHON_BIN}" -c "import $1" >/dev/null 2>&1; then
+    echo "Missing Python module: $1" >&2
+    exit 2
+  fi
+}
+
+run_esptool() {
+  require_module esptool
+  exec "${PYTHON_BIN}" -m esptool "$@"
+}
+
+list_ports() {
+  require_python
+  if "${PYTHON_BIN}" -c "import serial.tools.list_ports" >/dev/null 2>&1; then
+    exec "${PYTHON_BIN}" - <<'PY'
+from serial.tools import list_ports
+for port in list_ports.comports():
+    desc = (port.description or "").replace("\n", " ").strip()
+    hwid = (port.hwid or "").replace("\n", " ").strip()
+    print(f"PORT={port.device}\tDESC={desc}\tHWID={hwid}")
+PY
+  fi
+
+  for port in /dev/cu.*; do
+    [ -e "${port}" ] || continue
+    printf 'PORT=%s\tDESC=\tHWID=\n' "${port}"
+  done
+}
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  emwaver-esp-helper list-ports
+  emwaver-esp-helper chip-id --port PORT [--baud BAUD] [--no-stub]
+  emwaver-esp-helper flash --port PORT --bootloader FILE --partition-table FILE --ota-data FILE --app FILE [--baud BAUD] [--before MODE] [--after MODE] [--no-stub]
+EOF
+  exit 1
+}
+
+CMD="${1:-}"
+[ -n "${CMD}" ] || usage
+shift
+
+case "${CMD}" in
+  list-ports)
+    list_ports
+    ;;
+  chip-id)
+    run_esptool --chip esp32s3 "$@" chip_id
+    ;;
+  flash)
+    PORT=""
+    BOOTLOADER=""
+    PARTITION_TABLE=""
+    OTA_DATA=""
+    APP_IMAGE=""
+    BAUD="115200"
+    BEFORE="no_reset"
+    AFTER="hard_reset"
+    NO_STUB="0"
+
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --port)
+          PORT="${2:-}"
+          shift 2
+          ;;
+        --bootloader)
+          BOOTLOADER="${2:-}"
+          shift 2
+          ;;
+        --partition-table)
+          PARTITION_TABLE="${2:-}"
+          shift 2
+          ;;
+        --ota-data)
+          OTA_DATA="${2:-}"
+          shift 2
+          ;;
+        --app)
+          APP_IMAGE="${2:-}"
+          shift 2
+          ;;
+        --baud)
+          BAUD="${2:-}"
+          shift 2
+          ;;
+        --before)
+          BEFORE="${2:-}"
+          shift 2
+          ;;
+        --after)
+          AFTER="${2:-}"
+          shift 2
+          ;;
+        --no-stub)
+          NO_STUB="1"
+          shift
+          ;;
+        *)
+          echo "Unknown argument: $1" >&2
+          usage
+          ;;
+      esac
+    done
+
+    [ -n "${PORT}" ] || { echo "Missing --port" >&2; exit 1; }
+    [ -f "${BOOTLOADER}" ] || { echo "Missing --bootloader file: ${BOOTLOADER}" >&2; exit 1; }
+    [ -f "${PARTITION_TABLE}" ] || { echo "Missing --partition-table file: ${PARTITION_TABLE}" >&2; exit 1; }
+    [ -f "${OTA_DATA}" ] || { echo "Missing --ota-data file: ${OTA_DATA}" >&2; exit 1; }
+    [ -f "${APP_IMAGE}" ] || { echo "Missing --app file: ${APP_IMAGE}" >&2; exit 1; }
+
+    set -- --chip esp32s3 -p "${PORT}" -b "${BAUD}" --before "${BEFORE}" --after "${AFTER}"
+    if [ "${NO_STUB}" = "1" ]; then
+      set -- "$@" --no-stub
+    fi
+    set -- "$@" write_flash --flash_mode dio --flash_freq 80m --flash_size 4MB \
+      0x0 "${BOOTLOADER}" \
+      0x20000 "${APP_IMAGE}" \
+      0x8000 "${PARTITION_TABLE}" \
+      0x10000 "${OTA_DATA}"
+    run_esptool "$@"
+    ;;
+  *)
+    usage
+    ;;
+esac
