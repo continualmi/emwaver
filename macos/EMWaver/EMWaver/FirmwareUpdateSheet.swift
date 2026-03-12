@@ -6,9 +6,31 @@ struct FirmwareUpdateSheet: View {
     @ObservedObject var updater: FirmwareUpdateManager
 
     @State private var updateModeRequested: Bool = false
+    @State private var showingEspBootloaderInstructions: Bool = false
 
     private var isSecureWorkflow: Bool {
         device.isSecureConnected
+    }
+
+    private var boardType: String {
+        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var isEspWorkflow: Bool {
+        boardType.caseInsensitiveCompare("esp32s3") == .orderedSame
+    }
+
+    private var canStartPrimaryAction: Bool {
+        if updater.isFlashing {
+            return false
+        }
+        if !isSecureWorkflow {
+            return device.isConnected && auth.isSignedIn
+        }
+        if isEspWorkflow {
+            return true
+        }
+        return device.isConnected || updater.dfuConnected
     }
 
     var body: some View {
@@ -41,7 +63,11 @@ struct FirmwareUpdateSheet: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if device.isSecureConnected {
+                    if isEspWorkflow {
+                        Text("ESP32-S3 updates use serial flashing. Put the board into bootloader mode manually before starting the update.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    } else if device.isSecureConnected {
                         Text("To update: EMWaver will switch the device into Update Mode automatically (no switch needed).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -123,7 +149,26 @@ struct FirmwareUpdateSheet: View {
                 .padding(.vertical, 4)
             }
 
-            if !updater.dfuConnected && !updater.updateDone {
+            if isEspWorkflow && !updater.updateDone {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Put the ESP32-S3 into bootloader mode")
+                        .font(.subheadline.weight(.semibold))
+
+                    Text("Use the BOOT and RESET buttons before starting the update. EMWaver will flash the serial port after the board is already in bootloader mode.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Button("Show bootloader steps") {
+                        showingEspBootloaderInstructions = true
+                    }
+                    .disabled(updater.isFlashing)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.secondary.opacity(0.08))
+                )
+            } else if !updater.dfuConnected && !updater.updateDone {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Put the device into Update Mode")
                         .font(.subheadline.weight(.semibold))
@@ -258,11 +303,7 @@ struct FirmwareUpdateSheet: View {
                             updater.startMintAndProvision(auth: auth, device: device)
                         }
                     }
-                    .disabled(
-                        (!device.isConnected && !updater.dfuConnected)
-                        || updater.isFlashing
-                        || (!isSecureWorkflow && !auth.isSignedIn)
-                    )
+                    .disabled(!canStartPrimaryAction)
                     .keyboardShortcut(.defaultAction)
                 }
             }
@@ -272,6 +313,9 @@ struct FirmwareUpdateSheet: View {
         .onAppear {
             updateModeRequested = false
             updater.refreshDfuPresence()
+        }
+        .sheet(isPresented: $showingEspBootloaderInstructions) {
+            EspBootloaderInstructionsSheet()
         }
     }
 }

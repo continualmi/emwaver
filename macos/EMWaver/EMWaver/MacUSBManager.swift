@@ -49,6 +49,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var secureDeviceIdHex: String? = nil
     @Published var hardwareUidHex: String? = nil
     @Published var connectedBoardType: String? = nil
+    @Published var lastDetectedBoardType: String? = nil
 
     // Signed device identity (base64) for account attach flows.
     @Published var secureDeviceIdB64: String? = nil
@@ -431,6 +432,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                 self.isSecureConnected = identityOk
                 self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
                 self.connectedBoardType = boardType
+                self.lastDetectedBoardType = boardType
                 if identityOk {
                     // Cache identity for account attach (DeviceID+Proof already verified locally).
                     if let ident = self.readDeviceIdentity(timeoutMs: 1800) {

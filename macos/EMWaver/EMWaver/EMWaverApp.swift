@@ -14,6 +14,7 @@ import AppKit
 @main
 struct EMWaverApp: App {
     @State private var didActivateApp = false
+    @State private var showingEspBootloaderInstructions = false
 
     init() {
         EnvBootstrap.loadForDevIfAvailable()
@@ -37,6 +38,9 @@ struct EMWaverApp: App {
                 .environmentObject(accountDevices)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
+                }
+                .sheet(isPresented: $showingEspBootloaderInstructions) {
+                    EspBootloaderInstructionsSheet()
                 }
                 .task {
                     // Best-effort background heartbeat + host discovery.
@@ -124,9 +128,14 @@ struct EMWaverApp: App {
 
                 if device.isConnected {
                     Button("Enter Update Mode") {
-                        device.requestEnterUpdateMode()
-                        device.disconnect()
-                        firmwareUpdater.refreshDfuPresence()
+                        let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+                        if boardType.caseInsensitiveCompare("esp32s3") == .orderedSame {
+                            showingEspBootloaderInstructions = true
+                        } else {
+                            device.requestEnterUpdateMode()
+                            device.disconnect()
+                            firmwareUpdater.refreshDfuPresence()
+                        }
                     }
                 }
 
