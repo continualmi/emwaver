@@ -79,6 +79,9 @@ struct EMWaverApp: App {
                 if device.isConnected {
                     Text("Status: Connected")
                         .foregroundStyle(.secondary)
+                } else if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
+                    Text("Status: ESP Bootloader")
+                        .foregroundStyle(.secondary)
                 } else if firmwareUpdater.dfuConnected {
                     Text("Status: Update Mode")
                         .foregroundStyle(.secondary)
@@ -143,7 +146,10 @@ struct EMWaverApp: App {
                     firmwareUpdater.refreshDfuPresence()
                 }
 
-                if firmwareUpdater.dfuConnected {
+                if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
+                    Text("ESP Bootloader: Detected")
+                        .foregroundStyle(.secondary)
+                } else if firmwareUpdater.dfuConnected {
                     Text("Update Mode: Detected")
                         .foregroundStyle(.secondary)
                 } else {

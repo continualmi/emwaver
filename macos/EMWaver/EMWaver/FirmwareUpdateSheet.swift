@@ -109,7 +109,7 @@ struct FirmwareUpdateSheet: View {
                         Button("Verify in Update Mode") {
                             updater.verifyUpdateModeIdentity()
                         }
-                        .disabled(!updater.dfuConnected || updater.isFlashing)
+                        .disabled(isEspWorkflow || !updater.dfuConnected || updater.isFlashing)
                     }
 
                     if let verification = updater.lastVerification {
@@ -210,7 +210,16 @@ struct FirmwareUpdateSheet: View {
                 )
             }
 
-            if updater.dfuConnected && !updater.updateDone {
+            if isEspWorkflow && firmwareUpdaterHasEspBootloader && !updater.updateDone {
+                Text(espBootloaderDetectedText)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(12)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(0.12))
+                    )
+            } else if updater.dfuConnected && !updater.updateDone {
                 Text("Device detected in Update Mode.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
@@ -317,5 +326,16 @@ struct FirmwareUpdateSheet: View {
         .sheet(isPresented: $showingEspBootloaderInstructions) {
             EspBootloaderInstructionsSheet()
         }
+    }
+
+    private var firmwareUpdaterHasEspBootloader: Bool {
+        updater.espBootloaderConnected
+    }
+
+    private var espBootloaderDetectedText: String {
+        if let port = updater.espBootloaderPort, !port.isEmpty {
+            return "ESP bootloader detected on \(port)."
+        }
+        return "ESP bootloader detected."
     }
 }

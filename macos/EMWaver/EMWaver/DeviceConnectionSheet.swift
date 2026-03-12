@@ -12,6 +12,9 @@ struct DeviceConnectionSheet: View {
         if device.isConnected {
             return ("Connected", "cable.connector")
         }
+        if isEspBoard && firmwareUpdater.espBootloaderConnected {
+            return ("ESP Bootloader", "cpu")
+        }
         if firmwareUpdater.dfuConnected {
             return ("Update Mode", "arrow.triangle.2.circlepath")
         }
@@ -220,7 +223,7 @@ struct DeviceConnectionSheet: View {
                     }
                 }
 
-                Text(isEspBoard ? "ESP32-S3 updates require manual bootloader entry on the serial flashing port." : (firmwareUpdater.dfuConnected ? "Update Mode detected." : "Update Mode not detected."))
+                Text(espStatusText)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -275,6 +278,19 @@ struct DeviceConnectionSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.secondary.opacity(0.06)))
         }
+    }
+
+    private var espStatusText: String {
+        if !isEspBoard {
+            return firmwareUpdater.dfuConnected ? "Update Mode detected." : "Update Mode not detected."
+        }
+        if firmwareUpdater.espBootloaderConnected {
+            if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
+                return "ESP bootloader detected on \(port)."
+            }
+            return "ESP bootloader detected."
+        }
+        return "ESP bootloader not detected. Put the board in BOOT/RESET mode on the serial flashing port."
     }
 
 }
