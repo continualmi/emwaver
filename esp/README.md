@@ -136,6 +136,7 @@ Current reintegration status:
 - Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
 - macOS now allows an unsecured ESP32-S3 USB session to stay connected for local use and activation, instead of immediately disconnecting on missing `DeviceID + Proof`.
+- `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
 
 Planned EMWaver direction for ESP32:
 - BLE remains available for direct nearby workflows.
@@ -227,6 +228,57 @@ Target layering for reintegration:
    - recovery/fallback transport behavior
 
 The key constraint is that transports should not own the business logic or define separate app-visible protocols.
+
+## ESP update mode direction
+
+ESP32-S3 firmware update should not try to imitate STM32 DFU too closely.
+
+Recommended rule:
+- keep **Run Mode** on ESP as USB MIDI SysEx using the shared EMWaver device protocol,
+- keep **Update Mode** on ESP as a separate ESP-native serial flashing path,
+- do not make the app depend on `idf.py`,
+- do not require the runtime USB MIDI transport to become the flashing transport.
+
+Near-term update strategy:
+- the user connects the ESP board using its flash-capable USB serial path,
+- the macOS app invokes a bundled flashing helper based on `esptool`,
+- the helper writes prebuilt firmware artifacts at known offsets,
+- the device reboots back into Run Mode after flashing.
+
+Important product constraint:
+- on ESP, `EMW_OP_ENTER_DFU` should be treated as a generic future "enter update mode" concept, not as a requirement for the first macOS flashing flow.
+- for the first working product version, manual bootloader entry on some dev boards is acceptable.
+- the app should guide the user through bootloader mode instead of pretending all ESP boards support seamless automatic reboot into flashing.
+
+This gives EMWaver a realistic first update path:
+- STM32 can keep its DFU-oriented flow,
+- ESP32-S3 can use serial flashing with prebuilt binaries,
+- both board classes still fit the same managed-firmware product model.
+
+### macOS flashing notes
+
+Current observed behavior on restored ESP32-S3 dev boards:
+- macOS can see the flash-capable port as `/dev/cu.usbmodem*`,
+- ROM bootloader access may work even when esptool stub upload is unreliable,
+- some boards may need manual bootloader entry for reliable flashing.
+
+That means the macOS app should be designed around:
+- serial port discovery,
+- clear user guidance for entering boot mode,
+- conservative serial flashing settings where needed,
+- explicit logging when the board fails during stub upload or flash writes.
+
+The app should bundle:
+- bootloader image,
+- partition table,
+- OTA data image if required,
+- application image,
+- a small ESP flashing helper based on `esptool` behavior.
+
+The app should not bundle:
+- the full ESP-IDF,
+- `idf.py`,
+- developer-only environment assumptions.
 
 ### Session model recommendation
 

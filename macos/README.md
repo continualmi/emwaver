@@ -4,7 +4,12 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB workflows, remote host control, cloud/auth integrations, and firmware/update UX on macOS.
 
-It is now the canonical desktop surface for device activation and DFU provisioning: the macOS app reads the board hardware UID, requests backend-authoritative claim/restore plus `DeviceID + Proof`, enters DFU/update mode, flashes firmware, verifies device authenticity in both run/update paths, and provisions or restores the signed identity page.
+It is now the canonical desktop surface for device activation and firmware provisioning on macOS: the app reads the board hardware UID, requests backend-authoritative claim/restore plus `DeviceID + Proof`, flashes managed firmware, verifies device authenticity where available, and provisions or restores device identity according to board class.
+
+Important board-class split:
+- STM32 boards currently use the DFU-oriented update path.
+- ESP32-S3 boards should use a separate serial flashing flow.
+- The macOS app should not assume that all supported boards share one update-mode transport.
 
 ---
 
@@ -92,6 +97,32 @@ Current macOS responsibility in this area:
 - explicit authenticity verification in Run Mode and Update Mode,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for provisioning/update sessions.
+
+### Board-specific update model
+
+STM32 update flow:
+- run-mode connection over USB MIDI,
+- enter DFU/update mode from the app,
+- flash through the DFU helper,
+- restore/verify device identity as part of the managed update flow.
+
+ESP32-S3 update flow:
+- run-mode connection over USB MIDI remains separate from flashing,
+- flashing is performed over the board's flash-capable USB serial port,
+- the app should bundle a small helper based on `esptool` behavior,
+- the app should use prebuilt firmware images rather than ESP-IDF project logic,
+- manual bootloader entry is acceptable for the first shipping version on boards where automatic entry is unreliable.
+
+Explicit non-goal:
+- do not bundle `idf.py` or the full ESP-IDF inside the macOS app.
+- `idf.py` is a developer/build wrapper, not an end-user firmware update runtime.
+
+What the macOS app should eventually do for ESP:
+- detect available `/dev/cu.*` serial candidates,
+- help the user identify the correct ESP flash port,
+- present bootloader instructions when the board needs manual entry,
+- invoke the bundled ESP flashing helper with bundled images and fixed offsets,
+- return the user to Run Mode after flashing completes.
 
 ---
 
