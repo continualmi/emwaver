@@ -34,10 +34,7 @@ def expandEnv = { String input ->
 }
 
 [
-        'secrets/shared/core.env',
-        'secrets/shared/firebase.env',
-        'secrets/shared/oauth.env',
-        'secrets/targets/apps.env'
+        '.env'
 ].each { rel ->
     parseEnvFile(new File(emwaverRepoRootDir, rel))
 }

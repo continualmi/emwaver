@@ -16,12 +16,8 @@ function expandVars(input?: string): string | undefined {
 
 function loadEnvFiles() {
   const repoRoot = path.resolve(__dirname, "..");
-  const files = [
-    "secrets/shared/core.env",
-    "secrets/shared/firebase.env",
-    "secrets/shared/oauth.env",
-    "secrets/targets/frontend.env",
-  ];
+  const envName = (process.env.EMWAVER_ENV || process.env.NODE_ENV || "").trim().toLowerCase();
+  const files = [envName === "prod" || envName === "production" ? ".env.prod" : ".env"];
 
   for (const rel of files) {
     const p = path.resolve(repoRoot, rel);

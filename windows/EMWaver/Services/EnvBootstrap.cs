@@ -15,10 +15,7 @@ internal static class EnvBootstrap
 
             var files = new[]
             {
-                "secrets/shared/core.env",
-                "secrets/shared/firebase.env",
-                "secrets/shared/oauth.env",
-                "secrets/targets/apps.env",
+                ".env",
             };
 
             var resolved = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -82,8 +79,7 @@ internal static class EnvBootstrap
         var dir = new DirectoryInfo(start);
         while (dir != null)
         {
-            var marker = Path.Combine(dir.FullName, "secrets", "shared", "core.env");
-            if (File.Exists(marker)) return dir.FullName;
+            if (File.Exists(Path.Combine(dir.FullName, ".env"))) return dir.FullName;
             dir = dir.Parent;
         }
         return null;

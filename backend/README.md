@@ -37,7 +37,7 @@ Use this folder mainly for reference while validating parity or porting behavior
 ### 2.1 App boot sequence
 
 `create_app()` does:
-1. best-effort `.env` loading (`backend/.env`, then repo `.env`) for local dev,
+1. best-effort root env loading from repo `.env` for local/dev and `.env.prod` when `NODE_ENV=production` or `EMWAVER_ENV=prod`,
 2. parse runtime config from environment (`Config.from_env()`),
 3. configure CORS,
 4. initialize DB,

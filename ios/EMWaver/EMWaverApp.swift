@@ -37,7 +37,7 @@ struct EMWaverApp: App {
 
 /// Loads repo env files for local development (no Xcode scheme env required).
 private enum EnvBootstrap {
-    private static let requiredEnvMarker = "secrets/shared/core.env"
+    private static let requiredEnvMarker = ".env"
 
     static func loadForDevIfAvailable() {
         if ProcessInfo.processInfo.environment["EMWAVER_DISABLE_ENV_BOOTSTRAP"] == "1" {
@@ -48,12 +48,7 @@ private enum EnvBootstrap {
 #endif
         guard let repoRoot = findRepoRoot() else { return }
 
-        let files = [
-            "secrets/shared/core.env",
-            "secrets/shared/firebase.env",
-            "secrets/shared/oauth.env",
-            "secrets/targets/apps.env",
-        ]
+        let files = [".env"]
 
         var resolved: [String: String] = [:]
 
