@@ -78,6 +78,13 @@ struct ContentView: View {
         return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
     }
 
+    private var setupOverlayText: String {
+        if auth.isSignedIn {
+            return "This board is connected, but it is not claimed in your account yet. Normal scripts cannot talk to it until setup is complete."
+        }
+        return "This board is connected, but you are not signed in. Sign in and set it up before normal scripts can talk to it."
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -137,7 +144,7 @@ struct ContentView: View {
                     VStack(spacing: 10) {
                         Text("Set up this device to use scripts")
                             .font(.headline)
-                        Text("This board is connected, but it is not claimed in your account yet. Normal scripts cannot talk to it until setup is complete.")
+                        Text(setupOverlayText)
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                         Button("Open Device") {

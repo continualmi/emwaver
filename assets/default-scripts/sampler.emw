@@ -1,18 +1,74 @@
 'use strict';
 
-var PINS = [
-  { label: 'A0 (IR_RX)', value: '0' },
-  { label: 'A1 (IR_TX)', value: '1' },
-  { label: 'A2 (GDO0)', value: '2' },
-  { label: 'A3 (GDO2)', value: '3' },
-  { label: 'A4 (NSS)', value: '4' },
-  { label: 'A5 (SCK)', value: '5' },
-  { label: 'A6 (MISO)', value: '6' },
-  { label: 'A7 (MOSI)', value: '7' },
-  // Note: SWD pins (A13/A14) and A15 are not exposed on the shipping board.
-  { label: 'B6 (UART TX / I2C SCL)', value: String(16 + 6) },
-  { label: 'B7 (UART RX / I2C SDA)', value: String(16 + 7) },
-];
+function normalizeBoardType(value) {
+  return String(value || '').trim().toLowerCase() === 'esp32s3' ? 'esp32s3' : 'stm32f042';
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== 'undefined' && device && typeof device.boardType === 'function') {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return 'stm32f042';
+}
+
+function espPinLabel(pin) {
+  if (pin === 4) return 'GPIO4 (IR_TX default)';
+  if (pin === 10) return 'GPIO10 (SPI CS default)';
+  if (pin === 11) return 'GPIO11 (SPI MOSI default)';
+  if (pin === 12) return 'GPIO12 (SPI SCK default)';
+  if (pin === 13) return 'GPIO13 (SPI MISO default)';
+  if (pin === 37) return 'GPIO37 (IR_TX shield)';
+  return 'GPIO' + String(pin);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var pin = 0; pin <= 48; pin += 1) {
+    out.push({ label: espPinLabel(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function firstPin(options) {
+  return options.length ? String(options[0].value) : '0';
+}
+
+var PINS_BY_BOARD = {
+  stm32f042: [
+    { label: 'A0 (IR_RX)', value: '0' },
+    { label: 'A1 (IR_TX)', value: '1' },
+    { label: 'A2 (GDO0)', value: '2' },
+    { label: 'A3 (GDO2)', value: '3' },
+    { label: 'A4 (NSS)', value: '4' },
+    { label: 'A5 (SCK)', value: '5' },
+    { label: 'A6 (MISO)', value: '6' },
+    { label: 'A7 (MOSI)', value: '7' },
+    { label: 'B6 (UART TX / I2C SCL)', value: String(16 + 6) },
+    { label: 'B7 (UART RX / I2C SDA)', value: String(16 + 7) },
+  ],
+  esp32s3: buildEspPins(),
+};
+
+function boardPins() {
+  return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
+
+function syncPins() {
+  var options = boardPins();
+  var rxValid = false;
+  var txValid = false;
+  var rxCurrent = String(rxPin);
+  var txCurrent = String(txPin);
+  for (var i = 0; i < options.length; i += 1) {
+    var value = String(options[i].value);
+    if (value === rxCurrent) rxValid = true;
+    if (value === txCurrent) txValid = true;
+  }
+  if (!rxValid) rxPin = firstPin(options);
+  if (!txValid) txPin = boardType === 'esp32s3' ? '4' : '1';
+}
 
 function i(v, d) {
   var n = parseInt(String(v || '').trim(), 10);
@@ -40,12 +96,13 @@ function signalsDir() {
 }
 
 var status = '';
-var rxPin = '0';
+var boardType = detectBoardType();
+var rxPin = boardType === 'esp32s3' ? '4' : '0';
 var recording = false;
 var recordId = null;
 
 // TX pin used for retransmit (firmware transmit supports GPIOA 0..3).
-var txPin = '1'; // A1 (IR_TX)
+var txPin = boardType === 'esp32s3' ? '4' : '1';
 
 var samplePeriodUsText = '10';
 var maxBytesText = '393216';
@@ -210,7 +267,7 @@ function retransmit() {
     render();
 
     Sampler.transmitBufferStart(bytes, {
-      pin: Number(txPin) || 1,
+      pin: isFinite(Number(txPin)) ? Number(txPin) : 1,
       dutyPercent: clamp(i(txDutyText, 50), 1, 100),
       freqHz: clamp(i(txPwmHzText, 38000), 0, 200000),
       tickUs: periodUs,
@@ -437,11 +494,20 @@ function render() {
             UI.column({
               spacing: 6,
               children: [
+                UI.text({
+                  text: boardType === 'esp32s3' ? 'Detected MCU: ESP32-S3' : 'Detected MCU: STM32F042',
+                  font: 'caption',
+                }),
+              ],
+            }),
+            UI.column({
+              spacing: 6,
+              children: [
                 UI.picker({
                   style: 'menu',
                   label: 'Pin',
                   selected: String(rxPin),
-                  options: PINS,
+                  options: boardPins(),
                   onChange: function (v) { rxPin = String(v); render(); },
                 }),
               ],
@@ -453,7 +519,7 @@ function render() {
                   style: 'menu',
                   label: 'TX Pin',
                   selected: String(txPin),
-                  options: PINS,
+                  options: boardPins(),
                   onChange: function (v) { txPin = String(v); render(); },
                 }),
               ],

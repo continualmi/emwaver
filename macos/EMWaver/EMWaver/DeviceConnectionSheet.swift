@@ -29,7 +29,11 @@ struct DeviceConnectionSheet: View {
             items.append("EMWaver \(version)")
         }
         if device.isConnected {
-            items.append(currentDeviceIsRegistered ? "Claimed" : "Unclaimed")
+            if currentDeviceIsRegistered {
+                items.append(auth.isSignedIn ? "Claimed" : "Cached")
+            } else {
+                items.append("Unclaimed")
+            }
         }
         if let uid = shortHardwareUid {
             items.append("UID \(uid)")
@@ -127,6 +131,10 @@ struct DeviceConnectionSheet: View {
                     .fontWeight(.medium)
             }
             .font(.subheadline)
+
+            Text(accountStatusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             Text(deviceStatusText)
                 .foregroundStyle(.secondary)
@@ -238,6 +246,9 @@ struct DeviceConnectionSheet: View {
 
     private var deviceStatusText: String {
         if currentDeviceIsRegistered {
+            if !auth.isSignedIn {
+                return "This device matches a locally cached device record. Sign in to confirm which account it belongs to."
+            }
             if accountDevices.isOfflineMode {
                 return "This device is claimed and available from the local cache."
             }
@@ -271,19 +282,36 @@ struct DeviceConnectionSheet: View {
     }
 
     private var devicesIntroText: String {
+        if !auth.isSignedIn {
+            if let syncAt = accountDevices.lastSyncAt {
+                return "Signed out. Showing locally cached devices from the last sync on \(syncAt.formatted(date: .abbreviated, time: .shortened))."
+            }
+            return "Signed out. Showing locally cached devices."
+        }
+        let signedInLabel = auth.session?.email.flatMap { $0.isEmpty ? nil : $0 } ?? auth.userLabel
         if let syncAt = accountDevices.lastSyncAt {
             if accountDevices.isOfflineMode {
-                return "Showing locally cached devices."
+                return "Signed in as \(signedInLabel). Showing locally cached devices."
             }
-            return "Last synced \(syncAt.formatted(date: .abbreviated, time: .shortened))."
+            return "Signed in as \(signedInLabel). Last synced \(syncAt.formatted(date: .abbreviated, time: .shortened))."
         }
         if accountDevices.isOfflineMode {
-            return "Showing locally cached devices."
+            return "Signed in as \(signedInLabel). Showing locally cached devices."
         }
         if auth.isSignedIn {
-            return "Signed in. Your device list will sync when available."
+            return "Signed in as \(signedInLabel). Your device list will sync when available."
         }
         return "Sign in to sync your devices. Cached devices remain available in Offline Mode."
+    }
+
+    private var accountStatusText: String {
+        if let email = auth.session?.email, !email.isEmpty {
+            return "Account: \(email)"
+        }
+        if auth.isSignedIn {
+            return "Account: \(auth.userLabel)"
+        }
+        return "Account: not signed in"
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

@@ -13,7 +13,10 @@ const path = require("path");
 
 const repoRoot = path.resolve(__dirname, "..");
 const assetsDir = path.join(repoRoot, "assets", "default-scripts");
-const outPath = path.join(repoRoot, "frontend", "src", "lib", "exampleEmwScripts.ts");
+const outPaths = [
+  path.join(repoRoot, "frontend", "src", "lib", "exampleEmwScripts.ts"),
+  path.join(repoRoot, "web", "src", "lib", "exampleEmwScripts.ts"),
+];
 
 const allow = [
   "hello.emw",
@@ -57,5 +60,7 @@ const body = JSON.stringify(items, null, 2)
 
 const content = `${header}${body} as const;\n`;
 
-fs.writeFileSync(outPath, content);
-console.log(`Wrote ${outPath} (${items.length} scripts)`);
+for (const outPath of outPaths) {
+  fs.writeFileSync(outPath, content);
+  console.log(`Wrote ${outPath} (${items.length} scripts)`);
+}

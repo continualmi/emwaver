@@ -28,6 +28,19 @@ struct FirmwareUpdateSheet: View {
         return accountDevices.hasOfflineAccess(boardType: boardType, hardwareUid: hardwareUid)
     }
 
+    private var registrationStatusText: String {
+        if currentDeviceIsRegistered {
+            if auth.isSignedIn {
+                return "This board is already claimed in your account."
+            }
+            return "This board matches a locally cached device record. Sign in to confirm which account it belongs to."
+        }
+        if auth.isSignedIn {
+            return "This board is not claimed yet. Set up will claim it and flash EMWaver firmware."
+        }
+        return "This board is not claimed yet. Sign in first, then set it up and flash EMWaver firmware."
+    }
+
     private var isEspWorkflow: Bool {
         if updater.espBootloaderConnected || updater.espBootloaderPort != nil {
             return true
@@ -82,9 +95,7 @@ struct FirmwareUpdateSheet: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle((updater.espBootloaderConnected || updater.espBootloaderPort != nil) ? Color.green : .secondary)
 
-                    Text(currentDeviceIsRegistered
-                         ? "This board is already claimed in your account."
-                         : "This board is not claimed yet. Set up will claim it and flash EMWaver firmware.")
+                    Text(registrationStatusText)
                         .font(.caption)
                         .foregroundStyle(.secondary)
 

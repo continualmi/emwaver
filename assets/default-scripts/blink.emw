@@ -38,11 +38,6 @@ function firstEnabledPin(options) {
   return options.length ? String(options[0].value) : "0";
 }
 
-const MCU_OPTIONS = [
-  { label: "STM32F042", value: "stm32f042" },
-  { label: "ESP32-S3", value: "esp32s3" },
-];
-
 const PINS_BY_BOARD = {
   stm32f042: [
     { label: "GDO0 (A2)", value: GDO0 },
@@ -59,7 +54,7 @@ const PINS_BY_BOARD = {
   esp32s3: buildEspPins(),
 };
 
-let boardType = detectBoardType();
+const boardType = detectBoardType();
 let selectedPin = firstEnabledPin(PINS_BY_BOARD[boardType]);
 let periodMs = 250;
 let isBlinking = false;
@@ -68,17 +63,6 @@ let loopHandle = null;
 
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
-}
-
-function syncSelectedPin() {
-  var options = boardPins();
-  var current = String(selectedPin);
-  for (var i = 0; i < options.length; i += 1) {
-    if (String(options[i].value) === current && !options[i].disabled) {
-      return;
-    }
-  }
-  selectedPin = firstEnabledPin(options);
 }
 
 function stopBlink() {
@@ -123,22 +107,7 @@ function render() {
       spacing: 14,
       children: [
         UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "MCU", fontWeight: "medium" }),
-        UI.picker({
-          id: "blink.board",
-          style: "segmented",
-          selected: boardType,
-          options: MCU_OPTIONS,
-          onChange: function (value) {
-            boardType = normalizeBoardType(value);
-            syncSelectedPin();
-            if (isBlinking) {
-              void startBlink();
-            } else {
-              render();
-            }
-          },
-        }),
+        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
 
         UI.picker({
           id: "blink.pin",

@@ -1,10 +1,33 @@
 // Simple I2C test script for STM32F042 (I2C1 on B6/B7)
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+const boardType = detectBoardType();
 let hz = "100000";
 let addrHex = "3C";
 let txHex = "";
 let rxLen = 1;
 let statusText = "";
 let logLines = [];
+
+function ensureSupported() {
+  if (boardType === "esp32s3") {
+    statusText = "I2C script support is currently wired for STM32F042 only.";
+    render();
+    return false;
+  }
+  return true;
+}
 
 function pushLog(line) {
   logLines.push(String(line));
@@ -30,6 +53,7 @@ function fmtBytes(bytes) {
 }
 
 function openI2c() {
+  if (!ensureSupported()) return;
   statusText = "Opening...";
   render();
   var h = parseInt(hz, 10);
@@ -53,6 +77,7 @@ function openI2c() {
 }
 
 function closeI2c() {
+  if (!ensureSupported()) return;
   statusText = "Closing...";
   render();
   var resp = Wire.end();
@@ -70,6 +95,7 @@ function closeI2c() {
 }
 
 function writeI2c() {
+  if (!ensureSupported()) return;
   statusText = "Writing...";
   render();
   var h = parseInt(hz, 10);
@@ -93,6 +119,7 @@ function writeI2c() {
 }
 
 function readI2c() {
+  if (!ensureSupported()) return;
   statusText = "Reading...";
   render();
   var h = parseInt(hz, 10);
@@ -118,6 +145,7 @@ function readI2c() {
 }
 
 function xferI2c() {
+  if (!ensureSupported()) return;
   statusText = "Transferring...";
   render();
   var h = parseInt(hz, 10);
@@ -149,6 +177,7 @@ function xferI2c() {
 }
 
 function scanI2c() {
+  if (!ensureSupported()) return;
   statusText = "Scanning...";
   render();
 
@@ -196,7 +225,16 @@ function render() {
       spacing: 12,
       children: [
         UI.text({ text: "I2C (B6/B7)", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: "Note: B6/B7 are shared with USART1; using I2C will switch the pins to I2C1." }),
+        UI.text({
+          text:
+            (boardType === "stm32f042"
+              ? "Detected MCU: STM32F042. "
+              : "Detected MCU: ESP32-S3. ") +
+            (
+            boardType === "stm32f042"
+              ? "Note: B6/B7 are shared with USART1; using I2C will switch the pins to I2C1."
+              : "ESP32-S3 I2C pin routing is not exposed through this script yet."),
+        }),
 
         UI.row({
           spacing: 12,
