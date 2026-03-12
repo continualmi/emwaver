@@ -48,6 +48,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var isSecureConnected: Bool = false
     @Published var secureDeviceIdHex: String? = nil
     @Published var hardwareUidHex: String? = nil
+    @Published var lastDetectedHardwareUidHex: String? = nil
     @Published var connectedBoardType: String? = nil
     @Published var lastDetectedBoardType: String? = nil
 
@@ -431,6 +432,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                 self.deviceEmwaverVersion = v
                 self.isSecureConnected = identityOk
                 self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
+                self.lastDetectedHardwareUidHex = self.hardwareUidHex ?? self.lastDetectedHardwareUidHex
                 self.connectedBoardType = boardType
                 self.lastDetectedBoardType = boardType
                 if identityOk {
@@ -440,7 +442,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                         self.secureDeviceProofB64 = ident.proofB64
                     }
                 } else {
-                    self.lastErrorText = "Device is not secured yet. Local USB use is allowed, but activation/update flows still require provisioning."
+                    self.lastErrorText = "Device is not set up for this account yet. Set it up before using normal scripts."
                 }
             }
         }

@@ -1,0 +1,12 @@
+{
+  "esp32s3:D83BDAA3F808090212000253": {
+    "board_type": "esp32s3",
+    "hardware_uid": "D83BDAA3F808090212000253",
+    "device_id_b64": "rpZYsxhG8EQr7Yf2OERLLQ==",
+    "proof_b64": "xwBd6vVsx9hYa3MhnMklqIu6ZmnG7Gx96jP23wnFm5pqAkvTVCDd/2IT+sEUKFDGG7nxVjSTrvvCuw2xBbedDA==",
+    "owner_firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "created_at_ms": 1773352237380,
+    "updated_at_ms": 1773352237380,
+    "last_seen_at_ms": 1773352237380
+  }
+}

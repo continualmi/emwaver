@@ -37,6 +37,8 @@ struct EMWaverApp: App {
                 .environmentObject(accountDevices)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
+                        .environmentObject(auth)
+                        .environmentObject(accountDevices)
                 }
                 .task {
                     // Best-effort background heartbeat + host discovery.

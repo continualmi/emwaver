@@ -1,24 +1,85 @@
 // Blink a pin using timers (setTimeout) + `every()`.
 
-let selectedPin = GDO0;
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+function espPinLabel(pin) {
+  if (pin === 4) return "GPIO4 (IR_TX default)";
+  if (pin === 10) return "GPIO10 (SPI CS default)";
+  if (pin === 11) return "GPIO11 (SPI MOSI default)";
+  if (pin === 12) return "GPIO12 (SPI SCK default)";
+  if (pin === 13) return "GPIO13 (SPI MISO default)";
+  if (pin === 37) return "GPIO37 (IR_TX shield)";
+  return "GPIO" + String(pin);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var pin = 0; pin <= 48; pin += 1) {
+    out.push({ label: espPinLabel(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function firstEnabledPin(options) {
+  for (var i = 0; i < options.length; i += 1) {
+    if (!options[i].disabled) return String(options[i].value);
+  }
+  return options.length ? String(options[0].value) : "0";
+}
+
+const MCU_OPTIONS = [
+  { label: "STM32F042", value: "stm32f042" },
+  { label: "ESP32-S3", value: "esp32s3" },
+];
+
+const PINS_BY_BOARD = {
+  stm32f042: [
+    { label: "GDO0 (A2)", value: GDO0 },
+    { label: "GDO2 (A3)", value: GDO2 },
+    { label: "IR_RX (A0)", value: IR_RX },
+    { label: "IR_TX (A1)", value: IR_TX },
+    { label: "NSS (A4)", value: NSS },
+    { label: "SCK (A5)", value: SCK },
+    { label: "MISO (A6)", value: MISO },
+    { label: "MOSI (A7)", value: MOSI },
+    { label: "UART_TX (B6)", value: UART_TX },
+    { label: "UART_RX (B7)", value: UART_RX },
+  ],
+  esp32s3: buildEspPins(),
+};
+
+let boardType = detectBoardType();
+let selectedPin = firstEnabledPin(PINS_BY_BOARD[boardType]);
 let periodMs = 250;
 let isBlinking = false;
 let level = LOW;
 let loopHandle = null;
 
-const PINS = [
-  { label: "GDO0 (A2)", value: GDO0 },
-  { label: "GDO2 (A3)", value: GDO2 },
-  { label: "IR_RX (A0)", value: IR_RX },
-  { label: "IR_TX (A1)", value: IR_TX },
-  { label: "NSS (A4)", value: NSS },
-  { label: "SCK (A5)", value: SCK },
-  { label: "MISO (A6)", value: MISO },
-  { label: "MOSI (A7)", value: MOSI },
-  // Note: SWD pins (A13/A14) and A15 are not exposed on the shipping board.
-  { label: "UART_TX (B6)", value: UART_TX },
-  { label: "UART_RX (B7)", value: UART_RX },
-];
+function boardPins() {
+  return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
+
+function syncSelectedPin() {
+  var options = boardPins();
+  var current = String(selectedPin);
+  for (var i = 0; i < options.length; i += 1) {
+    if (String(options[i].value) === current && !options[i].disabled) {
+      return;
+    }
+  }
+  selectedPin = firstEnabledPin(options);
+}
 
 function stopBlink() {
   if (loopHandle && typeof loopHandle.stop === "function") {
@@ -62,12 +123,28 @@ function render() {
       spacing: 14,
       children: [
         UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
+        UI.text({ text: "MCU", fontWeight: "medium" }),
+        UI.picker({
+          id: "blink.board",
+          style: "segmented",
+          selected: boardType,
+          options: MCU_OPTIONS,
+          onChange: function (value) {
+            boardType = normalizeBoardType(value);
+            syncSelectedPin();
+            if (isBlinking) {
+              void startBlink();
+            } else {
+              render();
+            }
+          },
+        }),
 
         UI.picker({
           id: "blink.pin",
           style: "menu",
           selected: String(selectedPin),
-          options: PINS,
+          options: boardPins(),
           onChange: function (value) {
             selectedPin = String(value);
             if (isBlinking) {

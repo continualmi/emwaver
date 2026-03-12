@@ -91,6 +91,7 @@ var EMW_OP_RESET = 0x02;
 var EMW_OP_HELP = 0x03;
 var EMW_OP_NAME_GET = 0x04;
 var EMW_OP_NAME_SET = 0x05;
+var EMW_OP_BOARD_GET = 0x09;
 
 var EMW_OP_GPIO = 0x10;
 var EMW_GPIO_IN = 0x00;
@@ -701,6 +702,24 @@ if (typeof device.reset !== 'function') {
     var pkt = new Uint8Array([EMW_OP_RESET]);
     __emwSendPacket(pkt, 1500);
     return;
+  };
+}
+if (typeof device.boardType !== 'function') {
+  device.boardType = function (opts) {
+    var refresh = !!(opts && opts.refresh);
+    if (!refresh && typeof __scriptGlobal.__scriptDeviceBoardType === 'string' && __scriptGlobal.__scriptDeviceBoardType.length > 0) {
+      return __scriptGlobal.__scriptDeviceBoardType;
+    }
+
+    var timeout = opts && typeof opts.timeout === 'number' ? (opts.timeout | 0) : 1500;
+    var pkt = new Uint8Array([EMW_OP_BOARD_GET]);
+    var resp = __emwSendPacket(pkt, timeout);
+    var board = String(__scriptDecodeText(__emwPayload(resp)) || '').trim().toLowerCase();
+    if (!board) {
+      throw new Error('boardType unavailable');
+    }
+    __scriptGlobal.__scriptDeviceBoardType = board;
+    return board;
   };
 }
 __scriptGlobal.device = device;

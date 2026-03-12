@@ -327,6 +327,98 @@ final class FirmwareUpdateManager: ObservableObject {
         }
     }
 
+    func startEspClaimAndFlash(auth: AuthenticationManager, accountDevices: AccountDevicesService, device: MacUSBManager) {
+        appendLog("ESP setup requested")
+        updateError = nil
+        updateDone = false
+        progressPct = 0
+        progressMessage = "Claiming device..."
+        completionMessage = "ESP setup complete. Reconnect the device in Run Mode."
+
+        if isFlashing {
+            return
+        }
+
+        guard let session = auth.session else {
+            updateError = "Sign in to set up this device."
+            appendLog(updateError ?? "ESP setup failed")
+            return
+        }
+        guard let baseURL = BackendUrl.resolve() else {
+            updateError = "Missing backend URL (configure backend first)."
+            appendLog(updateError ?? "ESP setup failed")
+            return
+        }
+
+        let boardType = effectiveBoardType(for: device)
+        guard isEspBoardType(boardType) || espBootloaderConnected || espBootloaderPort != nil else {
+            updateError = "ESP setup requires an ESP32-S3 board."
+            appendLog(updateError ?? "ESP setup failed")
+            return
+        }
+
+        let hardwareUidHex = (device.hardwareUidHex ?? device.lastDetectedHardwareUidHex ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        guard !hardwareUidHex.isEmpty else {
+            updateError = "Connect the board in Run Mode once so the app can read its hardware UID before setup."
+            appendLog(updateError ?? "ESP setup failed")
+            return
+        }
+
+        Task {
+            do {
+                struct MintResponse: Decodable {
+                    let device_id_b64: String
+                    let proof_b64: String
+                    let created: Bool?
+                }
+
+                var req = URLRequest(url: baseURL.appendingPathComponent("provisioning/mint"))
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.httpBody = try JSONSerialization.data(withJSONObject: [
+                    "board_type": "esp32s3",
+                    "hardware_uid": hardwareUidHex,
+                ])
+
+                let (data, res) = try await URLSession.shared.data(for: req)
+                let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+                if code < 200 || code >= 300 {
+                    let msg = String(data: data, encoding: .utf8) ?? ""
+                    throw NSError(domain: "FirmwareUpdateManager", code: code, userInfo: [
+                        NSLocalizedDescriptionKey: msg.isEmpty ? "Device claim failed." : msg
+                    ])
+                }
+
+                let mint = try JSONDecoder().decode(MintResponse.self, from: data)
+
+                await MainActor.run {
+                    accountDevices.storeClaimedDevice(
+                        deviceIdB64: mint.device_id_b64,
+                        boardType: "esp32s3",
+                        hardwareUid: hardwareUidHex
+                    )
+                    accountDevices.refresh(auth: auth)
+                    self.appendLog((mint.created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded")
+                    self.appendLog("Hardware UID: \(hardwareUidHex)")
+                    self.progressMessage = "Flashing ESP firmware..."
+                }
+
+                try await MainActor.run {
+                    try self.startEspSerialUpdate(device: device)
+                }
+            } catch {
+                await MainActor.run {
+                    self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    self.progressMessage = ""
+                    self.appendLog(self.updateError ?? "ESP setup failed")
+                }
+            }
+        }
+    }
+
     func clearLogs() {
         logLines.removeAll(keepingCapacity: false)
     }

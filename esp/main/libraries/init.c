@@ -246,6 +246,11 @@ static bool handle_binary_packet(const command_t *cmd)
             send_binary_ok(uid, sizeof(uid));
             return true;
         }
+        case EMW_OP_BOARD_GET: {
+            static const uint8_t board_type[] = "esp32s3";
+            send_binary_ok(board_type, sizeof(board_type) - 1u);
+            return true;
+        }
         case EMW_OP_NAME_GET:
             handle_name_get();
             return true;

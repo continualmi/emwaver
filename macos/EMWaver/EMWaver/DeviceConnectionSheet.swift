@@ -29,7 +29,7 @@ struct DeviceConnectionSheet: View {
             items.append("EMWaver \(version)")
         }
         if device.isConnected {
-            items.append(currentDeviceIsRegistered ? "Secure" : "Needs activation")
+            items.append(currentDeviceIsRegistered ? "Claimed" : "Unclaimed")
         }
         if let uid = shortHardwareUid {
             items.append("UID \(uid)")
@@ -52,8 +52,14 @@ struct DeviceConnectionSheet: View {
     }
 
     private var currentDeviceIsRegistered: Bool {
-        guard let hardwareUid = device.hardwareUidHex, !hardwareUid.isEmpty else { return false }
+        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return false }
         return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
+    }
+
+    private var currentHardwareUidHex: String? {
+        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
+        guard let value, !value.isEmpty else { return nil }
+        return value
     }
 
     private var currentBoardType: String {
@@ -75,15 +81,6 @@ struct DeviceConnectionSheet: View {
                 overviewCard
                 devicesSection
                 firmwareSection
-
-                if let err = device.lastErrorText, !err.isEmpty {
-                    detailSection(title: "Last error") {
-                        Text(err)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
             }
             .padding(24)
         }
@@ -201,7 +198,7 @@ struct DeviceConnectionSheet: View {
         detailSection(title: "Firmware") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Button(showsEspFirmwareFlow ? "Flash firmware…" : (currentDeviceIsRegistered ? "Update firmware…" : "Set up device…")) {
+                    Button(primaryFirmwareButtonTitle) {
                         dismiss()
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
                             firmwareUpdater.present(boardType: showsEspFirmwareFlow ? "esp32s3" : currentBoardType)
@@ -230,8 +227,8 @@ struct DeviceConnectionSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if !showsEspFirmwareFlow && !currentDeviceIsRegistered {
-                    Text("Activation reads the hardware UID, registers the board with the backend, and prepares it for use in the app.")
+                if !currentDeviceIsRegistered {
+                    Text("Set up claims this physical board into your account. Unclaimed boards cannot be used by normal scripts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -242,24 +239,35 @@ struct DeviceConnectionSheet: View {
     private var deviceStatusText: String {
         if currentDeviceIsRegistered {
             if accountDevices.isOfflineMode {
-                return "This device is registered and available from the local cache."
+                return "This device is claimed and available from the local cache."
             }
-            return "This device is registered to your EMWaver device list."
+            return "This device is claimed in your EMWaver account."
         }
         if accountDevices.isOfflineMode {
-            return "This device is not in the local cache yet. Go online once to activate it."
+            return "This device is not claimed in the local cache yet. Go online once to set it up."
         }
         if auth.isSignedIn {
-            return "This device is connected, but it is not registered to your device list yet."
+            return "This device is connected, but it is not claimed in your account yet."
         }
-        return "This device is connected, but it is not registered yet. Sign in to activate and sync it."
+        return "This device is connected, but it is not claimed yet. Sign in to set it up."
     }
 
     private var espFlashStatusText: String {
         if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
-            return "Bootloader detected on \(port). Open the flash window to continue."
+            return currentDeviceIsRegistered
+                ? "Bootloader detected on \(port). Open the flash window to update firmware."
+                : "Bootloader detected on \(port). Open the flash window to claim and flash this board."
         }
-        return "ESP32-S3 firmware flashing uses the board's serial or flash-capable USB connection."
+        return currentDeviceIsRegistered
+            ? "ESP32-S3 firmware flashing uses the board's serial or flash-capable USB connection."
+            : "Set up will claim this ESP32-S3 into your account and flash EMWaver firmware."
+    }
+
+    private var primaryFirmwareButtonTitle: String {
+        if currentDeviceIsRegistered {
+            return showsEspFirmwareFlow ? "Flash firmware…" : "Update firmware…"
+        }
+        return "Set up device…"
     }
 
     private var devicesIntroText: String {
