@@ -1,18 +1,11 @@
 import SwiftUI
 
 /// App-level settings hub.
-///
-/// We keep backend/frontend URL selectors here (instead of the sign-in menu) and
-/// show device/account related toggles.
 struct SettingsView: View {
     @ObservedObject var device: MacUSBManager
     @Environment(\.dismiss) private var dismiss
 
     @State private var suppressAttachPrompt: Bool = UserDefaults.standard.bool(forKey: "emwaver.deviceAttachPrompt.suppress")
-
-    private var staffOnlyEnabled: Bool {
-        (ProcessInfo.processInfo.environment["EMWAVER_STAFF_ONLY"] ?? "") == "1"
-    }
 
     var body: some View {
         NavigationStack {
@@ -29,16 +22,6 @@ struct SettingsView: View {
                     Text("You can still attach a device later from the Device panel.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                }
-
-                if staffOnlyEnabled {
-                    Section("Staff Only · Backend") {
-                        BackendSettingsView()
-                    }
-
-                    Section("Staff Only · Web Frontend") {
-                        FrontendSettingsView()
-                    }
                 }
             }
             .formStyle(.grouped)

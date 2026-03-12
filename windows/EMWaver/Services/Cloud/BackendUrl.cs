@@ -6,7 +6,7 @@ internal static class BackendUrl
         (System.Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL_CLOUD") ?? "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io").Trim();
 
     internal static string Local =>
-        (System.Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL_LOCAL") ?? "http://127.0.0.1:3201").Trim();
+        (System.Environment.GetEnvironmentVariable("EMWAVER_BACKEND_URL_LOCAL") ?? "http://127.0.0.1:3920").Trim();
 
     internal static string Resolve()
     {

@@ -58,7 +58,6 @@ Representative views:
 - `HostsView.swift`
 - `RemoteHostControlView.swift`
 - `SettingsView.swift`
-- backend/frontend settings views
 - firmware/device connection sheets.
 
 ## 2.4 Pro and entitlements

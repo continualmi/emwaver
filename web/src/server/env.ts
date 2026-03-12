@@ -5,7 +5,7 @@ function parseBool(value: string | undefined, fallback = false): boolean {
 
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
-  port: Number.parseInt(process.env.PORT || "3200", 10),
+  port: Number.parseInt(process.env.PORT || "3920", 10),
   firebaseProjectId: (process.env.FIREBASE_PROJECT_ID || "").trim(),
   authDebug: parseBool(process.env.EMWAVER_AUTH_DEBUG),
   provisioningAllowedEmail: (process.env.EMWAVER_PROVISIONING_ALLOWED_EMAIL || "").trim().toLowerCase(),
