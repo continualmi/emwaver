@@ -31,6 +31,10 @@
 #define EMW_IDENTITY_DEVICE_ID 0x00u
 #define EMW_IDENTITY_PROOF     0x01u
 
+// Hardware UID
+// Reads the MCU factory-programmed 96-bit unique ID.
+#define EMW_OP_HARDWARE_UID_GET 0x08u
+
 // Name
 #define EMW_OP_NAME_GET 0x04u
 #define EMW_OP_NAME_SET 0x05u

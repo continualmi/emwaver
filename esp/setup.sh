@@ -40,6 +40,18 @@ if [[ -z "${IDF_TOOLS_PATH:-}" && -d "${tools_default}" ]]; then
     export IDF_TOOLS_PATH="${tools_default}"
 fi
 
+# If ESP-IDF was installed with a different system Python than the one
+# currently first on PATH (for example Homebrew vs pyenv), point export.sh
+# at the existing virtualenv so sourcing remains stable across shells.
+if [[ -z "${IDF_PYTHON_ENV_PATH:-}" && -d "${IDF_TOOLS_PATH}/python_env" ]]; then
+    shopt -s nullglob
+    python_env_matches=("${IDF_TOOLS_PATH}"/python_env/idf*_py*_env)
+    shopt -u nullglob
+    if (( ${#python_env_matches[@]} > 0 )); then
+        export IDF_PYTHON_ENV_PATH="${python_env_matches[0]}"
+    fi
+fi
+
 if [[ ! -f "${export_script}" ]]; then
     echo "ESP-IDF export script not found at ${export_script}." >&2
     echo "Install ESP-IDF under ${default_root} (recommended) or ${legacy_root}." >&2

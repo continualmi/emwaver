@@ -4,7 +4,7 @@
 ../USB_DEVICE/App/usbd_midi_if.c:208:6:MIDI_SetBufferType_FS	1
 ../USB_DEVICE/App/usbd_midi_if.c:213:17:MIDI_GetBufferType_FS	1
 ../USB_DEVICE/App/usbd_midi_if.c:218:10:MIDI_GetRxBufferBytesAvailable_FS	1
-../USB_DEVICE/App/usbd_midi_if.c:80:15:MIDI_Receive_FS	23
+../USB_DEVICE/App/usbd_midi_if.c:80:15:MIDI_Receive_FS	22
 ../USB_DEVICE/App/usbd_midi_if.c:223:9:MIDI_ReadRxBuffer_FS	4
 ../USB_DEVICE/App/usbd_midi_if.c:238:6:MIDI_FlushRxBuffer_FS	1
 ../USB_DEVICE/App/usbd_midi_if.c:245:6:MIDI_InitRxBuffer_FS	1

@@ -1,0 +1,13 @@
+../USB_DEVICE/App/usbd_midi.c:197:16:USBD_MIDI_Init	3
+../USB_DEVICE/App/usbd_midi.c:226:16:USBD_MIDI_DeInit	2
+../USB_DEVICE/App/usbd_midi.c:242:16:USBD_MIDI_Setup	3
+../USB_DEVICE/App/usbd_midi.c:274:16:USBD_MIDI_DataIn	1
+../USB_DEVICE/App/usbd_midi.c:283:10:USBD_MIDI_GetDataInCount	1
+../USB_DEVICE/App/usbd_midi.c:288:16:USBD_MIDI_DataOut	3
+../USB_DEVICE/App/usbd_midi.c:303:17:USBD_MIDI_GetFSCfgDesc	1
+../USB_DEVICE/App/usbd_midi.c:309:9:USBD_MIDI_RegisterInterface	2
+../USB_DEVICE/App/usbd_midi.c:318:9:USBD_MIDI_SetTxBuffer	1
+../USB_DEVICE/App/usbd_midi.c:326:9:USBD_MIDI_TransmitPacket	2
+../USB_DEVICE/App/usbd_midi.c:336:9:USBD_MIDI_IsTxBusy	4
+../USB_DEVICE/App/usbd_midi.c:345:9:USBD_MIDI_SetRxBuffer	1
+../USB_DEVICE/App/usbd_midi.c:352:9:USBD_MIDI_ReceivePacket	2

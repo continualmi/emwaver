@@ -149,6 +149,7 @@ Current server routes in this folder include:
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
 - account/store/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
+- device provisioning currently supports a hardware-UID-backed claim/restore path keyed by `board_type + hardware_uid`, while preserving issued `DeviceID + Proof` for later authenticity checks,
 - entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,
 - host presence and WebSocket routing are currently single-instance in-memory,
 - the current shape is suitable for a single-instance deployment and should move to shared state if multi-instance scaling is needed later.

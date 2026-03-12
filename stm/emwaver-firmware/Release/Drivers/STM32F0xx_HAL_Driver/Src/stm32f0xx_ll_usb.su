@@ -2,7 +2,7 @@
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:84:19:USB_EnableGlobalInt	0	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:109:19:USB_DisableGlobalInt	0	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:133:19:USB_SetCurrentMode	0	static
-../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:154:19:USB_DevInit	8	static
+../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:154:19:USB_DevInit	0	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:182:19:USB_ActivateEndpoint	32	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:315:19:USB_DeactivateEndpoint	20	static
 ../Drivers/STM32F0xx_HAL_Driver/Src/stm32f0xx_ll_usb.c:594:19:USB_EPSetStall	0	static

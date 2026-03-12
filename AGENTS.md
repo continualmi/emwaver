@@ -71,8 +71,11 @@ We intentionally give up:
 
 ### Device trust model
 
+- Near-term activation plan: EMWaver V1 device registration is keyed first by immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) so minting is tied to a physical board, not just to whatever firmware identity is currently flashed.
+- Backend registration is authoritative for `board_type + hardware_uid`; re-flashing the same physical board should restore its existing EMWaver activation state rather than consume a new device mint.
 - Minted devices receive `DeviceID + Proof` signed by root ed25519 key.
 - Apps/backend verify proof against root public key.
+- `DeviceID + Proof` remains part of the platform direction and should be preserved in the architecture for later hardening, tighter app/firmware coupling, and stronger authenticity checks.
 - Unminted boards have no platform access — minting is the activation gate.
 - Backend enforces minting policy, rate limits, and payment verification.
 
