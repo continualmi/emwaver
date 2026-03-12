@@ -20,6 +20,7 @@ struct ContentView: View {
     @ObservedObject var hostDirectory: HostDirectory
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
+    @EnvironmentObject private var accountDevices: AccountDevicesService
     @EnvironmentObject private var entitlements: EntitlementsManager
 
     let previewManager: ScriptPreviewManager
@@ -231,6 +232,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingDeviceSheet) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
                 .environmentObject(auth)
+                .environmentObject(accountDevices)
         }
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
@@ -309,5 +311,6 @@ struct ContentView: View {
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())
+    .environmentObject(AccountDevicesService())
     .environmentObject(EntitlementsManager())
 }

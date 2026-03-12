@@ -25,6 +25,7 @@ struct EMWaverApp: App {
     @StateObject private var hostDirectory = HostDirectory()
     @StateObject private var remoteControlHost = RemoteControlHostService()
     @StateObject private var deviceRegistry = DeviceRegistryService()
+    @StateObject private var accountDevices = AccountDevicesService()
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var entitlements = EntitlementsManager()
 
@@ -33,6 +34,7 @@ struct EMWaverApp: App {
             ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory, remoteControlHost: remoteControlHost, previewManager: previewManager)
                 .environmentObject(auth)
                 .environmentObject(entitlements)
+                .environmentObject(accountDevices)
                 .sheet(isPresented: $firmwareUpdater.isPresented) {
                     FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
                 }
@@ -46,6 +48,7 @@ struct EMWaverApp: App {
 
                     // Device identity -> backend attach (or prompt sign-in).
                     deviceRegistry.start(auth: auth, device: device)
+                    accountDevices.start(auth: auth)
 
                     // Pro entitlements/eligibility.
                     await entitlements.refresh(auth: auth, force: true)

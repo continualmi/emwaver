@@ -88,6 +88,7 @@ Current macOS responsibility in this area:
 - first-party claim/restore + provision flow for supported devices,
 - backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
 - reading supported-board hardware UID in Run Mode before activation,
+- unified in-app device list with local cache fallback for Offline Mode,
 - writing/restoring the flash identity page after DFU flash,
 - explicit authenticity verification in Run Mode and Update Mode,
 - bundled or operator-selected custom firmware images,
