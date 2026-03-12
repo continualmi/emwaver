@@ -1,3 +1,16 @@
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      const value = String(device.boardType() || "").trim().toLowerCase();
+      if (value === "esp32s3") return "esp32s3";
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+const boardType = detectBoardType();
+const blinkPin = boardType === "esp32s3" ? "4" : GDO0;
+
 UI.render(
   UI.column({
     padding: 16,
@@ -11,10 +24,10 @@ UI.render(
 );
 
 let level = LOW;
-pinMode(GDO0, OUTPUT);
-digitalWrite(GDO0, level);
+pinMode(blinkPin, OUTPUT);
+digitalWrite(blinkPin, level);
 
 every(250, function () {
   level = level === LOW ? HIGH : LOW;
-  digitalWrite(GDO0, level);
+  digitalWrite(blinkPin, level);
 });

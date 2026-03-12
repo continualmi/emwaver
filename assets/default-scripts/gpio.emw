@@ -1,18 +1,74 @@
-const PINS = [
-    { label: "A0 (IR_RX)", value: A0 },
-    { label: "A1 (IR_TX)", value: A1 },
-    { label: "A2 (GDO0)", value: A2 },
-    { label: "A3 (GDO2)", value: A3 },
-    { label: "A4 (NSS)", value: A4 },
-    { label: "A5 (SCK)", value: A5 },
-    { label: "A6 (MISO)", value: A6 },
-    { label: "A7 (MOSI)", value: A7 },
-    // Note: SWD pins (A13/A14) and A15 are not exposed on the shipping board.
-    { label: "B6 (UART TX / I2C SCL)", value: B6 },
-    { label: "B7 (UART RX / I2C SDA)", value: B7 },
+function normalizeBoardType(value) {
+    return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+    try {
+        if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+            return normalizeBoardType(device.boardType());
+        }
+    } catch (e) {}
+    return "stm32f042";
+}
+
+function espPinLabel(pin) {
+    if (pin === 4) return "GPIO4 (IR_TX default)";
+    if (pin === 10) return "GPIO10 (SPI CS default)";
+    if (pin === 11) return "GPIO11 (SPI MOSI default)";
+    if (pin === 12) return "GPIO12 (SPI SCK default)";
+    if (pin === 13) return "GPIO13 (SPI MISO default)";
+    if (pin === 37) return "GPIO37 (IR_TX shield)";
+    return "GPIO" + String(pin);
+}
+
+function buildEspPins() {
+    var out = [];
+    for (var pin = 0; pin <= 48; pin += 1) {
+        out.push({ label: espPinLabel(pin), value: String(pin) });
+    }
+    return out;
+}
+
+function firstPin(options) {
+    return options.length ? String(options[0].value) : "0";
+}
+
+const MCU_OPTIONS = [
+    { label: "STM32F042", value: "stm32f042" },
+    { label: "ESP32-S3", value: "esp32s3" },
 ];
 
-let pin = PINS[0].value;
+const PINS_BY_BOARD = {
+    stm32f042: [
+        { label: "A0 (IR_RX)", value: A0 },
+        { label: "A1 (IR_TX)", value: A1 },
+        { label: "A2 (GDO0)", value: A2 },
+        { label: "A3 (GDO2)", value: A3 },
+        { label: "A4 (NSS)", value: A4 },
+        { label: "A5 (SCK)", value: A5 },
+        { label: "A6 (MISO)", value: A6 },
+        { label: "A7 (MOSI)", value: A7 },
+        { label: "B6 (UART TX / I2C SCL)", value: B6 },
+        { label: "B7 (UART RX / I2C SDA)", value: B7 },
+    ],
+    esp32s3: buildEspPins(),
+};
+
+let boardType = detectBoardType();
+let pin = firstPin(PINS_BY_BOARD[boardType]);
+
+function boardPins() {
+    return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
+
+function syncPin() {
+    var options = boardPins();
+    var current = String(pin);
+    for (var i = 0; i < options.length; i += 1) {
+        if (String(options[i].value) === current) return;
+    }
+    pin = firstPin(options);
+}
 
 function writeHigh() {
     pinMode(pin, OUTPUT);
@@ -24,24 +80,39 @@ function writeLow() {
     digitalWrite(pin, LOW);
 }
 
-UI.render(UI.column({
-    padding: 16,
-    spacing: 12,
-    children: [
-        UI.picker({
-            style: "menu",
-            selected: pin,
-            options: PINS,
-            onChange: function (value) {
-                pin = value;
-            },
-        }),
-        UI.row({
-            spacing: 12,
-            children: [
-                UI.button({ label: "High", onTap: writeHigh }),
-                UI.button({ label: "Low", onTap: writeLow }),
-            ],
-        }),
-    ],
-}));
+function render() {
+    UI.render(UI.column({
+        padding: 16,
+        spacing: 12,
+        children: [
+            UI.text({ text: "MCU", fontWeight: "medium" }),
+            UI.picker({
+                style: "segmented",
+                selected: boardType,
+                options: MCU_OPTIONS,
+                onChange: function (value) {
+                    boardType = normalizeBoardType(value);
+                    syncPin();
+                    render();
+                },
+            }),
+            UI.picker({
+                style: "menu",
+                selected: pin,
+                options: boardPins(),
+                onChange: function (value) {
+                    pin = String(value);
+                },
+            }),
+            UI.row({
+                spacing: 12,
+                children: [
+                    UI.button({ label: "High", onTap: writeHigh }),
+                    UI.button({ label: "Low", onTap: writeLow }),
+                ],
+            }),
+        ],
+    }));
+}
+
+render();

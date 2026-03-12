@@ -51,12 +51,39 @@ struct ContentView: View {
         return ("cable.connector.slash", "Disconnected")
     }
 
+    private var currentHardwareUidHex: String? {
+        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
+    private var currentBoardType: String {
+        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var deviceIsClaimed: Bool {
+        guard let hardwareUid = currentHardwareUidHex else { return false }
+        return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
+    }
+
+    private var scriptDeviceBridge: (any ScriptDevice)? {
+        guard device.isConnected else { return nil }
+        guard device.isSecureConnected || deviceIsClaimed else { return nil }
+        return device
+    }
+
+    private var scriptDeviceAttachmentKey: String {
+        let hardwareUid = currentHardwareUidHex ?? "none"
+        let suffix = (scriptDeviceBridge == nil) ? "blocked" : "ready"
+        return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
                 ScriptsRootView(
                     previewManager: previewManager,
-                    device: device,
+                    device: scriptDeviceBridge,
                     syncProvider: {
                         // Local testing uses the repo root .env bootstrap.
                         guard let base = BackendUrl.resolve() else { return nil }
@@ -104,6 +131,24 @@ struct ContentView: View {
                         showingSettings = true
                     }
                 )
+                .id(scriptDeviceAttachmentKey)
+
+                if device.isConnected && !device.isSecureConnected && !deviceIsClaimed {
+                    VStack(spacing: 10) {
+                        Text("Set up this device to use scripts")
+                            .font(.headline)
+                        Text("This board is connected, but it is not claimed in your account yet. Normal scripts cannot talk to it until setup is complete.")
+                            .multilineTextAlignment(.center)
+                            .foregroundStyle(.secondary)
+                        Button("Open Device") {
+                            showingDeviceSheet = true
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+                    .padding(20)
+                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .shadow(radius: 12)
+                }
 
                 if showingRemoteOverlay {
                     VStack(spacing: 0) {

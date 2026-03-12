@@ -1805,6 +1805,12 @@ int main(void)
               break;
           }
 
+          case EMW_OP_BOARD_GET: {
+              static const uint8_t out[] = "stm32f042";
+              command_send_ok(out, sizeof(out) - 1u);
+              break;
+          }
+
           case EMW_OP_NAME_GET: {
               char name[DEVICE_NAME_MAX_LEN + 1];
               get_device_name(name, sizeof(name));

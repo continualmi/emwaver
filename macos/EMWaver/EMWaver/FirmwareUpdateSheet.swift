@@ -2,6 +2,7 @@ import SwiftUI
 
 struct FirmwareUpdateSheet: View {
     @EnvironmentObject var auth: AuthenticationManager
+    @EnvironmentObject var accountDevices: AccountDevicesService
     @ObservedObject var device: MacUSBManager
     @ObservedObject var updater: FirmwareUpdateManager
 
@@ -12,8 +13,19 @@ struct FirmwareUpdateSheet: View {
         device.isSecureConnected
     }
 
+    private var currentHardwareUidHex: String? {
+        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
+        guard let value, !value.isEmpty else { return nil }
+        return value
+    }
+
     private var boardType: String {
         updater.presentedBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var currentDeviceIsRegistered: Bool {
+        guard let hardwareUid = currentHardwareUidHex else { return false }
+        return accountDevices.hasOfflineAccess(boardType: boardType, hardwareUid: hardwareUid)
     }
 
     private var isEspWorkflow: Bool {
@@ -28,7 +40,8 @@ struct FirmwareUpdateSheet: View {
             return false
         }
         if isEspWorkflow {
-            return updater.espBootloaderConnected || updater.espBootloaderPort != nil
+            let bootloaderReady = updater.espBootloaderConnected || updater.espBootloaderPort != nil
+            return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && auth.isSignedIn)
         }
         if !isSecureWorkflow {
             return device.isConnected && auth.isSignedIn
@@ -69,6 +82,12 @@ struct FirmwareUpdateSheet: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle((updater.espBootloaderConnected || updater.espBootloaderPort != nil) ? Color.green : .secondary)
 
+                    Text(currentDeviceIsRegistered
+                         ? "This board is already claimed in your account."
+                         : "This board is not claimed yet. Set up will claim it and flash EMWaver firmware.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     Text("1. Hold BOOT")
                     Text("2. Press and release RESET")
                     Text("3. Release BOOT")
@@ -80,8 +99,12 @@ struct FirmwareUpdateSheet: View {
                         }
                         .disabled(updater.isFlashing)
 
-                        Button("Flash firmware") {
-                            updater.startUpdate(device: device)
+                        Button(currentDeviceIsRegistered ? "Flash firmware" : "Set up device") {
+                            if currentDeviceIsRegistered {
+                                updater.startUpdate(device: device)
+                            } else {
+                                updater.startEspClaimAndFlash(auth: auth, accountDevices: accountDevices, device: device)
+                            }
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(!canStartPrimaryAction)

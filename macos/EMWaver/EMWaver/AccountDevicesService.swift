@@ -89,6 +89,43 @@ final class AccountDevicesService: ObservableObject {
         }
     }
 
+    func storeClaimedDevice(deviceIdB64: String, boardType: String, hardwareUid: String) {
+        let normalizedUid = normalized(hardwareUid)
+        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
+
+        if let index = devices.firstIndex(where: {
+            $0.boardType?.caseInsensitiveCompare(boardType) == .orderedSame &&
+            normalized($0.hardwareUid) == normalizedUid
+        }) {
+            let existing = devices[index]
+            devices[index] = DeviceRecord(
+                deviceIdB64: deviceIdB64,
+                label: existing.label.isEmpty ? "EMWaver device" : existing.label,
+                boardType: boardType,
+                hardwareUid: hardwareUid,
+                createdAtMs: existing.createdAtMs,
+                updatedAtMs: nowMs,
+                lastSeenAtMs: nowMs
+            )
+        } else {
+            devices.insert(
+                DeviceRecord(
+                    deviceIdB64: deviceIdB64,
+                    label: "EMWaver device",
+                    boardType: boardType,
+                    hardwareUid: hardwareUid,
+                    createdAtMs: nowMs,
+                    updatedAtMs: nowMs,
+                    lastSeenAtMs: nowMs
+                ),
+                at: 0
+            )
+        }
+
+        persistCache()
+        lastSyncAt = Date()
+    }
+
     private func performRefresh(auth: AuthenticationManager) async {
         if isOfflineMode {
             loadCache()

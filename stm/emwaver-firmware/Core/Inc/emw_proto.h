@@ -35,6 +35,10 @@
 // Reads the MCU factory-programmed 96-bit unique ID.
 #define EMW_OP_HARDWARE_UID_GET 0x08u
 
+// Board type
+// Returns a short board/MCU slug such as "stm32f042" or "esp32s3".
+#define EMW_OP_BOARD_GET 0x09u
+
 // Name
 #define EMW_OP_NAME_GET 0x04u
 #define EMW_OP_NAME_SET 0x05u
