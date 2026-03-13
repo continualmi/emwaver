@@ -1,0 +1,631 @@
+// RFM69 helper for SPI-connected RFM69/RFM69HW modules on the current EMWaver script runtime.
+
+var RFM69_CS = typeof NSS !== "undefined" ? NSS : 4;
+var RFM69_VERSION_EXPECTED = 0x24;
+var RFM69_FXOSC_HZ = 32000000.0;
+var RFM69_FSTEP_HZ = RFM69_FXOSC_HZ / 524288.0;
+
+var REG = {
+  FIFO: 0x00,
+  OPMODE: 0x01,
+  DATAMODUL: 0x02,
+  BITRATEMSB: 0x03,
+  BITRATELSB: 0x04,
+  FDEVMSB: 0x05,
+  FDEVLSB: 0x06,
+  FRFMSB: 0x07,
+  FRFMID: 0x08,
+  FRFLSB: 0x09,
+  VERSION: 0x10,
+  PALEVEL: 0x11,
+  PARAMP: 0x12,
+  OCP: 0x13,
+  LNA: 0x18,
+  RXBW: 0x19,
+  AFCBW: 0x1A,
+  OOKPEAK: 0x1B,
+  OOKFIX: 0x1D,
+  RSSICONFIG: 0x23,
+  RSSIVALUE: 0x24,
+  IRQFLAGS1: 0x27,
+  RSSITHRESH: 0x29,
+  PREAMBLEMSB: 0x2C,
+  PREAMBLELSB: 0x2D,
+  SYNCCONFIG: 0x2E,
+  SYNCVALUE1: 0x2F,
+  PACKETCONFIG1: 0x37,
+  PAYLOADLENGTH: 0x38,
+  FIFOTHRESH: 0x3C,
+  PACKETCONFIG2: 0x3D,
+  TESTLNA: 0x58,
+  TESTPA1: 0x5A,
+  TESTPA2: 0x5C,
+};
+
+var RF_OPMODE_SLEEP = 0x00;
+var RF_OPMODE_STANDBY = 0x04;
+var RF_OPMODE_SYNTHESIZER = 0x08;
+var RF_OPMODE_TRANSMITTER = 0x0C;
+var RF_OPMODE_RECEIVER = 0x10;
+
+var RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC = 0x40;
+var RF_DATAMODUL_MODULATIONTYPE_FSK = 0x00;
+var RF_DATAMODUL_MODULATIONTYPE_OOK = 0x08;
+
+var RF_PALEVEL_PA0_ON = 0x80;
+var RF_PALEVEL_PA0_OFF = 0x00;
+var RF_PALEVEL_PA1_ON = 0x40;
+var RF_PALEVEL_PA1_OFF = 0x00;
+var RF_PALEVEL_PA2_ON = 0x20;
+var RF_PALEVEL_PA2_OFF = 0x00;
+
+var RF_OCP_ON = 0x1A;
+var RF_OCP_OFF = 0x0F;
+
+var RF_LNA_ZIN_50 = 0x00;
+var RF_LNA_GAINSELECT_AUTO = 0x00;
+
+var RF_OOKPEAK_THRESHTYPE_FIXED = 0x00;
+var RF_OOKPEAK_THRESHTYPE_PEAK = 0x40;
+
+var RF_RSSI_START = 0x01;
+var RF_RSSI_DONE = 0x02;
+var RF_IRQFLAGS1_MODEREADY = 0x80;
+
+var MODE_SLEEP = 0;
+var MODE_STANDBY = 1;
+var MODE_SYNTH = 2;
+var MODE_RX = 3;
+var MODE_TX = 4;
+
+var MOD_FSK = "FSK";
+var MOD_OOK = "OOK";
+
+var PA_MODE_PA0 = 1;
+var PA_MODE_PA1 = 2;
+var PA_MODE_PA1_PA2 = 3;
+var PA_MODE_PA1_PA2_20DBM = 4;
+
+var PA_MODE_OPTIONS = [
+  { label: "PA0", value: String(PA_MODE_PA0) },
+  { label: "PA1", value: String(PA_MODE_PA1) },
+  { label: "PA1+PA2", value: String(PA_MODE_PA1_PA2) },
+  { label: "PA1+PA2 20dBm", value: String(PA_MODE_PA1_PA2_20DBM) },
+];
+
+var BANDWIDTH_OPTIONS = [
+  { label: "250 kHz", value: "1A" },
+  { label: "125 kHz", value: "0A" },
+  { label: "62.5 kHz", value: "0B" },
+  { label: "31.3 kHz", value: "13" },
+];
+
+var statusText = "Ready";
+var detectedVersionText = "--";
+var modeText = "--";
+var frequencyText = "433.92";
+var dataRateText = "100000";
+var deviationText = "50000";
+var powerText = "10";
+var modulation = MOD_FSK;
+var paModeText = String(PA_MODE_PA1_PA2);
+var bandwidthText = "1A";
+var ocpEnabled = "on";
+var rssiText = "--";
+var logLines = [];
+
+function toHexByte(n) {
+  var v = Number(n) & 0xFF;
+  var s = v.toString(16).toUpperCase();
+  return s.length < 2 ? ("0" + s) : s;
+}
+
+function isFiniteNumber(value) {
+  return typeof value === "number" && isFinite(value);
+}
+
+function clampInt(value, minValue, maxValue) {
+  var n = Number(value);
+  if (!isFiniteNumber(n)) return minValue;
+  n = Math.round(n);
+  if (n < minValue) return minValue;
+  if (n > maxValue) return maxValue;
+  return n;
+}
+
+function formatFrequency(value) {
+  var n = Number(value);
+  return isFiniteNumber(n) ? n.toFixed(3) : String(value);
+}
+
+function pushLog(line) {
+  logLines.push(String(line));
+  if (logLines.length > 200) {
+    logLines = logLines.slice(logLines.length - 200);
+  }
+}
+
+function parseTextNumber(label, value, allowFloat) {
+  var text = String(value || "").trim();
+  var parsed = allowFloat ? Number(text) : parseInt(text, 10);
+  if (!isFiniteNumber(parsed) || parsed <= 0) {
+    throw new Error("Invalid " + label + ": " + String(value));
+  }
+  return parsed;
+}
+
+function parseSignedInteger(label, value) {
+  var text = String(value || "").trim();
+  var parsed = parseInt(text, 10);
+  if (!isFiniteNumber(parsed)) {
+    throw new Error("Invalid " + label + ": " + String(value));
+  }
+  return parsed;
+}
+
+function parseBandwidthRaw() {
+  var clean = String(bandwidthText || "").trim().replace(/^0x/i, "");
+  if (!/^[0-9a-fA-F]{1,2}$/.test(clean)) {
+    throw new Error("Invalid bandwidth raw value: " + String(bandwidthText));
+  }
+  return parseInt(clean, 16) & 0x1F;
+}
+
+function currentConfig() {
+  return {
+    frequencyMHz: parseTextNumber("frequency", frequencyText, true),
+    dataRate: parseTextNumber("bitrate", dataRateText, false),
+    deviationHz: parseTextNumber("deviation", deviationText, false),
+    powerDbm: parseSignedInteger("power", powerText),
+    modulation: modulation === MOD_OOK ? MOD_OOK : MOD_FSK,
+    paMode: clampInt(parseInt(paModeText, 10), PA_MODE_PA0, PA_MODE_PA1_PA2_20DBM),
+    bandwidthRaw: parseBandwidthRaw(),
+    ocp: ocpEnabled !== "off",
+  };
+}
+
+function describeConfig(config) {
+  return (
+    "freq=" + formatFrequency(config.frequencyMHz) + "MHz, " +
+    "rate=" + String(config.dataRate) + "bps, " +
+    "dev=" + String(config.deviationHz) + "Hz, " +
+    "mod=" + config.modulation + ", " +
+    "power=" + String(config.powerDbm) + "dBm"
+  );
+}
+
+function rfm69SpiXfer(txBytes, opts) {
+  var options = opts || {};
+  var rxLength = typeof options.rxLength === "number" ? options.rxLength : txBytes.length;
+  return SPI.transfer(txBytes, { cs: RFM69_CS, rxLength: rxLength });
+}
+
+function writeReg(addr, value) {
+  rfm69SpiXfer([(Number(addr) | 0x80) & 0xFF, Number(value) & 0xFF], { rxLength: 2 });
+}
+
+function readReg(addr) {
+  var response = rfm69SpiXfer([Number(addr) & 0x7F, 0x00], { rxLength: 2 });
+  return response && response.length >= 2 ? (response[1] & 0xFF) : 0;
+}
+
+function getModeLabelFromRegister(opmode) {
+  var modeBits = Number(opmode) & 0x1C;
+  if (modeBits === RF_OPMODE_SLEEP) return "Sleep";
+  if (modeBits === RF_OPMODE_STANDBY) return "Standby";
+  if (modeBits === RF_OPMODE_SYNTHESIZER) return "Synth";
+  if (modeBits === RF_OPMODE_RECEIVER) return "RX";
+  if (modeBits === RF_OPMODE_TRANSMITTER) return "TX";
+  return "0x" + toHexByte(opmode);
+}
+
+function refreshProbeFields() {
+  var version = readReg(REG.VERSION);
+  detectedVersionText = "0x" + toHexByte(version);
+  modeText = getModeLabelFromRegister(readReg(REG.OPMODE));
+}
+
+function waitForModeReady() {
+  for (var i = 0; i < 200; i += 1) {
+    if ((readReg(REG.IRQFLAGS1) & RF_IRQFLAGS1_MODEREADY) !== 0) return true;
+    delay(2);
+  }
+  return false;
+}
+
+function setMode(mode) {
+  var currentOpMode = readReg(REG.OPMODE);
+  var newOpMode = currentOpMode;
+
+  if (mode === MODE_TX) {
+    newOpMode = (currentOpMode & 0xE3) | RF_OPMODE_TRANSMITTER;
+  } else if (mode === MODE_RX) {
+    newOpMode = (currentOpMode & 0xE3) | RF_OPMODE_RECEIVER;
+    writeReg(REG.TESTPA1, 0x55);
+    writeReg(REG.TESTPA2, 0x70);
+    writeReg(REG.OCP, RF_OCP_ON);
+  } else if (mode === MODE_SYNTH) {
+    newOpMode = (currentOpMode & 0xE3) | RF_OPMODE_SYNTHESIZER;
+  } else if (mode === MODE_STANDBY) {
+    newOpMode = (currentOpMode & 0xE3) | RF_OPMODE_STANDBY;
+  } else if (mode === MODE_SLEEP) {
+    newOpMode = (currentOpMode & 0xE3) | RF_OPMODE_SLEEP;
+  }
+
+  writeReg(REG.OPMODE, newOpMode);
+  waitForModeReady();
+  modeText = getModeLabelFromRegister(readReg(REG.OPMODE));
+}
+
+function setFrequencyMHz(freqMHz) {
+  var frf = Math.round((Number(freqMHz) * 1000000.0) / RFM69_FSTEP_HZ);
+  writeReg(REG.FRFMSB, (frf >> 16) & 0xFF);
+  writeReg(REG.FRFMID, (frf >> 8) & 0xFF);
+  writeReg(REG.FRFLSB, frf & 0xFF);
+}
+
+function getFrequencyMHz() {
+  var frfMsb = readReg(REG.FRFMSB);
+  var frfMid = readReg(REG.FRFMID);
+  var frfLsb = readReg(REG.FRFLSB);
+  var frf = ((frfMsb & 0xFF) << 16) | ((frfMid & 0xFF) << 8) | (frfLsb & 0xFF);
+  return (frf * RFM69_FSTEP_HZ) / 1000000.0;
+}
+
+function setDataRate(bps) {
+  var bitrate = Math.round(RFM69_FXOSC_HZ / Number(bps));
+  writeReg(REG.BITRATEMSB, (bitrate >> 8) & 0xFF);
+  writeReg(REG.BITRATELSB, bitrate & 0xFF);
+}
+
+function getDataRate() {
+  var bitrate = ((readReg(REG.BITRATEMSB) & 0xFF) << 8) | (readReg(REG.BITRATELSB) & 0xFF);
+  if (bitrate <= 0) return 0;
+  return Math.round(RFM69_FXOSC_HZ / bitrate);
+}
+
+function setDeviation(deviationHz) {
+  var deviation = Math.round(Number(deviationHz) / RFM69_FSTEP_HZ);
+  writeReg(REG.FDEVMSB, (deviation >> 8) & 0xFF);
+  writeReg(REG.FDEVLSB, deviation & 0xFF);
+}
+
+function setBandwidthRaw(rawValue) {
+  var bw = Number(rawValue) & 0x1F;
+  writeReg(REG.RXBW, (readReg(REG.RXBW) & 0xE0) | bw);
+  writeReg(REG.AFCBW, (readReg(REG.AFCBW) & 0xE0) | bw);
+}
+
+function setModulation(modValue) {
+  if (modValue === MOD_OOK) {
+    writeReg(REG.DATAMODUL, RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC | RF_DATAMODUL_MODULATIONTYPE_OOK);
+  } else {
+    writeReg(REG.DATAMODUL, RF_DATAMODUL_DATAMODE_CONTINUOUSNOBSYNC | RF_DATAMODUL_MODULATIONTYPE_FSK);
+  }
+}
+
+function setLNAGainAuto() {
+  writeReg(REG.LNA, RF_LNA_ZIN_50 | RF_LNA_GAINSELECT_AUTO);
+}
+
+function setSensitivityBoost(enabled) {
+  writeReg(REG.TESTLNA, enabled ? 0x2D : 0x1B);
+}
+
+function setThresholdTypeFixed(fixed) {
+  writeReg(REG.OOKPEAK, fixed ? RF_OOKPEAK_THRESHTYPE_FIXED : RF_OOKPEAK_THRESHTYPE_PEAK);
+}
+
+function setFixedThreshold(threshold) {
+  writeReg(REG.OOKFIX, Number(threshold) & 0xFF);
+}
+
+function setRSSIThreshold(threshold) {
+  writeReg(REG.RSSITHRESH, Number(threshold) & 0xFF);
+}
+
+function setTransmitPower(dbm, paMode, ocp) {
+  var power = clampInt(dbm, -18, 20);
+  var mode = clampInt(paMode, PA_MODE_PA0, PA_MODE_PA1_PA2_20DBM);
+  var paLevel = 0;
+
+  if (mode === PA_MODE_PA0) {
+    paLevel = RF_PALEVEL_PA0_ON | RF_PALEVEL_PA1_OFF | RF_PALEVEL_PA2_OFF | (power > 13 ? 31 : (power + 18));
+    writeReg(REG.TESTPA1, 0x55);
+    writeReg(REG.TESTPA2, 0x70);
+  } else if (mode === PA_MODE_PA1) {
+    paLevel = RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_OFF | (power > 13 ? 31 : (power + 18));
+    writeReg(REG.TESTPA1, 0x55);
+    writeReg(REG.TESTPA2, 0x70);
+  } else if (mode === PA_MODE_PA1_PA2) {
+    paLevel = RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_ON | (power > 17 ? 31 : (power + 14));
+    writeReg(REG.TESTPA1, 0x55);
+    writeReg(REG.TESTPA2, 0x70);
+  } else {
+    paLevel = RF_PALEVEL_PA0_OFF | RF_PALEVEL_PA1_ON | RF_PALEVEL_PA2_ON | (power > 20 ? 31 : (power + 11));
+    writeReg(REG.TESTPA1, 0x5D);
+    writeReg(REG.TESTPA2, 0x7C);
+  }
+
+  writeReg(REG.PALEVEL, paLevel & 0xFF);
+  writeReg(REG.OCP, ocp ? RF_OCP_ON : RF_OCP_OFF);
+}
+
+function readRSSI(forceTrigger) {
+  if (forceTrigger) {
+    writeReg(REG.RSSICONFIG, RF_RSSI_START);
+    for (var i = 0; i < 100; i += 1) {
+      if ((readReg(REG.RSSICONFIG) & RF_RSSI_DONE) !== 0) break;
+      delay(1);
+    }
+  }
+  return -((readReg(REG.RSSIVALUE) & 0xFF) >> 1);
+}
+
+function initializeRadio() {
+  setMode(MODE_STANDBY);
+  writeReg(REG.PARAMP, 0x08);
+  writeReg(REG.PREAMBLEMSB, 0x00);
+  writeReg(REG.PREAMBLELSB, 0x03);
+  writeReg(REG.SYNCCONFIG, 0x88);
+  writeReg(REG.SYNCVALUE1, 0x2D);
+  writeReg(REG.PACKETCONFIG1, 0x00);
+  writeReg(REG.PACKETCONFIG2, 0x00);
+  writeReg(REG.PAYLOADLENGTH, 0x00);
+  writeReg(REG.FIFOTHRESH, 0x8F);
+  setLNAGainAuto();
+  setSensitivityBoost(false);
+  setThresholdTypeFixed(true);
+  setFixedThreshold(0x0A);
+  setRSSIThreshold(0xE4);
+}
+
+function applyConfiguration(config) {
+  initializeRadio();
+  setFrequencyMHz(config.frequencyMHz);
+  setDataRate(config.dataRate);
+  setDeviation(config.deviationHz);
+  setBandwidthRaw(config.bandwidthRaw);
+  setModulation(config.modulation);
+  setTransmitPower(config.powerDbm, config.paMode, config.ocp);
+
+  var actualFrequency = getFrequencyMHz();
+  var actualDataRate = getDataRate();
+  frequencyText = String(actualFrequency.toFixed(3));
+  dataRateText = String(actualDataRate);
+  return {
+    frequencyMHz: actualFrequency,
+    dataRate: actualDataRate,
+    deviationHz: config.deviationHz,
+    powerDbm: config.powerDbm,
+    modulation: config.modulation,
+  };
+}
+
+function withRadioAction(label, fn) {
+  try {
+    statusText = label + "...";
+    render();
+    var result = fn();
+    refreshProbeFields();
+    if (result && typeof result === "object") {
+      pushLog(label + ": " + describeConfig(result));
+    } else {
+      pushLog(label + ": ok");
+    }
+    statusText = label + " complete";
+  } catch (e) {
+    statusText = label + " failed: " + String(e && e.message ? e.message : e);
+    pushLog(statusText);
+  }
+  render();
+}
+
+function actionProbe() {
+  withRadioAction("Probe", function () {
+    refreshProbeFields();
+    var version = readReg(REG.VERSION);
+    var freq = getFrequencyMHz();
+    var rate = getDataRate();
+    statusText =
+      version === RFM69_VERSION_EXPECTED
+        ? "RFM69 detected"
+        : "Probe complete (VERSION=" + detectedVersionText + ")";
+    pushLog(
+      "probe version=" + detectedVersionText +
+      ", mode=" + modeText +
+      ", freq=" + formatFrequency(freq) + "MHz" +
+      ", rate=" + String(rate) + "bps"
+    );
+    return null;
+  });
+}
+
+function actionInitRx() {
+  withRadioAction("Init RX", function () {
+    var config = currentConfig();
+    var applied = applyConfiguration(config);
+    setMode(MODE_RX);
+    rssiText = String(readRSSI(true)) + " dBm";
+    return applied;
+  });
+}
+
+function actionInitTx() {
+  withRadioAction("Init TX", function () {
+    var config = currentConfig();
+    var applied = applyConfiguration(config);
+    setMode(MODE_TX);
+    return applied;
+  });
+}
+
+function actionStandby() {
+  withRadioAction("Standby", function () {
+    setMode(MODE_STANDBY);
+    return null;
+  });
+}
+
+function actionReadRssi() {
+  withRadioAction("Read RSSI", function () {
+    rssiText = String(readRSSI(true)) + " dBm";
+    pushLog("RSSI: " + rssiText);
+    statusText = "RSSI updated";
+    return null;
+  });
+}
+
+function render() {
+  UI.render(UI.scroll({
+    padding: 16,
+    spacing: 12,
+    children: [
+      UI.text({ text: "RFM69", font: "title2", fontWeight: "semibold" }),
+      UI.text({
+        text: "SPI script for RFM69/RFM69HW modules. CS defaults to NSS/A4 on the current script runtime.",
+      }),
+
+      UI.text({
+        text: "Version: " + detectedVersionText + " | Mode: " + modeText + " | RSSI: " + rssiText,
+        font: "caption",
+      }),
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.button({ label: "Probe", onTap: actionProbe }),
+          UI.button({ label: "Read RSSI", onTap: actionReadRssi }),
+          UI.button({ label: "Standby", onTap: actionStandby }),
+        ],
+      }),
+
+      UI.divider({}),
+      UI.text({ text: "Configuration", fontWeight: "medium" }),
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.textField({
+            value: frequencyText,
+            placeholder: "Frequency MHz",
+            onChange: function (v) {
+              frequencyText = String(v || "");
+              render();
+            },
+          }),
+          UI.textField({
+            value: dataRateText,
+            placeholder: "Bitrate bps",
+            onChange: function (v) {
+              dataRateText = String(v || "");
+              render();
+            },
+          }),
+        ],
+      }),
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.textField({
+            value: deviationText,
+            placeholder: "Deviation Hz",
+            onChange: function (v) {
+              deviationText = String(v || "");
+              render();
+            },
+          }),
+          UI.textField({
+            value: powerText,
+            placeholder: "Power dBm",
+            onChange: function (v) {
+              powerText = String(v || "");
+              render();
+            },
+          }),
+        ],
+      }),
+
+      UI.picker({
+        style: "segmented",
+        selected: modulation,
+        options: [
+          { label: "FSK", value: MOD_FSK },
+          { label: "OOK", value: MOD_OOK },
+        ],
+        onChange: function (v) {
+          modulation = v === MOD_OOK ? MOD_OOK : MOD_FSK;
+          render();
+        },
+      }),
+
+      UI.picker({
+        selected: paModeText,
+        options: PA_MODE_OPTIONS,
+        onChange: function (v) {
+          paModeText = String(v || String(PA_MODE_PA1_PA2));
+          render();
+        },
+      }),
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.picker({
+            selected: bandwidthText,
+            options: BANDWIDTH_OPTIONS,
+            onChange: function (v) {
+              bandwidthText = String(v || "1A");
+              render();
+            },
+          }),
+          UI.picker({
+            style: "segmented",
+            selected: ocpEnabled,
+            options: [
+              { label: "OCP On", value: "on" },
+              { label: "OCP Off", value: "off" },
+            ],
+            onChange: function (v) {
+              ocpEnabled = v === "off" ? "off" : "on";
+              render();
+            },
+          }),
+        ],
+      }),
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.button({ label: "Init RX", onTap: actionInitRx }),
+          UI.button({ label: "Init TX", onTap: actionInitTx }),
+        ],
+      }),
+
+      statusText
+        ? UI.text({
+            text: statusText,
+            padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+            cornerRadius: 8,
+          })
+        : null,
+
+      UI.row({
+        spacing: 8,
+        children: [
+          UI.button({
+            label: "Clear Log",
+            onTap: function () {
+              logLines = [];
+              render();
+            },
+          }),
+        ],
+      }),
+      UI.logViewer({ text: logLines.join("\n"), minHeight: 220 }),
+    ],
+  }));
+}
+
+render();
