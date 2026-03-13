@@ -1,11 +1,17 @@
 # Hardware
 
-This folder holds the board-source and manufacturing material for EMWaver Shield.
+This folder holds the revision-specific hardware package for EMWaver Shield.
 
-Recommended structure as the repo fills out:
+Current direction:
 
-- `revisions/<revision>/source/` - EDA source files for a board revision.
-- `revisions/<revision>/fabrication/` - Gerbers, drill files, pick-and-place, BOMs.
-- `revisions/<revision>/notes.md` - concise revision notes and manufacturing caveats.
+- keep mirrored catalog material in `../catalog/`,
+- keep builder-facing documentation in `../docs/`,
+- keep actual board-source and fabrication assets here under `revisions/`.
+
+Recommended revision layout:
+
+- `revisions/<revision>/source/` - editable EDA source files
+- `revisions/<revision>/fabrication/` - Gerbers, drill files, BOMs, pick-and-place outputs
+- `revisions/<revision>/docs/` - pinouts, assembly notes, and manufacturing caveats
 
 Keep revision history inside this repo rather than creating a new repo for every hardware tweak.

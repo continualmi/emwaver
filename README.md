@@ -1,59 +1,51 @@
-# EMWaver Shield
+# EMWaver Shield Build Guide
 
 EMWaver Shield is a shield-style carrier board for an ESP32-S3 module in the EMWaver hardware family.
 
 <p align="center">
-  <img src="assets/images/emwaver-shield-phone-side.jpg" alt="EMWaver Shield with phone app side view" width="49%" />
-  <img src="assets/images/emwaver-shield-phone.jpg" alt="EMWaver Shield with phone app front view" width="49%" />
+  <img src="catalog/images/IMG_0063.jpg" alt="EMWaver Shield mounted with phone app side view" width="49%" />
+  <img src="catalog/images/IMG_0064.jpg" alt="EMWaver Shield mounted with phone app front view" width="49%" />
 </p>
 
-This repository is the hardware home for the board: design files, manufacturing assets, board notes, images, and release artifacts that help people understand or reproduce the hardware.
+This repository is primarily a build guide and hardware package for reproducing the board. It exists to collect the shield's public-facing hardware materials in one place: photos, catalog metadata, build notes, and design references.
 
-It is intentionally not the software source of truth for EMWaver. Firmware, app integration, provisioning, and platform logic live in the private EMWaver product repositories.
+EMWaver apps remain the normal software path. This repo is not the source of truth for private app, backend, provisioning, or internal firmware source.
 
-## Status
+## Start here
 
-- Private pre-launch repository.
-- Hardware-focused repository.
-- EMWaver apps remain the primary software distribution path.
+- [docs/guides/build-guide.md](docs/guides/build-guide.md) - practical builder flow.
+- [docs/reference/parts.md](docs/reference/parts.md) - parts and tools checklist.
+- [docs/reference/design-sources.md](docs/reference/design-sources.md) - current OSHWLab and EasyEDA references.
+- [catalog/device.json](catalog/device.json) - mirrored shield catalog metadata from the main EMWaver repo.
 
-## What belongs here
+## Build at a glance
 
-- PCB and schematic source files.
-- Manufacturing exports such as Gerbers, pick-and-place, and BOMs.
-- Board revision notes and assembly guidance.
-- Images, renders, and hardware-facing documentation.
-- Optional convenience binaries or recovery artifacts, when useful.
+1. Review the required parts and decide whether you are building the full radio-capable configuration.
+2. Open the linked design sources and export the fabrication files you need if local manufacturing assets are not yet committed here.
+3. Order the PCB and parts.
+4. Assemble the board, including the ESP32-S3 DevKit carrier and the optional/target radio hardware.
+5. Use the EMWaver apps for the software side rather than a manual firmware workflow.
 
-## What does not belong here
+## Current board direction
 
-- Private EMWaver application code.
-- Private backend, provisioning, or minting logic.
-- Internal firmware source or other non-public software.
-- Product-internal platform documentation that belongs in the main EMWaver repo.
-
-## Board summary
-
-Current direction for EMWaver Shield:
-
-- Shield-style board for an ESP32-S3 DevKit-class module.
+- Shield carrier for an ESP32-S3 DevKit-class module.
 - IR receiver and IR LED support.
-- USB-oriented EMWaver workflow.
-- Footprint/support for an RFM69HW radio module with helical antenna.
+- USB-C oriented EMWaver workflow.
+- RFM69HW radio module footprint with helical antenna support.
 - Large duplicated GPIO breakout intended for prototyping and expansion.
+- App support listed in the current catalog metadata: Android, iOS, and desktop.
 
-![EMWaver Shield render](assets/images/emwaver-shield.png)
+## Current repo contents
 
-## Repository layout
+- `catalog/` mirrors the current `EMWAVER_SHIELD` entry from the EMWaver web hardware catalog, including all photos and the device manifest.
+- `docs/` contains the builder-facing guide, parts checklist, and design-source references.
+- `hardware/` is where revision-specific source files and manufacturing exports should live as they are brought into the repo.
+- `assets/` is reserved for presentation material that is not part of the mirrored catalog package.
 
-- `hardware/` - board files, exports, and revision-specific hardware material.
-- `docs/` - hardware-facing notes, assembly guidance, and public documentation drafts.
-- `assets/` - images, renders, and presentation material.
+## Build status
 
-## Release posture
+The current source material available in-repo is the catalog package plus external design links. Manufacturing exports and local revision source files still need to be added here as the hardware package is filled out.
 
-If binaries are published here, they are convenience artifacts only. The normal user path is through EMWaver apps, which manage activation, updates, and the supported software experience.
-
-## Relationship to EMWaver
-
-EMWaver Shield is one hardware surface in the broader EMWaver platform. Users should experience it through the unified EMWaver apps rather than through a manual firmware workflow.
+<p align="center">
+  <img src="catalog/images/EMWAVER_SHIELD.png" alt="EMWaver Shield render" width="70%" />
+</p>

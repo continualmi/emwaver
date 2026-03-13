@@ -1,13 +1,13 @@
 # EMWaver Shield Repository Guidelines
 
-This repository is the hardware-facing home for **EMWaver Shield**.
+This repository is the hardware-facing home for **EMWaver Shield** and is organized primarily as a build-guide repo.
 
 Keep this file short and policy-oriented. Detailed notes belong in folder `README.md` files.
 
 ## Purpose
 
 - Public/private hardware repo for the EMWaver Shield board.
-- Primary contents: PCB design files, manufacturing outputs, board notes, images, and hardware documentation.
+- Primary contents: build-guide documentation, PCB design files, manufacturing outputs, board notes, images, and hardware documentation.
 - This repo is not the source of truth for EMWaver software or internal firmware source.
 
 ## Keep in `AGENTS.md`
@@ -26,9 +26,10 @@ Keep this file short and policy-oriented. Detailed notes belong in folder `READM
 
 ## Documentation map
 
-- `README.md` - top-level board overview and repo positioning.
+- `README.md` - top-level build-guide entry point.
+- `catalog/README.md` - mirrored catalog package from the main EMWaver repo.
 - `hardware/README.md` - PCB files, manufacturing exports, and revision layout.
-- `docs/README.md` - board-facing documentation and assembly/user notes.
+- `docs/README.md` - builder-facing documentation map.
 
 ## Guardrails
 
@@ -37,6 +38,7 @@ Keep this file short and policy-oriented. Detailed notes belong in folder `READM
 - If binaries are published, treat them as convenience artifacts, not the primary distribution channel.
 - Prefer revision folders over creating a new repo for every small board iteration.
 - Keep hardware docs and hardware assets updated together.
+- When importing material from the main EMWaver repo, prefer keeping the shield repo self-contained by mirroring the relevant catalog/design artifacts here.
 
 ## Workspace note
 

@@ -1,11 +1,11 @@
 # Docs
 
-This folder is for hardware-facing documentation such as:
+This repo is now organized primarily as a build guide, so `docs/` is the main builder-facing surface.
 
-- assembly notes,
-- bring-up checklists,
-- board revision summaries,
-- connector pinout notes,
-- user-facing hardware setup guidance.
+Current structure:
 
-Do not duplicate private software/platform internals here; link to the appropriate private product documentation when needed.
+- `guides/build-guide.md` - the main reproduction flow.
+- `reference/parts.md` - parts and tools checklist.
+- `reference/design-sources.md` - external design references plus local mirrored catalog material.
+
+Do not duplicate private EMWaver software/platform internals here.
