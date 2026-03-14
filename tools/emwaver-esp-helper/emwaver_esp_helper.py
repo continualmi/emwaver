@@ -6,7 +6,14 @@ import sys
 from pathlib import Path
 
 import esptool
+from esptool.cmds import detect_chip
 from serial.tools import list_ports
+
+CHIP_FEATURE_EMB_FLASH = 1 << 0
+CHIP_FEATURE_WIFI_BGN = 1 << 1
+CHIP_FEATURE_BLE = 1 << 4
+CHIP_FEATURE_EMB_PSRAM = 1 << 7
+CHIP_ESP32S3 = 9
 
 
 def _run_esptool(argv: list[str]) -> int:
@@ -38,6 +45,81 @@ def cmd_chip_id(args: argparse.Namespace) -> int:
         argv.append("--no-stub")
     argv.append("chip_id")
     return _run_esptool(argv)
+
+
+def _feature_mask_for_chip(esp: object) -> int:
+    features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BLE
+
+    get_flash_cap = getattr(esp, "get_flash_cap", None)
+    if callable(get_flash_cap):
+        try:
+            if int(get_flash_cap()) > 0:
+                features |= CHIP_FEATURE_EMB_FLASH
+        except Exception:
+            pass
+
+    get_psram_cap = getattr(esp, "get_psram_cap", None)
+    if callable(get_psram_cap):
+        try:
+            if int(get_psram_cap()) > 0:
+                features |= CHIP_FEATURE_EMB_PSRAM
+        except Exception:
+            pass
+
+    return features
+
+
+def _hardware_uid_hex_for_chip(esp: object) -> str:
+    mac = tuple(int(x) & 0xFF for x in esp.read_mac("BASE_MAC"))
+    revision = int(esp.get_chip_revision()) & 0xFF
+    cores = int(getattr(esp, "CHIP_CORES", 2)) & 0xFF
+    features = _feature_mask_for_chip(esp) & 0xFFFF
+
+    uid = bytes([
+        *mac,
+        CHIP_ESP32S3,
+        revision,
+        features & 0xFF,
+        (features >> 8) & 0xFF,
+        cores,
+        0x53,
+    ])
+    return uid.hex().upper()
+
+
+def cmd_read_identity(args: argparse.Namespace) -> int:
+    esp = None
+    try:
+        esp = detect_chip(
+            port=args.port,
+            baud=args.baud,
+            connect_mode="no_reset",
+            trace_enabled=False,
+        )
+        mac = tuple(int(x) & 0xFF for x in esp.read_mac("BASE_MAC"))
+        revision = int(esp.get_chip_revision())
+        cores = int(getattr(esp, "CHIP_CORES", 2))
+        features = _feature_mask_for_chip(esp)
+
+        print(f"CHIP_NAME={esp.CHIP_NAME}")
+        print(f"MAC={':'.join(f'{b:02X}' for b in mac)}")
+        print(f"CHIP_MODEL={CHIP_ESP32S3}")
+        print(f"CHIP_REVISION={revision}")
+        print(f"FEATURES=0x{features:04X}")
+        print(f"CORES={cores}")
+        print(f"HARDWARE_UID_HEX={_hardware_uid_hex_for_chip(esp)}")
+        return 0
+    except Exception as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    finally:
+        if esp is not None:
+            port = getattr(esp, "_port", None)
+            if port is not None:
+                try:
+                    port.close()
+                except Exception:
+                    pass
 
 
 def _require_file(path: str, label: str) -> str:
@@ -87,6 +169,11 @@ def build_parser() -> argparse.ArgumentParser:
     chip_id.add_argument("--baud", type=int, default=115200)
     chip_id.add_argument("--no-stub", action="store_true")
     chip_id.set_defaults(func=cmd_chip_id)
+
+    read_identity = sub.add_parser("read-identity")
+    read_identity.add_argument("--port", required=True)
+    read_identity.add_argument("--baud", type=int, default=115200)
+    read_identity.set_defaults(func=cmd_read_identity)
 
     flash = sub.add_parser("flash")
     flash.add_argument("--port", required=True)

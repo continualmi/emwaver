@@ -1,4 +1,4 @@
-name: Deploy Web (Azure App Service)
+name: Deploy Web (Azure Container Apps)
 
 on:
   workflow_dispatch:
@@ -14,11 +14,12 @@ permissions:
   id-token: write
 
 concurrency:
-  group: azure-web-app-service
+  group: azure-web-containerapp
   cancel-in-progress: true
 
 env:
-  AZURE_WEBAPP_NAME: emwaver-web
+  AZURE_CONTAINERAPP_NAME: emwaver-web
+  AZURE_CONTAINERAPPS_ENVIRONMENT: managedEnvironment-emwaver-9c25
   AZURE_RESOURCE_GROUP: emwaver
   IMAGE_NAME: emwaver-web
 
@@ -73,29 +74,47 @@ jobs:
           echo "username=$(az acr credential show -n '${{ secrets.AZURE_ACR_NAME }}' --query 'username' -o tsv)" >> "$GITHUB_OUTPUT"
           echo "password=$(az acr credential show -n '${{ secrets.AZURE_ACR_NAME }}' --query 'passwords[0].value' -o tsv)" >> "$GITHUB_OUTPUT"
 
-      - name: Configure Azure Web App container
+      - name: Create or update Azure Container App
+        shell: bash
         run: |
-          az webapp config container set \
+          set -euo pipefail
+
+          IMAGE="${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}"
+
+          if az containerapp show \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --name "${AZURE_WEBAPP_NAME}" \
-            --container-image-name "${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}" \
-            --container-registry-url "https://${{ secrets.AZURE_ACR_LOGIN_SERVER }}" \
-            --container-registry-user "${{ steps.acr.outputs.username }}" \
-            --container-registry-password "${{ steps.acr.outputs.password }}"
+            --name "${AZURE_CONTAINERAPP_NAME}" >/dev/null 2>&1; then
+            az containerapp update \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --name "${AZURE_CONTAINERAPP_NAME}" \
+              --image "${IMAGE}" \
+              --min-replicas 0 \
+              --max-replicas 1
+          else
+            az containerapp create \
+              --resource-group "${AZURE_RESOURCE_GROUP}" \
+              --environment "${AZURE_CONTAINERAPPS_ENVIRONMENT}" \
+              --name "${AZURE_CONTAINERAPP_NAME}" \
+              --image "${IMAGE}" \
+              --target-port 3000 \
+              --ingress external \
+              --registry-server "${{ secrets.AZURE_ACR_LOGIN_SERVER }}" \
+              --registry-username "${{ steps.acr.outputs.username }}" \
+              --registry-password "${{ steps.acr.outputs.password }}" \
+              --cpu 0.5 \
+              --memory 1.0Gi \
+              --min-replicas 0 \
+              --max-replicas 1
+          fi
 
       - name: Configure runtime settings
+        shell: bash
         run: |
-          az webapp config appsettings set \
-            --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --name "${AZURE_WEBAPP_NAME}" \
-            --settings \
-              WEBSITES_PORT=3000 \
-              WEBSITES_ENABLE_APP_SERVICE_STORAGE=false \
-              SCM_DO_BUILD_DURING_DEPLOYMENT=false \
-              ENABLE_ORYX_BUILD=false
+          set -euo pipefail
 
-      - name: Restart Azure Web App
-        run: |
-          az webapp restart \
+          az containerapp update \
             --resource-group "${AZURE_RESOURCE_GROUP}" \
-            --name "${AZURE_WEBAPP_NAME}"
+            --name "${AZURE_CONTAINERAPP_NAME}" \
+            --set-env-vars \
+              NODE_ENV=production \
+              PORT=3000

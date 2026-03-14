@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import Combine
 import EMWaverScriptRuntime
 #if canImport(AppKit)
 import AppKit
@@ -28,6 +29,7 @@ struct EMWaverApp: App {
     @StateObject private var accountDevices = AccountDevicesService()
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var entitlements = EntitlementsManager()
+    @StateObject private var appRouter = AppRouter()
 
     var body: some Scene {
         WindowGroup {
@@ -35,11 +37,7 @@ struct EMWaverApp: App {
                 .environmentObject(auth)
                 .environmentObject(entitlements)
                 .environmentObject(accountDevices)
-                .sheet(isPresented: $firmwareUpdater.isPresented) {
-                    FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
-                        .environmentObject(auth)
-                        .environmentObject(accountDevices)
-                }
+                .environmentObject(appRouter)
                 .task {
                     // Best-effort background heartbeat + host discovery.
                     hostSessions.start(auth: auth, device: device)
@@ -49,7 +47,7 @@ struct EMWaverApp: App {
                     remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)
 
                     // Device identity -> backend attach (or prompt sign-in).
-                    deviceRegistry.start(auth: auth, device: device)
+                    deviceRegistry.start(auth: auth, device: device, accountDevices: accountDevices)
                     accountDevices.start(auth: auth)
 
                     // Pro entitlements/eligibility.
@@ -123,16 +121,15 @@ struct EMWaverApp: App {
 
                 Divider()
 
-                Button(device.connectedBoardType?.caseInsensitiveCompare("esp32s3") == .orderedSame || firmwareUpdater.espBootloaderConnected ? "Flash Firmware…" : (device.isSecureConnected ? "Update Firmware…" : "Set Up Device…")) {
-                    let boardType = firmwareUpdater.espBootloaderConnected ? "esp32s3" : (device.connectedBoardType ?? device.lastDetectedBoardType)
-                    firmwareUpdater.present(boardType: boardType)
+                Button("Open Device…") {
+                    appRouter.isDeviceSheetPresented = true
                 }
 
                 if device.isConnected {
                     Button("Enter Update Mode") {
                         let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
                         if boardType.caseInsensitiveCompare("esp32s3") == .orderedSame {
-                            firmwareUpdater.present(boardType: "esp32s3")
+                            appRouter.isDeviceSheetPresented = true
                         } else {
                             device.requestEnterUpdateMode()
                             device.disconnect()
@@ -174,6 +171,11 @@ struct EMWaverApp: App {
         NSApp.activate(ignoringOtherApps: true)
 #endif
     }
+}
+
+@MainActor
+final class AppRouter: ObservableObject {
+    @Published var isDeviceSheetPresented: Bool = false
 }
 
 /// Loads repo env files for local development (no Xcode scheme env required).

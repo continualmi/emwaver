@@ -93,7 +93,18 @@ final class AccountDevicesService: ObservableObject {
         let normalizedUid = normalized(hardwareUid)
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-        if let index = devices.firstIndex(where: {
+        if let index = devices.firstIndex(where: { $0.deviceIdB64 == deviceIdB64 }) {
+            let existing = devices[index]
+            devices[index] = DeviceRecord(
+                deviceIdB64: deviceIdB64,
+                label: existing.label.isEmpty ? "EMWaver device" : existing.label,
+                boardType: boardType,
+                hardwareUid: hardwareUid,
+                createdAtMs: existing.createdAtMs,
+                updatedAtMs: nowMs,
+                lastSeenAtMs: nowMs
+            )
+        } else if let index = devices.firstIndex(where: {
             $0.boardType?.caseInsensitiveCompare(boardType) == .orderedSame &&
             normalized($0.hardwareUid) == normalizedUid
         }) {
@@ -162,7 +173,7 @@ final class AccountDevicesService: ObservableObject {
             }
 
             let decoded = try JSONDecoder().decode(DevicesResponse.self, from: data)
-            devices = decoded.devices
+            devices = mergeBackendDevices(decoded.devices, preserving: devices)
             persistCache()
             lastSyncAt = Date()
             lastError = nil
@@ -184,6 +195,54 @@ final class AccountDevicesService: ObservableObject {
             return
         }
         devices = decoded
+    }
+
+    private func mergeBackendDevices(_ backend: [DeviceRecord], preserving local: [DeviceRecord]) -> [DeviceRecord] {
+        var merged = backend
+
+        for localRecord in local {
+            guard let localKey = recordKey(for: localRecord) else {
+                if !merged.contains(where: { $0.deviceIdB64 == localRecord.deviceIdB64 }) {
+                    merged.append(localRecord)
+                }
+                continue
+            }
+
+            if let index = merged.firstIndex(where: { record in
+                guard let key = recordKey(for: record) else { return false }
+                return key == localKey
+            }) {
+                let backendRecord = merged[index]
+                merged[index] = DeviceRecord(
+                    deviceIdB64: backendRecord.deviceIdB64.isEmpty ? localRecord.deviceIdB64 : backendRecord.deviceIdB64,
+                    label: backendRecord.label.isEmpty ? localRecord.label : backendRecord.label,
+                    boardType: backendRecord.boardType ?? localRecord.boardType,
+                    hardwareUid: backendRecord.hardwareUid ?? localRecord.hardwareUid,
+                    createdAtMs: min(backendRecord.createdAtMs, localRecord.createdAtMs),
+                    updatedAtMs: max(backendRecord.updatedAtMs, localRecord.updatedAtMs),
+                    lastSeenAtMs: max(backendRecord.lastSeenAtMs, localRecord.lastSeenAtMs)
+                )
+            } else {
+                merged.append(localRecord)
+            }
+        }
+
+        return merged.sorted {
+            if $0.lastSeenAtMs != $1.lastSeenAtMs {
+                return $0.lastSeenAtMs > $1.lastSeenAtMs
+            }
+            return $0.updatedAtMs > $1.updatedAtMs
+        }
+    }
+
+    private func recordKey(for record: DeviceRecord) -> String? {
+        if !record.deviceIdB64.isEmpty {
+            return "id:\(record.deviceIdB64)"
+        }
+        guard let boardType = record.boardType, !boardType.isEmpty else { return nil }
+        let hardwareUid = normalized(record.hardwareUid)
+        guard !hardwareUid.isEmpty else { return nil }
+        return "uid:\(boardType.uppercased()):\(hardwareUid)"
     }
 
     private func normalized(_ value: String?) -> String {

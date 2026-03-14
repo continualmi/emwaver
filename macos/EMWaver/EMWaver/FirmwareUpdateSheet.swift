@@ -271,30 +271,6 @@ struct FirmwareUpdateSheet: View {
                 .padding(.vertical, 4)
             }
 
-            GroupBox("Firmware source") {
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Button(updater.firmwareSourceUsesCustom ? "Use bundled firmware" : "Use custom firmware…") {
-                            updater.toggleFirmwareSource()
-                        }
-                        .disabled(updater.isFlashing)
-
-                        if updater.firmwareSourceUsesCustom {
-                            Button("Select .bin…") {
-                                updater.selectCustomFirmware()
-                            }
-                            .disabled(updater.isFlashing)
-                        }
-                    }
-
-                    Text("Current firmware: \(updater.firmwareSummary)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                }
-                .padding(.vertical, 4)
-            }
-
             if isEspWorkflow && !updater.updateDone {
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Put the ESP32-S3 into bootloader mode")

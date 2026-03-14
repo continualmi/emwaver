@@ -17,6 +17,14 @@ final class FirmwareUpdateManager: ObservableObject {
         let details: [String]
     }
 
+    private struct EspSerialIdentity {
+        let hardwareUidHex: String
+        let macHex: String
+        let chipRevision: Int
+        let featuresHex: String
+        let cores: Int
+    }
+
     private var preservedIdentity: MacUSBManager.DeviceIdentity? = nil
     private var identityToWriteAfterFlash: MacUSBManager.DeviceIdentity? = nil
 
@@ -357,17 +365,30 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        let hardwareUidHex = (device.hardwareUidHex ?? device.lastDetectedHardwareUidHex ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .uppercased()
-        guard !hardwareUidHex.isEmpty else {
-            updateError = "Connect the board in Run Mode once so the app can read its hardware UID before setup."
-            appendLog(updateError ?? "ESP setup failed")
-            return
-        }
-
         Task {
             do {
+                let hardwareUidHex: String
+                if let cachedHardwareUid = self.normalizedHardwareUid(device.hardwareUidHex ?? device.lastDetectedHardwareUidHex) {
+                    hardwareUidHex = cachedHardwareUid
+                    await MainActor.run {
+                        self.appendLog("Using existing EMWaver runtime hardware UID")
+                        self.appendLog("Hardware UID: \(cachedHardwareUid)")
+                    }
+                } else {
+                    let identity = try self.readEspSerialIdentity()
+                    hardwareUidHex = identity.hardwareUidHex
+                    await MainActor.run {
+                        device.lastDetectedHardwareUidHex = identity.hardwareUidHex
+                        device.lastDetectedBoardType = "esp32s3"
+                        self.appendLog("Read raw ESP identity from ROM bootloader")
+                        self.appendLog("MAC: \(identity.macHex)")
+                        self.appendLog("Chip revision: \(identity.chipRevision)")
+                        self.appendLog("Features: \(identity.featuresHex)")
+                        self.appendLog("Cores: \(identity.cores)")
+                        self.appendLog("Hardware UID: \(identity.hardwareUidHex)")
+                    }
+                }
+
                 struct MintResponse: Decodable {
                     let device_id_b64: String
                     let proof_b64: String
@@ -400,8 +421,8 @@ final class FirmwareUpdateManager: ObservableObject {
                         boardType: "esp32s3",
                         hardwareUid: hardwareUidHex
                     )
-                    accountDevices.refresh(auth: auth)
                     self.appendLog((mint.created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded")
+                    self.appendLog("Stored claimed device locally for immediate access")
                     self.appendLog("Hardware UID: \(hardwareUidHex)")
                     self.progressMessage = "Flashing ESP firmware..."
                 }
@@ -763,6 +784,62 @@ final class FirmwareUpdateManager: ObservableObject {
         let port = try resolveEspFlashPort()
         appendLog("ESP flash port: \(port)")
         try runEspFlash(port: port)
+    }
+
+    private func normalizedHardwareUid(_ value: String?) -> String? {
+        let normalized = (value ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased()
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private func readEspSerialIdentity() throws -> EspSerialIdentity {
+        let port = try resolveEspFlashPort()
+        appendLog("ESP identity port: \(port)")
+
+        let (code, stdout, stderr) = try runEspHelperAndWait(arguments: [
+            "read-identity",
+            "--port", port,
+            "--baud", "115200",
+        ])
+        if code != 0 {
+            let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: Int(code),
+                userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Failed to read ESP serial identity." : msg]
+            )
+        }
+
+        func parseKey(_ key: String) -> String? {
+            for line in stdout.split(separator: "\n") {
+                if line.starts(with: "\(key)=") {
+                    return String(line.dropFirst(key.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            return nil
+        }
+
+        guard let hardwareUidHex = normalizedHardwareUid(parseKey("HARDWARE_UID_HEX")) else {
+            throw NSError(
+                domain: "FirmwareUpdateManager",
+                code: 19,
+                userInfo: [NSLocalizedDescriptionKey: "ESP serial identity is missing HARDWARE_UID_HEX."]
+            )
+        }
+
+        let macHex = parseKey("MAC")?.replacingOccurrences(of: ":", with: "").uppercased() ?? ""
+        let chipRevision = Int(parseKey("CHIP_REVISION") ?? "") ?? 0
+        let featuresHex = (parseKey("FEATURES") ?? "0x0000").uppercased()
+        let cores = Int(parseKey("CORES") ?? "") ?? 0
+
+        return EspSerialIdentity(
+            hardwareUidHex: hardwareUidHex,
+            macHex: macHex,
+            chipRevision: chipRevision,
+            featuresHex: featuresHex,
+            cores: cores
+        )
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {

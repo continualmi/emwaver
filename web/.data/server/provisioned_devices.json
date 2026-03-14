@@ -8,5 +8,25 @@
     "created_at_ms": 1773352237380,
     "updated_at_ms": 1773352237380,
     "last_seen_at_ms": 1773352237380
+  },
+  "esp32s3:D83BDAA4EC7C090292000253": {
+    "board_type": "esp32s3",
+    "hardware_uid": "D83BDAA4EC7C090292000253",
+    "device_id_b64": "V9neo7Vrv10hJsPRlnYJfw==",
+    "proof_b64": "nQcS/T3jPlYjP8f8IPlynaudeJqrtARq1LVpGftErhecjx2BZn3SJ5Jn0ULMEnoPN5hio8Uqy/OsgCdCYdbuDA==",
+    "owner_firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "created_at_ms": 1773482500681,
+    "updated_at_ms": 1773482500681,
+    "last_seen_at_ms": 1773482500681
+  },
+  "esp32s3:D83BDAA4EC7C090212000253": {
+    "board_type": "esp32s3",
+    "hardware_uid": "D83BDAA4EC7C090212000253",
+    "device_id_b64": "WVZFTjiorrUCc8MjffXEaA==",
+    "proof_b64": "O1H6+nqumDjX0l7WLWeFZbGV5XjmPQ25n8F7VSM8QipoFdyU03ZkYv+fhazC3Ep+Jh0o2Pc8l78jx3TNNGkbCw==",
+    "owner_firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "created_at_ms": 1773483498326,
+    "updated_at_ms": 1773483498326,
+    "last_seen_at_ms": 1773483498326
   }
 }
