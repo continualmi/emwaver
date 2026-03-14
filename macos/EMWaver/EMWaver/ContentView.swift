@@ -76,13 +76,6 @@ struct ContentView: View {
         return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
     }
 
-    private var setupOverlayText: String {
-        if auth.isSignedIn {
-            return "This board is connected, but it is not claimed in your account yet. Open Device to claim it before running normal scripts."
-        }
-        return "This board is connected, but you are not signed in. Sign in, then open Device to claim it before running normal scripts."
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
@@ -137,23 +130,6 @@ struct ContentView: View {
                     }
                 )
                 .id(scriptDeviceAttachmentKey)
-
-                if device.isConnected && !device.isSecureConnected && !deviceIsClaimed {
-                    VStack(spacing: 10) {
-                        Text("Set up this device to use scripts")
-                            .font(.headline)
-                        Text(setupOverlayText)
-                            .multilineTextAlignment(.center)
-                            .foregroundStyle(.secondary)
-                        Button("Open Device") {
-                            appRouter.isDeviceSheetPresented = true
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                    .padding(20)
-                    .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                    .shadow(radius: 12)
-                }
 
                 if showingRemoteOverlay {
                     VStack(spacing: 0) {
@@ -340,6 +316,18 @@ struct ContentView: View {
         }
         .onChange(of: auth.isSignedIn) { _ in
             Task { await entitlements.refresh(auth: auth, force: true) }
+        }
+        .onChange(of: device.hardwareUidHex) { _ in
+            accountDevices.refresh(auth: auth)
+        }
+        .onChange(of: device.lastDetectedHardwareUidHex) { _ in
+            accountDevices.refresh(auth: auth)
+        }
+        .onChange(of: device.connectedBoardType) { _ in
+            accountDevices.refresh(auth: auth)
+        }
+        .onChange(of: device.lastDetectedBoardType) { _ in
+            accountDevices.refresh(auth: auth)
         }
 
     }

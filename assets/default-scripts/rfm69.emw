@@ -1,6 +1,9 @@
-// RFM69 helper for SPI-connected RFM69/RFM69HW modules on the current EMWaver script runtime.
+// RFM69 radio console restored from the older profile-driven script flow and adapted
+// to the current EMWaver .emw runtime.
+// Board wiring note: the default RFM69 chip-select is GPIO36 and DIO2 is GPIO42.
 
-var RFM69_CS = typeof NSS !== "undefined" ? NSS : 4;
+var RFM69_CS = 36;
+var RFM69_DIO2 = 42;
 var RFM69_VERSION_EXPECTED = 0x24;
 var RFM69_FXOSC_HZ = 32000000.0;
 var RFM69_FSTEP_HZ = RFM69_FXOSC_HZ / 524288.0;
@@ -86,32 +89,31 @@ var PA_MODE_PA1 = 2;
 var PA_MODE_PA1_PA2 = 3;
 var PA_MODE_PA1_PA2_20DBM = 4;
 
-var PA_MODE_OPTIONS = [
-  { label: "PA0", value: String(PA_MODE_PA0) },
-  { label: "PA1", value: String(PA_MODE_PA1) },
-  { label: "PA1+PA2", value: String(PA_MODE_PA1_PA2) },
-  { label: "PA1+PA2 20dBm", value: String(PA_MODE_PA1_PA2_20DBM) },
-];
+var PROFILE_DEFAULTS = {
+  frequencyMHz: 433.92,
+  dataRate: 100000,
+  deviationHz: 50000,
+  powerDbm: 10,
+  modulation: MOD_FSK,
+  paMode: PA_MODE_PA1_PA2,
+  bandwidthRaw: 0x1A,
+  ocp: true,
+};
 
-var BANDWIDTH_OPTIONS = [
-  { label: "250 kHz", value: "1A" },
-  { label: "125 kHz", value: "0A" },
-  { label: "62.5 kHz", value: "0B" },
-  { label: "31.3 kHz", value: "13" },
+var PROFILES = [
+  { name: "433.92 MHz FSK (Default)", overrides: {} },
+  { name: "315 MHz FSK", overrides: { frequencyMHz: 315 } },
+  { name: "433.92 MHz OOK 38.4k", overrides: { modulation: MOD_OOK, dataRate: 38400 } },
+  { name: "915 MHz FSK 250k", overrides: { frequencyMHz: 915, modulation: MOD_FSK, dataRate: 250000 } },
 ];
 
 var statusText = "Ready";
 var detectedVersionText = "--";
 var modeText = "--";
-var frequencyText = "433.92";
-var dataRateText = "100000";
-var deviationText = "50000";
-var powerText = "10";
-var modulation = MOD_FSK;
-var paModeText = String(PA_MODE_PA1_PA2);
-var bandwidthText = "1A";
-var ocpEnabled = "on";
 var rssiText = "--";
+var selectedProfileIndex = 0;
+var lastConfig = null;
+var lastConfigText = "";
 var logLines = [];
 
 function toHexByte(n) {
@@ -145,52 +147,40 @@ function pushLog(line) {
   }
 }
 
-function parseTextNumber(label, value, allowFloat) {
-  var text = String(value || "").trim();
-  var parsed = allowFloat ? Number(text) : parseInt(text, 10);
-  if (!isFiniteNumber(parsed) || parsed <= 0) {
-    throw new Error("Invalid " + label + ": " + String(value));
-  }
-  return parsed;
+function currentProfile() {
+  return PROFILES[selectedProfileIndex] || PROFILES[0];
 }
 
-function parseSignedInteger(label, value) {
-  var text = String(value || "").trim();
-  var parsed = parseInt(text, 10);
-  if (!isFiniteNumber(parsed)) {
-    throw new Error("Invalid " + label + ": " + String(value));
+function profileOptions() {
+  var options = [];
+  for (var i = 0; i < PROFILES.length; i += 1) {
+    options.push({ label: PROFILES[i].name, value: String(i) });
   }
-  return parsed;
-}
-
-function parseBandwidthRaw() {
-  var clean = String(bandwidthText || "").trim().replace(/^0x/i, "");
-  if (!/^[0-9a-fA-F]{1,2}$/.test(clean)) {
-    throw new Error("Invalid bandwidth raw value: " + String(bandwidthText));
-  }
-  return parseInt(clean, 16) & 0x1F;
+  return options;
 }
 
 function currentConfig() {
+  var profile = currentProfile();
+  var overrides = profile && profile.overrides ? profile.overrides : {};
   return {
-    frequencyMHz: parseTextNumber("frequency", frequencyText, true),
-    dataRate: parseTextNumber("bitrate", dataRateText, false),
-    deviationHz: parseTextNumber("deviation", deviationText, false),
-    powerDbm: parseSignedInteger("power", powerText),
-    modulation: modulation === MOD_OOK ? MOD_OOK : MOD_FSK,
-    paMode: clampInt(parseInt(paModeText, 10), PA_MODE_PA0, PA_MODE_PA1_PA2_20DBM),
-    bandwidthRaw: parseBandwidthRaw(),
-    ocp: ocpEnabled !== "off",
+    frequencyMHz: typeof overrides.frequencyMHz === "number" ? overrides.frequencyMHz : PROFILE_DEFAULTS.frequencyMHz,
+    dataRate: typeof overrides.dataRate === "number" ? overrides.dataRate : PROFILE_DEFAULTS.dataRate,
+    deviationHz: typeof overrides.deviationHz === "number" ? overrides.deviationHz : PROFILE_DEFAULTS.deviationHz,
+    powerDbm: typeof overrides.powerDbm === "number" ? overrides.powerDbm : PROFILE_DEFAULTS.powerDbm,
+    modulation: overrides.modulation === MOD_OOK ? MOD_OOK : (overrides.modulation === MOD_FSK ? MOD_FSK : PROFILE_DEFAULTS.modulation),
+    paMode: typeof overrides.paMode === "number" ? overrides.paMode : PROFILE_DEFAULTS.paMode,
+    bandwidthRaw: typeof overrides.bandwidthRaw === "number" ? overrides.bandwidthRaw : PROFILE_DEFAULTS.bandwidthRaw,
+    ocp: typeof overrides.ocp === "boolean" ? overrides.ocp : PROFILE_DEFAULTS.ocp,
   };
 }
 
 function describeConfig(config) {
   return (
-    "freq=" + formatFrequency(config.frequencyMHz) + "MHz, " +
-    "rate=" + String(config.dataRate) + "bps, " +
-    "dev=" + String(config.deviationHz) + "Hz, " +
-    "mod=" + config.modulation + ", " +
-    "power=" + String(config.powerDbm) + "dBm"
+    "Freq " + formatFrequency(config.frequencyMHz) + " MHz" +
+    " | Rate " + String(config.dataRate) + " bps" +
+    " | Dev " + String(config.deviationHz) + " Hz" +
+    " | Mod " + config.modulation +
+    " | Power " + String(config.powerDbm) + " dBm"
   );
 }
 
@@ -389,17 +379,19 @@ function applyConfiguration(config) {
   setModulation(config.modulation);
   setTransmitPower(config.powerDbm, config.paMode, config.ocp);
 
-  var actualFrequency = getFrequencyMHz();
-  var actualDataRate = getDataRate();
-  frequencyText = String(actualFrequency.toFixed(3));
-  dataRateText = String(actualDataRate);
-  return {
-    frequencyMHz: actualFrequency,
-    dataRate: actualDataRate,
+  var actual = {
+    frequencyMHz: getFrequencyMHz(),
+    dataRate: getDataRate(),
     deviationHz: config.deviationHz,
     powerDbm: config.powerDbm,
     modulation: config.modulation,
+    paMode: config.paMode,
+    bandwidthRaw: config.bandwidthRaw,
+    ocp: config.ocp,
   };
+  lastConfig = actual;
+  lastConfigText = describeConfig(actual);
+  return actual;
 }
 
 function withRadioAction(label, fn) {
@@ -409,14 +401,14 @@ function withRadioAction(label, fn) {
     var result = fn();
     refreshProbeFields();
     if (result && typeof result === "object") {
-      pushLog(label + ": " + describeConfig(result));
+      pushLog("[" + label + "] " + describeConfig(result));
     } else {
-      pushLog(label + ": ok");
+      pushLog("[" + label + "] ok");
     }
     statusText = label + " complete";
   } catch (e) {
     statusText = label + " failed: " + String(e && e.message ? e.message : e);
-    pushLog(statusText);
+    pushLog("[" + label + "] " + statusText);
   }
   render();
 }
@@ -427,10 +419,11 @@ function actionProbe() {
     var version = readReg(REG.VERSION);
     var freq = getFrequencyMHz();
     var rate = getDataRate();
-    statusText =
-      version === RFM69_VERSION_EXPECTED
-        ? "RFM69 detected"
-        : "Probe complete (VERSION=" + detectedVersionText + ")";
+    if (version === RFM69_VERSION_EXPECTED) {
+      statusText = "RFM69 detected";
+    } else {
+      statusText = "Probe complete (VERSION=" + detectedVersionText + ")";
+    }
     pushLog(
       "probe version=" + detectedVersionText +
       ", mode=" + modeText +
@@ -441,20 +434,18 @@ function actionProbe() {
   });
 }
 
-function actionInitRx() {
-  withRadioAction("Init RX", function () {
-    var config = currentConfig();
-    var applied = applyConfiguration(config);
+function actionStartRx() {
+  withRadioAction("RX", function () {
+    var applied = applyConfiguration(currentConfig());
     setMode(MODE_RX);
     rssiText = String(readRSSI(true)) + " dBm";
     return applied;
   });
 }
 
-function actionInitTx() {
-  withRadioAction("Init TX", function () {
-    var config = currentConfig();
-    var applied = applyConfiguration(config);
+function actionStartTx() {
+  withRadioAction("TX", function () {
+    var applied = applyConfiguration(currentConfig());
     setMode(MODE_TX);
     return applied;
   });
@@ -476,16 +467,49 @@ function actionReadRssi() {
   });
 }
 
+function actionResetDefaults() {
+  selectedProfileIndex = 0;
+  lastConfig = null;
+  lastConfigText = "";
+  statusText = "Defaults restored";
+  pushLog("[Profile] Reset to " + currentProfile().name);
+  render();
+}
+
 function render() {
+  var activeConfig = currentConfig();
+  var activeConfigText = describeConfig(activeConfig);
+
   UI.render(UI.scroll({
     padding: 16,
     spacing: 12,
     children: [
-      UI.text({ text: "RFM69", font: "title2", fontWeight: "semibold" }),
+      UI.text({ text: "RFM69 Radio", font: "title2", fontWeight: "semibold" }),
       UI.text({
-        text: "SPI script for RFM69/RFM69HW modules. CS defaults to NSS/A4 on the current script runtime.",
+        text: "Restored profile-driven RFM69/RFM69HW console. Default CS is GPIO36 and DIO2 is GPIO42.",
       }),
 
+      UI.text({
+        text: "Profile: " + currentProfile().name,
+        fontWeight: "medium",
+      }),
+      UI.picker({
+        style: "menu",
+        selected: String(selectedProfileIndex),
+        options: profileOptions(),
+        onChange: function (value) {
+          selectedProfileIndex = clampInt(parseInt(String(value), 10), 0, PROFILES.length - 1);
+          lastConfig = null;
+          lastConfigText = "";
+          pushLog("[Profile] " + currentProfile().name);
+          render();
+        },
+      }),
+
+      UI.text({
+        text: "Active config: " + activeConfigText,
+        font: "caption",
+      }),
       UI.text({
         text: "Version: " + detectedVersionText + " | Mode: " + modeText + " | RSSI: " + rssiText,
         font: "caption",
@@ -500,106 +524,12 @@ function render() {
         ],
       }),
 
-      UI.divider({}),
-      UI.text({ text: "Configuration", fontWeight: "medium" }),
-
       UI.row({
         spacing: 8,
         children: [
-          UI.textField({
-            value: frequencyText,
-            placeholder: "Frequency MHz",
-            onChange: function (v) {
-              frequencyText = String(v || "");
-              render();
-            },
-          }),
-          UI.textField({
-            value: dataRateText,
-            placeholder: "Bitrate bps",
-            onChange: function (v) {
-              dataRateText = String(v || "");
-              render();
-            },
-          }),
-        ],
-      }),
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.textField({
-            value: deviationText,
-            placeholder: "Deviation Hz",
-            onChange: function (v) {
-              deviationText = String(v || "");
-              render();
-            },
-          }),
-          UI.textField({
-            value: powerText,
-            placeholder: "Power dBm",
-            onChange: function (v) {
-              powerText = String(v || "");
-              render();
-            },
-          }),
-        ],
-      }),
-
-      UI.picker({
-        style: "segmented",
-        selected: modulation,
-        options: [
-          { label: "FSK", value: MOD_FSK },
-          { label: "OOK", value: MOD_OOK },
-        ],
-        onChange: function (v) {
-          modulation = v === MOD_OOK ? MOD_OOK : MOD_FSK;
-          render();
-        },
-      }),
-
-      UI.picker({
-        selected: paModeText,
-        options: PA_MODE_OPTIONS,
-        onChange: function (v) {
-          paModeText = String(v || String(PA_MODE_PA1_PA2));
-          render();
-        },
-      }),
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.picker({
-            selected: bandwidthText,
-            options: BANDWIDTH_OPTIONS,
-            onChange: function (v) {
-              bandwidthText = String(v || "1A");
-              render();
-            },
-          }),
-          UI.picker({
-            style: "segmented",
-            selected: ocpEnabled,
-            options: [
-              { label: "OCP On", value: "on" },
-              { label: "OCP Off", value: "off" },
-            ],
-            onChange: function (v) {
-              ocpEnabled = v === "off" ? "off" : "on";
-              render();
-            },
-          }),
-        ],
-      }),
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({ label: "Init RX", onTap: actionInitRx }),
-          UI.button({ label: "Init TX", onTap: actionInitTx }),
+          UI.button({ label: "Start RX", onTap: actionStartRx }),
+          UI.button({ label: "Start TX", onTap: actionStartTx }),
+          UI.button({ label: "Reset Defaults", onTap: actionResetDefaults }),
         ],
       }),
 
@@ -608,6 +538,12 @@ function render() {
             text: statusText,
             padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
             cornerRadius: 8,
+          })
+        : null,
+
+      lastConfigText
+        ? UI.text({
+            text: "Last applied: " + lastConfigText,
           })
         : null,
 

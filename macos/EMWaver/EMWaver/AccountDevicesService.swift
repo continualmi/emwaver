@@ -39,6 +39,8 @@ final class AccountDevicesService: ObservableObject {
     @Published private(set) var isOfflineMode: Bool = false
     @Published private(set) var lastSyncAt: Date? = nil
     @Published private(set) var lastError: String? = nil
+    @Published private(set) var isRefreshing: Bool = false
+    @Published private(set) var hasLoadedOnce: Bool = false
 
     func start(auth: AuthenticationManager) {
         loadCache()
@@ -77,6 +79,7 @@ final class AccountDevicesService: ObservableObject {
 
     func refresh(auth: AuthenticationManager) {
         refreshTask?.cancel()
+        isRefreshing = true
         refreshTask = Task { [weak self] in
             await self?.performRefresh(auth: auth)
         }
@@ -135,9 +138,28 @@ final class AccountDevicesService: ObservableObject {
 
         persistCache()
         lastSyncAt = Date()
+        hasLoadedOnce = true
+    }
+
+    func claimStatusResolved(boardType: String, hardwareUid: String, signedIn: Bool) -> Bool {
+        if hasOfflineAccess(boardType: boardType, hardwareUid: hardwareUid) {
+            return true
+        }
+        if isOfflineMode || !signedIn {
+            return true
+        }
+        if isRefreshing {
+            return false
+        }
+        return hasLoadedOnce
     }
 
     private func performRefresh(auth: AuthenticationManager) async {
+        defer {
+            isRefreshing = false
+            hasLoadedOnce = true
+        }
+
         if isOfflineMode {
             loadCache()
             return
@@ -192,9 +214,11 @@ final class AccountDevicesService: ObservableObject {
         guard let data = UserDefaults.standard.data(forKey: cacheKey),
               let decoded = try? JSONDecoder().decode([DeviceRecord].self, from: data) else {
             devices = []
+            hasLoadedOnce = true
             return
         }
         devices = decoded
+        hasLoadedOnce = true
     }
 
     private func mergeBackendDevices(_ backend: [DeviceRecord], preserving local: [DeviceRecord]) -> [DeviceRecord] {
