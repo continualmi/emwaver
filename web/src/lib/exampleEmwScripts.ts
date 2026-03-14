@@ -3,7 +3,7 @@
 // IMPORTANT: This file is GENERATED from assets/default-scripts/*.emw.
 // Do not edit by hand.
 //
-// Regenerate: node scripts/sync_frontend_example_scripts.js
+// Regenerate: node scripts/sync_web_example_scripts.js
 
 export type ExampleEmwScript = {
   name: string;

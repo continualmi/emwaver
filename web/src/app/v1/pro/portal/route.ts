@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const portal = await stripe.billingPortal.sessions.create({
       customer: customerId,
-      return_url: process.env.PRO_CANCEL_URL || process.env.PRO_SUCCESS_URL || "https://emwaver-web.azurewebsites.net/pro",
+      return_url: process.env.PRO_CANCEL_URL || process.env.PRO_SUCCESS_URL || new URL("/pro", request.url).toString(),
     });
     return NextResponse.json({ url: portal.url });
   } catch (error) {

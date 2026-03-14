@@ -40,6 +40,10 @@ Entry points:
 - keychain store,
 - sign-in sheets (including web handoff sheet).
 
+Auth UX rule:
+- sign-in must remain available even when no EMWaver device is connected, so new users can authenticate before claiming and flashing a supported board.
+- device attach/claim still happens later from the Device / firmware setup flow.
+
 ## 2.2 Device + transport + host management
 
 Core files include:

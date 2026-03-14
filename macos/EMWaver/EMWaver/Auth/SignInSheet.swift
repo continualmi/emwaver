@@ -10,7 +10,7 @@ struct SignInSheet: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Sign in is optional. Your scripts and signals always stay on this Mac. If you sign in, EMWaver can attach genuine devices to your account for recovery/support. Cloud backup + sync are EMWaver Pro features.")
+            Text("Sign in is optional. Your scripts and signals always stay on this Mac. You can sign in before connecting a device, then claim and set it up later from the Device panel. Genuine devices can be attached to your account for recovery/support. Cloud backup + sync are EMWaver Pro features.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

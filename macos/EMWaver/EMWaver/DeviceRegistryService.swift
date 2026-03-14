@@ -7,8 +7,10 @@ import Foundation
 final class DeviceRegistryService: ObservableObject {
     private var cancellables: Set<AnyCancellable> = []
     private var lastSeenKey: String = ""
+    private weak var accountDevices: AccountDevicesService?
 
-    func start(auth: AuthenticationManager, device: MacUSBManager) {
+    func start(auth: AuthenticationManager, device: MacUSBManager, accountDevices: AccountDevicesService) {
+        self.accountDevices = accountDevices
         // Re-check whenever auth or secure device identity changes.
         Publishers.CombineLatest(auth.$session, device.$secureDeviceIdB64)
             .receive(on: DispatchQueue.main)
@@ -81,6 +83,17 @@ final class DeviceRegistryService: ObservableObject {
                 device.deviceAttachStatusText = "Device verified"
             } else {
                 device.deviceAttachStatusText = "Device verified"
+            }
+
+            if let hardwareUid = device.hardwareUidHex,
+               !hardwareUid.isEmpty,
+               let boardType = device.connectedBoardType,
+               !boardType.isEmpty {
+                accountDevices?.storeClaimedDevice(
+                    deviceIdB64: deviceIdB64,
+                    boardType: boardType,
+                    hardwareUid: hardwareUid
+                )
             }
         } catch {
             device.deviceAttachStatusText = error.localizedDescription

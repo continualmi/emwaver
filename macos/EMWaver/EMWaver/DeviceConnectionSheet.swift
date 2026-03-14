@@ -78,6 +78,27 @@ struct DeviceConnectionSheet: View {
         isEspBoard || firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
     }
 
+    private var canRunFirmwareAction: Bool {
+        if firmwareUpdater.isFlashing {
+            return false
+        }
+        if showsEspFirmwareFlow {
+            let bootloaderReady = firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
+            return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && auth.isSignedIn)
+        }
+        if currentDeviceIsRegistered {
+            return device.isConnected || firmwareUpdater.dfuConnected
+        }
+        return device.isConnected && auth.isSignedIn
+    }
+
+    private var firmwareActionTitle: String {
+        if currentDeviceIsRegistered {
+            return showsEspFirmwareFlow ? "Flash firmware" : "Update firmware"
+        }
+        return showsEspFirmwareFlow ? "Claim and flash" : "Claim device"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -206,21 +227,16 @@ struct DeviceConnectionSheet: View {
         detailSection(title: "Firmware") {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(spacing: 10) {
-                    Button(primaryFirmwareButtonTitle) {
-                        dismiss()
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                            firmwareUpdater.present(boardType: showsEspFirmwareFlow ? "esp32s3" : currentBoardType)
-                        }
+                    Button(firmwareActionTitle) {
+                        runFirmwareAction()
                     }
                     .buttonStyle(.borderedProminent)
+                    .disabled(!canRunFirmwareAction)
 
                     if device.isConnected {
                         Button("Enter Update Mode") {
                             if showsEspFirmwareFlow {
-                                dismiss()
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-                                    firmwareUpdater.present(boardType: "esp32s3")
-                                }
+                                firmwareUpdater.refreshDfuPresence()
                             } else {
                                 device.requestEnterUpdateMode()
                                 device.disconnect()
@@ -235,10 +251,79 @@ struct DeviceConnectionSheet: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if !currentDeviceIsRegistered {
-                    Text("Set up claims this physical board into your account. Unclaimed boards cannot be used by normal scripts.")
+                if showsEspFirmwareFlow {
+                    Text("For ESP32-S3 flashing: hold BOOT, press and release RESET, then release BOOT. Click Refresh if the bootloader port does not appear yet.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
+
+                    Button("Refresh") {
+                        firmwareUpdater.refreshDfuPresence()
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(firmwareUpdater.isFlashing)
+                }
+
+                if !currentDeviceIsRegistered {
+                    Text("Claim attaches this physical board to your account. For ESP32-S3, the same step also flashes EMWaver firmware. Unclaimed boards cannot be used by normal scripts.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if !auth.isSignedIn {
+                        Button("Sign In") {
+                            auth.isSignInSheetPresented = true
+                        }
+                        .buttonStyle(.bordered)
+                    }
+                }
+
+                if let err = firmwareUpdater.updateError, !err.isEmpty {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
+                        .padding(12)
+                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.12)))
+                }
+
+                if firmwareUpdater.isFlashing {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text(firmwareUpdater.progressMessage.isEmpty ? "Working..." : firmwareUpdater.progressMessage)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Text("\(Int(firmwareUpdater.progressPct.rounded()))%")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        ProgressView(value: firmwareUpdater.progressPct, total: 100)
+                            .progressViewStyle(.linear)
+                    }
+                }
+
+                if !firmwareUpdater.logLines.isEmpty {
+                    VStack(alignment: .leading, spacing: 8) {
+                        HStack {
+                            Text("Recent activity")
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                            Spacer()
+                            Button("Clear") {
+                                firmwareUpdater.clearLogs()
+                            }
+                            .buttonStyle(.borderless)
+                            .disabled(firmwareUpdater.isFlashing)
+                        }
+
+                        Text(firmwareUpdater.logLines.suffix(4).joined(separator: "\n"))
+                            .font(.system(.caption, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.08)))
+                    }
                 }
             }
         }
@@ -266,19 +351,12 @@ struct DeviceConnectionSheet: View {
     private var espFlashStatusText: String {
         if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
             return currentDeviceIsRegistered
-                ? "Bootloader detected on \(port). Open the flash window to update firmware."
-                : "Bootloader detected on \(port). Open the flash window to claim and flash this board."
+                ? "Bootloader detected on \(port). Ready to flash."
+                : "Bootloader detected on \(port). Ready to claim and flash this board."
         }
         return currentDeviceIsRegistered
             ? "ESP32-S3 firmware flashing uses the board's serial or flash-capable USB connection."
             : "Set up will claim this ESP32-S3 into your account and flash EMWaver firmware."
-    }
-
-    private var primaryFirmwareButtonTitle: String {
-        if currentDeviceIsRegistered {
-            return showsEspFirmwareFlow ? "Flash firmware…" : "Update firmware…"
-        }
-        return "Set up device…"
     }
 
     private var devicesIntroText: String {
@@ -337,6 +415,23 @@ struct DeviceConnectionSheet: View {
             return "ESP bootloader detected."
         }
         return "ESP bootloader not detected. Put the board in BOOT/RESET mode on the serial flashing port."
+    }
+
+    private func runFirmwareAction() {
+        if showsEspFirmwareFlow {
+            if currentDeviceIsRegistered {
+                firmwareUpdater.startUpdate(device: device)
+            } else {
+                firmwareUpdater.startEspClaimAndFlash(auth: auth, accountDevices: accountDevices, device: device)
+            }
+            return
+        }
+
+        if currentDeviceIsRegistered {
+            firmwareUpdater.startUpdate(device: device)
+        } else {
+            firmwareUpdater.startMintAndProvision(auth: auth, device: device)
+        }
     }
 
 }

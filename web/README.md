@@ -226,7 +226,7 @@ This single app is the backend for the web surface, so backend-dependent flows r
 
 ## 9) Deployment
 
-- Deployed as a single Azure App Service Node container.
+- Deployed as a single Azure Container App (Consumption) with scale-to-zero enabled for the current dev phase.
 - GitHub Actions builds and deploys this folder as the unified web/backend service.
 
 Keep deployment assumptions aligned with:

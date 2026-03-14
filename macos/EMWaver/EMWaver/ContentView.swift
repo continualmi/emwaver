@@ -22,17 +22,15 @@ struct ContentView: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var accountDevices: AccountDevicesService
     @EnvironmentObject private var entitlements: EntitlementsManager
+    @EnvironmentObject private var appRouter: AppRouter
 
     let previewManager: ScriptPreviewManager
 
-    @State private var showingDeviceSheet: Bool = false
     @State private var showingHosts: Bool = false
     @State private var showingSettings: Bool = false
 
     @State private var showingProUpgrade: Bool = false
     @State private var proFeatureName: String = ""
-
-    @State private var showingSignInRequiresDeviceAlert: Bool = false
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -80,9 +78,9 @@ struct ContentView: View {
 
     private var setupOverlayText: String {
         if auth.isSignedIn {
-            return "This board is connected, but it is not claimed in your account yet. Normal scripts cannot talk to it until setup is complete."
+            return "This board is connected, but it is not claimed in your account yet. Open Device to claim it before running normal scripts."
         }
-        return "This board is connected, but you are not signed in. Sign in and set it up before normal scripts can talk to it."
+        return "This board is connected, but you are not signed in. Sign in, then open Device to claim it before running normal scripts."
     }
 
     var body: some View {
@@ -148,7 +146,7 @@ struct ContentView: View {
                             .multilineTextAlignment(.center)
                             .foregroundStyle(.secondary)
                         Button("Open Device") {
-                            showingDeviceSheet = true
+                            appRouter.isDeviceSheetPresented = true
                         }
                         .buttonStyle(.borderedProminent)
                     }
@@ -207,7 +205,7 @@ struct ContentView: View {
         .toolbar {
             ToolbarItem(placement: .automatic) {
                 Button {
-                    showingDeviceSheet = true
+                    appRouter.isDeviceSheetPresented = true
                 } label: {
                     HStack(spacing: 8) {
                         Image(systemName: toolbarDeviceStatus.icon)
@@ -274,11 +272,7 @@ struct ContentView: View {
                     }
                 } else {
                     Button {
-                        if device.isConnected {
-                            auth.isSignInSheetPresented = true
-                        } else {
-                            showingSignInRequiresDeviceAlert = true
-                        }
+                        auth.isSignInSheetPresented = true
                     } label: {
                         Label("Sign In", systemImage: "person.crop.circle.badge.plus")
                     }
@@ -293,7 +287,7 @@ struct ContentView: View {
             WebSignInHandoffSheet()
                 .environmentObject(auth)
         }
-        .sheet(isPresented: $showingDeviceSheet) {
+        .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
                 .environmentObject(auth)
                 .environmentObject(accountDevices)
@@ -339,14 +333,6 @@ struct ContentView: View {
         } message: {
             Text("This EMWaver device is genuine (signed identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro. You can attach the device later from the Device panel.")
         }
-        .alert("Connect an EMWaver device to sign in", isPresented: $showingSignInRequiresDeviceAlert) {
-            Button("Open Device…") {
-                showingDeviceSheet = true
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("To keep accounts tied to genuine hardware, EMWaver sign-in requires a connected device. (Free users can still sign in to attach/register their device for recovery; Pro unlocks cloud features.)")
-        }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
@@ -371,4 +357,5 @@ struct ContentView: View {
     .environmentObject(AuthenticationManager())
     .environmentObject(AccountDevicesService())
     .environmentObject(EntitlementsManager())
+    .environmentObject(AppRouter())
 }
