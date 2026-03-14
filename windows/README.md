@@ -81,6 +81,8 @@ Firmware update dialogs/managers are present:
 
 Bundled firmware assets live under `Assets/Firmware` (updated via repo tooling).
 
+The current Windows updater is a straight DFU firmware flow. Signed device-identity recovery is deferred for later work and is not exposed in the current UI.
+
 ## 3.5 App settings and appearance
 
 Settings surface includes app-level preferences such as:

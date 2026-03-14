@@ -191,7 +191,7 @@ Direction reflected in repo docs:
 - `/build` is the primary board catalog + self-build page,
 - `/account` handles attached-device/account relationship UX,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
-- claim/recovery flows are web-managed,
+- device/account flows are web-managed,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
 Store distribution policy migrated from AGENTS:

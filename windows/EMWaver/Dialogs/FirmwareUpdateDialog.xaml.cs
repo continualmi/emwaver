@@ -21,7 +21,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         _updater.PropertyChanged += OnUpdaterPropertyChanged;
 
         PrimaryButtonClick += OnPrimaryButtonClick;
-        SecondaryButtonClick += OnSecondaryButtonClick;
         Closing += OnClosing;
         Opened += OnOpened;
 
@@ -54,12 +53,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
     {
         args.Cancel = true; // keep dialog open
         _ = _updater.StartUpdateAsync(_device);
-    }
-
-    private void OnSecondaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
-    {
-        args.Cancel = true; // keep dialog open
-        _ = _updater.StartRecoveryAsync(AppServices.CloudAuth, _device);
     }
 
     private void OnUpdaterPropertyChanged(object? sender, PropertyChangedEventArgs e)
@@ -109,16 +102,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
         // Buttons
         IsPrimaryButtonEnabled = (!_updater.IsFlashing) && (!_updater.UpdateDone) && (_device.IsConnected || _updater.DfuConnected);
-
-        // Only enable recovery when update is blocked due to missing/invalid identity.
-        var canRecover = !_updater.IsFlashing
-            && !_updater.UpdateDone
-            && (_device.IsConnected || _updater.DfuConnected)
-            && !string.IsNullOrWhiteSpace(_updater.UpdateError)
-            && (_updater.UpdateError!.Contains("not secured", System.StringComparison.OrdinalIgnoreCase)
-                || _updater.UpdateError!.Contains("identity", System.StringComparison.OrdinalIgnoreCase));
-
-        IsSecondaryButtonEnabled = canRecover;
         // Note: ContentDialog has no IsCloseButtonEnabled; Closing handler cancels while flashing.
     }
 }

@@ -8,7 +8,6 @@
     mc:Ignorable="d"
     Title="Update EMWaver"
     PrimaryButtonText="Update device"
-    SecondaryButtonText="Recover identity"
     CloseButtonText="Close"
     DefaultButton="Primary">
 
