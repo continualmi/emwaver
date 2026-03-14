@@ -154,4 +154,5 @@
 
 // Functions
 void rfm69_register_commands(void);
+bool rfm69_boot_register_sweep(void);
 // NOTE: `rfm69_init_device()` is intentionally internal to `rfm69.c`.
