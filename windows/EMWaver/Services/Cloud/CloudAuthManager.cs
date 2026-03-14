@@ -23,6 +23,8 @@ internal sealed class CloudAuthManager
     private string? _idToken;
     private string? _refreshToken;
 
+    internal event Action? Changed;
+
     private sealed record Persisted(string? IdToken, string? RefreshToken);
 
     internal CloudAuthManager(CloudConfig cfg, GoogleOAuthPkce google, FirebaseAuthService firebase)
@@ -103,6 +105,7 @@ internal sealed class CloudAuthManager
                     TryWriteLocalSetting(KeyIdToken, _idToken);
                     TryWriteLocalSetting(KeyRefreshToken, _refreshToken);
                     TrySavePersisted();
+                    Changed?.Invoke();
 
                     return _idToken;
                 }
@@ -190,6 +193,7 @@ internal sealed class CloudAuthManager
         TryWriteLocalSetting(KeyIdToken, _idToken);
         TryWriteLocalSetting(KeyRefreshToken, _refreshToken);
         TrySavePersisted();
+        Changed?.Invoke();
 
         return _idToken ?? "";
     }
@@ -230,6 +234,8 @@ internal sealed class CloudAuthManager
         catch
         {
         }
+
+        Changed?.Invoke();
     }
 
     private string? GetRefreshToken()

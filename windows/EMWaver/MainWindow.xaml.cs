@@ -39,8 +39,10 @@ public sealed partial class MainWindow : Window
 
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
         AppServices.FirmwareUpdater.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
+        AppServices.AccountDevices.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
 
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
+        AppServices.FirmwareUpdater.PropertyChanged += OnFirmwareUpdaterPropertyChanged;
 
         AppServices.Device.AvailablePorts.CollectionChanged += OnPortsCollectionChanged;
 
@@ -53,6 +55,8 @@ public sealed partial class MainWindow : Window
 
         // Remote control host WS (web can attach + drive scripts/UI).
         AppServices.RemoteControlHost.Start();
+        AppServices.AccountDevices.Start();
+        AppServices.DeviceRegistry.Start(AppServices.Device);
 
         // Initial UI state.
         RunOnUi(() =>
@@ -68,6 +72,9 @@ public sealed partial class MainWindow : Window
     {
         Closed -= OnClosed;
         AppServices.Settings.Changed -= OnSettingsChanged;
+        AppServices.Device.PropertyChanged -= OnDevicePropertyChanged;
+        AppServices.FirmwareUpdater.PropertyChanged -= OnFirmwareUpdaterPropertyChanged;
+        AppServices.Device.AvailablePorts.CollectionChanged -= OnPortsCollectionChanged;
     }
 
     private void OnSettingsChanged()
@@ -185,7 +192,7 @@ public sealed partial class MainWindow : Window
         }
 
         // Top-level navigation UX
-        var isSettings = e.Content is SettingsPage;
+        var isSettings = e.Content is SettingsPage || e.Content is DevicePage;
 
         // Settings is a "focused" page: hide device/connect + script toolbar clutter.
         DeviceMenuButton.Visibility = isSettings ? Visibility.Collapsed : Visibility.Visible;
@@ -273,23 +280,30 @@ public sealed partial class MainWindow : Window
     private void UpdateDeviceStatus()
     {
         var device = AppServices.Device;
-        switch (device.Mode)
+        if (!device.IsConnected && AppServices.FirmwareUpdater.EspBootloaderConnected)
         {
-            case Services.DeviceMode.RunMode:
-                DeviceStatusText.Text = "Connected";
-                break;
-            case Services.DeviceMode.UpdateMode:
-                DeviceStatusText.Text = "Update Mode";
-                break;
-            default:
-                DeviceStatusText.Text = "Disconnected";
-                break;
+            DeviceStatusText.Text = "ESP Bootloader";
+        }
+        else
+        {
+            switch (device.Mode)
+            {
+                case Services.DeviceMode.RunMode:
+                    DeviceStatusText.Text = "Connected";
+                    break;
+                case Services.DeviceMode.UpdateMode:
+                    DeviceStatusText.Text = "Update Mode";
+                    break;
+                default:
+                    DeviceStatusText.Text = "Disconnected";
+                    break;
+            }
         }
 
         var connected = device.IsConnected;
 
         DeviceVersionText.Text = connected && !string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion)
-            ? $"EMWaver {device.DeviceEmwaverVersion}"
+            ? $"{(device.ConnectedBoardType ?? device.LastDetectedBoardType ?? "device")} | EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
 
         // Cable icon state
@@ -310,9 +324,11 @@ public sealed partial class MainWindow : Window
         AutoConnectMenuItem.IsChecked = device.AutoConnectEnabled;
         // Keep a fast UI hint using the built-in VID/PID scan, but also keep parity with
         // macOS by polling the shared DFU helper (libusb) in the background.
-        UpdateModeStatusItem.Text = (device.DfuConnected || AppServices.FirmwareUpdater.DfuConnected)
-            ? "Update Mode: Detected"
-            : "Update Mode: Not detected";
+        UpdateModeStatusItem.Text = AppServices.FirmwareUpdater.EspBootloaderConnected
+            ? $"ESP Bootloader: {(AppServices.FirmwareUpdater.EspBootloaderPort ?? "Detected")}"
+            : ((device.DfuConnected || AppServices.FirmwareUpdater.DfuConnected)
+                ? "Update Mode: Detected"
+                : "Update Mode: Not detected");
 
         if (!string.IsNullOrWhiteSpace(device.LastErrorText))
         {
@@ -324,6 +340,11 @@ public sealed partial class MainWindow : Window
             LastErrorMenuItem.Text = string.Empty;
             LastErrorMenuItem.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private void OnFirmwareUpdaterPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        RunOnUi(UpdateDeviceStatus);
     }
 
     private void OnScriptsToolbarStateChanged(ScriptToolbarState state)
@@ -403,6 +424,13 @@ public sealed partial class MainWindow : Window
 
     private void OnEnterUpdateModeClick(object sender, RoutedEventArgs e)
     {
+        var boardType = AppServices.Device.ConnectedBoardType ?? AppServices.Device.LastDetectedBoardType ?? "stm32f042";
+        if (string.Equals(boardType, "esp32s3", StringComparison.OrdinalIgnoreCase))
+        {
+            OnUpdateFirmwareClick(sender, e);
+            return;
+        }
+
         AppServices.Device.RequestEnterUpdateMode();
         AppServices.Device.Disconnect();
         _ = AppServices.Device.RefreshDfuPresenceAsync();
@@ -421,6 +449,7 @@ public sealed partial class MainWindow : Window
             XamlRoot = this.Content.XamlRoot,
         };
 
+        dlg.SetPresentedBoardType(AppServices.Device.ConnectedBoardType ?? AppServices.Device.LastDetectedBoardType);
         await dlg.ShowAsync();
     }
 
@@ -583,6 +612,12 @@ public sealed partial class MainWindow : Window
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         ContentFrame.Navigate(typeof(SettingsPage));
+        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private void OnOpenDeviceClick(object sender, RoutedEventArgs e)
+    {
+        ContentFrame.Navigate(typeof(DevicePage));
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
     }
 }

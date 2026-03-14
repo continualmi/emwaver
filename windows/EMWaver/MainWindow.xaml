@@ -59,6 +59,7 @@
                 </StackPanel>
                 <Button.Flyout>
                     <MenuFlyout>
+                        <MenuFlyoutItem Text="Open Device" Click="OnOpenDeviceClick" />
                         <MenuFlyoutItem Text="Settings" Click="OnSettingsClick" />
                         <MenuFlyoutSeparator />
                         <MenuFlyoutItem Text="Refresh Ports" Click="OnRefreshPortsClick" />

@@ -92,6 +92,47 @@
       <TargetPath>emwaver.bin</TargetPath>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
+
+    <!-- Optional ESP helper + managed firmware bundle for Windows parity with macOS. -->
+    <Content Include="..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe"
+             Condition="Exists('..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-esp-helper.exe</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\esp\build\bootloader\bootloader.bin"
+             Condition="Exists('..\..\esp\build\bootloader\bootloader.bin')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-esp32s3-bootloader.bin</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\esp\build\partition_table\partition-table.bin"
+             Condition="Exists('..\..\esp\build\partition_table\partition-table.bin')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-esp32s3-partition-table.bin</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\esp\build\ota_data_initial.bin"
+             Condition="Exists('..\..\esp\build\ota_data_initial.bin')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-esp32s3-ota-data.bin</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
+
+    <Content Include="..\..\esp\build\emwaveresp.bin"
+             Condition="Exists('..\..\esp\build\emwaveresp.bin')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
+      <TargetPath>emwaver-esp32s3-app.bin</TargetPath>
+      <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
+    </Content>
   </ItemGroup>
 
 </Project>

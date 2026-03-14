@@ -5,6 +5,7 @@ Freeze-friendly Python source for the ESP32-S3 serial flashing helper used by de
 Current contract:
 - `list-ports`
 - `chip-id --port ... [--baud ...] [--no-stub]`
+- `read-identity --port ... [--baud ...]`
 - `flash --port ... --bootloader ... --partition-table ... --ota-data ... --app ... [--baud ...] [--before ...] [--after ...] [--no-stub]`
 
 Build a standalone helper with:
