@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
+import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
   getHardwareDevice,
   getRelatedHardware,
@@ -98,33 +99,10 @@ export default async function BuildDevicePage({
         <div className="grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
           {/* Images */}
           <div className="space-y-4">
-            <div className="relative aspect-[4/3] w-full overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
-              <Image
-                src={device.image}
-                alt={device.title}
-                fill
-                unoptimized
-                className="object-cover"
-              />
-            </div>
-            {device.images.length > 1 && (
-              <div className="grid grid-cols-4 gap-2">
-                {device.images.slice(0, 8).map((src) => (
-                  <div
-                    key={src}
-                    className="relative aspect-square overflow-hidden rounded-xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]"
-                  >
-                    <Image
-                      src={src}
-                      alt={device.title}
-                      fill
-                      unoptimized
-                      className="object-cover"
-                    />
-                  </div>
-                ))}
-              </div>
-            )}
+            <DeviceGallery
+              images={device.images.length ? device.images : [device.image]}
+              title={device.title}
+            />
           </div>
 
           {/* Info */}

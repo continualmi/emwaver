@@ -9,18 +9,18 @@ import {
 } from "@/lib/hardwareCatalog";
 import { BuilderClient } from "@/app/hardware/BuilderClient";
 
-const SUPPORTED_BOARDS = [
+const SUPPORTED_MCUS = [
   {
     name: "ESP32-S3",
     description:
-      "Supported for EMWaver. A simple way to get started with USB, Wi-Fi, and BLE on one board.",
-    tags: ["ESP32-S3", "Wi-Fi", "BLE", "USB"],
+      "Dual-core MCU family used for EMWaver wireless-capable targets and DIY builds. Best fit when you want USB, BLE, and Wi-Fi on the same device.",
+    tags: ["MCU", "Wi-Fi", "BLE", "USB"],
   },
   {
-    name: "EMWaver STM32 board",
+    name: "STM32F042",
     description:
-      "Custom EMWaver hardware you can build from the fabrication files below.",
-    tags: ["STM32", "Custom board", "Builder"],
+      "The STM32 MCU behind the classic host-backed EMWaver boards. Used for compact USB-first designs such as GPIO, IR, ISM, and related module-driven variants.",
+    tags: ["MCU", "USB", "STM32", "Host-backed"],
   },
 ];
 
@@ -113,17 +113,17 @@ export default function BuildPage() {
           </p>
         </section>
 
-        {/* ─── SUPPORTED BOARDS (text-only callout) ─── */}
+        {/* ─── SUPPORTED MCUS (text-only callout) ─── */}
         <section className="pb-14">
           <h2 className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
-            Supported boards
+            Supported MCUs
           </h2>
           <p className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Pick an ESP32-S3 to get started, or build one of the custom EMWaver
-            boards from the hardware catalog.
+            EMWaver targets a small set of MCU families and modules, then exposes
+            concrete boards and builds on top of them in the catalog below.
           </p>
           <div className="mt-5 grid gap-4 md:grid-cols-2">
-            {SUPPORTED_BOARDS.map((board) => (
+            {SUPPORTED_MCUS.map((board) => (
               <div
                 key={board.name}
                 className="rounded-2xl border border-[rgba(78,231,199,0.25)] bg-[rgba(78,231,199,0.06)] p-5"
