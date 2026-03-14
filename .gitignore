@@ -114,3 +114,6 @@ prompt.txt
 
 # Local branding explorations (generated)
 assets/branding/logo-explorations/
+
+# Web auth handoff temp state
+web/.data/server/auth-handoff*.json
