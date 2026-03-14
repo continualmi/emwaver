@@ -15,15 +15,6 @@ export default function DocsIndex() {
           <Link href="/docs/scripts">Run scripts</Link>: start from default scripts or write your own.
         </li>
       </ol>
-
-      <h2>Troubleshooting</h2>
-      <ul>
-        <li>
-          <Link href="/docs/device-recovery">Recover device identity</Link>: fix “Not secure” after an
-          update.
-        </li>
-      </ul>
-
       <h2>Headless</h2>
       <ul>
         <li>

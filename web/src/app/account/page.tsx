@@ -152,7 +152,7 @@ export default function AccountPage() {
         <div className="mb-6 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Account</h1>
-            <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and recovery</div>
+            <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and Pro</div>
             {entitlements?.pro ? (
               <div className="mt-2 inline-flex items-center rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.10)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
                 Pro active
@@ -197,16 +197,16 @@ export default function AccountPage() {
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-sm font-semibold text-[color:var(--ink)]">Sign in to manage devices</div>
             <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-              Devices can be used locally without an account, but signing in lets you save them for recovery purposes.
+              Devices can be used locally without an account, but signing in lets you keep activated devices tied to your account.
             </div>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-[1fr_1fr]">
+          <div className="max-w-3xl">
             <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-sm font-semibold text-[color:var(--ink)]">My devices</div>
-                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Attached EMWaver device identities</div>
+                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Devices tied to your account</div>
                 </div>
                 <button
                   onClick={() => void refresh()}
@@ -220,7 +220,7 @@ export default function AccountPage() {
               {devices.length === 0 ? (
                 <div className="pt-3 text-sm text-[color:var(--ink-dim)]">
                   No devices attached yet.
-                  <div className="pt-2 text-xs">Tip: when the app detects a genuine device (DeviceID+Proof), it can prompt you to attach it here.</div>
+                  <div className="pt-2 text-xs">Devices you activate in the apps will show up here.</div>
                 </div>
               ) : (
                 <ul className="mt-4 space-y-3">
@@ -228,7 +228,7 @@ export default function AccountPage() {
                     <li key={d.device_id_b64} className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">DeviceID</div>
+                          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Identifier</div>
                           <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{d.device_id_b64}</div>
                           <div className="mt-3 text-xs font-semibold text-[color:var(--ink-dim)]">Label</div>
                           <input
@@ -253,22 +253,6 @@ export default function AccountPage() {
                   ))}
                 </ul>
               )}
-            </section>
-
-            <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-              <div className="text-sm font-semibold text-[color:var(--ink)]">Help</div>
-              <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-                Need to fix a device that shows as “Not secure” after an update? Follow the in-app recovery steps.
-              </div>
-
-              <div className="mt-4">
-                <a
-                  href="/docs/device-recovery"
-                  className="inline-flex items-center gap-2 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] no-underline hover:bg-[color:var(--surface-3)]"
-                >
-                  Recover device identity
-                </a>
-              </div>
             </section>
           </div>
         )}
