@@ -61,12 +61,6 @@
 #define PWM_LED_MODE LEDC_LOW_SPEED_MODE
 #define PWM_LED_CHANNEL LEDC_CHANNEL_1
 #define PWM_DUTY_MAX 4095u
-#define RFM69_GPIO36_TEST_PIN GPIO_NUM_36
-#define RFM69_GPIO10_TEST_PIN GPIO_NUM_10
-#define RFM69_GPIO40_TEST_PIN GPIO_NUM_40
-#define RFM69_GPIO42_TEST_PIN GPIO_NUM_42
-#define RFM69_REG_VERSION 0x10u
-#define RFM69_VERSION_EXPECTED 0x24u
 
 static const char *TAG = "INIT";
 static QueueHandle_t cmd_queue;
@@ -97,7 +91,6 @@ static void version_command(void);
 static void ble_status_command(void);
 static void stop_command(void);
 static void init_ir_tx_pins(void);
-static void boot_test_gpio_output(gpio_num_t pin, const char *label);
 
 void emwaver_init(void)
 {
@@ -126,12 +119,9 @@ void emwaver_init(void)
     }
 
     command_registry_init();
-    boot_test_gpio_output(RFM69_GPIO10_TEST_PIN, "GPIO10");
-    boot_test_gpio_output(RFM69_GPIO36_TEST_PIN, "GPIO36");
-    boot_test_gpio_output(RFM69_GPIO40_TEST_PIN, "GPIO40");
-    boot_test_gpio_output(RFM69_GPIO42_TEST_PIN, "GPIO42");
     spi_init();
     sampler_module_init();
+    spi_boot_init_defaults();
 
     spi_register_commands();
     rfm69_register_commands();
@@ -166,44 +156,6 @@ static void init_ir_tx_pins(void)
         gpio_set_direction(pins[i], GPIO_MODE_OUTPUT);
         gpio_set_level(pins[i], 0);
     }
-}
-
-static void boot_test_gpio_output(gpio_num_t pin, const char *label)
-{
-    ESP_LOGW(TAG, "Boot %s test: toggling pin as plain output", label);
-
-    gpio_config_t cfg = {
-        .pin_bit_mask = 1ULL << pin,
-        .mode = GPIO_MODE_OUTPUT,
-        .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    ESP_ERROR_CHECK(gpio_config(&cfg));
-
-    for (int i = 0; i < 3; ++i) {
-        gpio_set_level(pin, 1);
-        ESP_LOGW(TAG,
-                 "Boot %s test: HIGH (%d/3), readback=%d",
-                 label,
-                 i + 1,
-                 gpio_get_level(pin));
-        vTaskDelay(pdMS_TO_TICKS(1000));
-
-        gpio_set_level(pin, 0);
-        ESP_LOGW(TAG,
-                 "Boot %s test: LOW (%d/3), readback=%d",
-                 label,
-                 i + 1,
-                 gpio_get_level(pin));
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    }
-
-    gpio_set_level(pin, 1);
-    ESP_LOGW(TAG,
-             "Boot %s test: done, leaving pin HIGH, readback=%d",
-             label,
-             gpio_get_level(pin));
 }
 
 static void command_task(void *pv_parameters)

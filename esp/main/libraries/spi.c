@@ -41,7 +41,6 @@
 #define SPI_DEFAULT_MOSI 11
 #define SPI_DEFAULT_SCK  12
 #define SPI_DEFAULT_CS   10
-#define SPI_RFM69_SOFT_CS 10
 
 typedef struct {
     bool initialized;
@@ -77,12 +76,6 @@ static void spi_transfer_command(const char *name,
                                  int mode,
                                  int clock_hz,
                                  bool lsb_first);
-static bool spi_cs_is_manual_active_low(int cs_io);
-
-static bool spi_cs_is_manual_active_low(int cs_io)
-{
-    return cs_io == SPI_RFM69_SOFT_CS;
-}
 
 void spi_init(void)
 {
@@ -125,14 +118,8 @@ void spi_boot_init_defaults(void)
     bus->mosi = SPI_DEFAULT_MOSI;
     bus->sck = SPI_DEFAULT_SCK;
 
-    if (ret == ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG,
-                 "SPI host %d was already initialized; stateless SPI will reuse the existing bus configuration",
-                 host_id);
-    } else {
-        ESP_LOGI(TAG, "SPI default bus ready (host=%d miso=%d mosi=%d sck=%d)",
-                 host_id, SPI_DEFAULT_MISO, SPI_DEFAULT_MOSI, SPI_DEFAULT_SCK);
-    }
+    ESP_LOGI(TAG, "SPI default bus ready (host=%d miso=%d mosi=%d sck=%d)",
+             host_id, SPI_DEFAULT_MISO, SPI_DEFAULT_MOSI, SPI_DEFAULT_SCK);
 }
 
 void spi_register_commands(void)
@@ -301,11 +288,10 @@ esp_err_t spi_transfer_once(int cs_io,
     const spi_host_device_t host = spi_host_from_id(SPI_DEFAULT_HOST_ID);
 
     spi_device_handle_t handle = NULL;
-    bool manual_active_low_cs = spi_cs_is_manual_active_low(cs_io);
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = clock_hz,
         .mode = (uint8_t)mode,
-        .spics_io_num = manual_active_low_cs ? -1 : cs_io,
+        .spics_io_num = cs_io,
         .queue_size = 1,
         .flags = 0,
     };
@@ -315,13 +301,6 @@ esp_err_t spi_transfer_once(int cs_io,
 
     esp_err_t ret = spi_bus_add_device(host, &devcfg, &handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG,
-                 "spi_bus_add_device failed (host=%d cs=%d mode=%d clock=%d): %s",
-                 (int)host,
-                 cs_io,
-                 mode,
-                 clock_hz,
-                 esp_err_to_name(ret));
         return ret;
     }
 
@@ -339,35 +318,12 @@ esp_err_t spi_transfer_once(int cs_io,
         .rx_buffer = rx_len ? rx : NULL,
     };
 
-    if (manual_active_low_cs) {
-        gpio_reset_pin((gpio_num_t)cs_io);
-        gpio_set_direction((gpio_num_t)cs_io, GPIO_MODE_OUTPUT);
-        gpio_set_level((gpio_num_t)cs_io, 1);
-        gpio_set_level((gpio_num_t)cs_io, 0);
-    }
-
     ret = spi_device_transmit(handle, &t);
-
-    if (manual_active_low_cs) {
-        gpio_set_level((gpio_num_t)cs_io, 1);
-    }
-
     esp_err_t remove_ret = spi_bus_remove_device(handle);
     if (ret != ESP_OK) {
-        ESP_LOGE(TAG,
-                 "spi_device_transmit failed (host=%d cs=%d len=%d): %s",
-                 (int)host,
-                 cs_io,
-                 (int)total_len,
-                 esp_err_to_name(ret));
         return ret;
     }
     if (remove_ret != ESP_OK) {
-        ESP_LOGE(TAG,
-                 "spi_bus_remove_device failed (host=%d cs=%d): %s",
-                 (int)host,
-                 cs_io,
-                 esp_err_to_name(remove_ret));
         return remove_ret;
     }
     return ESP_OK;
