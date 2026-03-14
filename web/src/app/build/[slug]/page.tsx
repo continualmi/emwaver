@@ -12,9 +12,11 @@ import {
 function ExternalLink({
   href,
   label,
+  download,
 }: {
   href: string | null;
   label: string;
+  download?: boolean;
 }) {
   if (!href) return null;
   return (
@@ -22,6 +24,7 @@ function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer"
+      download={download}
       className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
     >
       {label}
@@ -73,6 +76,10 @@ export default async function BuildDevicePage({
     { href: device.schematicUrl, label: "Schematic" },
     { href: device.githubUrl, label: "GitHub" },
   ].filter((l) => l.href);
+  const hasCaseSection =
+    Boolean(device.casingImage) ||
+    Boolean(device.onshapeUrl) ||
+    device.caseDownloads.length > 0;
 
   return (
     <div className="min-h-dvh">
@@ -203,6 +210,45 @@ export default async function BuildDevicePage({
                   />
                 ))}
               </div>
+            )}
+
+            {hasCaseSection && (
+              <section className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-5">
+                <div className="text-sm font-semibold text-[color:var(--ink)]">
+                  Case / enclosure
+                </div>
+                <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+                  Recovered enclosure assets for this board, including case previews,
+                  CAD links, and downloadable model files where they still exist in
+                  the repo.
+                </p>
+
+                {device.casingImage && (
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
+                    <div className="relative aspect-[4/3] w-full">
+                      <Image
+                        src={device.casingImage}
+                        alt={`${device.title} case preview`}
+                        fill
+                        unoptimized
+                        className="object-cover"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <ExternalLink href={device.onshapeUrl} label="Open in Onshape" />
+                  {device.caseDownloads.map((asset) => (
+                    <ExternalLink
+                      key={asset.href}
+                      href={asset.href}
+                      label={`Download ${asset.label}`}
+                      download
+                    />
+                  ))}
+                </div>
+              </section>
             )}
           </div>
         </div>

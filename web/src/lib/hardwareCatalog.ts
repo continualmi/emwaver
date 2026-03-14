@@ -10,6 +10,8 @@ export type HardwareDevice = {
   description: string;
   image: string;
   images: string[];
+  casingImage: string | null;
+  caseDownloads: { label: string; href: string }[];
   tags: string[];
   appSupport: string[];
   parent: string | null;
@@ -25,6 +27,7 @@ export type HardwareDevice = {
 
 type DeviceManifest = Partial<HardwareDevice> & {
   displayTitle?: string;
+  caseDownloadUrl?: string;
 };
 
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
@@ -46,7 +49,7 @@ function normalizeString(value: unknown): string {
   return String(value || "").trim();
 }
 
-function ensureImagePath(slug: string, value: unknown): string {
+function ensureCatalogAssetPath(slug: string, value: unknown): string {
   const raw = normalizeString(value);
   if (!raw) return `/hardware-catalog/hardware/${slug}/${slug}.png`;
   if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
@@ -55,6 +58,10 @@ function ensureImagePath(slug: string, value: unknown): string {
   if (raw.startsWith("downloads/")) return `/hardware-catalog/${raw}`;
   if (raw.includes("/")) return `/hardware-catalog/hardware/${raw}`;
   return `/hardware-catalog/hardware/${slug}/${raw}`;
+}
+
+function ensureImagePath(slug: string, value: unknown): string {
+  return ensureCatalogAssetPath(slug, value);
 }
 
 function parseManifest(slug: string): HardwareDevice {
@@ -66,6 +73,29 @@ function parseManifest(slug: string): HardwareDevice {
   const normalizedImages = Array.from(
     new Set(images.map((value) => ensureImagePath(slug, value)).filter(Boolean)),
   );
+  const rawCaseDownloads = Array.isArray(data.caseDownloads) ? data.caseDownloads : [];
+  const caseDownloads = rawCaseDownloads
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") return null;
+      const href = ensureCatalogAssetPath(
+        slug,
+        (entry as { href?: unknown }).href,
+      );
+      if (!href) return null;
+      return {
+        label: normalizeString((entry as { label?: unknown }).label) || "Case file",
+        href,
+      };
+    })
+    .filter((entry): entry is { label: string; href: string } => Boolean(entry));
+
+  const legacyCaseDownload = normalizeString(data.caseDownloadUrl);
+  if (legacyCaseDownload) {
+    caseDownloads.push({
+      label: "STL",
+      href: ensureCatalogAssetPath(slug, legacyCaseDownload),
+    });
+  }
 
   const primaryImage =
     normalizedImages[0] || ensureImagePath(slug, data.image || `${slug}.png`);
@@ -80,6 +110,12 @@ function parseManifest(slug: string): HardwareDevice {
     description: normalizeString(data.description),
     image: primaryImage,
     images: normalizedImages.length ? normalizedImages : [primaryImage],
+    casingImage: normalizeString(data.casingImage)
+      ? ensureCatalogAssetPath(slug, data.casingImage)
+      : null,
+    caseDownloads: Array.from(
+      new Map(caseDownloads.map((entry) => [entry.href, entry])).values(),
+    ),
     tags: Array.isArray(data.tags) ? data.tags.map((value) => normalizeString(value)).filter(Boolean) : [],
     appSupport: Array.isArray(data.appSupport)
       ? data.appSupport.map((value) => normalizeString(value)).filter(Boolean)

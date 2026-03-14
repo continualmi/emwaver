@@ -39,6 +39,9 @@
   "description": "Current-gen EMWaver STM32 board for the host-backed USB path of the platform.",
   "tags": ["STM32", "USB"],
   "appSupport": ["android", "ios", "desktop"],
+  "caseDownloads": [
+    { "label": "STL", "href": "case/emwaver.stl" }
+  ],
   "oshwLabUrl": "",
   "githubUrl": "",
   "schematicUrl": ""
