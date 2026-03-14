@@ -51,6 +51,7 @@
 #define STARTUP_LED GPIO_NUM_1
 #define IR_TX_PIN_SHIELD GPIO_NUM_37
 #define IR_TX_PIN_DEFAULT GPIO_NUM_4
+#define IR_LED_GUARD_PIN GPIO_NUM_5
 #define FW_VERSION_MAJOR 1u
 #define FW_VERSION_MINOR 0u
 #define DEVICE_NAME_NAMESPACE "emwaver"
@@ -150,7 +151,7 @@ void emwaver_init(void)
 
 static void init_ir_tx_pins(void)
 {
-    const gpio_num_t pins[] = {IR_TX_PIN_DEFAULT, IR_TX_PIN_SHIELD};
+    const gpio_num_t pins[] = {IR_TX_PIN_DEFAULT, IR_TX_PIN_SHIELD, IR_LED_GUARD_PIN};
     for (int i = 0; i < (int)(sizeof(pins) / sizeof(pins[0])); ++i) {
         gpio_reset_pin(pins[i]);
         gpio_set_direction(pins[i], GPIO_MODE_OUTPUT);
