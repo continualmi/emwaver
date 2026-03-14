@@ -32,6 +32,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         internal const byte Version = 0x01;
         internal const byte IdentityGet = 0x07;
+        internal const byte HardwareUidGet = 0x08;
         internal const byte EnterDfu = 0x06;
     }
 
@@ -119,6 +120,90 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             if (_secureDeviceProofB64 != value)
             {
                 _secureDeviceProofB64 = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string? _hardwareUidHex;
+    public string? HardwareUidHex
+    {
+        get => _hardwareUidHex;
+        private set
+        {
+            if (_hardwareUidHex != value)
+            {
+                _hardwareUidHex = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string? _lastDetectedHardwareUidHex;
+    public string? LastDetectedHardwareUidHex
+    {
+        get => _lastDetectedHardwareUidHex;
+        internal set
+        {
+            if (_lastDetectedHardwareUidHex != value)
+            {
+                _lastDetectedHardwareUidHex = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string? _connectedBoardType;
+    public string? ConnectedBoardType
+    {
+        get => _connectedBoardType;
+        private set
+        {
+            if (_connectedBoardType != value)
+            {
+                _connectedBoardType = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string? _lastDetectedBoardType;
+    public string? LastDetectedBoardType
+    {
+        get => _lastDetectedBoardType;
+        internal set
+        {
+            if (_lastDetectedBoardType != value)
+            {
+                _lastDetectedBoardType = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private bool _needsLoginToSaveDevice;
+    public bool NeedsLoginToSaveDevice
+    {
+        get => _needsLoginToSaveDevice;
+        internal set
+        {
+            if (_needsLoginToSaveDevice != value)
+            {
+                _needsLoginToSaveDevice = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private string? _deviceAttachStatusText;
+    public string? DeviceAttachStatusText
+    {
+        get => _deviceAttachStatusText;
+        internal set
+        {
+            if (_deviceAttachStatusText != value)
+            {
+                _deviceAttachStatusText = value;
                 OnPropertyChanged();
             }
         }
@@ -308,6 +393,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             SecureDeviceIdHex = null;
             SecureDeviceIdB64 = null;
             SecureDeviceProofB64 = null;
+            HardwareUidHex = null;
+            ConnectedBoardType = null;
+            NeedsLoginToSaveDevice = false;
+            DeviceAttachStatusText = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
             NativeBufferRust.ClearAll();
@@ -349,14 +438,31 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 try
                 {
                     var ok = await VerifySecureIdentityAsync(timeoutMs: 900);
+                    var hardwareUid = await ReadHardwareUidAsync(timeoutMs: 1200);
+                    var boardType = InferBoardType(port.DisplayName, hardwareUid);
+                    var hardwareUidHex = hardwareUid == null ? null : BitConverter.ToString(hardwareUid).Replace("-", "");
                     RunOnUi(() =>
                     {
                         IsSecureConnected = ok;
+                        HardwareUidHex = hardwareUidHex;
+                        LastDetectedHardwareUidHex = hardwareUidHex ?? LastDetectedHardwareUidHex;
+                        ConnectedBoardType = boardType;
+                        LastDetectedBoardType = boardType;
+                        if (!ok)
+                        {
+                            DeviceAttachStatusText = "Device is not set up for this account yet. Set it up before using normal scripts.";
+                        }
                     });
                 }
                 catch
                 {
-                    RunOnUi(() => { IsSecureConnected = false; });
+                    RunOnUi(() =>
+                    {
+                        IsSecureConnected = false;
+                        HardwareUidHex = null;
+                        ConnectedBoardType = InferBoardType(port.DisplayName, null);
+                        LastDetectedBoardType = ConnectedBoardType;
+                    });
                 }
             });
         }
@@ -412,6 +518,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         SecureDeviceIdHex = null;
         SecureDeviceIdB64 = null;
         SecureDeviceProofB64 = null;
+        HardwareUidHex = null;
+        ConnectedBoardType = null;
+        NeedsLoginToSaveDevice = false;
+        DeviceAttachStatusText = null;
 
         // Keep parity with iOS/macOS: avoid stale capture across sessions.
         NativeBufferRust.ClearAll();
@@ -494,6 +604,22 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         return new DeviceIdentity(deviceId, proof);
     }
 
+    internal async Task<byte[]?> ReadHardwareUidAsync(int timeoutMs)
+    {
+        var lane = await SendCommandAsync(
+            commandLane: new byte[] { EmwOpcode.HardwareUidGet },
+            timeoutMs: timeoutMs,
+            responsePredicate: lane18 => lane18.Length >= 13 && lane18[0] == 0x80
+        );
+
+        if (lane == null || lane.Length < 13 || lane[0] != 0x80)
+        {
+            return null;
+        }
+
+        return lane.Skip(1).Take(12).ToArray();
+    }
+
     private async Task<bool> VerifySecureIdentityAsync(int timeoutMs)
     {
         var pkRaw = EMWaver.Services.Security.EmwaverRootKey.GetPublicKeyRaw();
@@ -534,6 +660,20 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             return false;
         }
+    }
+
+    private static string InferBoardType(string? portName, byte[]? hardwareUid)
+    {
+        var name = (portName ?? string.Empty).ToLowerInvariant();
+        if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("s3"))
+        {
+            return "esp32s3";
+        }
+        if (hardwareUid != null && hardwareUid.Length == 12 && name.Contains("emwaver esp"))
+        {
+            return "esp32s3";
+        }
+        return "stm32f042";
     }
 
     private async Task<string?> QueryDeviceVersionAsync(int timeoutMs)

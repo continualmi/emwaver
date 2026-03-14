@@ -2,43 +2,30 @@
     x:Class="EMWaver.Dialogs.FirmwareUpdateDialog"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:EMWaver.Dialogs"
-    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    mc:Ignorable="d"
-    Title="Update EMWaver"
+    Title="Device Setup"
     PrimaryButtonText="Update device"
     CloseButtonText="Close"
     DefaultButton="Primary">
 
     <ScrollViewer>
         <StackPanel Spacing="14" Padding="6">
-            <TextBlock Text="Update your device to the latest EMWaver version." Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-
-            <Border x:Name="RunModePanel" CornerRadius="10" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <Border CornerRadius="10" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <StackPanel Spacing="6">
-                    <TextBlock Text="Device connected in Run mode." FontWeight="SemiBold" />
-                    <TextBlock x:Name="DetectedVersionText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock Text="To update: EMWaver will switch the device into Update Mode automatically (no switch needed)." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="SummaryTitleText" Text="Device" FontWeight="SemiBold" />
+                    <TextBlock x:Name="SummaryText" Text="Preparing device state..." TextWrapping="Wrap" />
+                    <TextBlock x:Name="BoardInfoText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="ClaimStatusText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="BootloaderStatusText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="SignInStatusText" Text="" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
-            <Border x:Name="NeedDfuPanel" CornerRadius="10" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                <StackPanel Spacing="6">
-                    <TextBlock Text="Put the device into Update Mode" FontWeight="SemiBold" />
-                    <TextBlock Text="Click Update device. The firmware will erase the initial flash pages and reboot into the STM32 ROM DFU bootloader." FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    <TextBlock Text="Update mode | Run mode" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                </StackPanel>
-            </Border>
-
-            <Border x:Name="DfuDetectedPanel"
-                    CornerRadius="10"
-                    Padding="12"
-                    Background="{ThemeResource StatusWarningBackgroundBrush}"
-                    BorderBrush="{ThemeResource StatusWarningBorderBrush}"
-                    BorderThickness="1">
-                <TextBlock Text="Device connected in Update Mode." Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            </Border>
+            <StackPanel Orientation="Horizontal" Spacing="10">
+                <Button x:Name="RefreshStateButton" Content="Refresh" Click="OnRefreshStateClick" />
+                <Button x:Name="VerifyRunModeButton" Content="Verify Run Mode" Click="OnVerifyRunModeClick" />
+                <Button x:Name="VerifyUpdateModeButton" Content="Verify Update Mode" Click="OnVerifyUpdateModeClick" />
+                <Button x:Name="OpenAccountButton" Content="Open account" Click="OnOpenAccountClick" />
+            </StackPanel>
 
             <Border x:Name="ErrorPanel"
                     CornerRadius="10"
@@ -59,6 +46,7 @@
                     <TextBlock x:Name="ProgressPctText" Grid.Column="1" Text="0%" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
                 <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0" />
+                <TextBlock x:Name="VerificationText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
 
             <Border x:Name="DonePanel"
@@ -67,8 +55,11 @@
                     Background="{ThemeResource StatusSuccessBackgroundBrush}"
                     BorderBrush="{ThemeResource StatusSuccessBorderBrush}"
                     BorderThickness="1">
-                <TextBlock Text="Update complete. Reconnect the device to use it." Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
+                <TextBlock x:Name="DoneText" Text="Update complete. Reconnect the device to use it." Foreground="{ThemeResource TextFillColorPrimaryBrush}" TextWrapping="Wrap" />
             </Border>
+
+            <TextBlock Text="Activity log" FontWeight="SemiBold" />
+            <TextBox x:Name="ActivityLogTextBox" IsReadOnly="True" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="180" />
         </StackPanel>
     </ScrollViewer>
 </ContentDialog>

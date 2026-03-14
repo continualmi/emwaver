@@ -13,44 +13,52 @@ export function DocsSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-4 backdrop-blur">
-      <div className="mb-3 text-xs font-semibold tracking-wide text-[color:var(--ink)]">
-        Docs
+    <nav className="docs-sidebar">
+      <div className="docs-sidebar-brand">
+        <span className="docs-brand-icon">EM</span>
+        <span className="docs-brand-text">Docs</span>
       </div>
 
-      <div className="space-y-5">
+      <div className="docs-sidebar-groups">
         {DOCS_NAV.map((group) => (
-          <div key={group.heading}>
-            <div className="mb-2 text-[11px] font-semibold tracking-wider text-[color:var(--ink-dim)]">
-              {group.heading.toUpperCase()}
-            </div>
-            <div className="space-y-1">
+          <div key={group.heading} className="docs-nav-group">
+            <div className="docs-nav-heading">{group.heading}</div>
+            <ul className="docs-nav-list">
               {group.items.map((item) => {
                 const active = isActive(pathname, item.href);
                 return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={
-                      "group block rounded-xl px-3 py-2 text-sm transition " +
-                      (active
-                        ? "bg-[color:var(--surface)] text-[color:var(--ink)]"
-                        : "text-[color:var(--ink-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[color:var(--ink)]")
-                    }
-                  >
-                    <div className="font-semibold">{item.label}</div>
-                    {item.description ? (
-                      <div className="pt-0.5 text-[12px] leading-5 text-[color:var(--ink-dim)]">
-                        {item.description}
-                      </div>
-                    ) : null}
-                  </Link>
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      className={`docs-nav-item${active ? " active" : ""}`}
+                    >
+                      <svg
+                        width="16"
+                        height="16"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      >
+                        <path d={item.iconPath} />
+                      </svg>
+                      <span>{item.label}</span>
+                    </Link>
+                  </li>
                 );
               })}
-            </div>
+            </ul>
           </div>
         ))}
       </div>
-    </div>
+
+      <div className="docs-sidebar-footer">
+        <Link href="/" className="docs-footer-link">
+          &larr; Back to site
+        </Link>
+      </div>
+    </nav>
   );
 }

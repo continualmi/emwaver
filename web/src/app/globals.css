@@ -47,9 +47,12 @@ body {
   overflow: hidden;
 }
 
-/* Docs-mode: tighter, more technical atmosphere (separate from landing vibe). */
+/* ── Docs layout ──────────────────────────────────────── */
+
 .docs-mode {
   position: relative;
+  display: flex;
+  min-height: 100vh;
 }
 
 .docs-mode::before {
@@ -76,6 +79,232 @@ body {
   background-size: 64px 64px;
   opacity: 0.04;
   z-index: -1;
+}
+
+/* ── Docs sidebar (fixed left) ────────────────────────── */
+
+.docs-sidebar-desktop {
+  display: none;
+}
+
+.docs-sidebar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+}
+
+.docs-sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px 18px;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+
+.docs-brand-icon {
+  width: 30px;
+  height: 30px;
+  background: linear-gradient(135deg, var(--aqua), var(--sky));
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--paper);
+  font-weight: 700;
+  font-size: 11px;
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+
+.docs-brand-text {
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.docs-sidebar-groups {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.docs-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docs-nav-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(233, 238, 252, 0.38);
+  padding: 0 10px 6px;
+}
+
+.docs-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.docs-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: rgba(233, 238, 252, 0.56);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+.docs-nav-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--ink);
+}
+
+.docs-nav-item.active {
+  background: rgba(78, 231, 199, 0.1);
+  color: var(--aqua);
+}
+
+.docs-nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.docs-nav-item.active svg {
+  opacity: 1;
+}
+
+.docs-sidebar-footer {
+  padding: 14px 8px 0;
+  border-top: 1px solid var(--line);
+  margin-top: 8px;
+}
+
+.docs-footer-link {
+  font-size: 13px;
+  color: rgba(233, 238, 252, 0.44);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.docs-footer-link:hover {
+  color: var(--ink);
+}
+
+/* ── Docs content area ────────────────────────────────── */
+
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 32px 64px;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+.docs-article {
+  max-width: 78ch;
+}
+
+/* ── Docs mobile nav ──────────────────────────────────── */
+
+.docs-mobile-bar {
+  margin-bottom: 24px;
+}
+
+.docs-mobile-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(2, 4, 10, 0.55);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  backdrop-filter: blur(12px);
+}
+
+.docs-mobile-toggle:hover {
+  border-color: rgba(233, 238, 252, 0.24);
+}
+
+.docs-mobile-toggle svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.docs-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 99;
+}
+
+.docs-mobile-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 280px;
+  height: 100vh;
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  box-shadow: 20px 0 60px rgba(0, 0, 0, 0.5);
+}
+
+/* ── Desktop: show fixed sidebar ──────────────────────── */
+
+@media (min-width: 768px) {
+  .docs-sidebar-desktop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 250px;
+    height: 100vh;
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    border-right: 1px solid var(--line);
+    z-index: 50;
+    backdrop-filter: blur(16px);
+  }
+
+  .docs-content {
+    margin-left: 250px;
+    padding: 36px 40px 64px;
+  }
+
+  .docs-mobile-bar {
+    display: none;
+  }
 }
 
 /* Make docs/news sections reveal more of the global background image. */
