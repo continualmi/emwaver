@@ -5,15 +5,22 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DOCS_NAV } from "@/components/docs/docsNav";
 
-function isActive(pathname: string, href: string) {
-  if (href === "/docs") return pathname === "/docs";
-  return pathname === href || pathname.startsWith(href + "/");
+function findActiveHref(pathname: string): string | null {
+  const allHrefs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.href));
+  const exact = allHrefs.find((h) => h === pathname);
+  if (exact) return exact;
+  const prefixMatches = allHrefs
+    .filter((h) => h !== "/docs" && pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length);
+  return prefixMatches[0] ?? null;
 }
 
 function activeLabel(pathname: string) {
+  const href = findActiveHref(pathname);
+  if (!href) return "Docs";
   for (const group of DOCS_NAV) {
     for (const item of group.items) {
-      if (isActive(pathname, item.href)) return item.label;
+      if (item.href === href) return item.label;
     }
   }
   return "Docs";
@@ -23,6 +30,7 @@ export function DocsMobileNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const current = activeLabel(pathname);
+  const activeHref = findActiveHref(pathname);
 
   return (
     <>
@@ -42,7 +50,7 @@ export function DocsMobileNav() {
           <div className="docs-mobile-overlay" onClick={() => setOpen(false)} />
           <nav className="docs-mobile-drawer">
             <div className="docs-sidebar-brand">
-              <span className="docs-brand-icon">EM</span>
+              <img src="/logo.png" alt="EMWaver" className="docs-brand-logo" />
               <span className="docs-brand-text">Docs</span>
             </div>
 
@@ -52,7 +60,7 @@ export function DocsMobileNav() {
                   <div className="docs-nav-heading">{group.heading}</div>
                   <ul className="docs-nav-list">
                     {group.items.map((item) => {
-                      const active = isActive(pathname, item.href);
+                      const active = item.href === activeHref;
                       return (
                         <li key={item.href}>
                           <Link

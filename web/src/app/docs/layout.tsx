@@ -1,5 +1,6 @@
 import { DocsMobileNav } from "@/components/docs/DocsMobileNav";
 import { DocsSidebar } from "@/components/docs/DocsSidebar";
+import { DocsHighlight } from "@/components/docs/DocsHighlight";
 
 export default function DocsLayout({
   children,
@@ -8,6 +9,7 @@ export default function DocsLayout({
 }) {
   return (
     <div className="docs-mode">
+      <DocsHighlight />
       <aside className="docs-sidebar-desktop">
         <DocsSidebar />
       </aside>
