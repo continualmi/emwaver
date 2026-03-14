@@ -62,6 +62,11 @@ const body = JSON.stringify(items, null, 2)
 const content = `${header}${body} as const;\n`;
 
 for (const outPath of outPaths) {
+  const outDir = path.dirname(outPath);
+  if (!fs.existsSync(outDir)) {
+    console.warn(`Skipping ${outPath} (missing directory)`);
+    continue;
+  }
   fs.writeFileSync(outPath, content);
   console.log(`Wrote ${outPath} (${items.length} scripts)`);
 }

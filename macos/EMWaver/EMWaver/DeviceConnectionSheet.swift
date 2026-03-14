@@ -31,6 +31,8 @@ struct DeviceConnectionSheet: View {
         if device.isConnected {
             if currentDeviceIsRegistered {
                 items.append(auth.isSignedIn ? "Claimed" : "Cached")
+            } else if !currentDeviceClaimStatusResolved {
+                items.append("Checking")
             } else {
                 items.append("Unclaimed")
             }
@@ -60,6 +62,15 @@ struct DeviceConnectionSheet: View {
         return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
     }
 
+    private var currentDeviceClaimStatusResolved: Bool {
+        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return true }
+        return accountDevices.claimStatusResolved(
+            boardType: currentBoardType,
+            hardwareUid: hardwareUid,
+            signedIn: auth.isSignedIn
+        )
+    }
+
     private var currentHardwareUidHex: String? {
         let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
         guard let value, !value.isEmpty else { return nil }
@@ -82,6 +93,9 @@ struct DeviceConnectionSheet: View {
         if firmwareUpdater.isFlashing {
             return false
         }
+        if !currentDeviceClaimStatusResolved {
+            return false
+        }
         if showsEspFirmwareFlow {
             let bootloaderReady = firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
             return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && auth.isSignedIn)
@@ -93,6 +107,9 @@ struct DeviceConnectionSheet: View {
     }
 
     private var firmwareActionTitle: String {
+        if !currentDeviceClaimStatusResolved {
+            return "Checking device"
+        }
         if currentDeviceIsRegistered {
             return showsEspFirmwareFlow ? "Flash firmware" : "Update firmware"
         }
@@ -263,7 +280,7 @@ struct DeviceConnectionSheet: View {
                     .disabled(firmwareUpdater.isFlashing)
                 }
 
-                if !currentDeviceIsRegistered {
+                if !currentDeviceIsRegistered && currentDeviceClaimStatusResolved {
                     Text("Claim attaches this physical board to your account. For ESP32-S3, the same step also flashes EMWaver firmware. Unclaimed boards cannot be used by normal scripts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
@@ -339,6 +356,9 @@ struct DeviceConnectionSheet: View {
             }
             return "This device is claimed in your EMWaver account."
         }
+        if !currentDeviceClaimStatusResolved {
+            return "Checking whether this device is already claimed in your account."
+        }
         if accountDevices.isOfflineMode {
             return "This device is not claimed in the local cache yet. Go online once to set it up."
         }
@@ -349,6 +369,9 @@ struct DeviceConnectionSheet: View {
     }
 
     private var espFlashStatusText: String {
+        if !currentDeviceClaimStatusResolved {
+            return "Checking whether this ESP32-S3 is already claimed before offering setup actions."
+        }
         if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
             return currentDeviceIsRegistered
                 ? "Bootloader detected on \(port). Ready to flash."
