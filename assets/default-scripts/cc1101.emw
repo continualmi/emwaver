@@ -1,7 +1,88 @@
 // CC1101 - merged ISM register view + quick preset / packet tools.
 // Desktop scripts are sync-only; long operations are chunked via setTimeout.
 
-var DEFAULT_CC1101_CS = typeof CC1101_CS !== "undefined" ? CC1101_CS : 4;
+function normalizeBoardType(value) {
+  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+function isNumericPinValue(value) {
+  return typeof value === "number" && isFinite(value);
+}
+
+function espPinLabel(pin) {
+  if (pin === 2) return "GPIO2 (GDO0 default)";
+  if (pin === 10) return "GPIO10 (CC1101 CS default)";
+  if (pin === 11) return "GPIO11 (SPI MOSI default)";
+  if (pin === 12) return "GPIO12 (SPI SCK default)";
+  if (pin === 13) return "GPIO13 (SPI MISO default)";
+  return "GPIO" + String(pin);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var pin = 0; pin <= 48; pin += 1) {
+    out.push({ label: espPinLabel(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function buildStmPins() {
+  return [
+    { label: "A0", value: String(A0) },
+    { label: "A1", value: String(A1) },
+    { label: "A2 / GDO0 default", value: String(A2) },
+    { label: "A3", value: String(A3) },
+    { label: "A4 / NSS / CC1101 CS default", value: String(A4) },
+    { label: "A5 / SCK", value: String(A5) },
+    { label: "A6 / MISO", value: String(A6) },
+    { label: "A7 / MOSI", value: String(A7) },
+    { label: "B6", value: String(B6) },
+    { label: "B7", value: String(B7) },
+  ];
+}
+
+var detectedBoardType = detectBoardType();
+var boardType = detectedBoardType;
+var LEGACY_CC1101_CS =
+  typeof CC1101_CS !== "undefined" && isNumericPinValue(CC1101_CS) ? CC1101_CS : undefined;
+var BOARD_TYPE_OPTIONS = [
+  { label: "ESP32-S3", value: "esp32s3" },
+  { label: "STM32F042", value: "stm32f042" },
+];
+
+function defaultCc1101CsPinForBoard(type) {
+  return typeof LEGACY_CC1101_CS !== "undefined" && type !== "esp32s3"
+    ? LEGACY_CC1101_CS
+    : type === "esp32s3"
+      ? 10
+      : 4;
+}
+
+function defaultGdo0PinForBoard(type) {
+  return type === "esp32s3" ? 2 : GDO0;
+}
+
+function spiSummaryForBoard(type) {
+  return type === "esp32s3"
+    ? "Board mode: ESP32-S3. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."
+    : "Board mode: STM32F042. Default CC1101 wiring: CS=A4, MOSI=A7, MISO=A6, SCK=A5, GDO0=A2.";
+}
+
+function pinOptionsForBoard(type) {
+  return type === "esp32s3" ? buildEspPins() : buildStmPins();
+}
+
+var DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
+var DEFAULT_GDO0_PIN = defaultGdo0PinForBoard(boardType);
 
 var RF_PARAMETER_STEPS = 6;
 var CC1101_PA_TABLE_SIZE = 8;
@@ -219,7 +300,7 @@ function getRegisterAddress(name) {
 
 function cc1101SpiXfer(tx, opts) {
   var options = opts || {};
-  var cs = typeof options.cs !== "undefined" ? options.cs : DEFAULT_CC1101_CS;
+  var cs = typeof options.cs !== "undefined" ? options.cs : cc1101CsPin;
   var rxLength = typeof options.rxLength === "number" ? options.rxLength : undefined;
   return SPI.transfer(tx, { cs: cs, rxLength: rxLength });
 }
@@ -518,10 +599,10 @@ function initRxAsk433() {
   presetStatusText = "Init RX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
-  pinMode(GDO0, INPUT);
+  pinMode(gdo0Pin, INPUT);
   cc1101Strobe(CC1101_SRX);
   txCarrierOn = false;
-  presetStatusText = "RX ready (GDO0 = modem out)";
+  presetStatusText = "RX ready (GDO0 pin " + String(gdo0Pin) + " = modem out)";
   render();
 }
 
@@ -529,19 +610,22 @@ function initTxAsk433() {
   presetStatusText = "Init TX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
-  pinMode(GDO0, OUTPUT);
-  digitalWrite(GDO0, LOW);
+  pinMode(gdo0Pin, OUTPUT);
+  digitalWrite(gdo0Pin, LOW);
   txCarrierOn = false;
   cc1101Strobe(CC1101_STX);
-  presetStatusText = "TX ready (GDO0 = modem in, carrier gated by GDO0)";
+  presetStatusText = "TX ready (GDO0 pin " + String(gdo0Pin) + " = modem in, carrier gated by GDO0)";
   render();
 }
 
 function toggleCarrier() {
   txCarrierOn = !txCarrierOn;
-  pinMode(GDO0, OUTPUT);
-  digitalWrite(GDO0, txCarrierOn ? HIGH : LOW);
-  presetStatusText = txCarrierOn ? "Carrier: ON (GDO0=HIGH)" : "Carrier: OFF (GDO0=LOW)";
+  pinMode(gdo0Pin, OUTPUT);
+  digitalWrite(gdo0Pin, txCarrierOn ? HIGH : LOW);
+  presetStatusText =
+    txCarrierOn
+      ? "Carrier: ON (GDO0 pin " + String(gdo0Pin) + "=HIGH)"
+      : "Carrier: OFF (GDO0 pin " + String(gdo0Pin) + "=LOW)";
   render();
 }
 
@@ -673,8 +757,10 @@ var presetStatusText = "Ready";
 var txCarrierOn = false;
 var registers = {};
 var rfParams = null; // { frequencyMHz, dataRate, bandwidth, deviation, modulation, txPower }
+var cc1101CsPin = DEFAULT_CC1101_CS;
+var gdo0Pin = DEFAULT_GDO0_PIN;
 
-var packetCsPin = DEFAULT_CC1101_CS;
+var packetCsPin = cc1101CsPin;
 var packetFreqMHz = 433.92;
 var packetDataRateBps = 100000;
 var packetPayloadHex = "01 02 03 04";
@@ -690,6 +776,15 @@ var loadJob = null;
 
 var editDialog = null; // { kind, title, key, mode, allowDecimal }
 var editValue = "";
+
+function applyBoardType(nextBoardType) {
+  boardType = normalizeBoardType(nextBoardType);
+  DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
+  DEFAULT_GDO0_PIN = defaultGdo0PinForBoard(boardType);
+  cc1101CsPin = DEFAULT_CC1101_CS;
+  gdo0Pin = DEFAULT_GDO0_PIN;
+  packetCsPin = cc1101CsPin;
+}
 
 function stopLoading(msg) {
   isLoading = false;
@@ -1006,6 +1101,53 @@ function render() {
                 UI.card({
                   title: "Device",
                   children: [
+                    UI.text({
+                      text:
+                        "Detected board: " +
+                        (detectedBoardType === "esp32s3" ? "ESP32-S3" : "STM32F042") +
+                        ". " +
+                        spiSummaryForBoard(boardType),
+                      font: "caption",
+                    }),
+                    UI.picker({
+                      id: "board_type",
+                      label: "Board",
+                      selected: String(boardType),
+                      options: BOARD_TYPE_OPTIONS,
+                      onChange: function (value) {
+                        applyBoardType(String(value));
+                        render();
+                      },
+                    }),
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 12,
+                      children: [
+                        UI.picker({
+                          id: "cc1101_cs_pin",
+                          label: "CC1101 CS Pin",
+                          selected: String(cc1101CsPin),
+                          options: pinOptionsForBoard(boardType),
+                          onChange: function (value) {
+                            var n = parseInt(String(value), 10);
+                            cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
+                            packetCsPin = cc1101CsPin;
+                            render();
+                          },
+                        }),
+                        UI.picker({
+                          id: "cc1101_gdo0_pin",
+                          label: "CC1101 GDO0 Pin",
+                          selected: String(gdo0Pin),
+                          options: pinOptionsForBoard(boardType),
+                          onChange: function (value) {
+                            var n = parseInt(String(value), 10);
+                            gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
+                            render();
+                          },
+                        }),
+                      ],
+                    }),
                     UI.button({
                       label: "Initialize & Read",
                       onTap: startRefresh,
@@ -1015,43 +1157,6 @@ function render() {
                       font: "caption",
                     }),
                     statusMessage ? UI.text({ text: statusMessage, font: "caption" }) : null,
-                  ],
-                }),
-
-                UI.card({
-                  title: "Quick Presets",
-                  subtitle: "Known-good ASK/OOK setup and carrier gate",
-                  children: [
-                    UI.grid({
-                      minColumnWidth: 220,
-                      spacing: 12,
-                      children: [
-                        UI.button({ label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
-                        UI.button({ label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
-                      ],
-                    }),
-                    UI.grid({
-                      minColumnWidth: 160,
-                      spacing: 12,
-                      children: [
-                        UI.button({ label: txCarrierOn ? "Carrier OFF" : "Carrier ON", onTap: toggleCarrier }),
-                        UI.button({
-                          label: "IDLE",
-                          onTap: function () {
-                            cc1101Idle();
-                            txCarrierOn = false;
-                            presetStatusText = "IDLE";
-                            render();
-                          },
-                        }),
-                        UI.button({ label: "Probe PART/VERSION", onTap: probePartVersion }),
-                      ],
-                    }),
-                    UI.text({ text: presetStatusText, fontWeight: "medium" }),
-                    UI.text({
-                      text: "GDO0 is serial data. RX: modem output. TX: modem input (GDO0 gates carrier).",
-                      font: "caption",
-                    }),
                   ],
                 }),
 
@@ -1146,6 +1251,43 @@ function render() {
                 }),
 
                 UI.card({
+                  title: "Quick Presets",
+                  subtitle: "Known-good ASK/OOK setup and carrier gate",
+                  children: [
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 12,
+                      children: [
+                        UI.button({ label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
+                        UI.button({ label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
+                      ],
+                    }),
+                    UI.grid({
+                      minColumnWidth: 160,
+                      spacing: 12,
+                      children: [
+                        UI.button({ label: txCarrierOn ? "Carrier OFF" : "Carrier ON", onTap: toggleCarrier }),
+                        UI.button({
+                          label: "IDLE",
+                          onTap: function () {
+                            cc1101Idle();
+                            txCarrierOn = false;
+                            presetStatusText = "IDLE";
+                            render();
+                          },
+                        }),
+                        UI.button({ label: "Probe PART/VERSION", onTap: probePartVersion }),
+                      ],
+                    }),
+                    UI.text({ text: presetStatusText, fontWeight: "medium" }),
+                    UI.text({
+                      text: "GDO0 is serial data. RX: modem output. TX: modem input (GDO0 gates carrier).",
+                      font: "caption",
+                    }),
+                  ],
+                }),
+
+                UI.card({
                   title: "Packet Mode (optional)",
                   subtitle: "Quick fixed-length packet TX sanity check",
                   children: [
@@ -1156,7 +1298,7 @@ function render() {
                         UI.textField({
                           fillsWidth: true,
                           value: String(packetCsPin),
-                          placeholder: "CS pin (default CC1101_CS)",
+                          placeholder: "CS pin (default board mapping)",
                           onChange: function (v) {
                             var n = parseInt(String(v), 10);
                             packetCsPin = isFiniteNumber(n) ? n : String(v);
