@@ -611,7 +611,8 @@ static void handle_sample_opcode(const command_t *cmd)
     uint8_t sub = cmd->data[1];
     if (sub == EMW_SAMPLE_START) {
         gpio_num_t gpio = GPIO_NUM_NC;
-        if (!validate_gpio_pin(cmd->data[2], &gpio) || !sampler_start_sampling((int)gpio)) {
+        uint8_t tick_us = cmd->data[3];
+        if (!validate_gpio_pin(cmd->data[2], &gpio) || !sampler_start_sampling((int)gpio, tick_us)) {
             send_binary_err();
             return;
         }
@@ -645,7 +646,14 @@ static void handle_transmit_opcode(const command_t *cmd)
 
     if (sub == EMW_TRANSMIT_START) {
         gpio_num_t gpio = GPIO_NUM_NC;
-        if (!validate_gpio_pin(cmd->data[2], &gpio) || !sampler_start_transmission((int)gpio)) {
+        uint8_t duty_percent = cmd->data[3];
+        uint32_t freq_hz = ((uint32_t)cmd->data[4]) |
+                           ((uint32_t)cmd->data[5] << 8) |
+                           ((uint32_t)cmd->data[6] << 16) |
+                           ((uint32_t)cmd->data[7] << 24);
+        uint8_t tick_us = cmd->data[8];
+        if (!validate_gpio_pin(cmd->data[2], &gpio) ||
+            !sampler_start_transmission((int)gpio, duty_percent, (int)freq_hz, tick_us)) {
             send_binary_err();
             return;
         }

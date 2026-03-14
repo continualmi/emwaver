@@ -18,58 +18,72 @@
 #include "sampler.h"
 
 #include <limits.h>
-#include <stdlib.h>
 #include <string.h>
 
-#include "ble_server.h"
 #include "command_registry.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/timer.h"
 #include "esp_err.h"
-#include "esp_log.h"
-#include "esp_timer.h"
 #include "esp_intr_alloc.h"
+#include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/queue.h"
-#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "hal/ledc_ll.h"
-#include "soc/timer_group_reg.h"
-#include "soc/timer_group_struct.h"
+#include "usb.h"
 
-#define SAMPLER_BUFFER_SIZE 256
+#define SAMPLER_RING_LANES 16u
+#define SAMPLER_RING_MASK (SAMPLER_RING_LANES - 1u)
 #define SAMPLER_TIMER_GROUP TIMER_GROUP_0
 #define SAMPLER_TIMER TIMER_0
 #define TRANSMIT_TIMER TIMER_1
-#define SAMPLER_TIMER_INTERVAL_US 10
-#define TRANSMIT_INTERVAL_US 10
-#define TRANSMISSION_TIMEOUT_MS 2000
-#define TRANSMISSION_IDLE_EXIT_MS 100
-#define MONITOR_CHECK_INTERVAL_MS 10
-#define BLE_RX_BUFFER_SIZE 4096
-#define TRANSMIT_PWM_DEFAULT_FREQ_HZ 38000
-#define TRANSMIT_PWM_DEFAULT_DUTY_PERCENT 50
-#define TRANSMIT_PWM_MAX_FREQ_HZ 1000000
-#define TRANSMIT_PWM_MIN_FREQ_HZ 1
+#define DEFAULT_TICK_US 10u
+#define MIN_TICK_US 5u
+#define TRANSMISSION_TIMEOUT_MS 2000u
+#define TRANSMISSION_IDLE_EXIT_MS 100u
+#define TRANSMISSION_START_FILL_BYTES 250u
+#define MONITOR_CHECK_INTERVAL_MS 10u
+#define TRANSMIT_PWM_DEFAULT_FREQ_HZ 38000u
+#define TRANSMIT_PWM_DEFAULT_DUTY_PERCENT 50u
+#define TRANSMIT_PWM_MAX_FREQ_HZ 1000000u
+#define TRANSMIT_PWM_MIN_FREQ_HZ 1u
 
 static const char *TAG = "SAMPLER";
 
-static volatile uint8_t *buffer_a = NULL;
-static volatile uint8_t *buffer_b = NULL;
-static volatile uint8_t *current_buffer = NULL;
-static volatile uint8_t *transmit_buffer = NULL;
-static volatile int buffer_index = 0;
-static SemaphoreHandle_t buffer_ready_sem = NULL;
-static TaskHandle_t sampler_task_handle = NULL;
+static portMUX_TYPE s_sampler_lock = portMUX_INITIALIZER_UNLOCKED;
 
-static intr_handle_t sampling_timer_isr_handle = NULL;
-static intr_handle_t transmission_timer_isr_handle = NULL;
-static TaskHandle_t transmission_monitor_task_handle = NULL;
+static volatile uint8_t sampler_ring[SAMPLER_RING_LANES][EMW_USB_CMD_LANE_SIZE];
+static volatile uint8_t sampler_overflow_lane[EMW_USB_CMD_LANE_SIZE];
+static volatile uint8_t sampler_ring_head;
+static volatile uint8_t sampler_ring_tail;
+static volatile uint8_t sampler_ring_count;
+static volatile uint8_t sampler_overflow_active;
+static volatile uint8_t sampler_bit_index;
+static volatile uint8_t sampler_byte_index;
+static volatile uint8_t sampler_current_byte;
 
-static uint16_t sampler_pin = 0;
-static bool sampling_active = false;
-static bool transmission_active = false;
+static volatile uint8_t tx_bit_index;
+static volatile uint8_t tx_current_byte;
+static volatile uint8_t tx_out_enabled;
+
+static intr_handle_t sampling_timer_isr_handle;
+static intr_handle_t transmission_timer_isr_handle;
+static TaskHandle_t sampler_task_handle;
+static TaskHandle_t transmission_monitor_task_handle;
+
+static uint16_t sampler_pin;
+static bool sampling_active;
+static bool transmission_active;
+static uint32_t sampling_tick_us;
+static uint32_t transmit_tick_us;
+static bool transmit_use_pwm;
+static uint32_t transmit_pwm_freq_hz;
+static uint8_t transmit_pwm_duty_percent;
+static bool transmit_pwm_configured;
+static bool transmit_pwm_enabled_state;
+static ledc_mode_t transmit_ledc_speed_mode = LEDC_LOW_SPEED_MODE;
+static ledc_timer_t transmit_ledc_timer = LEDC_TIMER_0;
+static ledc_channel_t transmit_ledc_channel = LEDC_CHANNEL_0;
 
 static void sampler_start_command(int pin);
 static void sampler_stop_command(void);
@@ -77,42 +91,38 @@ static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_perc
 static void transmit_stop_command(void);
 static void sampler_task(void *pv_parameters);
 static void transmission_monitor_task(void *pv_parameters);
-
-static void IRAM_ATTR sampling_isr(void *arg);
-static void IRAM_ATTR transmission_isr(void *arg);
-static bool sampler_start_impl(int pin, const char **err_msg);
+static void sampling_isr(void *arg);
+static void transmission_isr(void *arg);
+static bool sampler_start_impl(int pin, uint8_t tick_us, const char **err_msg);
 static bool sampler_stop_impl(const char **err_msg);
-static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, const char **err_msg);
+static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, uint8_t tick_us, const char **err_msg);
 static bool transmit_stop_impl(const char **err_msg);
-
 static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t duty_percent, const char **err_msg);
 static void transmit_pwm_set_enabled_isr(bool enabled);
 static void transmit_pwm_stop(void);
-
-static bool transmit_use_pwm = false;
-static uint32_t transmit_pwm_freq_hz = TRANSMIT_PWM_DEFAULT_FREQ_HZ;
-static uint8_t transmit_pwm_duty_percent = TRANSMIT_PWM_DEFAULT_DUTY_PERCENT;
-static bool transmit_pwm_configured = false;
-static bool transmit_pwm_enabled_state = false;
-static ledc_mode_t transmit_ledc_speed_mode = LEDC_LOW_SPEED_MODE;
-static ledc_timer_t transmit_ledc_timer = LEDC_TIMER_0;
-static ledc_channel_t transmit_ledc_channel = LEDC_CHANNEL_0;
+static void configure_timer(timer_group_t group, timer_idx_t timer, uint32_t interval_us, bool auto_reload);
+static uint32_t normalize_tick_us(uint8_t requested_us);
+static void reset_sampler_state(void);
+static void reset_transmission_state(void);
 
 void sampler_module_init(void)
 {
-    buffer_ready_sem = NULL;
-    sampler_task_handle = NULL;
     sampling_timer_isr_handle = NULL;
     transmission_timer_isr_handle = NULL;
+    sampler_task_handle = NULL;
     transmission_monitor_task_handle = NULL;
     sampling_active = false;
     transmission_active = false;
-
-    transmit_use_pwm = false;
+    sampler_pin = 0;
+    sampling_tick_us = DEFAULT_TICK_US;
+    transmit_tick_us = DEFAULT_TICK_US;
+    transmit_use_pwm = true;
     transmit_pwm_freq_hz = TRANSMIT_PWM_DEFAULT_FREQ_HZ;
     transmit_pwm_duty_percent = TRANSMIT_PWM_DEFAULT_DUTY_PERCENT;
     transmit_pwm_configured = false;
     transmit_pwm_enabled_state = false;
+    reset_sampler_state();
+    reset_transmission_state();
 }
 
 void sampler_register_commands(void)
@@ -168,10 +178,7 @@ void sampler_stop_all(void)
     sampler_stop_transmission();
 }
 
-static void configure_timer(timer_group_t group,
-                            timer_idx_t timer,
-                            uint32_t interval_us,
-                            bool auto_reload)
+static void configure_timer(timer_group_t group, timer_idx_t timer, uint32_t interval_us, bool auto_reload)
 {
     timer_config_t config = {
         .divider = 80,
@@ -187,14 +194,43 @@ static void configure_timer(timer_group_t group,
     timer_enable_intr(group, timer);
 }
 
+static uint32_t normalize_tick_us(uint8_t requested_us)
+{
+    if (requested_us == 0u) {
+        return DEFAULT_TICK_US;
+    }
+    if (requested_us < MIN_TICK_US) {
+        return MIN_TICK_US;
+    }
+    return requested_us;
+}
+
+static void reset_sampler_state(void)
+{
+    portENTER_CRITICAL(&s_sampler_lock);
+    sampler_ring_head = 0;
+    sampler_ring_tail = 0;
+    sampler_ring_count = 0;
+    sampler_overflow_active = 0;
+    sampler_bit_index = 0;
+    sampler_byte_index = 0;
+    sampler_current_byte = 0;
+    memset((void *)sampler_ring, 0, sizeof(sampler_ring));
+    memset((void *)sampler_overflow_lane, 0, sizeof(sampler_overflow_lane));
+    portEXIT_CRITICAL(&s_sampler_lock);
+}
+
+static void reset_transmission_state(void)
+{
+    tx_bit_index = 0;
+    tx_current_byte = 0;
+    tx_out_enabled = 0;
+}
+
 static void sampler_start_command(int pin)
 {
     const char *err = NULL;
-    if (sampler_start_impl(pin, &err)) {
-        // Sampler streaming is started in fire-and-forget mode; do not emit a command
-        // response packet to avoid contaminating the capture stream on the client.
-        // Errors are logged; clients should infer failure by lack of stream data.
-    } else {
+    if (!sampler_start_impl(pin, DEFAULT_TICK_US, &err)) {
         ESP_LOGW(TAG, "sample start failed: %s", err ? err : "unknown");
     }
 }
@@ -202,9 +238,7 @@ static void sampler_start_command(int pin)
 static void sampler_stop_command(void)
 {
     const char *err = NULL;
-    if (sampler_stop_impl(&err)) {
-        // Fire-and-forget (see sampler_start_command).
-    } else {
+    if (!sampler_stop_impl(&err)) {
         ESP_LOGW(TAG, "sample stop failed: %s", err ? err : "unknown");
     }
 }
@@ -212,11 +246,7 @@ static void sampler_stop_command(void)
 static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_percent)
 {
     const char *err = NULL;
-    if (transmit_start_impl(pin, pwm, freq_hz, duty_percent, &err)) {
-        // Fire-and-forget: do not emit ok/err responses. During retransmission the
-        // client expects the notification channel to be reserved for BS flow-control
-        // packets (and for sampler streaming), not command-response framing.
-    } else {
+    if (!transmit_start_impl(pin, pwm, freq_hz, duty_percent, DEFAULT_TICK_US, &err)) {
         ESP_LOGW(TAG, "transmit start failed: %s", err ? err : "unknown");
     }
 }
@@ -224,61 +254,67 @@ static void transmit_start_command(int pin, bool pwm, int freq_hz, int duty_perc
 static void transmit_stop_command(void)
 {
     const char *err = NULL;
-    if (transmit_stop_impl(&err)) {
-        // Fire-and-forget (see transmit_start_command).
-    } else {
+    if (!transmit_stop_impl(&err)) {
         ESP_LOGW(TAG, "transmit stop failed: %s", err ? err : "unknown");
     }
 }
 
 static void sampler_task(void *pv_parameters)
 {
-    bool stop_requested = false;
+    (void)pv_parameters;
 
-    while (!stop_requested) {
+    for (;;) {
         uint32_t notification = 0;
-        if (xTaskNotifyWait(0, ULONG_MAX, &notification, 0) == pdTRUE) {
-            if (notification == 1) {
-                stop_requested = true;
-                break;
+        if (xTaskNotifyWait(0, ULONG_MAX, &notification, pdMS_TO_TICKS(1)) == pdTRUE && notification == 1u) {
+            break;
+        }
+
+        if (sampling_active) {
+            uint8_t lane_index = 0;
+            bool has_lane = false;
+
+            portENTER_CRITICAL(&s_sampler_lock);
+            if (sampler_ring_count > 0u) {
+                lane_index = sampler_ring_tail;
+                has_lane = true;
+            }
+            portEXIT_CRITICAL(&s_sampler_lock);
+
+            if (has_lane) {
+                if (usb_send_stream_lane((const uint8_t *)sampler_ring[lane_index], true) == ESP_OK) {
+                    portENTER_CRITICAL(&s_sampler_lock);
+                    if (sampler_ring_count > 0u) {
+                        sampler_ring_tail = (uint8_t)((sampler_ring_tail + 1u) & SAMPLER_RING_MASK);
+                        sampler_ring_count--;
+                    }
+                    portEXIT_CRITICAL(&s_sampler_lock);
+                }
             }
         }
 
-        if (buffer_ready_sem && xSemaphoreTake(buffer_ready_sem, pdMS_TO_TICKS(1)) == pdTRUE) {
-            if (transmit_buffer) {
-                ble_server_notify((uint8_t *)transmit_buffer, SAMPLER_BUFFER_SIZE);
-                vTaskDelay(pdMS_TO_TICKS(15));
-            }
-        } else {
-            vTaskDelay(pdMS_TO_TICKS(1));
-        }
+        usb_poll_tx();
     }
 
     sampler_task_handle = NULL;
-    if (buffer_ready_sem) {
-        vSemaphoreDelete(buffer_ready_sem);
-        buffer_ready_sem = NULL;
-    }
-
     vTaskDelete(NULL);
 }
 
 static void transmission_monitor_task(void *pv_parameters)
 {
+    (void)pv_parameters;
+
     uint16_t last_bytes_available = 0;
-    uint16_t current_bytes_available = 0;
     uint32_t unchanged_time_ms = 0;
     uint32_t idle_zero_time_ms = 0;
     uint32_t fill_wait_time_ms = 0;
     bool timer_started = false;
 
     while (transmission_active) {
-        current_bytes_available = ble_get_rx_bytes_available();
+        uint16_t current_bytes_available = usb_get_rx_buffer_bytes_available();
 
         if (!timer_started) {
-            // Match STM32 semantics: wait for a small initial fill (or timeout),
-            // then start draining the circular RX buffer in the transmit ISR.
-            if (current_bytes_available >= 1000 || fill_wait_time_ms >= TRANSMISSION_TIMEOUT_MS) {
+            if (current_bytes_available >= TRANSMISSION_START_FILL_BYTES ||
+                fill_wait_time_ms >= TRANSMISSION_TIMEOUT_MS) {
                 timer_start(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
                 timer_started = true;
                 unchanged_time_ms = 0;
@@ -287,16 +323,12 @@ static void transmission_monitor_task(void *pv_parameters)
             } else {
                 fill_wait_time_ms += MONITOR_CHECK_INTERVAL_MS;
             }
-        }
-
-        if (timer_started) {
-            if (current_bytes_available == 0) {
+        } else {
+            if (current_bytes_available == 0u) {
                 idle_zero_time_ms += MONITOR_CHECK_INTERVAL_MS;
-                // Mimic STM32 behavior: once the RX ring has drained, leave transmitter
-                // mode promptly so the command channel can resume normal parsing.
                 if (idle_zero_time_ms >= TRANSMISSION_IDLE_EXIT_MS) {
                     ESP_LOGI(TAG, "Transmission complete (buffer drained)");
-                    transmit_stop_impl(NULL);
+                    (void)transmit_stop_impl(NULL);
                     break;
                 }
             } else {
@@ -310,12 +342,13 @@ static void transmission_monitor_task(void *pv_parameters)
                 unchanged_time_ms += MONITOR_CHECK_INTERVAL_MS;
                 if (unchanged_time_ms >= TRANSMISSION_TIMEOUT_MS) {
                     ESP_LOGI(TAG, "Transmission timeout");
-                    transmit_stop_impl(NULL);
+                    (void)transmit_stop_impl(NULL);
                     break;
                 }
             }
         }
 
+        usb_poll_tx();
         vTaskDelay(pdMS_TO_TICKS(MONITOR_CHECK_INTERVAL_MS));
     }
 
@@ -325,37 +358,52 @@ static void transmission_monitor_task(void *pv_parameters)
 
 static void IRAM_ATTR sampling_isr(void *arg)
 {
+    (void)arg;
     timer_group_clr_intr_status_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
 
-    static uint8_t bit_index = 0;
-    static uint8_t current_byte = 0;
-
-    uint8_t level = gpio_get_level(sampler_pin);
-    if (level) {
-        current_byte |= (1U << bit_index);
-    } else {
-        current_byte &= ~(1U << bit_index);
+    uint8_t level = (uint8_t)gpio_get_level((gpio_num_t)sampler_pin);
+    if (level != 0u) {
+        sampler_current_byte |= (uint8_t)(1u << sampler_bit_index);
     }
 
-    bit_index++;
-    if (bit_index >= 8) {
-        current_buffer[buffer_index] = current_byte;
-        buffer_index++;
-        bit_index = 0;
-        current_byte = 0;
+    sampler_bit_index++;
+    if (sampler_bit_index < 8u) {
+        timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        return;
+    }
 
-        if (buffer_index >= SAMPLER_BUFFER_SIZE) {
-            transmit_buffer = current_buffer;
-            current_buffer = (current_buffer == buffer_a) ? buffer_b : buffer_a;
-            buffer_index = 0;
-            BaseType_t woken = pdFALSE;
-            if (buffer_ready_sem) {
-                xSemaphoreGiveFromISR(buffer_ready_sem, &woken);
-            }
-            if (woken == pdTRUE) {
-                portYIELD_FROM_ISR();
-            }
+    sampler_bit_index = 0;
+
+    uint8_t *lane = sampler_overflow_active ? (uint8_t *)sampler_overflow_lane
+                                            : (uint8_t *)sampler_ring[sampler_ring_head];
+    lane[sampler_byte_index] = sampler_current_byte;
+    sampler_current_byte = 0;
+    sampler_byte_index++;
+    if (sampler_byte_index < EMW_USB_CMD_LANE_SIZE) {
+        timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        return;
+    }
+
+    sampler_byte_index = 0;
+
+    if (sampler_overflow_active) {
+        if (sampler_ring_count < SAMPLER_RING_LANES) {
+            sampler_overflow_active = 0;
         }
+        timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        return;
+    }
+
+    if (sampler_ring_count >= SAMPLER_RING_LANES) {
+        sampler_overflow_active = 1;
+        timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
+        return;
+    }
+
+    sampler_ring_count = (uint8_t)(sampler_ring_count + 1u);
+    sampler_ring_head = (uint8_t)((sampler_ring_head + 1u) & SAMPLER_RING_MASK);
+    if (sampler_ring_count >= SAMPLER_RING_LANES) {
+        sampler_overflow_active = 1;
     }
 
     timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
@@ -363,43 +411,43 @@ static void IRAM_ATTR sampling_isr(void *arg)
 
 static void IRAM_ATTR transmission_isr(void *arg)
 {
+    (void)arg;
     timer_group_clr_intr_status_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
 
-    static uint8_t bit_index = 0;
-    static uint8_t current_byte = 0;
-    static bool need_new_byte = true;
-
-    if (bit_index == 0 && need_new_byte) {
-        if (ble_get_rx_bytes_available() > 0) {
-            ble_read_rx_buffer(&current_byte, 1);
-            need_new_byte = false;
-        } else {
-            gpio_set_level(sampler_pin, 0);
-            timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
-            return;
+    if (usb_get_rx_buffer_bytes_available() > 0u) {
+        if (tx_bit_index == 0u) {
+            if (usb_read_rx_buffer((uint8_t *)&tx_current_byte, 1) != EMW_USB_RX_BUFFER_OK) {
+                timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
+                return;
+            }
         }
-    }
 
-    bool bit_set = (current_byte & (1U << bit_index)) != 0;
-    if (transmit_use_pwm && transmit_pwm_configured) {
-        transmit_pwm_set_enabled_isr(bit_set);
-        if (!bit_set) {
-            gpio_set_level(sampler_pin, 0);
+        bool bit = ((tx_current_byte >> tx_bit_index) & 1u) != 0u;
+        if (transmit_use_pwm && transmit_pwm_configured) {
+            transmit_pwm_set_enabled_isr(bit);
+            if (!bit) {
+                gpio_set_level((gpio_num_t)sampler_pin, 0);
+            }
+        } else {
+            gpio_set_level((gpio_num_t)sampler_pin, bit ? 1 : 0);
+        }
+
+        tx_bit_index = (uint8_t)(tx_bit_index + 1u);
+        if (tx_bit_index >= 8u) {
+            tx_bit_index = 0u;
         }
     } else {
-        gpio_set_level(sampler_pin, bit_set ? 1 : 0);
-    }
-
-    bit_index++;
-    if (bit_index >= 8) {
-        bit_index = 0;
-        need_new_byte = true;
+        if (transmit_use_pwm && transmit_pwm_configured) {
+            transmit_pwm_set_enabled_isr(false);
+        }
+        gpio_set_level((gpio_num_t)sampler_pin, 0);
+        tx_bit_index = 0u;
     }
 
     timer_group_enable_alarm_in_isr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
 }
 
-static bool sampler_start_impl(int pin, const char **err_msg)
+static bool sampler_start_impl(int pin, uint8_t tick_us, const char **err_msg)
 {
     if (err_msg) {
         *err_msg = NULL;
@@ -411,7 +459,6 @@ static bool sampler_start_impl(int pin, const char **err_msg)
         }
         return false;
     }
-
     if (sampling_active) {
         if (err_msg) {
             *err_msg = "sample start: active";
@@ -423,45 +470,16 @@ static bool sampler_start_impl(int pin, const char **err_msg)
         .pin_bit_mask = 1ULL << pin,
         .mode = GPIO_MODE_INPUT,
         .pull_up_en = GPIO_PULLUP_DISABLE,
-        .pull_down_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
         .intr_type = GPIO_INTR_DISABLE,
     };
     gpio_config(&io_conf);
 
-    buffer_a = (uint8_t *)malloc(SAMPLER_BUFFER_SIZE);
-    buffer_b = (uint8_t *)malloc(SAMPLER_BUFFER_SIZE);
-    if (!buffer_a || !buffer_b) {
-        free((void *)buffer_a);
-        free((void *)buffer_b);
-        buffer_a = buffer_b = NULL;
-        if (err_msg) {
-            *err_msg = "sample start: mem";
-        }
-        return false;
-    }
-
-    memset((void *)buffer_a, 0, SAMPLER_BUFFER_SIZE);
-    memset((void *)buffer_b, 0, SAMPLER_BUFFER_SIZE);
-
-    current_buffer = buffer_a;
-    transmit_buffer = NULL;
-    buffer_index = 0;
     sampler_pin = (uint16_t)pin;
-
-    if (buffer_ready_sem == NULL) {
-        buffer_ready_sem = xSemaphoreCreateBinary();
-        if (!buffer_ready_sem) {
-            free((void *)buffer_a);
-            free((void *)buffer_b);
-            buffer_a = buffer_b = NULL;
-            if (err_msg) {
-                *err_msg = "sample start: sem";
-            }
-            return false;
-        }
-    }
-
-    configure_timer(SAMPLER_TIMER_GROUP, SAMPLER_TIMER, SAMPLER_TIMER_INTERVAL_US, true);
+    sampling_tick_us = normalize_tick_us(tick_us);
+    reset_sampler_state();
+    usb_set_buffer_type(EMW_BUFFER_DOUBLE);
+    configure_timer(SAMPLER_TIMER_GROUP, SAMPLER_TIMER, sampling_tick_us, true);
 
     esp_err_t err = timer_isr_register(SAMPLER_TIMER_GROUP,
                                        SAMPLER_TIMER,
@@ -470,35 +488,23 @@ static bool sampler_start_impl(int pin, const char **err_msg)
                                        ESP_INTR_FLAG_IRAM,
                                        &sampling_timer_isr_handle);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "timer_isr_register failed: %s", esp_err_to_name(err));
-        timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
-        timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
-        free((void *)buffer_a);
-        free((void *)buffer_b);
-        buffer_a = buffer_b = NULL;
-        current_buffer = NULL;
-        transmit_buffer = NULL;
-        buffer_index = 0;
         if (err_msg) {
             *err_msg = "sample start: isr";
         }
         return false;
     }
 
+    sampling_active = true;
     timer_start(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
 
     if (sampler_task_handle == NULL) {
         if (xTaskCreate(sampler_task, "sampler", 4096, NULL, 5, &sampler_task_handle) != pdPASS) {
+            sampling_active = false;
             timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
             timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
             esp_intr_free(sampling_timer_isr_handle);
             sampling_timer_isr_handle = NULL;
-            free((void *)buffer_a);
-            free((void *)buffer_b);
-            buffer_a = buffer_b = NULL;
-            current_buffer = NULL;
-            transmit_buffer = NULL;
-            buffer_index = 0;
+            usb_set_buffer_type(EMW_BUFFER_PACKET);
             if (err_msg) {
                 *err_msg = "sample start: task";
             }
@@ -506,8 +512,7 @@ static bool sampler_start_impl(int pin, const char **err_msg)
         }
     }
 
-    sampling_active = true;
-    ESP_LOGI(TAG, "Sampling started on pin %d", pin);
+    ESP_LOGI(TAG, "Sampling started on pin %d (tick=%luus)", pin, (unsigned long)sampling_tick_us);
     return true;
 }
 
@@ -523,33 +528,24 @@ static bool sampler_stop_impl(const char **err_msg)
 
     timer_pause(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
     timer_disable_intr(SAMPLER_TIMER_GROUP, SAMPLER_TIMER);
-
     if (sampling_timer_isr_handle) {
         esp_intr_free(sampling_timer_isr_handle);
         sampling_timer_isr_handle = NULL;
     }
 
-    if (sampler_task_handle) {
-        xTaskNotify(sampler_task_handle, 1, eSetValueWithOverwrite);
-    }
-
-    if (buffer_ready_sem) {
-        xSemaphoreGive(buffer_ready_sem);
-    }
-
-    free((void *)buffer_a);
-    free((void *)buffer_b);
-    buffer_a = buffer_b = NULL;
-    current_buffer = NULL;
-    transmit_buffer = NULL;
-    buffer_index = 0;
-
     sampling_active = false;
+    usb_set_buffer_type(EMW_BUFFER_PACKET);
+    reset_sampler_state();
+
+    if (sampler_task_handle) {
+        xTaskNotify(sampler_task_handle, 1u, eSetValueWithOverwrite);
+    }
+
     ESP_LOGI(TAG, "Sampling stopped");
     return true;
 }
 
-static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, const char **err_msg)
+static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent, uint8_t tick_us, const char **err_msg)
 {
     if (err_msg) {
         *err_msg = NULL;
@@ -561,7 +557,6 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
         }
         return false;
     }
-
     if (transmission_active) {
         if (err_msg) {
             *err_msg = "transmit start: active";
@@ -569,27 +564,20 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
         return false;
     }
 
-    uint32_t effective_freq_hz = transmit_pwm_freq_hz;
-    uint8_t effective_duty_percent = transmit_pwm_duty_percent;
+    uint32_t effective_freq_hz = (freq_hz > 0) ? (uint32_t)freq_hz : TRANSMIT_PWM_DEFAULT_FREQ_HZ;
+    uint8_t effective_duty_percent = (duty_percent > 0) ? (uint8_t)duty_percent : TRANSMIT_PWM_DEFAULT_DUTY_PERCENT;
 
-    if (freq_hz > 0) {
-        if (freq_hz < TRANSMIT_PWM_MIN_FREQ_HZ || freq_hz > TRANSMIT_PWM_MAX_FREQ_HZ) {
-            if (err_msg) {
-                *err_msg = "transmit start: freq";
-            }
-            return false;
+    if (effective_freq_hz < TRANSMIT_PWM_MIN_FREQ_HZ || effective_freq_hz > TRANSMIT_PWM_MAX_FREQ_HZ) {
+        if (err_msg) {
+            *err_msg = "transmit start: freq";
         }
-        effective_freq_hz = (uint32_t)freq_hz;
+        return false;
     }
-
-    if (duty_percent > 0) {
-        if (duty_percent < 1 || duty_percent > 100) {
-            if (err_msg) {
-                *err_msg = "transmit start: duty";
-            }
-            return false;
+    if (effective_duty_percent < 1u || effective_duty_percent > 100u) {
+        if (err_msg) {
+            *err_msg = "transmit start: duty";
         }
-        effective_duty_percent = (uint8_t)duty_percent;
+        return false;
     }
 
     gpio_config_t io_conf = {
@@ -603,20 +591,21 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
 
     sampler_pin = (uint16_t)pin;
     transmit_use_pwm = pwm;
+    transmit_tick_us = normalize_tick_us(tick_us);
     transmit_pwm_freq_hz = effective_freq_hz;
     transmit_pwm_duty_percent = effective_duty_percent;
+    reset_transmission_state();
 
     transmit_pwm_configured = false;
     if (transmit_use_pwm) {
         if (!transmit_pwm_configure((gpio_num_t)pin, transmit_pwm_freq_hz, transmit_pwm_duty_percent, err_msg)) {
-            transmit_use_pwm = false;
             return false;
         }
     }
 
-    ble_set_transmitter_mode(1);
-
-    configure_timer(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER, TRANSMIT_INTERVAL_US, true);
+    usb_init_rx_buffer();
+    usb_set_buffer_type(EMW_BUFFER_CIRCULAR);
+    configure_timer(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER, transmit_tick_us, true);
 
     esp_err_t err = timer_isr_register(SAMPLER_TIMER_GROUP,
                                        TRANSMIT_TIMER,
@@ -625,10 +614,10 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
                                        ESP_INTR_FLAG_IRAM,
                                        &transmission_timer_isr_handle);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "transmit isr register failed: %s", esp_err_to_name(err));
-        timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
-        timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
-        ble_set_transmitter_mode(0);
+        usb_set_buffer_type(EMW_BUFFER_PACKET);
+        if (transmit_pwm_configured) {
+            transmit_pwm_stop();
+        }
         if (err_msg) {
             *err_msg = "transmit start: isr";
         }
@@ -636,16 +625,19 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
     }
 
     transmission_active = true;
-
     if (transmission_monitor_task_handle == NULL) {
         if (xTaskCreate(transmission_monitor_task, "tx_monitor", 4096, NULL, 5,
                         &transmission_monitor_task_handle) != pdPASS) {
+            transmission_active = false;
             timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
             timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
             esp_intr_free(transmission_timer_isr_handle);
             transmission_timer_isr_handle = NULL;
-            ble_set_transmitter_mode(0);
-            transmission_active = false;
+            usb_set_buffer_type(EMW_BUFFER_PACKET);
+            usb_free_rx_buffer();
+            if (transmit_pwm_configured) {
+                transmit_pwm_stop();
+            }
             if (err_msg) {
                 *err_msg = "transmit start: task";
             }
@@ -653,8 +645,12 @@ static bool transmit_start_impl(int pin, bool pwm, int freq_hz, int duty_percent
         }
     }
 
-    ESP_LOGI(TAG, "Transmission initialized on pin %d (pwm=%d freq=%lu duty=%u%%)",
-             pin, transmit_use_pwm ? 1 : 0, (unsigned long)transmit_pwm_freq_hz, (unsigned int)transmit_pwm_duty_percent);
+    ESP_LOGI(TAG, "Transmission initialized on pin %d (pwm=%d freq=%lu duty=%u%% tick=%luus)",
+             pin,
+             transmit_use_pwm ? 1 : 0,
+             (unsigned long)transmit_pwm_freq_hz,
+             (unsigned int)transmit_pwm_duty_percent,
+             (unsigned long)transmit_tick_us);
     return true;
 }
 
@@ -670,26 +666,28 @@ static bool transmit_stop_impl(const char **err_msg)
 
     timer_pause(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
     timer_disable_intr(SAMPLER_TIMER_GROUP, TRANSMIT_TIMER);
-
     if (transmission_timer_isr_handle) {
         esp_intr_free(transmission_timer_isr_handle);
         transmission_timer_isr_handle = NULL;
     }
 
+    transmission_active = false;
     if (transmit_pwm_configured) {
         transmit_pwm_stop();
     }
-    gpio_set_level(sampler_pin, 0);
-    ble_set_transmitter_mode(0);
-    transmission_active = false;
+    gpio_set_level((gpio_num_t)sampler_pin, 0);
+    usb_set_buffer_type(EMW_BUFFER_PACKET);
+    usb_flush_rx_buffer();
+    usb_free_rx_buffer();
+    reset_transmission_state();
 
     ESP_LOGI(TAG, "Transmission stopped");
     return true;
 }
 
-bool sampler_start_sampling(int pin)
+bool sampler_start_sampling(int pin, uint8_t tick_us)
 {
-    return sampler_start_impl(pin, NULL);
+    return sampler_start_impl(pin, tick_us, NULL);
 }
 
 bool sampler_stop_sampling(void)
@@ -697,9 +695,9 @@ bool sampler_stop_sampling(void)
     return sampler_stop_impl(NULL);
 }
 
-bool sampler_start_transmission(int pin)
+bool sampler_start_transmission(int pin, uint8_t duty_percent, int freq_hz, uint8_t tick_us)
 {
-    return transmit_start_impl(pin, false, 0, 0, NULL);
+    return transmit_start_impl(pin, true, freq_hz, duty_percent, tick_us, NULL);
 }
 
 bool sampler_stop_transmission(void)
@@ -713,31 +711,23 @@ static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t du
         *err_msg = NULL;
     }
 
-    if (duty_percent == 0 || duty_percent > 100) {
-        if (err_msg) {
-            *err_msg = "transmit pwm: duty";
-        }
-        return false;
-    }
-
     ledc_timer_config_t timer_conf = {
         .speed_mode = transmit_ledc_speed_mode,
         .timer_num = transmit_ledc_timer,
         .duty_resolution = LEDC_TIMER_10_BIT,
-        .freq_hz = (uint32_t)freq_hz,
+        .freq_hz = freq_hz,
         .clk_cfg = LEDC_AUTO_CLK,
     };
     esp_err_t err = ledc_timer_config(&timer_conf);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "ledc_timer_config failed: %s", esp_err_to_name(err));
         if (err_msg) {
             *err_msg = "transmit pwm: timer";
         }
         return false;
     }
 
-    uint32_t max_duty = (1U << LEDC_TIMER_10_BIT) - 1U;
-    uint32_t duty = (max_duty * (uint32_t)duty_percent) / 100U;
+    uint32_t max_duty = (1u << LEDC_TIMER_10_BIT) - 1u;
+    uint32_t duty = (max_duty * (uint32_t)duty_percent) / 100u;
 
     ledc_channel_config_t ch_conf = {
         .gpio_num = (int)gpio,
@@ -750,7 +740,6 @@ static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t du
     };
     err = ledc_channel_config(&ch_conf);
     if (err != ESP_OK) {
-        ESP_LOGE(TAG, "ledc_channel_config failed: %s", esp_err_to_name(err));
         if (err_msg) {
             *err_msg = "transmit pwm: channel";
         }
@@ -758,30 +747,32 @@ static bool transmit_pwm_configure(gpio_num_t gpio, uint32_t freq_hz, uint8_t du
     }
 
     ledc_ll_set_idle_level(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, 0);
-    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, false);
-    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
-
-    gpio_set_level(gpio, 0);
-    transmit_pwm_configured = true;
+    ledc_stop(transmit_ledc_speed_mode, transmit_ledc_channel, 0);
     transmit_pwm_enabled_state = false;
+    transmit_pwm_configured = true;
     return true;
 }
 
-static void IRAM_ATTR transmit_pwm_set_enabled_isr(bool enabled)
+static void transmit_pwm_set_enabled_isr(bool enabled)
 {
-    if (enabled == transmit_pwm_enabled_state) {
+    if (!transmit_pwm_configured || enabled == transmit_pwm_enabled_state) {
         return;
     }
+
+    if (enabled) {
+        ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
+        ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, true);
+    } else {
+        ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, false);
+    }
     transmit_pwm_enabled_state = enabled;
-    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, enabled);
-    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
+    tx_out_enabled = enabled ? 1u : 0u;
 }
 
 static void transmit_pwm_stop(void)
 {
-    ledc_ll_set_sig_out_en(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel, false);
-    ledc_ll_ls_channel_update(LEDC_LL_GET_HW(), transmit_ledc_speed_mode, transmit_ledc_channel);
     ledc_stop(transmit_ledc_speed_mode, transmit_ledc_channel, 0);
-    transmit_pwm_configured = false;
     transmit_pwm_enabled_state = false;
+    transmit_pwm_configured = false;
+    tx_out_enabled = 0u;
 }

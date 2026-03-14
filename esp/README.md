@@ -134,6 +134,7 @@ Current reintegration status:
 - Firmware now enumerates as USB MIDI and accepts STM32-style EMWaver SysEx framing.
 - BLE is intentionally not active in the current bring-up path.
 - Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
+- USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
 - macOS now allows an unsecured ESP32-S3 USB session to stay connected for local use and activation, instead of immediately disconnecting on missing `DeviceID + Proof`.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
@@ -150,7 +151,7 @@ EMWaver should keep **all three transports** in scope for ESP32-S3, but the firm
 
 Recommended rule:
 - Start with **USB first** on ESP32-S3 because it requires the least host-side change.
-- Mirror the existing STM32 EMWaver request/response behavior on ESP32.
+- Mirror the existing STM32 EMWaver request/response behavior on ESP32, including sampling/retransmit superframe semantics.
 - Reuse the same **SysEx packet protocol across transports**, with transport-specific framing/chunking only where required.
 - Treat OTA/update paths as a separate concern from the steady-state control/runtime protocol.
 

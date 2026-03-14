@@ -25,6 +25,7 @@
 #include "esp_mac.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "tinyusb.h"
 #include "tusb.h"
@@ -49,10 +50,11 @@ enum usb_endpoints {
 #define EMW_MIDI_PACKET_SIZE 4u
 #define EMW_SYSEX_BYTES 48u
 #define EMW_ENCODED_BYTES 42u
-#define EMW_FRAME_SIZE 36u
 #define EMW_LANE_SIZE 18u
 #define EMW_CABLE_NUM 0u
 #define EMW_RX_TASK_STACK 4096
+#define EMW_RX_BUFFER_SIZE 512u
+#define EMW_USB_TX_TIMEOUT_MS 100u
 
 #define TUSB_DESCRIPTOR_TOTAL_LEN (TUD_CONFIG_DESC_LEN + CFG_TUD_MIDI * TUD_MIDI_DESC_LEN)
 
@@ -80,12 +82,24 @@ static const char *s_string_desc[] = {
 static QueueHandle_t s_cmd_queue;
 static bool s_usb_ready;
 static bool s_driver_installed;
+static SemaphoreHandle_t s_tx_mutex;
+static uint8_t s_rx_buffer[EMW_RX_BUFFER_SIZE];
+static uint16_t s_rx_head;
+static uint16_t s_rx_tail;
+static volatile emw_buffer_type_t s_buffer_type = EMW_BUFFER_PACKET;
+static volatile uint8_t s_pending_cmd_lane[EMW_LANE_SIZE];
+static volatile bool s_pending_cmd_ready;
+static volatile uint16_t s_pending_bs_status;
+static volatile bool s_pending_bs_ready;
 
 static void usb_midi_rx_task(void *arg);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void process_sysex_frame(const uint8_t *sysex);
 static void build_serial_string(void);
+static esp_err_t send_frame(const uint8_t *frame, bool nonblocking);
+static esp_err_t send_status_frame(uint16_t status, bool nonblocking);
+static size_t fill_frame_from_pending(uint8_t *frame, const uint8_t *stream_lane);
 
 void usb_init(QueueHandle_t cmd_queue)
 {
@@ -94,6 +108,9 @@ void usb_init(QueueHandle_t cmd_queue)
     }
 
     s_cmd_queue = cmd_queue;
+    s_tx_mutex = xSemaphoreCreateMutex();
+    configASSERT(s_tx_mutex != NULL);
+    usb_init_rx_buffer();
     build_serial_string();
 
     tinyusb_config_t const tusb_cfg = {
@@ -124,38 +141,100 @@ bool usb_is_ready(void)
 
 esp_err_t usb_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len)
 {
-    if (!usb_is_ready()) {
-        return ESP_ERR_INVALID_STATE;
-    }
-
     if (payload_len > (EMW_LANE_SIZE - 1u)) {
         payload_len = EMW_LANE_SIZE - 1u;
     }
 
-    uint8_t frame[EMW_FRAME_SIZE] = {0};
-    uint8_t encoded[EMW_ENCODED_BYTES];
-    uint8_t sysex[EMW_SYSEX_BYTES];
-
-    frame[0] = status;
+    uint8_t lane[EMW_LANE_SIZE] = {0};
+    lane[0] = status;
     if (payload && payload_len > 0) {
-        memcpy(&frame[1], payload, payload_len);
+        memcpy(&lane[1], payload, payload_len);
     }
 
-    encode_payload_7bit_fixed(frame, encoded);
-
-    sysex[0] = 0xF0;
-    sysex[1] = 0x7D;
-    sysex[2] = 'E';
-    sysex[3] = 'M';
-    sysex[4] = 'W';
-    memcpy(&sysex[5], encoded, sizeof(encoded));
-    sysex[EMW_SYSEX_BYTES - 1u] = 0xF7;
-
-    uint32_t written = tud_midi_stream_write(EMW_CABLE_NUM, sysex, sizeof(sysex));
-    if (written != sizeof(sysex)) {
-        return ESP_FAIL;
+    if (s_buffer_type != EMW_BUFFER_PACKET) {
+        memcpy((void *)s_pending_cmd_lane, lane, sizeof(lane));
+        s_pending_cmd_ready = true;
+        return ESP_OK;
     }
-    return ESP_OK;
+
+    uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
+    memcpy(frame, lane, sizeof(lane));
+    return send_frame(frame, false);
+}
+
+esp_err_t usb_send_stream_lane(const uint8_t *stream_lane, bool nonblocking)
+{
+    uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
+    (void)fill_frame_from_pending(frame, stream_lane);
+    return send_frame(frame, nonblocking);
+}
+
+void usb_queue_status_packet(uint16_t status)
+{
+    s_pending_bs_status = status;
+    s_pending_bs_ready = true;
+}
+
+void usb_poll_tx(void)
+{
+    if (!s_pending_bs_ready) {
+        return;
+    }
+
+    if (send_status_frame(s_pending_bs_status, true) == ESP_OK) {
+        s_pending_bs_ready = false;
+    }
+}
+
+void usb_set_buffer_type(emw_buffer_type_t buffer_type)
+{
+    s_buffer_type = buffer_type;
+}
+
+emw_buffer_type_t usb_get_buffer_type(void)
+{
+    return s_buffer_type;
+}
+
+void usb_init_rx_buffer(void)
+{
+    memset(s_rx_buffer, 0, sizeof(s_rx_buffer));
+    s_rx_head = 0;
+    s_rx_tail = 0;
+}
+
+void usb_flush_rx_buffer(void)
+{
+    usb_init_rx_buffer();
+}
+
+void usb_free_rx_buffer(void)
+{
+    s_rx_head = 0;
+    s_rx_tail = 0;
+}
+
+uint16_t usb_get_rx_buffer_bytes_available(void)
+{
+    return (uint16_t)((s_rx_head + EMW_RX_BUFFER_SIZE - s_rx_tail) % EMW_RX_BUFFER_SIZE);
+}
+
+uint8_t usb_read_rx_buffer(uint8_t *buf, uint16_t len)
+{
+    if (!buf) {
+        return EMW_USB_RX_BUFFER_NO_DATA;
+    }
+
+    if (usb_get_rx_buffer_bytes_available() < len) {
+        return EMW_USB_RX_BUFFER_NO_DATA;
+    }
+
+    for (uint16_t i = 0; i < len; ++i) {
+        buf[i] = s_rx_buffer[s_rx_tail];
+        s_rx_tail = (uint16_t)((s_rx_tail + 1u) % EMW_RX_BUFFER_SIZE);
+    }
+
+    return EMW_USB_RX_BUFFER_OK;
 }
 
 static void usb_midi_rx_task(void *arg)
@@ -193,6 +272,7 @@ static void usb_midi_rx_task(void *arg)
             }
         }
 
+        usb_poll_tx();
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -209,9 +289,23 @@ static void process_sysex_frame(const uint8_t *sysex)
         return;
     }
 
-    uint8_t decoded[EMW_FRAME_SIZE];
+    uint8_t decoded[EMW_USB_FRAME_SIZE];
     if (!decode_payload_7bit_fixed(&sysex[5], decoded)) {
         return;
+    }
+
+    const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
+    if (s_buffer_type == EMW_BUFFER_CIRCULAR) {
+        uint16_t next_head = s_rx_head;
+        for (size_t i = 0; i < EMW_LANE_SIZE; ++i) {
+            s_rx_buffer[next_head] = stream_lane[i];
+            next_head = (uint16_t)((next_head + 1u) % EMW_RX_BUFFER_SIZE);
+            if (next_head == s_rx_tail) {
+                return;
+            }
+        }
+        s_rx_head = next_head;
+        usb_queue_status_packet(usb_get_rx_buffer_bytes_available());
     }
 
     bool cmd_any = false;
@@ -239,9 +333,9 @@ static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
     size_t in_pos = 0;
     size_t out_pos = 0;
 
-    while (in_pos < EMW_ENCODED_BYTES && out_pos < EMW_FRAME_SIZE) {
+    while (in_pos < EMW_ENCODED_BYTES && out_pos < EMW_USB_FRAME_SIZE) {
         uint8_t prefix = in[in_pos++];
-        for (uint8_t j = 0; j < 7u && out_pos < EMW_FRAME_SIZE; ++j) {
+        for (uint8_t j = 0; j < 7u && out_pos < EMW_USB_FRAME_SIZE; ++j) {
             if (in_pos >= EMW_ENCODED_BYTES) {
                 return false;
             }
@@ -253,7 +347,7 @@ static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
         }
     }
 
-    return out_pos == EMW_FRAME_SIZE;
+    return out_pos == EMW_USB_FRAME_SIZE;
 }
 
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
@@ -261,12 +355,12 @@ static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
     size_t in_pos = 0;
     size_t out_pos = 0;
 
-    while (in_pos < EMW_FRAME_SIZE && out_pos < EMW_ENCODED_BYTES) {
+    while (in_pos < EMW_USB_FRAME_SIZE && out_pos < EMW_ENCODED_BYTES) {
         uint8_t prefix = 0;
         uint8_t chunk[7] = {0};
         uint8_t chunk_len = 0;
 
-        for (uint8_t j = 0; j < 7u && in_pos < EMW_FRAME_SIZE; ++j) {
+        for (uint8_t j = 0; j < 7u && in_pos < EMW_USB_FRAME_SIZE; ++j) {
             uint8_t value = in[in_pos++];
             if ((value & 0x80u) != 0u) {
                 prefix |= (uint8_t)(1u << j);
@@ -280,6 +374,62 @@ static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
             out[out_pos++] = chunk[j];
         }
     }
+}
+
+static esp_err_t send_frame(const uint8_t *frame, bool nonblocking)
+{
+    if (!frame || !usb_is_ready()) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    TickType_t wait_ticks = nonblocking ? 0 : pdMS_TO_TICKS(EMW_USB_TX_TIMEOUT_MS);
+    if (!s_tx_mutex || xSemaphoreTake(s_tx_mutex, wait_ticks) != pdTRUE) {
+        return nonblocking ? ESP_ERR_TIMEOUT : ESP_FAIL;
+    }
+
+    uint8_t encoded[EMW_ENCODED_BYTES];
+    uint8_t sysex[EMW_SYSEX_BYTES];
+    encode_payload_7bit_fixed(frame, encoded);
+
+    sysex[0] = 0xF0;
+    sysex[1] = 0x7D;
+    sysex[2] = 'E';
+    sysex[3] = 'M';
+    sysex[4] = 'W';
+    memcpy(&sysex[5], encoded, sizeof(encoded));
+    sysex[EMW_SYSEX_BYTES - 1u] = 0xF7;
+
+    uint32_t written = tud_midi_stream_write(EMW_CABLE_NUM, sysex, sizeof(sysex));
+    xSemaphoreGive(s_tx_mutex);
+
+    return (written == sizeof(sysex)) ? ESP_OK : (nonblocking ? ESP_ERR_TIMEOUT : ESP_FAIL);
+}
+
+static esp_err_t send_status_frame(uint16_t status, bool nonblocking)
+{
+    uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
+    frame[EMW_LANE_SIZE + 0u] = 'B';
+    frame[EMW_LANE_SIZE + 1u] = 'S';
+    frame[EMW_LANE_SIZE + 2u] = (uint8_t)(status >> 8);
+    frame[EMW_LANE_SIZE + 3u] = (uint8_t)(status & 0xFFu);
+    (void)fill_frame_from_pending(frame, NULL);
+    return send_frame(frame, nonblocking);
+}
+
+static size_t fill_frame_from_pending(uint8_t *frame, const uint8_t *stream_lane)
+{
+    if (!frame) {
+        return 0;
+    }
+
+    if (s_pending_cmd_ready) {
+        memcpy(&frame[0], (const void *)s_pending_cmd_lane, EMW_LANE_SIZE);
+        s_pending_cmd_ready = false;
+    }
+    if (stream_lane) {
+        memcpy(&frame[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
+    }
+    return EMW_USB_FRAME_SIZE;
 }
 
 static void build_serial_string(void)
