@@ -356,6 +356,55 @@ export function BuilderClient() {
           </a>
         </div>
 
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">
+                Cost estimate
+              </div>
+              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
+                Rough historical JLCPCB estimate based on BOM row count after
+                filtering disabled sections.
+              </div>
+            </div>
+            <div className="rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold text-[color:var(--ink-dim)]">
+              {bomLoaded ? `${estimate.rows} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM..."}
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+              <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
+                2 units
+              </div>
+              <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">
+                {formatCurrency(estimate.two)}
+              </div>
+              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
+                {formatCurrency(Number((estimate.two / 2).toFixed(2)))} each
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+              <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
+                5 units
+              </div>
+              <div className="pt-2 text-2xl font-semibold text-[color:var(--ink)]">
+                {formatCurrency(estimate.five)}
+              </div>
+              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
+                {formatCurrency(Number((estimate.five / 5).toFixed(2)))} each
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-3 text-xs leading-6 text-[color:var(--ink-dim)]">
+            Mostly driven by per-part setup fees, calibrated from the historical
+            builder flow at about {formatCurrency(COST_MODEL.dollarsPerRow)} per
+            BOM row over the base configuration.
+          </div>
+        </div>
+
         {bomError && <div className="text-xs text-[color:var(--danger)]">{bomError}</div>}
 
         <div className="flex flex-wrap gap-3 text-sm">
