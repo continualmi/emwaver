@@ -186,7 +186,7 @@ If a folder has a README, detailed documentation should live there.
 Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits,
-- push changes directly to `main` after making updates; only use a PR branch if a direct push is blocked.
+- push changes directly to `main` after making updates.
 
 ## 9) Org Workspace
 
