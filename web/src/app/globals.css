@@ -104,19 +104,12 @@ body {
   margin-bottom: 14px;
 }
 
-.docs-brand-icon {
+.docs-brand-logo {
   width: 30px;
   height: 30px;
-  background: linear-gradient(135deg, var(--aqua), var(--sky));
   border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--paper);
-  font-weight: 700;
-  font-size: 11px;
+  object-fit: cover;
   flex-shrink: 0;
-  letter-spacing: -0.02em;
 }
 
 .docs-brand-text {
@@ -181,8 +174,8 @@ body {
 }
 
 .docs-nav-item.active {
-  background: rgba(78, 231, 199, 0.1);
-  color: var(--aqua);
+  background: rgba(91, 192, 255, 0.12);
+  color: var(--sky);
 }
 
 .docs-nav-item svg {
@@ -268,10 +261,10 @@ body {
 
 .docs-mobile-drawer {
   position: fixed;
-  top: 0;
+  top: 48px;
   left: 0;
   width: 280px;
-  height: 100vh;
+  height: calc(100vh - 48px);
   background: var(--paper);
   border-right: 1px solid var(--line);
   z-index: 100;
@@ -287,10 +280,10 @@ body {
   .docs-sidebar-desktop {
     display: block;
     position: fixed;
-    top: 0;
+    top: 48px;
     left: 0;
     width: 250px;
-    height: 100vh;
+    height: calc(100vh - 48px);
     background: color-mix(in srgb, var(--paper) 92%, transparent);
     border-right: 1px solid var(--line);
     z-index: 50;
@@ -390,17 +383,20 @@ body:has(.dashboard-mode) .global-bg-overlay {
 .prose-emw pre {
   margin: 1rem 0;
   padding: 1rem;
-  background: rgba(2, 4, 10, 0.75);
+  background: transparent;
   border: 1px solid rgba(233, 238, 252, 0.12);
   border-radius: 14px;
   overflow: auto;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
 }
 
 .prose-emw pre code {
   border: none;
   background: transparent;
   padding: 0;
+}
+
+.prose-emw pre code.hljs {
+  background: transparent;
 }
 
 .prose-emw ul,
@@ -424,7 +420,7 @@ body:has(.dashboard-mode) .global-bg-overlay {
 
 .prose-emw table {
   width: 100%;
-  margin: 1rem 0;
+  margin: 0;
   border-collapse: separate;
   border-spacing: 0;
   border: 1px solid rgba(233, 238, 252, 0.12);

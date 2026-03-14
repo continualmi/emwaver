@@ -4,18 +4,24 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { DOCS_NAV } from "@/components/docs/docsNav";
 
-function isActive(pathname: string, href: string) {
-  if (href === "/docs") return pathname === "/docs";
-  return pathname === href || pathname.startsWith(href + "/");
+function findActiveHref(pathname: string): string | null {
+  const allHrefs = DOCS_NAV.flatMap((g) => g.items.map((i) => i.href));
+  const exact = allHrefs.find((h) => h === pathname);
+  if (exact) return exact;
+  const prefixMatches = allHrefs
+    .filter((h) => h !== "/docs" && pathname.startsWith(h + "/"))
+    .sort((a, b) => b.length - a.length);
+  return prefixMatches[0] ?? null;
 }
 
 export function DocsSidebar() {
   const pathname = usePathname();
+  const activeHref = findActiveHref(pathname);
 
   return (
     <nav className="docs-sidebar">
       <div className="docs-sidebar-brand">
-        <span className="docs-brand-icon">EM</span>
+        <img src="/logo.png" alt="EMWaver" className="docs-brand-logo" />
         <span className="docs-brand-text">Docs</span>
       </div>
 
@@ -25,7 +31,7 @@ export function DocsSidebar() {
             <div className="docs-nav-heading">{group.heading}</div>
             <ul className="docs-nav-list">
               {group.items.map((item) => {
-                const active = isActive(pathname, item.href);
+                const active = item.href === activeHref;
                 return (
                   <li key={item.href}>
                     <Link

@@ -3,10 +3,9 @@ import { notFound, redirect } from "next/navigation";
 const REDIRECTS: Record<string, string> = {
   "overview": "/",
   "installing-using": "/docs/install",
-  "hardware/device": "/docs/hardware/device",
-  "hardware/pinout": "/docs/hardware/pinout",
+  "hardware/device": "/docs/hardware",
   "hardware/pinout/index": "/docs/hardware/pinout",
-  "scripts": "/docs/scripts",
+  "daemon": "/docs",
 };
 
 export default async function DocPage({
