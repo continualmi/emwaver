@@ -38,7 +38,7 @@ static const char *TAG = "RFM69";
 static int rfm69_miso = 13;
 static int rfm69_mosi = 11;
 static int rfm69_sck  = 12;
-static int rfm69_cs   = 10;
+static int rfm69_cs   = 36;
 
 static spi_device_handle_t rfm69_handle = NULL;
 static bool rfm69_initialized = false;
@@ -97,39 +97,6 @@ static void rfm69_set_sensitivity_boost(bool enabled);
 static void rfm69_set_transmit_power(int dbm, int pa_mode, bool ocp);
 static int rfm69_get_power_dbm(void);
 static int rfm69_read_rssi_dbm(bool force_trigger);
-static void rfm69_force_reinit_bus(void);
-static void rfm69_select(void);
-static void rfm69_deselect(void);
-
-bool rfm69_boot_register_sweep(void)
-{
-    rfm69_force_reinit_bus();
-
-    esp_err_t ret = rfm69_init_device();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "Boot register sweep init failed: %s", esp_err_to_name(ret));
-        return false;
-    }
-
-    char line[96];
-    for (uint8_t base = 0x00; base < 0x70; base = (uint8_t)(base + 8u)) {
-        int written = snprintf(line, sizeof(line), "%02X:", base);
-        for (uint8_t offset = 0; offset < 8u && (base + offset) < 0x70u; offset += 1u) {
-            uint8_t reg = (uint8_t)(base + offset);
-            uint8_t value = rfm69_read_reg(reg);
-            written += snprintf(line + written,
-                                sizeof(line) - (size_t)written,
-                                " %02X",
-                                value);
-            if (written >= (int)sizeof(line)) {
-                break;
-            }
-        }
-        ESP_LOGI(TAG, "Boot reg sweep %s", line);
-    }
-
-    return true;
-}
 
 void rfm69_register_commands(void)
 {
@@ -274,9 +241,7 @@ static void rfm69_write_reg(uint8_t addr, uint8_t value)
         .tx_buffer = tx,
         .rx_buffer = NULL
     };
-    rfm69_select();
     spi_device_transmit(rfm69_handle, &t);
-    rfm69_deselect();
 }
 
 static uint8_t rfm69_read_reg(uint8_t addr)
@@ -291,9 +256,7 @@ static uint8_t rfm69_read_reg(uint8_t addr)
         .tx_buffer = tx,
         .rx_buffer = rx
     };
-    rfm69_select();
     spi_device_transmit(rfm69_handle, &t);
-    rfm69_deselect();
 
     return rx[1];
 }
@@ -322,13 +285,9 @@ static esp_err_t rfm69_init_device(void)
     spi_device_interface_config_t devcfg = {
         .clock_speed_hz = RFM69_CLOCK,
         .mode = 0,
-        .spics_io_num = -1,
+        .spics_io_num = rfm69_cs,
         .queue_size = 7,
     };
-
-    gpio_reset_pin((gpio_num_t)rfm69_cs);
-    gpio_set_direction((gpio_num_t)rfm69_cs, GPIO_MODE_OUTPUT);
-    gpio_set_level((gpio_num_t)rfm69_cs, 1);
 
     ret = spi_bus_add_device(RFM69_HOST, &devcfg, &rfm69_handle);
     if (ret != ESP_OK) {
@@ -340,34 +299,6 @@ static esp_err_t rfm69_init_device(void)
     ESP_LOGI(TAG, "RFM69 initialized on host %d (CS=%d)",
              RFM69_HOST, rfm69_cs);
     return ESP_OK;
-}
-
-static void rfm69_select(void)
-{
-    gpio_set_level((gpio_num_t)rfm69_cs, 0);
-}
-
-static void rfm69_deselect(void)
-{
-    gpio_set_level((gpio_num_t)rfm69_cs, 1);
-}
-
-static void rfm69_force_reinit_bus(void)
-{
-    if (rfm69_handle) {
-        esp_err_t removed = spi_bus_remove_device(rfm69_handle);
-        if (removed != ESP_OK) {
-            ESP_LOGW(TAG, "Failed to remove previous SPI device: %s", esp_err_to_name(removed));
-        }
-        rfm69_handle = NULL;
-    }
-
-    rfm69_initialized = false;
-
-    esp_err_t freed = spi_bus_free(RFM69_HOST);
-    if (freed != ESP_OK && freed != ESP_ERR_INVALID_STATE) {
-        ESP_LOGW(TAG, "Failed to free SPI bus before forced reinit: %s", esp_err_to_name(freed));
-    }
 }
 
 static void rfm69_cmd_init(int miso, int mosi, int sck, int cs)
