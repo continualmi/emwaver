@@ -6,8 +6,6 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
   getHardwareDevice,
-  getRelatedHardware,
-  type HardwareDevice,
 } from "@/lib/hardwareCatalog";
 
 function ExternalLink({
@@ -33,33 +31,6 @@ function ExternalLink({
   );
 }
 
-function RelatedCard({ device }: { device: HardwareDevice }) {
-  return (
-    <Link
-      href={`/build/${device.slug}`}
-      className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] transition hover:bg-[rgba(255,255,255,0.07)]"
-    >
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[rgba(3,7,18,0.55)]">
-        <Image
-          src={device.image}
-          alt={device.title}
-          fill
-          unoptimized
-          className="object-cover transition group-hover:scale-[1.02]"
-        />
-      </div>
-      <div className="p-4">
-        <div className="text-sm font-semibold text-[color:var(--ink)]">
-          {device.title}
-        </div>
-        <div className="line-clamp-2 pt-1 text-xs text-[color:var(--ink-dim)]">
-          {device.description}
-        </div>
-      </div>
-    </Link>
-  );
-}
-
 export default async function BuildDevicePage({
   params,
 }: {
@@ -68,8 +39,6 @@ export default async function BuildDevicePage({
   const { slug } = await params;
   const device = getHardwareDevice(slug);
   if (!device) notFound();
-
-  const related = getRelatedHardware(device);
 
   const links = [
     { href: device.oshwLabUrl, label: "OSHW Lab" },
@@ -231,18 +200,6 @@ export default async function BuildDevicePage({
           </div>
         </div>
 
-        {related.length > 0 && (
-          <section className="pt-14">
-            <h2 className="text-xl font-semibold tracking-tight text-[color:var(--ink)]">
-              Related boards
-            </h2>
-            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {related.slice(0, 6).map((d) => (
-                <RelatedCard key={d.slug} device={d} />
-              ))}
-            </div>
-          </section>
-        )}
       </main>
 
       <SiteFooter />

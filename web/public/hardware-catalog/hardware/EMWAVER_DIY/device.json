@@ -1,14 +1,20 @@
 {
   "title": "EMWAVER_DIY",
-  "displayTitle": "EMWaver DIY",
+  "displayTitle": "EMWaver Core",
   "group": "stm32",
   "status": "current",
   "image": "EMWAVER.png",
   "images": [
-    "EMWAVER.png"
+    "EMWAVER.png",
+    "IMG_0201.jpg",
+    "IMG_0202.jpg",
+    "IMG_0204.jpg",
+    "IMG_0206.jpg",
+    "IMG_0209.jpg",
+    "IMG_0217.jpg"
   ],
   "designDate": "2026-03-10",
-  "description": "Current EMWaver DIY board. This is the newer device with two GPIO blocks and infrared support, intended as the current hands-on EMWaver board while the older integrated EMWaver device is kept separate.",
+  "description": "EMWaver Core is the STM32-based EMWaver board without a built-in CC1101 radio. It keeps the compact hands-on board format with two GPIO blocks and infrared support.",
   "tags": ["DIY", "GPIO", "IR", "USB"],
   "requires": [],
   "appSupport": ["android", "ios", "desktop"],
