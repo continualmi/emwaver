@@ -1,6 +1,6 @@
 {
   "title": "emwaver",
-  "displayTitle": "EMWaver",
+  "displayTitle": "EMWaver Link",
   "group": "stm32",
   "status": "production",
   "image": "emwaver_photoshoot/IMG_0149.webp",
@@ -36,7 +36,7 @@
     "emwaver.png"
   ],
   "designDate": "2026-01-06",
-  "description": "Current-gen EMWaver STM32 board for the host-backed USB path of the platform.",
+  "description": "EMWaver Link is the STM32-based EMWaver board with built-in CC1101 radio support for the host-backed USB path of the platform.",
   "tags": ["STM32", "USB"],
   "appSupport": ["android", "ios", "desktop"],
   "caseDownloads": [

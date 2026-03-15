@@ -1,6 +1,6 @@
 {
   "title": "EMWAVER_DIY_V1",
-  "displayTitle": "EMWaver DIY v1",
+  "displayTitle": "EMWaver Carrier",
   "group": "module",
   "status": "module",
   "image": "EMWAVER_DIY/EMWAVER_DIY.png",
@@ -22,7 +22,7 @@
   "casingImage": "EMWAVER_DIY/EMWAVER_DIY_CASING.png",
   "onshapeUrl": "https://cad.onshape.com/documents/46528cc3f6bf51d259b3efae/w/aa322902f63dd90c958c8fd1/e/34e00f1462cf9231351b3c0d",
   "designDate": "2025-06-23",
-  "description": "Original EMWaver DIY board. This was the ESP32-S3 DIY design that let you assemble an EMWaver-compatible board around your own ESP32-S3 module and CC1101 radio module, with IR receiver + IR LEDs and USB-C for power, programming, and USB communication.",
+  "description": "EMWaver Carrier is the bring-your-own-MCU EMWaver board. It lets you assemble an EMWaver-compatible device around your own ESP32-S3 module and CC1101 radio module, with IR receiver + IR LEDs and USB-C for power, programming, and USB communication.",
   "tags": ["DIY", "ESP32-S3", "CC1101", "IR", "USB-C", "module"],
   "requires": ["ESP32-S3 DevKit", "CC1101"],
   "appSupport": ["android", "ios", "desktop"],
