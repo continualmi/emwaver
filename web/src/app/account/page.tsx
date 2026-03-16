@@ -154,7 +154,7 @@ export default function AccountPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Account</h1>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and Pro</div>
             {entitlements?.pro ? (
-              <div className="mt-2 inline-flex items-center rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.10)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
+              <div className="mt-2 inline-flex items-center rounded-full border border-[color:var(--line)] bg-[color:var(--aqua-tint-2)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
                 Pro active
               </div>
             ) : null}

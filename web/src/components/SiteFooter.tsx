@@ -3,7 +3,7 @@ import { societyRouteUrl } from "@/lib/societySite";
 
 export function SiteFooter() {
   return (
-    <footer className="border-t border-[color:var(--line)] bg-[rgba(2,3,8,0.4)]">
+    <footer className="border-t border-[color:var(--line)] bg-[color:var(--glass-heavy)]">
       <div className="mx-auto grid w-full max-w-6xl gap-4 px-5 py-5 md:grid-cols-3">
         <div className="space-y-3">
           <div className="flex items-center gap-2">

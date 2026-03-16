@@ -67,9 +67,9 @@ export function InformativeShell({
           </aside>
 
           <div className="min-w-0">
-            <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
+            <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10">
               <div className="md:hidden">
-                <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-2 backdrop-blur">
+                <div className="mb-6 flex gap-2 overflow-x-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--glass)] p-2 backdrop-blur">
                   {NAV.map((item) => {
                     const active = item.href === activeHref;
                     return (

@@ -78,7 +78,7 @@ export default async function BuildDevicePage({
           <div className="space-y-6">
             <div>
               {device.experimental && (
-                <span className="mb-2 inline-block rounded-full border border-[color:var(--line)] bg-[rgba(240,166,106,0.12)] px-3 py-1 text-[11px] font-semibold text-[color:var(--copper)]">
+                <span className="mb-2 inline-block rounded-full border border-[color:var(--line)] bg-[color:var(--copper-tint-2)] px-3 py-1 text-[11px] font-semibold text-[color:var(--copper)]">
                   Experimental
                 </span>
               )}
@@ -105,7 +105,7 @@ export default async function BuildDevicePage({
 
             <div className="grid grid-cols-2 gap-3">
               {device.group && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
                     Group
                   </div>
@@ -115,7 +115,7 @@ export default async function BuildDevicePage({
                 </div>
               )}
               {device.designDate && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
                     Design date
                   </div>
@@ -125,7 +125,7 @@ export default async function BuildDevicePage({
                 </div>
               )}
               {device.reproductionCost && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
                     Reproduction cost
                   </div>
@@ -136,7 +136,7 @@ export default async function BuildDevicePage({
                 </div>
               )}
               {device.appSupport.length > 0 && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
                     App support
                   </div>
@@ -160,7 +160,7 @@ export default async function BuildDevicePage({
             )}
 
             {hasCaseSection && (
-              <section className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-5">
+              <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
                 <div className="text-sm font-semibold text-[color:var(--ink)]">
                   Case / enclosure
                 </div>
@@ -171,7 +171,7 @@ export default async function BuildDevicePage({
                 </p>
 
                 {device.casingImage && (
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
                     <div className="relative aspect-[4/3] w-full">
                       <Image
                         src={device.casingImage}

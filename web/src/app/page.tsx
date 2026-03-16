@@ -8,7 +8,7 @@ export default function HomePage() {
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <img src="/2015_upscale.jpg" alt="" className="h-full w-full object-cover opacity-[0.72]" />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_600px_at_15%_0%,rgba(255,255,255,0.10),transparent_60%),radial-gradient(900px_600px_at_85%_10%,rgba(78,231,199,0.10),transparent_62%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(900px_600px_at_15%_0%,var(--hero-glow-white),transparent_60%),radial-gradient(900px_600px_at_85%_10%,var(--hero-glow-aqua),transparent_62%)]" />
       </div>
 
       <SiteHeader />
@@ -53,8 +53,8 @@ export default function HomePage() {
 
           {/* Hero image: device + phone */}
           <div className="mx-auto mt-12 max-w-4xl">
-            <div className="relative overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] backdrop-blur-md shadow-[0_30px_80px_rgba(0,0,0,0.45)]">
-              <div className="absolute inset-0 bg-[radial-gradient(600px_300px_at_30%_10%,rgba(78,231,199,0.18),transparent_55%),radial-gradient(600px_400px_at_90%_40%,rgba(91,192,255,0.14),transparent_58%)]" />
+            <div className="relative overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface)] backdrop-blur-md shadow-[0_30px_80px_var(--shadow-heavy)]">
+              <div className="absolute inset-0 bg-[radial-gradient(600px_300px_at_30%_10%,var(--card-glow-aqua),transparent_55%),radial-gradient(600px_400px_at_90%_40%,var(--card-glow-sky),transparent_58%)]" />
               <div className="relative p-6">
                 <img
                   src="/banner.jpeg"
@@ -69,21 +69,21 @@ export default function HomePage() {
         {/* ─── PLATFORM PILLARS (3 cards) ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-14">
           <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] p-6 backdrop-blur-md">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-6 backdrop-blur-md">
               <div className="text-xs font-semibold text-[color:var(--aqua)]">Host-powered</div>
               <div className="pt-3 text-lg font-semibold text-[color:var(--ink)]">Your phone is the computer</div>
               <div className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
                 EMWaver extracts power, compute, UI, storage, and connectivity from the host it&apos;s plugged into. No on-device screen or buttons needed — your phone or laptop <em>is</em> the interface.
               </div>
             </div>
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] p-6 backdrop-blur-md">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-6 backdrop-blur-md">
               <div className="text-xs font-semibold text-[color:var(--sky)]">AI-first</div>
               <div className="pt-3 text-lg font-semibold text-[color:var(--ink)]">Agents that build and test</div>
               <div className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
                 AI agents write scripts, generate UI, and interact with the interfaces they create — testing autonomously. Full chip exploits in minutes, not days.
               </div>
             </div>
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.06)] p-6 backdrop-blur-md">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-6 backdrop-blur-md">
               <div className="text-xs font-semibold text-[color:var(--copper)]">Plug and play</div>
               <div className="pt-3 text-lg font-semibold text-[color:var(--ink)]">Zero prerequisites</div>
               <div className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
@@ -95,7 +95,7 @@ export default function HomePage() {
 
         {/* ─── CTA ─── */}
         <section className="mx-auto max-w-6xl px-5 pb-16">
-          <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-6 md:p-10 backdrop-blur-md">
+          <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10 backdrop-blur-md">
             <div className="flex items-end justify-between gap-6">
               <div>
                 <div className="text-xs font-semibold tracking-wide text-[color:var(--aqua)]">
@@ -113,7 +113,7 @@ export default function HomePage() {
             <div className="mt-8 grid gap-4 md:grid-cols-3">
               <Link
                 href="/build"
-                className="group rounded-2xl border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] p-5 hover:bg-[rgba(78,231,199,0.12)]"
+                className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--aqua-tint)] p-5 hover:bg-[color:var(--aqua-tint-2)]"
               >
                 <div className="text-xs font-semibold text-[color:var(--aqua)]">Step 1</div>
                 <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">

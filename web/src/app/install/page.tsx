@@ -37,8 +37,8 @@ export default function InstallPage() {
     <div className="relative min-h-dvh overflow-x-clip">
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-[color:var(--bg)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,rgba(78,231,199,0.08),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[color:var(--paper)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,var(--aqua-tint),transparent_60%)]" />
       </div>
 
       <SiteHeader />
@@ -49,7 +49,7 @@ export default function InstallPage() {
           <img
             src="/app-icon.png"
             alt="EMWaver app icon"
-            className="h-28 w-28 rounded-[1.75rem] border border-[color:var(--line)] shadow-[0_16px_48px_rgba(0,0,0,0.4)]"
+            className="h-28 w-28 rounded-[1.75rem] border border-[color:var(--line)] shadow-[0_16px_48px_var(--shadow-heavy)]"
           />
         </div>
 

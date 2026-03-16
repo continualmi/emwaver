@@ -245,7 +245,7 @@ export default function AgentChatPage() {
               ) : (
                 <ul className="divide-y divide-[color:var(--line)]">
                   {conversations.map((c) => (
-                    <li key={c.id} className={selectedId === c.id ? "bg-[rgba(91,192,255,0.10)]" : ""}>
+                    <li key={c.id} className={selectedId === c.id ? "bg-[color:var(--sky-tint-2)]" : ""}>
                       <button
                         type="button"
                         disabled={!idToken || isBusy}
@@ -269,14 +269,14 @@ export default function AgentChatPage() {
           <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div
               ref={scrollRef}
-              className="h-[calc(100vh-340px)] overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] p-3"
+              className="h-[calc(100vh-340px)] overflow-y-auto rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-3"
             >
               {messages.length === 0 ? (
                 <div className="text-sm text-[color:var(--ink-dim)]">No messages yet.</div>
               ) : (
                 <div className="space-y-3">
                   {messages.map((m) => (
-                    <div key={m.id} className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-3">
+                    <div key={m.id} className="rounded-xl border border-[color:var(--line)] bg-[color:var(--glass)] p-3">
                       <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{m.role}</div>
                       <div className="mt-1 whitespace-pre-wrap text-sm text-[color:var(--ink)]">{m.content}</div>
                     </div>
@@ -297,7 +297,7 @@ export default function AgentChatPage() {
                   }
                 }}
                 placeholder={!idToken ? "Sign in to chat" : "Message…"}
-                className="min-h-12 flex-1 resize-y rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 text-sm text-[color:var(--ink)] outline-none disabled:opacity-50"
+                className="min-h-12 flex-1 resize-y rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-3 text-sm text-[color:var(--ink)] outline-none disabled:opacity-50"
               />
               <button
                 disabled={!idToken || !selectedId || isBusy || !draft.trim()}

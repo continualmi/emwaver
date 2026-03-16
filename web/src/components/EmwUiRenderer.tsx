@@ -235,7 +235,7 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
   const hasData = poly.length > 1;
 
   return (
-    <div style={{ ...styleFromProps(props) }} className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] p-3">
+    <div style={{ ...styleFromProps(props) }} className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-3">
       <div className="mb-2 flex items-center justify-between text-xs font-semibold text-[color:var(--ink-dim)]">
         <div>{String(props.title ?? props.id ?? "Plot")}</div>
         <div className="font-mono">x [{Math.round(view.min)} .. {Math.round(view.max)}]</div>
@@ -244,7 +244,7 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
       <div
         ref={ref}
         style={{ height, width: "100%", maxWidth: "100%", overscrollBehavior: "contain", touchAction: "none" as any, position: "relative" }}
-        className="w-full select-none overflow-hidden rounded-lg border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)]"
+        className="w-full select-none overflow-hidden rounded-lg border border-[color:var(--line)] bg-[color:var(--image-well)]"
         onWheel={onWheel}
         onWheelCapture={onWheel}
         onMouseDown={onMouseDown}
@@ -264,14 +264,14 @@ function PlotNode<N extends UiNodeLike>({ n, a }: { n: N; a: RendererAdapter<N> 
           {hasData ? (
             <polyline
               fill="none"
-              stroke="rgba(255,255,255,0.9)"
+              stroke="var(--plot-stroke)"
               strokeWidth="2"
               strokeLinejoin="round"
               strokeLinecap="round"
               points={poly.join(" ")}
             />
           ) : (
-            <text x="20" y="40" fill="rgba(255,255,255,0.6)" fontSize="24">
+            <text x="20" y="40" fill="var(--plot-text)" fontSize="24">
               waiting for data…
             </text>
           )}
@@ -452,7 +452,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
           <textarea
             disabled={!enabled}
             value={val}
-            className="h-40 w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-2 font-mono text-xs text-[color:var(--ink)] disabled:opacity-50"
+            className="h-40 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-2 font-mono text-xs text-[color:var(--ink)] disabled:opacity-50"
             onChange={(e) => a.isEnabled(n, "change") && a.onEvent(n, "change", { value: e.target.value })}
             onKeyDown={(e) => {
               if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && a.isEnabled(n, "submit")) {
@@ -470,7 +470,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
       return (
         <div
           style={{ display: "flex", flexDirection: "column", gap, ...styleFromProps(props), ...(maxH ? { maxHeight: maxH, overflow: "auto" } : {}) }}
-          className="rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.20)]"
+          className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]"
         >
           {children.map((c, i) => (
             <React.Fragment key={a.getKey(c, i)}>{renderNode(c, a, i)}</React.Fragment>
@@ -500,7 +500,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
             ...(pad !== undefined ? { padding: px(pad) } : {}),
             ...styleFromProps(props),
           }}
-          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] disabled:opacity-40"
+          className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] disabled:opacity-40"
         >
           {title !== undefined ? <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{String(title)}</div> : null}
           <div className={mono ? "font-mono text-sm text-[color:var(--ink)]" : "text-sm text-[color:var(--ink)]"}>{String(value ?? "")}</div>
@@ -523,7 +523,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
             ...(pad !== undefined ? { padding: px(pad) } : {}),
             ...styleFromProps(props),
           }}
-          className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] overflow-hidden"
+          className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] overflow-hidden"
         >
           {title || subtitle ? (
             <div className="space-y-1">
@@ -569,7 +569,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
       return (
         <pre
           style={styleFromProps(props)}
-          className="whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs text-[color:var(--ink)]"
+          className="whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-3 font-mono text-xs text-[color:var(--ink)]"
         >
           {text}
         </pre>
@@ -588,7 +588,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
       const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
       return (
         <div style={styleFromProps(props)} className="space-y-2">
-          <div className="h-2 w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.08)]">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-[color:var(--surface-2)]">
             <div className="h-full bg-[color:var(--aqua)]" style={{ width: `${pct * 100}%` }} />
           </div>
           <div className="text-xs text-[color:var(--ink-dim)]">{Math.round(pct * 100)}%</div>
@@ -601,7 +601,7 @@ function renderNode<N extends UiNodeLike>(n: N | null | undefined, a: RendererAd
 
     default:
       return (
-        <div className="rounded-lg border border-[color:var(--line)] bg-[rgba(255,255,255,0.02)] p-2 text-xs text-[color:var(--ink-dim)]">
+        <div className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] p-2 text-xs text-[color:var(--ink-dim)]">
           Unsupported node: <span className="font-mono text-[color:var(--ink)]">{type}</span>
         </div>
       );

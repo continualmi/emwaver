@@ -12,7 +12,7 @@ export function NewsSidebar() {
   const pathname = usePathname();
 
   return (
-    <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.55)] p-4 backdrop-blur">
+    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--glass)] p-4 backdrop-blur">
       <div className="mb-3 text-xs font-semibold tracking-wide text-[color:var(--ink)]">
         Continual Society
       </div>
@@ -24,7 +24,7 @@ export function NewsSidebar() {
             "block rounded-xl px-3 py-2 text-sm font-semibold transition " +
             (isActive(pathname, "/society")
               ? "bg-[color:var(--surface)] text-[color:var(--ink)]"
-              : "text-[color:var(--ink-dim)] hover:bg-[rgba(255,255,255,0.06)] hover:text-[color:var(--ink)]")
+              : "text-[color:var(--ink-dim)] hover:bg-[color:var(--surface)] hover:text-[color:var(--ink)]")
           }
         >
           Society

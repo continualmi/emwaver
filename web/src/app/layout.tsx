@@ -32,7 +32,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${displaySans.variable} ${mono.variable} pt-12 antialiased`}>
-        <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-center bg-amber-500/12 px-4 shadow-[0_1px_0_rgba(251,191,36,0.15)] backdrop-blur-md">
+        <div className="fixed inset-x-0 top-0 z-[60] flex h-12 items-center justify-center bg-amber-500/12 px-4 shadow-[0_1px_0_var(--banner-shadow)] backdrop-blur-md">
           <div className="text-center text-xs font-medium tracking-[0.18em] text-amber-100 uppercase sm:text-sm">
             Under construction: EMWaver is still being finished and some pages or features may be incomplete.
           </div>
@@ -42,9 +42,10 @@ export default function RootLayout({
           <img
             src="/2015_upscale.jpg"
             alt=""
-            className="global-bg-image h-full w-full object-cover opacity-[0.30]"
+            className="global-bg-image h-full w-full object-cover"
+            style={{ opacity: "var(--bg-image-opacity)" }}
           />
-          <div className="global-bg-overlay absolute inset-0 bg-[radial-gradient(1000px_600px_at_20%_0%,rgba(78,231,199,0.08),transparent_62%),radial-gradient(900px_600px_at_85%_20%,rgba(91,192,255,0.06),transparent_64%),linear-gradient(to_bottom,rgba(2,3,8,0.52),rgba(2,3,8,0.60))]" />
+          <div className="global-bg-overlay absolute inset-0" style={{ background: "var(--bg-overlay-gradient)" }} />
         </div>
 
         {children}

@@ -769,7 +769,7 @@ export default function CloudPage() {
                   const hostText = selectedHostId ? hostLabel(selectedHostId) : "";
                   return (
                     <div
-                      className={`inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${b.label === "Live" ? "bg-[rgba(78,231,199,0.12)] text-[color:var(--ink)]" : b.label === "Connecting" ? "bg-[rgba(245,158,11,0.10)] text-[color:var(--ink)]" : b.label === "Offline" || b.label === "Error" ? "bg-[rgba(239,68,68,0.10)] text-[color:var(--ink)]" : "bg-[rgba(255,255,255,0.03)] text-[color:var(--ink-dim)]"}`}
+                      className={`inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] px-3 py-1 text-xs font-semibold ${b.label === "Live" ? "bg-[color:var(--aqua-tint-2)] text-[color:var(--ink)]" : b.label === "Connecting" ? "bg-[color:var(--amber-tint)] text-[color:var(--ink)]" : b.label === "Offline" || b.label === "Error" ? "bg-[color:var(--red-tint)] text-[color:var(--ink)]" : "bg-[color:var(--surface-3)] text-[color:var(--ink-dim)]"}`}
                       title={b.title}
                     >
                       <span className={`h-2 w-2 rounded-full ${b.dotClass}`} />
@@ -797,7 +797,7 @@ export default function CloudPage() {
         </div>
 
         {showProPreview ? (
-          <div className="mb-4 rounded-2xl border border-[color:var(--line)] bg-[rgba(240,166,106,0.10)] p-4">
+          <div className="mb-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--copper-tint)] p-4">
             <div className="text-sm font-semibold text-[color:var(--ink)]">Pro feature preview</div>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">
               You can browse the UI and bundled example scripts. Cloud files, remote hosts, and the Agent require EMWaver Pro.
@@ -857,12 +857,12 @@ export default function CloudPage() {
 
             <div className="mt-4 min-h-0 flex-1 overflow-hidden rounded-xl border border-[color:var(--line)]">
               <div className="h-full overflow-y-auto">
-                <div className="border-b border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                <div className="border-b border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
                   Example Scripts
                 </div>
                 <ul className="divide-y divide-[color:var(--line)]">
                   {exampleEmwScripts.map((s) => (
-                    <li key={s.name} className={selected === s.name ? "bg-[rgba(78,231,199,0.10)]" : ""}>
+                    <li key={s.name} className={selected === s.name ? "bg-[color:var(--aqua-tint-2)]" : ""}>
                       <button
                         type="button"
                         onClick={() => openExample(s.name, s.source)}
@@ -875,7 +875,7 @@ export default function CloudPage() {
                   ))}
                 </ul>
 
-                <div className="border-y border-[color:var(--line)] bg-[rgba(2,4,10,0.35)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
+                <div className="border-y border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-2 text-xs font-semibold text-[color:var(--ink-dim)]">
                   Cloud Files
                 </div>
 
@@ -886,7 +886,7 @@ export default function CloudPage() {
                 ) : (
                   <ul className="divide-y divide-[color:var(--line)]">
                     {files.map((f) => (
-                      <li key={f.name} className={selected === f.name ? "bg-[rgba(91,192,255,0.10)]" : ""}>
+                      <li key={f.name} className={selected === f.name ? "bg-[color:var(--sky-tint-2)]" : ""}>
                         <div className="flex items-start justify-between gap-3 p-3">
                           <button
                             onClick={() => void openFile(f.name)}
@@ -949,7 +949,7 @@ export default function CloudPage() {
                         scriptInstanceId,
                       });
                     }}
-                    className="rounded-lg border border-[color:var(--line)] bg-[rgba(244,63,94,0.12)] px-3 py-1.5 text-xs font-semibold text-[rgb(251,113,133)]"
+                    className="rounded-lg border border-[color:var(--line)] bg-[color:var(--danger-tint)] px-3 py-1.5 text-xs font-semibold text-[color:var(--destructive-text)]"
                   >
                     Stop
                   </button>
@@ -1020,7 +1020,7 @@ export default function CloudPage() {
                   setUiError(null);
                 }}
                 readOnly={selected ? isRaw(selected) : true}
-                className="mt-3 min-h-0 flex-1 w-full rounded-xl border border-[color:var(--line)] bg-[rgba(2,4,10,0.65)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
+                className="mt-3 min-h-0 flex-1 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-3 font-mono text-xs leading-5 text-[color:var(--ink)] outline-none"
               />
             )}
 
