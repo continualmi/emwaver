@@ -13,7 +13,7 @@ export function DeviceGallery({
 
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
+      <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
         <div className="relative flex aspect-[4/3] items-center justify-center">
           <img
             src={active}
@@ -33,7 +33,7 @@ export function DeviceGallery({
               className={`relative aspect-square overflow-hidden rounded-xl border transition ${
                 active === image
                   ? "border-[color:var(--aqua)] ring-1 ring-[color:var(--aqua)]"
-                  : "border-[color:var(--line)] hover:border-[rgba(233,238,252,0.24)]"
+                  : "border-[color:var(--line)] hover:border-[color:var(--nav-hover-border)]"
               }`}
               aria-label={`Show ${title} image ${index + 1}`}
             >

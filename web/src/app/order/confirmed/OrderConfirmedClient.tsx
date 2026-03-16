@@ -82,7 +82,7 @@ export default function OrderConfirmedClient() {
     <div className="min-h-dvh docs-mode">
       <SiteHeader />
       <main className="w-full overflow-y-auto px-5 py-10">
-        <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
+        <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10">
           <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
             Order confirmed
           </h1>

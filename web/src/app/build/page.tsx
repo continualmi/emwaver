@@ -46,9 +46,9 @@ function DeviceCard({ device }: { device: HardwareDevice }) {
   return (
     <Link
       href={`/build/${device.slug}`}
-      className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] transition hover:bg-[rgba(255,255,255,0.07)]"
+      className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] transition hover:bg-[color:var(--surface-2)]"
     >
-      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[rgba(3,7,18,0.55)]">
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-[color:var(--image-well)]">
         <Image
           src={device.image}
           alt={device.title}
@@ -137,7 +137,7 @@ export default function BuildPage() {
             {LANDING_IMAGES.map((img) => (
               <div
                 key={img.src}
-                className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)]"
+                className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)]"
               >
                 <div className="relative aspect-[4/3] w-full overflow-hidden">
                   <Image
@@ -171,7 +171,7 @@ export default function BuildPage() {
             {SUPPORTED_MCUS.map((board) => (
               <div
                 key={board.name}
-                className="rounded-2xl border border-[rgba(78,231,199,0.25)] bg-[rgba(78,231,199,0.06)] p-5"
+                className="rounded-2xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] p-5"
               >
                 <div className="text-base font-semibold text-[color:var(--ink)]">
                   {board.name}
@@ -183,7 +183,7 @@ export default function BuildPage() {
                   {board.tags.map((tag) => (
                     <span
                       key={tag}
-                      className="rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.08)] px-2.5 py-0.5 text-[11px] text-[color:var(--aqua)]"
+                      className="rounded-full border border-[color:var(--line)] bg-[color:var(--aqua-tint)] px-2.5 py-0.5 text-[11px] text-[color:var(--aqua)]"
                     >
                       {tag}
                     </span>

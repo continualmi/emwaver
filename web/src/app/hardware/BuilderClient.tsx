@@ -116,7 +116,7 @@ function FeatureToggle({
       onClick={onChange}
       className={`rounded-2xl border px-4 py-3 text-left transition ${
         checked
-          ? "border-[color:var(--aqua)] bg-[rgba(78,231,199,0.10)]"
+          ? "border-[color:var(--aqua)] bg-[color:var(--aqua-tint-2)]"
           : "border-[color:var(--line)] bg-[color:var(--surface)] hover:bg-[color:var(--surface-2)]"
       }`}
     >
@@ -292,9 +292,9 @@ export function BuilderClient() {
   return (
     <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
       {/* Board preview */}
-      <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] shadow-[0_30px_80px_rgba(0,0,0,0.35)]">
+      <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] shadow-[0_30px_80px_var(--shadow)]">
         <div className="p-5">
-          <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(3,7,18,0.55)]">
+          <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
             <div className="relative h-[320px] w-full md:h-[420px]">
               <Image src={pickImage()} alt="EMWaver board preview" fill unoptimized className="object-cover" />
             </div>
@@ -306,10 +306,10 @@ export function BuilderClient() {
             {bomLoaded ? `${filteredRows.length} BOM rows` : bomError ? "BOM unavailable" : "Loading BOM…"}
           </div>
           <div className="flex items-center gap-3">
-            <div className="rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
+            <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
               ~{formatCurrency(estimate.two)} / 2 pcs
             </div>
-            <div className="rounded-full border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
+            <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-1 text-xs text-[color:var(--ink-dim)]">
               ~{formatCurrency(estimate.five)} / 5 pcs
             </div>
           </div>
@@ -317,7 +317,7 @@ export function BuilderClient() {
       </div>
 
       {/* Controls */}
-      <div className="space-y-5 rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)] p-5">
+      <div className="space-y-5 rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
         <div>
           <div className="text-sm font-semibold text-[color:var(--ink)]">Assembly sections</div>
           <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Toggle sections on or off to customize the board. At least one core feature and one USB connector must stay selected.</div>
@@ -356,7 +356,7 @@ export function BuilderClient() {
           </a>
         </div>
 
-        <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <div className="text-sm font-semibold text-[color:var(--ink)]">
@@ -373,7 +373,7 @@ export function BuilderClient() {
           </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
               <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
                 2 units
               </div>
@@ -385,7 +385,7 @@ export function BuilderClient() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-4">
+            <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
               <div className="text-xs font-semibold tracking-[0.14em] text-[color:var(--ink-dim)]">
                 5 units
               </div>

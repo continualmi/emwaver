@@ -194,7 +194,7 @@ export default function ProPage() {
     <div className="min-h-dvh docs-mode">
       <SiteHeader />
       <main className="w-full overflow-y-auto px-5 py-10">
-        <div className="rounded-3xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.03)] p-6 md:p-10">
+        <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10">
           <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">EMWaver Pro</h1>
           <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
             Pro unlocks cloud features + the Agent experience. To subscribe, you must be signed in and have at least one verified genuine EMWaver device attached to your account.
@@ -257,7 +257,7 @@ export default function ProPage() {
               <div className="flex items-center justify-between gap-3">
                 <div className="text-sm font-semibold text-[color:var(--ink)]">Status</div>
                 {entitlements?.pro ? (
-                  <div className="rounded-full border border-[color:var(--line)] bg-[rgba(78,231,199,0.10)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
+                  <div className="rounded-full border border-[color:var(--line)] bg-[color:var(--aqua-tint-2)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
                     Pro active
                   </div>
                 ) : null}
