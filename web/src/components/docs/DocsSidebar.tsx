@@ -20,11 +20,6 @@ export function DocsSidebar() {
 
   return (
     <nav className="docs-sidebar">
-      <div className="docs-sidebar-brand">
-        <img src="/logo.png" alt="EMWaver" className="docs-brand-logo" />
-        <span className="docs-brand-text">Docs</span>
-      </div>
-
       <div className="docs-sidebar-groups">
         {DOCS_NAV.map((group) => (
           <div key={group.heading} className="docs-nav-group">
@@ -58,12 +53,6 @@ export function DocsSidebar() {
             </ul>
           </div>
         ))}
-      </div>
-
-      <div className="docs-sidebar-footer">
-        <Link href="/" className="docs-footer-link">
-          &larr; Back to site
-        </Link>
       </div>
     </nav>
   );

@@ -95,30 +95,6 @@ body {
   padding: 20px 14px;
 }
 
-.docs-sidebar-brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 4px 8px 18px;
-  border-bottom: 1px solid var(--line);
-  margin-bottom: 14px;
-}
-
-.docs-brand-logo {
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  object-fit: cover;
-  flex-shrink: 0;
-}
-
-.docs-brand-text {
-  font-weight: 600;
-  font-size: 15px;
-  letter-spacing: -0.02em;
-  color: var(--ink);
-}
-
 .docs-sidebar-groups {
   flex: 1;
   display: flex;
@@ -189,23 +165,6 @@ body {
   opacity: 1;
 }
 
-.docs-sidebar-footer {
-  padding: 14px 8px 0;
-  border-top: 1px solid var(--line);
-  margin-top: 8px;
-}
-
-.docs-footer-link {
-  font-size: 13px;
-  color: rgba(233, 238, 252, 0.44);
-  text-decoration: none;
-  transition: color 0.15s ease;
-}
-
-.docs-footer-link:hover {
-  color: var(--ink);
-}
-
 /* ── Docs content area ────────────────────────────────── */
 
 .docs-content {
@@ -261,10 +220,10 @@ body {
 
 .docs-mobile-drawer {
   position: fixed;
-  top: 48px;
+  top: 117px;
   left: 0;
   width: 280px;
-  height: calc(100vh - 48px);
+  height: calc(100vh - 117px);
   background: var(--paper);
   border-right: 1px solid var(--line);
   z-index: 100;
@@ -280,10 +239,10 @@ body {
   .docs-sidebar-desktop {
     display: block;
     position: fixed;
-    top: 48px;
+    top: 117px;
     left: 0;
     width: 250px;
-    height: calc(100vh - 48px);
+    height: calc(100vh - 117px);
     background: color-mix(in srgb, var(--paper) 92%, transparent);
     border-right: 1px solid var(--line);
     z-index: 50;
