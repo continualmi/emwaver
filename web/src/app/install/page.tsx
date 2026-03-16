@@ -77,7 +77,7 @@ export default function InstallPage() {
               <img
                 src={store.badge}
                 alt={`${store.platform} badge`}
-                className="h-10 w-10 shrink-0 object-contain"
+                className="h-12 w-auto max-w-[8rem] shrink-0 object-contain"
               />
               <div>
                 <div className="text-xs font-semibold text-[color:var(--ink-dim)]">
