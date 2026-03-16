@@ -6,6 +6,7 @@ import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
   { href: "/build", label: "Build" },
+  { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
   { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },

@@ -9,6 +9,24 @@ import {
 } from "@/lib/hardwareCatalog";
 import { BuilderClient } from "@/app/hardware/BuilderClient";
 
+const LANDING_IMAGES = [
+  {
+    src: "/landing1.jpeg",
+    alt: "EMWaver plugged into a smartphone",
+    label: "Mobile setup",
+  },
+  {
+    src: "/landing2.png",
+    alt: "EMWaver device close-up",
+    label: "Device close-up",
+  },
+  {
+    src: "/landing3.png",
+    alt: "EMWaver connected to laptop with modules",
+    label: "Laptop setup",
+  },
+];
+
 const SUPPORTED_MCUS = [
   {
     name: "ESP32-S3",
@@ -111,6 +129,33 @@ export default function BuildPage() {
             further, the hardware catalog below includes fabrication files for
             custom EMWaver boards.
           </p>
+        </section>
+
+        {/* ─── LANDING IMAGES GALLERY ─── */}
+        <section className="pb-14">
+          <div className="grid gap-4 sm:grid-cols-3">
+            {LANDING_IMAGES.map((img) => (
+              <div
+                key={img.src}
+                className="group overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[rgba(255,255,255,0.04)]"
+              >
+                <div className="relative aspect-[4/3] w-full overflow-hidden">
+                  <Image
+                    src={img.src}
+                    alt={img.alt}
+                    fill
+                    unoptimized
+                    className="object-cover"
+                  />
+                </div>
+                <div className="px-4 py-3">
+                  <div className="text-xs font-semibold text-[color:var(--ink-dim)]">
+                    {img.label}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         </section>
 
         {/* ─── SUPPORTED MCUS (text-only callout) ─── */}
