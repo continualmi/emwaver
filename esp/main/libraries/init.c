@@ -233,18 +233,7 @@ static bool handle_binary_packet(const command_t *cmd)
                 send_binary_err();
                 return true;
             }
-            esp_chip_info_t chip_info = {0};
-            esp_chip_info(&chip_info);
-            uint8_t uid[12] = {
-                mac[0], mac[1], mac[2], mac[3], mac[4], mac[5],
-                (uint8_t)chip_info.model,
-                (uint8_t)chip_info.revision,
-                (uint8_t)(chip_info.features & 0xFFu),
-                (uint8_t)((chip_info.features >> 8) & 0xFFu),
-                (uint8_t)(chip_info.cores & 0xFFu),
-                0x53u,
-            };
-            send_binary_ok(uid, sizeof(uid));
+            send_binary_ok(mac, sizeof(mac));
             return true;
         }
         case EMW_OP_BOARD_GET: {

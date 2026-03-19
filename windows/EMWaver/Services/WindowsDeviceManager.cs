@@ -459,15 +459,21 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         var lane = await SendCommandAsync(
             commandLane: new byte[] { EmwOpcode.HardwareUidGet },
             timeoutMs: timeoutMs,
-            responsePredicate: lane18 => lane18.Length >= 13 && lane18[0] == 0x80
+            responsePredicate: lane18 => lane18.Length >= 7 && lane18[0] == 0x80
         );
 
-        if (lane == null || lane.Length < 13 || lane[0] != 0x80)
+        if (lane == null || lane.Length < 7 || lane[0] != 0x80)
         {
             return null;
         }
 
-        return lane.Skip(1).Take(12).ToArray();
+        var payloadCount = Math.Min(Math.Max(0, lane.Length - 1), 12);
+        if (payloadCount != 6 && payloadCount != 12)
+        {
+            return null;
+        }
+
+        return lane.Skip(1).Take(payloadCount).ToArray();
     }
 
     private static string InferBoardType(string? portName, byte[]? hardwareUid)

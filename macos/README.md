@@ -4,7 +4,7 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB workflows, remote host control, cloud/auth integrations, and firmware/update UX on macOS.
 
-It is now the canonical desktop surface for device activation and firmware provisioning on macOS: the app reads the board hardware UID, requests backend-authoritative claim/restore for `board_type + hardware_uid`, flashes managed firmware, and keeps local claimed-device access aligned with that registration model.
+It is now the canonical desktop surface for device activation and firmware provisioning on macOS: the app reads the board hardware UID, silently restores/syncs backend access for `board_type + hardware_uid`, flashes managed firmware, and keeps local device access aligned with that registration model.
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
@@ -41,8 +41,8 @@ Entry points:
 - sign-in sheets (including web handoff sheet).
 
 Auth UX rule:
-- sign-in must remain available even when no EMWaver device is connected, so new users can authenticate before claiming and flashing a supported board.
-- device attach/claim still happens later from the Device / firmware setup flow.
+- sign-in must remain available even when no EMWaver device is connected, so new users can authenticate before flashing a supported board.
+- once a supported board reconnects with readable `board_type + hardware_uid`, the app should restore/sync it automatically instead of requiring a manual claim button.
 
 ## 2.2 Device + transport + host management
 
@@ -84,8 +84,10 @@ Tooling helper path:
 
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
 
+The macOS app bundles the canonical committed firmware image at `firmware/emwaver.bin`. Keep that file updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes.
+
 Current macOS responsibility in this area:
-- first-party claim/restore + provision flow for supported devices,
+- first-party restore/sync + provision flow for supported devices,
 - backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
 - reading supported-board hardware UID in Run Mode before activation,
 - unified in-app device list with local cache fallback for Offline Mode,
@@ -96,6 +98,7 @@ Current macOS responsibility in this area:
 
 STM32 update flow:
 - run-mode connection over USB MIDI,
+- if firmware is missing the hardware UID command, immediately prompt the user to enter the managed update flow,
 - enter DFU/update mode from the app,
 - flash through the DFU helper.
 
