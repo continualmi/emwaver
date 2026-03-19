@@ -35,6 +35,7 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 
 public class USBService extends Service implements DeviceConnectionService {

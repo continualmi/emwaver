@@ -252,10 +252,6 @@ public class MainActivity extends AppCompatActivity {
             .setMessage(status + versionLine)
             .setNegativeButton("Close", null);
 
-        if (connected && secureConnected) {
-            builder.setIcon(R.drawable.ic_securewaver);
-        }
-
         // Primary action: Update firmware.
         // IMPORTANT: do NOT switch into DFU here. The update dialog has an explicit confirmation
         // button for entering Update Mode (with a warning that the device becomes unusable until flashed).
