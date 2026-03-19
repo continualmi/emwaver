@@ -5,8 +5,7 @@ import Network
 @MainActor
 final class AccountDevicesService: ObservableObject {
     struct DeviceRecord: Codable, Identifiable {
-        var id: String { deviceIdB64 }
-        let deviceIdB64: String
+        var id: String { cacheKey }
         let label: String
         let boardType: String?
         let hardwareUid: String?
@@ -15,13 +14,52 @@ final class AccountDevicesService: ObservableObject {
         let lastSeenAtMs: Int64
 
         enum CodingKeys: String, CodingKey {
-            case deviceIdB64 = "device_id_b64"
             case label
             case boardType = "board_type"
             case hardwareUid = "hardware_uid"
             case createdAtMs = "created_at_ms"
             case updatedAtMs = "updated_at_ms"
             case lastSeenAtMs = "last_seen_at_ms"
+        }
+
+        init(
+            label: String,
+            boardType: String?,
+            hardwareUid: String?,
+            createdAtMs: Int64,
+            updatedAtMs: Int64,
+            lastSeenAtMs: Int64
+        ) {
+            self.label = label
+            self.boardType = boardType
+            self.hardwareUid = hardwareUid
+            self.createdAtMs = createdAtMs
+            self.updatedAtMs = updatedAtMs
+            self.lastSeenAtMs = lastSeenAtMs
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            self.label = try container.decodeIfPresent(String.self, forKey: .label) ?? "EMWaver device"
+            self.boardType = try container.decodeIfPresent(String.self, forKey: .boardType)
+            self.hardwareUid = try container.decodeIfPresent(String.self, forKey: .hardwareUid)
+            self.createdAtMs = try container.decodeIfPresent(Int64.self, forKey: .createdAtMs) ?? 0
+            self.updatedAtMs = try container.decodeIfPresent(Int64.self, forKey: .updatedAtMs) ?? 0
+            self.lastSeenAtMs = try container.decodeIfPresent(Int64.self, forKey: .lastSeenAtMs) ?? 0
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(label, forKey: .label)
+            try container.encodeIfPresent(boardType, forKey: .boardType)
+            try container.encodeIfPresent(hardwareUid, forKey: .hardwareUid)
+            try container.encode(createdAtMs, forKey: .createdAtMs)
+            try container.encode(updatedAtMs, forKey: .updatedAtMs)
+            try container.encode(lastSeenAtMs, forKey: .lastSeenAtMs)
+        }
+
+        private var cacheKey: String {
+            "\(boardType ?? ""):\(hardwareUid ?? "")"
         }
     }
 
@@ -92,28 +130,16 @@ final class AccountDevicesService: ObservableObject {
         }
     }
 
-    func storeClaimedDevice(deviceIdB64: String, boardType: String, hardwareUid: String) {
+    func storeClaimedDevice(boardType: String, hardwareUid: String) {
         let normalizedUid = normalized(hardwareUid)
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-        if let index = devices.firstIndex(where: { $0.deviceIdB64 == deviceIdB64 }) {
-            let existing = devices[index]
-            devices[index] = DeviceRecord(
-                deviceIdB64: deviceIdB64,
-                label: existing.label.isEmpty ? "EMWaver device" : existing.label,
-                boardType: boardType,
-                hardwareUid: hardwareUid,
-                createdAtMs: existing.createdAtMs,
-                updatedAtMs: nowMs,
-                lastSeenAtMs: nowMs
-            )
-        } else if let index = devices.firstIndex(where: {
+        if let index = devices.firstIndex(where: {
             $0.boardType?.caseInsensitiveCompare(boardType) == .orderedSame &&
             normalized($0.hardwareUid) == normalizedUid
         }) {
             let existing = devices[index]
             devices[index] = DeviceRecord(
-                deviceIdB64: deviceIdB64,
                 label: existing.label.isEmpty ? "EMWaver device" : existing.label,
                 boardType: boardType,
                 hardwareUid: hardwareUid,
@@ -124,7 +150,6 @@ final class AccountDevicesService: ObservableObject {
         } else {
             devices.insert(
                 DeviceRecord(
-                    deviceIdB64: deviceIdB64,
                     label: "EMWaver device",
                     boardType: boardType,
                     hardwareUid: hardwareUid,
@@ -226,7 +251,7 @@ final class AccountDevicesService: ObservableObject {
 
         for localRecord in local {
             guard let localKey = recordKey(for: localRecord) else {
-                if !merged.contains(where: { $0.deviceIdB64 == localRecord.deviceIdB64 }) {
+                if !merged.contains(where: { recordKey(for: $0) == nil && $0.label == localRecord.label }) {
                     merged.append(localRecord)
                 }
                 continue
@@ -238,7 +263,6 @@ final class AccountDevicesService: ObservableObject {
             }) {
                 let backendRecord = merged[index]
                 merged[index] = DeviceRecord(
-                    deviceIdB64: backendRecord.deviceIdB64.isEmpty ? localRecord.deviceIdB64 : backendRecord.deviceIdB64,
                     label: backendRecord.label.isEmpty ? localRecord.label : backendRecord.label,
                     boardType: backendRecord.boardType ?? localRecord.boardType,
                     hardwareUid: backendRecord.hardwareUid ?? localRecord.hardwareUid,
@@ -260,9 +284,6 @@ final class AccountDevicesService: ObservableObject {
     }
 
     private func recordKey(for record: DeviceRecord) -> String? {
-        if !record.deviceIdB64.isEmpty {
-            return "id:\(record.deviceIdB64)"
-        }
         guard let boardType = record.boardType, !boardType.isEmpty else { return nil }
         let hardwareUid = normalized(record.hardwareUid)
         guard !hardwareUid.isEmpty else { return nil }

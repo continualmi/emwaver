@@ -1,8 +1,5 @@
 using EMWaver.Services.Cloud;
-using EMWaver.Services.Security;
 using Microsoft.UI.Dispatching;
-using Org.BouncyCastle.Crypto.Parameters;
-using Org.BouncyCastle.Crypto.Signers;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -23,8 +20,6 @@ namespace EMWaver.Services;
 internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private sealed record MintResponse(
-        [property: JsonPropertyName("device_id_b64")] string DeviceIdB64,
-        [property: JsonPropertyName("proof_b64")] string ProofB64,
         [property: JsonPropertyName("created")] bool? Created
     );
 
@@ -36,15 +31,8 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         int Cores
     );
 
-    private const uint IdentityPageAddr = 0x0800_7800;
-    private const int IdentityPageSize = 1024;
-    private const int DeviceIdLen = 16;
-    private const int ProofLen = 64;
-
     private DispatcherQueue? _ui;
     private Timer? _dfuPollTimer;
-    private WindowsDeviceManager.DeviceIdentity? _preservedIdentity;
-    private WindowsDeviceManager.DeviceIdentity? _identityToWriteAfterFlash;
     private readonly List<string> _logLines = new();
 
     private bool _dfuConnected;
@@ -167,18 +155,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
     }
 
-    private string _lastVerificationText = "";
-    internal string LastVerificationText
-    {
-        get => _lastVerificationText;
-        private set
-        {
-            if (_lastVerificationText == value) return;
-            _lastVerificationText = value;
-            OnPropertyChanged();
-        }
-    }
-
     internal string LogText => string.Join(Environment.NewLine, _logLines);
 
     internal void AttachUiDispatcher(DispatcherQueue ui)
@@ -197,9 +173,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         ProgressPct = 0;
         ProgressMessage = "";
         CompletionMessage = "Update complete. Reconnect the device to use it.";
-        LastVerificationText = "";
-        _preservedIdentity = null;
-        _identityToWriteAfterFlash = null;
         _logLines.Clear();
         OnPropertyChanged(nameof(LogText));
     }
@@ -253,35 +226,11 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        if (device.IsConnected && !device.IsSecureConnected)
-        {
-            UpdateError = "Firmware update blocked: device is not secured.";
-            return;
-        }
-
-        _preservedIdentity = null;
-        _identityToWriteAfterFlash = null;
-
-        if (device.IsConnected && device.IsSecureConnected)
-        {
-            _preservedIdentity = await device.ReadDeviceIdentityAsync(timeoutMs: 900);
-            if (_preservedIdentity == null)
-            {
-                UpdateError = "Failed to read device identity in Run Mode. Reconnect and retry.";
-                return;
-            }
-            AppendLog("Run-mode identity captured for restore");
-        }
-
         if (DfuConnected)
         {
             try
             {
-                if (_preservedIdentity == null)
-                {
-                    await GateOnDfuIdentityOrFailAsync();
-                }
-                await RunStmFlashAsync(_identityToWriteAfterFlash ?? _preservedIdentity);
+                await RunStmFlashAsync();
             }
             catch (Exception ex)
             {
@@ -312,11 +261,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         try
         {
-            if (_preservedIdentity == null)
-            {
-                await GateOnDfuIdentityOrFailAsync();
-            }
-            await RunStmFlashAsync(_identityToWriteAfterFlash ?? _preservedIdentity);
+            await RunStmFlashAsync();
         }
         catch (Exception ex)
         {
@@ -338,12 +283,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             UpdateError = "Activation currently requires a device connected in Run mode so Windows can read its hardware UID.";
             return;
         }
-        if (device.IsSecureConnected)
-        {
-            UpdateError = "Device is already secured. Use Update instead.";
-            return;
-        }
-
         var token = await auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
         if (string.IsNullOrWhiteSpace(token))
         {
@@ -380,10 +319,9 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        _identityToWriteAfterFlash = DecodeIdentity(mint.DeviceIdB64, mint.ProofB64);
         AppendLog((mint.Created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded");
-        AppendLog($"DeviceID: {mint.DeviceIdB64[..Math.Min(16, mint.DeviceIdB64.Length)]}...");
-        AppendLog($"Proof: {mint.ProofB64[..Math.Min(16, mint.ProofB64.Length)]}...");
+        AppServices.AccountDevices.StoreClaimedDevice(boardType, hardwareUidHex);
+        AppendLog("Stored claimed device locally for immediate access");
 
         ProgressMessage = "Switching device to Update Mode...";
         device.RequestEnterUpdateMode();
@@ -399,8 +337,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
         try
         {
-            await RunStmFlashAsync(_identityToWriteAfterFlash);
-            AppServices.AccountDevices.StoreClaimedDevice(mint.DeviceIdB64, boardType, hardwareUidHex);
+            await RunStmFlashAsync();
         }
         catch (Exception ex)
         {
@@ -464,58 +401,8 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         }
 
         AppendLog((mint.Created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded");
-        accountDevices.StoreClaimedDevice(mint.DeviceIdB64, "esp32s3", hardwareUidHex);
+        accountDevices.StoreClaimedDevice("esp32s3", hardwareUidHex);
         await StartEspSerialUpdateAsync(device);
-    }
-
-    internal async Task VerifyRunModeIdentityAsync(WindowsDeviceManager device)
-    {
-        UpdateError = null;
-        if (!device.IsConnected)
-        {
-            UpdateError = "Run Mode verification requires a connected device.";
-            return;
-        }
-
-        var pk = GetRootPublicKeyOrThrow();
-        var identity = await device.ReadDeviceIdentityAsync(timeoutMs: 900);
-        if (identity == null)
-        {
-            UpdateError = "Failed to read identity via Run Mode opcode.";
-            LastVerificationText = "Run Mode verification failed";
-            return;
-        }
-
-        var ok = VerifyEd25519(pk, identity.DeviceId, identity.Proof);
-        LastVerificationText = $"Run Mode: {(ok ? "OK" : "Invalid")} | DeviceID {identity.DeviceIdB64}";
-        AppendLog(LastVerificationText);
-        if (!ok)
-        {
-            UpdateError = "Device proof is invalid.";
-        }
-    }
-
-    internal async Task VerifyUpdateModeIdentityAsync()
-    {
-        UpdateError = null;
-        try
-        {
-            var (identity, ok) = await ReadUpdateModeIdentityAsync();
-            LastVerificationText = identity == null
-                ? "Update Mode verification failed"
-                : $"Update Mode: {(ok ? "OK" : "Invalid")} | DeviceID {identity.DeviceIdB64}";
-            AppendLog(LastVerificationText);
-            if (!ok)
-            {
-                UpdateError = "Device identity proof is invalid.";
-            }
-        }
-        catch (Exception ex)
-        {
-            UpdateError = ex.Message;
-            LastVerificationText = $"Update Mode verification failed: {ex.Message}";
-            AppendLog(LastVerificationText);
-        }
     }
 
     private async Task<MintResponse> MintDeviceAsync(string idToken, string boardType, string hardwareUidHex)
@@ -573,12 +460,9 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         ProgressPct = 0;
         ProgressMessage = "Preparing update...";
         CompletionMessage = "Update complete. Reconnect the device to use it.";
-        LastVerificationText = "";
-        _preservedIdentity = null;
-        _identityToWriteAfterFlash = null;
     }
 
-    private async Task RunStmFlashAsync(WindowsDeviceManager.DeviceIdentity? identityToWriteAfterFlash)
+    private async Task RunStmFlashAsync()
     {
         if (IsFlashing) return;
 
@@ -642,15 +526,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
                 blockNum += 1;
             }
 
-            if (identityToWriteAfterFlash != null)
-            {
-                SetProgress("Restoring device identity...", 98);
-                var page = BuildIdentityPage(identityToWriteAfterFlash.DeviceId, identityToWriteAfterFlash.Proof);
-                await dfu.SetAddressPointerAsync(IdentityPageAddr, ct);
-                await dfu.WriteBlockAsync(page, blockNum: 2, numBytes: page.Length, ct);
-                AppendLog("Identity page restored");
-            }
-
             SetProgress("Flash write completed successfully.", 100);
             UpdateDone = true;
             AppendLog(CompletionMessage);
@@ -664,49 +539,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         {
             IsFlashing = false;
         }
-    }
-
-    private async Task GateOnDfuIdentityOrFailAsync()
-    {
-        var (identity, ok) = await ReadUpdateModeIdentityAsync();
-        if (identity == null)
-        {
-            throw new InvalidOperationException("Device identity page is malformed.");
-        }
-        if (!ok)
-        {
-            throw new InvalidOperationException("Device identity proof is invalid.");
-        }
-        _preservedIdentity = identity;
-        AppendLog("DFU identity verified before update");
-    }
-
-    private async Task<(WindowsDeviceManager.DeviceIdentity? Identity, bool Ok)> ReadUpdateModeIdentityAsync()
-    {
-        var pk = GetRootPublicKeyOrThrow();
-        await using var dfu = await Dfu.OpenFirstAsync();
-        await dfu.SetAddressPointerAsync(IdentityPageAddr, CancellationToken.None);
-
-        var buf = new byte[IdentityPageSize];
-        await dfu.ReadBlockAsync(buf, blockNum: 2, numBytes: IdentityPageSize, CancellationToken.None);
-
-        if (buf.Length < 16 ||
-            buf[0] != (byte)'E' || buf[1] != (byte)'M' || buf[2] != (byte)'I' || buf[3] != (byte)'D')
-        {
-            throw new InvalidOperationException("Device is not secured (missing identity page).");
-        }
-        if (buf[4] != 1 || buf[5] != DeviceIdLen || buf[6] != ProofLen)
-        {
-            throw new InvalidOperationException("Device identity page is malformed.");
-        }
-
-        var deviceId = new byte[DeviceIdLen];
-        var proof = new byte[ProofLen];
-        Buffer.BlockCopy(buf, 16, deviceId, 0, DeviceIdLen);
-        Buffer.BlockCopy(buf, 16 + DeviceIdLen, proof, 0, ProofLen);
-
-        var identity = new WindowsDeviceManager.DeviceIdentity(deviceId, proof);
-        return (identity, VerifyEd25519(pk, deviceId, proof));
     }
 
     private async Task StartEspSerialUpdateAsync(WindowsDeviceManager device)
@@ -1066,65 +898,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         var selector = UsbDevice.GetDeviceSelector(Dfu.USB_VENDOR_ID, Dfu.USB_PRODUCT_ID);
         var devices = await DeviceInformation.FindAllAsync(selector);
         return devices.Count > 0;
-    }
-
-    private static byte[] BuildIdentityPage(byte[] deviceId16, byte[] proof64)
-    {
-        if (deviceId16.Length != DeviceIdLen) throw new ArgumentException($"DeviceID must be {DeviceIdLen} bytes");
-        if (proof64.Length != ProofLen) throw new ArgumentException($"Proof must be {ProofLen} bytes");
-
-        var page = Enumerable.Repeat((byte)0xFF, IdentityPageSize).ToArray();
-        page[0] = (byte)'E';
-        page[1] = (byte)'M';
-        page[2] = (byte)'I';
-        page[3] = (byte)'D';
-        page[4] = 1;
-        page[5] = DeviceIdLen;
-        page[6] = ProofLen;
-        Buffer.BlockCopy(deviceId16, 0, page, 16, DeviceIdLen);
-        Buffer.BlockCopy(proof64, 0, page, 16 + DeviceIdLen, ProofLen);
-        return page;
-    }
-
-    private static WindowsDeviceManager.DeviceIdentity DecodeIdentity(string deviceIdB64, string proofB64)
-    {
-        var deviceId = Convert.FromBase64String(deviceIdB64);
-        var proof = Convert.FromBase64String(proofB64);
-        if (deviceId.Length != DeviceIdLen)
-        {
-            throw new InvalidOperationException("Backend returned an invalid DeviceID.");
-        }
-        if (proof.Length != ProofLen)
-        {
-            throw new InvalidOperationException("Backend returned an invalid Proof.");
-        }
-        return new WindowsDeviceManager.DeviceIdentity(deviceId, proof);
-    }
-
-    private static byte[] GetRootPublicKeyOrThrow()
-    {
-        var pk = EmwaverRootKey.GetPublicKeyRaw();
-        if (pk == null || pk.Length != 32)
-        {
-            throw new InvalidOperationException("Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64).");
-        }
-        return pk;
-    }
-
-    private static bool VerifyEd25519(byte[] pkRaw32, byte[] message, byte[] signature64)
-    {
-        try
-        {
-            var pk = new Ed25519PublicKeyParameters(pkRaw32, 0);
-            var verifier = new Ed25519Signer();
-            verifier.Init(false, pk);
-            verifier.BlockUpdate(message, 0, message.Length);
-            return verifier.VerifySignature(signature64);
-        }
-        catch
-        {
-            return false;
-        }
     }
 
     private string EffectiveBoardType(WindowsDeviceManager device)

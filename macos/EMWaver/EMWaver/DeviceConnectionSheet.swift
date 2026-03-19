@@ -281,7 +281,7 @@ struct DeviceConnectionSheet: View {
                 }
 
                 if !currentDeviceIsRegistered && currentDeviceClaimStatusResolved {
-                    Text("Claim attaches this physical board to your account. For ESP32-S3, the same step also flashes EMWaver firmware. Unclaimed boards cannot be used by normal scripts.")
+                    Text("Claim attaches this physical board to your account using its board type and hardware UID. The same step also flashes managed EMWaver firmware. Unclaimed boards cannot be used by normal scripts.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
@@ -453,7 +453,7 @@ struct DeviceConnectionSheet: View {
         if currentDeviceIsRegistered {
             firmwareUpdater.startUpdate(device: device)
         } else {
-            firmwareUpdater.startMintAndProvision(auth: auth, device: device)
+            firmwareUpdater.startMintAndProvision(auth: auth, accountDevices: accountDevices, device: device)
         }
     }
 

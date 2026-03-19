@@ -218,8 +218,6 @@ public class MainActivity extends AppCompatActivity {
         final boolean connected = connectionManager != null && connectionManager.isConnected();
         final USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
         final boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
-        final boolean secureConnected = usbService != null && usbService.isSecureConnected();
-
         final String deviceVer = usbService != null ? usbService.getDeviceFirmwareVersion() : null;
         final String bundledVer = BuildConfig.EMWAVER_BUNDLED_FW_VERSION;
         final boolean upToDate = deviceVer != null && bundledVer != null && !bundledVer.isEmpty() && deviceVer.equals(bundledVer);
@@ -237,7 +235,7 @@ public class MainActivity extends AppCompatActivity {
 
         String status;
         if (connected) {
-            status = secureConnected ? "Connected (Secure)" : "Connected (Not secure)";
+            status = "Connected";
         } else {
             status = dfuConnected ? "Update Mode detected" : "Disconnected";
         }
@@ -267,15 +265,10 @@ public class MainActivity extends AppCompatActivity {
             }
             USBService svc = connectionManager.getUsbService();
             boolean isConnected = connectionManager.isConnected();
-            boolean isSecure = svc != null && svc.isSecureConnected();
             boolean isDfu = svc != null && svc.isFlashDeviceConnected();
 
             if (!isConnected && !isDfu) {
                 Toast.makeText(MainActivity.this, "Connect a device first", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            if (isConnected && !isSecure) {
-                Toast.makeText(MainActivity.this, "Firmware update blocked: device is not secured", Toast.LENGTH_LONG).show();
                 return;
             }
 

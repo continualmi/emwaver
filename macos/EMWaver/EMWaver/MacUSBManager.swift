@@ -7,7 +7,6 @@
 import Combine
 import CoreMIDI
 import Foundation
-import CryptoKit
 
 import EMWaverScriptRuntime
 import EMWaverTransport
@@ -24,7 +23,6 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
-        static let identityGet: UInt8 = 0x07
         static let hardwareUidGet: UInt8 = 0x08
         static let sample: UInt8 = 0x60
 
@@ -45,20 +43,10 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
     }
 
-    @Published var isSecureConnected: Bool = false
-    @Published var secureDeviceIdHex: String? = nil
     @Published var hardwareUidHex: String? = nil
     @Published var lastDetectedHardwareUidHex: String? = nil
     @Published var connectedBoardType: String? = nil
     @Published var lastDetectedBoardType: String? = nil
-
-    // Signed device identity (base64) for account attach flows.
-    @Published var secureDeviceIdB64: String? = nil
-    @Published var secureDeviceProofB64: String? = nil
-
-    // If a genuine device is connected but the user isn't signed in, prompt to sign in to attach it.
-    @Published var needsLoginToSaveDevice: Bool = false
-    @Published var deviceAttachStatusText: String? = nil
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
@@ -415,8 +403,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.deviceEmwaverVersion = nil
         }
 
-        // Mirror the desktop app behavior: query the device version automatically on connect,
-        // then require a valid signed device identity.
+        // Mirror the desktop app behavior: query the device version and hardware UID automatically on connect.
         DispatchQueue.global(qos: .userInitiated).async {
             var v = self.queryDeviceVersion(timeoutMs: 1500)
             if v == nil {
@@ -424,26 +411,15 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                 v = self.queryDeviceVersion(timeoutMs: 1500)
             }
 
-            let identityOk = (v != nil) ? self.verifySecureIdentity(timeoutMs: 1800) : false
             let hardwareUid = (v != nil) ? self.readHardwareUid(timeoutMs: 1200) : nil
             let boardType = self.inferBoardType(portName: displayName ?? candidate.name, hardwareUid: hardwareUid)
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
-                self.isSecureConnected = identityOk
                 self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
                 self.lastDetectedHardwareUidHex = self.hardwareUidHex ?? self.lastDetectedHardwareUidHex
                 self.connectedBoardType = boardType
                 self.lastDetectedBoardType = boardType
-                if identityOk {
-                    // Cache identity for account attach (DeviceID+Proof already verified locally).
-                    if let ident = self.readDeviceIdentity(timeoutMs: 1800) {
-                        self.secureDeviceIdB64 = ident.deviceIdB64
-                        self.secureDeviceProofB64 = ident.proofB64
-                    }
-                } else {
-                    self.lastErrorText = "Device is not set up for this account yet. Set it up before using normal scripts."
-                }
             }
         }
     }
@@ -459,14 +435,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.isConnected = false
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
-            self.isSecureConnected = false
-            self.secureDeviceIdHex = nil
             self.hardwareUidHex = nil
             self.connectedBoardType = nil
-            self.secureDeviceIdB64 = nil
-            self.secureDeviceProofB64 = nil
-            self.needsLoginToSaveDevice = false
-            self.deviceAttachStatusText = nil
         }
     }
 
@@ -489,14 +459,6 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         return "\(resp[1]).\(resp[2])"
     }
 
-    struct DeviceIdentity {
-        let deviceId: Data
-        let proof: Data
-
-        var deviceIdB64: String { deviceId.base64EncodedString() }
-        var proofB64: String { proof.base64EncodedString() }
-    }
-
     func readHardwareUid(timeoutMs: Int) -> Data? {
         guard let lane = sendCommandInternal(
             Data([EmwOpcode.hardwareUidGet]),
@@ -505,55 +467,6 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         ) else { return nil }
         if lane[0] != 0x80 { return nil }
         return Data(lane[1..<13])
-    }
-
-    func readDeviceIdentity(timeoutMs: Int) -> DeviceIdentity? {
-        // Read DeviceID.
-        guard let devLane = sendCommandInternal(
-            Data([EmwOpcode.identityGet, 0x00, 0x00]),
-            timeout: timeoutMs,
-            responsePredicate: { lane in lane.count >= 17 && lane[0] == 0x80 }
-        ) else { return nil }
-        if devLane[0] != 0x80 { return nil }
-        let deviceId = Data(devLane[1..<17])
-
-        // Read Proof in 4 chunks.
-        var proof = Data(capacity: 64)
-        for chunk in 0..<4 {
-            guard let lane = sendCommandInternal(
-                Data([EmwOpcode.identityGet, 0x01, UInt8(chunk)]),
-                timeout: timeoutMs,
-                responsePredicate: { lane in lane.count >= 17 && lane[0] == 0x80 }
-            ) else { return nil }
-            if lane[0] != 0x80 { return nil }
-            proof.append(contentsOf: lane[1..<17])
-        }
-        guard proof.count == 64 else { return nil }
-
-        return DeviceIdentity(deviceId: deviceId, proof: proof)
-    }
-
-    /// Reads DeviceID (16B) and Proof (64B) using EMW_OP_IDENTITY_GET and verifies Proof using the embedded Root public key.
-    private func verifySecureIdentity(timeoutMs: Int) -> Bool {
-        guard let pk = EmwaverRootKey.publicKey else {
-            // No embedded public key => treat as not secure.
-            return false
-        }
-
-        guard let ident = readDeviceIdentity(timeoutMs: timeoutMs) else { return false }
-        let deviceId = ident.deviceId
-        let proof = ident.proof
-
-        // Verify signature.
-        do {
-            if pk.isValidSignature(proof, for: deviceId) {
-                DispatchQueue.main.async {
-                    self.secureDeviceIdHex = deviceId.map { String(format: "%02x", $0) }.joined()
-                }
-                return true
-            }
-        }
-        return false
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {

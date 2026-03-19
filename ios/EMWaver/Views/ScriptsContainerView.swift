@@ -109,19 +109,6 @@ struct ScriptsContainerView: View {
                                     .foregroundStyle(.secondary)
                             }
 
-                            if bleManager.isConnected {
-                                Divider()
-                                HStack(spacing: 6) {
-                                    Text(bleManager.isSecureConnected ? "Secured" : "Not verified")
-                                    if bleManager.isSecureConnected {
-                                        Image(systemName: "checkmark.shield.fill")
-                                    } else {
-                                        Image(systemName: "shield.slash")
-                                    }
-                                }
-                                .foregroundStyle(bleManager.isSecureConnected ? .green : .secondary)
-                            }
-
                             if let err = bleManager.lastErrorText, !err.isEmpty {
                                 Divider()
                                 Text(err)

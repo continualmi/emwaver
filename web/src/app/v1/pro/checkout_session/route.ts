@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
-import { devicesStore } from "@/server/store/devices";
+import { provisionedDevicesStore } from "@/server/store/provisionedDevices";
 import { getStripe } from "@/server/stripe";
 
 export async function POST(request: NextRequest) {
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   if (!priceId || !(process.env.STRIPE_WEBHOOK_SECRET || "").trim()) {
     return NextResponse.json({ error: "pro_not_configured" }, { status: 503 });
   }
-  if (!devicesStore.hasUserDevice(identity.uid)) {
+  if (!provisionedDevicesStore.hasUserDevice(identity.uid)) {
     return NextResponse.json(
       {
         error: "not_eligible",

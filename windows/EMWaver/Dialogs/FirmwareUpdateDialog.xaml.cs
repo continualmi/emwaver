@@ -113,18 +113,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         UpdateUi();
     }
 
-    private async void OnVerifyRunModeClick(object sender, RoutedEventArgs e)
-    {
-        await _updater.VerifyRunModeIdentityAsync(_device);
-        UpdateUi();
-    }
-
-    private async void OnVerifyUpdateModeClick(object sender, RoutedEventArgs e)
-    {
-        await _updater.VerifyUpdateModeIdentityAsync();
-        UpdateUi();
-    }
-
     private async void OnOpenAccountClick(object sender, RoutedEventArgs e)
     {
         var dialog = new AccountDialog
@@ -246,17 +234,14 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         ErrorPanel.Visibility = string.IsNullOrWhiteSpace(_updater.UpdateError) ? Visibility.Collapsed : Visibility.Visible;
         ErrorText.Text = _updater.UpdateError ?? "";
 
-        ProgressPanel.Visibility = (_updater.IsFlashing || !string.IsNullOrWhiteSpace(_updater.LastVerificationText)) ? Visibility.Visible : Visibility.Collapsed;
+        ProgressPanel.Visibility = _updater.IsFlashing ? Visibility.Visible : Visibility.Collapsed;
         ProgressMessageText.Text = string.IsNullOrWhiteSpace(_updater.ProgressMessage) ? "Idle" : _updater.ProgressMessage;
         ProgressPctText.Text = $"{(int)Math.Round(_updater.ProgressPct)}%";
         ProgressBar.Value = _updater.ProgressPct;
-        VerificationText.Text = _updater.LastVerificationText;
 
         DonePanel.Visibility = _updater.UpdateDone ? Visibility.Visible : Visibility.Collapsed;
         DoneText.Text = _updater.CompletionMessage;
 
-        VerifyRunModeButton.IsEnabled = _device.IsConnected && !_updater.IsFlashing;
-        VerifyUpdateModeButton.IsEnabled = !isEsp && (_updater.DfuConnected || _device.DfuConnected) && !_updater.IsFlashing;
         RefreshStateButton.IsEnabled = !_updater.IsFlashing;
         OpenAccountButton.IsEnabled = !_updater.IsFlashing;
 

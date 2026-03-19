@@ -4,7 +4,7 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB workflows, remote host control, cloud/auth integrations, and firmware/update UX on macOS.
 
-It is now the canonical desktop surface for device activation and firmware provisioning on macOS: the app reads the board hardware UID, requests backend-authoritative claim/restore plus `DeviceID + Proof`, flashes managed firmware, verifies device authenticity where available, and provisions or restores device identity according to board class.
+It is now the canonical desktop surface for device activation and firmware provisioning on macOS: the app reads the board hardware UID, requests backend-authoritative claim/restore for `board_type + hardware_uid`, flashes managed firmware, and keeps local claimed-device access aligned with that registration model.
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
@@ -48,7 +48,6 @@ Auth UX rule:
 
 Core files include:
 - `MacUSBManager.swift`
-- `DeviceRegistryService.swift`
 - `HostSessionManager.swift`
 - `RemoteControlHostService.swift`
 - `RemoteControlClientService.swift`
@@ -58,7 +57,7 @@ Responsibilities:
 - local USB host operation,
 - remote attach/control pathways,
 - host presence and cloud session integration,
-- device authenticity verification and account attach,
+- hardware-UID-backed claim awareness,
 - mint/provision handoff into DFU update tooling for first-party activation on macOS.
 
 ## 2.3 UI surfaces
@@ -73,12 +72,6 @@ Representative views:
 
 `Pro/EntitlementsManager.swift` + `ProUpgradeSheet.swift` integrate subscription/entitlement UX.
 
-## 2.5 Security
-
-`Security/EmwaverRootKey.swift` contains root-key handling for authenticity checks.
-
----
-
 ## 3) Firmware update, activation, and tooling
 
 Firmware update UI/logic:
@@ -92,13 +85,10 @@ Tooling helper path:
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
 
 Current macOS responsibility in this area:
-- secure-device firmware update with identity preservation,
 - first-party claim/restore + provision flow for supported devices,
 - backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
 - reading supported-board hardware UID in Run Mode before activation,
 - unified in-app device list with local cache fallback for Offline Mode,
-- writing/restoring the flash identity page after DFU flash,
-- explicit authenticity verification in Run Mode and Update Mode,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for provisioning/update sessions.
 
@@ -107,8 +97,7 @@ Current macOS responsibility in this area:
 STM32 update flow:
 - run-mode connection over USB MIDI,
 - enter DFU/update mode from the app,
-- flash through the DFU helper,
-- restore/verify device identity as part of the managed update flow.
+- flash through the DFU helper.
 
 ESP32-S3 update flow:
 - run-mode connection over USB MIDI remains separate from flashing,

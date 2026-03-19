@@ -99,19 +99,17 @@ Windows is intended to track the current macOS app in the device activation / pr
 
 What Windows already has:
 - USB MIDI run-mode transport,
-- secure identity verification in Run Mode using the embedded root key,
 - STM32 DFU firmware flashing,
 - cloud sign-in, host session, remote control, and Pro entitlement plumbing.
 
 Windows now includes:
 - board-aware device state (`board_type`, hardware UID, last detected board info),
 - backend-tethered claim / restore flow using `/provisioning/mint`,
-- device attach / seen flow using `/v1/devices/seen`,
 - cached claimed-device list with offline-mode fallback,
 - board-specific update UX split between STM32 DFU and ESP32-S3 serial flashing,
 - bundled ESP32-S3 flashing helper + bundled ESP images when present in the workspace/build output,
 - ESP bootloader detection and BOOT / RESET guidance,
-- verification and activity-log surfaces around setup and update.
+- activity-log surfaces around setup and update.
 
 ---
 
@@ -120,25 +118,25 @@ Windows now includes:
 The parity work in this folder specifically addressed the older Windows gaps relative to macOS:
 
 1. Device model
-- `Services/WindowsDeviceManager.cs` now tracks hardware UID, connected board type, last detected board type, last detected hardware UID, and attach status in addition to version and secure identity.
+- `Services/WindowsDeviceManager.cs` now tracks hardware UID, connected board type, and last-detected board info in addition to version/runtime state.
 
 2. Update architecture
 - `Services/FirmwareUpdateManager.cs` now splits STM32 managed DFU from ESP32-S3 serial flashing.
-- STM32 claim/update can mint identities and restore the identity page after flashing.
+- STM32 claim/update is keyed by `board_type + hardware_uid` and then flashes managed firmware.
 - ESP32-S3 setup/update uses the bundled helper + bundled image set when present.
 
 3. Device UI / wording
 - `Pages/DevicePage*` and `Dialogs/FirmwareUpdateDialog*` are now board-aware and expose claimed/cached/unclaimed state, offline messaging, verification, and activity logs.
 
 4. Account / claim integration
-- Windows now has local services equivalent to macOS `DeviceRegistryService` and `AccountDevicesService`.
-- Genuine connected devices are seen/attached through the backend and claimed devices are cached locally for offline-aware behavior.
+- Windows now has a local claimed-device cache equivalent to macOS `AccountDevicesService`.
+- Claimed devices are keyed by `board_type + hardware_uid` for offline-aware behavior.
 
 5. ESP32-S3 support
 - Windows now detects ESP bootloader availability, resolves flash-capable serial ports, and guides the user toward the serial flashing path instead of forcing STM32 DFU semantics onto ESP boards.
 
-6. Verification and operator diagnostics
-- Windows now exposes Run Mode / Update Mode verification hooks plus flashing and provisioning activity logs.
+6. Operator diagnostics
+- Windows now exposes flashing and provisioning activity logs.
 
 ---
 
@@ -152,22 +150,20 @@ Windows should:
 - read hardware UID in Run Mode using the shared device opcode,
 - infer / store current board type and last detected board type,
 - preserve last detected hardware UID for ESP and reconnect scenarios,
-- keep the current secure Run Mode identity verification behavior.
+- rely on `board_type + hardware_uid` only.
 
 ### 5.2 Claim / restore / attach
 
 Windows should:
 - call `/provisioning/mint` with `board_type + hardware_uid` during setup,
-- attach genuine connected devices through `/v1/devices/seen`,
 - maintain a local claimed-device cache keyed by `board_type + hardware_uid`,
 - support offline-mode access decisions from the cached device list.
 
 ### 5.3 STM32 update flow
 
 Windows STM32 flow should match the current managed model:
-- secured devices update through DFU,
 - unclaimed STM32 boards can be claimed and provisioned from the app,
-- device identity preservation / restore remains part of the managed flow,
+- claimed STM32 boards update through DFU,
 - update UI clearly distinguishes claimed/setup vs update behavior.
 
 ### 5.4 ESP32-S3 update flow
@@ -194,11 +190,9 @@ Windows should have a board-aware device surface that shows:
   - STM32: `Claim device` or `Update firmware`
   - ESP32-S3: `Claim and flash` or `Flash firmware`
 
-### 5.6 Verification / diagnostics
+### 5.6 Diagnostics
 
 Windows should expose:
-- run-mode authenticity verification,
-- update-mode authenticity verification where applicable,
 - flashing / provisioning activity logs,
 - clear operator-readable error messages for serial-port selection, bootloader entry, and backend provisioning failures.
 
@@ -213,8 +207,7 @@ The main remaining work after the parity code changes is validation on a real Wi
 
 2. STM32 hardware validation
 - verify claim + DFU provision path on an unclaimed STM32 board,
-- verify secure update path on an already claimed STM32 board,
-- verify Run Mode / Update Mode authenticity checks.
+- verify update path on an already claimed STM32 board.
 
 3. ESP32-S3 hardware validation
 - build the Windows `emwaver-esp-helper.exe`,

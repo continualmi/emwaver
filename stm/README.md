@@ -343,7 +343,6 @@ Firmware enforces single bus owner (`BUS_OWNER_*`).
 ## 8) Flash layout used by firmware
 
 - `0x08000000` start of application flash.
-- `0x08007800` signed identity blob (magic + metadata + DeviceID + Proof).
 - `0x08007C00` user device name page.
 
 DFU entry routine intentionally erases early flash pages (starting at app base) so ROM empty-check falls into system DFU bootloader.

@@ -40,7 +40,6 @@ internal static class AppServices
     internal static RemoteControlClientService RemoteControlClient = new(CloudConfig, CloudAuth);
     internal static EntitlementsManager Entitlements = new(Http, () => CloudConfig, () => CloudAuth);
     internal static AccountDevicesService AccountDevices = new(Http, () => CloudAuth);
-    internal static DeviceRegistryService DeviceRegistry = new(Http, () => CloudAuth, () => AccountDevices);
 
     internal static void ReloadCloud()
     {

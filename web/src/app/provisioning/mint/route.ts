@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { mintDeviceIdentity } from "@/server/deviceIdentity";
 import { unauthorizedJson, requireIdentity } from "@/server/http";
 import {
   normalizeBoardType,
@@ -26,19 +25,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
 
-  const privateKey = (process.env.EMWAVER_PROVISIONING_ROOT_PRIVATE_KEY_B64 || "").trim();
-  if (!privateKey) {
-    return NextResponse.json({ error: "not_configured" }, { status: 503 });
-  }
-
   try {
     const payload = await request.json().catch(() => null);
     const rawBoardType = String((payload as Record<string, unknown> | null)?.board_type || "").trim();
     const rawHardwareUid = String((payload as Record<string, unknown> | null)?.hardware_uid || "").trim();
-
-    if (!rawBoardType && !rawHardwareUid) {
-      return NextResponse.json(await mintDeviceIdentity(privateKey));
-    }
 
     const boardType = normalizeBoardType(rawBoardType);
     const hardwareUid = normalizeHardwareUid(rawHardwareUid);
@@ -50,18 +40,10 @@ export async function POST(request: NextRequest) {
     }
 
     const existing = provisionedDevicesStore.get(boardType, hardwareUid);
-    const minted = existing
-      ? {
-          device_id_b64: existing.device_id_b64,
-          proof_b64: existing.proof_b64,
-        }
-      : await mintDeviceIdentity(privateKey);
     const result = provisionedDevicesStore.claimOrRestore({
       boardType,
       hardwareUid,
       ownerFirebaseUid: identity.uid,
-      deviceIdB64: minted.device_id_b64,
-      proofB64: minted.proof_b64,
     });
 
     if ("error" in result) {
@@ -69,14 +51,12 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      device_id_b64: result.device.device_id_b64,
-      proof_b64: result.device.proof_b64,
-      algorithm: "ed25519",
-      device_id_len: 16,
-      proof_len: 64,
       board_type: result.device.board_type,
       hardware_uid: result.device.hardware_uid,
+      label: result.device.label,
+      owner_firebase_uid: result.device.owner_firebase_uid,
       created: result.created,
+      restored: Boolean(existing),
     });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });

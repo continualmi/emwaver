@@ -1,6 +1,5 @@
 import Foundation
 import Combine
-import CryptoKit
 #if canImport(AppKit)
 import AppKit
 #endif
@@ -9,14 +8,6 @@ import UniformTypeIdentifiers
 #endif
 
 final class FirmwareUpdateManager: ObservableObject {
-    struct VerificationResult {
-        let ok: Bool
-        let transport: String
-        let deviceIdB64: String?
-        let proofB64: String?
-        let details: [String]
-    }
-
     private struct EspSerialIdentity {
         let hardwareUidHex: String
         let macHex: String
@@ -24,9 +15,6 @@ final class FirmwareUpdateManager: ObservableObject {
         let featuresHex: String
         let cores: Int
     }
-
-    private var preservedIdentity: MacUSBManager.DeviceIdentity? = nil
-    private var identityToWriteAfterFlash: MacUSBManager.DeviceIdentity? = nil
 
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
@@ -42,7 +30,6 @@ final class FirmwareUpdateManager: ObservableObject {
     @Published var logLines: [String] = []
     @Published var firmwareSourceUsesCustom: Bool = false
     @Published var customFirmwarePath: String? = nil
-    @Published var lastVerification: VerificationResult? = nil
 
     private var dfuPollTimer: Timer? = nil
 
@@ -66,8 +53,6 @@ final class FirmwareUpdateManager: ObservableObject {
         updateDone = false
         progressPct = 0
         progressMessage = ""
-        preservedIdentity = nil
-        identityToWriteAfterFlash = nil
         completionMessage = "Update complete. Reconnect the device to use it."
         presentedBoardType = boardType
         isPresented = true
@@ -101,41 +86,12 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        // Gate: only secured devices can be updated.
-        // For run-mode devices we can use the already-verified secure connection state.
-        if device.isConnected && !device.isSecureConnected {
-            updateError = "Firmware update blocked: device is not secured."
-            appendLog(updateError ?? "Update blocked")
-            return
-        }
-
-        // Prefer preserving identity from Run mode (EMWaver opcode), because DFU_UPLOAD readback
-        // is flaky on macOS (Pipe error) and can prevent DFU identity reads.
-        if device.isConnected && device.isSecureConnected {
-            preservedIdentity = device.readDeviceIdentity(timeoutMs: 900)
-            identityToWriteAfterFlash = nil
-            if preservedIdentity == nil {
-                updateError = "Failed to read device identity in Run mode. Reconnect and retry."
-                appendLog(updateError ?? "Identity read failed")
-                return
-            }
-            appendLog("Run-mode identity captured for restore")
-        }
-
-        // If DFU is already present, try to gate on DFU identity page (if needed), then flash.
+        // If DFU is already present, just flash the managed firmware.
         if dfuConnected {
             do {
-                if preservedIdentity == nil {
-                    try gateOnDfuIdentityOrFail()
-                }
                 try runFlash()
             } catch {
-                let msg = String(describing: error)
-                if msg.contains("req=0x02") || msg.lowercased().contains("pipe error") {
-                    updateError = "macOS DFU readback failed (DFU_UPLOAD Pipe error). Connect the device in Run mode first, then click Update so we can preserve identity without DFU readback."
-                } else {
-                    updateError = msg
-                }
+                updateError = String(describing: error)
                 appendLog(updateError ?? "Update failed")
                 isFlashing = false
             }
@@ -144,9 +100,6 @@ final class FirmwareUpdateManager: ObservableObject {
 
         // Otherwise, ask the connected device to enter DFU.
         if device.isConnected {
-            // Note: identity preservation + gating happens via DFU page upload (not run-mode opcode).
-            preservedIdentity = nil
-
             progressMessage = "Switching device to Update Mode..."
             appendLog("Requesting Update Mode from Run Mode")
             device.requestEnterUpdateMode()
@@ -194,11 +147,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 }
 
                 self.progressMessage = "Preparing update..."
-                self.preservedIdentity = nil
-                self.identityToWriteAfterFlash = nil
                 do {
-                    try self.gateOnDfuIdentityOrFail()
-                    self.appendLog("DFU identity verified before update")
                     try self.runFlash()
                 } catch {
                     self.updateError = String(describing: error)
@@ -209,7 +158,7 @@ final class FirmwareUpdateManager: ObservableObject {
         }
     }
 
-    func startMintAndProvision(auth: AuthenticationManager, device: MacUSBManager) {
+    func startMintAndProvision(auth: AuthenticationManager, accountDevices: AccountDevicesService, device: MacUSBManager) {
         appendLog("Activation requested")
         updateError = nil
         updateDone = false
@@ -231,11 +180,6 @@ final class FirmwareUpdateManager: ObservableObject {
             appendLog(updateError ?? "Activation failed")
             return
         }
-        if device.isSecureConnected {
-            updateError = "Device is already secured. Use Update instead."
-            appendLog(updateError ?? "Activation skipped")
-            return
-        }
         if !device.isConnected && !dfuConnected {
             updateError = "Connect a device in Run mode or Update Mode to activate it."
             appendLog(updateError ?? "Activation failed")
@@ -248,17 +192,13 @@ final class FirmwareUpdateManager: ObservableObject {
         }
         let boardType = device.connectedBoardType ?? "stm32f042"
         if isEspBoardType(boardType) {
-            updateError = "ESP activation is not wired yet. ESP update now uses serial flashing, but identity provisioning/restore for ESP still needs a board-specific implementation."
+            updateError = "ESP activation is not wired through this STM32 flow. Use the ESP claim-and-flash path instead."
             appendLog(updateError ?? "Activation failed")
             return
         }
 
-        // Step 1: claim or restore an identity for this physical board using its hardware UID.
+        // Step 1: claim or restore access for this physical board using its hardware UID.
         struct MintResponse: Decodable {
-            let device_id_b64: String
-            let proof_b64: String
-            let board_type: String?
-            let hardware_uid: String?
             let created: Bool?
         }
 
@@ -288,17 +228,19 @@ final class FirmwareUpdateManager: ObservableObject {
                     throw NSError(domain: "FirmwareUpdateManager", code: code, userInfo: [NSLocalizedDescriptionKey: "Mint failed: \(msg)"])
                 }
                 let mint = try JSONDecoder().decode(MintResponse.self, from: data)
-                let mintedIdentity = try self.decodeIdentity(deviceIdB64: mint.device_id_b64, proofB64: mint.proof_b64)
                 await MainActor.run {
                     self.progressMessage = "Claiming device..."
+                    accountDevices.storeClaimedDevice(
+                        boardType: boardType,
+                        hardwareUid: hardwareUidHex
+                    )
                     self.appendLog((mint.created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded")
                     self.appendLog("Board type: \(boardType)")
                     self.appendLog("Hardware UID: \(hardwareUidHex)")
-                    self.appendLog("DeviceID: \(mint.device_id_b64.prefix(16))…")
-                    self.appendLog("Proof: \(mint.proof_b64.prefix(16))…")
+                    self.appendLog("Stored claimed device locally for immediate access")
                 }
 
-                // Step 2: enter DFU, flash bundled firmware, then write the minted identity page.
+                // Step 2: enter DFU and flash bundled firmware.
                 await MainActor.run {
                     self.progressMessage = "Switching device to Update Mode..."
                 }
@@ -316,10 +258,8 @@ final class FirmwareUpdateManager: ObservableObject {
                 }
 
                 await MainActor.run {
-                    self.preservedIdentity = nil
-                    self.identityToWriteAfterFlash = mintedIdentity
                     self.progressMessage = "Flashing EMWaver firmware..."
-                    self.appendLog("Provisioning in Update Mode")
+                    self.appendLog("Flashing in Update Mode")
                 }
 
                 try await MainActor.run {
@@ -390,8 +330,6 @@ final class FirmwareUpdateManager: ObservableObject {
                 }
 
                 struct MintResponse: Decodable {
-                    let device_id_b64: String
-                    let proof_b64: String
                     let created: Bool?
                 }
 
@@ -417,7 +355,6 @@ final class FirmwareUpdateManager: ObservableObject {
 
                 await MainActor.run {
                     accountDevices.storeClaimedDevice(
-                        deviceIdB64: mint.device_id_b64,
                         boardType: "esp32s3",
                         hardwareUid: hardwareUidHex
                     )
@@ -477,93 +414,6 @@ final class FirmwareUpdateManager: ObservableObject {
             return URL(fileURLWithPath: path).lastPathComponent
         }
         return "Bundled emwaver.bin"
-    }
-
-    func verifyRunModeIdentity(device: MacUSBManager) {
-        updateError = nil
-        guard device.isConnected else {
-            let msg = "Run Mode verification requires a connected device."
-            updateError = msg
-            appendLog(msg)
-            return
-        }
-        guard let pk = EmwaverRootKey.publicKey else {
-            let msg = "Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64)"
-            updateError = msg
-            appendLog(msg)
-            return
-        }
-        guard let ident = device.readDeviceIdentity(timeoutMs: 900) else {
-            let msg = "Failed to read identity via Run Mode opcode."
-            updateError = msg
-            appendLog(msg)
-            lastVerification = VerificationResult(
-                ok: false,
-                transport: "Run Mode",
-                deviceIdB64: nil,
-                proofB64: nil,
-                details: [
-                    "Method: Run Mode identity opcode (0x07) over USB MIDI",
-                    "Identity read failed"
-                ]
-            )
-            return
-        }
-
-        let ok = pk.isValidSignature(ident.proof, for: ident.deviceId)
-        let port = device.connectedPortName ?? "USB MIDI"
-        let result = VerificationResult(
-            ok: ok,
-            transport: "Run Mode (\(port))",
-            deviceIdB64: ident.deviceIdB64,
-            proofB64: ident.proofB64,
-            details: [
-                "Method: Run Mode identity opcode (0x07) over USB MIDI",
-                "MIDI port: \(port)",
-                "Proof check: Ed25519 verify(DeviceID, Proof) with Root Public Key"
-            ]
-        )
-        lastVerification = result
-        appendVerification(result)
-        if !ok {
-            updateError = "Device proof is invalid."
-        }
-    }
-
-    func verifyUpdateModeIdentity() {
-        updateError = nil
-        do {
-            let parsed = try readUpdateModeIdentity()
-            let result = VerificationResult(
-                ok: parsed.ok,
-                transport: "Update Mode",
-                deviceIdB64: parsed.identity?.deviceIdB64,
-                proofB64: parsed.identity?.proofB64,
-                details: [
-                    "Method: Update Mode identity page read (UPLOAD)",
-                    "Proof check: Ed25519 verify(DeviceID, Proof) with Root Public Key"
-                ]
-            )
-            lastVerification = result
-            appendVerification(result)
-            if !parsed.ok {
-                updateError = "Device identity proof is invalid."
-            }
-        } catch {
-            let msg = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            updateError = msg
-            appendLog("Update Mode verification failed: \(msg)")
-            lastVerification = VerificationResult(
-                ok: false,
-                transport: "Update Mode",
-                deviceIdB64: nil,
-                proofB64: nil,
-                details: [
-                    "Method: Update Mode identity page read (UPLOAD)",
-                    msg
-                ]
-            )
-        }
     }
 
     func refreshDfuPresence() {
@@ -989,58 +839,6 @@ final class FirmwareUpdateManager: ObservableObject {
         return (process.terminationStatus, stdoutStr, stderrStr)
     }
 
-    private func readUpdateModeIdentity() throws -> (identity: MacUSBManager.DeviceIdentity?, ok: Bool) {
-        guard let pk = EmwaverRootKey.publicKey else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 10, userInfo: [NSLocalizedDescriptionKey: "Missing Root public key (EMWAVER_ROOT_PUBLIC_KEY_B64)"])
-        }
-
-        let (code, stdout, stderr) = try runHelperAndWait(arguments: ["read-identity"])
-        if code != 0 {
-            let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw NSError(domain: "FirmwareUpdateManager", code: Int(code), userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Failed to read identity page via DFU" : msg])
-        }
-
-        func parseKey(_ key: String) -> String? {
-            for line in stdout.split(separator: "\n") {
-                if line.starts(with: "\(key)=") {
-                    return String(line.dropFirst(key.count + 1)).trimmingCharacters(in: .whitespacesAndNewlines)
-                }
-            }
-            return nil
-        }
-
-        guard let hasHeader = parseKey("HAS_HEADER"), hasHeader == "1" else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 11, userInfo: [NSLocalizedDescriptionKey: "Device is not secured (missing identity page)"])
-        }
-        guard let devB64 = parseKey("DEVICE_ID_B64"),
-              let proofB64 = parseKey("PROOF_B64") else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 12, userInfo: [NSLocalizedDescriptionKey: "Device identity page is malformed"])
-        }
-        let identity = try decodeIdentity(deviceIdB64: devB64, proofB64: proofB64)
-        return (identity, pk.isValidSignature(identity.proof, for: identity.deviceId))
-    }
-
-    private func gateOnDfuIdentityOrFail() throws {
-        let parsed = try readUpdateModeIdentity()
-        guard let identity = parsed.identity else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 12, userInfo: [NSLocalizedDescriptionKey: "Device identity page is malformed"])
-        }
-        if !parsed.ok {
-            throw NSError(domain: "FirmwareUpdateManager", code: 13, userInfo: [NSLocalizedDescriptionKey: "Device identity proof is invalid"])
-        }
-        preservedIdentity = identity
-    }
-
-    private func decodeIdentity(deviceIdB64: String, proofB64: String) throws -> MacUSBManager.DeviceIdentity {
-        guard let deviceId = Data(base64Encoded: deviceIdB64), deviceId.count == 16 else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 14, userInfo: [NSLocalizedDescriptionKey: "Backend returned an invalid DeviceID"])
-        }
-        guard let proof = Data(base64Encoded: proofB64), proof.count == 64 else {
-            throw NSError(domain: "FirmwareUpdateManager", code: 15, userInfo: [NSLocalizedDescriptionKey: "Backend returned an invalid Proof"])
-        }
-        return MacUSBManager.DeviceIdentity(deviceId: deviceId, proof: proof)
-    }
-
     private func waitForDfuPresence(timeoutSeconds: TimeInterval = 8.0) async throws {
         let deadline = Date().addingTimeInterval(timeoutSeconds)
         var lastErr: String? = nil
@@ -1125,32 +923,9 @@ final class FirmwareUpdateManager: ObservableObject {
 
                 let code = proc.terminationStatus
                 if code == 0 {
-                    // Restore or mint the identity page after DFU flash (ROM DFU mass erase wipes it).
-                    if let ident = self.identityToWriteAfterFlash ?? self.preservedIdentity {
-                        do {
-                            self.progressMessage = "Restoring device identity..."
-                            self.appendLog("Writing identity page")
-                            let (code3, _, stderr3) = try self.runHelperAndWait(arguments: [
-                                "write-identity",
-                                "--device-id-b64",
-                                ident.deviceIdB64,
-                                "--proof-b64",
-                                ident.proofB64
-                            ])
-                            if code3 != 0 {
-                                throw NSError(domain: "FirmwareUpdateManager", code: Int(code3), userInfo: [NSLocalizedDescriptionKey: stderr3])
-                            }
-                        } catch {
-                            self.updateError = "Firmware flashed, but failed to restore device identity: \(error)"
-                            self.appendLog(self.updateError ?? "Identity restore failed")
-                            return
-                        }
-                    }
-
                     self.progressPct = 100
                     self.updateDone = true
                     self.progressMessage = ""
-                    self.identityToWriteAfterFlash = nil
                     self.appendLog(self.completionMessage)
                 } else {
                     let err = String(data: self.flashStderrBuffer, encoding: .utf8) ?? ""
@@ -1211,19 +986,6 @@ final class FirmwareUpdateManager: ObservableObject {
         } else if lower.contains("erasing flash") {
             progressPct = max(progressPct, 2)
             progressMessage = "Erasing flash..."
-        }
-    }
-
-    private func appendVerification(_ result: VerificationResult) {
-        appendLog("Verify (\(result.transport)): \(result.ok ? "CERTIFIED" : "NOT CERTIFIED")")
-        for line in result.details {
-            appendLog(line)
-        }
-        if let id = result.deviceIdB64 {
-            appendLog("DeviceID: \(id.prefix(16))…")
-        }
-        if let proof = result.proofB64 {
-            appendLog("Proof: \(proof.prefix(16))…")
         }
     }
 

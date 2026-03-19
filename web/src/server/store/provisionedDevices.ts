@@ -3,8 +3,7 @@ import { readCollection, writeCollection } from "./jsonStore";
 export type ProvisionedDeviceRecord = {
   board_type: string;
   hardware_uid: string;
-  device_id_b64: string;
-  proof_b64: string;
+  label: string;
   owner_firebase_uid: string;
   created_at_ms: number;
   updated_at_ms: number;
@@ -50,8 +49,6 @@ class ProvisionedDevicesStore {
     boardType: string;
     hardwareUid: string;
     ownerFirebaseUid: string;
-    deviceIdB64: string;
-    proofB64: string;
   }) {
     const now = nowMs();
     const key = makeKey(input.boardType, input.hardwareUid);
@@ -74,8 +71,7 @@ class ProvisionedDevicesStore {
     const created: ProvisionedDeviceRecord = {
       board_type: input.boardType,
       hardware_uid: input.hardwareUid,
-      device_id_b64: input.deviceIdB64,
-      proof_b64: input.proofB64,
+      label: "",
       owner_firebase_uid: input.ownerFirebaseUid,
       created_at_ms: now,
       updated_at_ms: now,
@@ -84,6 +80,27 @@ class ProvisionedDevicesStore {
     this.rows.set(key, created);
     this.persist();
     return { device: created, created: true } as const;
+  }
+
+  hasUserDevice(firebaseUid: string) {
+    return [...this.rows.values()].some((row) => row.owner_firebase_uid === firebaseUid);
+  }
+
+  setLabel(boardType: string, hardwareUid: string, firebaseUid: string, label: string) {
+    const key = makeKey(boardType, hardwareUid);
+    const existing = this.rows.get(key);
+    if (!existing || existing.owner_firebase_uid !== firebaseUid) {
+      return null;
+    }
+
+    const next: ProvisionedDeviceRecord = {
+      ...existing,
+      label: label.slice(0, 128),
+      updated_at_ms: nowMs(),
+    };
+    this.rows.set(key, next);
+    this.persist();
+    return next;
   }
 }
 

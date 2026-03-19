@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
-import { devicesStore } from "@/server/store/devices";
+import { provisionedDevicesStore } from "@/server/store/provisionedDevices";
 import { societyStore } from "@/server/store/society";
 
 type Context = { params: Promise<{ postId: string }> };
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, context: Context) {
   if (post.locked) {
     return NextResponse.json({ error: "locked" }, { status: 403 });
   }
-  if (!devicesStore.hasUserDevice(identity.uid)) {
+  if (!provisionedDevicesStore.hasUserDevice(identity.uid)) {
     return NextResponse.json({ error: "device_required" }, { status: 403 });
   }
 

@@ -33,14 +33,8 @@ import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
-import com.emwaver.emwaverandroidapp.security.SecureIdentity;
-
-import android.util.Base64;
-
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.util.Arrays;
 import java.util.HashMap;
 
 public class USBService extends Service implements DeviceConnectionService {
@@ -77,10 +71,6 @@ public class USBService extends Service implements DeviceConnectionService {
 
     // Keep all-zero stream lanes while sampler stream mode is active.
     private volatile boolean isSamplerStreamingActive = false;
-
-    private volatile boolean secureConnected = false;
-    private volatile String secureDeviceIdB64 = null;
-    private volatile String secureDeviceProofB64 = null;
 
     private volatile String deviceFirmwareVersion = null;
 
@@ -328,8 +318,6 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
-            // Verify the signed device identity in Run mode to mark connection as secure.
-            verifySecureIdentityAsync();
             queryFirmwareVersionAsync();
         }, midiHandler);
     }
@@ -375,76 +363,6 @@ public class USBService extends Service implements DeviceConnectionService {
             sendCommand(new byte[]{0x06}, 900);
         } catch (Throwable ignored) {
         }
-    }
-
-    private void verifySecureIdentityAsync() {
-        // Run on MIDI handler thread to avoid blocking the main thread.
-        if (midiHandler == null) {
-            // Fallback: best-effort inline.
-            verifySecureIdentityOnce();
-            return;
-        }
-        midiHandler.post(this::verifySecureIdentityOnce);
-    }
-
-    private void verifySecureIdentityOnce() {
-        try {
-            if (!checkConnection()) {
-                secureConnected = false;
-                secureDeviceIdB64 = null;
-                secureDeviceProofB64 = null;
-                return;
-            }
-
-            DeviceIdentity ident = readDeviceIdentity(1800);
-            if (ident == null) {
-                secureConnected = false;
-                secureDeviceIdB64 = null;
-                secureDeviceProofB64 = null;
-                return;
-            }
-
-            boolean ok = SecureIdentity.verifyDeviceIdentity(ident.deviceId, ident.proof);
-            secureConnected = ok;
-            if (ok) {
-                secureDeviceIdB64 = Base64.encodeToString(ident.deviceId, Base64.NO_WRAP);
-                secureDeviceProofB64 = Base64.encodeToString(ident.proof, Base64.NO_WRAP);
-            } else {
-                secureDeviceIdB64 = null;
-                secureDeviceProofB64 = null;
-            }
-        } catch (Throwable t) {
-            secureConnected = false;
-            secureDeviceIdB64 = null;
-            secureDeviceProofB64 = null;
-        }
-    }
-
-    private static final class DeviceIdentity {
-        final byte[] deviceId;
-        final byte[] proof;
-        DeviceIdentity(byte[] deviceId, byte[] proof) {
-            this.deviceId = deviceId;
-            this.proof = proof;
-        }
-    }
-
-    private DeviceIdentity readDeviceIdentity(int timeoutMs) {
-        // EMW_OP_IDENTITY_GET (0x07)
-        byte[] devLane = sendCommand(new byte[]{0x07, 0x00, 0x00}, timeoutMs);
-        if (devLane == null || devLane.length < 18) return null;
-        if ((devLane[0] & 0xFF) != 0x80) return null;
-        byte[] deviceId = Arrays.copyOfRange(devLane, 1, 17);
-
-        byte[] proof = new byte[64];
-        for (int chunk = 0; chunk < 4; chunk++) {
-            byte[] lane = sendCommand(new byte[]{0x07, 0x01, (byte) chunk}, timeoutMs);
-            if (lane == null || lane.length < 18) return null;
-            if ((lane[0] & 0xFF) != 0x80) return null;
-            System.arraycopy(lane, 1, proof, chunk * 16, 16);
-        }
-
-        return new DeviceIdentity(deviceId, proof);
     }
 
     private void closeMidiLocked() {
@@ -615,11 +533,6 @@ public class USBService extends Service implements DeviceConnectionService {
         write(packet);
     }
 
-    
-    // Secure connection (genuine device identity verified via EMW_OP_IDENTITY_GET)
-    public boolean isSecureConnected() { return secureConnected; }
-    public String getSecureDeviceIdB64() { return secureDeviceIdB64; }
-    public String getSecureDeviceProofB64() { return secureDeviceProofB64; }
     public String getDeviceFirmwareVersion() { return deviceFirmwareVersion; }
 
 // DFU helpers

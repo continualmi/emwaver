@@ -2,24 +2,13 @@ import SwiftUI
 
 /// App-level settings hub.
 struct SettingsView: View {
-    @ObservedObject var device: MacUSBManager
     @Environment(\.dismiss) private var dismiss
-
-    @State private var suppressAttachPrompt: Bool = UserDefaults.standard.bool(forKey: "emwaver.deviceAttachPrompt.suppress")
 
     var body: some View {
         NavigationStack {
             Form {
-                Section("Account") {
-                    Toggle("Don't prompt to attach device on connect", isOn: $suppressAttachPrompt)
-                        .onChange(of: suppressAttachPrompt) { _, v in
-                            UserDefaults.standard.set(v, forKey: "emwaver.deviceAttachPrompt.suppress")
-                            if v {
-                                device.needsLoginToSaveDevice = false
-                            }
-                        }
-
-                    Text("You can still attach a device later from the Device panel.")
+                Section("Device access") {
+                    Text("Claimed-device access is keyed by board type and hardware UID.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -37,5 +26,5 @@ struct SettingsView: View {
 }
 
 #Preview {
-    SettingsView(device: MacUSBManager())
+    SettingsView()
 }

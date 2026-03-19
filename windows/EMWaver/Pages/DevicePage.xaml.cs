@@ -102,10 +102,10 @@ public sealed partial class DevicePage : Page
         BoardTypeText.Text = string.IsNullOrWhiteSpace(boardType) ? string.Empty : $"Board: {boardType}";
         HardwareUidText.Text = string.IsNullOrWhiteSpace(hardwareUid) ? string.Empty : $"Hardware UID: {hardwareUid}";
         SecureText.Text = device.IsConnected
-            ? (device.IsSecureConnected ? "Secure connection: OK" : "Secure connection: Not secured")
+            ? (currentDeviceIsRegistered ? "Claim status: Claimed" : "Claim status: Unclaimed")
             : string.Empty;
-        DeviceIdText.Text = !string.IsNullOrWhiteSpace(device.SecureDeviceIdHex) ? $"DeviceID: {device.SecureDeviceIdHex}" : string.Empty;
-        AttachStatusText.Text = device.DeviceAttachStatusText ?? string.Empty;
+        DeviceIdText.Text = string.Empty;
+        AttachStatusText.Text = string.Empty;
         ClaimStatusText.Text = BuildClaimStatusText(isEsp, currentDeviceIsRegistered, claimStatusResolved);
         OfflineStatusText.Text = accountDevices.IsOfflineMode
             ? (currentDeviceIsRegistered ? "This device is available in Offline Mode." : "This device needs online activation before it can be used in Offline Mode.")
@@ -113,13 +113,13 @@ public sealed partial class DevicePage : Page
         UpdateModeStatusText.Text = updater.EspBootloaderConnected
             ? $"ESP bootloader detected on {updater.EspBootloaderPort ?? "serial port"}."
             : ((updater.DfuConnected || device.DfuConnected) ? "STM32 Update Mode detected." : "Update Mode not detected.");
-        VerificationText.Text = updater.LastVerificationText;
+        VerificationText.Text = string.Empty;
         ErrorText.Text = updater.UpdateError ?? device.LastErrorText ?? accountDevices.LastError ?? string.Empty;
 
         FirmwareProgressBar.Value = updater.ProgressPct;
         FirmwareProgressText.Text = updater.IsFlashing
             ? $"{(string.IsNullOrWhiteSpace(updater.ProgressMessage) ? "Updating..." : updater.ProgressMessage)} ({(int)Math.Round(updater.ProgressPct)}%)"
-            : (updater.UpdateDone ? updater.CompletionMessage : "Open the firmware action to claim, verify, or update this device.");
+            : (updater.UpdateDone ? updater.CompletionMessage : "Open the firmware action to claim or update this device.");
         FirmwareStatusText.Text = isEsp
             ? "ESP32-S3 uses serial flashing on the flash-capable USB port."
             : "STM32 uses the managed DFU update flow.";

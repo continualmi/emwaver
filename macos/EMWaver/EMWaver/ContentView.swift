@@ -66,7 +66,7 @@ struct ContentView: View {
 
     private var scriptDeviceBridge: (any ScriptDevice)? {
         guard device.isConnected else { return nil }
-        guard device.isSecureConnected || deviceIsClaimed else { return nil }
+        guard deviceIsClaimed else { return nil }
         return device
     }
 
@@ -289,25 +289,11 @@ struct ContentView: View {
             .frame(minWidth: 560, minHeight: 520)
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView(device: device)
+            SettingsView()
         }
         .sheet(isPresented: $showingProUpgrade) {
             ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)
                 .environmentObject(auth)
-        }
-        .alert("Attach device to your account?", isPresented: $device.needsLoginToSaveDevice) {
-            Button("Sign In") {
-                auth.isSignInSheetPresented = true
-            }
-            Button("Don't ask again") {
-                UserDefaults.standard.set(true, forKey: "emwaver.deviceAttachPrompt.suppress")
-                device.needsLoginToSaveDevice = false
-            }
-            Button("Not now", role: .cancel) {
-                device.needsLoginToSaveDevice = false
-            }
-        } message: {
-            Text("This EMWaver device is genuine (signed identity verified). Signing in lets you attach it to your account for recovery/support. Cloud sync and other cloud features require EMWaver Pro. You can attach the device later from the Device panel.")
         }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.

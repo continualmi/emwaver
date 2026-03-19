@@ -136,7 +136,7 @@ Current reintegration status:
 - Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
-- macOS now allows an unsecured ESP32-S3 USB session to stay connected for local use and activation, instead of immediately disconnecting on missing `DeviceID + Proof`.
+- macOS now allows an ESP32-S3 USB session to stay connected for local use and activation, with claiming keyed by `board_type + hardware_uid`.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
 
 Planned EMWaver direction for ESP32:

@@ -19,9 +19,6 @@ internal sealed class AccountDevicesService : INotifyPropertyChanged
 {
     internal sealed record DeviceRecord
     {
-        [JsonPropertyName("device_id_b64")]
-        public string DeviceIdB64 { get; init; } = "";
-
         [JsonPropertyName("label")]
         public string Label { get; init; } = "";
 
@@ -168,7 +165,7 @@ internal sealed class AccountDevicesService : INotifyPropertyChanged
             Normalize(device.HardwareUid) == hardwareUidNorm);
     }
 
-    internal void StoreClaimedDevice(string deviceIdB64, string boardType, string hardwareUid)
+    internal void StoreClaimedDevice(string boardType, string hardwareUid)
     {
         RunOnUi(() =>
         {
@@ -179,16 +176,14 @@ internal sealed class AccountDevicesService : INotifyPropertyChanged
             int index = Devices
                 .Select((device, idx) => new { device, idx })
                 .Where(x =>
-                    string.Equals(x.device.DeviceIdB64, deviceIdB64, StringComparison.Ordinal) ||
-                    (Normalize(x.device.BoardType) == boardTypeNorm &&
-                     Normalize(x.device.HardwareUid) == hardwareUidNorm))
+                    Normalize(x.device.BoardType) == boardTypeNorm &&
+                    Normalize(x.device.HardwareUid) == hardwareUidNorm)
                 .Select(x => x.idx)
                 .DefaultIfEmpty(-1)
                 .First();
 
             var updated = new DeviceRecord
             {
-                DeviceIdB64 = deviceIdB64,
                 Label = "EMWaver device",
                 BoardType = boardType,
                 HardwareUid = hardwareUid,
@@ -316,8 +311,7 @@ internal sealed class AccountDevicesService : INotifyPropertyChanged
         {
             var localKey = RecordKey(localRecord);
             var index = merged.FindIndex(record =>
-                string.Equals(record.DeviceIdB64, localRecord.DeviceIdB64, StringComparison.Ordinal) ||
-                (!string.IsNullOrWhiteSpace(localKey) && string.Equals(RecordKey(record), localKey, StringComparison.Ordinal)));
+                !string.IsNullOrWhiteSpace(localKey) && string.Equals(RecordKey(record), localKey, StringComparison.Ordinal));
 
             if (index < 0)
             {

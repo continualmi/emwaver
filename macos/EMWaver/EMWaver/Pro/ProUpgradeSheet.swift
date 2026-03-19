@@ -68,7 +68,6 @@ struct ProUpgradeSheet: View {
                                 .foregroundStyle(.secondary)
                         }
 
-                        // Not sure where your attach UI will live; today DeviceRegistryService attaches automatically when signed in.
                         HStack(spacing: 10) {
                             Button("Get Pro…") {
                                 openProPurchase()

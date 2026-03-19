@@ -8,7 +8,6 @@ import Foundation
 import CoreMIDI
 import SwiftUI
 import os
-import CryptoKit
 
 struct SamplerLanePolicy {
     enum EmwOpcode {
@@ -93,12 +92,6 @@ final class USBManager: ObservableObject {
     @Published var availablePorts: [String] = []
     @Published var lastErrorText: String? = nil
     @Published var selfTestStatus: String = ""
-
-    // Secure connection (device authenticity)
-    @Published var isSecureConnected: Bool = false
-    @Published var secureDeviceIdHex: String? = nil
-    @Published var secureDeviceIdB64: String? = nil
-    @Published var secureDeviceProofB64: String? = nil
 
     // MARK: - MIDI plumbing
 
@@ -659,56 +652,6 @@ final class USBManager: ObservableObject {
         return out
     }
 
-    // MARK: - Secure connection (device authenticity)
-
-    private enum EmwOpcode {
-        static let identityGet: UInt8 = 0x07
-    }
-
-    struct DeviceIdentity {
-        let deviceId: Data
-        let proof: Data
-
-        var deviceIdB64: String { deviceId.base64EncodedString() }
-        var proofB64: String { proof.base64EncodedString() }
-    }
-
-    /// Read DeviceID (16B) and Proof (64B) using EMW_OP_IDENTITY_GET.
-    func readDeviceIdentity(timeoutMs: Int) -> DeviceIdentity? {
-        // Read DeviceID.
-        guard let devLane = sendCommandBestEffort(Data([EmwOpcode.identityGet, 0x00, 0x00]), timeout: timeoutMs) else { return nil }
-        guard devLane.count >= 17, devLane[0] == 0x80 else { return nil }
-        let deviceId = Data(devLane[1..<17])
-
-        // Read Proof in 4 chunks (16B each).
-        var proof = Data(capacity: 64)
-        for chunk in 0..<4 {
-            guard let lane = sendCommandBestEffort(Data([EmwOpcode.identityGet, 0x01, UInt8(chunk)]), timeout: timeoutMs) else { return nil }
-            guard lane.count >= 17, lane[0] == 0x80 else { return nil }
-            proof.append(contentsOf: lane[1..<17])
-        }
-        guard proof.count == 64 else { return nil }
-
-        return DeviceIdentity(deviceId: deviceId, proof: proof)
-    }
-
-    /// Verifies Proof = Sign_root(DeviceID) using the embedded Root public key.
-    private func verifySecureIdentity(timeoutMs: Int) -> Bool {
-        guard let pk = EmwaverRootKey.publicKey else { return false }
-        guard let ident = readDeviceIdentity(timeoutMs: timeoutMs) else { return false }
-
-        if pk.isValidSignature(ident.proof, for: ident.deviceId) {
-            DispatchQueue.main.async {
-                self.secureDeviceIdHex = ident.deviceId.map { String(format: "%02x", $0) }.joined()
-                self.secureDeviceIdB64 = ident.deviceIdB64
-                self.secureDeviceProofB64 = ident.proofB64
-            }
-            return true
-        }
-
-        return false
-    }
-
     // MARK: - Self-test (no adapter)
 
     func runVirtualLoopbackSelfTest() {
@@ -834,24 +777,6 @@ final class USBManager: ObservableObject {
             self.connectedPortName = chosen.name
             self.isConnected = true
             self.lastErrorText = nil
-            self.isSecureConnected = false
-            self.secureDeviceIdHex = nil
-            self.secureDeviceIdB64 = nil
-            self.secureDeviceProofB64 = nil
-        }
-
-        // Verify authenticity in the background.
-        // Do a couple of retries because CoreMIDI connection state / RX plumbing can settle slightly after the green dot flips.
-        DispatchQueue.global(qos: .userInitiated).async {
-            var ok = false
-            for attempt in 0..<3 {
-                if attempt > 0 { Thread.sleep(forTimeInterval: 0.25) }
-                ok = self.verifySecureIdentity(timeoutMs: 900)
-                if ok { break }
-            }
-            DispatchQueue.main.async {
-                self.isSecureConnected = ok
-            }
         }
     }
 
@@ -866,10 +791,6 @@ final class USBManager: ObservableObject {
         DispatchQueue.main.async {
             self.isConnected = false
             self.connectedPortName = nil
-            self.isSecureConnected = false
-            self.secureDeviceIdHex = nil
-            self.secureDeviceIdB64 = nil
-            self.secureDeviceProofB64 = nil
         }
     }
 
