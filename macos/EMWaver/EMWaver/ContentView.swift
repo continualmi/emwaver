@@ -38,7 +38,7 @@ struct ContentView: View {
 
     private var toolbarDeviceStatus: (icon: String, text: String) {
         if device.isConnected {
-            return ("cable.connector", device.connectedPortName ?? "Connected")
+            return ("cable.connector", currentBoardDisplayName)
         }
         if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame,
            firmwareUpdater.espBootloaderConnected {
@@ -58,6 +58,17 @@ struct ContentView: View {
 
     private var currentBoardType: String {
         device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var currentBoardDisplayName: String {
+        switch currentBoardType.lowercased() {
+        case "stm32f042":
+            return "STM32F042"
+        case "esp32s3":
+            return "ESP32-S3"
+        default:
+            return device.connectedPortName ?? "Connected"
+        }
     }
 
     private var deviceIsClaimed: Bool {
@@ -225,11 +236,6 @@ struct ContentView: View {
                             .frame(width: 14, alignment: .center)
 
                         Text(toolbarDeviceStatus.text)
-
-                        if device.isConnected, let v = device.deviceEmwaverVersion, !v.isEmpty {
-                            Text("EMWaver \(v)")
-                                .foregroundStyle(.secondary)
-                        }
                     }
                     .padding(.leading, 6)
                     .padding(.trailing, 2)

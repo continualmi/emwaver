@@ -2,7 +2,7 @@
 
 This folder contains the STM32 firmware source projects and helper scripts used to build/export firmware artifacts for EMWaver (a **Continual MI** project).
 
-The platform supports multiple MCU board targets. This workspace currently contains the STM32F042 firmware; additional board targets (e.g., STM32F103 BluePill) will be added as separate projects within this workspace.
+The platform supports multiple MCU board targets. This workspace currently contains the STM32F042 firmware; additional STM targets, if added in the future, should live as separate projects within this workspace.
 
 If you only read one thing first, read:
 - `emwaver-firmware/Core/Src/main.c` (runtime behavior + protocol handling)

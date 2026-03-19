@@ -22,7 +22,7 @@ EMWaver is a **software-first**, AI-first electronics platform by **Continual MI
 Core direction:
 - **Business model:** software-first — revenue from paid device minting, platform services (Pro), and AI usage. No dependency on selling hardware to launch or operate.
 - **Transport:** managed multi-transport platform. USB MIDI SysEx remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
-- **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board, STM32F103 BluePill, ESP32-S3 class devices). Users bring their own compatible board.
+- **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** agent-assisted workflows are first-class.
@@ -81,7 +81,7 @@ We intentionally give up:
 ### Supported boards
 
 - The platform supports multiple MCU targets. Each target needs a firmware implementation of the transport/runtime model appropriate to that board class, plus platform identity and managed update support.
-- Current/planned targets: STM32F042 (EMWaver board — coming soon), STM32F103 (BluePill), ESP32-S3 class targets.
+- Current/planned targets: STM32F042 (EMWaver board — coming soon) and ESP32-S3 class targets.
 - Adding a new supported board = porting firmware + adding its binary to the app bundle.
 - Users see a unified experience regardless of which board they use.
 

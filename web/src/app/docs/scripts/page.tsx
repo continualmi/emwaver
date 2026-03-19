@@ -69,7 +69,7 @@ render();`}</code>
       </p>
       <pre>
         <code className="language-javascript">{`const board = device.boardType();
-// "stm32f042", "stm32f103", "esp32s3", etc.
+// "stm32f042", "esp32s3", etc.
 
 if (board === "esp32s3") {
   // different pin assignments

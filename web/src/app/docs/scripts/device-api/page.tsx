@@ -110,7 +110,7 @@ Sampler.transmitBufferStart(bytes, {
       <h2>Device info</h2>
       <pre>
         <code className="language-javascript">{`device.version();    // firmware version, e.g. "1.0"
-device.boardType();  // "stm32f042", "stm32f103", "esp32s3"
+device.boardType();  // "stm32f042", "esp32s3"
 device.reset();      // reset the MCU`}</code>
       </pre>
     </>
