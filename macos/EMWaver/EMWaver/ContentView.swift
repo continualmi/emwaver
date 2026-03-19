@@ -31,6 +31,7 @@ struct ContentView: View {
 
     @State private var showingProUpgrade: Bool = false
     @State private var proFeatureName: String = ""
+    @State private var autoFirmwarePromptKey: String? = nil
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -62,6 +63,41 @@ struct ContentView: View {
     private var deviceIsClaimed: Bool {
         guard let hardwareUid = currentHardwareUidHex else { return false }
         return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
+    }
+
+    private var needsAutomaticFirmwareRecovery: Bool {
+        guard device.isConnected else { return false }
+        guard device.deviceEmwaverVersion != nil else { return false }
+        guard currentHardwareUidHex == nil else { return false }
+        guard device.hardwareUidUnsupportedByFirmware else { return false }
+        return currentBoardType.caseInsensitiveCompare("stm32f042") == .orderedSame
+    }
+
+    private var autoRecoveryKey: String? {
+        guard needsAutomaticFirmwareRecovery else { return nil }
+        let port = device.connectedPortName ?? "unknown"
+        let version = device.deviceEmwaverVersion ?? "unknown"
+        return "\(currentBoardType)|\(port)|\(version)"
+    }
+
+    private var shouldPromptForDfuFlash: Bool {
+        guard firmwareUpdater.dfuConnected else { return false }
+        guard !firmwareUpdater.isFlashing else { return false }
+        guard !firmwareUpdater.updateDone else { return false }
+        guard !firmwareUpdater.espBootloaderConnected else { return false }
+        guard firmwareUpdater.espBootloaderPort == nil else { return false }
+        return true
+    }
+
+    private var automaticFirmwarePromptKey: String? {
+        if let recoveryKey = autoRecoveryKey {
+            return "recovery|\(recoveryKey)"
+        }
+        if shouldPromptForDfuFlash {
+            let boardType = firmwareUpdater.presentedBoardType ?? currentBoardType
+            return "dfu|\(boardType)"
+        }
+        return nil
     }
 
     private var scriptDeviceBridge: (any ScriptDevice)? {
@@ -268,6 +304,11 @@ struct ContentView: View {
                 .environmentObject(auth)
                 .environmentObject(accountDevices)
         }
+        .sheet(isPresented: $firmwareUpdater.isPresented) {
+            FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
+                .environmentObject(auth)
+                .environmentObject(accountDevices)
+        }
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
                 HostsView(
@@ -299,23 +340,73 @@ struct ContentView: View {
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
             await entitlements.refresh(auth: auth, force: true)
+            firmwareUpdater.refreshDfuPresence()
+            syncConnectedDeviceAccessIfNeeded()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                triggerAutomaticFirmwarePromptIfNeeded()
+            }
         }
         .onChange(of: auth.isSignedIn) { _ in
             Task { await entitlements.refresh(auth: auth, force: true) }
+            syncConnectedDeviceAccessIfNeeded()
         }
         .onChange(of: device.hardwareUidHex) { _ in
             accountDevices.refresh(auth: auth)
+            syncConnectedDeviceAccessIfNeeded()
+            triggerAutomaticFirmwarePromptIfNeeded()
         }
         .onChange(of: device.lastDetectedHardwareUidHex) { _ in
             accountDevices.refresh(auth: auth)
+            syncConnectedDeviceAccessIfNeeded()
         }
         .onChange(of: device.connectedBoardType) { _ in
             accountDevices.refresh(auth: auth)
+            syncConnectedDeviceAccessIfNeeded()
+            triggerAutomaticFirmwarePromptIfNeeded()
         }
         .onChange(of: device.lastDetectedBoardType) { _ in
             accountDevices.refresh(auth: auth)
+            syncConnectedDeviceAccessIfNeeded()
+        }
+        .onChange(of: device.isConnected) { connected in
+            if !connected && !firmwareUpdater.dfuConnected {
+                autoFirmwarePromptKey = nil
+            }
+            syncConnectedDeviceAccessIfNeeded()
+            triggerAutomaticFirmwarePromptIfNeeded()
+        }
+        .onChange(of: device.deviceEmwaverVersion) { _ in
+            triggerAutomaticFirmwarePromptIfNeeded()
+        }
+        .onChange(of: device.hardwareUidUnsupportedByFirmware) { _ in
+            triggerAutomaticFirmwarePromptIfNeeded()
+        }
+        .onChange(of: firmwareUpdater.dfuConnected) { connected in
+            if !connected {
+                autoFirmwarePromptKey = nil
+            }
+            triggerAutomaticFirmwarePromptIfNeeded()
+        }
+        .onChange(of: firmwareUpdater.updateDone) { done in
+            if !done {
+                triggerAutomaticFirmwarePromptIfNeeded()
+            }
         }
 
+    }
+
+    private func syncConnectedDeviceAccessIfNeeded() {
+        guard device.isConnected else { return }
+        guard let hardwareUid = currentHardwareUidHex else { return }
+        accountDevices.syncSeenDevice(boardType: currentBoardType, hardwareUid: hardwareUid, auth: auth)
+    }
+
+    private func triggerAutomaticFirmwarePromptIfNeeded() {
+        guard let key = automaticFirmwarePromptKey else { return }
+        guard autoFirmwarePromptKey != key else { return }
+
+        autoFirmwarePromptKey = key
+        firmwareUpdater.present(boardType: currentBoardType)
     }
 }
 

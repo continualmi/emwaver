@@ -14,6 +14,13 @@ function nowMs() {
   return Date.now();
 }
 
+function canonicalHardwareUid(boardType: string, hardwareUid: string) {
+  if (boardType === "esp32s3" && hardwareUid.length >= 12) {
+    return hardwareUid.slice(0, 12);
+  }
+  return hardwareUid;
+}
+
 function makeKey(boardType: string, hardwareUid: string) {
   return `${boardType}:${hardwareUid}`;
 }
@@ -27,16 +34,65 @@ export function normalizeHardwareUid(value: string) {
 }
 
 class ProvisionedDevicesStore {
-  private readonly rows = new Map<string, ProvisionedDeviceRecord>(
-    Object.entries(readCollection<Record<string, ProvisionedDeviceRecord>>("provisioned_devices", {})),
-  );
+  private readonly rows: Map<string, ProvisionedDeviceRecord>;
+
+  constructor() {
+    const raw = readCollection<Record<string, ProvisionedDeviceRecord>>("provisioned_devices", {});
+    const normalized = new Map<string, ProvisionedDeviceRecord>();
+    let changed = false;
+
+    for (const row of Object.values(raw)) {
+      const boardType = normalizeBoardType(row.board_type);
+      const hardwareUid = canonicalHardwareUid(boardType, normalizeHardwareUid(row.hardware_uid));
+      const key = makeKey(boardType, hardwareUid);
+      const next: ProvisionedDeviceRecord = {
+        board_type: boardType,
+        hardware_uid: hardwareUid,
+        label: row.label || "",
+        owner_firebase_uid: row.owner_firebase_uid,
+        created_at_ms: row.created_at_ms,
+        updated_at_ms: row.updated_at_ms,
+        last_seen_at_ms: row.last_seen_at_ms,
+      };
+      const existing = normalized.get(key);
+
+      if (!existing) {
+        normalized.set(key, next);
+      } else {
+        normalized.set(key, {
+          ...existing,
+          label: existing.label || next.label,
+          created_at_ms: Math.min(existing.created_at_ms, next.created_at_ms),
+          updated_at_ms: Math.max(existing.updated_at_ms, next.updated_at_ms),
+          last_seen_at_ms: Math.max(existing.last_seen_at_ms, next.last_seen_at_ms),
+        });
+        changed = true;
+      }
+
+      if (
+        row.board_type !== boardType ||
+        row.hardware_uid !== hardwareUid ||
+        "device_id_b64" in (row as Record<string, unknown>) ||
+        "proof_b64" in (row as Record<string, unknown>)
+      ) {
+        changed = true;
+      }
+    }
+
+    this.rows = normalized;
+    if (changed) {
+      this.persist();
+    }
+  }
 
   private persist() {
     writeCollection("provisioned_devices", Object.fromEntries(this.rows.entries()));
   }
 
   get(boardType: string, hardwareUid: string) {
-    return this.rows.get(makeKey(boardType, hardwareUid)) || null;
+    const normalizedBoardType = normalizeBoardType(boardType);
+    const normalizedHardwareUid = canonicalHardwareUid(normalizedBoardType, normalizeHardwareUid(hardwareUid));
+    return this.rows.get(makeKey(normalizedBoardType, normalizedHardwareUid)) || null;
   }
 
   listByUser(firebaseUid: string) {
@@ -51,7 +107,9 @@ class ProvisionedDevicesStore {
     ownerFirebaseUid: string;
   }) {
     const now = nowMs();
-    const key = makeKey(input.boardType, input.hardwareUid);
+    const boardType = normalizeBoardType(input.boardType);
+    const hardwareUid = canonicalHardwareUid(boardType, normalizeHardwareUid(input.hardwareUid));
+    const key = makeKey(boardType, hardwareUid);
     const existing = this.rows.get(key);
 
     if (existing) {
@@ -59,7 +117,11 @@ class ProvisionedDevicesStore {
         return { error: "device_owned_by_another_user" } as const;
       }
       const next: ProvisionedDeviceRecord = {
-        ...existing,
+        board_type: existing.board_type,
+        hardware_uid: existing.hardware_uid,
+        label: existing.label,
+        owner_firebase_uid: existing.owner_firebase_uid,
+        created_at_ms: existing.created_at_ms,
         updated_at_ms: now,
         last_seen_at_ms: now,
       };
@@ -69,8 +131,8 @@ class ProvisionedDevicesStore {
     }
 
     const created: ProvisionedDeviceRecord = {
-      board_type: input.boardType,
-      hardware_uid: input.hardwareUid,
+      board_type: boardType,
+      hardware_uid: hardwareUid,
       label: "",
       owner_firebase_uid: input.ownerFirebaseUid,
       created_at_ms: now,
@@ -87,16 +149,22 @@ class ProvisionedDevicesStore {
   }
 
   setLabel(boardType: string, hardwareUid: string, firebaseUid: string, label: string) {
-    const key = makeKey(boardType, hardwareUid);
+    const normalizedBoardType = normalizeBoardType(boardType);
+    const normalizedHardwareUid = canonicalHardwareUid(normalizedBoardType, normalizeHardwareUid(hardwareUid));
+    const key = makeKey(normalizedBoardType, normalizedHardwareUid);
     const existing = this.rows.get(key);
     if (!existing || existing.owner_firebase_uid !== firebaseUid) {
       return null;
     }
 
     const next: ProvisionedDeviceRecord = {
-      ...existing,
+      board_type: existing.board_type,
+      hardware_uid: existing.hardware_uid,
       label: label.slice(0, 128),
+      owner_firebase_uid: existing.owner_firebase_uid,
+      created_at_ms: existing.created_at_ms,
       updated_at_ms: nowMs(),
+      last_seen_at_ms: existing.last_seen_at_ms,
     };
     this.rows.set(key, next);
     this.persist();

@@ -69,6 +69,7 @@ final class FirmwareUpdateManager: ObservableObject {
         progressPct = 0
         progressMessage = "Preparing update..."
         completionMessage = "Update complete. Reconnect the device to use it."
+        presentedBoardType = effectiveBoardType(for: device)
 
         if isFlashing {
             return
@@ -87,11 +88,15 @@ final class FirmwareUpdateManager: ObservableObject {
         }
 
         // If DFU is already present, just flash the managed firmware.
-        if dfuConnected {
+        let dfuAvailableNow = dfuConnected || detectDfuConnectedNow()
+        if dfuAvailableNow {
+            dfuConnected = true
+            appendLog("Update Mode confirmed; starting flash")
             do {
                 try runFlash()
             } catch {
                 updateError = String(describing: error)
+                dfuConnected = detectDfuConnectedNow()
                 appendLog(updateError ?? "Update failed")
                 isFlashing = false
             }
@@ -105,7 +110,9 @@ final class FirmwareUpdateManager: ObservableObject {
             device.requestEnterUpdateMode()
             device.disconnect()
         } else {
-            updateError = "Connect a device in Run mode, then retry the update."
+            dfuConnected = false
+            progressMessage = ""
+            updateError = "Update Mode is not detected. Reconnect the device in Update Mode, then try again."
             appendLog(updateError ?? "Update failed")
             return
         }
@@ -868,6 +875,15 @@ final class FirmwareUpdateManager: ObservableObject {
         )
     }
 
+    private func detectDfuConnectedNow() -> Bool {
+        do {
+            let (code, _, _) = try runHelperAndWait(arguments: ["is-connected"])
+            return code == 0
+        } catch {
+            return false
+        }
+    }
+
     private func runFlash() throws {
         if flashProcess != nil {
             return
@@ -880,8 +896,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         let process = Process()
         process.executableURL = try helperURL()
-        // DFU_UPLOAD verification is flaky on macOS (Pipe error). Disable temporarily.
-        process.arguments = ["flash", "--firmware", fw.path, "--no-verify"]
+        process.arguments = ["flash", "--firmware", fw.path]
 
         let stdout = Pipe()
         let stderr = Pipe()

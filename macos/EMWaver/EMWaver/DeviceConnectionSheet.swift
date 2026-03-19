@@ -29,7 +29,9 @@ struct DeviceConnectionSheet: View {
             items.append("EMWaver \(version)")
         }
         if device.isConnected {
-            if currentDeviceIsRegistered {
+            if needsFirmwareInstall {
+                items.append("Needs firmware")
+            } else if currentDeviceIsRegistered {
                 items.append(auth.isSignedIn ? "Claimed" : "Cached")
             } else if !currentDeviceClaimStatusResolved {
                 items.append("Checking")
@@ -85,35 +87,12 @@ struct DeviceConnectionSheet: View {
         currentBoardType.caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
-    private var showsEspFirmwareFlow: Bool {
-        isEspBoard || firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
-    }
-
-    private var canRunFirmwareAction: Bool {
-        if firmwareUpdater.isFlashing {
-            return false
-        }
-        if !currentDeviceClaimStatusResolved {
-            return false
-        }
-        if showsEspFirmwareFlow {
-            let bootloaderReady = firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil
-            return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && auth.isSignedIn)
-        }
-        if currentDeviceIsRegistered {
-            return device.isConnected || firmwareUpdater.dfuConnected
-        }
-        return device.isConnected && auth.isSignedIn
-    }
-
-    private var firmwareActionTitle: String {
-        if !currentDeviceClaimStatusResolved {
-            return "Checking device"
-        }
-        if currentDeviceIsRegistered {
-            return showsEspFirmwareFlow ? "Flash firmware" : "Update firmware"
-        }
-        return showsEspFirmwareFlow ? "Claim and flash" : "Claim device"
+    private var needsFirmwareInstall: Bool {
+        device.isConnected &&
+        device.deviceEmwaverVersion != nil &&
+        currentHardwareUidHex == nil &&
+        device.hardwareUidUnsupportedByFirmware &&
+        !isEspBoard
     }
 
     var body: some View {
@@ -122,7 +101,6 @@ struct DeviceConnectionSheet: View {
                 header
                 overviewCard
                 devicesSection
-                firmwareSection
             }
             .padding(24)
         }
@@ -240,113 +218,10 @@ struct DeviceConnectionSheet: View {
         }
     }
 
-    private var firmwareSection: some View {
-        detailSection(title: "Firmware") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    Button(firmwareActionTitle) {
-                        runFirmwareAction()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(!canRunFirmwareAction)
-
-                    if device.isConnected {
-                        Button("Enter Update Mode") {
-                            if showsEspFirmwareFlow {
-                                firmwareUpdater.refreshDfuPresence()
-                            } else {
-                                device.requestEnterUpdateMode()
-                                device.disconnect()
-                                firmwareUpdater.refreshDfuPresence()
-                            }
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-
-                Text(showsEspFirmwareFlow ? espFlashStatusText : espStatusText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if showsEspFirmwareFlow {
-                    Text("For ESP32-S3 flashing: hold BOOT, press and release RESET, then release BOOT. Click Refresh if the bootloader port does not appear yet.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Button("Refresh") {
-                        firmwareUpdater.refreshDfuPresence()
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(firmwareUpdater.isFlashing)
-                }
-
-                if !currentDeviceIsRegistered && currentDeviceClaimStatusResolved {
-                    Text("Claim attaches this physical board to your account using its board type and hardware UID. The same step also flashes managed EMWaver firmware. Unclaimed boards cannot be used by normal scripts.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    if !auth.isSignedIn {
-                        Button("Sign In") {
-                            auth.isSignInSheetPresented = true
-                        }
-                        .buttonStyle(.bordered)
-                    }
-                }
-
-                if let err = firmwareUpdater.updateError, !err.isEmpty {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
-                        .padding(12)
-                        .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.12)))
-                }
-
-                if firmwareUpdater.isFlashing {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text(firmwareUpdater.progressMessage.isEmpty ? "Working..." : firmwareUpdater.progressMessage)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(Int(firmwareUpdater.progressPct.rounded()))%")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        ProgressView(value: firmwareUpdater.progressPct, total: 100)
-                            .progressViewStyle(.linear)
-                    }
-                }
-
-                if !firmwareUpdater.logLines.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Recent activity")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Button("Clear") {
-                                firmwareUpdater.clearLogs()
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(firmwareUpdater.isFlashing)
-                        }
-
-                        Text(firmwareUpdater.logLines.suffix(4).joined(separator: "\n"))
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                            .textSelection(.enabled)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(RoundedRectangle(cornerRadius: 10).fill(Color.secondary.opacity(0.08)))
-                    }
-                }
-            }
-        }
-    }
-
     private var deviceStatusText: String {
+        if needsFirmwareInstall {
+            return "This device is running firmware that does not expose a hardware UID yet. Install managed EMWaver firmware before claiming it."
+        }
         if currentDeviceIsRegistered {
             if !auth.isSignedIn {
                 return "This device matches a locally cached device record. Sign in to confirm which account it belongs to."
@@ -366,20 +241,6 @@ struct DeviceConnectionSheet: View {
             return "This device is connected, but it is not claimed in your account yet."
         }
         return "This device is connected, but it is not claimed yet. Sign in to set it up."
-    }
-
-    private var espFlashStatusText: String {
-        if !currentDeviceClaimStatusResolved {
-            return "Checking whether this ESP32-S3 is already claimed before offering setup actions."
-        }
-        if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
-            return currentDeviceIsRegistered
-                ? "Bootloader detected on \(port). Ready to flash."
-                : "Bootloader detected on \(port). Ready to claim and flash this board."
-        }
-        return currentDeviceIsRegistered
-            ? "ESP32-S3 firmware flashing uses the board's serial or flash-capable USB connection."
-            : "Set up will claim this ESP32-S3 into your account and flash EMWaver firmware."
     }
 
     private var devicesIntroText: String {
@@ -426,35 +287,4 @@ struct DeviceConnectionSheet: View {
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.secondary.opacity(0.06)))
         }
     }
-
-    private var espStatusText: String {
-        if !isEspBoard {
-            return firmwareUpdater.dfuConnected ? "Update Mode detected." : "Update Mode not detected."
-        }
-        if firmwareUpdater.espBootloaderConnected {
-            if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
-                return "ESP bootloader detected on \(port)."
-            }
-            return "ESP bootloader detected."
-        }
-        return "ESP bootloader not detected. Put the board in BOOT/RESET mode on the serial flashing port."
-    }
-
-    private func runFirmwareAction() {
-        if showsEspFirmwareFlow {
-            if currentDeviceIsRegistered {
-                firmwareUpdater.startUpdate(device: device)
-            } else {
-                firmwareUpdater.startEspClaimAndFlash(auth: auth, accountDevices: accountDevices, device: device)
-            }
-            return
-        }
-
-        if currentDeviceIsRegistered {
-            firmwareUpdater.startUpdate(device: device)
-        } else {
-            firmwareUpdater.startMintAndProvision(auth: auth, accountDevices: accountDevices, device: device)
-        }
-    }
-
 }

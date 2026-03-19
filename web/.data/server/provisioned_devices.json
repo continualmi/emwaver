@@ -38,5 +38,13 @@
     "created_at_ms": 1773494954240,
     "updated_at_ms": 1773494954240,
     "last_seen_at_ms": 1773494954240
+  },
+  "stm32f042:2B002E000843565537353020": {
+    "board_type": "stm32f042",
+    "hardware_uid": "2B002E000843565537353020",
+    "owner_firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "created_at_ms": 1773923676380,
+    "updated_at_ms": 1773923676380,
+    "last_seen_at_ms": 1773923676380
   }
 }

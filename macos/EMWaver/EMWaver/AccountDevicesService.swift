@@ -72,6 +72,7 @@ final class AccountDevicesService: ObservableObject {
     private let monitorQueue = DispatchQueue(label: "com.emwaver.macos.accountDevices.path")
     private var cancellables: Set<AnyCancellable> = []
     private var refreshTask: Task<Void, Never>?
+    private var seenSyncTasks: [String: Task<Void, Never>] = [:]
 
     @Published private(set) var devices: [DeviceRecord] = []
     @Published private(set) var isOfflineMode: Bool = false
@@ -177,6 +178,53 @@ final class AccountDevicesService: ObservableObject {
             return false
         }
         return hasLoadedOnce
+    }
+
+    func syncSeenDevice(boardType: String, hardwareUid: String, auth: AuthenticationManager) {
+        let normalizedBoardType = boardType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let normalizedUid = normalized(hardwareUid)
+        guard !normalizedBoardType.isEmpty, !normalizedUid.isEmpty else { return }
+        guard !isOfflineMode else { return }
+        guard let session = auth.session, !session.idToken.isEmpty else { return }
+        guard let base = BackendUrl.resolve() else { return }
+        guard !hasOfflineAccess(boardType: normalizedBoardType, hardwareUid: normalizedUid) else { return }
+
+        let key = "\(normalizedBoardType):\(normalizedUid):\(session.uid)"
+        guard seenSyncTasks[key] == nil else { return }
+
+        seenSyncTasks[key] = Task { [weak self] in
+            defer {
+                Task { @MainActor [weak self] in
+                    self?.seenSyncTasks[key] = nil
+                }
+            }
+
+            do {
+                var url = base
+                url.appendPathComponent("v1")
+                url.appendPathComponent("devices")
+                url.appendPathComponent("seen")
+
+                var req = URLRequest(url: url)
+                req.httpMethod = "POST"
+                req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.httpBody = try JSONSerialization.data(withJSONObject: [
+                    "board_type": normalizedBoardType,
+                    "hardware_uid": normalizedUid,
+                ])
+
+                let (_, res) = try await URLSession.shared.data(for: req)
+                let code = (res as? HTTPURLResponse)?.statusCode ?? -1
+                guard code >= 200 && code < 300 else { return }
+
+                await MainActor.run {
+                    self?.storeClaimedDevice(boardType: normalizedBoardType, hardwareUid: normalizedUid)
+                }
+            } catch {
+                // Keep auto-restore silent; manual refresh will surface broader account errors.
+            }
+        }
     }
 
     private func performRefresh(auth: AuthenticationManager) async {

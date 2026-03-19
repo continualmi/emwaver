@@ -71,20 +71,7 @@ def _feature_mask_for_chip(esp: object) -> int:
 
 def _hardware_uid_hex_for_chip(esp: object) -> str:
     mac = tuple(int(x) & 0xFF for x in esp.read_mac("BASE_MAC"))
-    revision = int(esp.get_chip_revision()) & 0xFF
-    cores = int(getattr(esp, "CHIP_CORES", 2)) & 0xFF
-    features = _feature_mask_for_chip(esp) & 0xFFFF
-
-    uid = bytes([
-        *mac,
-        CHIP_ESP32S3,
-        revision,
-        features & 0xFF,
-        (features >> 8) & 0xFF,
-        cores,
-        0x53,
-    ])
-    return uid.hex().upper()
+    return bytes(mac).hex().upper()
 
 
 def cmd_read_identity(args: argparse.Namespace) -> int:
