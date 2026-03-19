@@ -133,17 +133,18 @@ final class AccountDevicesService: ObservableObject {
 
     func storeClaimedDevice(boardType: String, hardwareUid: String) {
         let normalizedUid = normalized(hardwareUid)
+        let normalizedBoardType = boardType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         if let index = devices.firstIndex(where: {
-            $0.boardType?.caseInsensitiveCompare(boardType) == .orderedSame &&
+            $0.boardType?.caseInsensitiveCompare(normalizedBoardType) == .orderedSame &&
             normalized($0.hardwareUid) == normalizedUid
         }) {
             let existing = devices[index]
             devices[index] = DeviceRecord(
                 label: existing.label.isEmpty ? "EMWaver device" : existing.label,
-                boardType: boardType,
-                hardwareUid: hardwareUid,
+                boardType: normalizedBoardType,
+                hardwareUid: normalizedUid,
                 createdAtMs: existing.createdAtMs,
                 updatedAtMs: nowMs,
                 lastSeenAtMs: nowMs
@@ -152,8 +153,8 @@ final class AccountDevicesService: ObservableObject {
             devices.insert(
                 DeviceRecord(
                     label: "EMWaver device",
-                    boardType: boardType,
-                    hardwareUid: hardwareUid,
+                    boardType: normalizedBoardType,
+                    hardwareUid: normalizedUid,
                     createdAtMs: nowMs,
                     updatedAtMs: nowMs,
                     lastSeenAtMs: nowMs
@@ -162,6 +163,7 @@ final class AccountDevicesService: ObservableObject {
             )
         }
 
+        devices = dedupeDevices(devices)
         persistCache()
         lastSyncAt = Date()
         hasLoadedOnce = true
@@ -268,7 +270,7 @@ final class AccountDevicesService: ObservableObject {
             }
 
             let decoded = try JSONDecoder().decode(DevicesResponse.self, from: data)
-            devices = mergeBackendDevices(decoded.devices, preserving: devices)
+            devices = dedupeDevices(decoded.devices)
             persistCache()
             lastSyncAt = Date()
             lastError = nil
@@ -290,12 +292,13 @@ final class AccountDevicesService: ObservableObject {
             hasLoadedOnce = true
             return
         }
-        devices = decoded
+        devices = dedupeDevices(decoded)
+        persistCache()
         hasLoadedOnce = true
     }
 
     private func mergeBackendDevices(_ backend: [DeviceRecord], preserving local: [DeviceRecord]) -> [DeviceRecord] {
-        var merged = backend
+        var merged = dedupeDevices(backend)
 
         for localRecord in local {
             guard let localKey = recordKey(for: localRecord) else {
@@ -324,6 +327,49 @@ final class AccountDevicesService: ObservableObject {
         }
 
         return merged.sorted {
+            if $0.lastSeenAtMs != $1.lastSeenAtMs {
+                return $0.lastSeenAtMs > $1.lastSeenAtMs
+            }
+            return $0.updatedAtMs > $1.updatedAtMs
+        }
+    }
+
+    private func dedupeDevices(_ input: [DeviceRecord]) -> [DeviceRecord] {
+        var deduped: [String: DeviceRecord] = [:]
+        var anonymous: [DeviceRecord] = []
+
+        for record in input {
+            guard let key = recordKey(for: record) else {
+                if !anonymous.contains(where: { $0.label == record.label && $0.lastSeenAtMs == record.lastSeenAtMs }) {
+                    anonymous.append(record)
+                }
+                continue
+            }
+
+            let normalizedRecord = DeviceRecord(
+                label: record.label.isEmpty ? "EMWaver device" : record.label,
+                boardType: record.boardType?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                hardwareUid: normalized(record.hardwareUid),
+                createdAtMs: record.createdAtMs,
+                updatedAtMs: record.updatedAtMs,
+                lastSeenAtMs: record.lastSeenAtMs
+            )
+
+            if let existing = deduped[key] {
+                deduped[key] = DeviceRecord(
+                    label: existing.label.isEmpty ? normalizedRecord.label : existing.label,
+                    boardType: existing.boardType ?? normalizedRecord.boardType,
+                    hardwareUid: existing.hardwareUid ?? normalizedRecord.hardwareUid,
+                    createdAtMs: min(existing.createdAtMs, normalizedRecord.createdAtMs),
+                    updatedAtMs: max(existing.updatedAtMs, normalizedRecord.updatedAtMs),
+                    lastSeenAtMs: max(existing.lastSeenAtMs, normalizedRecord.lastSeenAtMs)
+                )
+            } else {
+                deduped[key] = normalizedRecord
+            }
+        }
+
+        return (Array(deduped.values) + anonymous).sorted {
             if $0.lastSeenAtMs != $1.lastSeenAtMs {
                 return $0.lastSeenAtMs > $1.lastSeenAtMs
             }

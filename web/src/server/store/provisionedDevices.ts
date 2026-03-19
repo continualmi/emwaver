@@ -25,6 +25,16 @@ function makeKey(boardType: string, hardwareUid: string) {
   return `${boardType}:${hardwareUid}`;
 }
 
+function mergeRows(existing: ProvisionedDeviceRecord, next: ProvisionedDeviceRecord): ProvisionedDeviceRecord {
+  return {
+    ...existing,
+    label: existing.label || next.label,
+    created_at_ms: Math.min(existing.created_at_ms, next.created_at_ms),
+    updated_at_ms: Math.max(existing.updated_at_ms, next.updated_at_ms),
+    last_seen_at_ms: Math.max(existing.last_seen_at_ms, next.last_seen_at_ms),
+  };
+}
+
 export function normalizeBoardType(value: string) {
   return value.trim().toLowerCase();
 }
@@ -59,13 +69,7 @@ class ProvisionedDevicesStore {
       if (!existing) {
         normalized.set(key, next);
       } else {
-        normalized.set(key, {
-          ...existing,
-          label: existing.label || next.label,
-          created_at_ms: Math.min(existing.created_at_ms, next.created_at_ms),
-          updated_at_ms: Math.max(existing.updated_at_ms, next.updated_at_ms),
-          last_seen_at_ms: Math.max(existing.last_seen_at_ms, next.last_seen_at_ms),
-        });
+        normalized.set(key, mergeRows(existing, next));
         changed = true;
       }
 
@@ -96,9 +100,20 @@ class ProvisionedDevicesStore {
   }
 
   listByUser(firebaseUid: string) {
-    return [...this.rows.values()]
-      .filter((row) => row.owner_firebase_uid === firebaseUid)
-      .sort((a, b) => b.created_at_ms - a.created_at_ms);
+    const deduped = new Map<string, ProvisionedDeviceRecord>();
+    for (const row of this.rows.values()) {
+      if (row.owner_firebase_uid !== firebaseUid) continue;
+      const key = makeKey(row.board_type, canonicalHardwareUid(row.board_type, row.hardware_uid));
+      const existing = deduped.get(key);
+      deduped.set(key, existing ? mergeRows(existing, row) : row);
+    }
+
+    return [...deduped.values()].sort((a, b) => {
+      if (a.last_seen_at_ms !== b.last_seen_at_ms) {
+        return b.last_seen_at_ms - a.last_seen_at_ms;
+      }
+      return b.created_at_ms - a.created_at_ms;
+    });
   }
 
   claimOrRestore(input: {
