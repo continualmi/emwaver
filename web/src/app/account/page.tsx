@@ -15,7 +15,8 @@ type Entitlements = {
 };
 
 type Device = {
-  device_id_b64: string;
+  board_type: string;
+  hardware_uid: string;
   label?: string;
   created_at_ms?: number;
   updated_at_ms?: number;
@@ -45,10 +46,10 @@ async function openProPortal(idToken: string): Promise<string> {
   return String(json.url || "");
 }
 
-async function setDeviceLabel(idToken: string, deviceIdB64: string, label: string) {
+async function setDeviceLabel(idToken: string, boardType: string, hardwareUid: string, label: string) {
   const res = await backendFetch("/v1/devices/label", idToken, {
     method: "POST",
-    body: JSON.stringify({ device_id_b64: deviceIdB64, label }),
+    body: JSON.stringify({ board_type: boardType, hardware_uid: hardwareUid, label }),
   });
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
@@ -225,11 +226,13 @@ export default function AccountPage() {
               ) : (
                 <ul className="mt-4 space-y-3">
                   {devices.map((d) => (
-                    <li key={d.device_id_b64} className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+                    <li key={`${d.board_type}:${d.hardware_uid}`} className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0">
-                          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Identifier</div>
-                          <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{d.device_id_b64}</div>
+                          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Board type</div>
+                          <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{d.board_type}</div>
+                          <div className="mt-3 text-xs font-semibold text-[color:var(--ink-dim)]">Hardware UID</div>
+                          <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{d.hardware_uid}</div>
                           <div className="mt-3 text-xs font-semibold text-[color:var(--ink-dim)]">Label</div>
                           <input
                             defaultValue={d.label || ""}
@@ -239,7 +242,7 @@ export default function AccountPage() {
                               const next = String(e.target.value || "").trim();
                               void (async () => {
                                 try {
-                                  await setDeviceLabel(idToken, d.device_id_b64, next);
+                                  await setDeviceLabel(idToken, d.board_type, d.hardware_uid, next);
                                   await refresh();
                                 } catch (err: any) {
                                   setError(String(err?.message || err));

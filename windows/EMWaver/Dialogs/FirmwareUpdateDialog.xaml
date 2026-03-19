@@ -22,8 +22,6 @@
 
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button x:Name="RefreshStateButton" Content="Refresh" Click="OnRefreshStateClick" />
-                <Button x:Name="VerifyRunModeButton" Content="Verify Run Mode" Click="OnVerifyRunModeClick" />
-                <Button x:Name="VerifyUpdateModeButton" Content="Verify Update Mode" Click="OnVerifyUpdateModeClick" />
                 <Button x:Name="OpenAccountButton" Content="Open account" Click="OnOpenAccountClick" />
             </StackPanel>
 
@@ -46,7 +44,6 @@
                     <TextBlock x:Name="ProgressPctText" Grid.Column="1" Text="0%" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                 </Grid>
                 <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="100" Value="0" />
-                <TextBlock x:Name="VerificationText" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
             </StackPanel>
 
             <Border x:Name="DonePanel"

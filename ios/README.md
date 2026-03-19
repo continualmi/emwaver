@@ -58,13 +58,6 @@ Responsibilities:
 - remote host control view,
 - cloud/host sheets.
 
-## 2.4 Security
-
-`ios/EMWaver/Security/EmwaverRootKey.swift`:
-- root key usage for authenticity-related verification paths.
-
----
-
 ## 3) Bundled firmware assets
 
 - `ios/EMWaver/firmware/emwaver.bin`

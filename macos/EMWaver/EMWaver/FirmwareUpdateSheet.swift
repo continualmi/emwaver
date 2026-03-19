@@ -9,10 +9,6 @@ struct FirmwareUpdateSheet: View {
     @State private var updateModeRequested: Bool = false
     @State private var showActivityLog: Bool = false
 
-    private var isSecureWorkflow: Bool {
-        device.isSecureConnected
-    }
-
     private var currentHardwareUidHex: String? {
         let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
         guard let value, !value.isEmpty else { return nil }
@@ -56,10 +52,7 @@ struct FirmwareUpdateSheet: View {
             let bootloaderReady = updater.espBootloaderConnected || updater.espBootloaderPort != nil
             return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && auth.isSignedIn)
         }
-        if !isSecureWorkflow {
-            return device.isConnected && auth.isSignedIn
-        }
-        return device.isConnected || updater.dfuConnected
+        return currentDeviceIsRegistered ? (device.isConnected || updater.dfuConnected) : (device.isConnected && auth.isSignedIn)
     }
 
     var body: some View {
@@ -181,11 +174,11 @@ struct FirmwareUpdateSheet: View {
     private var defaultBody: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top) {
+                HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text(isSecureWorkflow ? "Update EMWaver" : "Set Up EMWaver")
+                    Text(currentDeviceIsRegistered ? "Update EMWaver" : "Set Up EMWaver")
                         .font(.title3.weight(.semibold))
-                    Text(isSecureWorkflow
+                    Text(currentDeviceIsRegistered
                          ? "Update your device to the latest EMWaver version."
                          : "Flash bundled firmware and finish device setup.")
                         .font(.subheadline)
@@ -200,7 +193,7 @@ struct FirmwareUpdateSheet: View {
 
             if device.isConnected, !updater.updateDone {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text(device.isSecureConnected ? "Device connected (Secure)." : "Device connected (Not secure).")
+                    Text(currentDeviceIsRegistered ? "Device connected (Claimed)." : "Device connected (Unclaimed).")
                         .font(.subheadline.weight(.semibold))
 
                     if let v = device.deviceEmwaverVersion, !v.isEmpty {
@@ -213,7 +206,7 @@ struct FirmwareUpdateSheet: View {
                         Text("ESP32-S3 updates use serial flashing. Put the board into bootloader mode manually before starting the update.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    } else if device.isSecureConnected {
+                    } else if currentDeviceIsRegistered {
                         Text("To update: EMWaver will switch the device into Update Mode automatically (no switch needed).")
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -238,37 +231,6 @@ struct FirmwareUpdateSheet: View {
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.secondary.opacity(0.08))
                 )
-            }
-
-            GroupBox("Verification") {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Run authenticity checks in both Run Mode and Update Mode.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    HStack {
-                        Button("Verify in Run Mode") {
-                            updater.verifyRunModeIdentity(device: device)
-                        }
-                        .disabled(!device.isConnected || updater.isFlashing)
-
-                        Button("Verify in Update Mode") {
-                            updater.verifyUpdateModeIdentity()
-                        }
-                        .disabled(isEspWorkflow || !updater.dfuConnected || updater.isFlashing)
-                    }
-
-                    if let verification = updater.lastVerification {
-                        Text(verification.ok ? "Certified original EMWaver device." : "Device is not certified.")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(verification.ok ? Color.green : Color.red)
-
-                        Text(verification.transport)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding(.vertical, 4)
             }
 
             if isEspWorkflow && !updater.updateDone {
@@ -296,11 +258,11 @@ struct FirmwareUpdateSheet: View {
                         }
                         .disabled(updater.isFlashing)
 
-                        Button(isSecureWorkflow ? "Update device" : "Set up device") {
-                            if isSecureWorkflow {
+                        Button(currentDeviceIsRegistered ? "Update device" : "Set up device") {
+                            if currentDeviceIsRegistered {
                                 updater.startUpdate(device: device)
                             } else {
-                                updater.startMintAndProvision(auth: auth, device: device)
+                                updater.startMintAndProvision(auth: auth, accountDevices: accountDevices, device: device)
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -398,7 +360,7 @@ struct FirmwareUpdateSheet: View {
             GroupBox("Activity log") {
                 VStack(alignment: .leading, spacing: 8) {
                     HStack {
-                        Text("Latest setup, update, and verification details.")
+                        Text("Latest setup and update details.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Spacer()
@@ -441,11 +403,11 @@ struct FirmwareUpdateSheet: View {
             HStack {
                 Spacer()
                 if !updater.updateDone {
-                    Button(isSecureWorkflow ? "Update device" : "Set up device") {
-                        if isSecureWorkflow {
+                    Button(currentDeviceIsRegistered ? "Update device" : "Set up device") {
+                        if currentDeviceIsRegistered {
                             updater.startUpdate(device: device)
                         } else {
-                            updater.startMintAndProvision(auth: auth, device: device)
+                            updater.startMintAndProvision(auth: auth, accountDevices: accountDevices, device: device)
                         }
                     }
                     .disabled(!canStartPrimaryAction)

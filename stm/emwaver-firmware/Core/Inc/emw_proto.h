@@ -25,12 +25,6 @@
 // Enter ROM DFU update mode (STM32F042: implemented by erasing initial flash pages then reset).
 #define EMW_OP_ENTER_DFU 0x06u
 
-// Device identity
-// Reads provisioned DeviceID/Proof from flash.
-#define EMW_OP_IDENTITY_GET 0x07u
-#define EMW_IDENTITY_DEVICE_ID 0x00u
-#define EMW_IDENTITY_PROOF     0x01u
-
 // Hardware UID
 // Reads the MCU factory-programmed 96-bit unique ID.
 #define EMW_OP_HARDWARE_UID_GET 0x08u

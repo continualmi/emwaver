@@ -56,7 +56,6 @@ public sealed partial class MainWindow : Window
         // Remote control host WS (web can attach + drive scripts/UI).
         AppServices.RemoteControlHost.Start();
         AppServices.AccountDevices.Start();
-        AppServices.DeviceRegistry.Start(AppServices.Device);
 
         // Initial UI state.
         RunOnUi(() =>
