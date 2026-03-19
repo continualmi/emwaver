@@ -110,7 +110,6 @@
   --plot-text:       rgba(26, 29, 38, 0.50);
 
   /* ── Misc ── */
-  --banner-shadow:   rgba(217, 152, 41, 0.12);
   --destructive-text: #dc2f4e;
   --mobile-drawer-shadow: rgba(0, 0, 0, 0.12);
 }
@@ -219,7 +218,6 @@
     --plot-text:       rgba(255, 255, 255, 0.6);
 
     /* ── Misc ── */
-    --banner-shadow:   rgba(251, 191, 36, 0.15);
     --destructive-text: rgb(251, 113, 133);
     --mobile-drawer-shadow: rgba(0, 0, 0, 0.5);
   }
@@ -429,10 +427,10 @@ body {
 
 .docs-mobile-drawer {
   position: fixed;
-  top: 117px;
+  top: 69px;
   left: 0;
   width: 280px;
-  height: calc(100vh - 117px);
+  height: calc(100vh - 69px);
   background: var(--paper);
   border-right: 1px solid var(--line);
   z-index: 100;
@@ -448,10 +446,10 @@ body {
   .docs-sidebar-desktop {
     display: block;
     position: fixed;
-    top: 117px;
+    top: 69px;
     left: 0;
     width: 250px;
-    height: calc(100vh - 117px);
+    height: calc(100vh - 69px);
     background: color-mix(in srgb, var(--paper) 92%, transparent);
     border-right: 1px solid var(--line);
     z-index: 50;
