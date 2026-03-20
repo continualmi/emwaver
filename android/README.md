@@ -85,9 +85,14 @@ Use the appropriate connected device/emulator setup (USB host behavior testing n
 ## 6) Guardrails
 
 1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model).
-2. Keep firmware asset paths stable unless coordinated across tooling and update flows.
-3. Keep app-level dialogs/resources synced with underlying feature availability.
-4. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
+2. Keep Android USB discovery aligned with both STM32 and ESP32-S3 EMWaver runtime descriptors; do not hard-code STM32-only identity assumptions in the runtime path.
+3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
+4. Keep app-level dialogs/resources synced with underlying feature availability.
+5. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
+
+Current Android board split:
+- STM32 runtime uses USB MIDI SysEx and can enter the DFU-based update flow.
+- ESP32-S3 runtime now shares the same USB MIDI SysEx connection path, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
 
 ---
 

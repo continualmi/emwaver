@@ -37,6 +37,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Locale;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -48,6 +49,9 @@ public class USBService extends Service implements DeviceConnectionService {
     // STM32 firmware descriptors (stm/emwaver-firmware/USB_DEVICE/App/usbd_desc.c)
     private static final int EMW_USB_VENDOR_ID = 1155;   // 0x0483
     private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
+    private static final int EMW_OP_VERSION = 0x01;
+    private static final int EMW_OP_ENTER_DFU = 0x06;
+    private static final int EMW_OP_BOARD_GET = 0x09;
 
     // Sampler opcodes.
     private static final int EMW_OP_SAMPLE = 0x60;
@@ -74,6 +78,8 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile boolean isSamplerStreamingActive = false;
 
     private volatile String deviceFirmwareVersion = null;
+    private volatile String connectedBoardType = null;
+    private volatile UsbDevice connectedMidiUsbDevice = null;
 
     // SysEx receive accumulator (raw MIDI bytes)
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
@@ -190,11 +196,72 @@ public class USBService extends Service implements DeviceConnectionService {
         UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
-            if (device.getVendorId() == EMW_USB_VENDOR_ID && device.getProductId() == EMW_USB_PRODUCT_ID) {
+            if (isSupportedEmwaverRuntimeDevice(device)) {
                 return device;
             }
         }
         return null;
+    }
+
+    private boolean isSupportedEmwaverRuntimeDevice(@Nullable UsbDevice device) {
+        if (device == null) {
+            return false;
+        }
+        if (device.getVendorId() == EMW_USB_VENDOR_ID && device.getProductId() == EMW_USB_PRODUCT_ID) {
+            return true;
+        }
+
+        String manufacturer = lower(device.getManufacturerName());
+        String product = lower(device.getProductName());
+
+        if (product.contains("emwaver")) {
+            return true;
+        }
+        if (manufacturer.contains("emwaver")) {
+            return true;
+        }
+        if ((manufacturer.contains("espressif") || product.contains("esp32") || product.contains("esp32-s3") || product.contains("s3"))
+                && usbDeviceLooksLikeMidi(device)) {
+            return true;
+        }
+        return false;
+    }
+
+    private boolean usbDeviceLooksLikeMidi(@Nullable UsbDevice device) {
+        if (device == null) {
+            return false;
+        }
+        for (int i = 0; i < device.getInterfaceCount(); i++) {
+            android.hardware.usb.UsbInterface iface = device.getInterface(i);
+            if (iface == null) {
+                continue;
+            }
+            if (iface.getInterfaceClass() == 1 && iface.getInterfaceSubclass() == 3) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String lower(@Nullable String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.US);
+    }
+
+    private String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
+        String hint = lower(boardTypeHint);
+        if (!hint.isEmpty()) {
+            return hint;
+        }
+
+        String product = lower(device != null ? device.getProductName() : null);
+        String manufacturer = lower(device != null ? device.getManufacturerName() : null);
+        if (product.contains("esp32") || product.contains("esp32-s3") || product.contains("s3")) {
+            return "esp32s3";
+        }
+        if (manufacturer.contains("espressif")) {
+            return "esp32s3";
+        }
+        return "stm32f042";
     }
 
     public void checkForConnectedDevices() {
@@ -312,6 +379,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 midiDevice = device;
+                connectedMidiUsbDevice = usbDevice;
                 midiIn = midiDevice.openInputPort(0);
                 midiOut = midiDevice.openOutputPort(0);
                 if (midiOut != null) {
@@ -337,23 +405,47 @@ public class USBService extends Service implements DeviceConnectionService {
         try {
             if (!checkConnection()) {
                 deviceFirmwareVersion = null;
+                connectedBoardType = null;
                 return;
             }
             // EMW_OP_VERSION (0x01). Response: [0x80, major, minor, ...]
-            byte[] lane = sendCommand(new byte[]{0x01}, 900);
+            byte[] lane = sendCommand(new byte[]{(byte) EMW_OP_VERSION}, 900);
             if (lane == null || lane.length < 3) {
                 deviceFirmwareVersion = null;
-                return;
-            }
-            if ((lane[0] & 0xFF) != 0x80) {
+            } else if ((lane[0] & 0xFF) != 0x80) {
                 deviceFirmwareVersion = null;
-                return;
+            } else {
+                int major = lane[1] & 0xFF;
+                int minor = lane[2] & 0xFF;
+                deviceFirmwareVersion = major + "." + minor;
             }
-            int major = lane[1] & 0xFF;
-            int minor = lane[2] & 0xFF;
-            deviceFirmwareVersion = major + "." + minor;
+            connectedBoardType = inferBoardType(connectedMidiUsbDevice, queryBoardTypeHint());
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
+            connectedBoardType = inferBoardType(connectedMidiUsbDevice, null);
+        }
+    }
+
+    @Nullable
+    private String queryBoardTypeHint() {
+        try {
+            byte[] lane = sendCommand(new byte[]{(byte) EMW_OP_BOARD_GET}, 900);
+            if (lane == null || lane.length < 2) {
+                return null;
+            }
+            if ((lane[0] & 0xFF) != 0x80) {
+                return null;
+            }
+            int end = 1;
+            while (end < lane.length && lane[end] != 0) {
+                end++;
+            }
+            if (end <= 1) {
+                return null;
+            }
+            return new String(lane, 1, end - 1).trim();
+        } catch (Throwable ignored) {
+            return null;
         }
     }
 
@@ -361,7 +453,7 @@ public class USBService extends Service implements DeviceConnectionService {
         // Only valid in Run mode.
         try {
             // EMW_OP_ENTER_DFU (0x06)
-            sendCommand(new byte[]{0x06}, 900);
+            sendCommand(new byte[]{(byte) EMW_OP_ENTER_DFU}, 900);
         } catch (Throwable ignored) {
         }
     }
@@ -388,6 +480,9 @@ public class USBService extends Service implements DeviceConnectionService {
         midiOut = null;
         midiIn = null;
         midiDevice = null;
+        connectedMidiUsbDevice = null;
+        connectedBoardType = null;
+        deviceFirmwareVersion = null;
         isSamplerStreamingActive = false;
     }
 
@@ -535,6 +630,8 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     public String getDeviceFirmwareVersion() { return deviceFirmwareVersion; }
+
+    public String getConnectedBoardType() { return connectedBoardType; }
 
 // DFU helpers
 

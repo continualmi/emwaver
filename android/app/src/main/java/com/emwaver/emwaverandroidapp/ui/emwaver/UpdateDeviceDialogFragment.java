@@ -38,6 +38,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -71,6 +72,14 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
 
     private final Pattern pctPattern = Pattern.compile("\\((\\d+)%\\)\\s*$");
     private int lastPct = 0;
+
+    private boolean isEspBoardConnected() {
+        return usbService != null && Objects.equals("esp32s3", normalizeBoardType(usbService.getConnectedBoardType()));
+    }
+
+    private String normalizeBoardType(@Nullable String boardType) {
+        return boardType == null ? "" : boardType.trim().toLowerCase(Locale.US);
+    }
 
     @Nullable
     @Override
@@ -183,7 +192,12 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         boolean dfuReady = dfuDevicePresent && hasPermission;
-        boolean canEnterUpdate = runConnected && !dfuDevicePresent;
+        boolean espBoardConnected = isEspBoardConnected();
+        boolean canEnterUpdate = runConnected && !dfuDevicePresent && !espBoardConnected;
+
+        if (espBoardConnected && !isFlashing && !updateDone) {
+            showError("ESP32-S3 flashing is not wired on Android yet. The runtime USB path now connects, but firmware updates still need the ESP-native flow on macOS.");
+        }
 
         if (instructionsCard != null) {
             instructionsCard.setVisibility((!dfuReady && !updateDone) ? View.VISIBLE : View.GONE);
@@ -200,7 +214,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         if (updateButton != null) {
-            updateButton.setEnabled(dfuReady && !isFlashing);
+            updateButton.setEnabled(dfuReady && !espBoardConnected && !isFlashing);
         }
         if (closeButton != null) {
             closeButton.setEnabled(!isFlashing);
@@ -216,6 +230,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         boolean connected = mgr.isConnected();
         if (!connected) {
             showError("Connect a device first.");
+            return;
+        }
+        if (isEspBoardConnected()) {
+            showError("ESP32-S3 does not support the STM32 DFU flow on Android. Use the ESP flashing path on macOS for now.");
             return;
         }
 
@@ -241,6 +259,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
 
         if (usbService == null || dfu == null) {
             showError("USB Service not available");
+            return;
+        }
+        if (isEspBoardConnected()) {
+            showError("ESP32-S3 flashing is not available on Android yet. Use the ESP flashing path on macOS for now.");
             return;
         }
         if (!usbService.isFlashDeviceConnected() || !usbService.hasUsbPermission()) {
