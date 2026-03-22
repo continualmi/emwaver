@@ -1,6 +1,5 @@
 import Image from "next/image";
 import Link from "next/link";
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import {
   getCurrentBoards,
@@ -232,7 +231,6 @@ export default function BuildPage() {
         )}
       </main>
 
-      <SiteFooter />
     </div>
   );
 }
