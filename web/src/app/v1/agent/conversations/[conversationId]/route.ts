@@ -20,20 +20,13 @@ export async function PATCH(request: NextRequest, context: Context) {
     return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
   }
 
-  const updates: { title?: string | null; agent_type?: "llm" | "elm" } = {};
+  const updates: { title?: string | null } = {};
   if (payload && "title" in payload) {
     const titleRaw = (payload as Record<string, unknown>).title;
     if (titleRaw != null && typeof titleRaw !== "string") {
       return NextResponse.json({ error: "Invalid 'title'" }, { status: 400 });
     }
     updates.title = typeof titleRaw === "string" && titleRaw.trim() ? titleRaw.trim() : null;
-  }
-  if (payload && "agent_type" in payload) {
-    const agentType = String((payload as Record<string, unknown>).agent_type || "").trim().toLowerCase();
-    if (agentType !== "llm" && agentType !== "elm") {
-      return NextResponse.json({ error: "Invalid 'agent_type'" }, { status: 400 });
-    }
-    updates.agent_type = agentType;
   }
 
   return NextResponse.json({ conversation: agentStore.updateConversation(conversationId, updates) });

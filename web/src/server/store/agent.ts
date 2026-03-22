@@ -6,7 +6,6 @@ export type AgentConversationRecord = {
   id: string;
   firebase_uid: string;
   title: string | null;
-  agent_type: "llm" | "elm";
   created_at_ms: number;
   updated_at_ms: number;
 };
@@ -43,13 +42,12 @@ class AgentStore {
       .sort((a, b) => b.updated_at_ms - a.updated_at_ms);
   }
 
-  createConversation(firebaseUid: string, title: string | null, agentType: "llm" | "elm") {
+  createConversation(firebaseUid: string, title: string | null) {
     const now = nowMs();
     const conversation: AgentConversationRecord = {
       id: randomUUID(),
       firebase_uid: firebaseUid,
       title,
-      agent_type: agentType,
       created_at_ms: now,
       updated_at_ms: now,
     };
@@ -62,11 +60,10 @@ class AgentStore {
     return this.conversations.get(id) || null;
   }
 
-  updateConversation(id: string, updates: Partial<Pick<AgentConversationRecord, "title" | "agent_type">>) {
+  updateConversation(id: string, updates: Partial<Pick<AgentConversationRecord, "title">>) {
     const conversation = this.conversations.get(id);
     if (!conversation) return null;
     if ("title" in updates) conversation.title = updates.title ?? null;
-    if (updates.agent_type) conversation.agent_type = updates.agent_type;
     conversation.updated_at_ms = nowMs();
     this.conversations.set(id, conversation);
     this.persist();

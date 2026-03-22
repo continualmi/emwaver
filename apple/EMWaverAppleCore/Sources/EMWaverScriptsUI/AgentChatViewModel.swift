@@ -7,83 +7,6 @@
 import Foundation
 import os
 
-private enum JSONValue: Codable, Equatable {
-    case string(String)
-    case number(Double)
-    case bool(Bool)
-    case object([String: JSONValue])
-    case array([JSONValue])
-    case null
-
-    init(from decoder: Decoder) throws {
-        let c = try decoder.singleValueContainer()
-        if c.decodeNil() {
-            self = .null
-        } else if let v = try? c.decode(Bool.self) {
-            self = .bool(v)
-        } else if let v = try? c.decode(Double.self) {
-            self = .number(v)
-        } else if let v = try? c.decode(String.self) {
-            self = .string(v)
-        } else if let v = try? c.decode([String: JSONValue].self) {
-            self = .object(v)
-        } else if let v = try? c.decode([JSONValue].self) {
-            self = .array(v)
-        } else {
-            throw DecodingError.dataCorruptedError(in: c, debugDescription: "Unsupported JSONValue")
-        }
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var c = encoder.singleValueContainer()
-        switch self {
-        case .string(let v): try c.encode(v)
-        case .number(let v): try c.encode(v)
-        case .bool(let v): try c.encode(v)
-        case .object(let v): try c.encode(v)
-        case .array(let v): try c.encode(v)
-        case .null: try c.encodeNil()
-        }
-    }
-
-    var any: Any {
-        switch self {
-        case .string(let v): return v
-        case .number(let v): return v
-        case .bool(let v): return v
-        case .object(let v): return v.mapValues { $0.any }
-        case .array(let v): return v.map { $0.any }
-        case .null: return NSNull()
-        }
-    }
-
-    static func from(any: Any) -> JSONValue? {
-        switch any {
-        case let v as String:
-            return .string(v)
-        case let v as NSNumber:
-            let type = String(cString: v.objCType)
-            if type == "c" {
-                return .bool(v.boolValue)
-            }
-            return .number(v.doubleValue)
-        case let v as [String: Any]:
-            var out: [String: JSONValue] = [:]
-            for (k, value) in v {
-                guard let mapped = JSONValue.from(any: value) else { continue }
-                out[k] = mapped
-            }
-            return .object(out)
-        case let v as [Any]:
-            return .array(v.compactMap { JSONValue.from(any: $0) })
-        case _ as NSNull:
-            return .null
-        default:
-            return nil
-        }
-    }
-}
-
 @MainActor
 public final class AgentChatViewModel: ObservableObject {
     private static let log = OSLog(subsystem: "com.emwaver", category: "AgentChat")
@@ -95,20 +18,6 @@ public final class AgentChatViewModel: ObservableObject {
         case chatgptCodex = "chatgpt_codex"
         case openrouter = "openrouter"
     }
-
-    public enum AgentMode: String, Codable, CaseIterable {
-        case llm
-        case elm
-    }
-
-    public static let allowedCodexModelIds: [String] = [
-        "gpt-5.1-codex-max",
-        "gpt-5.1-codex-mini",
-        "gpt-5.1-codex",
-        "gpt-5.2",
-        "gpt-5.2-codex",
-        "gpt-5.3-codex",
-    ]
 
     public static let allowedOpenRouterModelIds: [String] = [
         "qwen/qwen3-coder-next",
@@ -124,39 +33,9 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var draft: String = ""
     @Published public var isSending: Bool = false
     @Published public var lastError: String?
-    @Published public var mode: AgentMode = .llm {
-        didSet {
-            guard !isRestoringModeState else { return }
-            applyModeToSelectedConversation()
-            if mode == .elm {
-                ensureCodexForElmMode()
-            }
-            persistElmPreferences()
-            restartElmTickLoopIfNeeded()
-        }
-    }
-    @Published public var elmTickActive: Bool = false {
-        didSet {
-            guard !isRestoringModeState else { return }
-            persistElmPreferences()
-            restartElmTickLoopIfNeeded()
-        }
-    }
-    @Published public var elmTickPeriodSeconds: Int = 10 {
-        didSet {
-            if elmTickPeriodSeconds < 1 { elmTickPeriodSeconds = 1 }
-            if elmTickPeriodSeconds > 3600 { elmTickPeriodSeconds = 3600 }
-            guard !isRestoringModeState else { return }
-            persistElmPreferences()
-            restartElmTickLoopIfNeeded()
-        }
-    }
-    @Published public private(set) var elmDebugTurns: [ElmDebugTurn] = []
 
     private var assistantPlaceholderId: UUID?
     private var toolBubbleMessageIdByCallId: [String: UUID] = [:]
-    private var elmTickTask: Task<Void, Never>?
-    private var isRestoringModeState = false
 
     public let host: AgentHost
 
@@ -170,59 +49,12 @@ public final class AgentChatViewModel: ObservableObject {
 
     private let conversationsKey = "emwaver.agent.local.conversations.v1"
     private let selectedConversationKey = "emwaver.agent.local.selected_conversation_id"
-    private let preferredModelKey = "emwaver.agent.local.preferred_model_id"
     private let preferredProviderKey = "emwaver.agent.local.preferred_provider_id"
-    private let preferredCodexModelKey = "emwaver.agent.local.preferred_model_id.codex"
     private let preferredOpenRouterModelKey = "emwaver.agent.local.preferred_model_id.openrouter"
-    private let modeKey = "emwaver.agent.local.mode"
-    private let elmTickActiveKey = "emwaver.agent.local.elm_tick_active"
-    private let elmTickPeriodSecondsKey = "emwaver.agent.local.elm_tick_period_seconds"
-    private let elmStateKey = "emwaver.agent.local.elm_state"
-
-    private struct ElmSymbolEntry: Codable, Equatable {
-        var id: String
-        var fields: [String: JSONValue]
-    }
-
-    private struct ElmState: Codable, Equatable {
-        var tickId: Int
-        var symbolic: [ElmSymbolEntry]
-        var emwFilesOpen: [String]
-    }
-
-    private static let defaultElmState = ElmState(tickId: 0, symbolic: [], emwFilesOpen: [])
-    private var elmState = defaultElmState
-    private let elmDebugTurnLimit = 100
-
-    public struct ElmDebugTurn: Identifiable, Equatable {
-        public let id: UUID
-        public let createdAt: Date
-        public let tickId: Int
-        public let inputJSON: String
-        public let outputJSON: String?
-        public let errorText: String?
-
-        public init(
-            id: UUID = UUID(),
-            createdAt: Date = Date(),
-            tickId: Int,
-            inputJSON: String,
-            outputJSON: String?,
-            errorText: String?
-        ) {
-            self.id = id
-            self.createdAt = createdAt
-            self.tickId = tickId
-            self.inputJSON = inputJSON
-            self.outputJSON = outputJSON
-            self.errorText = errorText
-        }
-    }
 
     public init(host: AgentHost, cloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
         self.host = host
         self.cloudProvider = cloudProvider
-        loadElmPreferences()
 
         // If cloud persistence is enabled, prefer cloud conversations over local state.
         if cloudProvider != nil {
@@ -234,14 +66,6 @@ public final class AgentChatViewModel: ObservableObject {
         } else {
             loadPersistedState()
         }
-        if mode == .elm {
-            ensureCodexForElmMode()
-        }
-        restartElmTickLoopIfNeeded()
-    }
-
-    deinit {
-        elmTickTask?.cancel()
     }
 
     public var isAgentConfigured: Bool {
@@ -292,11 +116,9 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         let id = UUID()
-        let chatType = mode
         let conv = Conversation(
             id: id,
-            title: conversationTitle(for: chatType),
-            agentType: chatType,
+            title: defaultConversationTitle,
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
@@ -308,9 +130,6 @@ public final class AgentChatViewModel: ObservableObject {
         )
         upsertConversation(conv)
         selectConversation(id)
-        if mode == .elm {
-            ensureCodexForElmMode()
-        }
         persistState()
     }
 
@@ -318,29 +137,14 @@ public final class AgentChatViewModel: ObservableObject {
         selectedConversationId = id
 
         if cloudProvider != nil {
-            if let info = conversations.first(where: { $0.id == id }) {
-                isRestoringModeState = true
-                mode = info.agentType
-                isRestoringModeState = false
-                restartElmTickLoopIfNeeded()
-            }
-            if mode == .elm {
-                ensureCodexForElmMode()
-            }
             Task { await self.loadCloudMessages(conversationId: id) }
             return
         }
 
         if let conv = conversation(id: id) {
-            isRestoringModeState = true
-            mode = conv.agentType
-            isRestoringModeState = false
             messages = conv.messages
         } else {
             messages = []
-        }
-        if mode == .elm {
-            ensureCodexForElmMode()
         }
         persistState()
     }
@@ -461,330 +265,6 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    private func sendELM(userText: String, appendUserMessage: Bool) {
-        _ = appendUserMessage
-        _ = userText
-        lastError = "Single-turn control mode is no longer available."
-    }
-
-    private func restartElmTickLoopIfNeeded() {
-        elmTickTask?.cancel()
-        elmTickTask = nil
-
-        guard mode == .elm, elmTickActive else { return }
-
-        let period = max(1, elmTickPeriodSeconds)
-        elmTickTask = Task { [weak self] in
-            guard let self else { return }
-            while !Task.isCancelled {
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(period) * 1_000_000_000)
-                } catch {
-                    return
-                }
-                if Task.isCancelled { return }
-                await self.fireElmTick()
-            }
-        }
-    }
-
-    private func fireElmTick() async {
-        guard mode == .elm, elmTickActive else { return }
-        guard !isSending else { return }
-        sendELM(userText: "", appendUserMessage: false)
-    }
-
-    private struct ElmTurnOutput {
-        struct Action {
-            let targetNodeId: String
-            let name: String
-            let payload: [String: Any]
-        }
-
-        enum SymbolicOpKind: String {
-            case upsert
-            case delete
-        }
-
-        struct SymbolicOp {
-            let kind: SymbolicOpKind
-            let id: String
-            let fields: [String: JSONValue]
-        }
-
-        enum FileOpKind: String {
-            case open
-            case close
-        }
-
-        struct FileOp {
-            let kind: FileOpKind
-            let file: String
-        }
-
-        let action: Action?
-        let assistant: String
-        let symbolicOps: [SymbolicOp]
-        let emwFileOps: [FileOp]
-    }
-
-    private struct ElmParseResult {
-        let output: ElmTurnOutput
-        let rawObject: [String: Any]
-    }
-
-    private func runElmTurn(userText: String) async throws -> ElmTurnOutput {
-        let config = try currentAgentModelConfig()
-        let inputPayload = try await buildElmInput(userText: userText)
-        let inputJSON = jsonString(inputPayload)
-        let inputPretty = prettyJSONString(inputPayload)
-        let tickId = elmState.tickId
-
-        dbg("elm turn model=\(config.modelName) tick=\(elmState.tickId) open_files=\(elmState.emwFilesOpen.count)")
-
-        var responseText: String?
-
-        do {
-            let resp = try await modelClient.sendStream(
-                config: config,
-                messages: [
-                    ["role": "system", "content": agentControlSystemPrompt()],
-                    ["role": "user", "content": inputJSON],
-                ],
-                tools: []
-            )
-            let text = ((resp["content"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            responseText = text
-
-            guard !text.isEmpty else {
-                throw AgentBackendError.serverError("Agent control mode produced no output")
-            }
-
-            let parsed = try parseElmTurnOutput(text: text)
-            try await applyElmTurnOutput(parsed.output)
-            appendElmDebugTurn(tickId: tickId, inputJSON: inputPretty, outputJSON: prettyJSONString(parsed.rawObject), errorText: nil)
-            persistElmPreferences()
-            return parsed.output
-        } catch {
-            appendElmDebugTurn(
-                tickId: tickId,
-                inputJSON: inputPretty,
-                outputJSON: responseText.map { normalizeDebugOutputText($0) },
-                errorText: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            )
-            throw error
-        }
-    }
-
-    private func parseElmTurnOutput(text: String) throws -> ElmParseResult {
-        let obj = try parseJSONObject(text: text)
-
-        var action: ElmTurnOutput.Action?
-        if let actionObj = obj["action"] as? [String: Any] {
-            let targetNodeId = (actionObj["target_node_id"] as? String) ?? ""
-            let name = (actionObj["name"] as? String) ?? ""
-            let payload = (actionObj["payload"] as? [String: Any]) ?? [:]
-            if !targetNodeId.isEmpty, !name.isEmpty {
-                action = .init(targetNodeId: targetNodeId, name: name, payload: payload)
-            }
-        }
-
-        let assistant = (obj["assistant"] as? String) ?? ""
-
-        var symbolicOps: [ElmTurnOutput.SymbolicOp] = []
-        if let rows = obj["symbolic_ops"] as? [Any] {
-            for rowAny in rows {
-                guard let row = rowAny as? [String: Any] else { continue }
-                let kindRaw = (row["op"] as? String) ?? ""
-                guard let kind = ElmTurnOutput.SymbolicOpKind(rawValue: kindRaw) else { continue }
-                let id = (row["id"] as? String) ?? ""
-                guard !id.isEmpty else { continue }
-                let fieldsObj = (row["fields"] as? [String: Any]) ?? [:]
-                var fields: [String: JSONValue] = [:]
-                for (k, value) in fieldsObj {
-                    guard let mapped = JSONValue.from(any: value) else { continue }
-                    fields[k] = mapped
-                }
-                symbolicOps.append(.init(kind: kind, id: id, fields: fields))
-            }
-        }
-
-        var emwFileOps: [ElmTurnOutput.FileOp] = []
-        if let rows = obj["emw_file_ops"] as? [Any] {
-            for rowAny in rows {
-                guard let row = rowAny as? [String: Any] else { continue }
-                let kindRaw = (row["op"] as? String) ?? ""
-                guard let kind = ElmTurnOutput.FileOpKind(rawValue: kindRaw) else { continue }
-                let file = (row["file"] as? String) ?? ""
-                guard !file.isEmpty else { continue }
-                emwFileOps.append(.init(kind: kind, file: file))
-            }
-        }
-
-        return ElmParseResult(
-            output: ElmTurnOutput(
-                action: action,
-                assistant: assistant,
-                symbolicOps: symbolicOps,
-                emwFileOps: emwFileOps
-            ),
-            rawObject: obj
-        )
-    }
-
-    private func parseJSONObject(text: String) throws -> [String: Any] {
-        func parse(_ raw: String) -> [String: Any]? {
-            guard let data = raw.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-                return nil
-            }
-            return obj
-        }
-
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let direct = parse(trimmed) {
-            return direct
-        }
-
-        if trimmed.hasPrefix("```"), trimmed.hasSuffix("```") {
-            let lines = trimmed.split(separator: "\n", omittingEmptySubsequences: false)
-            if lines.count >= 2 {
-                let body = lines.dropFirst().dropLast().joined(separator: "\n")
-                if let unwrapped = parse(body) {
-                    return unwrapped
-                }
-            }
-        }
-
-        if let left = trimmed.firstIndex(of: "{"), let right = trimmed.lastIndex(of: "}") {
-            let candidate = String(trimmed[left...right])
-            if let wrapped = parse(candidate) {
-                return wrapped
-            }
-        }
-
-        throw AgentBackendError.serverError("Agent control mode output is not valid JSON")
-    }
-
-    private func applyElmTurnOutput(_ output: ElmTurnOutput) async throws {
-        if let action = output.action {
-            try host.invokeUIEvent(targetNodeId: action.targetNodeId, name: action.name, payload: action.payload)
-        }
-
-        if !output.symbolicOps.isEmpty {
-            var byId: [String: ElmSymbolEntry] = [:]
-            for entry in elmState.symbolic {
-                byId[entry.id] = entry
-            }
-            for op in output.symbolicOps {
-                switch op.kind {
-                case .upsert:
-                    var current = byId[op.id] ?? ElmSymbolEntry(id: op.id, fields: [:])
-                    for (k, value) in op.fields {
-                        current.fields[k] = value
-                    }
-                    byId[op.id] = current
-                case .delete:
-                    byId.removeValue(forKey: op.id)
-                }
-            }
-            elmState.symbolic = byId.values.sorted { $0.id < $1.id }
-        }
-
-        if !output.emwFileOps.isEmpty {
-            var open = Set(elmState.emwFilesOpen)
-            for op in output.emwFileOps {
-                switch op.kind {
-                case .open:
-                    open.insert(op.file)
-                case .close:
-                    open.remove(op.file)
-                }
-            }
-            elmState.emwFilesOpen = Array(open).sorted()
-        }
-    }
-
-    private func buildElmInput(userText: String) async throws -> [String: Any] {
-        elmState.tickId += 1
-
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime]
-        let now = iso.string(from: Date())
-
-        let snapshot = host.uiSnapshot()
-        let uiTree = snapshot["root"] ?? NSNull()
-
-        let emwFilesAll = try await listAllEmwFiles()
-        let openItems = try await loadOpenEmwFiles()
-
-        let symbolic = elmState.symbolic.map { entry -> [String: Any] in
-            var row: [String: Any] = [
-                "id": entry.id,
-                "fields": entry.fields.mapValues { $0.any },
-            ]
-            if let text = entry.fields["text"]?.any as? String {
-                row["text"] = text
-            }
-            return row
-        }
-
-        return [
-            "time": [
-                "now_utc": now,
-                "heartbeat": [
-                    "period_ms": elmTickPeriodSeconds * 1000,
-                    "tick_id": elmState.tickId,
-                ],
-            ],
-            "user": userText,
-            "ui_tree": uiTree,
-            "symbolic": symbolic,
-            "emw_files_all": emwFilesAll,
-            "emw_files_open": openItems,
-        ]
-    }
-
-    private func listAllEmwFiles() async throws -> [String] {
-        let local = try await host.fileService.listFiles(withExtension: ".emw", includeContent: false, accessToken: "")
-            .map { $0.metadata.name }
-
-        let bundled = (Bundle.main.urls(forResourcesWithExtension: "emw", subdirectory: "DefaultScripts") ?? [])
-            .map { $0.lastPathComponent }
-
-        return Array(Set(local + bundled)).sorted()
-    }
-
-    private func loadOpenEmwFiles() async throws -> [[String: Any]] {
-        let all = Set(try await listAllEmwFiles())
-        let wanted = elmState.emwFilesOpen.filter { all.contains($0) }
-        elmState.emwFilesOpen = wanted
-
-        var items: [[String: Any]] = []
-        for path in wanted {
-            guard let content = try await readEmwFile(path: path) else { continue }
-            items.append([
-                "path": path,
-                "content": content,
-            ])
-        }
-        return items
-    }
-
-    private func readEmwFile(path: String) async throws -> String? {
-        if let local = try? await host.fileService.getFile(id: path, accessToken: ""),
-           let text = local.textContent {
-            return text
-        }
-
-        if let url = Bundle.main.url(forResource: (path as NSString).deletingPathExtension, withExtension: "emw", subdirectory: "DefaultScripts"),
-           let text = try? String(contentsOf: url, encoding: .utf8) {
-            return text
-        }
-
-        return nil
-    }
-
     // MARK: - Tool loop (env-configured OpenAI-compatible endpoint)
 
     private func agentSystemPrompt() -> String {
@@ -796,19 +276,6 @@ public final class AgentChatViewModel: ObservableObject {
         }
         // Fallback: keep this minimal; prefer editing the bundled MD file.
         return "You are the EMWaver Agent."
-    }
-
-    private func agentControlSystemPrompt() -> String {
-        if let url = Bundle.module.url(forResource: "AGENT_CONTROL_SYSTEM_PROMPT", withExtension: "md"),
-           let text = try? String(contentsOf: url, encoding: .utf8) {
-            return text.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        return """
-You are the EMWaver Agent in single-turn stateless control mode.
-Return only valid JSON with optional keys: action, assistant, symbolic_ops, emw_file_ops.
-Do not include markdown.
-If no user-visible update is needed, omit assistant.
-"""
     }
 
     private func agentFormattingRules() -> String {
@@ -1252,52 +719,17 @@ If no user-visible update is needed, omit assistant.
         return String(data: data, encoding: .utf8) ?? "{}"
     }
 
-    private func prettyJSONString(_ obj: Any) -> String {
-        guard JSONSerialization.isValidJSONObject(obj),
-              let data = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),
-              let text = String(data: data, encoding: .utf8) else {
-            return jsonString(obj)
-        }
-        return text
-    }
-
-    private func normalizeDebugOutputText(_ text: String) -> String {
-        if let obj = try? parseJSONObject(text: text) {
-            return prettyJSONString(obj)
-        }
-        return text
-    }
-
-    private func appendElmDebugTurn(tickId: Int, inputJSON: String, outputJSON: String?, errorText: String?) {
-        let row = ElmDebugTurn(
-            tickId: tickId,
-            inputJSON: inputJSON,
-            outputJSON: outputJSON,
-            errorText: errorText
-        )
-        elmDebugTurns.insert(row, at: 0)
-        if elmDebugTurns.count > elmDebugTurnLimit {
-            elmDebugTurns.removeLast(elmDebugTurns.count - elmDebugTurnLimit)
-        }
-    }
-
-    public func clearElmDebugTurns() {
-        elmDebugTurns.removeAll()
-    }
-
     // MARK: - Local persistence (multiple conversations)
 
     public struct ConversationInfo: Identifiable, Equatable {
         public let id: UUID
         public let title: String
-        public let agentType: AgentMode
         public let updatedAt: Date
     }
 
     private struct Conversation: Identifiable, Codable, Equatable {
         let id: UUID
         var title: String?
-        var agentType: AgentMode
         let createdAt: Date
         var updatedAt: Date
         var sessionId: String
@@ -1320,7 +752,6 @@ If no user-visible update is needed, omit assistant.
         init(
             id: UUID,
             title: String?,
-            agentType: AgentMode,
             createdAt: Date,
             updatedAt: Date,
             sessionId: String,
@@ -1332,7 +763,6 @@ If no user-visible update is needed, omit assistant.
         ) {
             self.id = id
             self.title = title
-            self.agentType = agentType
             self.createdAt = createdAt
             self.updatedAt = updatedAt
             self.sessionId = sessionId
@@ -1347,7 +777,6 @@ If no user-visible update is needed, omit assistant.
             let c = try decoder.container(keyedBy: CodingKeys.self)
             id = try c.decode(UUID.self, forKey: .id)
             title = try c.decodeIfPresent(String.self, forKey: .title)
-            agentType = try c.decodeIfPresent(AgentMode.self, forKey: .agentType) ?? .llm
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
             updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? UUID().uuidString
@@ -1412,32 +841,14 @@ If no user-visible update is needed, omit assistant.
         conversations = all.map {
             ConversationInfo(
                 id: $0.id,
-                title: $0.title ?? conversationTitle(for: $0.agentType),
-                agentType: $0.agentType,
+                title: $0.title ?? defaultConversationTitle,
                 updatedAt: $0.updatedAt
             )
         }
     }
 
-    private func conversationTitle(for mode: AgentMode) -> String {
-        switch mode {
-        case .llm: return "Chat"
-        case .elm: return "Agent"
-        }
-    }
-
-    private func applyModeToSelectedConversation() {
-        guard let id = selectedConversationId else { return }
-        let newTitle = conversationTitle(for: mode)
-        updateConversation(id: id) { conv in
-            conv.agentType = mode
-            conv.title = newTitle
-            conv.updatedAt = Date()
-        }
-
-        if cloudProvider != nil {
-            Task { await self.updateCloudConversationMetadata(conversationId: id, title: newTitle, agentType: mode.rawValue) }
-        }
+    private var defaultConversationTitle: String {
+        "Chat"
     }
 
     private func persistState() {
@@ -1456,7 +867,7 @@ If no user-visible update is needed, omit assistant.
 
     private func allowedModels(for provider: ProviderId) -> [String] {
         switch provider {
-        case .chatgptCodex: return Self.allowedCodexModelIds
+        case .chatgptCodex: return Self.allowedOpenRouterModelIds
         case .openrouter: return Self.allowedOpenRouterModelIds
         }
     }
@@ -1474,76 +885,17 @@ If no user-visible update is needed, omit assistant.
         let allowed = allowedModels(for: provider)
         let fallback = allowed.first ?? Self.defaultModelId
 
-        let specificKey: String = {
-            switch provider {
-            case .chatgptCodex: return preferredCodexModelKey
-            case .openrouter: return preferredOpenRouterModelKey
-            }
-        }()
-
-        let direct = UserDefaults.standard.string(forKey: specificKey)
+        let direct = UserDefaults.standard.string(forKey: preferredOpenRouterModelKey)
         if let direct, allowed.contains(direct) {
             return direct
-        }
-
-        // Legacy fallback for older installs that only stored one preferred model key.
-        let legacy = UserDefaults.standard.string(forKey: preferredModelKey)
-        if let legacy, allowed.contains(legacy) {
-            return legacy
         }
 
         return fallback
     }
 
     private func persistPreferredModel(_ modelId: String, for provider: ProviderId) {
-        UserDefaults.standard.set(modelId, forKey: preferredModelKey)
-        switch provider {
-        case .chatgptCodex:
-            UserDefaults.standard.set(modelId, forKey: preferredCodexModelKey)
-        case .openrouter:
-            UserDefaults.standard.set(modelId, forKey: preferredOpenRouterModelKey)
-        }
-    }
-
-    private func loadElmPreferences() {
-        isRestoringModeState = true
-        defer { isRestoringModeState = false }
-
-        if let raw = UserDefaults.standard.string(forKey: modeKey),
-           let parsed = AgentMode(rawValue: raw) {
-            mode = parsed
-        } else {
-            mode = .llm
-        }
-
-        if UserDefaults.standard.object(forKey: elmTickActiveKey) != nil {
-            elmTickActive = UserDefaults.standard.bool(forKey: elmTickActiveKey)
-        } else {
-            elmTickActive = false
-        }
-
-        let storedPeriod = UserDefaults.standard.integer(forKey: elmTickPeriodSecondsKey)
-        elmTickPeriodSeconds = max(1, storedPeriod == 0 ? 10 : storedPeriod)
-
-        if let data = UserDefaults.standard.data(forKey: elmStateKey),
-           let decoded = try? JSONDecoder().decode(ElmState.self, from: data) {
-            elmState = decoded
-        } else {
-            elmState = Self.defaultElmState
-        }
-    }
-
-    private func persistElmPreferences() {
-        UserDefaults.standard.set(mode.rawValue, forKey: modeKey)
-        UserDefaults.standard.set(elmTickActive, forKey: elmTickActiveKey)
-        UserDefaults.standard.set(max(1, elmTickPeriodSeconds), forKey: elmTickPeriodSecondsKey)
-        if let data = try? JSONEncoder().encode(elmState) {
-            UserDefaults.standard.set(data, forKey: elmStateKey)
-        }
-    }
-
-    private func ensureCodexForElmMode() {
-        // Legacy no-op. Single-turn control mode is no longer exposed in the UI.
+        _ = provider
+        UserDefaults.standard.set(modelId, forKey: preferredOpenRouterModelKey)
     }
 
     private func loadPersistedState() {
@@ -1554,8 +906,7 @@ If no user-visible update is needed, omit assistant.
                 let id = UUID()
                 let conv = Conversation(
                     id: id,
-                    title: conversationTitle(for: .llm),
-                    agentType: .llm,
+                    title: defaultConversationTitle,
                     createdAt: Date(),
                     updatedAt: Date(),
                     sessionId: UUID().uuidString,
@@ -1907,11 +1258,9 @@ extension AgentChatViewModel {
 
             let infos: [ConversationInfo] = rows.compactMap { r in
                 guard let id = UUID(uuidString: r.id) else { return nil }
-                let mode = AgentMode(rawValue: (r.agent_type ?? "llm").lowercased()) ?? .llm
                 return ConversationInfo(
                     id: id,
-                    title: r.title ?? conversationTitle(for: mode),
-                    agentType: mode,
+                    title: r.title ?? defaultConversationTitle,
                     updatedAt: Date(timeIntervalSince1970: TimeInterval(r.updated_at_ms) / 1000.0)
                 )
             }
@@ -1926,12 +1275,6 @@ extension AgentChatViewModel {
                     // Create an initial conversation.
                     await self.createCloudConversation()
                 }
-            } else if let sid = self.selectedConversationId,
-                      let selected = infos.first(where: { $0.id == sid }) {
-                self.isRestoringModeState = true
-                self.mode = selected.agentType
-                self.isRestoringModeState = false
-                self.restartElmTickLoopIfNeeded()
             }
 
         } catch {
@@ -1950,8 +1293,7 @@ extension AgentChatViewModel {
             let c = try await api.createConversation(
                 baseURL: ctx.baseURL,
                 token: ctx.accessToken,
-                title: conversationTitle(for: mode),
-                agentType: mode.rawValue
+                title: defaultConversationTitle
             )
             guard let id = UUID(uuidString: c.id) else {
                 throw NSError(domain: "AgentCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid conversation id"]) 
@@ -2038,26 +1380,6 @@ extension AgentChatViewModel {
         }
     }
 
-    func updateCloudConversationMetadata(conversationId: UUID, title: String?, agentType: String?) async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            return
-        }
-
-        do {
-            let api = AgentCloudAPI()
-            _ = try await api.updateConversation(
-                baseURL: ctx.baseURL,
-                token: ctx.accessToken,
-                conversationId: conversationId.uuidString.lowercased(),
-                title: title,
-                agentType: agentType
-            )
-            await refreshCloudConversations()
-        } catch {
-            // Best-effort metadata sync.
-        }
-    }
-
     private func ensureShadowLocalConversationExists(id: UUID) {
         // Create a local shadow conversation if missing. This stores provider/model/session state
         // (Codex input items / OpenRouter messages) so local inference can reuse cloud history.
@@ -2065,8 +1387,7 @@ extension AgentChatViewModel {
 
         let conv = Conversation(
             id: id,
-            title: conversationTitle(for: mode),
-            agentType: mode,
+            title: defaultConversationTitle,
             createdAt: Date(),
             updatedAt: Date(),
             sessionId: UUID().uuidString,
