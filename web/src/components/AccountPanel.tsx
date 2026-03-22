@@ -12,26 +12,9 @@ type Entitlements = {
   features?: { [k: string]: boolean };
 };
 
-type Device = {
-  board_type: string;
-  hardware_uid: string;
-  label?: string;
-  created_at_ms?: number;
-  updated_at_ms?: number;
-  last_seen_at_ms?: number;
-};
-
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
-}
-
-async function listMyDevices(idToken: string): Promise<Device[]> {
-  const res = await backendFetch("/v1/devices/my", idToken, { method: "GET" });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
-  const json = JSON.parse(text);
-  return json.devices || [];
 }
 
 async function getEntitlements(idToken: string): Promise<Entitlements> {
@@ -49,22 +32,11 @@ async function openProPortal(idToken: string): Promise<string> {
   return String(json.url || "");
 }
 
-async function setDeviceLabel(idToken: string, boardType: string, hardwareUid: string, label: string) {
-  const res = await backendFetch("/v1/devices/label", idToken, {
-    method: "POST",
-    body: JSON.stringify({ board_type: boardType, hardware_uid: hardwareUid, label }),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
-  return JSON.parse(text) as { device: Device };
-}
-
 export function AccountPanel() {
   const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
 
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
-  const [devices, setDevices] = useState<Device[]>([]);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -76,7 +48,6 @@ export function AccountPanel() {
       if (!u) {
         setUserEmail(null);
         setIdToken("");
-        setDevices([]);
         setEntitlements(null);
         return;
       }
@@ -84,9 +55,7 @@ export function AccountPanel() {
       const tok = await u.getIdToken();
       setIdToken(tok);
       try {
-        const [nextDevices, nextEntitlements] = await Promise.all([listMyDevices(tok), getEntitlements(tok)]);
-        setDevices(nextDevices);
-        setEntitlements(nextEntitlements);
+        setEntitlements(await getEntitlements(tok));
       } catch (error: unknown) {
         setError(errorMessage(error));
       }
@@ -130,9 +99,7 @@ export function AccountPanel() {
     setBusy(true);
     setError(null);
     try {
-      const [nextDevices, nextEntitlements] = await Promise.all([listMyDevices(idToken), getEntitlements(idToken)]);
-      setDevices(nextDevices);
-      setEntitlements(nextEntitlements);
+      setEntitlements(await getEntitlements(idToken));
     } catch (error: unknown) {
       setError(errorMessage(error));
     } finally {
@@ -217,8 +184,8 @@ export function AccountPanel() {
         <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-sm font-semibold text-[color:var(--ink)]">My devices</div>
-              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Devices tied to your account</div>
+              <div className="text-sm font-semibold text-[color:var(--ink)]">Account overview</div>
+              <div className="pt-1 text-xs text-[color:var(--ink-dim)]">Membership and connected-cloud status</div>
             </div>
             <button
               type="button"
@@ -229,46 +196,14 @@ export function AccountPanel() {
               Refresh
             </button>
           </div>
-
-          {devices.length === 0 ? (
-            <div className="pt-3 text-sm text-[color:var(--ink-dim)]">
-              No devices attached yet.
-              <div className="pt-2 text-xs">Devices you activate in the apps will show up here.</div>
+          <div className="mt-4 space-y-3 text-sm text-[color:var(--ink-dim)]">
+            <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+              Activated devices now live on the Dashboard so you can see them alongside your cloud files and hosts.
             </div>
-          ) : (
-            <ul className="mt-4 space-y-3">
-              {devices.map((device) => (
-                <li
-                  key={`${device.board_type}:${device.hardware_uid}`}
-                  className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4"
-                >
-                  <div className="min-w-0">
-                    <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Board type</div>
-                    <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{device.board_type}</div>
-                    <div className="mt-3 text-xs font-semibold text-[color:var(--ink-dim)]">Hardware UID</div>
-                    <div className="mt-1 break-all font-mono text-xs text-[color:var(--ink)]">{device.hardware_uid}</div>
-                    <div className="mt-3 text-xs font-semibold text-[color:var(--ink-dim)]">Label</div>
-                    <input
-                      defaultValue={device.label || ""}
-                      placeholder="e.g. Lab board"
-                      className="mt-1 w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm text-[color:var(--ink)]"
-                      onBlur={(e) => {
-                        const next = String(e.target.value || "").trim();
-                        void (async () => {
-                          try {
-                            await setDeviceLabel(idToken, device.board_type, device.hardware_uid, next);
-                            await refresh();
-                          } catch (error: unknown) {
-                            setError(errorMessage(error));
-                          }
-                        })();
-                      }}
-                    />
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+            <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+              Use this modal for sign-in, session status, and Pro management.
+            </div>
+          </div>
         </section>
       )}
 
