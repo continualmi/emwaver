@@ -9,7 +9,7 @@ Target: Windows 11 only.
 ## 1) Scope
 
 This folder contains the full Windows client:
-- USB MIDI transport integration,
+- USB transport integration,
 - script runtime UI and tooling pages,
 - remote host/session control views,
 - firmware update flow integration,
@@ -58,7 +58,7 @@ Auxiliary:
 
 ## 3.1 Device connection and transport
 
-Windows app communicates with EMWaver hardware over USB MIDI SysEx and hosts device operations from the desktop runtime.
+Windows app communicates with EMWaver hardware over USB and hosts device operations from the desktop runtime.
 
 Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services.
 
@@ -98,7 +98,7 @@ Settings surface includes app-level preferences such as:
 Windows is intended to track the current macOS app in the device activation / provisioning layer.
 
 What Windows already has:
-- USB MIDI run-mode transport,
+- USB run-mode transport,
 - STM32 DFU firmware flashing,
 - cloud sign-in, host session, remote control, and Pro entitlement plumbing.
 
@@ -173,7 +173,7 @@ Windows STM32 flow should match the current managed model:
 ### 5.4 ESP32-S3 update flow
 
 Windows ESP flow should match the macOS board-class split:
-- Run Mode remains USB MIDI SysEx,
+- Run Mode remains USB,
 - flashing uses the board's flash-capable serial USB port,
 - the app bundles and invokes the ESP helper rather than `idf.py`,
 - the app bundles prebuilt ESP firmware artifacts,

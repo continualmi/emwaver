@@ -11,7 +11,7 @@ It is one remote-control path in the platform, not the only remote architecture.
 ## 1) Purpose
 
 The daemon is the **no-UI host runtime** for host-backed boards:
-- owns USB MIDI connection to the EMWaver hardware,
+- owns USB connection to the EMWaver hardware,
 - runs the script runtime and UI state machine headlessly,
 - forwards snapshots/events over WebSocket (`/v1/ws`) to remote controllers.
 
@@ -94,7 +94,7 @@ Snapshots are sent when tree changes (revision increments).
 
 ## 5) Device/transport ownership
 
-Daemon-side transport is local USB MIDI.
+Daemon-side transport is local USB.
 
 - Device detection/listing uses MIDI port enumeration.
 - Device command path routes through local `Device` abstraction and packet send/response semantics.

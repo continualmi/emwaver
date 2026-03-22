@@ -252,13 +252,6 @@ public final class AgentChatViewModel: ObservableObject {
         AgentModelConfig.current()?.modelName ?? Self.defaultModelId
     }
 
-    public var agentStatusSummary: String {
-        if let config = AgentModelConfig.current() {
-            return "Model • \(config.modelName)"
-        }
-        return "Agent model not configured"
-    }
-
     private func currentAgentModelConfig() throws -> AgentModelConfig {
         guard let config = AgentModelConfig.current() else {
             throw AgentBackendError.serverError("Agent model is not configured. Set MODEL_NAME, MODEL_BASE_URL, and MODEL_API_KEY in .env.")

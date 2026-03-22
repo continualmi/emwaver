@@ -103,13 +103,13 @@ Current macOS responsibility in this area:
 ### Board-specific update model
 
 STM32 update flow:
-- run-mode connection over USB MIDI,
+- run-mode connection over USB,
 - if firmware is missing the hardware UID command, immediately prompt the user to enter the managed update flow,
 - enter DFU/update mode from the app,
 - flash through the DFU helper.
 
 ESP32-S3 update flow:
-- run-mode connection over USB MIDI remains separate from flashing,
+- run-mode connection over USB remains separate from flashing,
 - flashing is performed over the board's flash-capable USB serial port,
 - the app should bundle a small helper based on `esptool` behavior,
 - the app should use prebuilt firmware images rather than ESP-IDF project logic,

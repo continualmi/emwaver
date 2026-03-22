@@ -28,7 +28,7 @@ Published internal library targets:
 
 ## 2.1 `EMWaverTransport`
 
-Low-level transport layer abstractions for USB MIDI SysEx device communication.
+Low-level transport layer abstractions for USB device communication.
 
 Key file:
 - `Sources/EMWaverTransport/UsbMidiSysex.swift`
