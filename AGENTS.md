@@ -20,7 +20,7 @@ Implementation details belong in folder-level `README.md` files.
 EMWaver is a **software-first**, AI-first electronics platform by **Continual MI**. It turns supported MCU boards into a full hardware lab through EMWaver-managed host-backed and autonomous device flows.
 
 Core direction:
-- **Business model:** software-first — revenue from paid device minting, platform services (Pro), and AI usage. No dependency on selling hardware to launch or operate.
+- **Business model:** software-first SaaS — revenue comes from subscriptions for platform services plus AI usage/limits. No dependency on selling hardware to launch or operate.
 - **Transport:** managed multi-transport platform. USB MIDI SysEx remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
@@ -38,7 +38,7 @@ Core direction:
 1. **Managed electronics platform** — EMWaver uses host apps where that is the best fit, and supports autonomous board classes where direct cloud/device operation is the better product.
 2. **Software-first platform** — the product is the software stack (apps, firmware, cloud, AI), not the hardware. Users supply their own supported MCU board.
 3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
-4. **Best beginner experience** — buy a cheap supported board, install the app, plug in, activate, and start exploring without firmware toolchains.
+4. **Best beginner experience** — buy a cheap supported board, install the app, plug in, sign in, and start exploring without firmware toolchains.
 
 ### Explicit Tradeoffs
 
@@ -51,7 +51,7 @@ We intentionally give up:
 ### What We Gain
 
 - Launch without hardware supply chain.
-- Revenue from day one via minting + Pro + AI.
+- Revenue from day one via subscriptions + AI.
 - Multiple supported boards, one unified UX.
 - Cross-platform apps (Android/iOS/macOS/Windows).
 - Cloud-connected remote workflows.
@@ -64,17 +64,18 @@ We intentionally give up:
 
 ### Business model (software-first)
 
-- **Paid device minting**: users pay to activate (mint) a supported board as an EMWaver device. Minting is the entry point to the platform.
-- **EMWaver Pro**: unlocks cloud-heavy capabilities and the full Agent experience. Backend-issued entitlements are authoritative.
-- **AI credits/usage**: AI agent services are a revenue stream.
+- **Subscription-first access**: users subscribe to EMWaver services rather than purchasing individual device activations.
+- **Free tier**: may allow a small number of activated devices for local/basic use so onboarding remains low-friction.
+- **EMWaver Pro**: unlocks the full cloud product, including remote hosting/control, sync, higher device limits, and the full Agent experience. Backend-issued entitlements are authoritative.
+- **AI credits/usage**: agent usage remains a metered resource even when access is subscription-gated.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
 
 ### Device trust model
 
-- Near-term activation plan: EMWaver V1 device registration is keyed by immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) together with board type, so minting is tied to a physical board.
-- Backend registration is authoritative for `board_type + hardware_uid`; re-flashing the same physical board should restore its existing EMWaver activation state rather than consume a new device mint.
-- Unminted boards have no platform access — minting is the activation gate.
-- Backend enforces minting policy, rate limits, and payment verification.
+- EMWaver V1 device registration is keyed by immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) together with board type, so activation is tied to a physical board.
+- Backend registration is authoritative for `board_type + hardware_uid`; re-flashing the same physical board should restore its existing EMWaver activation state rather than consume another device slot.
+- Access is gated by account entitlements and device-count limits, not by per-device purchases.
+- Backend enforces subscription policy, device limits, rate limits, and payment verification.
 
 (Implementation details live in `macos/README.md` and `web/README.md`.)
 
@@ -162,11 +163,11 @@ If a folder has a README, detailed documentation should live there.
 
 1. **Managed transport architecture**: USB MIDI SysEx is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
-3. **Software-first business**: revenue comes from minting, Pro, and AI — not hardware sales.
+3. **Software-first business**: revenue comes from subscriptions and AI — not hardware sales.
 4. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
 5. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
-6. **Backend is authoritative** for minting policy, cloud entitlements, and feature gating.
-7. **Minting is the activation gate**: unminted boards get no platform/cloud access.
+6. **Backend is authoritative** for subscription policy, device limits, cloud entitlements, and feature gating.
+7. **Activation is account-gated**: device access is governed by plan entitlements and allowed device counts, not individual device purchases.
 8. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
 9. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
 10. **CI/Releases policy**: GitHub Actions are for web CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.

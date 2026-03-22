@@ -58,7 +58,7 @@ Responsibilities:
 - remote attach/control pathways,
 - host presence and cloud session integration,
 - hardware-UID-backed claim awareness,
-- mint/provision handoff into DFU update tooling for first-party activation on macOS.
+- activation/provision handoff into DFU update tooling for first-party setup on macOS.
 
 ## 2.3 UI surfaces
 
@@ -89,6 +89,7 @@ The macOS app bundles the canonical committed firmware image at `firmware/emwave
 Current macOS responsibility in this area:
 - first-party restore/sync + provision flow for supported devices,
 - backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
+- device access governed by account subscription entitlements and allowed device counts rather than per-device purchases,
 - reading supported-board hardware UID in Run Mode before activation,
 - unified in-app device list with local cache fallback for Offline Mode,
 - bundled or operator-selected custom firmware images,

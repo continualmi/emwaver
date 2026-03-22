@@ -2,7 +2,7 @@
 
 Next.js + Node unified web app for EMWaver’s public web surface and web-based cloud flows.
 
-This folder is the canonical EMWaver web surface in the repo. It now owns the public website, web APIs, agent endpoints, store/account flows, and the WebSocket relay under one Next.js + Node deployment.
+This folder is the canonical EMWaver web surface in the repo. It now owns the public website, web APIs, agent endpoints, subscription/account flows, and the WebSocket relay under one Next.js + Node deployment.
 
 ---
 
@@ -10,7 +10,7 @@ This folder is the canonical EMWaver web surface in the repo. It now owns the pu
 
 `/web` currently contains:
 - public landing/site pages,
-- install/build/account/store UX surfaces,
+- install/build/account/subscription UX surfaces,
 - hardware catalog + builder web surfaces,
 - web integrations for backend APIs,
 - remote host/web-session client pieces,
@@ -92,7 +92,7 @@ Important shared components include:
   - host list APIs.
 - `remoteSessions.ts` / `remoteAttach.ts` — WS message types + connection helpers for host/web control sessions.
 - `firebase.ts` — auth integration support.
-- `store.ts` — store/order helpers.
+- `store.ts` — subscription/checkout helpers.
 
 ---
 
@@ -147,8 +147,8 @@ Current server routes in this folder include:
 
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- account/store/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
-- device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity,
+- account/subscription/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
+- device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity and device-limit key,
 - entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,
 - host presence and WebSocket routing are currently single-instance in-memory,
 - the current shape is suitable for a single-instance deployment and should move to shared state if multi-instance scaling is needed later.
@@ -182,7 +182,7 @@ WS URL conversion logic:
 
 ---
 
-## 6) Product pages and store/account direction
+## 6) Product pages and subscription/account direction
 
 This frontend is where build/account hardware-related web flows live.
 
@@ -191,6 +191,7 @@ Direction reflected in repo docs:
 - `/account` handles attached-device/account relationship UX,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,
+- pricing and subscription UX should center on service plans rather than per-device purchases,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
 Store distribution policy migrated from AGENTS:
