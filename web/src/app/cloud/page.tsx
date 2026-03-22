@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AccountPill } from "@/components/AccountPill";
+import { DashboardDevicesPanel } from "@/components/DashboardDevicesPanel";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
@@ -649,7 +650,7 @@ export default function CloudPage() {
       <SiteHeader />
 
       <main className="app-shell-main flex w-full min-h-0 flex-col overflow-hidden px-5 pt-10 pb-6">
-        <div className="mb-6 flex items-center justify-between gap-4">
+        <div className="mb-6 shrink-0 flex items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Dashboard</h1>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Cloud file browser + editor</div>
@@ -723,7 +724,7 @@ export default function CloudPage() {
         </div>
 
         {showProPreview ? (
-          <div className="mb-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--copper-tint)] p-4">
+          <div className="mb-4 shrink-0 rounded-2xl border border-[color:var(--line)] bg-[color:var(--copper-tint)] p-4">
             <div className="text-sm font-semibold text-[color:var(--ink)]">Pro feature preview</div>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">
               You can browse the UI and bundled example scripts. Cloud files, remote hosts, and the Agent require EMWaver Pro.
@@ -749,7 +750,9 @@ export default function CloudPage() {
           </div>
         ) : null}
 
-        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[340px_1fr]">
+        <DashboardDevicesPanel idToken={idToken} signedIn={!!userEmail} />
+
+        <div className="grid min-h-0 flex-1 gap-4 md:grid-cols-[340px_minmax(0,1fr)]">
           <aside className="flex min-h-0 flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4">
             <div className="flex items-center justify-between gap-3">
               <div className="text-sm font-semibold text-[color:var(--ink)]">Scripts</div>
