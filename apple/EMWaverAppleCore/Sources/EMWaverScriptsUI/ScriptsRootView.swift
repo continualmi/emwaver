@@ -358,18 +358,16 @@ public struct ScriptsRootView: View {
                         }()
 
                         if !viewModel.assetScripts.isEmpty {
-                            Section("Example Scripts") {
-                                ForEach(viewModel.assetScripts) { script in
-                                    ScriptRow(
-                                        script: script,
-                                        isSelected: script.id == viewModel.selectedScriptId,
-                                        showCloudIndicators: cloudIndicatorsEnabled,
-                                        onTap: { previewScript(script.id) },
-                                        onEdit: { openEditor(for: script.id) }
-                                    )
-                                    .listRowSeparator(.hidden)
-                                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-                                }
+                            ForEach(viewModel.assetScripts) { script in
+                                ScriptRow(
+                                    script: script,
+                                    isSelected: script.id == viewModel.selectedScriptId,
+                                    showCloudIndicators: cloudIndicatorsEnabled,
+                                    onTap: { previewScript(script.id) },
+                                    onEdit: { openEditor(for: script.id) }
+                                )
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
                             }
                         }
 
