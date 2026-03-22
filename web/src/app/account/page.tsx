@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { backendFetch } from "@/lib/backend";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
@@ -263,7 +262,6 @@ export default function AccountPage() {
         {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
       </main>
 
-      <SiteFooter />
     </div>
   );
 }

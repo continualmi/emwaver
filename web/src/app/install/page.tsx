@@ -1,4 +1,3 @@
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
 const STORES = [
@@ -95,7 +94,6 @@ export default function InstallPage() {
         </div>
       </main>
 
-      <SiteFooter />
     </div>
   );
 }

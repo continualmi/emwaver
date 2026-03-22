@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged } from "firebase/auth";
 
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { backendFetch } from "@/lib/backend";
 import { firebaseAuth, isFirebaseConfigured } from "@/lib/firebase";
@@ -111,7 +110,6 @@ export default function AuthHandoffPage() {
           </div>
         </div>
       </main>
-      <SiteFooter />
     </div>
   );
 }

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 
 type NavItem = {
@@ -106,8 +105,6 @@ export function InformativeShell({
           </div>
         </div>
       </main>
-
-      <SiteFooter />
     </div>
   );
 }

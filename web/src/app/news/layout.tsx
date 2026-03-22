@@ -1,4 +1,3 @@
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { NewsMobileNav } from "@/components/news/NewsMobileNav";
 import { NewsSidebar } from "@/components/news/NewsSidebar";
@@ -30,7 +29,6 @@ export default function NewsLayout({
         </div>
       </main>
 
-      <SiteFooter />
     </div>
   );
 }

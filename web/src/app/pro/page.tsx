@@ -3,17 +3,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
 
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { backendFetch } from "@/lib/backend";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
-
-type Eligibility = {
-  canPurchasePro: boolean;
-  reason?: string | null;
-  requiresDeviceAttached: boolean;
-  hasDeviceAttached: boolean;
-};
 
 type Credits = {
   balance: number;
@@ -54,7 +46,6 @@ export default function ProPage() {
   const [idToken, setIdToken] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
-  const [eligibility, setEligibility] = useState<Eligibility | null>(null);
   const [credits, setCredits] = useState<Credits | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
 
@@ -62,7 +53,6 @@ export default function ProPage() {
     if (!auth) return;
     return onAuthStateChanged(auth, async (u) => {
       setError(null);
-      setEligibility(null);
       setCredits(null);
       setEntitlements(null);
 
@@ -80,22 +70,9 @@ export default function ProPage() {
   useEffect(() => {
     if (!idToken) return;
     void refreshEntitlements();
-    void refreshEligibility();
     void refreshCredits();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idToken]);
-
-  async function refreshEligibility() {
-    if (!idToken) return;
-    try {
-      const res = await backendFetch("/v1/billing/eligibility", idToken, { method: "GET" });
-      const text = await res.text();
-      if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
-      setEligibility(JSON.parse(text) as Eligibility);
-    } catch (e: any) {
-      setError(formatUiError(e));
-    }
-  }
 
   async function refreshEntitlements() {
     if (!idToken) return;
@@ -150,7 +127,6 @@ export default function ProPage() {
       setBusy(true);
       setError(null);
 
-      // Must be signed in; backend enforces device eligibility.
       const res = await backendFetch("/v1/pro/checkout_session", idToken, {
         method: "POST",
         body: JSON.stringify({}),
@@ -193,18 +169,17 @@ export default function ProPage() {
   return (
     <div className="min-h-dvh docs-mode">
       <SiteHeader />
-      <main className="w-full overflow-y-auto px-5 py-10">
-        <div className="rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10">
+      <main className="flex w-full flex-1 items-center px-5 py-10">
+        <div className="mx-auto w-full max-w-5xl rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-6 md:p-10">
           <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">EMWaver Pro</h1>
           <p className="pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
-            Pro unlocks cloud features + the Agent experience. To subscribe, you must be signed in and have at least one verified genuine EMWaver device attached to your account.
-            Pro includes EMWaver-managed inference credits, and also supports unlimited BYOK/BYO third‑party providers.
+            Pro unlocks cloud features, higher Agent limits, and more device activations. Free users can run scripts and use the Agent with a smaller monthly token allowance, while Pro adds cloud access and more included usage.
           </p>
 
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
               <div className="text-sm font-semibold text-[color:var(--ink)]">Free vs Pro</div>
-              <div className="mt-3 overflow-hidden rounded-xl border border-[color:var(--line)]">
+              <div className="mt-3 overflow-x-auto rounded-xl border border-[color:var(--line)]">
                 <table className="w-full text-left text-sm">
                   <thead className="bg-[color:var(--surface-2)] text-[color:var(--ink)]">
                     <tr>
@@ -215,7 +190,7 @@ export default function ProPage() {
                   </thead>
                   <tbody className="text-[color:var(--ink-dim)]">
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">Local USB scripting</td>
+                      <td className="px-3 py-2">Run scripts</td>
                       <td className="px-3 py-2">Yes</td>
                       <td className="px-3 py-2">Yes</td>
                     </tr>
@@ -225,31 +200,22 @@ export default function ProPage() {
                       <td className="px-3 py-2">Yes</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">Cloud file sync</td>
+                      <td className="px-3 py-2">Cloud script sync</td>
                       <td className="px-3 py-2">No</td>
                       <td className="px-3 py-2">Yes</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">Agent</td>
-                      <td className="px-3 py-2">No</td>
-                      <td className="px-3 py-2">Yes</td>
+                      <td className="px-3 py-2">Unique device activations</td>
+                      <td className="px-3 py-2">2 devices</td>
+                      <td className="px-3 py-2">Up to 50 devices</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
                       <td className="px-3 py-2">Agent credits (tokens / month)</td>
-                      <td className="px-3 py-2">—</td>
+                      <td className="px-3 py-2">100K tokens / month</td>
                       <td className="px-3 py-2">10M tokens / month</td>
-                    </tr>
-                    <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">BYOK / third‑party providers (Agent)</td>
-                      <td className="px-3 py-2">No</td>
-                      <td className="px-3 py-2">Unlimited</td>
                     </tr>
                   </tbody>
                 </table>
-              </div>
-
-              <div className="mt-4 text-xs text-[color:var(--ink-dim)]">
-                Note: Pro purchase requires a signed-in account with at least one verified genuine EMWaver device attached.
               </div>
             </div>
 
@@ -267,21 +233,6 @@ export default function ProPage() {
                 <div>
                   <span className="font-semibold text-[color:var(--ink)]">Account:</span> {userEmail ? userEmail : "Not signed in"}
                 </div>
-
-                {idToken ? (
-                  <div>
-                    <span className="font-semibold text-[color:var(--ink)]">Eligibility:</span>{" "}
-                    {eligibility ? (
-                      eligibility.canPurchasePro ? (
-                        <span className="text-[color:var(--aqua)]">Eligible</span>
-                      ) : (
-                        <span>Not eligible ({eligibility.reason || "unknown"})</span>
-                      )
-                    ) : (
-                      <span>Checking…</span>
-                    )}
-                  </div>
-                ) : null}
 
                 {idToken ? (
                   <div>
@@ -320,7 +271,6 @@ export default function ProPage() {
           {error ? <div className="mt-4 whitespace-pre-wrap text-xs text-red-300">{error}</div> : null}
         </div>
       </main>
-      <SiteFooter />
     </div>
   );
 }

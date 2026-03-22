@@ -5,7 +5,6 @@ import Link from "next/link";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
-import { SiteFooter } from "@/components/SiteFooter";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
   agentChatStream,
@@ -315,7 +314,6 @@ export default function AgentChatPage() {
         </div>
       </main>
 
-      <SiteFooter />
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
-import { provisionedDevicesStore } from "@/server/store/provisionedDevices";
 import { getStripe } from "@/server/stripe";
 
 export async function POST(request: NextRequest) {
@@ -12,17 +11,6 @@ export async function POST(request: NextRequest) {
   if (!priceId || !(process.env.STRIPE_WEBHOOK_SECRET || "").trim()) {
     return NextResponse.json({ error: "pro_not_configured" }, { status: 503 });
   }
-  if (!provisionedDevicesStore.hasUserDevice(identity.uid)) {
-    return NextResponse.json(
-      {
-        error: "not_eligible",
-        reason: "no_device",
-        detail: "Connect and attach a genuine EMWaver device to your account before subscribing.",
-      },
-      { status: 403 },
-    );
-  }
-
   try {
     const stripe = getStripe();
     const session = await stripe.checkout.sessions.create({

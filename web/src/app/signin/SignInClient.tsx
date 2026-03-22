@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
 
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
@@ -113,7 +112,6 @@ export default function SignInClient() {
           </div>
         </div>
       </main>
-      <SiteFooter />
     </div>
   );
 }

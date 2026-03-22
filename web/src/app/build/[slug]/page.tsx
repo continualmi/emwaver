@@ -1,7 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { SiteFooter } from "@/components/SiteFooter";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
@@ -202,7 +201,6 @@ export default async function BuildDevicePage({
 
       </main>
 
-      <SiteFooter />
     </div>
   );
 }
