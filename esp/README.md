@@ -205,7 +205,7 @@ Target layering for reintegration:
 
 1. **Core runtime**
    - board identity (`board_type + hardware_uid`)
-   - minted-device restore/claim state
+   - activated-device restore/claim state governed by account entitlements and device limits
    - script/runtime execution boundary
    - capability registry
    - session/auth state

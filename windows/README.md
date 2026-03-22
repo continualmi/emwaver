@@ -104,7 +104,7 @@ What Windows already has:
 
 Windows now includes:
 - board-aware device state (`board_type`, hardware UID, last detected board info),
-- backend-tethered claim / restore flow using `/provisioning/mint`,
+- backend-tethered activation / restore flow using `/provisioning/mint`,
 - cached claimed-device list with offline-mode fallback,
 - board-specific update UX split between STM32 DFU and ESP32-S3 serial flashing,
 - bundled ESP32-S3 flashing helper + bundled ESP images when present in the workspace/build output,
@@ -158,6 +158,10 @@ Windows should:
 - call `/provisioning/mint` with `board_type + hardware_uid` during setup,
 - maintain a local claimed-device cache keyed by `board_type + hardware_uid`,
 - support offline-mode access decisions from the cached device list.
+
+Windows should treat activation as account-plan enforcement:
+- backend entitlements determine whether another device can be activated on the account,
+- no per-device purchase flow should be required to use an additional board.
 
 ### 5.3 STM32 update flow
 
