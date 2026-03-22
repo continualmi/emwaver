@@ -6,16 +6,15 @@
 
 import Foundation
 
-/// OpenRouter chat-completions client (API key).
-/// Uses OpenAI-compatible `chat/completions` with streaming SSE.
-final class AgentOpenRouterClient {
+/// OpenAI-compatible `chat/completions` client with streaming SSE support.
+final class AgentModelClient {
     struct ToolSpec {
         let name: String
         let description: String
         let parameters: [String: Any]
 
         func asChatTool() -> [String: Any] {
-            return [
+            [
                 "type": "function",
                 "function": [
                     "name": name,
@@ -26,31 +25,30 @@ final class AgentOpenRouterClient {
         }
     }
 
-    struct OpenRouterError: LocalizedError {
+    struct ClientError: LocalizedError {
         let message: String
         var errorDescription: String? { message }
     }
 
-    private let baseURL = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-
     func sendStream(
-        apiKey: String,
-        model: String,
+        config: AgentModelConfig,
         messages: [[String: Any]],
         tools: [ToolSpec]
     ) async throws -> [String: Any] {
-        var req = URLRequest(url: baseURL)
+        var req = URLRequest(url: config.chatCompletionsURL)
         req.httpMethod = "POST"
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = config.timeoutInterval
+        req.setValue("Bearer \(config.apiKey)", forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.setValue("text/event-stream", forHTTPHeaderField: "Accept")
 
-        // OpenRouter recommended attribution headers (matches opencode behavior).
-        req.setValue("https://emwavers.com/", forHTTPHeaderField: "HTTP-Referer")
-        req.setValue("EMWaver", forHTTPHeaderField: "X-Title")
+        if config.baseURL.host?.contains("openrouter.ai") == true {
+            req.setValue("https://emwavers.com/", forHTTPHeaderField: "HTTP-Referer")
+            req.setValue("EMWaver", forHTTPHeaderField: "X-Title")
+        }
 
         let body: [String: Any] = [
-            "model": model,
+            "model": config.modelName,
             "messages": messages,
             "tools": tools.map { $0.asChatTool() },
             "stream": true,
@@ -62,12 +60,11 @@ final class AgentOpenRouterClient {
         let http = resp as? HTTPURLResponse
         let status = http?.statusCode ?? -1
         if status < 200 || status >= 300 {
-            // Best-effort body for debugging.
             var text = ""
             for try await line in bytes.lines {
                 text += line + "\n"
             }
-            throw OpenRouterError(message: "OpenRouter HTTP \(status): \(text)")
+            throw ClientError(message: "Model HTTP \(status): \(text)")
         }
 
         var finalAssistant: [String: Any] = [:]
@@ -97,7 +94,6 @@ final class AgentOpenRouterClient {
                 continue
             }
 
-            // Standard OpenAI-style stream chunk.
             if let choices = obj["choices"] as? [Any],
                let c0 = choices.first as? [String: Any],
                let delta = c0["delta"] as? [String: Any] {
@@ -134,14 +130,12 @@ final class AgentOpenRouterClient {
                     }
                 }
 
-                // Some providers include final message in a non-delta field.
                 if let msg = c0["message"] as? [String: Any] {
                     finalAssistant = msg
                 }
             }
         }
 
-        // Build assistant message object.
         var assistant: [String: Any] = [
             "role": "assistant",
             "content": contentParts.joined(),
@@ -152,7 +146,6 @@ final class AgentOpenRouterClient {
             assistant["tool_calls"] = toolCalls
         }
 
-        // If provider returned a final message, merge its fields but keep our aggregated content/tool_calls.
         if !finalAssistant.isEmpty {
             for (k, v) in finalAssistant {
                 assistant[k] = v
