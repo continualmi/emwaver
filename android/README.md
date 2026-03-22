@@ -2,7 +2,7 @@
 
 Native Android EMWaver application (Gradle project, Java/Kotlin-style Android app structure).
 
-This app provides mobile EMWaver device workflows: USB MIDI communication, scripting surfaces, settings, host/remote control UI, auth/cloud dialogs, and firmware asset packaging.
+This app provides mobile EMWaver device workflows: USB communication, scripting surfaces, settings, host/remote control UI, auth/cloud dialogs, and firmware asset packaging.
 
 ---
 
@@ -29,7 +29,7 @@ Entry/activity files include:
 Located under `android/app/src/main/java/com/emwaver/emwaverandroidapp/`.
 
 Key components:
-- `UsbMidiSysex.java` — USB MIDI SysEx transport logic.
+- `UsbMidiSysex.java` — USB transport logic.
 - `USBService.java` / `USBManager-like services` — device connection plumbing.
 - `DeviceConnectionManager.java` / `DeviceConnectionService.java` — connection lifecycle.
 - `CommandSender.java` — command dispatch path.
@@ -91,8 +91,8 @@ Use the appropriate connected device/emulator setup (USB host behavior testing n
 5. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
 
 Current Android board split:
-- STM32 runtime uses USB MIDI SysEx and can enter the DFU-based update flow.
-- ESP32-S3 runtime now shares the same USB MIDI SysEx connection path, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
+- STM32 runtime uses USB and can enter the DFU-based update flow.
+- ESP32-S3 runtime now shares the same USB connection path, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
 
 ---
 

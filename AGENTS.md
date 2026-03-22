@@ -21,7 +21,7 @@ EMWaver is a **software-first**, AI-first electronics platform by **Continual MI
 
 Core direction:
 - **Business model:** software-first SaaS — revenue comes from subscriptions for platform services plus AI usage/limits. No dependency on selling hardware to launch or operate.
-- **Transport:** managed multi-transport platform. USB MIDI SysEx remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
+- **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
@@ -162,7 +162,7 @@ If a folder has a README, detailed documentation should live there.
 
 ## 7) Non-negotiable Platform Policies
 
-1. **Managed transport architecture**: USB MIDI SysEx is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
+1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
 3. **Software-first business**: revenue comes from subscriptions and AI — not hardware sales.
 4. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.

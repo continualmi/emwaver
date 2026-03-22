@@ -95,14 +95,6 @@ public struct AgentChatPanelView: View {
                 .help("Agent options")
             }
 
-            HStack(spacing: 8) {
-                Text(viewModel.agentStatusSummary)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer()
-            }
         }
         .padding(12)
     }

@@ -46,7 +46,7 @@ Responsibilities:
 - cloud config / host directory helpers.
 
 Responsibilities:
-- USB MIDI SysEx device communication,
+- USB device communication,
 - runtime host session behavior,
 - remote control integration,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
