@@ -1,7 +1,9 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AccountPill } from "@/components/AccountPill";
 import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
@@ -11,7 +13,6 @@ const nav = [
   { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },
   { href: "/cloud", label: "Dashboard" },
-  { href: "/account", label: "Account" },
 ];
 
 export function SiteHeader() {
@@ -24,16 +25,20 @@ export function SiteHeader() {
           <Link href="/" className="flex items-center gap-3">
             <div className="flex items-center gap-2">
               <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1">
-                <img
+                <Image
                   src="/continuous-logo.png"
                   alt="Continual MI"
+                  width={36}
+                  height={36}
                   className="h-full w-full object-contain"
                 />
               </div>
               <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
-                <img
+                <Image
                   src="/logo.png"
                   alt="EMWaver"
+                  width={36}
+                  height={36}
                   className="h-full w-full object-cover"
                 />
               </div>
@@ -74,6 +79,7 @@ export function SiteHeader() {
                 </Link>
               );
             })}
+            <AccountPill />
           </nav>
         </div>
       </header>

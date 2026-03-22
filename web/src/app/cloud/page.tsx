@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
+import { AccountPill } from "@/components/AccountPill";
 import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
@@ -742,12 +743,7 @@ export default function CloudPage() {
                   Sign in
                 </a>
               ) : (
-                <a
-                  href="/account"
-                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-                >
-                  Account
-                </a>
+                <AccountPill variant="button" label="Account" />
               )}
             </div>
           </div>
