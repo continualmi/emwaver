@@ -7,48 +7,10 @@
 import SwiftUI
 
 public struct AgentChatPanelView: View {
-
-    private struct AgentModeHelpGlyph: View {
-        let mode: AgentChatViewModel.AgentMode
-        @State private var showing = false
-
-        var body: some View {
-            Button {
-                showing = true
-            } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-            .help("What is this mode?")
-            .popover(isPresented: $showing, arrowEdge: .bottom) {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(mode == .elm ? "Agent" : "Chat")
-                        .font(.headline)
-
-                    Text(mode == .elm
-                         ? "Single-turn control loop for deterministic script and UI operation."
-                         : "Conversational mode for broader planning and tool-calling workflows.")
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-
-                    Spacer(minLength: 0)
-                }
-                .padding(14)
-                .frame(width: 320)
-            }
-        }
-    }
     @ObservedObject private var viewModel: AgentChatViewModel
 
     private let agentEnabled: Bool
     private let onRequestUpgrade: (() -> Void)?
-
-    @State private var showingOpenRouterConnect = false
-    @State private var showingElmDebugInspector = false
-    @State private var openRouterApiKeyDraft = ""
 
     public init(
         viewModel: AgentChatViewModel,
@@ -76,40 +38,6 @@ public struct AgentChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
-        .sheet(isPresented: $showingOpenRouterConnect) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Connect OpenRouter")
-                    .font(.headline)
-
-                Text("Paste your OpenRouter API key. It will be stored locally in the macOS Keychain.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                SecureField("OpenRouter API key", text: $openRouterApiKeyDraft)
-                    .textFieldStyle(.roundedBorder)
-
-                HStack {
-                    Button("Cancel") {
-                        openRouterApiKeyDraft = ""
-                        showingOpenRouterConnect = false
-                    }
-
-                    Spacer()
-
-                    Button("Save") {
-                        viewModel.setOpenRouterApiKey(openRouterApiKeyDraft)
-                        openRouterApiKeyDraft = ""
-                        showingOpenRouterConnect = false
-                    }
-                    .disabled(openRouterApiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .padding(16)
-            .frame(width: 420)
-        }
-        .sheet(isPresented: $showingElmDebugInspector) {
-            ElmDebugInspectorSheet(viewModel: viewModel)
-        }
     }
 
     private var header: some View {
@@ -117,57 +45,15 @@ public struct AgentChatPanelView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                    Text(viewModel.mode == .elm ? "Agent" : "Chat")
+                    Text("Agent")
                         .font(.headline)
-
-                    AgentModeHelpGlyph(mode: viewModel.mode)
                 }
 
                 Spacer()
 
-                if viewModel.mode == .elm {
-                    Button {
-                        showingElmDebugInspector = true
-                    } label: {
-                        Image(systemName: "ladybug")
-                    }
-                    .buttonStyle(.plain)
-                    .help("Agent control-turn debug inspector")
-                }
-
                 Menu {
                     Button("New Chat") {
                         viewModel.newConversation()
-                    }
-
-                    Divider()
-
-                    Menu {
-                        Button {
-                            viewModel.mode = .llm
-                        } label: {
-                            HStack {
-                                Text("Chat")
-                                if viewModel.mode == .llm {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-
-                        Button {
-                            viewModel.mode = .elm
-                        } label: {
-                            HStack {
-                                Text("Agent")
-                                if viewModel.mode == .elm {
-                                    Spacer()
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    } label: {
-                        Text("Mode • \(viewModel.mode == .elm ? "Agent" : "Chat")")
                     }
 
                     if !viewModel.conversations.isEmpty {
@@ -179,9 +65,6 @@ public struct AgentChatPanelView: View {
                             } label: {
                                 HStack {
                                     Text(conv.title)
-                                    Text(conv.agentType == .elm ? "Agent" : "Chat")
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
                                     if viewModel.selectedConversationId == conv.id {
                                         Spacer()
                                         Image(systemName: "checkmark")
@@ -202,89 +85,6 @@ public struct AgentChatPanelView: View {
 
                     Divider()
 
-                    Menu {
-                        Section("Provider") {
-                            Button {
-                                viewModel.setProviderForSelectedConversation(.chatgptCodex)
-                            } label: {
-                                HStack {
-                                    Text("ChatGPT (Codex)")
-                                    if viewModel.selectedProviderId == .chatgptCodex {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-
-                            Button {
-                                viewModel.setProviderForSelectedConversation(.openrouter)
-                            } label: {
-                                HStack {
-                                    Text("OpenRouter")
-                                    if viewModel.selectedProviderId == .openrouter {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                            .disabled(viewModel.mode == .elm)
-                        }
-
-                        Divider()
-
-                        Section("Model") {
-                            ForEach(viewModel.allowedModelsForSelectedProvider, id: \.self) { mid in
-                                Button {
-                                    viewModel.setModelForSelectedConversation(mid)
-                                } label: {
-                                    HStack {
-                                        Text(mid)
-                                        if viewModel.selectedModelId == mid {
-                                            Spacer()
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } label: {
-                        Text("\(viewModel.selectedProviderId == .openrouter ? "OpenRouter" : "ChatGPT") • \(viewModel.selectedModelId)")
-                    }
-
-                    Divider()
-
-                    if viewModel.isChatGPTConnected {
-                        Button(role: .destructive) {
-                            viewModel.disconnectChatGPT()
-                        } label: {
-                            Text("Disconnect ChatGPT")
-                        }
-                    } else {
-                        Button {
-                            viewModel.connectChatGPTViaBrowser()
-                        } label: {
-                            Text("Connect ChatGPT (Plus/Pro)")
-                        }
-                    }
-
-                    Divider()
-
-                    if viewModel.isOpenRouterConnected {
-                        Button(role: .destructive) {
-                            viewModel.disconnectOpenRouter()
-                        } label: {
-                            Text("Disconnect OpenRouter")
-                        }
-                    } else {
-                        Button {
-                            showingOpenRouterConnect = true
-                        } label: {
-                            Text("Connect OpenRouter (API key)")
-                        }
-                    }
-
-                    Divider()
-
                     Button("Clear Messages") {
                         viewModel.clear()
                     }
@@ -292,7 +92,16 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "ellipsis.circle")
                 }
                 .buttonStyle(.plain)
-                .help("Chat options")
+                .help("Agent options")
+            }
+
+            HStack(spacing: 8) {
+                Text(viewModel.agentStatusSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+
+                Spacer()
             }
         }
         .padding(12)
@@ -349,22 +158,7 @@ public struct AgentChatPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             suggestions
 
-            if viewModel.mode == .elm {
-                HStack(spacing: 10) {
-                    Toggle("Tick Active", isOn: $viewModel.elmTickActive)
-
-                    Spacer()
-
-                    Stepper(value: $viewModel.elmTickPeriodSeconds, in: 1...3600, step: 1) {
-                        Text("Tick: \(viewModel.elmTickPeriodSeconds)s")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: 180)
-                }
-            }
-
-            TextField(viewModel.mode == .elm ? "User message (optional between ticks)" : "Message", text: $viewModel.draft, axis: .vertical)
+            TextField("Message", text: $viewModel.draft, axis: .vertical)
                 .textFieldStyle(.roundedBorder)
                 .lineLimit(1...6)
                 .disabled(viewModel.isSending)
@@ -373,7 +167,7 @@ public struct AgentChatPanelView: View {
                 }
 
             HStack {
-                Text(agentEnabled ? (viewModel.mode == .elm ? "Enter to send one Agent turn" : "Enter to send") : "Pro required to send")
+                Text(agentEnabled ? "Enter to send" : "Pro required to send")
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
@@ -398,7 +192,7 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("\(viewModel.mode == .elm ? "Agent" : "Chat") requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                    Text("Agent requires EMWaver Pro. You can read chats and type, but sending is locked.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
@@ -459,106 +253,6 @@ public struct AgentChatPanelView: View {
         }
     }
 }
-
-private struct ElmDebugInspectorSheet: View {
-    @Environment(\.dismiss) private var dismiss
-    @ObservedObject var viewModel: AgentChatViewModel
-    @State private var selectedTurnId: UUID?
-    @State private var selectedPane: Pane = .input
-
-    private enum Pane: String, CaseIterable, Identifiable {
-        case input
-        case output
-
-        var id: String { rawValue }
-        var label: String { self == .input ? "Input" : "Output" }
-    }
-
-    private var selectedTurn: AgentChatViewModel.ElmDebugTurn? {
-        if let selectedTurnId {
-            return viewModel.elmDebugTurns.first(where: { $0.id == selectedTurnId })
-        }
-        return viewModel.elmDebugTurns.first
-    }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("Agent Turn Debug")
-                    .font(.headline)
-
-                Spacer()
-
-                Button("Close") {
-                    dismiss()
-                }
-
-                Button("Clear") {
-                    viewModel.clearElmDebugTurns()
-                    selectedTurnId = nil
-                }
-                .disabled(viewModel.elmDebugTurns.isEmpty)
-            }
-
-            HStack(spacing: 12) {
-                List(viewModel.elmDebugTurns, selection: $selectedTurnId) { turn in
-                    HStack(spacing: 8) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Tick \(turn.tickId)")
-                                .font(.subheadline.weight(.semibold))
-                            Text(turn.createdAt.formatted(date: .omitted, time: .standard))
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        if turn.errorText != nil {
-                            Image(systemName: "exclamationmark.triangle.fill")
-                                .foregroundStyle(.red)
-                        }
-                    }
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        selectedTurnId = turn.id
-                    }
-                    .tag(turn.id)
-                }
-                .frame(minWidth: 220)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    Picker("Pane", selection: $selectedPane) {
-                        ForEach(Pane.allCases) { pane in
-                            Text(pane.label).tag(pane)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    if let turn = selectedTurn {
-                        if let err = turn.errorText, !err.isEmpty {
-                            Text(err)
-                                .font(.caption)
-                                .foregroundStyle(.red)
-                        }
-
-                        ScrollView {
-                            Text(selectedPane == .input ? turn.inputJSON : (turn.outputJSON ?? "{}"))
-                                .font(.system(.callout, design: .monospaced))
-                                .textSelection(.enabled)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(10)
-                        }
-                        .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    } else {
-                        Text("No turns captured yet.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-        }
-        .padding(14)
-        .frame(minWidth: 860, minHeight: 520)
-    }
-}
-
 
 private struct MessageRow: View {
     let message: AgentChatMessage

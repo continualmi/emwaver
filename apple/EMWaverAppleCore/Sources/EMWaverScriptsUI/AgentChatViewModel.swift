@@ -115,8 +115,8 @@ public final class AgentChatViewModel: ObservableObject {
         "x-ai/grok-4.1-fast",
     ]
 
-    public static let defaultProviderId: ProviderId = .chatgptCodex
-    public static let defaultModelId = "gpt-5.3-codex"
+    public static let defaultProviderId: ProviderId = .openrouter
+    public static let defaultModelId = AgentModelConfig.current()?.modelName ?? "google/gemini-3-flash-preview"
 
     @Published public private(set) var messages: [AgentChatMessage] = []
     @Published public private(set) var conversations: [ConversationInfo] = []
@@ -164,8 +164,7 @@ public final class AgentChatViewModel: ObservableObject {
     // This enables cross-device continuity while still allowing local inference providers.
     private let cloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
-    private let codex = AgentCodexClient()
-    private let openRouter = AgentOpenRouterClient()
+    private let modelClient = AgentModelClient()
 
     private let legacyDefaultsKey = "emwaver.agent.local.conversation"
 
@@ -245,40 +244,26 @@ public final class AgentChatViewModel: ObservableObject {
         elmTickTask?.cancel()
     }
 
-    private let keychainService = "com.emwaver.agent"
-    private let openRouterKeyAccount = "openrouter_api_key"
-
-    public var isChatGPTConnected: Bool {
-        codex.isConnected()
+    public var isAgentConfigured: Bool {
+        AgentModelConfig.current() != nil
     }
 
-    public var isOpenRouterConnected: Bool {
-        (try? KeychainStore.get(service: keychainService, account: openRouterKeyAccount)) != nil
+    public var selectedModelId: String {
+        AgentModelConfig.current()?.modelName ?? Self.defaultModelId
     }
 
-    public func setOpenRouterApiKey(_ key: String) {
-        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        do {
-            try KeychainStore.set(service: keychainService, account: openRouterKeyAccount, data: Data(trimmed.utf8))
-        } catch {
-            lastError = error.localizedDescription
+    public var agentStatusSummary: String {
+        if let config = AgentModelConfig.current() {
+            return "Model • \(config.modelName)"
         }
+        return "Agent model not configured"
     }
 
-    public func disconnectOpenRouter() {
-        do {
-            try KeychainStore.delete(service: keychainService, account: openRouterKeyAccount)
-        } catch {
-            lastError = error.localizedDescription
+    private func currentAgentModelConfig() throws -> AgentModelConfig {
+        guard let config = AgentModelConfig.current() else {
+            throw AgentBackendError.serverError("Agent model is not configured. Set MODEL_NAME, MODEL_BASE_URL, and MODEL_API_KEY in .env.")
         }
-    }
-
-    private func getOpenRouterApiKey() throws -> String {
-        guard let data = try KeychainStore.get(service: keychainService, account: openRouterKeyAccount) else {
-            throw AgentBackendError.serverError("OpenRouter is not connected")
-        }
-        return String(data: data, encoding: .utf8) ?? ""
+        return config
     }
 
     public func clear() {
@@ -368,52 +353,7 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     public func setModelForSelectedConversation(_ modelId: String) {
-        guard let id = selectedConversationId else { return }
-        guard let conv = conversation(id: id) else { return }
-        let allowed = allowedModels(for: conv.providerId)
-        guard allowed.contains(modelId) else { return }
-        persistPreferredModel(modelId, for: conv.providerId)
-        updateConversation(id: id) { conv in
-            conv.modelId = modelId
-            conv.updatedAt = Date()
-        }
-        persistState()
-        dbg("set model conv=\(id) provider=\(conv.providerId.rawValue) model=\(modelId)")
-    }
-
-    public var selectedProviderId: ProviderId {
-        guard let id = selectedConversationId,
-              let conv = conversation(id: id) else { return preferredProviderId() }
-        return conv.providerId
-    }
-
-    public var selectedModelId: String {
-        guard let id = selectedConversationId,
-              let conv = conversation(id: id) else { return preferredModelId() }
-        return conv.modelId
-    }
-
-    public var allowedModelsForSelectedProvider: [String] {
-        allowedModels(for: selectedProviderId)
-    }
-
-    public func setProviderForSelectedConversation(_ provider: ProviderId) {
-        if mode == .elm, provider != .chatgptCodex {
-            return
-        }
-        guard let id = selectedConversationId else { return }
-        UserDefaults.standard.set(provider.rawValue, forKey: preferredProviderKey)
-
-        // Keep provider-specific preferred model across switches/restarts.
-        let nextModel = preferredModelId(for: provider)
-
-        updateConversation(id: id) { conv in
-            conv.providerId = provider
-            conv.modelId = nextModel
-            conv.updatedAt = Date()
-        }
-        persistState()
-        dbg("set provider conv=\(id) provider=\(provider.rawValue) model=\(nextModel)")
+        // Model selection is managed by repo `.env` (`MODEL_NAME`) rather than per-device UI state.
     }
 
     public func deleteConversation(_ id: UUID) {
@@ -435,28 +375,6 @@ public final class AgentChatViewModel: ObservableObject {
         persistState()
     }
 
-    public func connectChatGPTViaBrowser() {
-        lastError = nil
-        Task {
-            do {
-                try await codex.connectViaBrowserOAuth()
-                await MainActor.run {
-                    self.lastError = nil
-                    self.objectWillChange.send()
-                }
-            } catch {
-                await MainActor.run {
-                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                }
-            }
-        }
-    }
-
-    public func disconnectChatGPT() {
-        codex.disconnect()
-        objectWillChange.send()
-    }
-
     public func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
@@ -465,30 +383,18 @@ public final class AgentChatViewModel: ObservableObject {
         lastError = nil
         draft = ""
 
-        switch mode {
-        case .llm:
-            sendLLM(userText: text)
-        case .elm:
-            sendELM(userText: text, appendUserMessage: true)
-        }
+        sendAgent(userText: text)
     }
 
-    private func sendLLM(userText text: String) {
+    private func sendAgent(userText text: String) {
         // In cloud mode we still run inference locally, but we persist user/assistant turns to the backend.
         let isCloud = (cloudProvider != nil)
 
-        // Provider-specific connection checks
-        switch selectedProviderId {
-        case .chatgptCodex:
-            guard isChatGPTConnected else {
-                lastError = "Connect ChatGPT (Plus/Pro) first."
-                return
-            }
-        case .openrouter:
-            guard isOpenRouterConnected else {
-                lastError = "Connect OpenRouter (API key) first."
-                return
-            }
+        do {
+            _ = try currentAgentModelConfig()
+        } catch {
+            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            return
         }
 
         messages.append(AgentChatMessage(role: .user, text: text))
@@ -498,13 +404,8 @@ public final class AgentChatViewModel: ObservableObject {
             updateConversation(id: id) { conv in
                 conv.messages = self.messages
                 conv.updatedAt = Date()
-                switch conv.providerId {
-                case .chatgptCodex:
-                    break
-                case .openrouter:
-                    let msg: [String: Any] = ["role": "user", "content": text]
-                    conv.openRouterMessagesJSON.append(jsonString(msg))
-                }
+                let msg: [String: Any] = ["role": "user", "content": text]
+                conv.openRouterMessagesJSON.append(jsonString(msg))
             }
             persistState()
         }
@@ -530,13 +431,7 @@ public final class AgentChatViewModel: ObservableObject {
                     self.messages.append(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
-                let reply: String
-                switch self.selectedProviderId {
-                case .chatgptCodex:
-                    reply = try await self.runToolLoop(userPrompt: text)
-                case .openrouter:
-                    reply = try await self.runOpenRouterToolLoop(userPrompt: text)
-                }
+                let reply = try await self.runManagedToolLoop(userPrompt: text)
 
                 // Persist assistant turn to cloud.
                 if isCloud, let cid = self.selectedConversationId {
@@ -574,62 +469,9 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     private func sendELM(userText: String, appendUserMessage: Bool) {
-        ensureCodexForElmMode()
-        guard isChatGPTConnected else {
-            lastError = "Connect ChatGPT (Plus/Pro) first."
-            return
-        }
-        let isCloud = (cloudProvider != nil)
-
-        if appendUserMessage && !userText.isEmpty {
-            messages.append(AgentChatMessage(role: .user, text: userText))
-            if !isCloud, let id = selectedConversationId {
-                updateConversation(id: id) { conv in
-                    conv.messages = self.messages
-                    conv.updatedAt = Date()
-                }
-                persistState()
-            }
-        }
-
-        isSending = true
-
-        Task { @MainActor in
-            do {
-                if isCloud, self.selectedConversationId == nil {
-                    await self.createCloudConversation()
-                }
-
-                if appendUserMessage, !userText.isEmpty, isCloud, let cid = self.selectedConversationId {
-                    await self.appendCloudMessage(conversationId: cid, role: "user", content: userText)
-                }
-
-                let output = try await self.runElmTurn(userText: userText)
-                let assistant = output.assistant.trimmingCharacters(in: .whitespacesAndNewlines)
-
-                if !assistant.isEmpty {
-                    if isCloud, let cid = self.selectedConversationId {
-                        await self.appendCloudMessage(conversationId: cid, role: "assistant", content: assistant)
-                    }
-                    self.messages.append(AgentChatMessage(role: .assistant, text: assistant))
-                }
-
-                self.isSending = false
-
-                if isCloud {
-                    Task { await self.refreshCloudConversations() }
-                } else if let id = self.selectedConversationId {
-                    self.updateConversation(id: id) { conv in
-                        conv.messages = self.messages
-                        conv.updatedAt = Date()
-                    }
-                    self.persistState()
-                }
-            } catch {
-                self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                self.isSending = false
-            }
-        }
+        _ = appendUserMessage
+        _ = userText
+        lastError = "Single-turn control mode is no longer available."
     }
 
     private func restartElmTickLoopIfNeeded() {
@@ -699,31 +541,26 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     private func runElmTurn(userText: String) async throws -> ElmTurnOutput {
-        let model = Self.allowedCodexModelIds.contains(selectedModelId) ? selectedModelId : (Self.allowedCodexModelIds.first ?? Self.defaultModelId)
+        let config = try currentAgentModelConfig()
         let inputPayload = try await buildElmInput(userText: userText)
         let inputJSON = jsonString(inputPayload)
         let inputPretty = prettyJSONString(inputPayload)
         let tickId = elmState.tickId
 
-        dbg("elm turn model=\(model) tick=\(elmState.tickId) open_files=\(elmState.emwFilesOpen.count)")
+        dbg("elm turn model=\(config.modelName) tick=\(elmState.tickId) open_files=\(elmState.emwFilesOpen.count)")
 
         var responseText: String?
 
         do {
-            let resp = try await codex.send(
-                model: model,
-                instructions: agentControlSystemPrompt(),
-                input: [Self.codexUserMessageItem(text: inputJSON)],
-                tools: [],
-                sessionId: nil
+            let resp = try await modelClient.sendStream(
+                config: config,
+                messages: [
+                    ["role": "system", "content": agentControlSystemPrompt()],
+                    ["role": "user", "content": inputJSON],
+                ],
+                tools: []
             )
-
-            let outputItems = Self.extractResponsesOutputItems(resp)
-            let text = outputItems
-                .filter { ($0["type"] as? String) == "message" }
-                .map { Self.extractTextFromMessageItem($0) }
-                .joined(separator: "\n\n")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let text = ((resp["content"] as? String) ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             responseText = text
 
             guard !text.isEmpty else {
@@ -955,112 +792,7 @@ public final class AgentChatViewModel: ObservableObject {
         return nil
     }
 
-    // MARK: - Tool loop (Codex Responses)
-
-    private func runToolLoop(userPrompt: String) async throws -> String {
-        // Provide a light instruction prompt so Codex knows it is operating the host.
-        let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
-
-        let tools = toolSpecs()
-
-        // Fast local answer for a common question: don't ask the model to enumerate its own tool schema.
-        // This avoids formatting glitches and keeps the response consistent across providers.
-        if Self.isToolListingPrompt(userPrompt) {
-            return Self.localToolHelpMarkdown(tools)
-        }
-
-        var iterations = 0
-        var lastAssistantText = ""
-
-        let sessionId = currentSessionId()
-
-        // Persist user message into Codex input history (opencode-style: replay full state, no server ids).
-        appendCodexItemToCurrentConversation(Self.codexUserMessageItem(text: userPrompt))
-
-        while iterations < 10 {
-            iterations += 1
-
-            let inputItems = currentCodexInputItems()
-            dbg("loop iter=\(iterations) model=\(selectedModelId) session=\(sessionId) input_items=\(inputItems.count)")
-
-            let resp = try await codex.send(
-                model: selectedModelId,
-                instructions: instructions,
-                input: inputItems,
-                tools: tools,
-                sessionId: sessionId
-            )
-
-            let outputItems = Self.extractResponsesOutputItems(resp)
-            dbg("resp output_items=\(outputItems.count)")
-
-            // First: persist the assistant output items into conversation state (so the next call has full context).
-            // We also extract any visible assistant text.
-            var functionCalls: [(callId: String, name: String, arguments: String)] = []
-            var assistantTexts: [String] = []
-
-            for item in outputItems {
-                if let type = item["type"] as? String, type == "message" {
-                    let t = Self.extractTextFromMessageItem(item)
-                    assistantTexts.append(t)
-                    if !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        appendCodexItemToCurrentConversation(Self.codexAssistantMessageItem(text: t))
-                    }
-                }
-
-                if let type = item["type"] as? String, type == "function_call" {
-                    let callId = (item["call_id"] as? String) ?? ""
-                    let name = (item["name"] as? String) ?? ""
-                    let args = (item["arguments"] as? String) ?? "{}"
-                    if !callId.isEmpty, !name.isEmpty {
-                        dbg("tool_call name=\(name) call_id=\(callId) args_len=\(args.count)")
-                        functionCalls.append((callId: callId, name: name, arguments: args))
-                        appendCodexItemToCurrentConversation(Self.codexFunctionCallItem(callId: callId, name: name, arguments: args))
-                    }
-                }
-            }
-
-            let assistantText = assistantTexts.joined(separator: "\n\n").trimmingCharacters(in: .whitespacesAndNewlines)
-            if !assistantText.isEmpty {
-                lastAssistantText = assistantText
-            }
-
-            if functionCalls.isEmpty {
-                break
-            }
-
-            // Execute tools and append function_call_output items.
-            for call in functionCalls {
-                let argsObj = parseArgs(call.arguments)
-
-                await MainActor.run {
-                    self.appendSystemToolBubble(callId: call.callId, name: call.name, args: argsObj)
-                }
-
-                let result = try await executeTool(name: call.name, args: argsObj)
-                dbg("tool_result name=\(call.name) call_id=\(call.callId) keys=\((result as NSDictionary).allKeys.count)")
-
-                await MainActor.run {
-                    self.updateSystemToolBubble(callId: call.callId, name: call.name, args: argsObj, result: result)
-                }
-
-                let outItem: [String: Any] = [
-                    "type": "function_call_output",
-                    "call_id": call.callId,
-                    "output": jsonString(result),
-                ]
-                appendCodexItemToCurrentConversation(outItem)
-            }
-        }
-
-        let trimmed = lastAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            throw AgentBackendError.serverError("Codex produced no text")
-        }
-        return trimmed
-    }
-
-    // MARK: - Tool loop (OpenRouter Chat Completions)
+    // MARK: - Tool loop (env-configured OpenAI-compatible endpoint)
 
     private func agentSystemPrompt() -> String {
         // Source of truth lives in the repo at /AGENT_SYSTEM_PROMPT.md and is bundled into this SwiftPM
@@ -1090,7 +822,7 @@ If no user-visible update is needed, omit assistant.
         return "Formatting: respond in Markdown.\n- Use blank lines between paragraphs.\n- When listing items (tools, files, steps), use a Markdown bullet list with one item per line (prefix `- `).\n- When showing code, use fenced code blocks."
     }
 
-    private func runOpenRouterToolLoop(userPrompt: String) async throws -> String {
+    private func runManagedToolLoop(userPrompt: String) async throws -> String {
         let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
 
         // Local tool listing
@@ -1098,8 +830,8 @@ If no user-visible update is needed, omit assistant.
             return Self.localToolHelpMarkdown(toolSpecs())
         }
 
-        let apiKey = try getOpenRouterApiKey()
-        let tools = toolSpecs().map { AgentOpenRouterClient.ToolSpec(name: $0.name, description: $0.description, parameters: $0.parameters) }
+        let config = try currentAgentModelConfig()
+        let tools = toolSpecs().map { AgentModelClient.ToolSpec(name: $0.name, description: $0.description, parameters: $0.parameters) }
 
         // Ensure system message exists once per conversation.
         if let id = selectedConversationId {
@@ -1119,11 +851,10 @@ If no user-visible update is needed, omit assistant.
             iterations += 1
 
             let history = currentOpenRouterMessages()
-            dbg("openrouter loop iter=\(iterations) model=\(selectedModelId) msgs=\(history.count)")
+            dbg("agent loop iter=\(iterations) model=\(config.modelName) msgs=\(history.count)")
 
-            let assistantMsg = try await openRouter.sendStream(
-                apiKey: apiKey,
-                model: selectedModelId,
+            let assistantMsg = try await modelClient.sendStream(
+                config: config,
                 messages: history,
                 tools: tools
             )
@@ -1170,7 +901,7 @@ If no user-visible update is needed, omit assistant.
 
         let trimmed = lastAssistantText.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty {
-            throw AgentBackendError.serverError("OpenRouter produced no text")
+            throw AgentBackendError.serverError("Agent model produced no text")
         }
         return trimmed
     }
@@ -1335,7 +1066,7 @@ If no user-visible update is needed, omit assistant.
         }
     }
 
-    private func toolSpecs() -> [AgentCodexClient.ToolSpec] {
+    private func toolSpecs() -> [AgentModelClient.ToolSpec] {
         return [
             .init(
                 name: "web_fetch",
@@ -1444,7 +1175,7 @@ If no user-visible update is needed, omit assistant.
         return false
     }
 
-    private static func localToolHelpMarkdown(_ tools: [AgentCodexClient.ToolSpec]) -> String {
+    private static func localToolHelpMarkdown(_ tools: [AgentModelClient.ToolSpec]) -> String {
         var out: [String] = []
         out.append("I can use the following tools:\n")
         out.append("") // blank line so Markdown list renders reliably
@@ -1627,8 +1358,8 @@ If no user-visible update is needed, omit assistant.
             createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
             updatedAt = try c.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
             sessionId = try c.decodeIfPresent(String.self, forKey: .sessionId) ?? UUID().uuidString
-            providerId = try c.decodeIfPresent(ProviderId.self, forKey: .providerId) ?? AgentChatViewModel.defaultProviderId
-            modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? AgentChatViewModel.defaultModelId
+            providerId = try c.decodeIfPresent(ProviderId.self, forKey: .providerId) ?? .openrouter
+            modelId = try c.decodeIfPresent(String.self, forKey: .modelId) ?? (AgentModelConfig.current()?.modelName ?? "google/gemini-3-flash-preview")
             messages = try c.decodeIfPresent([AgentChatMessage].self, forKey: .messages) ?? []
             codexInputItemsJSON = try c.decodeIfPresent([String].self, forKey: .codexInputItemsJSON) ?? []
             openRouterMessagesJSON = try c.decodeIfPresent([String].self, forKey: .openRouterMessagesJSON) ?? []
@@ -1819,19 +1550,7 @@ If no user-visible update is needed, omit assistant.
     }
 
     private func ensureCodexForElmMode() {
-        UserDefaults.standard.set(ProviderId.chatgptCodex.rawValue, forKey: preferredProviderKey)
-
-        guard let id = selectedConversationId else { return }
-        guard let conv = conversation(id: id) else { return }
-
-        if conv.providerId != .chatgptCodex {
-            setProviderForSelectedConversation(.chatgptCodex)
-        }
-
-        let model = selectedModelId
-        if !Self.allowedCodexModelIds.contains(model), let fallback = Self.allowedCodexModelIds.first {
-            setModelForSelectedConversation(fallback)
-        }
+        // Legacy no-op. Single-turn control mode is no longer exposed in the UI.
     }
 
     private func loadPersistedState() {
@@ -2377,7 +2096,7 @@ extension AgentChatViewModel {
             conv.sessionId = UUID().uuidString
         }
 
-        // Seed OpenRouter with system instructions, then replay user/assistant turns.
+        // Seed the managed model with system instructions, then replay user/assistant turns.
         let instructions = agentSystemPrompt() + "\n\n" + agentFormattingRules()
         updateConversation(id: id) { conv in
             let sys: [String: Any] = ["role": "system", "content": instructions]
@@ -2388,10 +2107,8 @@ extension AgentChatViewModel {
             switch m.role {
             case .user:
                 appendOpenRouterMessageToCurrentConversation(["role": "user", "content": m.text])
-                appendCodexItemToCurrentConversation(Self.codexUserMessageItem(text: m.text))
             case .assistant:
                 appendOpenRouterMessageToCurrentConversation(["role": "assistant", "content": m.text])
-                appendCodexItemToCurrentConversation(Self.codexAssistantMessageItem(text: m.text))
             case .system:
                 // Skip tool bubbles/system notices for now.
                 break

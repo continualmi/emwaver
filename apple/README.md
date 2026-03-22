@@ -81,6 +81,11 @@ Representative files:
 - `AgentChat*` files
 - `AgentCloudAPI.swift`
 
+Agent configuration direction:
+- the Apple shared Agent UI now uses one managed tool-calling agent mode,
+- model config is loaded from app environment variables such as `MODEL_NAME`, `MODEL_BASE_URL`, `MODEL_API_KEY`, and `MODEL_REQUEST_TIMEOUT_MS`,
+- the package should not depend on end-user provider login flows or free-form API key entry in the UI.
+
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`
 

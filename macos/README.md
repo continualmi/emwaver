@@ -72,6 +72,11 @@ Representative views:
 
 `Pro/EntitlementsManager.swift` + `ProUpgradeSheet.swift` integrate subscription/entitlement UX.
 
+Agent configuration on macOS:
+- local development loads repo-root `.env` into process environment at app startup,
+- the Agent should use managed env-configured model settings (`MODEL_NAME`, `MODEL_BASE_URL`, `MODEL_API_KEY`, optional `MODEL_REQUEST_TIMEOUT_MS`),
+- the macOS Agent UI should not require Codex login flows or manual provider API key entry.
+
 ## 3) Firmware update, activation, and tooling
 
 Firmware update UI/logic:
