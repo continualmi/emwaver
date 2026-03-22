@@ -8,7 +8,7 @@ import SwiftUI
 
 public struct AgentChatPanelView: View {
 
-    private struct ELMHelpGlyph: View {
+    private struct AgentModeHelpGlyph: View {
         let mode: AgentChatViewModel.AgentMode
         @State private var showing = false
 
@@ -21,19 +21,15 @@ public struct AgentChatPanelView: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("What is ELM?")
+            .help("What is this mode?")
             .popover(isPresented: $showing, arrowEdge: .bottom) {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("ELM")
+                    Text(mode == .elm ? "Agent" : "Chat")
                         .font(.headline)
 
-                    Text(mode == .elm ? "Electronics Language Model" : "Large Language Model")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
                     Text(mode == .elm
-                         ? "Single-turn JSON control loop for deterministic script/UI operation."
-                         : "Multi-turn conversational agent with tool-calling workflows.")
+                         ? "Single-turn control loop for deterministic script and UI operation."
+                         : "Conversational mode for broader planning and tool-calling workflows.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -121,10 +117,10 @@ public struct AgentChatPanelView: View {
             HStack(spacing: 8) {
                 HStack(spacing: 6) {
                     Image(systemName: "sparkles")
-                    Text(viewModel.mode == .elm ? "ELM" : "LLM")
+                    Text(viewModel.mode == .elm ? "Agent" : "Chat")
                         .font(.headline)
 
-                    ELMHelpGlyph(mode: viewModel.mode)
+                    AgentModeHelpGlyph(mode: viewModel.mode)
                 }
 
                 Spacer()
@@ -136,7 +132,7 @@ public struct AgentChatPanelView: View {
                         Image(systemName: "ladybug")
                     }
                     .buttonStyle(.plain)
-                    .help("ELM turn debug inspector")
+                    .help("Agent control-turn debug inspector")
                 }
 
                 Menu {
@@ -151,7 +147,7 @@ public struct AgentChatPanelView: View {
                             viewModel.mode = .llm
                         } label: {
                             HStack {
-                                Text("LLM")
+                                Text("Chat")
                                 if viewModel.mode == .llm {
                                     Spacer()
                                     Image(systemName: "checkmark")
@@ -163,7 +159,7 @@ public struct AgentChatPanelView: View {
                             viewModel.mode = .elm
                         } label: {
                             HStack {
-                                Text("ELM")
+                                Text("Agent")
                                 if viewModel.mode == .elm {
                                     Spacer()
                                     Image(systemName: "checkmark")
@@ -171,7 +167,7 @@ public struct AgentChatPanelView: View {
                             }
                         }
                     } label: {
-                        Text("Mode • \(viewModel.mode == .elm ? "ELM" : "LLM")")
+                        Text("Mode • \(viewModel.mode == .elm ? "Agent" : "Chat")")
                     }
 
                     if !viewModel.conversations.isEmpty {
@@ -183,7 +179,7 @@ public struct AgentChatPanelView: View {
                             } label: {
                                 HStack {
                                     Text(conv.title)
-                                    Text(conv.agentType == .elm ? "ELM" : "LLM")
+                                    Text(conv.agentType == .elm ? "Agent" : "Chat")
                                         .font(.caption2)
                                         .foregroundStyle(.secondary)
                                     if viewModel.selectedConversationId == conv.id {
@@ -377,7 +373,7 @@ public struct AgentChatPanelView: View {
                 }
 
             HStack {
-                Text(agentEnabled ? (viewModel.mode == .elm ? "Enter to send one ELM turn" : "Enter to send") : "Pro required to send")
+                Text(agentEnabled ? (viewModel.mode == .elm ? "Enter to send one Agent turn" : "Enter to send") : "Pro required to send")
                     .foregroundStyle(.secondary)
                     .font(.caption)
 
@@ -402,7 +398,7 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("\(viewModel.mode == .elm ? "ELM" : "LLM") requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                    Text("\(viewModel.mode == .elm ? "Agent" : "Chat") requires EMWaver Pro. You can read chats and type, but sending is locked.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
@@ -488,7 +484,7 @@ private struct ElmDebugInspectorSheet: View {
     var body: some View {
         VStack(spacing: 12) {
             HStack {
-                Text("ELM Turn Debug")
+                Text("Agent Turn Debug")
                     .font(.headline)
 
                 Spacer()

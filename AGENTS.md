@@ -86,10 +86,11 @@ We intentionally give up:
 - Adding a new supported board = porting firmware + adding its binary to the app bundle.
 - Users see a unified experience regardless of which board they use.
 
-### ELM direction (model strategy)
+### Agent direction (model strategy)
 
-- EMWaver in-house model line is **ELM** (Electronics Language Models).
-- LLM conversational mode and ELM control-turn mode are product-level complementary modes.
+- EMWaver product language should refer to the **Agent**, not to an EMWaver-specific model line.
+- Near-term EMWaver AI is foundation-model-backed and product-managed rather than framed around a custom in-house model family.
+- Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
 
 ### Linux host scope
 

@@ -165,7 +165,7 @@ struct ContentView: View {
                     },
                     agentEnabled: (entitlements.entitlements?.features.agent ?? false),
                     onRequestAgentUpgrade: {
-                        proFeatureName = "ELM"
+                        proFeatureName = "Agent"
                         showingProUpgrade = true
                     },
                     onRequestSyncUpgrade: {

@@ -712,7 +712,7 @@ public final class AgentChatViewModel: ObservableObject {
         do {
             let resp = try await codex.send(
                 model: model,
-                instructions: elmSystemPrompt(),
+                instructions: agentControlSystemPrompt(),
                 input: [Self.codexUserMessageItem(text: inputJSON)],
                 tools: [],
                 sessionId: nil
@@ -727,7 +727,7 @@ public final class AgentChatViewModel: ObservableObject {
             responseText = text
 
             guard !text.isEmpty else {
-                throw AgentBackendError.serverError("ELM produced no output")
+                throw AgentBackendError.serverError("Agent control mode produced no output")
             }
 
             let parsed = try parseElmTurnOutput(text: text)
@@ -833,7 +833,7 @@ public final class AgentChatViewModel: ObservableObject {
             }
         }
 
-        throw AgentBackendError.serverError("ELM output is not valid JSON")
+        throw AgentBackendError.serverError("Agent control mode output is not valid JSON")
     }
 
     private func applyElmTurnOutput(_ output: ElmTurnOutput) async throws {
@@ -1073,13 +1073,13 @@ public final class AgentChatViewModel: ObservableObject {
         return "You are the EMWaver Agent."
     }
 
-    private func elmSystemPrompt() -> String {
-        if let url = Bundle.module.url(forResource: "ELM_SYSTEM_PROMPT", withExtension: "md"),
+    private func agentControlSystemPrompt() -> String {
+        if let url = Bundle.module.url(forResource: "AGENT_CONTROL_SYSTEM_PROMPT", withExtension: "md"),
            let text = try? String(contentsOf: url, encoding: .utf8) {
             return text.trimmingCharacters(in: .whitespacesAndNewlines)
         }
         return """
-You are the EMWaver ELM in single-turn stateless mode.
+You are the EMWaver Agent in single-turn stateless control mode.
 Return only valid JSON with optional keys: action, assistant, symbolic_ops, emw_file_ops.
 Do not include markdown.
 If no user-visible update is needed, omit assistant.
@@ -1697,8 +1697,8 @@ If no user-visible update is needed, omit assistant.
 
     private func conversationTitle(for mode: AgentMode) -> String {
         switch mode {
-        case .llm: return "LLM Chat"
-        case .elm: return "ELM Chat"
+        case .llm: return "Chat"
+        case .elm: return "Agent"
         }
     }
 

@@ -26,11 +26,11 @@ struct ProUpgradeSheet: View {
             VStack(alignment: .leading, spacing: 10) {
                 Label("Remote host sessions", systemImage: "dot.radiowaves.left.and.right")
                 Label("File storage + sync across devices", systemImage: "arrow.triangle.2.circlepath")
-                Label("ELM", systemImage: "sparkles")
+                Label("Agent", systemImage: "sparkles")
             }
             .padding(.top, 6)
 
-            Text("ELM uses EMWaver ELMs (Electronics Language Models).")
+            Text("Agent access is included with EMWaver Pro, subject to usage limits.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
