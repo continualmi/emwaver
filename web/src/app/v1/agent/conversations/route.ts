@@ -19,14 +19,9 @@ export async function POST(request: NextRequest) {
   }
 
   const titleRaw = (payload as Record<string, unknown> | null)?.title;
-  const agentTypeRaw = (payload as Record<string, unknown> | null)?.agent_type;
   const title = typeof titleRaw === "string" && titleRaw.trim() ? titleRaw.trim() : null;
-  const agentType = agentTypeRaw == null ? "llm" : String(agentTypeRaw).trim().toLowerCase();
-  if (agentType !== "llm" && agentType !== "elm") {
-    return NextResponse.json({ error: "Invalid 'agent_type'" }, { status: 400 });
-  }
 
   return NextResponse.json({
-    conversation: agentStore.createConversation(identity.uid, title, agentType),
+    conversation: agentStore.createConversation(identity.uid, title),
   });
 }

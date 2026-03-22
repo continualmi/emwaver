@@ -230,12 +230,12 @@ export default function ProPage() {
                       <td className="px-3 py-2">Yes</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">Agent (ELM)</td>
+                      <td className="px-3 py-2">Agent</td>
                       <td className="px-3 py-2">No</td>
                       <td className="px-3 py-2">Yes</td>
                     </tr>
                     <tr className="border-t border-[color:var(--line)]">
-                      <td className="px-3 py-2">ELM credits (tokens / month)</td>
+                      <td className="px-3 py-2">Agent credits (tokens / month)</td>
                       <td className="px-3 py-2">—</td>
                       <td className="px-3 py-2">10M tokens / month</td>
                     </tr>
@@ -285,7 +285,7 @@ export default function ProPage() {
 
                 {idToken ? (
                   <div>
-                    <span className="font-semibold text-[color:var(--ink)]">ELM Credits:</span>{" "}
+                    <span className="font-semibold text-[color:var(--ink)]">Agent Credits:</span>{" "}
                     {credits ? (
                       <span>
                         {credits.balance} available{credits.monthlyAllowance ? ` / ${credits.monthlyAllowance} per month` : ""}
