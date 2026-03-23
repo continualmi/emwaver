@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "missing_board_type_or_hardware_uid" }, { status: 400 });
   }
 
-  const device = provisionedDevicesStore.setLabel(boardType, hardwareUid, identity.uid, label);
+  const device = await provisionedDevicesStore.setLabel(boardType, hardwareUid, identity.uid, label);
   if (!device) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }

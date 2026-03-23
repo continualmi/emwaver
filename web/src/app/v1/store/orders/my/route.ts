@@ -7,5 +7,5 @@ export async function GET(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
-  return NextResponse.json({ orders: ordersStore.byUser(identity.uid) });
+  return NextResponse.json({ orders: await ordersStore.byUser(identity.uid) });
 }

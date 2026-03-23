@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "invalid_hardware_uid" }, { status: 400 });
     }
 
-    const existing = provisionedDevicesStore.get(boardType, hardwareUid);
-    const result = provisionedDevicesStore.claimOrRestore({
+    const existing = await provisionedDevicesStore.get(boardType, hardwareUid);
+    const result = await provisionedDevicesStore.claimOrRestore({
       boardType,
       hardwareUid,
       ownerFirebaseUid: identity.uid,

@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
-  const devices = provisionedDevicesStore.listByUser(identity.uid).map((device) => ({
+  const devices = (await provisionedDevicesStore.listByUser(identity.uid)).map((device) => ({
     board_type: device.board_type,
     hardware_uid: device.hardware_uid,
     label: device.label,

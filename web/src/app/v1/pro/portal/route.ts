@@ -2,17 +2,22 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
 import { getStripe } from "@/server/stripe";
+import { ensurePlatformUser } from "@/server/platformCore";
 
 export async function POST(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
   try {
+    const user = await ensurePlatformUser({
+      firebaseUid: identity.uid,
+      email: identity.email ?? null,
+      displayName: identity.displayName ?? null,
+    });
     const stripe = getStripe();
-    const customers = await stripe.customers.list({ email: identity.email || "", limit: 1 });
-    const customerId = customers.data[0]?.id;
+    const customerId = user.stripe_customer_id;
     if (!customerId) {
-      return NextResponse.json({ error: "no_customer", detail: "No Stripe customer found for this email yet." }, { status: 404 });
+      return NextResponse.json({ error: "no_customer", detail: "No shared Continual customer exists for this account yet." }, { status: 404 });
     }
 
     const portal = await stripe.billingPortal.sessions.create({
