@@ -1,1 +1,18 @@
-{}
+{
+  "0b528af4-4f38-4004-958a-f4b36c5a9b5d": {
+    "id": "0b528af4-4f38-4004-958a-f4b36c5a9b5d",
+    "conversation_id": "25a6f8e3-4789-4bc4-b0d0-c55f5b3c8a72",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "Hi",
+    "created_at_ms": 1774250029068
+  },
+  "b575e59c-fc46-448e-b3ab-8d2e812ae6f1": {
+    "id": "b575e59c-fc46-448e-b3ab-8d2e812ae6f1",
+    "conversation_id": "25a6f8e3-4789-4bc4-b0d0-c55f5b3c8a72",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hi! How can I help you today?",
+    "created_at_ms": 1774250030459
+  }
+}

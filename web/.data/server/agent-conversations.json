@@ -6,5 +6,12 @@
     "agent_type": "llm",
     "created_at_ms": 1773352214967,
     "updated_at_ms": 1773352214967
+  },
+  "25a6f8e3-4789-4bc4-b0d0-c55f5b3c8a72": {
+    "id": "25a6f8e3-4789-4bc4-b0d0-c55f5b3c8a72",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "title": "Chat",
+    "created_at_ms": 1774250028586,
+    "updated_at_ms": 1774250030459
   }
 }

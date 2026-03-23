@@ -83,7 +83,7 @@ Representative files:
 
 Agent configuration direction:
 - the Apple shared Agent UI now uses one managed tool-calling agent mode,
-- model config is loaded from app environment variables such as `MODEL_NAME`, `MODEL_BASE_URL`, `MODEL_API_KEY`, and `MODEL_REQUEST_TIMEOUT_MS`,
+- app clients should call the EMWaver backend `/v1/agent/*` routes and let the web/backend layer own provider calls, tool execution loops, and metering,
 - the package should not depend on end-user provider login flows or free-form API key entry in the UI.
 
 Also bundles package resources, including firmware payload under:

@@ -213,7 +213,7 @@ public final class AgentBackendApi {
         }
 
         Request req = auth(new Request.Builder()
-                        .url(joinUrl(baseUrl, "/v1/agent/chat/stream"))
+                        .url(joinUrl(baseUrl, "/v1/agent/chat/stream_tools"))
                         .post(RequestBody.create(payload.toString(), JSON))
                         .header("Accept", "text/event-stream"),
                 idToken).build();

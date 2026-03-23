@@ -24,8 +24,6 @@ public struct ScriptsRootView: View {
 
     private let device: (any ScriptDevice)?
     private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
-    // Agent runs locally on the host.
-    private let agentHost: DefaultAgentHost
     private let hostStatusSink: ((Bool, String?) -> Void)?
 
     // Pro gating (caller-controlled).
@@ -92,11 +90,9 @@ public struct ScriptsRootView: View {
         self.onRequestSyncUpgrade = onRequestSyncUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
         self.agentCloudProvider = agentCloudProvider
-        let host = DefaultAgentHost(previewManager: previewManager)
         self._previewManager = StateObject(wrappedValue: previewManager)
-        self.agentHost = host
         _agentViewModel = StateObject(
-            wrappedValue: AgentChatViewModel(host: host, cloudProvider: agentCloudProvider)
+            wrappedValue: AgentChatViewModel(cloudProvider: agentCloudProvider)
         )
     }
 

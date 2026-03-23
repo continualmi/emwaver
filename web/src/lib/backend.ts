@@ -138,6 +138,7 @@ export async function agentChat(idToken: string, conversationId: string, message
 // Streaming: returns an async iterator of events.
 export type AgentStreamEvent =
   | { type: "delta"; text: string }
+  | { type: "tool"; name: string; payload: unknown }
   | { type: "done"; message: AgentMessage; model?: string | null }
   | { type: "error"; error: string };
 
@@ -148,8 +149,8 @@ export type HostSession = {
   platform: string;
   device_name: string;
   app_version: string;
-  capabilities: any;
-  status: any;
+  capabilities: unknown;
+  status: unknown;
   created_at_ms: number;
   last_seen_at_ms: number;
   online: boolean;
@@ -168,7 +169,7 @@ export async function* agentChatStream(
   conversationId: string,
   message: string,
 ): AsyncGenerator<AgentStreamEvent> {
-  const url = `${backendBaseUrl()}/v1/agent/chat/stream`;
+  const url = `${backendBaseUrl()}/v1/agent/chat/stream_tools`;
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -193,7 +194,7 @@ export async function* agentChatStream(
     // SSE block separated by blank line
     const lines = block.split(/\r?\n/);
     let ev = "message";
-    let dataLines: string[] = [];
+    const dataLines: string[] = [];
     for (const ln of lines) {
       if (ln.startsWith("event:")) ev = ln.slice("event:".length).trim();
       else if (ln.startsWith("data:")) dataLines.push(ln.slice("data:".length).trim());
@@ -203,6 +204,7 @@ export async function* agentChatStream(
     try {
       const obj = JSON.parse(dataRaw);
       if (ev === "delta") return { type: "delta", text: String(obj.text || "") };
+      if (ev === "tool") return { type: "tool", name: String(obj.name || "tool"), payload: obj.result ?? obj.arguments ?? null };
       if (ev === "done") return { type: "done", message: obj.message, model: obj.model };
       if (ev === "error") return { type: "error", error: String(obj.error || "error") };
       return null;
