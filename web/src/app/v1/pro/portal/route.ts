@@ -2,18 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
 import { getStripe } from "@/server/stripe";
-import { ensurePlatformUser } from "@/server/platformCore";
+import { getPlatformUserById } from "@/server/platformCore";
 
 export async function POST(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
   try {
-    const user = await ensurePlatformUser({
-      firebaseUid: identity.uid,
-      email: identity.email ?? null,
-      displayName: identity.displayName ?? null,
-    });
+    const user = await getPlatformUserById(identity.uid);
+    if (!user) return NextResponse.json({ error: "unknown_user" }, { status: 404 });
     const stripe = getStripe();
     const customerId = user.stripe_customer_id;
     if (!customerId) {

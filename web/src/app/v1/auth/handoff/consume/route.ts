@@ -1,39 +1,48 @@
-import { getAuth } from "firebase-admin/auth";
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getFirebaseAdminApp } from "@/server/auth";
-import { authHandoffStore } from "@/server/store/authHandoff";
+import { verifyContinualHandoffToken } from "@/server/continualHandoff";
+import { getContinualPlatformUrl } from "@/server/env";
+import { createSessionToken } from "@/server/session";
 
 export async function POST(request: NextRequest) {
-  let adminApp;
-  try {
-    adminApp = getFirebaseAdminApp();
-  } catch {
-    return NextResponse.json(
-      {
-        error: "not_configured",
-        detail: "Backend is missing FIREBASE_ADMIN_JSON_B64 (Firebase Admin service account JSON, base64).",
-      },
-      { status: 503 },
-    );
-  }
-
   const payload = await request.json().catch(() => null);
   const code = String((payload as Record<string, unknown> | null)?.code || "").trim().toUpperCase();
   if (!code) {
     return NextResponse.json({ error: "missing_code" }, { status: 400 });
   }
 
-  const result = authHandoffStore.consume(code);
-  if ("error" in result) {
-    const status = result.error === "already_consumed" ? 409 : result.error === "expired" ? 410 : 404;
-    return NextResponse.json({ error: result.error }, { status });
-  }
-
   try {
-    const token = await getAuth(adminApp).createCustomToken(result.firebase_uid);
-    return NextResponse.json({ firebase_custom_token: token, uid: result.firebase_uid });
+    const response = await fetch(new URL("/api/auth/handoff/code/consume", getContinualPlatformUrl()), {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json",
+      },
+      body: JSON.stringify({ code, product: "emwaver" }),
+      cache: "no-store",
+    });
+    const json = (await response.json().catch(() => null)) as { handoff_token?: string; error?: string } | null;
+    if (!response.ok) {
+      return NextResponse.json({ error: json?.error || "handoff_consume_failed" }, { status: response.status });
+    }
+
+    const handoffToken = String(json?.handoff_token || "").trim();
+    const user = verifyContinualHandoffToken(handoffToken);
+    if (!user) {
+      return NextResponse.json({ error: "invalid_handoff_token" }, { status: 502 });
+    }
+
+    const accessToken = createSessionToken(user);
+    return NextResponse.json({
+      access_token: accessToken,
+      user: {
+        uid: user.uid,
+        email: user.email ?? null,
+        name: user.name ?? null,
+        status: user.status,
+      },
+    });
   } catch (error) {
-    return NextResponse.json({ error: "token_mint_failed", detail: String(error) }, { status: 502 });
+    return NextResponse.json({ error: "handoff_consume_failed", detail: String(error) }, { status: 502 });
   }
 }

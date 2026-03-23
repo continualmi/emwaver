@@ -1,18 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { getFirebaseAdminApp } from "@/server/auth";
-import { unauthorizedJson, requireIdentity } from "@/server/http";
-import { authHandoffStore } from "@/server/store/authHandoff";
+import { getContinualPlatformUrl } from "@/server/env";
 
-export async function POST(request: NextRequest) {
-  const identity = await requireIdentity(request);
-  if (!identity) return unauthorizedJson();
-
-  try {
-    getFirebaseAdminApp();
-  } catch {
-    return NextResponse.json({ error: "not_configured" }, { status: 503 });
-  }
-
-  return NextResponse.json(authHandoffStore.issue(identity.uid));
+export async function POST(_request: NextRequest) {
+  return NextResponse.json(
+    {
+      error: "moved_to_society",
+      redirect_url: new URL("/emwaver/handoff", getContinualPlatformUrl()).toString(),
+      detail: "Native EMWaver handoff codes are now issued by the Continual platform.",
+    },
+    { status: 410 },
+  );
 }

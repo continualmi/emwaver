@@ -1,15 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, type User } from "firebase/auth";
+import { useEffect, useRef, useState } from "react";
 
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
+import { fetchSessionState, redirectToContinualSignIn } from "@/lib/clientSession";
 import { AccountPanel } from "@/components/AccountPanel";
 import { ModalPortal } from "@/components/ModalPortal";
 
-function displayNameForUser(user: User | null) {
+type SessionUser = {
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+};
+
+function displayNameForUser(user: SessionUser | null) {
   if (!user) return "Account";
-  const name = user.displayName?.trim();
+  const name = user.name?.trim();
   if (name) return name;
   return user.email?.split("@")[0] || "Account";
 }
@@ -25,8 +30,8 @@ function GoogleLogo() {
   );
 }
 
-function UserAvatar({ user }: { user: User | null }) {
-  const photoUrl = user?.photoURL?.trim();
+function UserAvatar({ user }: { user: SessionUser | null }) {
+  const photoUrl = user?.picture?.trim();
   if (photoUrl) {
     // eslint-disable-next-line @next/next/no-img-element
     return <img className="h-6 w-6 rounded-full object-cover" src={photoUrl} alt="" referrerPolicy="no-referrer" />;
@@ -52,8 +57,7 @@ type AccountPillProps = {
 };
 
 export function AccountPill({ variant = "pill", label, className = "" }: AccountPillProps) {
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [authReady, setAuthReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -61,15 +65,18 @@ export function AccountPill({ variant = "pill", label, className = "" }: Account
   const rootRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!auth) {
+    void (async () => {
+      const session = await fetchSessionState();
+      if (session.user) {
+        setUser({
+          email: session.user.email,
+          name: session.user.name,
+          picture: session.user.picture,
+        });
+      }
       setAuthReady(true);
-      return;
-    }
-    return onAuthStateChanged(auth, (nextUser) => {
-      setUser(nextUser);
-      setAuthReady(true);
-    });
-  }, [auth]);
+    })();
+  }, []);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -107,12 +114,9 @@ export function AccountPill({ variant = "pill", label, className = "" }: Account
   }, [modalOpen]);
 
   async function handleLogin() {
-    if (!auth) return;
     setBusy(true);
     try {
-      await signInWithPopup(auth, googleProvider());
-      setMenuOpen(false);
-      setModalOpen(true);
+      redirectToContinualSignIn("/cloud");
     } finally {
       setBusy(false);
     }
@@ -152,14 +156,14 @@ export function AccountPill({ variant = "pill", label, className = "" }: Account
             >
               Account settings
             </button>
-            {!user && authReady && auth ? (
+            {!user && authReady ? (
               <button
                 type="button"
                 className="mt-1 flex w-full items-center rounded-xl px-3 py-2 text-left text-sm text-[color:var(--ink-dim)] hover:bg-[color:var(--surface)]"
                 onClick={() => void handleLogin()}
                 disabled={busy}
               >
-                {busy ? "Signing in..." : "Continue with Google"}
+                {busy ? "Signing in..." : "Sign in with Continual"}
               </button>
             ) : null}
           </div>

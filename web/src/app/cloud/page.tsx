@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { AccountPill } from "@/components/AccountPill";
 import { DashboardDevicesPanel } from "@/components/DashboardDevicesPanel";
@@ -9,7 +8,7 @@ import { EmwUiPreview } from "@/components/EmwUiPreview";
 import { RemoteEmwUi } from "@/components/RemoteEmwUi";
 import { evalEmwUi } from "@/lib/emwUiRuntime";
 import { exampleEmwScripts } from "@/lib/exampleEmwScripts";
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
+import { fetchSessionState, redirectToContinualSignIn, signOutSession } from "@/lib/clientSession";
 import {
   backendFetch,
   deleteFile,
@@ -84,7 +83,6 @@ function formatUiError(input: unknown): string {
 }
 
 export default function CloudPage() {
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
   const [files, setFiles] = useState<CloudUserFile[]>([]);
@@ -162,10 +160,10 @@ export default function CloudPage() {
   }, [idToken]);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, async (u) => {
+    void (async () => {
       setError(null);
-      if (!u) {
+      const session = await fetchSessionState();
+      if (!session.user) {
         setUserEmail(null);
         setIdToken("");
         setIsPro(false);
@@ -189,8 +187,8 @@ export default function CloudPage() {
         setViewerText("");
         return;
       }
-      setUserEmail(u.email || u.displayName || "Signed in");
-      const tok = await u.getIdToken();
+      setUserEmail(session.user.email || session.user.name || "Signed in");
+      const tok = session.accessToken;
       setIdToken(tok);
       try {
         await refresh(tok);
@@ -199,26 +197,11 @@ export default function CloudPage() {
         setEntitlementsOk(false);
         setError(formatUiError(e));
       }
-    });
-  }, [auth]);
+    })();
+  }, []);
 
   async function doSignIn() {
-    setError(null);
-    if (!auth) {
-      setError(
-        "Firebase env is missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID"
-      );
-      return;
-    }
-    try {
-      await signInWithPopup(auth, googleProvider());
-    } catch (e: any) {
-      const code = e?.code ? String(e.code) : "";
-      const msg = e?.message ? String(e.message) : String(e);
-      // Common in prod when the deployed domain isn't whitelisted in Firebase Auth.
-      // Shows up as auth/unauthorized-domain.
-      setError(formatUiError(code ? `${code}: ${msg}` : msg));
-    }
+    redirectToContinualSignIn("/cloud");
   }
 
 
@@ -254,8 +237,13 @@ export default function CloudPage() {
   }
   async function doSignOut() {
     setError(null);
-    if (!auth) return;
-    await signOut(auth);
+    await signOutSession();
+    setUserEmail(null);
+    setIdToken("");
+    setIsPro(false);
+    setEntitlementsOk(false);
+    setFiles([]);
+    setHosts([]);
   }
 
   function clearTimers() {
@@ -658,7 +646,7 @@ export default function CloudPage() {
 
           {!userEmail ? (
             <a
-              href="/signin?redirect=%2Fcloud"
+                href="/signin?redirect=%2Fcloud"
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
             >
               Sign in
@@ -727,14 +715,14 @@ export default function CloudPage() {
           <div className="mb-4 shrink-0 rounded-2xl border border-[color:var(--line)] bg-[color:var(--copper-tint)] p-4">
             <div className="text-sm font-semibold text-[color:var(--ink)]">Pro feature preview</div>
             <div className="pt-1 text-sm text-[color:var(--ink-dim)]">
-              You can browse the UI and bundled example scripts. Cloud files, remote hosts, and the Agent require EMWaver Pro.
+              You can browse the UI and bundled example scripts. Cloud files, remote hosts, and the Agent require Continual Pro.
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
               <a
                 href="/pro"
                 className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
               >
-                Get EMWaver Pro
+                Get Continual Pro
               </a>
               {!userEmail ? (
                 <a

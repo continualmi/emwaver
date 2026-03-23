@@ -10,20 +10,13 @@ struct SignInSheet: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Sign in is optional. Your scripts and signals always stay on this device. If you sign in, EMWaver can back them up and sync across devices.")
+            Text("Sign in is optional. Your scripts and signals always stay on this device. If you sign in, EMWaver can back them up, sync across devices, and unlock cloud features through Continual Pro.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let err = auth.lastError, !err.isEmpty {
                 Text(err)
                     .foregroundStyle(.red)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !auth.canSignInWithGoogle {
-                Text("Google sign-in isn't configured yet for this build. You can keep using EMWaver locally.")
-                    .foregroundStyle(.secondary)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -36,23 +29,14 @@ struct SignInSheet: View {
                 Spacer()
 
                 Button {
-                    Task {
-                        await auth.signInWithGoogle()
-                        if auth.isSignedIn {
-                            dismiss()
-                        }
-                    }
+                    auth.beginWebSignInHandoff()
                 } label: {
                     HStack(spacing: 8) {
-                        if auth.isSigningIn {
-                            ProgressView()
-                                .controlSize(.small)
-                        }
-                        Text("Continue with Google")
+                        Text("Continue with Continual")
                     }
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(auth.isSigningIn || !auth.canSignInWithGoogle)
+                .disabled(auth.isSigningIn)
             }
         }
         .padding(20)

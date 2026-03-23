@@ -66,7 +66,7 @@ We intentionally give up:
 
 - **Subscription-first access**: users subscribe to EMWaver services rather than purchasing individual device activations.
 - **Free tier**: may allow a small number of activated devices for local/basic use so onboarding remains low-friction.
-- **EMWaver Pro**: unlocks the full cloud product, including remote hosting/control, sync, higher device limits, and the full Agent experience. Backend-issued entitlements are authoritative.
+- **Continual Pro**: is the shared Continual MI subscription and the authoritative paid entitlement for EMWaver. It unlocks the full cloud product, including remote hosting/control, sync, higher device limits, and the full Agent experience. Any older `EMWaver Pro` wording should be treated as transitional product copy, not the long-term billing/account model.
 - **AI credits/usage**: agent usage remains a metered resource even when access is subscription-gated.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
 

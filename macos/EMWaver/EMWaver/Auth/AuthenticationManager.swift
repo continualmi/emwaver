@@ -81,19 +81,18 @@ final class AuthenticationManager: ObservableObject {
         // Close the sign-in sheet first; SwiftUI doesn't reliably present two sheets at once.
         isSignInSheetPresented = false
 
-        // Open the EMWaver web sign-in page and then prompt for the code.
-        guard var base = FrontendUrl.resolve() else {
-            lastError = "Missing frontend URL"
+        // Open the shared Continual handoff page and then prompt for the code.
+        let rawBase = (ProcessInfo.processInfo.environment["CONTINUAL_PLATFORM_URL"] ?? "https://continualmi.com")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var base = URL(string: rawBase) else {
+            lastError = "Missing Continual platform URL"
             return
         }
-        base.appendPathComponent("signin")
-        // redirect to /auth/handoff to show the code.
-        let urlStr = base.absoluteString + "?redirect=%2Fauth%2Fhandoff"
-        if let url = URL(string: urlStr) {
-            #if canImport(AppKit)
-            NSWorkspace.shared.open(url)
-            #endif
-        }
+        base.appendPathComponent("emwaver")
+        base.appendPathComponent("handoff")
+        #if canImport(AppKit)
+        NSWorkspace.shared.open(base)
+        #endif
 
         // Present the handoff sheet after the sign-in sheet has had a moment to dismiss.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
@@ -118,17 +117,10 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
-        let apiKey = (ProcessInfo.processInfo.environment["EMWAVER_FIREBASE_WEB_API_KEY"] ?? "")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        if apiKey.isEmpty {
-            lastError = "Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)"
-            return
-        }
-
         var consumeURL = base
 
         do {
-            // Consume handoff code -> custom token.
+            // Consume handoff code -> EMWaver access token.
             consumeURL.appendPathComponent("v1")
             consumeURL.appendPathComponent("auth")
             consumeURL.appendPathComponent("handoff")
@@ -148,20 +140,18 @@ final class AuthenticationManager: ObservableObject {
             }
 
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let customToken = (json?["firebase_custom_token"] as? String) ?? ""
-            if customToken.isEmpty {
-                throw AuthError.failed("Missing firebase_custom_token")
+            let accessToken = (json?["access_token"] as? String) ?? ""
+            if accessToken.isEmpty {
+                throw AuthError.failed("Missing access_token")
             }
-
-            // Exchange custom token for Firebase session (idToken + refreshToken).
-            let fb = try await firebase.signInWithCustomToken(firebaseWebApiKey: apiKey, customToken: customToken)
+            let user = json?["user"] as? [String: Any]
 
             let newSession = AuthSession(
-                uid: fb.localId ?? "",
-                email: fb.email,
-                displayName: fb.displayName,
-                idToken: fb.idToken,
-                refreshToken: fb.refreshToken
+                uid: (user?["uid"] as? String) ?? "",
+                email: user?["email"] as? String,
+                displayName: user?["name"] as? String,
+                idToken: accessToken,
+                refreshToken: accessToken
             )
 
             // Persist refresh token + profile for restore.
@@ -198,11 +188,7 @@ final class AuthenticationManager: ObservableObject {
         guard session == nil else { return }
 
         do {
-            let apiKey = (ProcessInfo.processInfo.environment["EMWAVER_FIREBASE_WEB_API_KEY"] ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !apiKey.isEmpty else { return }
-
-            guard let refresh = try KeychainStore.getString(account: refreshTokenAccount), !refresh.isEmpty else {
+            guard let token = try KeychainStore.getString(account: refreshTokenAccount), !token.isEmpty else {
                 return
             }
 
@@ -214,18 +200,14 @@ final class AuthenticationManager: ObservableObject {
                 }
             }
 
-            let fb = try await firebase.refresh(firebaseWebApiKey: apiKey, refreshToken: refresh)
-
             let newSession = AuthSession(
-                uid: storedProfile?.uid ?? (fb.localId ?? ""),
+                uid: storedProfile?.uid ?? "",
                 email: storedProfile?.email,
                 displayName: storedProfile?.displayName,
-                idToken: fb.idToken,
-                refreshToken: fb.refreshToken
+                idToken: token,
+                refreshToken: token
             )
 
-            // Save rotated refresh token.
-            try KeychainStore.setString(newSession.refreshToken, account: refreshTokenAccount)
             session = newSession
         } catch {
             // Best-effort: clear invalid tokens.

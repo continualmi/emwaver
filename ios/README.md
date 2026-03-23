@@ -30,10 +30,11 @@ Key app entry:
 - `GoogleOAuthSignInProvider.swift`
 - `KeychainStore.swift`
 - `SignInSheet.swift`
+- `WebSignInHandoffSheet.swift`
 
 Responsibilities:
 - sign-in state,
-- Firebase token handling,
+- Continual handoff-code exchange and EMWaver session token handling,
 - secure local persistence.
 
 ## 2.2 Device and transport managers
@@ -80,11 +81,13 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-Google sign-in config is bundled at build time from repo env files:
-- repo-root `.env` for local/debug builds
-- repo-root `.env.prod` for release-oriented builds
+The iOS app now relies on the shared Continual account flow:
+- the app opens the Society-hosted EMWaver handoff page in the browser,
+- the user signs in with Continual,
+- Society issues a one-time EMWaver code,
+- the app exchanges that code with EMWaver for an EMWaver-native session token.
 
-The iOS target writes a generated `EMWaverEnv.plist` into the app bundle and patches the built app `Info.plist` with the Google callback URL scheme. Scheme environment variables still override bundled values when present.
+Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 
