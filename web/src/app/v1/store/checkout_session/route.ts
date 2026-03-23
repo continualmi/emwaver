@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "stripe_error", detail: String(error) }, { status: 502 });
   }
 
-  const order = ordersStore.createDraft({
+  const order = await ordersStore.createDraft({
     firebase_uid: user?.uid || null,
     email,
     quantity,

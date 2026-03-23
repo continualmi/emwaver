@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  entitlementsStore.set(uid, {
+  await entitlementsStore.set(uid, {
     pro_active: true,
     pro_expires_at_ms: expires_at_ms,
     updated_at_ms: Date.now(),

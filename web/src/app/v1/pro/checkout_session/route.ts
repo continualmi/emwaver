@@ -1,27 +1,22 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { unauthorizedJson, requireIdentity } from "@/server/http";
-import { getStripe } from "@/server/stripe";
+import { createContinualProCheckoutSession, ensurePlatformUser } from "@/server/platformCore";
 
 export async function POST(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
-  const priceId = (process.env.PRO_STRIPE_PRICE_ID || "").trim();
-  if (!priceId || !(process.env.STRIPE_WEBHOOK_SECRET || "").trim()) {
+  if (!(process.env.STRIPE_WEBHOOK_SECRET || "").trim()) {
     return NextResponse.json({ error: "pro_not_configured" }, { status: 503 });
   }
   try {
-    const stripe = getStripe();
-    const session = await stripe.checkout.sessions.create({
-      mode: "subscription",
-      customer_email: identity.email || undefined,
-      client_reference_id: identity.uid,
-      line_items: [{ price: priceId, quantity: 1 }],
-      success_url: `${process.env.PRO_SUCCESS_URL}?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: process.env.PRO_CANCEL_URL || process.env.PRO_SUCCESS_URL,
-      metadata: { firebase_uid: identity.uid },
+    const user = await ensurePlatformUser({
+      firebaseUid: identity.uid,
+      email: identity.email ?? null,
+      displayName: identity.displayName ?? null,
     });
+    const session = await createContinualProCheckoutSession(user);
     return NextResponse.json({ url: session.url, session_id: session.id });
   } catch (error) {
     return NextResponse.json({ error: "stripe_error", detail: String(error) }, { status: 502 });

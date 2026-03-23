@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "missing_session_id" }, { status: 400 });
   }
 
-  const result = ordersStore.claim(sessionId, identity.uid);
+  const result = await ordersStore.claim(sessionId, identity.uid);
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: result.error === "already_claimed" ? 409 : 404 });
   }

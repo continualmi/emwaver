@@ -35,7 +35,7 @@ export async function POST(request: NextRequest, context: Context) {
   if (post.locked) {
     return NextResponse.json({ error: "locked" }, { status: 403 });
   }
-  if (!provisionedDevicesStore.hasUserDevice(identity.uid)) {
+  if (!(await provisionedDevicesStore.hasUserDevice(identity.uid))) {
     return NextResponse.json({ error: "device_required" }, { status: 403 });
   }
 

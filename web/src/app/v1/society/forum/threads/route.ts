@@ -7,7 +7,7 @@ import { societyStore } from "@/server/store/society";
 export async function POST(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
-  if (!provisionedDevicesStore.hasUserDevice(identity.uid)) {
+  if (!(await provisionedDevicesStore.hasUserDevice(identity.uid))) {
     return NextResponse.json({ error: "device_required" }, { status: 403 });
   }
 

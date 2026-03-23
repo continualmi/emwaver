@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import Stripe from "stripe";
 
-import { entitlementsStore } from "@/server/store/entitlements";
 import { getStripe } from "@/server/stripe";
+import { syncContinualSubscriptionFromStripe } from "@/server/platformCore";
 
 export async function POST(request: NextRequest) {
   const webhookSecret = (process.env.STRIPE_WEBHOOK_SECRET || "").trim();
@@ -22,18 +22,12 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.mode === "subscription") {
-        const firebaseUid = String(session.client_reference_id || session.metadata?.firebase_uid || "").trim();
-        if (firebaseUid) {
-          entitlementsStore.set(firebaseUid, {
-            pro_active: true,
-            pro_expires_at_ms: null,
-            updated_at_ms: Date.now(),
-          });
-        }
-      }
+    if (
+      event.type === "customer.subscription.created" ||
+      event.type === "customer.subscription.updated" ||
+      event.type === "customer.subscription.deleted"
+    ) {
+      await syncContinualSubscriptionFromStripe(event.data.object as Stripe.Subscription);
     }
   } catch {
     return NextResponse.json({ error: "webhook_handler_failed" }, { status: 500 });

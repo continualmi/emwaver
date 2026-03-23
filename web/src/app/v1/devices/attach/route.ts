@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "missing_board_type_or_hardware_uid" }, { status: 400 });
   }
 
-  const result = provisionedDevicesStore.claimOrRestore({
+  const result = await provisionedDevicesStore.claimOrRestore({
     boardType,
     hardwareUid,
     ownerFirebaseUid: identity.uid,

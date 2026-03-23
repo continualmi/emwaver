@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
 
-  const entitlements = entitlementsStore.get(identity.uid);
+  const entitlements = await entitlementsStore.get(identity.uid, identity);
   if (!entitlements.pro_active) {
     return NextResponse.json({
       balance: 0,
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const credits = creditsStore.getForUser(identity.uid);
+  const credits = await creditsStore.getForUser(identity.uid, identity);
   return NextResponse.json({
     balance: credits.balance_tokens,
     monthlyAllowance: PRO_MONTHLY_ALLOWANCE_TOKENS,

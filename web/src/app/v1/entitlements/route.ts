@@ -8,7 +8,7 @@ export async function GET(request: NextRequest) {
   if (!identity) return unauthorizedJson();
 
   const now = Date.now();
-  const row = entitlementsStore.get(identity.uid);
+  const row = await entitlementsStore.get(identity.uid, identity);
 
   let pro = false;
   let expiresAtMs: number | null = null;

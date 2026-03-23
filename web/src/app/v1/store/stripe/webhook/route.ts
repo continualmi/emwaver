@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
       const session = event.data.object as Stripe.Checkout.Session;
       const shippingDetails = (session as Stripe.Checkout.Session & { shipping_details?: unknown }).shipping_details;
       const shipping = shippingDetails ? JSON.stringify(shippingDetails) : "{}";
-      ordersStore.markCompleted(String(session.id || ""), {
+      await ordersStore.markCompleted(String(session.id || ""), {
         status: String(session.payment_status || "").toLowerCase() === "paid" ? "paid" : "completed",
         firebase_uid: String(session.client_reference_id || "").trim() || null,
         stripe_payment_intent_id: String(session.payment_intent || ""),
