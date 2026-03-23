@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
@@ -20,6 +20,18 @@ function formatTitle(c: AgentConversation) {
   if (t) return t;
   const d = new Date(c.created_at_ms);
   return `Chat ${d.toISOString().slice(0, 10)}`;
+}
+
+function errorMessage(error: unknown) {
+  if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const candidate = error as { code?: unknown; message?: unknown };
+    const code = typeof candidate.code === "string" ? candidate.code : "";
+    const message = typeof candidate.message === "string" ? candidate.message : String(error);
+    return code ? `${code}: ${message}` : message;
+  }
+  return String(error);
 }
 
 export default function AgentChatPage() {
@@ -43,19 +55,19 @@ export default function AgentChatPage() {
     el.scrollTop = el.scrollHeight;
   }
 
-  async function refreshConversations(tok: string) {
+  const refreshConversations = useCallback(async (tok: string) => {
     const cs = await listAgentConversations(tok);
     setConversations(cs);
     return cs;
-  }
+  }, []);
 
-  async function openConversation(tok: string, id: string) {
+  const openConversation = useCallback(async (tok: string, id: string) => {
     setError(null);
     setSelectedId(id);
     const ms = await listAgentMessages(tok, id);
     setMessages(ms);
     setTimeout(scrollToBottom, 0);
-  }
+  }, []);
 
   useEffect(() => {
     if (!auth) return;
@@ -84,7 +96,7 @@ export default function AgentChatPage() {
         await openConversation(tok, c.id);
       }
     });
-  }, [auth]);
+  }, [auth, openConversation, refreshConversations]);
 
   async function doSignIn() {
     setError(null);
@@ -96,10 +108,8 @@ export default function AgentChatPage() {
     }
     try {
       await signInWithPopup(auth, googleProvider());
-    } catch (e: any) {
-      const code = e?.code ? String(e.code) : "";
-      const msg = e?.message ? String(e.message) : String(e);
-      setError(code ? `${code}: ${msg}` : msg);
+    } catch (error: unknown) {
+      setError(errorMessage(error));
     }
   }
 
@@ -118,8 +128,8 @@ export default function AgentChatPage() {
       const cs = [c, ...conversations];
       setConversations(cs);
       await openConversation(idToken, c.id);
-    } catch (e: any) {
-      setError(String(e?.message || e));
+    } catch (error: unknown) {
+      setError(errorMessage(error));
     } finally {
       setIsBusy(false);
     }
@@ -179,8 +189,8 @@ export default function AgentChatPage() {
       }
 
       await refreshConversations(idToken);
-    } catch (e: any) {
-      setError(String(e?.message || e));
+    } catch (error: unknown) {
+      setError(errorMessage(error));
     } finally {
       setIsBusy(false);
     }

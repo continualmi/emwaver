@@ -74,7 +74,7 @@ Representative views:
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
-- the Agent should use managed env-configured model settings (`MODEL_NAME`, `MODEL_BASE_URL`, `MODEL_API_KEY`, optional `MODEL_REQUEST_TIMEOUT_MS`),
+- the Agent should call the managed EMWaver backend `/v1/agent/*` routes, with provider selection, tool loops, and metering owned server-side,
 - the macOS Agent UI should not require Codex login flows or manual provider API key entry.
 
 ## 3) Firmware update, activation, and tooling
