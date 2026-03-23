@@ -10,20 +10,13 @@ struct SignInSheet: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Sign in is optional. Your scripts and signals always stay on this Mac. You can sign in before connecting a device, and EMWaver will sync supported boards automatically once their firmware is installed and the hardware UID is available. Cloud backup + sync are EMWaver Pro features.")
+            Text("Sign in is optional. Your scripts and signals always stay on this Mac. You can sign in before connecting a device, and EMWaver will sync supported boards automatically once their firmware is installed and the hardware UID is available. Cloud backup, remote access, and expanded Agent features are part of Continual Pro.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
             if let err = auth.lastError, !err.isEmpty {
                 Text(err)
                     .foregroundStyle(.red)
-                    .font(.callout)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            if !auth.canSignInWithGoogle {
-                Text("Google sign-in isn’t configured yet for this build. You can keep using EMWaver locally.")
-                    .foregroundStyle(.secondary)
                     .font(.callout)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -39,7 +32,7 @@ struct SignInSheet: View {
                     auth.beginWebSignInHandoff()
                 } label: {
                     HStack(spacing: 8) {
-                        Text("Continue with EMWaver")
+                        Text("Continue with Continual")
                     }
                 }
                 .buttonStyle(.borderedProminent)

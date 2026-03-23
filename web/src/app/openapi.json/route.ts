@@ -6,7 +6,7 @@ function openapiSpec(baseUrl: string) {
     info: {
       title: "EMWaver Backend API",
       version: "v1",
-      description: "Unified EMWaver web/backend API. Auth: Authorization: Bearer <firebase_id_token>.",
+      description: "Unified EMWaver web/backend API. Auth: EMWaver session cookie for browser flows or Authorization: Bearer <emwaver_session_token> for native/app flows.",
     },
     servers: [{ url: baseUrl }],
     components: {
@@ -15,7 +15,7 @@ function openapiSpec(baseUrl: string) {
           type: "http",
           scheme: "bearer",
           bearerFormat: "JWT",
-          description: "Firebase ID token",
+          description: "EMWaver access token minted after verified Continual handoff",
         },
       },
     },

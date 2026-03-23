@@ -177,6 +177,12 @@ struct ScriptsContainerView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }
+        .sheet(isPresented: $auth.isWebHandoffSheetPresented) {
+            WebSignInHandoffSheet()
+                .environmentObject(auth)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
         .sheet(isPresented: $showingCloudSettings) {
             CloudSettingsSheet()
                 .presentationDetents([.medium, .large])

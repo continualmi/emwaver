@@ -8,17 +8,13 @@ package com.emwaver.emwaverandroidapp.cloud;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-
-import com.google.android.gms.tasks.Tasks;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseUser;
 
 import org.json.JSONObject;
 
@@ -33,10 +29,13 @@ import okhttp3.Response;
 /**
  * Simple auth helper for Android.
  *
- * Source of truth is FirebaseAuth (it persists the signed-in user across app restarts).
- * We fetch fresh Firebase ID tokens for backend calls.
+ * Source of truth is the EMWaver access token issued after a Continual handoff.
  */
 public final class CloudAuthManager {
+    private static final String PREFS = "emwaver.auth";
+    private static final String KEY_ACCESS_TOKEN = "access_token";
+    private static final String KEY_EMAIL = "email";
+    private static final String KEY_NAME = "name";
 
     public interface SignInCallback {
         void onResult(boolean success, @Nullable String errorMessage);
@@ -46,6 +45,7 @@ public final class CloudAuthManager {
 
     private final OkHttpClient http = new OkHttpClient.Builder().build();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    @Nullable private Context appContext;
 
     private CloudAuthManager() {}
 
@@ -60,37 +60,53 @@ public final class CloudAuthManager {
         return instance;
     }
 
-    /** Ensure Firebase is initialized (safe to call repeatedly). */
     public void ensureInitialized(@NonNull Context context) {
-        try {
-            FirebaseApp.initializeApp(context.getApplicationContext());
-        } catch (Exception ignored) {
-            // If google-services.json isn't present, Firebase init may fail.
-        }
+        appContext = context.getApplicationContext();
+    }
+
+    private SharedPreferences prefs(@NonNull Context context) {
+        return context.getApplicationContext().getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+    }
+
+    @Nullable
+    private Context requireContext() {
+        return appContext;
     }
 
     public boolean isSignedIn() {
-        return FirebaseAuth.getInstance().getCurrentUser() != null;
+        Context context = requireContext();
+        return context != null && isSignedIn(context);
+    }
+
+    public boolean isSignedIn(@NonNull Context context) {
+        return !prefs(context).getString(KEY_ACCESS_TOKEN, "").trim().isEmpty();
+    }
+
+    @Nullable
+    public String getSignedInEmail(@NonNull Context context) {
+        return prefs(context).getString(KEY_EMAIL, null);
     }
 
     @Nullable
     public String getSignedInEmail() {
-        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
-        return u != null ? u.getEmail() : null;
+        Context context = requireContext();
+        return context != null ? getSignedInEmail(context) : null;
+    }
+
+    @Nullable
+    public String getSignedInDisplayName(@NonNull Context context) {
+        return prefs(context).getString(KEY_NAME, null);
     }
 
     @Nullable
     public String getSignedInDisplayName() {
-        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
-        return u != null ? u.getDisplayName() : null;
+        Context context = requireContext();
+        return context != null ? getSignedInDisplayName(context) : null;
     }
 
     public void beginWebSignIn(@NonNull Context context) {
-        String base = CloudConfig.getFrontendBaseUrl(context).trim();
-        // Android uses the same handoff UX as desktop: sign in on web, copy one-time code,
-        // then paste it back in-app. Keep deep-link callback support as optional fallback.
-        String redirect = Uri.encode("/auth/handoff");
-        String url = base + "/signin?redirect=" + redirect;
+        String base = "https://continualmi.com";
+        String url = base.replaceAll("/+$", "") + "/emwaver/handoff";
         Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         browser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(browser);
@@ -101,8 +117,6 @@ public final class CloudAuthManager {
             @Nullable String code,
             @NonNull SignInCallback callback
     ) {
-        ensureInitialized(context);
-
         final String trimmed = code == null ? "" : code.trim().toUpperCase();
         if (trimmed.isEmpty()) {
             callback.onResult(false, "Missing handoff code");
@@ -111,19 +125,13 @@ public final class CloudAuthManager {
 
         new Thread(() -> {
             try {
-                String customToken = fetchCustomToken(context, trimmed);
-                mainHandler.post(() -> FirebaseAuth.getInstance()
-                        .signInWithCustomToken(customToken)
-                        .addOnCompleteListener(task -> {
-                            if (task.isSuccessful()) {
-                                callback.onResult(true, null);
-                            } else {
-                                String msg = task.getException() != null
-                                        ? task.getException().getMessage()
-                                        : "Firebase sign-in failed";
-                                callback.onResult(false, msg);
-                            }
-                        }));
+                SessionResult session = fetchAccessToken(context, trimmed);
+                prefs(context).edit()
+                        .putString(KEY_ACCESS_TOKEN, session.accessToken)
+                        .putString(KEY_EMAIL, session.email)
+                        .putString(KEY_NAME, session.name)
+                        .apply();
+                mainHandler.post(() -> callback.onResult(true, null));
             } catch (Exception e) {
                 String msg = e.getMessage() != null ? e.getMessage() : "Sign in failed";
                 mainHandler.post(() -> callback.onResult(false, msg));
@@ -132,7 +140,20 @@ public final class CloudAuthManager {
     }
 
     @NonNull
-    private String fetchCustomToken(@NonNull Context context, @NonNull String code) throws Exception {
+    private static final class SessionResult {
+        final String accessToken;
+        final String email;
+        final String name;
+
+        SessionResult(String accessToken, String email, String name) {
+            this.accessToken = accessToken;
+            this.email = email;
+            this.name = name;
+        }
+    }
+
+    @NonNull
+    private SessionResult fetchAccessToken(@NonNull Context context, @NonNull String code) throws Exception {
         String url = CloudConfig.getBackendBaseUrl(context).trim() + "/v1/auth/handoff/consume";
         JSONObject payload = new JSONObject();
         payload.put("code", code);
@@ -156,11 +177,16 @@ public final class CloudAuthManager {
             }
 
             JSONObject root = new JSONObject(json);
-            String customToken = root.optString("firebase_custom_token", "");
-            if (customToken.isEmpty()) {
-                throw new IOException("Missing firebase_custom_token");
+            String accessToken = root.optString("access_token", "");
+            if (accessToken.isEmpty()) {
+                throw new IOException("Missing access_token");
             }
-            return customToken;
+            JSONObject user = root.optJSONObject("user");
+            return new SessionResult(
+                    accessToken,
+                    user != null ? user.optString("email", "") : "",
+                    user != null ? user.optString("name", "") : ""
+            );
         }
     }
 
@@ -169,20 +195,24 @@ public final class CloudAuthManager {
      * Returns "" when not signed in.
      */
     @NonNull
+    public String getIdTokenBlocking(@NonNull Context context) {
+        return prefs(context).getString(KEY_ACCESS_TOKEN, "");
+    }
+
+    @NonNull
     public String getIdTokenBlocking() {
-        FirebaseUser u = FirebaseAuth.getInstance().getCurrentUser();
-        if (u == null) {
-            return "";
-        }
-        try {
-            // Force refresh to avoid returning an empty/expired token when user is signed in.
-            return Tasks.await(u.getIdToken(true)).getToken();
-        } catch (Exception e) {
-            return "";
-        }
+        Context context = requireContext();
+        return context != null ? getIdTokenBlocking(context) : "";
+    }
+
+    public void signOut(@NonNull Context context) {
+        prefs(context).edit().clear().apply();
     }
 
     public void signOut() {
-        FirebaseAuth.getInstance().signOut();
+        Context context = requireContext();
+        if (context != null) {
+            signOut(context);
+        }
     }
 }

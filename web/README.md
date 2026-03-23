@@ -91,7 +91,7 @@ Important shared components include:
   - SSE streaming chat,
   - host list APIs.
 - `remoteSessions.ts` / `remoteAttach.ts` — WS message types + connection helpers for host/web control sessions.
-- `firebase.ts` — auth integration support.
+- `clientSession.ts` — browser session bootstrap, sign-in redirect helpers, and sign-out helpers.
 - `store.ts` — subscription/checkout helpers.
 
 ---
@@ -148,6 +148,8 @@ Current server routes in this folder include:
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
 - account/subscription/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
+- interactive sign-in is owned by Society/Continual, and EMWaver issues its own signed product session only after verifying a Society handoff token,
+- native apps currently use the Society-owned pasted-code handoff flow, then exchange the code for an EMWaver-native access token,
 - device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity and device-limit key,
 - entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,
 - host presence and WebSocket routing are currently single-instance in-memory,

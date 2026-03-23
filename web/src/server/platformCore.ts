@@ -117,11 +117,57 @@ function canonicalPeriodBounds(row: { current_period_start?: string | Date | nul
   };
 }
 
+function looksLikeUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+export async function getPlatformUserById(userId: string, clientArg?: PoolClient): Promise<PlatformUser | null> {
+  await ensurePlatformSchema();
+  const client = clientArg ?? await getPlatformPgPool().connect();
+  const shouldRelease = !clientArg;
+  try {
+    const result = await client.query(
+      `
+        select id, firebase_uid, email, display_name, stripe_customer_id
+        from users
+        where id = $1::uuid
+        limit 1
+      `,
+      [userId],
+    );
+    return result.rowCount ? (result.rows[0] as PlatformUser) : null;
+  } finally {
+    if (shouldRelease) client.release();
+  }
+}
+
 export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg?: PoolClient): Promise<PlatformUser> {
   await ensurePlatformSchema();
   const client = clientArg ?? await getPlatformPgPool().connect();
   const shouldRelease = !clientArg;
   try {
+    if (looksLikeUuid(input.firebaseUid)) {
+      const existing = await getPlatformUserById(input.firebaseUid, client);
+      if (existing) {
+        if (input.email !== null || input.displayName !== null) {
+          const updated = await client.query(
+            `
+              update users
+              set
+                email = coalesce($2, email),
+                display_name = coalesce($3, display_name),
+                updated_at = now()
+              where id = $1::uuid
+              returning id, firebase_uid, email, display_name, stripe_customer_id
+            `,
+            [input.firebaseUid, input.email, input.displayName],
+          );
+          return updated.rows[0] as PlatformUser;
+        }
+        return existing;
+      }
+    }
+
     const result = await client.query(
       `
         insert into users (firebase_uid, email, display_name)
@@ -169,6 +215,9 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
 
 export async function findUserByFirebaseUid(firebaseUid: string) {
   await ensurePlatformSchema();
+  if (looksLikeUuid(firebaseUid)) {
+    return getPlatformUserById(firebaseUid);
+  }
   const result = await getPlatformPgPool().query(
     `
       select id, firebase_uid, email, display_name, stripe_customer_id

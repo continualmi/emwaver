@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 
-import { verifyIdToken } from "../auth";
+import { verifySessionToken } from "../session";
 import { hostSessionsStore } from "../store/hostSessions";
 import type { RemoteConnection, RemoteSessionState } from "./state";
 
@@ -33,6 +33,13 @@ function tokenFromRequest(req: IncomingMessage): string {
   if (authHeader.toLowerCase().startsWith("bearer ")) {
     return authHeader.slice("bearer ".length).trim();
   }
+  const cookieHeader = String(req.headers.cookie || "");
+  for (const part of cookieHeader.split(";")) {
+    const [rawName, ...rest] = part.split("=");
+    if (rawName?.trim() === "emwaver_session") {
+      return rest.join("=").trim();
+    }
+  }
   return (url.searchParams.get("token") || "").trim();
 }
 
@@ -46,7 +53,7 @@ function forwardJson(socket: WebSocket, payload: Record<string, unknown>) {
 
 export async function handleWebSocketUpgrade({ req, socket, head, wsServer, remoteState }: UpgradeContext) {
   const token = tokenFromRequest(req);
-  const identity = await verifyIdToken(token);
+  const identity = verifySessionToken(token);
   if (!identity) {
     socket.destroy();
     return;

@@ -12,8 +12,8 @@ namespace EMWaver.Services.Cloud;
 
 internal sealed class CloudAuthManager
 {
-    private const string KeyIdToken = "cloud.firebase.idToken";
-    private const string KeyRefreshToken = "cloud.firebase.refreshToken";
+    private const string KeyIdToken = "cloud.emwaver.accessToken";
+    private const string KeyRefreshToken = "cloud.emwaver.sessionToken";
 
     private readonly CloudConfig _cfg;
     private readonly FirebaseAuthService _firebase;
@@ -93,28 +93,6 @@ internal sealed class CloudAuthManager
                 return token;
             }
 
-            var refresh = GetRefreshToken();
-            if (!string.IsNullOrWhiteSpace(refresh) && !string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
-            {
-                try
-                {
-                    var session = await _firebase.RefreshIdTokenAsync(_cfg.FirebaseWebApiKey, refresh!, ct);
-                    _idToken = session.IdToken;
-                    _refreshToken = session.RefreshToken;
-
-                    TryWriteLocalSetting(KeyIdToken, _idToken);
-                    TryWriteLocalSetting(KeyRefreshToken, _refreshToken);
-                    TrySavePersisted();
-                    Changed?.Invoke();
-
-                    return _idToken;
-                }
-                catch
-                {
-                    // Ignore refresh failures; caller decides whether to prompt sign-in.
-                }
-            }
-
             if (interactiveSignIn)
             {
                 return await SignInInteractiveAsync(ct);
@@ -132,11 +110,6 @@ internal sealed class CloudAuthManager
     internal Task<string> SignInInteractiveAsync(CancellationToken ct)
     {
         _ = ct;
-        if (string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
-        {
-            throw new InvalidOperationException("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)");
-        }
-
         var signin = BuildSigninUrl();
         OpenBrowser(signin.ToString());
 
@@ -147,11 +120,6 @@ internal sealed class CloudAuthManager
 
     internal async Task<string> SignInWithHandoffCodeAsync(string code, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_cfg.FirebaseWebApiKey))
-        {
-            throw new InvalidOperationException("Missing EMWAVER_FIREBASE_WEB_API_KEY (Firebase Web API key)");
-        }
-
         var trimmed = (code ?? "").Trim().ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(trimmed))
         {
@@ -172,20 +140,14 @@ internal sealed class CloudAuthManager
 
         using var doc = JsonDocument.Parse(resJson);
         var root = doc.RootElement;
-        var customToken = root.TryGetProperty("firebase_custom_token", out var tokenEl) ? tokenEl.GetString() : null;
-        if (string.IsNullOrWhiteSpace(customToken))
+        var accessToken = root.TryGetProperty("access_token", out var tokenEl) ? tokenEl.GetString() : null;
+        if (string.IsNullOrWhiteSpace(accessToken))
         {
-            throw new InvalidOperationException("Missing firebase_custom_token");
+            throw new InvalidOperationException("Missing access_token");
         }
 
-        var session = await _firebase.SignInWithCustomTokenAsync(
-            firebaseWebApiKey: _cfg.FirebaseWebApiKey,
-            customToken: customToken!,
-            ct: ct
-        );
-
-        _idToken = session.IdToken;
-        _refreshToken = session.RefreshToken;
+        _idToken = accessToken;
+        _refreshToken = accessToken;
 
         // Best-effort persistence in BOTH contexts:
         // - Packaged apps: ApplicationData.Current.LocalSettings
@@ -200,9 +162,8 @@ internal sealed class CloudAuthManager
 
     internal Uri BuildSigninUrl()
     {
-        var baseUrl = FrontendUrl.Resolve().TrimEnd('/');
-        var redirect = Uri.EscapeDataString("/auth/handoff");
-        return new Uri($"{baseUrl}/signin?redirect={redirect}");
+        var baseUrl = (Environment.GetEnvironmentVariable("CONTINUAL_PLATFORM_URL") ?? "https://continualmi.com").Trim().TrimEnd('/');
+        return new Uri($"{baseUrl}/emwaver/handoff");
     }
 
     private static void OpenBrowser(string url)

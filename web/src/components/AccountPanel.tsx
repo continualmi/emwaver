@@ -1,10 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
+import { useEffect, useState } from "react";
 
 import { backendFetch } from "@/lib/backend";
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
+import { fetchSessionState, redirectToContinualSignIn, signOutSession } from "@/lib/clientSession";
 
 type Entitlements = {
   pro: boolean;
@@ -33,8 +32,6 @@ async function openProPortal(idToken: string): Promise<string> {
 }
 
 export function AccountPanel() {
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
-
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
@@ -42,53 +39,38 @@ export function AccountPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, async (u) => {
+    void (async () => {
       setError(null);
-      if (!u) {
+      const session = await fetchSessionState();
+      if (!session.user) {
         setUserEmail(null);
         setIdToken("");
         setEntitlements(null);
         return;
       }
-      setUserEmail(u.email || u.displayName || "Signed in");
-      const tok = await u.getIdToken();
+      setUserEmail(session.user.email || session.user.name || "Signed in");
+      const tok = session.accessToken;
       setIdToken(tok);
       try {
         setEntitlements(await getEntitlements(tok));
-      } catch (error: unknown) {
-        setError(errorMessage(error));
+      } catch (nextError: unknown) {
+        setError(errorMessage(nextError));
       }
-    });
-  }, [auth]);
+    })();
+  }, []);
 
   async function doSignIn() {
-    setError(null);
-    if (!auth) {
-      setError(
-        "Firebase env is missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID"
-      );
-      return;
-    }
-    try {
-      setBusy(true);
-      await signInWithPopup(auth, googleProvider());
-    } catch (error: unknown) {
-      const maybeFirebaseError = error as { code?: string; message?: string };
-      const code = maybeFirebaseError.code ? String(maybeFirebaseError.code) : "";
-      const msg = maybeFirebaseError.message ? String(maybeFirebaseError.message) : String(error);
-      setError(code ? `${code}: ${msg}` : msg);
-    } finally {
-      setBusy(false);
-    }
+    redirectToContinualSignIn("/cloud");
   }
 
   async function doSignOut() {
     setError(null);
-    if (!auth) return;
     setBusy(true);
     try {
-      await signOut(auth);
+      await signOutSession();
+      setUserEmail(null);
+      setIdToken("");
+      setEntitlements(null);
     } finally {
       setBusy(false);
     }
@@ -127,10 +109,10 @@ export function AccountPanel() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight text-[color:var(--ink)]">Account</h2>
-          <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and Pro</div>
+          <div className="pt-1 text-sm text-[color:var(--ink-dim)]">Devices, orders, and Continual Pro</div>
           {entitlements?.pro ? (
             <div className="mt-2 inline-flex items-center rounded-full border border-[color:var(--line)] bg-[color:var(--aqua-tint-2)] px-3 py-1 text-xs font-semibold text-[color:var(--aqua)]">
-              Pro active
+              Continual Pro active
             </div>
           ) : null}
         </div>
@@ -142,7 +124,7 @@ export function AccountPanel() {
             disabled={busy}
             className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
           >
-            {busy ? "Signing in..." : "Continue with Google"}
+            {busy ? "Signing in..." : "Sign in with Continual"}
           </button>
         ) : (
           <div className="flex flex-wrap items-center gap-3">
@@ -159,7 +141,7 @@ export function AccountPanel() {
               onClick={() => void doManagePro()}
               className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)] disabled:opacity-50"
             >
-              Manage Pro
+              Manage Continual Pro
             </button>
             <button
               type="button"

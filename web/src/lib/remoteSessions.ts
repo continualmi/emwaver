@@ -57,7 +57,9 @@ export function backendWsUrl(idToken: string): string {
   const u = new URL(raw);
   u.protocol = u.protocol === "https:" ? "wss:" : "ws:";
   u.pathname = `/v1/ws`;
-  u.searchParams.set("token", idToken);
+  if (idToken) {
+    u.searchParams.set("token", idToken);
+  }
   return u.toString();
 }
 

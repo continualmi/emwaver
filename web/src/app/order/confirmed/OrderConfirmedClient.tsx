@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { onAuthStateChanged, signInWithPopup } from "firebase/auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
+import { fetchSessionState, redirectToContinualSignIn } from "@/lib/clientSession";
 import { claimOrder } from "@/lib/store";
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
 export default function OrderConfirmedClient() {
   const params = useSearchParams();
   const sessionId = String(params.get("session_id") || "");
 
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [idToken, setIdToken] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string | null>(null);
 
@@ -20,17 +18,17 @@ export default function OrderConfirmedClient() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, async (u) => {
-      if (!u) {
+    void (async () => {
+      const session = await fetchSessionState();
+      if (!session.user) {
         setIdToken("");
         setUserEmail(null);
         return;
       }
-      setUserEmail(u.email || u.displayName || "Signed in");
-      setIdToken(await u.getIdToken());
-    });
-  }, [auth]);
+      setUserEmail(session.user.email || session.user.name || "Signed in");
+      setIdToken(session.accessToken);
+    })();
+  }, []);
 
   async function doSignInAndClaim() {
     setError(null);
@@ -38,15 +36,10 @@ export default function OrderConfirmedClient() {
       setError("Missing session_id.");
       return;
     }
-    if (!auth) {
-      setError("Google sign-in is not configured yet (missing NEXT_PUBLIC_FIREBASE_* env).");
-      return;
-    }
 
     try {
       if (!idToken) {
-        await signInWithPopup(auth, googleProvider());
-        // onAuthStateChanged will set idToken
+        redirectToContinualSignIn(`/order/confirmed?session_id=${encodeURIComponent(sessionId)}`);
         return;
       }
 
@@ -103,7 +96,7 @@ export default function OrderConfirmedClient() {
               disabled={!sessionId || status === "claiming"}
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
             >
-              {idToken ? "Attach purchase to my account" : "Sign in with Google to attach purchase"}
+              {idToken ? "Attach purchase to my account" : "Sign in with Continual to attach purchase"}
             </button>
 
             {userEmail ? <div className="text-xs text-[color:var(--ink-dim)]">Signed in as: {userEmail}</div> : null}

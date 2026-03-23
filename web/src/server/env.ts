@@ -3,6 +3,10 @@ function parseBool(value: string | undefined, fallback = false): boolean {
   return ["1", "true", "yes", "on"].includes(value.trim().toLowerCase());
 }
 
+function readEnv(name: string) {
+  return String(process.env[name] ?? "").trim();
+}
+
 export const env = {
   nodeEnv: process.env.NODE_ENV || "development",
   port: Number.parseInt(process.env.PORT || "3920", 10),
@@ -17,4 +21,33 @@ export const env = {
 
 export function hasEnv(name: string): boolean {
   return Boolean((process.env[name] || "").trim());
+}
+
+export function getEmwaverAppUrl() {
+  return readEnv("CANONICAL_APP_URL") || readEnv("NEXT_PUBLIC_SITE_URL") || "http://localhost:3920";
+}
+
+export function getContinualPlatformUrl() {
+  return readEnv("CONTINUAL_PLATFORM_URL")
+    || readEnv("SOCIETY_SITE_URL")
+    || readEnv("NEXT_PUBLIC_SOCIETY_SITE_URL")
+    || "https://continualmi.com";
+}
+
+export function getEmwaverSessionSecret() {
+  return readEnv("EMWAVER_SESSION_SECRET")
+    || readEnv("CONTINUAL_AUTH_HANDOFF_SECRET")
+    || readEnv("SOCIETY_HANDOFF_SECRET");
+}
+
+export function getContinualAuthHandoffSecret() {
+  return readEnv("CONTINUAL_AUTH_HANDOFF_SECRET")
+    || readEnv("SOCIETY_HANDOFF_SECRET")
+    || readEnv("EMWAVER_SESSION_SECRET");
+}
+
+export function getEmwaverSessionMaxAgeSeconds() {
+  const raw = Number.parseInt(readEnv("EMWAVER_SESSION_MAX_AGE_SECONDS"), 10);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return 60 * 60 * 24 * 30;
 }

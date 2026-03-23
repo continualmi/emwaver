@@ -17,7 +17,7 @@ export async function backendFetch(path: string, idToken: string, init?: Request
     headers.set("Authorization", `Bearer ${idToken}`);
   }
 
-  const res = await fetch(url, { ...init, headers, cache: "no-store" });
+  const res = await fetch(url, { ...init, headers, cache: "no-store", credentials: "include" });
   return res;
 }
 
@@ -45,6 +45,7 @@ export async function downloadFileContent(name: string, idToken: string): Promis
     method: "GET",
     headers: idToken ? { Authorization: `Bearer ${idToken}` } : {},
     cache: "no-store",
+    credentials: "include",
   });
   if (!res.ok) {
     const text = await res.text();
@@ -75,6 +76,7 @@ export async function deleteFile(name: string, idToken: string) {
       Accept: "application/json",
       ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}),
     },
+    credentials: "include",
   });
   const text = await res.text();
   if (!res.ok) throw new Error(text || `HTTP ${res.status}`);

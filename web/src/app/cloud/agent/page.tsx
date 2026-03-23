@@ -2,10 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 
 import { SiteHeader } from "@/components/SiteHeader";
-import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
   agentChat,
   createAgentConversation,
@@ -14,6 +12,7 @@ import {
   type AgentConversation,
   type AgentMessage,
 } from "@/lib/backend";
+import { fetchSessionState, redirectToContinualSignIn, signOutSession } from "@/lib/clientSession";
 
 function formatTitle(c: AgentConversation) {
   const t = (c.title || "").trim();
@@ -35,7 +34,6 @@ function errorMessage(error: unknown) {
 }
 
 export default function AgentChatPage() {
-  const auth = useMemo(() => (isFirebaseConfigured() ? firebaseAuth() : null), []);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
 
@@ -70,10 +68,10 @@ export default function AgentChatPage() {
   }, []);
 
   useEffect(() => {
-    if (!auth) return;
-    return onAuthStateChanged(auth, async (u) => {
+    void (async () => {
       setError(null);
-      if (!u) {
+      const session = await fetchSessionState();
+      if (!session.user) {
         setUserEmail(null);
         setIdToken("");
         setConversations([]);
@@ -83,8 +81,8 @@ export default function AgentChatPage() {
         return;
       }
 
-      setUserEmail(u.email || u.displayName || "Signed in");
-      const tok = await u.getIdToken();
+      setUserEmail(session.user.email || session.user.name || "Signed in");
+      const tok = session.accessToken;
       setIdToken(tok);
 
       const cs = await refreshConversations(tok);
@@ -95,28 +93,22 @@ export default function AgentChatPage() {
         setConversations([c]);
         await openConversation(tok, c.id);
       }
-    });
-  }, [auth, openConversation, refreshConversations]);
+    })();
+  }, [openConversation, refreshConversations]);
 
   async function doSignIn() {
-    setError(null);
-    if (!auth) {
-      setError(
-        "Firebase env is missing. Set NEXT_PUBLIC_FIREBASE_API_KEY, NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN, NEXT_PUBLIC_FIREBASE_PROJECT_ID, NEXT_PUBLIC_FIREBASE_APP_ID"
-      );
-      return;
-    }
-    try {
-      await signInWithPopup(auth, googleProvider());
-    } catch (error: unknown) {
-      setError(errorMessage(error));
-    }
+    redirectToContinualSignIn("/cloud/agent");
   }
 
   async function doSignOut() {
     setError(null);
-    if (!auth) return;
-    await signOut(auth);
+    await signOutSession();
+    setUserEmail(null);
+    setIdToken("");
+    setConversations([]);
+    setSelectedId(null);
+    setMessages([]);
+    setDraft("");
   }
 
   async function newChat() {
@@ -197,7 +189,7 @@ export default function AgentChatPage() {
               onClick={doSignIn}
               className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
             >
-              Sign in with Google
+              Sign in with Continual
             </button>
           ) : (
             <div className="flex items-center gap-3">

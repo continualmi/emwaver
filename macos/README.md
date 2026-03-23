@@ -43,6 +43,7 @@ Entry points:
 Auth UX rule:
 - sign-in must remain available even when no EMWaver device is connected, so new users can authenticate before flashing a supported board.
 - once a supported board reconnects with readable `board_type + hardware_uid`, the app should restore/sync it automatically instead of requiring a manual claim button.
+- interactive sign-in is now `Sign in with Continual`, using the Society-hosted EMWaver handoff page and a pasted one-time code instead of direct in-app Google/Firebase sign-in.
 
 ## 2.2 Device + transport + host management
 
@@ -71,6 +72,10 @@ Representative views:
 ## 2.4 Pro and entitlements
 
 `Pro/EntitlementsManager.swift` + `ProUpgradeSheet.swift` integrate subscription/entitlement UX.
+
+Billing/account authority rule:
+- `Continual Pro` is the canonical paid plan.
+- older `EMWaver Pro` strings in local UI should be treated as migration-era copy and updated toward `Continual Pro`.
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
