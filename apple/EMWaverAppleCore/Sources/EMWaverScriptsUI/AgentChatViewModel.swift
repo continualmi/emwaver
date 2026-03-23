@@ -126,7 +126,10 @@ public final class AgentChatViewModel: ObservableObject {
                 }
             } catch {
                 await MainActor.run {
-                    self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    let fallback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    if self.lastError?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false {
+                        self.lastError = fallback
+                    }
                     self.isSending = false
                     self.assistantPlaceholderId = nil
                 }
@@ -145,42 +148,23 @@ public final class AgentChatViewModel: ObservableObject {
         }
 
         let api = AgentCloudAPI()
-        var reply = ""
-
-        try await api.chatStream(
+        let response = try await api.chat(
             baseURL: ctx.baseURL,
             token: ctx.accessToken,
             conversationId: conversationId.uuidString.lowercased(),
             message: userPrompt
-        ) { event in
-            await MainActor.run {
-                switch event {
-                case .delta(let text):
-                    reply += text
-                    if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                        self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
-                    }
-                case .tool(let name, let kind, let payload):
-                    if kind == "arguments" {
-                        let args = payload as? [String: Any] ?? [:]
-                        self.appendSystemToolBubble(name: name, args: args)
-                    }
-                case .done(let message, _):
-                    reply = message.content
-                    if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                        self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: message.content)
-                    }
-                case .error(let error):
-                    self.lastError = error
-                }
+        )
+
+        let reply = response.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        await MainActor.run {
+            if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
+                self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
             }
         }
-
-        let trimmed = reply.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
+        guard !reply.isEmpty else {
             throw AgentBackendError.serverError("Agent model produced no text")
         }
-        return trimmed
+        return reply
     }
 
     private func makeToolBubbleText(name: String, args: [String: Any], fetchedURL: String? = nil) -> String {

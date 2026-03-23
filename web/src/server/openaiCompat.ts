@@ -13,17 +13,19 @@ type ChatMessage = {
 };
 
 function baseUrl() {
-  return (process.env.OPENAI_BASE_URL || "https://api.openai.com/v1").trim().replace(/\/+$/, "");
+  return (process.env.MODEL_BASE_URL || process.env.OPENAI_BASE_URL || "https://api.openai.com/v1")
+    .trim()
+    .replace(/\/+$/, "");
 }
 
 export function openAIModel() {
-  const model = (process.env.OPENAI_MODEL || "").trim();
-  if (!model) throw new Error("Missing OPENAI_MODEL");
+  const model = (process.env.MODEL_NAME || process.env.OPENAI_MODEL || "").trim();
+  if (!model) throw new Error("Missing MODEL_NAME");
   return model;
 }
 
 function headers() {
-  const apiKey = (process.env.OPENAI_API_KEY || "").trim();
+  const apiKey = (process.env.MODEL_API_KEY || process.env.OPENAI_API_KEY || "").trim();
   return {
     "content-type": "application/json",
     ...(apiKey ? { authorization: `Bearer ${apiKey}` } : {}),

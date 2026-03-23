@@ -7,7 +7,7 @@ import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 import {
-  agentChatStream,
+  agentChat,
   createAgentConversation,
   listAgentConversations,
   listAgentMessages,
@@ -162,31 +162,14 @@ export default function AgentChatPage() {
     setTimeout(scrollToBottom, 0);
 
     try {
-      let accum = "";
-      for await (const ev of agentChatStream(idToken, selectedId, text)) {
-        if (ev.type === "delta") {
-          accum += ev.text;
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantMsg.id);
-            if (idx !== -1) next[idx] = { ...next[idx], content: accum };
-            return next;
-          });
-          setTimeout(scrollToBottom, 0);
-        } else if (ev.type === "done") {
-          // replace placeholder with real persisted message id/timestamp
-          setMessages((prev) => {
-            const next = [...prev];
-            const idx = next.findIndex((m) => m.id === assistantMsg.id);
-            if (idx !== -1) next[idx] = ev.message;
-            return next;
-          });
-          break;
-        } else if (ev.type === "error") {
-          setError(ev.error);
-          break;
-        }
-      }
+      const result = await agentChat(idToken, selectedId, text);
+      setMessages((prev) => {
+        const next = [...prev];
+        const idx = next.findIndex((m) => m.id === assistantMsg.id);
+        if (idx !== -1) next[idx] = result.message;
+        return next;
+      });
+      setTimeout(scrollToBottom, 0);
 
       await refreshConversations(idToken);
     } catch (error: unknown) {

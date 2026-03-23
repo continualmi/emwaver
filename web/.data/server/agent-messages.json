@@ -30,5 +30,93 @@
     "role": "assistant",
     "content": "Hi! How can I help you today?",
     "created_at_ms": 1774250890661
+  },
+  "f9f3fd15-fef7-4853-9b45-2326d6f7faa0": {
+    "id": "f9f3fd15-fef7-4853-9b45-2326d6f7faa0",
+    "conversation_id": "3032847e-5c5c-4d1b-ac36-c11146d657b8",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "Hi",
+    "created_at_ms": 1774251294192
+  },
+  "9e96a1a5-51ce-4037-b11b-da6581bfb60f": {
+    "id": "9e96a1a5-51ce-4037-b11b-da6581bfb60f",
+    "conversation_id": "3032847e-5c5c-4d1b-ac36-c11146d657b8",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hi! How can I help you today?",
+    "created_at_ms": 1774251294986
+  },
+  "8ea4d8ce-5b53-4ed3-a5ae-9696ac25636e": {
+    "id": "8ea4d8ce-5b53-4ed3-a5ae-9696ac25636e",
+    "conversation_id": "c433a578-6a65-46b2-b038-939dbcd4babc",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "hi",
+    "created_at_ms": 1774251580336
+  },
+  "5b991622-d5d9-4236-8bb0-ccb46ad6aeda": {
+    "id": "5b991622-d5d9-4236-8bb0-ccb46ad6aeda",
+    "conversation_id": "c433a578-6a65-46b2-b038-939dbcd4babc",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hello! How can I help you today?",
+    "created_at_ms": 1774251581989
+  },
+  "96b33090-4304-449c-85c7-23a014c520e1": {
+    "id": "96b33090-4304-449c-85c7-23a014c520e1",
+    "conversation_id": "c433a578-6a65-46b2-b038-939dbcd4babc",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "Hi",
+    "created_at_ms": 1774251640463
+  },
+  "b31b216b-e1d4-46e4-9cac-74ae124c2ae5": {
+    "id": "b31b216b-e1d4-46e4-9cac-74ae124c2ae5",
+    "conversation_id": "790e0ea9-5047-49fb-af4a-cac29abd8303",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "hi",
+    "created_at_ms": 1774251792874
+  },
+  "c0d24cde-0eec-4a08-9792-1d854e58cbf3": {
+    "id": "c0d24cde-0eec-4a08-9792-1d854e58cbf3",
+    "conversation_id": "790e0ea9-5047-49fb-af4a-cac29abd8303",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hello! I see you have a MacBook Air online with EMWaver. I'm ready to help you explore hardware or write some scripts.\n\nWhat would you like to do? For example, I can:\n1. **Scan for USB devices** to see if any hardware is connected.\n2. **Write a script** to toggle a GPIO pin or talk to a sensor.\n3. **Help you use the Sampler** if you have an EMWaver device attached.\n\nLet me know how you'd like to start!",
+    "created_at_ms": 1774251795786
+  },
+  "10f6f851-b6d2-4007-af09-ea15060943d7": {
+    "id": "10f6f851-b6d2-4007-af09-ea15060943d7",
+    "conversation_id": "74cbbf58-11f1-45c7-8fb2-5685bf206e9c",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "Hi",
+    "created_at_ms": 1774252509077
+  },
+  "55351c62-fecc-454b-b8c9-3fea4be098ba": {
+    "id": "55351c62-fecc-454b-b8c9-3fea4be098ba",
+    "conversation_id": "74cbbf58-11f1-45c7-8fb2-5685bf206e9c",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hello! I'm the EMWaver Agent. I can help you explore hardware by writing and running scripts on your devices.\n\nI see you have a **MacBook Air** online. Would you like to start by scanning for connected USB hardware (like an EMWaver board), or should we try writing a simple script to explore the UI?",
+    "created_at_ms": 1774252511701
+  },
+  "4bcc1cdc-50b4-470d-8ecb-349aafe6a4ce": {
+    "id": "4bcc1cdc-50b4-470d-8ecb-349aafe6a4ce",
+    "conversation_id": "74cbbf58-11f1-45c7-8fb2-5685bf206e9c",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "user",
+    "content": "Hi",
+    "created_at_ms": 1774252522220
+  },
+  "cafaa620-3138-4fb5-9b6c-87aec1664b79": {
+    "id": "cafaa620-3138-4fb5-9b6c-87aec1664b79",
+    "conversation_id": "74cbbf58-11f1-45c7-8fb2-5685bf206e9c",
+    "firebase_uid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+    "role": "assistant",
+    "content": "Hello! I'm the EMWaver Agent. I'm ready to help you interact with your hardware.\n\nI see you have a **MacBook Air** available as a host. To get started, I can:\n\n1.  **Scan for connected hardware** (like an EMWaver board or CC1101 module).\n2.  **Create a simple UI script** to test the connection and display some controls.\n3.  **Run a hardware test** (like toggling a GPIO pin or scanning an I2C bus).\n\nWhat would you like to do first?",
+    "created_at_ms": 1774252523962
   }
 }
