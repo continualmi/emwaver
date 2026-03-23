@@ -115,6 +115,7 @@ export async function POST(request: NextRequest) {
 
       let assistantText = "";
       let toolIterations = 0;
+      let sawToolCall = false;
       controller.enqueue(encoder.encode(": connected\n\n"));
 
       while (toolIterations < 8) {
@@ -132,6 +133,7 @@ export async function POST(request: NextRequest) {
         const toolCalls = (message.tool_calls as Array<Record<string, unknown>> | undefined) || [];
         if (message.content) assistantText = String(message.content);
         if (!toolCalls.length) break;
+        sawToolCall = true;
 
         messages.push({
           role: "assistant",
@@ -163,8 +165,16 @@ export async function POST(request: NextRequest) {
 
       assistantText = assistantText.trim();
       if (!assistantText) {
-        controller.enqueue(encoder.encode(sse("error", { error: "Upstream produced no content" })));
-        return;
+        if (sawToolCall) {
+          if (toolIterations >= 8) {
+            assistantText = "I hit the tool-call limit before producing a final reply. Please try again with a narrower request."
+          } else {
+            assistantText = "I completed tool calls, but the model returned no final text. Please review the tool activity above and try again."
+          }
+        } else {
+          controller.enqueue(encoder.encode(sse("error", { error: "Upstream produced no content" })));
+          return;
+        }
       }
 
       const persisted = agentStore.appendMessage({
