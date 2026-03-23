@@ -6,6 +6,12 @@
 
 import SwiftUI
 
+#if canImport(UIKit)
+import UIKit
+#elseif canImport(AppKit)
+import AppKit
+#endif
+
 public struct AgentChatPanelView: View {
     @ObservedObject private var viewModel: AgentChatViewModel
 
@@ -150,27 +156,31 @@ public struct AgentChatPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             suggestions
 
-            TextField("Message", text: $viewModel.draft, axis: .vertical)
-                .textFieldStyle(.roundedBorder)
-                .lineLimit(1...6)
-                .disabled(viewModel.isSending)
-                .onSubmit {
-                    sendOrUpgrade()
-                }
-
-            HStack {
-                Text(agentEnabled ? "Enter to send" : "Pro required to send")
-                    .foregroundStyle(.secondary)
-                    .font(.caption)
-
-                Spacer()
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Message", text: $viewModel.draft, axis: .vertical)
+                    .lineLimit(1...6)
+                    .textFieldStyle(.plain)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .background(composerFieldBackgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(Color.black.opacity(0.10))
+                    )
+                    .foregroundStyle(.primary)
+                    .tint(.accentColor)
+                    .disabled(viewModel.isSending)
+                    .onSubmit {
+                        sendOrUpgrade()
+                    }
 
                 Button {
                     sendOrUpgrade()
                 } label: {
                     Text("Send")
+                        .frame(minWidth: 64)
                 }
-                .keyboardShortcut(.return, modifiers: [])
+                .buttonStyle(.borderedProminent)
                 .disabled(viewModel.isSending || viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -244,6 +254,16 @@ public struct AgentChatPanelView: View {
             }
         }
     }
+}
+
+private var composerFieldBackgroundColor: Color {
+    #if canImport(UIKit)
+    Color(uiColor: .secondarySystemBackground)
+    #elseif canImport(AppKit)
+    Color(nsColor: .textBackgroundColor)
+    #else
+    Color.white.opacity(0.9)
+    #endif
 }
 
 private struct MessageRow: View {
