@@ -33,11 +33,12 @@ const STORES = [
 
 export default function InstallPage() {
   return (
-    <div className="relative min-h-dvh overflow-x-clip">
+    <div className="install-mode relative min-h-dvh overflow-x-clip">
       {/* Background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <div className="absolute inset-0 bg-[color:var(--paper)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,var(--aqua-tint),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(255,255,255,0.18),rgba(245,246,248,0.28))]" />
+        <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,var(--aqua-tint-2),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(700px_480px_at_85%_18%,var(--sky-tint),transparent_62%)]" />
       </div>
 
       <SiteHeader />
