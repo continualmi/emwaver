@@ -162,7 +162,7 @@ internal sealed class CloudAuthManager
 
     internal Uri BuildSigninUrl()
     {
-        var baseUrl = (Environment.GetEnvironmentVariable("CONTINUAL_PLATFORM_URL") ?? "https://continualmi.com").Trim().TrimEnd('/');
+        var baseUrl = "https://continualmi.com";
         return new Uri($"{baseUrl}/emwaver/handoff");
     }
 

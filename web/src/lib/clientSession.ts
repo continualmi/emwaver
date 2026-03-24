@@ -2,6 +2,13 @@
 
 import { societySiteUrl } from "./societySite";
 
+const CANONICAL_EMWAVER_APP_URL = "https://emwaver-web.azurewebsites.net";
+
+function emwaverAppUrl() {
+  const value = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_EMWAVER_FRONTEND_URL_CLOUD || CANONICAL_EMWAVER_APP_URL;
+  return value.trim().replace(/\/+$/, "");
+}
+
 export type ClientSessionUser = {
   uid: string;
   email: string | null;
@@ -41,7 +48,7 @@ export async function signOutSession() {
 }
 
 export function buildContinualSignInUrl(nextPath?: string) {
-  const callback = new URL("/auth/callback", window.location.origin);
+  const callback = new URL("/auth/callback", emwaverAppUrl());
   if (nextPath && nextPath.startsWith("/")) {
     callback.searchParams.set("next", nextPath);
   }

@@ -81,16 +81,14 @@ final class AuthenticationManager: ObservableObject {
         // Close the sign-in sheet first; SwiftUI doesn't reliably present two sheets at once.
         isSignInSheetPresented = false
 
-        // Open the shared Continual handoff page and then prompt for the code.
-        let rawBase = (ProcessInfo.processInfo.environment["CONTINUAL_PLATFORM_URL"] ?? "https://continualmi.com")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var base = URL(string: rawBase) else {
+        // Open the canonical shared Continual handoff page and then prompt for the code.
+        guard var base = URL(string: "https://continualmi.com") else {
             lastError = "Missing Continual platform URL"
             return
         }
         base.appendPathComponent("emwaver")
         base.appendPathComponent("handoff")
-        #if canImport(AppKit)
+#if canImport(AppKit)
         NSWorkspace.shared.open(base)
         #endif
 
