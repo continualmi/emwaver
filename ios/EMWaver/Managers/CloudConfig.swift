@@ -1,7 +1,7 @@
 import Foundation
 
 enum CloudConfig {
-    static let productionBackend = "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io"
+    static let productionBackend = "https://emwaver-web.azurewebsites.net"
 
     static func backendBaseURL() -> URL? {
         // Product direction: iOS talks to the fixed production backend.

@@ -83,9 +83,7 @@ final class AuthenticationManager: ObservableObject {
         lastError = nil
         isSignInSheetPresented = false
 
-        let rawBase = (ProcessInfo.processInfo.environment["CONTINUAL_PLATFORM_URL"] ?? "https://continualmi.com")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        guard var base = URL(string: rawBase) else {
+        guard var base = URL(string: "https://continualmi.com") else {
             lastError = "Missing Continual platform URL"
             return
         }

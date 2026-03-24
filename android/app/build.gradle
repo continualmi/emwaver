@@ -72,9 +72,9 @@ android {
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
-        def cloudBackend = envOr("EMWAVER_BACKEND_URL_CLOUD", "https://emwaver-backend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def cloudBackend = envOr("EMWAVER_BACKEND_URL_CLOUD", "https://emwaver-web.azurewebsites.net")
         def localBackend = envOr("EMWAVER_BACKEND_URL_LOCAL", "http://127.0.0.1:3920")
-        def cloudFrontend = envOr("EMWAVER_FRONTEND_URL_CLOUD", "https://emwaver-frontend.delightfuldune-64bd11df.westeurope.azurecontainerapps.io")
+        def cloudFrontend = envOr("EMWAVER_FRONTEND_URL_CLOUD", "https://emwaver-web.azurewebsites.net")
         def localFrontend = envOr("EMWAVER_FRONTEND_URL_LOCAL", "http://127.0.0.1:3920")
         def staffOnly = envOr("EMWAVER_STAFF_ONLY", "0")
 
