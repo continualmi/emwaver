@@ -119,11 +119,11 @@ Current server routes in this folder include:
 - `GET /v1/devices/my`
 - `POST /v1/devices/label`
 - `POST /provisioning/mint`
-- `POST /v1/auth/handoff/start`
-- `POST /v1/auth/handoff/consume`
 - `GET /v1/agent/conversations`
 - `POST /v1/agent/conversations`
 - `PATCH /v1/agent/conversations/:conversationId`
+
+Society now owns the Continual handoff code issue/consume routes used by the macOS app.
 - `DELETE /v1/agent/conversations/:conversationId`
 - `GET /v1/agent/conversations/:conversationId/messages`
 - `POST /v1/agent/conversations/:conversationId/messages`

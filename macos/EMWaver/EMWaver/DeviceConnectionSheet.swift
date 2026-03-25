@@ -46,13 +46,13 @@ struct DeviceConnectionSheet: View {
     }
 
     private var shortHardwareUid: String? {
-        guard let uid = device.hardwareUidHex, uid.count >= 8 else { return nil }
+        guard let uid = currentHardwareUidHex, uid.count >= 8 else { return nil }
         return String(uid.suffix(8))
     }
 
     private var currentDeviceOfflineStatus: String? {
         guard accountDevices.isOfflineMode else { return nil }
-        guard let hardwareUid = device.hardwareUidHex, !hardwareUid.isEmpty else { return nil }
+        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return nil }
         if accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid) {
             return "This device is available in Offline Mode."
         }

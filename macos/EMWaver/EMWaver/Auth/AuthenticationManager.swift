@@ -82,7 +82,7 @@ final class AuthenticationManager: ObservableObject {
         isSignInSheetPresented = false
 
         // Open the canonical shared Continual handoff page and then prompt for the code.
-        guard var base = URL(string: "https://continualmi.com") else {
+        guard var base = SocietyUrl.resolve() else {
             lastError = "Missing Continual platform URL"
             return
         }
@@ -110,24 +110,28 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
-        guard let base = BackendUrl.resolve() else {
-            lastError = "Missing backend URL"
+        guard let base = SocietyUrl.resolve() else {
+            lastError = "Missing Continual platform URL"
             return
         }
 
         var consumeURL = base
 
         do {
-            // Consume handoff code -> EMWaver access token.
-            consumeURL.appendPathComponent("v1")
+            // Consume handoff code -> Continual session token.
+            consumeURL.appendPathComponent("api")
             consumeURL.appendPathComponent("auth")
             consumeURL.appendPathComponent("handoff")
+            consumeURL.appendPathComponent("code")
             consumeURL.appendPathComponent("consume")
 
             var req = URLRequest(url: consumeURL)
             req.httpMethod = "POST"
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: ["code": trimmed])
+            req.httpBody = try JSONSerialization.data(withJSONObject: [
+                "code": trimmed,
+                "product": "emwaver"
+            ])
 
             let (data, res) = try await URLSession.shared.data(for: req)
             let http = (res as? HTTPURLResponse)?.statusCode ?? -1
@@ -138,9 +142,9 @@ final class AuthenticationManager: ObservableObject {
             }
 
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let accessToken = (json?["access_token"] as? String) ?? ""
+            let accessToken = (json?["access_token"] as? String) ?? (json?["handoff_token"] as? String) ?? ""
             if accessToken.isEmpty {
-                throw AuthError.failed("Missing access_token")
+                throw AuthError.failed("Missing session token")
             }
             let user = json?["user"] as? [String: Any]
 
