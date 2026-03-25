@@ -132,6 +132,7 @@ We intentionally give up:
 Use the local README first when working in a folder:
 
 - `README.txt` (repo root) — concise repo overview + doc index
+- `PLANNING.md` (repo root) — durable working tracker for current priorities, active work, blockers, and next steps
 - `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
