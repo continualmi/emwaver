@@ -129,7 +129,7 @@ export async function getPlatformUserById(userId: string, clientArg?: PoolClient
     const result = await client.query(
       `
         select id, firebase_uid, email, display_name, stripe_customer_id
-        from users
+        from core.users
         where id = $1::uuid
         limit 1
       `,
@@ -145,14 +145,19 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
   await ensurePlatformSchema();
   const client = clientArg ?? await getPlatformPgPool().connect();
   const shouldRelease = !clientArg;
+  const normalizedEmail = input.email?.trim() || null;
+  const normalizedDisplayName = input.displayName?.trim()
+    || normalizedEmail?.split("@")[0]
+    || input.firebaseUid.trim()
+    || "EMWaver user";
   try {
     if (looksLikeUuid(input.firebaseUid)) {
       const existing = await getPlatformUserById(input.firebaseUid, client);
       if (existing) {
-        if (input.email !== null || input.displayName !== null) {
+        if (normalizedEmail !== null || input.displayName !== null) {
           const updated = await client.query(
             `
-              update users
+              update core.users
               set
                 email = coalesce($2, email),
                 display_name = coalesce($3, display_name),
@@ -160,7 +165,7 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
               where id = $1::uuid
               returning id, firebase_uid, email, display_name, stripe_customer_id
             `,
-            [input.firebaseUid, input.email, input.displayName],
+            [input.firebaseUid, normalizedEmail, normalizedDisplayName],
           );
           return updated.rows[0] as PlatformUser;
         }
@@ -170,7 +175,7 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
 
     const result = await client.query(
       `
-        insert into users (firebase_uid, email, display_name)
+        insert into core.users (firebase_uid, email, display_name)
         values ($1, $2, $3)
         on conflict (firebase_uid)
         do update set
@@ -179,7 +184,7 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
           updated_at = now()
         returning id, firebase_uid, email, display_name, stripe_customer_id
       `,
-      [input.firebaseUid, input.email, input.displayName],
+      [input.firebaseUid, normalizedEmail, normalizedDisplayName],
     );
 
     const user = result.rows[0] as PlatformUser;
@@ -195,7 +200,7 @@ export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg
           display_name = excluded.display_name,
           updated_at = now()
       `,
-      [user.id, input.firebaseUid, input.email, input.displayName],
+      [user.id, input.firebaseUid, normalizedEmail, normalizedDisplayName],
     );
 
     await client.query(
@@ -221,7 +226,7 @@ export async function findUserByFirebaseUid(firebaseUid: string) {
   const result = await getPlatformPgPool().query(
     `
       select id, firebase_uid, email, display_name, stripe_customer_id
-      from users
+      from core.users
       where firebase_uid = $1
       limit 1
     `,
@@ -305,7 +310,7 @@ async function getActiveSubscription(client: PoolClient, userId: string) {
   const result = await client.query(
     `
       select stripe_subscription_id, current_period_start, current_period_end
-      from user_subscriptions
+      from mdl.user_subscriptions
       where user_id = $1::uuid
         and status = 'active'
         and plan_id in ('plus', 'continual_pro')
@@ -751,7 +756,7 @@ export async function ensureStripeCustomerForUser(user: PlatformUser, clientArg?
     });
     await client.query(
       `
-        update users
+        update core.users
         set stripe_customer_id = $2, updated_at = now()
         where id = $1::uuid
       `,
@@ -822,7 +827,7 @@ export async function syncContinualSubscriptionFromStripe(subscription: Stripe.S
 
     await client.query(
       `
-        update users
+        update core.users
         set stripe_customer_id = $2, updated_at = now()
         where id = $1::uuid
       `,
@@ -831,7 +836,7 @@ export async function syncContinualSubscriptionFromStripe(subscription: Stripe.S
 
     await client.query(
       `
-        update user_subscriptions
+        update mdl.user_subscriptions
         set status = case when status = 'active' then 'canceled' else status end,
             ends_at = coalesce(ends_at, $2::timestamptz),
             updated_at = now()
@@ -845,7 +850,7 @@ export async function syncContinualSubscriptionFromStripe(subscription: Stripe.S
     const item = subscription.items.data[0];
     await client.query(
       `
-        insert into user_subscriptions (
+        insert into mdl.user_subscriptions (
           user_id,
           plan_id,
           stripe_subscription_id,
