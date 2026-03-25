@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
