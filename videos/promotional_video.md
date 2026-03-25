@@ -101,8 +101,8 @@ Record in this order unless logistics force a change:
 
 1. `new_core_carrier_hero_clip.MOV` `✅ recorded 2026-03-25`
 2. `new_macos_script_opens_and_generates_ui_cc1101.MOV` `✅ recorded 2026-03-25`
-3. `new_macos_cc1101_real_interaction_demo.MOV`
-4. `new_android_same_script_same_ui_cc1101.MOV`
+3. `new_macos_cc1101_real_interaction_demo.MOV` `✅ recorded 2026-03-25`
+4. `new_android_same_script_same_ui_cc1101.MOV` `✅ recorded 2026-03-25`
 5. `new_core_vs_carrier_same_script_match_cut.MOV`
 
 ## Recording Notes
@@ -246,6 +246,8 @@ Reason: these may still be useful later, but they are not required to prove the 
 | `clip_012_dual_module_emwaver_into_phone.MOV` | `2026-03-05` | `✅` | Start with both modules installed, then plug the fully kitted EMWaver into the phone and confirm the connected runtime state in-app. |
 | `new_core_carrier_hero_clip.MOV` | `2026-03-25` | `✅` | Launch hero shot showing `EMWaver Core` and `EMWaver Carrier` together in a clean shared visual language, captured as the opening product identity footage for the promo cut. |
 | `new_macos_script_opens_and_generates_ui_cc1101.MOV` | `2026-03-25` | `✅` | macOS screen recording of opening the `cc1101` script and letting EMWaver render the generated interface clearly enough to establish the script-first UI model without turning the shot into a hardware interaction demo. |
+| `new_macos_cc1101_real_interaction_demo.MOV` | `2026-03-25` | `✅` | macOS screen recording showing the rendered `cc1101` UI driving a real hardware interaction clearly enough to prove the generated controls are connected to actual device behavior. |
+| `new_android_same_script_same_ui_cc1101.MOV` | `2026-03-25` | `✅` | Android screen recording of the same `cc1101` script and generated UI flow used on macOS, captured to prove the script-first control model carries across platforms. |
 | `clip_013_cc1101_capture_garage_remote_signal.MOV` | `TBD` | `pending` | With the CC1101 module connected, capture a garage remote RF signal in `sampler.emw`, mirroring the earlier IR capture flow but now demonstrating sub-GHz acquisition. |
 | `clip_014_cc1101_retransmit_garage_open.MOV` | `TBD` | `pending` | Outdoors near a real garage, retransmit the captured garage signal from `sampler.emw` and show the garage door beginning to open as visual proof of replay success. |
 | `clip_015_cc1101_capture_tesla_charge_port_signal.MOV` | `TBD` | `pending` | Capture the Tesla charging port open signal from the charging cable remote action using CC1101, with clear framing of the source action and sampled signal state. |
