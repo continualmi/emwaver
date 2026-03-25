@@ -8,9 +8,9 @@ Drive folder link: `https://drive.google.com/drive/u/2/folders/1hPoiWPKId1ZUcjdp
 
 ## Progress
 
-Overall completion: `30%` (`10/33` clips done)
+Overall completion: `33%` (`11/33` clips done)
 
-`[#######-------------]`
+`[########------------]`
 
 ## Current Direction
 
@@ -99,7 +99,7 @@ These are the next clips that matter most for a strong first promo cut:
 
 Record in this order unless logistics force a change:
 
-1. `new_core_carrier_hero_clip.MOV`
+1. `new_core_carrier_hero_clip.MOV` `✅ recorded 2026-03-25`
 2. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
 3. `new_macos_cc1101_real_interaction_demo.MOV`
 4. `new_android_same_script_same_ui_cc1101.MOV`
@@ -244,6 +244,7 @@ Reason: these may still be useful later, but they are not required to prove the 
 | `clip_010_rc522_emwaver_into_phone.MOV` | `2026-03-05` | `✅` | Start with RC522 already inserted, then plug EMWaver into the phone and show app-side connection confirmation to mirror the CC1101 flow. |
 | `clip_011_dual_module_insert_into_emwaver.MOV` | `2026-03-05` | `✅` | Show EMWaver with both module slots populated (CC1101 + RC522) as a fully kitted configuration before host connection, emphasizing compact expansion readiness. |
 | `clip_012_dual_module_emwaver_into_phone.MOV` | `2026-03-05` | `✅` | Start with both modules installed, then plug the fully kitted EMWaver into the phone and confirm the connected runtime state in-app. |
+| `new_core_carrier_hero_clip.MOV` | `2026-03-25` | `✅` | Launch hero shot showing `EMWaver Core` and `EMWaver Carrier` together in a clean shared visual language, captured as the opening product identity footage for the promo cut. |
 | `clip_013_cc1101_capture_garage_remote_signal.MOV` | `TBD` | `pending` | With the CC1101 module connected, capture a garage remote RF signal in `sampler.emw`, mirroring the earlier IR capture flow but now demonstrating sub-GHz acquisition. |
 | `clip_014_cc1101_retransmit_garage_open.MOV` | `TBD` | `pending` | Outdoors near a real garage, retransmit the captured garage signal from `sampler.emw` and show the garage door beginning to open as visual proof of replay success. |
 | `clip_015_cc1101_capture_tesla_charge_port_signal.MOV` | `TBD` | `pending` | Capture the Tesla charging port open signal from the charging cable remote action using CC1101, with clear framing of the source action and sampled signal state. |
