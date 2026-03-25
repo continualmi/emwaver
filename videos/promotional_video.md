@@ -12,6 +12,222 @@ Overall completion: `30%` (`10/33` clips done)
 
 `[#######-------------]`
 
+## Current Direction
+
+Primary message: EMWaver is a script-first hardware platform. Scripts generate UI, that UI runs across clients, and the controls interact with real hardware on both EMWaver Carrier and EMWaver Core.
+
+Planning decisions:
+
+- This is the launch video, not a general montage.
+- The main proof is `scripts -> generated UI -> real hardware interaction`.
+- `cc1101` is the primary hardware example for this cut.
+- Both `EMWaver Carrier` and `EMWaver Core` should appear as product classes, even if the same script is used.
+- `macOS` and `Android` are still the most useful runtime surfaces to record first.
+- Voiceover is expected; the clips should be directed to support dictated narration.
+- The strongest story is "write or open a script once, get a usable UI, run hardware from it."
+
+## Target Cut
+
+Target length: `45-75s`
+
+Suggested story arc:
+
+1. Product identity: EMWaver Core and EMWaver Carrier are part of one platform.
+2. Script-first model: open a script and show that the platform renders its UI automatically.
+3. Hardware control: use the generated UI to drive a real `cc1101` flow.
+4. Product breadth: show the same model across Core and Carrier.
+5. Platform breadth: show the same model on `macOS` and `Android`.
+6. Closing claim: EMWaver is the platform for running hardware scripts, not just a board demo.
+
+## Launch Video Narrative
+
+This cut should answer four questions in order:
+
+1. What is EMWaver?
+2. What makes it different?
+3. Does it actually control real hardware?
+4. Does the same model hold across products and platforms?
+
+The answer should be:
+
+- EMWaver is a platform for running hardware scripts.
+- Those scripts generate UI automatically.
+- That UI directly drives real hardware behavior.
+- The same platform works on Core, Carrier, `macOS`, and `Android`.
+
+## Voiceover Direction
+
+The edit should be designed for dictated narration over clips, not silent-only storytelling.
+
+Voiceover style:
+
+- short declarative sentences
+- product-defining, not tutorial-style
+- no hype language that the footage cannot support
+- each spoken line should match a visible proof point on screen
+
+Working voiceover transcript:
+
+1. `This is EMWaver.`
+2. `It is a script-first hardware platform.`
+3. `You open a script, and EMWaver turns it into a real interface automatically.`
+4. `That interface is not a mockup. It runs against real hardware.`
+5. `Here the same platform is driving cc1101-based workflows.`
+6. `The model stays the same across EMWaver Carrier and EMWaver Core.`
+7. `It also stays consistent across desktop and mobile clients.`
+8. `The result is simple: write or run scripts, get UI instantly, and interact with hardware directly.`
+9. `That is EMWaver.`
+
+Optional tighter closing line:
+
+`Scripts become interfaces. Interfaces control hardware.`
+
+## Must-Have Recordings
+
+These are the next clips that matter most for a strong first promo cut:
+
+| Priority | Clip | Why it matters |
+| --- | --- | --- |
+| `P0` | `new_core_carrier_hero_clip.MOV` | Establishes that Core and Carrier belong to the same EMWaver platform. |
+| `P0` | `new_macos_script_opens_and_generates_ui_cc1101.MOV` | Proves the central product claim: scripts render usable UI automatically. |
+| `P0` | `new_macos_cc1101_real_interaction_demo.MOV` | Shows the generated UI driving real hardware behavior. |
+| `P0` | `new_android_same_script_same_ui_cc1101.MOV` | Proves the script/UI model is not desktop-only. |
+| `P1` | `new_core_vs_carrier_same_script_match_cut.MOV` | Makes the product-class equivalence explicit. |
+| `P1` | `clip_021_macos_mobile_ui_parity_comparison.MOV` | Useful as a compressed proof point if the dedicated parity clip looks strong. |
+
+## Next Recording Order
+
+Record in this order unless logistics force a change:
+
+1. `new_core_carrier_hero_clip.MOV`
+2. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
+3. `new_macos_cc1101_real_interaction_demo.MOV`
+4. `new_android_same_script_same_ui_cc1101.MOV`
+5. `new_core_vs_carrier_same_script_match_cut.MOV`
+
+## Recording Notes
+
+### `new_core_carrier_hero_clip.MOV`
+
+Goal: define the launch product before any software appears.
+
+Shot requirements:
+
+- Show `EMWaver Core` and `EMWaver Carrier` cleanly in the same visual language.
+- Keep the shot premium and stable.
+- Avoid clutter, cables, and setup noise where possible.
+- This should feel like the opening identity shot for launch.
+
+Preferred duration: `3-5s`
+
+### `new_macos_script_opens_and_generates_ui_cc1101.MOV`
+
+Goal: prove the script-first model.
+
+Shot requirements:
+
+- Use `macOS`.
+- Open the `cc1101` script from a believable starting point.
+- Hold just long enough for the rendered UI to become obvious.
+- Make the transition from script to interactive UI easy to read.
+- Avoid anything that makes this look like a developer IDE demo.
+
+Preferred duration: `6-10s`
+
+### `new_macos_cc1101_real_interaction_demo.MOV`
+
+Goal: show the rendered UI controlling real hardware.
+
+Shot requirements:
+
+- Use a `cc1101` interaction that is visually credible and repeatable.
+- The hardware consequence should be visible or strongly implied on screen.
+- Keep the interaction short and decisive.
+- This clip should support the voiceover line that the UI is connected to real hardware.
+
+Preferred duration: `5-8s`
+
+### `new_android_same_script_same_ui_cc1101.MOV`
+
+Goal: prove the same script/UI model exists on mobile.
+
+Shot requirements:
+
+- Use the same `cc1101` script shown on `macOS`.
+- Keep the framing focused on recognizably equivalent controls.
+- If possible, show the same control being used with the same result.
+- This is not a second demo; it is parity proof.
+
+Preferred duration: `4-7s`
+
+### `new_core_vs_carrier_same_script_match_cut.MOV`
+
+Goal: prove that the platform is bigger than one hardware body.
+
+Shot requirements:
+
+- Show the same script model working with both `Carrier` and `Core`.
+- A match cut or fast alternation is preferred.
+- The audience should understand that these are two EMWaver products, not two unrelated gadgets.
+
+Preferred duration: `3-5s`
+
+## Edit Outline
+
+Recommended final sequence:
+
+1. `new_core_carrier_hero_clip.MOV`
+2. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
+3. `new_macos_cc1101_real_interaction_demo.MOV`
+4. `new_android_same_script_same_ui_cc1101.MOV`
+5. `new_core_vs_carrier_same_script_match_cut.MOV`
+6. Optional closing reuse of `clip_001_device_closeup_rotation.MOV`
+
+## On-Screen Text
+
+Use very little text. The voiceover should carry the explanation.
+
+Recommended text cards or overlays:
+
+- `EMWaver`
+- `Scripts generate UI`
+- `Real hardware interaction`
+- `Carrier + Core`
+- `macOS + Android`
+
+Avoid:
+
+- long captions
+- feature lists
+- marketing adjectives that are not proven in the shot
+- platform logo clutter
+
+## Backlog Triage
+
+Keep for this cut if quality is strong:
+
+- `clip_001_device_closeup_rotation.MOV`
+- `clip_002_android_plug_in_connected.MOV`
+- `clip_008_cc1101_emwaver_into_phone.MOV`
+- `new_macos_script_opens_and_generates_ui_cc1101.MOV`
+- `new_macos_cc1101_real_interaction_demo.MOV`
+- `new_android_same_script_same_ui_cc1101.MOV`
+- `new_core_vs_carrier_same_script_match_cut.MOV`
+
+Deprioritize for now:
+
+- `clip_020_ios_android_functional_ui_parity.MOV`
+- `clip_022_windows_mobile_ui_parity_comparison.MOV`
+- `clip_024_web_remote_ui_parity_demo.MOV`
+- `clip_025_remote_host_servo_control_from_web.MOV`
+- `clip_027_macos_agent_tests_nrf24_until_passing.MOV`
+- `clip_029_hardware_catalog_overview_scroll.MOV`
+- `clip_030_hardware_catalog_device_detail_browse.MOV`
+- all RFID and Tesla-specific clips for this cut
+- servo as the main story for this cut
+
+Reason: these may still be useful later, but they are not required to prove the launch story that EMWaver runs scripts, renders UI, and drives real hardware on Core and Carrier.
+
 ## Source Clips
 
 | File name | Date recorded | Status | Notes |
