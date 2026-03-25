@@ -103,7 +103,7 @@ Record in this order unless logistics force a change:
 2. `new_macos_script_opens_and_generates_ui_cc1101.MOV` `✅ recorded 2026-03-25`
 3. `new_macos_cc1101_real_interaction_demo.MOV` `✅ recorded 2026-03-25`
 4. `new_android_same_script_same_ui_cc1101.MOV` `✅ recorded 2026-03-25`
-5. `new_core_vs_carrier_same_script_match_cut.MOV`
+5. `new_core_vs_carrier_same_script_match_cut.MOV` `✅ recorded 2026-03-25`
 
 ## Recording Notes
 
@@ -228,6 +228,96 @@ Deprioritize for now:
 
 Reason: these may still be useful later, but they are not required to prove the launch story that EMWaver runs scripts, renders UI, and drives real hardware on Core and Carrier.
 
+## EMWaver Link Follow-Up Plan
+
+Use this as a second-wave recording plan after the current Core/Carrier launch cut.
+
+Product framing:
+
+- `EMWaver Link` should be presented as the same script-first platform model as `Core`.
+- The differentiator is not a new software story; it is that `cc1101` is built in rather than added as a module.
+- The strongest Link message is reduced setup friction: pick up the device, open the script, and run the same radio workflow immediately.
+- Avoid making Link look like a separate ecosystem or incompatible product line.
+
+Recommended follow-up story arc:
+
+1. Show that `Link` is a real EMWaver product in the same family.
+2. Show that `cc1101` workflows are available without the module insertion step.
+3. Reuse the same script/UI proof already established on `macOS` and `Android`.
+4. Contrast `Core` modularity with `Link` convenience without framing one as replacing the other.
+
+Proposed Link clips:
+
+| Priority | Clip | Why it matters |
+| --- | --- | --- |
+| `P0` | `link_001_product_identity_closeup.MOV` | Establishes `EMWaver Link` as a distinct product body in the same family as Core. |
+| `P0` | `link_002_no_module_setup_cc1101_ready.MOV` | Proves the key product claim: `cc1101` is ready without attaching a module. |
+| `P0` | `link_003_macos_same_cc1101_script_built_in_radio.MOV` | Shows the same script/UI model working on `Link` with built-in radio hardware. |
+| `P1` | `link_004_core_vs_link_same_script_match_cut.MOV` | Makes the modular-vs-integrated hardware choice visually obvious while preserving one platform story. |
+| `P1` | `link_005_android_same_script_same_ui_built_in_cc1101.MOV` | Reinforces that Link keeps the same mobile parity, not a special-case client flow. |
+
+Recording notes:
+
+### `link_001_product_identity_closeup.MOV`
+
+Goal: introduce `EMWaver Link` as premium hardware, not a prototype variant.
+
+Shot requirements:
+
+- Clean product-only close-up.
+- Favor angles that make the body feel intentional and self-contained.
+- Avoid module-slot storytelling in this shot.
+
+Preferred duration: `3-5s`
+
+### `link_002_no_module_setup_cc1101_ready.MOV`
+
+Goal: make the integrated `cc1101` value obvious in one shot.
+
+Shot requirements:
+
+- Start from the device already in hand or on desk with no module insertion step.
+- Plug in or connect, open the `cc1101` script, and get to a usable state quickly.
+- The viewer should infer "this is ready out of the box for cc1101 flows."
+
+Preferred duration: `4-7s`
+
+### `link_003_macos_same_cc1101_script_built_in_radio.MOV`
+
+Goal: prove that Link uses the same script/UI model as Core while simplifying the hardware setup.
+
+Shot requirements:
+
+- Use the same `cc1101` script already used in the current promo work.
+- Show a short real interaction on `macOS`.
+- Keep the framing centered on continuity of software model, not on new UI.
+
+Preferred duration: `5-8s`
+
+### `link_004_core_vs_link_same_script_match_cut.MOV`
+
+Goal: explain the product distinction in one fast visual comparison.
+
+Shot requirements:
+
+- Alternate quickly between `Core` and `Link` using the same script model.
+- Make `Core` read as modular and `Link` read as integrated.
+- Do not imply that scripts or workflows differ between them.
+
+Preferred duration: `3-5s`
+
+### `link_005_android_same_script_same_ui_built_in_cc1101.MOV`
+
+Goal: show that Link keeps the same mobile story as the rest of EMWaver.
+
+Shot requirements:
+
+- Use `Android`.
+- Reuse the same `cc1101` script and recognizably similar controls.
+- Frame this as parity plus convenience, not as a separate feature set.
+
+Preferred duration: `4-7s`
+
 ## Source Clips
 
 | File name | Date recorded | Status | Notes |
@@ -248,7 +338,8 @@ Reason: these may still be useful later, but they are not required to prove the 
 | `new_macos_script_opens_and_generates_ui_cc1101.MOV` | `2026-03-25` | `✅` | macOS screen recording of opening the `cc1101` script and letting EMWaver render the generated interface clearly enough to establish the script-first UI model without turning the shot into a hardware interaction demo. |
 | `new_macos_cc1101_real_interaction_demo.MOV` | `2026-03-25` | `✅` | macOS screen recording showing the rendered `cc1101` UI driving a real hardware interaction clearly enough to prove the generated controls are connected to actual device behavior. |
 | `new_android_same_script_same_ui_cc1101.MOV` | `2026-03-25` | `✅` | Android screen recording of the same `cc1101` script and generated UI flow used on macOS, captured to prove the script-first control model carries across platforms. |
-| `clip_013_cc1101_capture_garage_remote_signal.MOV` | `TBD` | `pending` | With the CC1101 module connected, capture a garage remote RF signal in `sampler.emw`, mirroring the earlier IR capture flow but now demonstrating sub-GHz acquisition. |
+| `new_core_vs_carrier_same_script_match_cut.MOV` | `2026-03-25` | `✅` | Short comparison clip alternating the same script model across `EMWaver Carrier` and `EMWaver Core`, making the shared platform story explicit rather than reading as two unrelated devices. |
+| `clip_013_cc1101_capture_tesla_charge_port_signal_from_stored_device.MOV` | `TBD` | `pending` | With the CC1101 module connected, capture the Tesla charge-port opening signal from another device where the signal is already stored, showing a believable sub-GHz acquisition flow without needing the original source action in frame. |
 | `clip_014_cc1101_retransmit_garage_open.MOV` | `TBD` | `pending` | Outdoors near a real garage, retransmit the captured garage signal from `sampler.emw` and show the garage door beginning to open as visual proof of replay success. |
 | `clip_015_cc1101_capture_tesla_charge_port_signal.MOV` | `TBD` | `pending` | Capture the Tesla charging port open signal from the charging cable remote action using CC1101, with clear framing of the source action and sampled signal state. |
 | `clip_016_cc1101_retransmit_tesla_charge_port_open.MOV` | `TBD` | `pending` | Retransmit the captured Tesla charging port signal via CC1101 and show the charge port opening response to confirm end-to-end capture and replay behavior. |
