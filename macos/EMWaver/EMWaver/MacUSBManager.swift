@@ -51,6 +51,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
+    private let commandLock = NSLock()
 
     private let midiQueueKey = DispatchSpecificKey<Void>()
 
@@ -189,31 +190,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     func sendPacket(_ data: Data) {
         midiQueue.async {
-            guard self.connectedDestination != 0 else {
-                self.setError("Cannot send packet: Not connected")
-                return
-            }
-
-            guard let packet = Self.makePacket(data) else {
-                self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.laneSizeBytes))")
-                return
-            }
-
-            // Track sampler mode so we don't drop all-zero stream lanes while sampling.
-            if data.count >= 2 {
-                let opcode = data[data.startIndex]
-                if opcode == EmwOpcode.sample {
-                    let sub = data[data.startIndex.advanced(by: 1)]
-                    if sub == EmwOpcode.sampleStart {
-                        self.isSamplerStreamingActive = true
-                    } else if sub == EmwOpcode.sampleStop {
-                        self.isSamplerStreamingActive = false
-                    }
-                }
-            }
-
-            let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
-            self.sendSuperframe(sf)
+            self.sendPacketNow(data)
         }
     }
 
@@ -227,6 +204,9 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             return nil
         }
 
+        commandLock.lock()
+        defer { commandLock.unlock() }
+
         bufferQueue.sync {
             rxPackets.removeAll(keepingCapacity: true)
         }
@@ -239,7 +219,9 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.responsePredicate = responsePredicate
         }
 
-        sendPacket(command)
+        withMidiQueueSync {
+            self.sendPacketNow(command)
+        }
 
         let ms = max(1, timeout)
         let waitResult = sem.wait(timeout: .now() + .milliseconds(ms))
@@ -255,6 +237,34 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
 
         return bufferQueue.sync { responseData }
+    }
+
+    private func sendPacketNow(_ data: Data) {
+        guard connectedDestination != 0 else {
+            setError("Cannot send packet: Not connected")
+            return
+        }
+
+        guard let packet = Self.makePacket(data) else {
+            setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.laneSizeBytes))")
+            return
+        }
+
+        // Track sampler mode so we don't drop all-zero stream lanes while sampling.
+        if data.count >= 2 {
+            let opcode = data[data.startIndex]
+            if opcode == EmwOpcode.sample {
+                let sub = data[data.startIndex.advanced(by: 1)]
+                if sub == EmwOpcode.sampleStart {
+                    isSamplerStreamingActive = true
+                } else if sub == EmwOpcode.sampleStop {
+                    isSamplerStreamingActive = false
+                }
+            }
+        }
+
+        let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
+        sendSuperframe(sf)
     }
 
     func transmitBuffer() {

@@ -190,7 +190,9 @@ private enum EnvBootstrap {
 #endif
         guard let repoRoot = findRepoRoot() else { return }
 
-        let files = [".env"]
+        // Load .env.prod first (cloud/production defaults), then .env (local overrides).
+        // In local debug builds, repo env should win over any inherited process env.
+        let files = [".env.prod", ".env"]
 
         var resolved: [String: String] = [:]
 
@@ -208,12 +210,8 @@ private enum EnvBootstrap {
 
                 val = expand(val, resolved: resolved)
 
-                if ProcessInfo.processInfo.environment[key] == nil, resolved[key] == nil {
-                    setenv(key, val, 0)
-                    resolved[key] = val
-                } else if resolved[key] == nil {
-                    resolved[key] = ProcessInfo.processInfo.environment[key] ?? val
-                }
+                setenv(key, val, 1)
+                resolved[key] = val
             }
         }
     }

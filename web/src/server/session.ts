@@ -4,7 +4,12 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
 
-import { getEmwaverAppUrl, getEmwaverSessionMaxAgeSeconds, getEmwaverSessionSecret } from "./env";
+import {
+  getContinualAuthHandoffSecret,
+  getEmwaverAppUrl,
+  getEmwaverSessionMaxAgeSeconds,
+  getEmwaverSessionSecret,
+} from "./env";
 
 export const EMWAVER_SESSION_COOKIE_NAME = "emwaver_session";
 
@@ -36,6 +41,19 @@ type SessionPayload = {
   exp: number;
 };
 
+type ContinualHandoffPayload = {
+  iss: "society";
+  aud: "emwaver" | "mdl";
+  sub: string;
+  email: string | null;
+  name: string | null;
+  picture: string | null;
+  status: string;
+  identities: SessionIdentity[];
+  iat: number;
+  exp: number;
+};
+
 function encode(value: string) {
   return Buffer.from(value, "utf8").toString("base64url");
 }
@@ -46,6 +64,10 @@ function decode(value: string) {
 
 function sign(encodedPayload: string) {
   return createHmac("sha256", getEmwaverSessionSecret()).update(encodedPayload).digest("base64url");
+}
+
+function signContinualHandoff(encodedPayload: string) {
+  return createHmac("sha256", getContinualAuthHandoffSecret()).update(encodedPayload).digest("base64url");
 }
 
 function isSecureCookie() {
@@ -101,6 +123,32 @@ export function verifySessionToken(token: string): SessionUser | null {
   }
 }
 
+export function verifyContinualHandoffToken(token: string): SessionUser | null {
+  const [encodedPayload, encodedSignature] = token.split(".", 2);
+  if (!encodedPayload || !encodedSignature) return null;
+
+  const expected = Buffer.from(signContinualHandoff(encodedPayload));
+  const actual = Buffer.from(encodedSignature);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) return null;
+
+  try {
+    const payload = JSON.parse(decode(encodedPayload)) as ContinualHandoffPayload;
+    const now = Math.floor(Date.now() / 1000);
+    if (payload.iss !== "society" || payload.aud !== "emwaver" || payload.exp <= now) return null;
+
+    return {
+      uid: payload.sub,
+      email: payload.email,
+      name: payload.name,
+      picture: payload.picture,
+      status: payload.status,
+      identities: Array.isArray(payload.identities) ? payload.identities : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export function bearerToken(headers: Headers): string | null {
   const raw = (headers.get("authorization") || "").trim();
   if (!raw.toLowerCase().startsWith("bearer ")) return null;
@@ -111,12 +159,12 @@ export function bearerToken(headers: Headers): string | null {
 export function getSessionUserFromRequest(req: NextRequest) {
   const bearer = bearerToken(req.headers);
   if (bearer) {
-    return verifySessionToken(bearer);
+    return verifySessionToken(bearer) || verifyContinualHandoffToken(bearer);
   }
 
   const cookieToken = req.cookies.get(EMWAVER_SESSION_COOKIE_NAME)?.value?.trim();
   if (!cookieToken) return null;
-  return verifySessionToken(cookieToken);
+  return verifySessionToken(cookieToken) || verifyContinualHandoffToken(cookieToken);
 }
 
 export function setSessionCookie(cookieStore: ResponseCookies, token: string) {
