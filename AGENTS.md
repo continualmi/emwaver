@@ -134,6 +134,7 @@ Use the local README first when working in a folder:
 - `README.txt` (repo root) — concise repo overview + doc index
 - `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
+- `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `web/README.md` — unified Next.js + Node web app and TypeScript backend
@@ -157,6 +158,7 @@ If a folder has a README, detailed documentation should live there.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
+- `videos/` — video planning metadata, clip backlog, creative direction, and promo writing.
 
 ---
 
