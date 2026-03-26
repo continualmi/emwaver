@@ -1,0 +1,35 @@
+{
+  "title": "RFID_WAVER",
+  "displayTitle": "RFID Waver",
+  "group": "module",
+  "parent": "GPIO_WAVER",
+  "status": "module",
+  "image": "github:catalog/images/RFID_WAVER.png",
+  "images": [
+    "github:catalog/images/IMG_0062.jpg",
+    "github:catalog/images/IMG_0049.jpg",
+    "github:catalog/images/IMG_0050.jpg",
+    "github:catalog/images/IMG_0051.jpg",
+    "github:catalog/images/IMG_0052.jpg",
+    "github:catalog/images/RFID_WAVER.png"
+  ],
+  "casingImage": "github:catalog/images/RFID_WAVER_CASING.png",
+  "onshapeUrl": "https://cad.onshape.com/documents/8c00382cac979df11294e78b/w/1325cb43bbc1d8491be4a0fb/e/af9c9fdbec9d880ce42170e6",
+  "description": "RFID Waver is an add-on module intended to plug into GPIO Waver. Together they form an RFID-capable device based on the MFRC522 (13.56 MHz) reader/writer, enabling card reads and (where supported) cloning to compatible “magic” cards via the EMWaver app.",
+  "designDate": "2024-08-24",
+  "tags": ["RFID", "MFRC522", "13.56MHz", "module"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "https://oshwlab.com/maarnotto/rfid_waver_mirrored",
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=cf5e03b0384a499194ce0b0c5843f05a",
+  "githubUrl": "https://github.com/continualmi/rfid-waver",
+  "buildAssets": {
+    "bom": "github:BOM_RFID_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_RFID_WAVER_PCB_RFID_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_RFID_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_RFID_WAVER_2026-03-26.pdf",
+    "case": "github:RFID_WAVER_CASE.stl"
+  },
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 45, "currency": "USD", "units": 5 }
+}
