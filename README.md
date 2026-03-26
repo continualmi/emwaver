@@ -168,6 +168,7 @@ Recommended format for this section:
 Current image assets:
 
 - `assets/images/emwaver-link.webp` — current thumbnail / catalog image
+- `catalog/images/` — mirrored gallery and catalog-backed image set used by EMWaver web surfaces
 
 As the repo grows, this should also include:
 
