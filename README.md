@@ -1,6 +1,6 @@
 # EMWaver Shield Build Guide
 
-![EMWaver Shield](catalog/images/EMWAVER_SHIELD.png)
+![EMWaver Shield](catalog/images/IMG_0067.jpg)
 
 EMWaver Shield is a shield-style carrier board for an ESP32-S3 module in the EMWaver hardware family.
 
