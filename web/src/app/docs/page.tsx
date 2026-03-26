@@ -123,6 +123,18 @@ export default function DocsIndex() {
             Supported boards, open-source hardware files, pinout.
           </div>
         </Link>
+        <Link
+          href="/docs/community"
+          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+        >
+          <div className="text-xs font-semibold text-[color:var(--copper)]">Community</div>
+          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
+            Get help
+          </div>
+          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
+            Join the Continual Society Discord for support, bugs, and discussion.
+          </div>
+        </Link>
       </div>
     </>
   );
