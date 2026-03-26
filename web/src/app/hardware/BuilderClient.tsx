@@ -5,10 +5,12 @@ import { useEffect, useState } from "react";
 
 type BomRow = Record<string, string>;
 
-const BOM_URL = "/hardware-catalog/hardware/pcb/BOM_EMWaver_2026-01-21.csv";
-const CPL_URL = "/hardware-catalog/hardware/pcb/CPL_EMWaver_2026-01-21.csv";
-const GERBER_URL = "/hardware-catalog/hardware/pcb/Gerber_EMWaver_2026-01-21.zip";
-const STL_URL = "/hardware-catalog/hardware/case/emwaver.stl";
+const LINK_FABRICATION_ROOT =
+  "https://raw.githubusercontent.com/continualmi/emwaver-link/main/hardware/revisions/v1/fabrication";
+const BOM_URL = `${LINK_FABRICATION_ROOT}/BOM_EMWaver_2026-01-21.csv`;
+const CPL_URL = `${LINK_FABRICATION_ROOT}/CPL_EMWaver_2026-01-21.csv`;
+const GERBER_URL = `${LINK_FABRICATION_ROOT}/Gerber_EMWaver_2026-01-21.zip`;
+const STL_URL = `${LINK_FABRICATION_ROOT}/emwaver.stl`;
 
 const BOARD_IMAGES = {
   all: "/hardware-catalog/hardware/emwaver/emwaver_all.png",
