@@ -3,15 +3,15 @@
   "displayTitle": "EMWaver Core",
   "group": "stm32",
   "status": "current",
-  "image": "EMWAVER.png",
+  "image": "github:catalog/images/EMWAVER.png",
   "images": [
-    "EMWAVER.png",
-    "IMG_0201.jpg",
-    "IMG_0202.jpg",
-    "IMG_0204.jpg",
-    "IMG_0206.jpg",
-    "IMG_0209.jpg",
-    "IMG_0217.jpg"
+    "github:catalog/images/EMWAVER.png",
+    "github:catalog/images/IMG_0201.jpg",
+    "github:catalog/images/IMG_0202.jpg",
+    "github:catalog/images/IMG_0204.jpg",
+    "github:catalog/images/IMG_0206.jpg",
+    "github:catalog/images/IMG_0209.jpg",
+    "github:catalog/images/IMG_0217.jpg"
   ],
   "designDate": "2026-03-10",
   "description": "EMWaver Core is the STM32-based EMWaver board without a built-in CC1101 radio. It keeps the compact hands-on board format with two GPIO blocks and infrared support.",

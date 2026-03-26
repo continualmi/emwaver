@@ -89,10 +89,40 @@ function normalizeString(value: unknown): string {
   return String(value || "").trim();
 }
 
-function ensureCatalogAssetPath(slug: string, value: unknown): string {
+function githubRawBaseUrl(githubUrl: string): string {
+  return githubUrl
+    .replace("https://github.com/", "https://raw.githubusercontent.com/")
+    .replace(/\/$/, "");
+}
+
+function ensureGithubAssetPath(
+  githubUrl: string | null,
+  value: unknown,
+): string {
+  const raw = normalizeString(value);
+  if (!raw) return "";
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+
+  if (raw.startsWith("github:")) {
+    if (!githubUrl) return "";
+    const relativePath = raw.slice("github:".length).replace(/^\/+/, "");
+    if (!relativePath) return githubUrl;
+    return `${githubRawBaseUrl(githubUrl)}/main/${relativePath}`;
+  }
+
+  return "";
+}
+
+function ensureCatalogAssetPath(
+  slug: string,
+  value: unknown,
+  githubUrl: string | null = null,
+): string {
   const raw = normalizeString(value);
   if (!raw) return `/hardware-catalog/hardware/${slug}/${slug}.png`;
-  if (raw.startsWith("http://") || raw.startsWith("https://")) return raw;
+  const githubAssetPath = ensureGithubAssetPath(githubUrl, raw);
+  if (githubAssetPath) return githubAssetPath;
   if (raw.startsWith("/hardware-catalog/")) return raw;
   if (raw.startsWith("hardware/")) return `/hardware-catalog/${raw}`;
   if (raw.startsWith("downloads/")) return `/hardware-catalog/${raw}`;
@@ -135,9 +165,7 @@ function ensureBuildAssetHref(
 
   const looksLikeFile = /\.[a-z0-9]+$/i.test(relativePath);
   if (looksLikeFile) {
-    const rawGithubUrl = githubUrl
-      .replace("https://github.com/", "https://raw.githubusercontent.com/")
-      .replace(/\/$/, "");
+    const rawGithubUrl = githubRawBaseUrl(githubUrl);
     return {
       href: `${rawGithubUrl}/main/${relativePath}`,
       mode: "download",
@@ -150,8 +178,8 @@ function ensureBuildAssetHref(
   };
 }
 
-function ensureImagePath(slug: string, value: unknown): string {
-  return ensureCatalogAssetPath(slug, value);
+function ensureImagePath(slug: string, value: unknown, githubUrl: string | null): string {
+  return ensureCatalogAssetPath(slug, value, githubUrl);
 }
 
 function resolveBuildAssets(
@@ -228,19 +256,17 @@ function parseManifest(slug: string): HardwareDevice {
   const file = path.join(PUBLIC_ROOT, slug, "device.json");
   const raw = fs.readFileSync(file, "utf8");
   const data = JSON.parse(raw) as DeviceManifest;
+  const githubUrl = normalizeString(data.githubUrl) || null;
 
   const images = Array.isArray(data.images) ? data.images : [];
   const normalizedImages = Array.from(
-    new Set(images.map((value) => ensureImagePath(slug, value)).filter(Boolean)),
+    new Set(images.map((value) => ensureImagePath(slug, value, githubUrl)).filter(Boolean)),
   );
   const rawCaseDownloads = Array.isArray(data.caseDownloads) ? data.caseDownloads : [];
   const caseDownloads = rawCaseDownloads
     .map((entry) => {
       if (!entry || typeof entry !== "object") return null;
-      const href = ensureCatalogAssetPath(
-        slug,
-        (entry as { href?: unknown }).href,
-      );
+      const href = ensureCatalogAssetPath(slug, (entry as { href?: unknown }).href, githubUrl);
       if (!href) return null;
       return {
         label: normalizeString((entry as { label?: unknown }).label) || "Case file",
@@ -253,7 +279,7 @@ function parseManifest(slug: string): HardwareDevice {
   if (legacyCaseDownload) {
     caseDownloads.push({
       label: "STL",
-      href: ensureCatalogAssetPath(slug, legacyCaseDownload),
+      href: ensureCatalogAssetPath(slug, legacyCaseDownload, githubUrl),
     });
   }
   const normalizedCaseDownloads = Array.from(
@@ -261,7 +287,7 @@ function parseManifest(slug: string): HardwareDevice {
   );
 
   const primaryImage =
-    normalizedImages[0] || ensureImagePath(slug, data.image || `${slug}.png`);
+    normalizedImages[0] || ensureImagePath(slug, data.image || `${slug}.png`, githubUrl);
 
   return {
     slug,
@@ -274,7 +300,7 @@ function parseManifest(slug: string): HardwareDevice {
     image: primaryImage,
     images: normalizedImages.length ? normalizedImages : [primaryImage],
     casingImage: normalizeString(data.casingImage)
-      ? ensureCatalogAssetPath(slug, data.casingImage)
+      ? ensureCatalogAssetPath(slug, data.casingImage, githubUrl)
       : null,
     caseDownloads: normalizedCaseDownloads,
     buildAssets: resolveBuildAssets(
@@ -297,7 +323,7 @@ function parseManifest(slug: string): HardwareDevice {
     easyEdaUrl: normalizeString(data.easyEdaUrl) || null,
     onshapeUrl: normalizeString(data.onshapeUrl) || null,
     schematicUrl: normalizeString(data.schematicUrl) || null,
-    githubUrl: normalizeString(data.githubUrl) || null,
+    githubUrl,
   };
 }
 
