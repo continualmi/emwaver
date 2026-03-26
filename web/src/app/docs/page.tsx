@@ -14,13 +14,14 @@ export default function DocsIndex() {
       <h2>What you can do</h2>
       <ul>
         <li>
-          <strong>Infrared</strong> — the EMWaver Shield has a built-in IR receiver and
-          transmitter. Capture signals from any remote, analyze the waveform, and replay it.
-          Works out of the box.
+          <strong>Infrared</strong> — EMWaver devices have built-in IR receive/transmit
+          support. Capture signals from any remote, analyze the waveform, and replay it.
+          Works out of the box on supported IR-capable boards, including the EMWaver Shield.
         </li>
         <li>
-          <strong>Sub-GHz radio</strong> — plug in a CC1101 module and control it from a
-          script. Read registers, configure RF parameters, transmit and receive packets.
+          <strong>Sub-GHz radio</strong> — some EMWaver boards include a built-in CC1101,
+          while others let you plug in a compatible radio module. Control it from a script,
+          read registers, configure RF parameters, and transmit or receive packets.
         </li>
         <li>
           <strong>RFID</strong> — plug in an MFRC522 module and scan cards, read UIDs,
