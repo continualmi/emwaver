@@ -2,10 +2,7 @@
 
 EMWaver Shield is a shield-style carrier board for an ESP32-S3 module in the EMWaver hardware family.
 
-<p align="center">
-  <img src="catalog/images/IMG_0063.jpg" alt="EMWaver Shield mounted with phone app side view" width="49%" />
-  <img src="catalog/images/IMG_0064.jpg" alt="EMWaver Shield mounted with phone app front view" width="49%" />
-</p>
+![EMWaver Shield](catalog/images/EMWAVER_SHIELD.png)
 
 This repository is primarily a build guide and hardware package for reproducing the board. It exists to collect the shield's public-facing hardware materials in one place: photos, catalog metadata, build notes, and design references.
 
