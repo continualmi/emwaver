@@ -150,5 +150,21 @@
     "role": "assistant",
     "content": "Hello! I am the **EMWaver Agent**. I'm ready to help you explore hardware, write `.emw` scripts, and interact with your devices.\n\nHow can I help you today? If you have a specific host or hardware task in mind (like toggling a GPIO, scanning an I2C bus, or capturing signals), let me know!",
     "created_at_ms": 1774559494195
+  },
+  "8e49d134-f248-4169-8f55-b70fe97e3931": {
+    "id": "8e49d134-f248-4169-8f55-b70fe97e3931",
+    "conversation_id": "7ea16cd1-0d6e-4b47-8706-f778aec48fd4",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "user",
+    "content": "Hey",
+    "created_at_ms": 1774563811645
+  },
+  "e3ae145f-aa89-41c1-992d-c5ba00a04050": {
+    "id": "e3ae145f-aa89-41c1-992d-c5ba00a04050",
+    "conversation_id": "7ea16cd1-0d6e-4b47-8706-f778aec48fd4",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "assistant",
+    "content": "Hello! I'm the **EMWaver Agent**. I'm here to help you explore hardware, write scripts, and control your devices.\n\nTo get started, I can:\n1.  **List your available devices** (hosts).\n2.  **Write and run `.emw` scripts** to interact with GPIO, SPI, I2C, or UART.\n3.  **Create custom UIs** to control your hardware projects.\n4.  **Analyze signals** using the sampler.\n\nIs there a specific device you'd like to connect to, or a hardware task you're working on?",
+    "created_at_ms": 1774563813915
   }
 }

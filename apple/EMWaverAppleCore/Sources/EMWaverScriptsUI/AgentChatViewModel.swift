@@ -97,7 +97,7 @@ public final class AgentChatViewModel: ObservableObject {
             return
         }
 
-        messages.append(AgentChatMessage(role: .user, text: text))
+        appendMessage(AgentChatMessage(role: .user, text: text))
 
         isSending = true
 
@@ -108,15 +108,19 @@ public final class AgentChatViewModel: ObservableObject {
                     await self.createCloudConversation()
                 }
 
-                // Placeholder assistant message that the SSE stream will fill incrementally.
+                // Placeholder assistant message while the managed Agent runs.
                 let placeholderId = UUID()
                 await MainActor.run {
                     self.assistantPlaceholderId = placeholderId
-                    self.messages.append(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
+                    self.appendMessage(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
-                _ = try await self.runCloudManagedToolLoop(userPrompt: text, placeholderId: placeholderId)
+                let reply = try await self.runCloudManagedToolLoop(userPrompt: text, placeholderId: placeholderId)
                 await MainActor.run {
+                    self.replaceMessage(
+                        id: placeholderId,
+                        with: AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
+                    )
                     self.isSending = false
                     self.assistantPlaceholderId = nil
                     Task { await self.refreshCloudConversations() }
@@ -144,53 +148,21 @@ public final class AgentChatViewModel: ObservableObject {
             throw AgentBackendError.serverError("Create a conversation before sending a message.")
         }
 
-        let api = AgentBackendAPI()
-        var streamedReply = ""
-        var finalReply: String?
-        var streamError: String?
-
-        try await api.chatStream(
+        let api = AgentCloudAPI()
+        let response = try await api.chat(
             baseURL: ctx.baseURL,
-            idToken: ctx.accessToken,
+            token: ctx.accessToken,
             conversationId: conversationId.uuidString.lowercased(),
             message: userPrompt
-        ) { event in
-            switch event {
-            case .delta(let text):
-                guard !text.isEmpty else { return }
-                streamedReply += text
-                if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                    self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: streamedReply)
-                }
-            case .done(let message, _):
-                let reply = message.content.trimmingCharacters(in: .whitespacesAndNewlines)
-                finalReply = reply
-                if let idx = self.messages.firstIndex(where: { $0.id == placeholderId }) {
-                    self.messages[idx] = AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
-                }
-            case .tool(let text):
-                let prefix = "[tool] "
-                let payload = text.hasPrefix(prefix) ? String(text.dropFirst(prefix.count)) : text
-                let pieces = payload.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-                let name = pieces.first.map(String.init) ?? "tool"
-                let detail = pieces.dropFirst().first.map(String.init) ?? ""
-                self.appendSystemToolBubble(name: name, args: detail.isEmpty ? [:] : ["detail": detail])
-            case .error(let message):
-                let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty {
-                    streamError = trimmed
-                }
-            }
-        }
+        )
 
-        if let streamError, !streamError.isEmpty {
-            if finalReply?.isEmpty != false, streamedReply.isEmpty, let idx = messages.firstIndex(where: { $0.id == placeholderId }) {
-                messages.remove(at: idx)
-            }
-            throw AgentBackendError.serverError(streamError)
+        let reply = response.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        await MainActor.run {
+            self.replaceMessage(
+                id: placeholderId,
+                with: AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
+            )
         }
-
-        let reply = (finalReply ?? streamedReply).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !reply.isEmpty else {
             throw AgentBackendError.serverError("Agent model produced no text")
         }
@@ -220,10 +192,23 @@ public final class AgentChatViewModel: ObservableObject {
         // insert tool bubbles *before* it so the timeline reads naturally.
         if let pid = assistantPlaceholderId,
            let idx = messages.firstIndex(where: { $0.id == pid }) {
-            messages.insert(msg, at: idx)
+            var updated = messages
+            updated.insert(msg, at: idx)
+            messages = updated
         } else {
-            messages.append(msg)
+            appendMessage(msg)
         }
+    }
+
+    private func appendMessage(_ message: AgentChatMessage) {
+        messages = messages + [message]
+    }
+
+    private func replaceMessage(id: UUID, with message: AgentChatMessage) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        var updated = messages
+        updated[idx] = message
+        messages = updated
     }
 
     public struct ConversationInfo: Identifiable, Equatable {
