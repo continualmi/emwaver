@@ -1,6 +1,6 @@
 # RFID Waver
 
-![RFID Waver](catalog/images/RFID_WAVER.png)
+![RFID Waver](catalog/images/IMG_0062.jpg)
 
 RFID Waver is an add-on RFID module intended to pair with GPIO Waver for MFRC522-based 13.56 MHz read and write workflows.
 
