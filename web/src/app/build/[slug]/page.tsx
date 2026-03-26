@@ -48,11 +48,16 @@ function ExternalLink({
 }
 
 function BuildAssetButton({ asset }: { asset: BuildAsset }) {
+  const isDownload = asset.mode === "download";
   return (
     <ExternalLink
       href={asset.href}
-      label={asset.available ? `Download ${asset.label}` : `${asset.label} coming soon`}
-      download={asset.available}
+      label={
+        asset.available
+          ? `${isDownload ? "Download" : "Open"} ${asset.label}`
+          : `${asset.label} coming soon`
+      }
+      download={isDownload && asset.available}
       disabled={!asset.available}
     />
   );
@@ -213,9 +218,9 @@ export default async function BuildDevicePage({
                 Build files
               </div>
               <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-                Download repo-hosted fabrication files, schematics, and related
-                production assets for this device. Buttons stay disabled until the
-                matching file is available here.
+                Open the build resources for this device on GitHub. Exact file
+                links can download directly from the hardware repo; otherwise the
+                buttons open the repo or the relevant build folder there.
               </p>
 
               <div className="mt-4 flex flex-wrap gap-3">
@@ -226,8 +231,7 @@ export default async function BuildDevicePage({
 
               {!hasAnyBuildAsset && (
                 <p className="pt-4 text-xs text-[color:var(--ink-dim)]">
-                  This device page is ready for build downloads, but no files have
-                  been mirrored here yet.
+                  This device does not expose build resources yet.
                 </p>
               )}
             </section>

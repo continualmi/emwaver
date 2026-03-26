@@ -39,12 +39,14 @@ export type BuildAsset = {
   label: string;
   href: string | null;
   available: boolean;
+  mode: "download" | "external";
 };
 
 type DeviceManifest = Partial<HardwareDevice> & {
   displayTitle?: string;
   caseDownloadUrl?: string;
   buildAssets?: Partial<Record<BuildAssetKey, string>>;
+  buildAssetFolders?: Partial<Record<BuildAssetKey, string>>;
 };
 
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
@@ -98,74 +100,126 @@ function ensureCatalogAssetPath(slug: string, value: unknown): string {
   return `/hardware-catalog/hardware/${slug}/${raw}`;
 }
 
+function ensureBuildAssetHref(
+  githubUrl: string | null,
+  value: unknown,
+): { href: string | null; mode: "download" | "external" } {
+  const raw = normalizeString(value);
+  if (!raw) {
+    return { href: null, mode: "external" };
+  }
+
+  if (raw.startsWith("http://") || raw.startsWith("https://")) {
+    return {
+      href: raw,
+      mode:
+        raw.includes("raw.githubusercontent.com/") ||
+        raw.includes("/raw/") ||
+        raw.includes("?raw=1")
+          ? "download"
+          : "external",
+    };
+  }
+
+  if (!githubUrl) {
+    return { href: null, mode: "external" };
+  }
+
+  const relativePath = raw.startsWith("github:")
+    ? raw.slice("github:".length).replace(/^\/+/, "")
+    : raw.replace(/^\/+/, "");
+
+  if (!relativePath) {
+    return { href: githubUrl, mode: "external" };
+  }
+
+  const looksLikeFile = /\.[a-z0-9]+$/i.test(relativePath);
+  if (looksLikeFile) {
+    const rawGithubUrl = githubUrl
+      .replace("https://github.com/", "https://raw.githubusercontent.com/")
+      .replace(/\/$/, "");
+    return {
+      href: `${rawGithubUrl}/main/${relativePath}`,
+      mode: "download",
+    };
+  }
+
+  return {
+    href: `${githubUrl.replace(/\/$/, "")}/tree/main/${relativePath}`,
+    mode: "external",
+  };
+}
+
 function ensureImagePath(slug: string, value: unknown): string {
   return ensureCatalogAssetPath(slug, value);
 }
 
-function listDeviceAssetCandidates(slug: string): string[] {
-  const root = path.join(PUBLIC_ROOT, slug);
-  if (!fs.existsSync(root)) return [];
-
-  const queue = [root];
-  const files: string[] = [];
-
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (!current) continue;
-
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
-      const fullPath = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        queue.push(fullPath);
-        continue;
-      }
-      const relative = path.relative(root, fullPath).replaceAll(path.sep, "/");
-      files.push(relative);
-    }
-  }
-
-  return files;
-}
-
 function resolveBuildAssets(
-  slug: string,
+  _slug: string,
   data: DeviceManifest,
   caseDownloads: { label: string; href: string }[],
 ): BuildAsset[] {
+  const githubUrl = normalizeString(data.githubUrl) || null;
   const manifestAssets = data.buildAssets && typeof data.buildAssets === "object"
     ? data.buildAssets
     : {};
-  const localCandidates = listDeviceAssetCandidates(slug);
+  const manifestFolders =
+    data.buildAssetFolders && typeof data.buildAssetFolders === "object"
+      ? data.buildAssetFolders
+      : {};
 
-  return BUILD_ASSET_SPECS.map(({ key, label, matchers }) => {
+  return BUILD_ASSET_SPECS.map(({ key, label }) => {
     const manifestHref = normalizeString(manifestAssets[key]);
     if (manifestHref) {
+      const resolved = ensureBuildAssetHref(githubUrl, manifestHref);
       return {
         key,
         label,
-        href: ensureCatalogAssetPath(slug, manifestHref),
-        available: true,
+        href: resolved.href,
+        available: Boolean(resolved.href),
+        mode: resolved.mode,
       };
     }
 
     if (key === "case" && caseDownloads.length > 0) {
+      const resolved = ensureBuildAssetHref(githubUrl, caseDownloads[0].href);
       return {
         key,
         label,
-        href: caseDownloads[0].href,
-        available: true,
+        href: resolved.href,
+        available: Boolean(resolved.href),
+        mode: resolved.mode,
       };
     }
 
-    const localMatch = localCandidates.find((candidate) =>
-      matchers.some((matcher) => matcher.test(path.basename(candidate))),
-    );
+    const folderHint = normalizeString(manifestFolders[key]);
+    if (folderHint) {
+      const folderHref = ensureBuildAssetHref(githubUrl, folderHint);
+      return {
+        key,
+        label,
+        href: folderHref.href,
+        available: Boolean(folderHref.href),
+        mode: folderHref.mode,
+      };
+    }
+
+    if (githubUrl) {
+      return {
+        key,
+        label,
+        href: githubUrl,
+        available: true,
+        mode: "external",
+      };
+    }
 
     return {
       key,
       label,
-      href: localMatch ? ensureCatalogAssetPath(slug, localMatch) : null,
-      available: Boolean(localMatch),
+      href: null,
+      available: false,
+      mode: "external",
     };
   });
 }

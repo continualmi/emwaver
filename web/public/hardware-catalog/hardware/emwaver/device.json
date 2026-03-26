@@ -40,14 +40,14 @@
   "tags": ["STM32", "USB"],
   "appSupport": ["android", "ios", "desktop"],
   "caseDownloads": [
-    { "label": "STL", "href": "case/emwaver.stl" }
+    { "label": "STL", "href": "github:hardware/revisions/v1/fabrication/emwaver.stl" }
   ],
   "buildAssets": {
-    "bom": "pcb/BOM_EMWaver_2026-01-21.csv",
-    "cpl": "pcb/CPL_EMWaver_2026-01-21.csv",
-    "gerbers": "pcb/Gerber_EMWaver_2026-01-21.zip",
-    "pcb": "pcb/PCB_emwaver_2025-12-09.pdf",
-    "case": "case/emwaver.stl"
+    "bom": "github:hardware/revisions/v1/fabrication/BOM_EMWaver_2026-01-21.csv",
+    "cpl": "github:hardware/revisions/v1/fabrication/CPL_EMWaver_2026-01-21.csv",
+    "gerbers": "github:hardware/revisions/v1/fabrication/Gerber_EMWaver_2026-01-21.zip",
+    "pcb": "github:hardware/revisions/v1/fabrication/PCB_emwaver_2025-12-09.pdf",
+    "case": "github:hardware/revisions/v1/fabrication/emwaver.stl"
   },
   "oshwLabUrl": "",
   "githubUrl": "https://github.com/continualmi/emwaver-link",
