@@ -1,6 +1,6 @@
 # EMWaver Link
 
-![EMWaver Link](assets/images/emwaver-link.webp)
+![EMWaver Link](catalog/images/emwaver-link.webp)
 
 EMWaver Link is the STM32-based EMWaver board with built-in CC1101 radio support for the host-backed USB path of the EMWaver platform.
 
@@ -167,7 +167,7 @@ Recommended format for this section:
 
 Current image assets:
 
-- `assets/images/emwaver-link.webp` — current thumbnail / catalog image
+- `catalog/images/emwaver-link.webp` — repo-local thumbnail / catalog image
 - `catalog/images/` — mirrored gallery and catalog-backed image set used by EMWaver web surfaces
 
 As the repo grows, this should also include:
