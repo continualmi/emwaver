@@ -42,6 +42,13 @@
   "caseDownloads": [
     { "label": "STL", "href": "case/emwaver.stl" }
   ],
+  "buildAssets": {
+    "bom": "pcb/BOM_EMWaver_2026-01-21.csv",
+    "cpl": "pcb/CPL_EMWaver_2026-01-21.csv",
+    "gerbers": "pcb/Gerber_EMWaver_2026-01-21.zip",
+    "pcb": "pcb/PCB_emwaver_2025-12-09.pdf",
+    "case": "case/emwaver.stl"
+  },
   "oshwLabUrl": "",
   "githubUrl": "https://github.com/continualmi/emwaver-link",
   "schematicUrl": ""

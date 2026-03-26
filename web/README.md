@@ -190,6 +190,7 @@ This frontend is where build/account hardware-related web flows live.
 
 Direction reflected in repo docs:
 - `/build` is the primary board catalog + self-build page,
+- device detail pages on `/build/[slug]` should prefer direct build-file downloads (for example BOM, CPL, Gerbers, schematics, PCB docs) with disabled states when a file is not yet mirrored into the web catalog,
 - `/account` handles attached-device/account relationship UX,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,

@@ -12,6 +12,7 @@ export type HardwareDevice = {
   images: string[];
   casingImage: string | null;
   caseDownloads: { label: string; href: string }[];
+  buildAssets: BuildAsset[];
   tags: string[];
   appSupport: string[];
   parent: string | null;
@@ -25,9 +26,25 @@ export type HardwareDevice = {
   githubUrl: string | null;
 };
 
+export type BuildAssetKey =
+  | "bom"
+  | "cpl"
+  | "gerbers"
+  | "schematic"
+  | "pcb"
+  | "case";
+
+export type BuildAsset = {
+  key: BuildAssetKey;
+  label: string;
+  href: string | null;
+  available: boolean;
+};
+
 type DeviceManifest = Partial<HardwareDevice> & {
   displayTitle?: string;
   caseDownloadUrl?: string;
+  buildAssets?: Partial<Record<BuildAssetKey, string>>;
 };
 
 const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
@@ -43,6 +60,27 @@ const CURRENT_BOARD_IDS = [
   "ISM_WAVER",
   "GPIO_WAVER",
   "INFRARED_WAVER",
+];
+
+const BUILD_ASSET_SPECS: Array<{
+  key: BuildAssetKey;
+  label: string;
+  matchers: RegExp[];
+}> = [
+  { key: "bom", label: "BOM", matchers: [/\bbom\b/i] },
+  { key: "cpl", label: "CPL / CLP", matchers: [/\bcpl\b/i, /\bclp\b/i, /\bplacement\b/i] },
+  {
+    key: "gerbers",
+    label: "Gerbers",
+    matchers: [/\bgerber\b/i, /\bgerbers\b/i, /gerber.*\.zip$/i, /\.gbr$/i, /\.drl$/i],
+  },
+  {
+    key: "schematic",
+    label: "Schematic",
+    matchers: [/\bschematic\b/i, /\bschematics\b/i, /\bschem\b/i, /\.sch$/i, /\.kicad_sch$/i],
+  },
+  { key: "pcb", label: "PCB", matchers: [/\bpcb\b/i] },
+  { key: "case", label: "Case", matchers: [/\bcase\b/i, /\.stl$/i] },
 ];
 
 function normalizeString(value: unknown): string {
@@ -62,6 +100,74 @@ function ensureCatalogAssetPath(slug: string, value: unknown): string {
 
 function ensureImagePath(slug: string, value: unknown): string {
   return ensureCatalogAssetPath(slug, value);
+}
+
+function listDeviceAssetCandidates(slug: string): string[] {
+  const root = path.join(PUBLIC_ROOT, slug);
+  if (!fs.existsSync(root)) return [];
+
+  const queue = [root];
+  const files: string[] = [];
+
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (!current) continue;
+
+    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+      const fullPath = path.join(current, entry.name);
+      if (entry.isDirectory()) {
+        queue.push(fullPath);
+        continue;
+      }
+      const relative = path.relative(root, fullPath).replaceAll(path.sep, "/");
+      files.push(relative);
+    }
+  }
+
+  return files;
+}
+
+function resolveBuildAssets(
+  slug: string,
+  data: DeviceManifest,
+  caseDownloads: { label: string; href: string }[],
+): BuildAsset[] {
+  const manifestAssets = data.buildAssets && typeof data.buildAssets === "object"
+    ? data.buildAssets
+    : {};
+  const localCandidates = listDeviceAssetCandidates(slug);
+
+  return BUILD_ASSET_SPECS.map(({ key, label, matchers }) => {
+    const manifestHref = normalizeString(manifestAssets[key]);
+    if (manifestHref) {
+      return {
+        key,
+        label,
+        href: ensureCatalogAssetPath(slug, manifestHref),
+        available: true,
+      };
+    }
+
+    if (key === "case" && caseDownloads.length > 0) {
+      return {
+        key,
+        label,
+        href: caseDownloads[0].href,
+        available: true,
+      };
+    }
+
+    const localMatch = localCandidates.find((candidate) =>
+      matchers.some((matcher) => matcher.test(path.basename(candidate))),
+    );
+
+    return {
+      key,
+      label,
+      href: localMatch ? ensureCatalogAssetPath(slug, localMatch) : null,
+      available: Boolean(localMatch),
+    };
+  });
 }
 
 function parseManifest(slug: string): HardwareDevice {
@@ -96,6 +202,9 @@ function parseManifest(slug: string): HardwareDevice {
       href: ensureCatalogAssetPath(slug, legacyCaseDownload),
     });
   }
+  const normalizedCaseDownloads = Array.from(
+    new Map(caseDownloads.map((entry) => [entry.href, entry])).values(),
+  );
 
   const primaryImage =
     normalizedImages[0] || ensureImagePath(slug, data.image || `${slug}.png`);
@@ -113,8 +222,11 @@ function parseManifest(slug: string): HardwareDevice {
     casingImage: normalizeString(data.casingImage)
       ? ensureCatalogAssetPath(slug, data.casingImage)
       : null,
-    caseDownloads: Array.from(
-      new Map(caseDownloads.map((entry) => [entry.href, entry])).values(),
+    caseDownloads: normalizedCaseDownloads,
+    buildAssets: resolveBuildAssets(
+      slug,
+      data,
+      normalizedCaseDownloads,
     ),
     tags: Array.isArray(data.tags) ? data.tags.map((value) => normalizeString(value)).filter(Boolean) : [],
     appSupport: Array.isArray(data.appSupport)

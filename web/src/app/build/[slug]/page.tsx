@@ -5,29 +5,95 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
   getHardwareDevice,
+  type BuildAsset,
+  type HardwareDevice,
 } from "@/lib/hardwareCatalog";
 
 function ExternalLink({
   href,
   label,
   download,
+  disabled = false,
 }: {
   href: string | null;
   label: string;
   download?: boolean;
+  disabled?: boolean;
 }) {
-  if (!href) return null;
+  const className =
+    "rounded-xl border px-4 py-2.5 text-sm font-semibold transition";
+
+  if (!href || disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        className={`${className} cursor-not-allowed border-[color:var(--line)] bg-[color:var(--surface-3)] text-[color:var(--ink-dim)] opacity-70`}
+      >
+        {label}
+      </span>
+    );
+  }
+
   return (
     <a
       href={href}
       target="_blank"
       rel="noreferrer"
       download={download}
-      className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
+      className={`${className} border-[color:var(--line)] bg-[color:var(--surface)] text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]`}
     >
       {label}
     </a>
   );
+}
+
+function BuildAssetButton({ asset }: { asset: BuildAsset }) {
+  return (
+    <ExternalLink
+      href={asset.href}
+      label={asset.available ? `Download ${asset.label}` : `${asset.label} coming soon`}
+      download={asset.available}
+      disabled={!asset.available}
+    />
+  );
+}
+
+function GithubIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      viewBox="0 0 24 24"
+      className="h-4 w-4 fill-current"
+    >
+      <path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.28-.01-1.2-.02-2.17-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.72.08-.71.08-.71 1.15.08 1.75 1.18 1.75 1.18 1.02 1.75 2.68 1.25 3.33.96.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.27-5.24-5.68 0-1.26.45-2.29 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.15 1.18a10.9 10.9 0 0 1 5.74 0c2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.18 1.83 1.18 3.09 0 4.42-2.69 5.39-5.26 5.67.41.35.78 1.04.78 2.1 0 1.52-.01 2.74-.01 3.12 0 .31.21.68.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z" />
+    </svg>
+  );
+}
+
+function getMcuLabel(device: HardwareDevice): string | null {
+  const tags = device.tags.map((tag) => tag.toLowerCase());
+  const requires = device.requires.map((item) => item.toLowerCase());
+  const description = device.description.toLowerCase();
+
+  if (
+    device.group === "esp32" ||
+    tags.includes("esp32-s3") ||
+    requires.some((item) => item.includes("esp32-s3")) ||
+    description.includes("esp32-s3")
+  ) {
+    return "ESP32-S3";
+  }
+
+  if (
+    device.group === "stm32" ||
+    tags.includes("stm32f042") ||
+    description.includes("stm32f042") ||
+    device.parent === "GPIO_WAVER"
+  ) {
+    return "STM32F042";
+  }
+
+  return null;
 }
 
 export default async function BuildDevicePage({
@@ -39,16 +105,8 @@ export default async function BuildDevicePage({
   const device = getHardwareDevice(slug);
   if (!device) notFound();
 
-  const links = [
-    { href: device.oshwLabUrl, label: "OSHW Lab" },
-    { href: device.easyEdaUrl, label: "EasyEDA" },
-    { href: device.schematicUrl, label: "Schematic" },
-    { href: device.githubUrl, label: "GitHub" },
-  ].filter((l) => l.href);
-  const hasCaseSection =
-    Boolean(device.casingImage) ||
-    Boolean(device.onshapeUrl) ||
-    device.caseDownloads.length > 0;
+  const hasAnyBuildAsset = device.buildAssets.some((asset) => asset.available);
+  const mcuLabel = getMcuLabel(device);
 
   return (
     <div className="min-h-dvh">
@@ -81,9 +139,23 @@ export default async function BuildDevicePage({
                   Experimental
                 </span>
               )}
-              <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
-                {device.title}
-              </h1>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h1 className="text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
+                  {device.title}
+                </h1>
+                {device.githubUrl && (
+                  <a
+                    href={device.githubUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    aria-label={`Open ${device.title} GitHub repository`}
+                    className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-[11px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
+                  >
+                    <GithubIcon />
+                    GitHub
+                  </a>
+                )}
+              </div>
               <p className="max-w-lg pt-3 text-[15px] leading-7 text-[color:var(--ink-dim)]">
                 {device.description}
               </p>
@@ -103,13 +175,13 @@ export default async function BuildDevicePage({
             )}
 
             <div className="grid grid-cols-2 gap-3">
-              {device.group && (
+              {mcuLabel && (
                 <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
-                    Group
+                    MCU
                   </div>
                   <div className="pt-1 text-sm font-semibold text-[color:var(--ink)]">
-                    {device.group}
+                    {mcuLabel}
                   </div>
                 </div>
               )}
@@ -134,65 +206,52 @@ export default async function BuildDevicePage({
                   </div>
                 </div>
               )}
-              {device.appSupport.length > 0 && (
-                <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-4">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
-                    App support
-                  </div>
-                  <div className="pt-1 text-sm font-semibold capitalize text-[color:var(--ink)]">
-                    {device.appSupport.join(", ")}
-                  </div>
-                </div>
-              )}
             </div>
 
-            {links.length > 0 && (
-              <div className="flex flex-wrap gap-3">
-                {links.map((link) => (
-                  <ExternalLink
-                    key={link.label}
-                    href={link.href}
-                    label={link.label}
-                  />
+            <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
+              <div className="text-sm font-semibold text-[color:var(--ink)]">
+                Build files
+              </div>
+              <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+                Download repo-hosted fabrication files, schematics, and related
+                production assets for this device. Buttons stay disabled until the
+                matching file is available here.
+              </p>
+
+              <div className="mt-4 flex flex-wrap gap-3">
+                {device.buildAssets.map((asset) => (
+                  <BuildAssetButton key={asset.key} asset={asset} />
                 ))}
               </div>
-            )}
 
-            {hasCaseSection && (
+              {!hasAnyBuildAsset && (
+                <p className="pt-4 text-xs text-[color:var(--ink-dim)]">
+                  This device page is ready for build downloads, but no files have
+                  been mirrored here yet.
+                </p>
+              )}
+            </section>
+
+            {device.casingImage && (
               <section className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
                 <div className="text-sm font-semibold text-[color:var(--ink)]">
-                  Case / enclosure
+                  Device preview
                 </div>
                 <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-                  Recovered enclosure assets for this board, including case previews,
-                  CAD links, and downloadable model files where they still exist in
-                  the repo.
+                  Historical enclosure and device imagery kept with this hardware
+                  entry.
                 </p>
 
-                {device.casingImage && (
-                  <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-                    <div className="relative aspect-[4/3] w-full">
-                      <Image
-                        src={device.casingImage}
-                        alt={`${device.title} case preview`}
-                        fill
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <ExternalLink href={device.onshapeUrl} label="Open in Onshape" />
-                  {device.caseDownloads.map((asset) => (
-                    <ExternalLink
-                      key={asset.href}
-                      href={asset.href}
-                      label={`Download ${asset.label}`}
-                      download
+                <div className="mt-4 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
+                  <div className="relative aspect-[4/3] w-full">
+                    <Image
+                      src={device.casingImage}
+                      alt={`${device.title} preview`}
+                      fill
+                      unoptimized
+                      className="object-cover"
                     />
-                  ))}
+                  </div>
                 </div>
               </section>
             )}
