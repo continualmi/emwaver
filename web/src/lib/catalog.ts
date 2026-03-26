@@ -18,7 +18,6 @@ export type DeviceInfo = {
   requires?: string[];
   parent?: string;
   appSupport?: string[];
-  oshwLabUrl?: string;
   easyEdaUrl?: string;
   githubUrl?: string;
   schematicUrl?: string;

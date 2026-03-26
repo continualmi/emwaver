@@ -19,9 +19,7 @@ export type HardwareDevice = {
   requires: string[];
   designDate: string | null;
   reproductionCost: { amount?: number; currency?: string; units?: number } | null;
-  oshwLabUrl: string | null;
   easyEdaUrl: string | null;
-  onshapeUrl: string | null;
   schematicUrl: string | null;
   githubUrl: string | null;
 };
@@ -319,9 +317,7 @@ function parseManifest(slug: string): HardwareDevice {
     designDate: normalizeString(data.designDate) || null,
     reproductionCost:
       data.reproductionCost && typeof data.reproductionCost === "object" ? data.reproductionCost : null,
-    oshwLabUrl: normalizeString(data.oshwLabUrl) || null,
     easyEdaUrl: normalizeString(data.easyEdaUrl) || null,
-    onshapeUrl: normalizeString(data.onshapeUrl) || null,
     schematicUrl: normalizeString(data.schematicUrl) || null,
     githubUrl,
   };
