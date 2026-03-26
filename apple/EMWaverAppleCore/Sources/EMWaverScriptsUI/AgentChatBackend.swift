@@ -131,7 +131,7 @@ final class AgentBackendAPI {
         idToken: String,
         conversationId: String,
         message: String,
-        onEvent: @escaping (StreamEvent) -> Void
+        onEvent: @escaping (StreamEvent) async -> Void
     ) async throws {
         var url = baseURL
         // Tool-capable endpoint (server-side tool loop).
@@ -165,22 +165,33 @@ final class AgentBackendAPI {
             throw AgentBackendError.serverError(msg)
         }
 
-        var buffer = ""
-        for try await line in bytes.lines {
-            if line.isEmpty {
-                if let ev = Self.parseSSEBlock(buffer) {
-                    onEvent(ev)
+        var buffer = Data()
+        for try await byte in bytes {
+            buffer.append(byte)
+            while let range = Self.nextSSEBoundary(in: buffer) {
+                let blockData = buffer.subdata(in: 0..<range.lowerBound)
+                buffer.removeSubrange(0..<range.upperBound)
+                if let block = String(data: blockData, encoding: .utf8),
+                   let ev = Self.parseSSEBlock(block) {
+                    await onEvent(ev)
                 }
-                buffer = ""
-            } else {
-                buffer += line
-                buffer += "\n"
             }
         }
 
-        if let ev = Self.parseSSEBlock(buffer) {
-            onEvent(ev)
+        if let block = String(data: buffer, encoding: .utf8),
+           let ev = Self.parseSSEBlock(block) {
+            await onEvent(ev)
         }
+    }
+
+    private static func nextSSEBoundary(in buffer: Data) -> Range<Data.Index>? {
+        if let range = buffer.range(of: Data([0x0A, 0x0A])) {
+            return range
+        }
+        if let range = buffer.range(of: Data([0x0D, 0x0A, 0x0D, 0x0A])) {
+            return range
+        }
+        return nil
     }
 
     private static func parseSSEBlock(_ block: String) -> StreamEvent? {

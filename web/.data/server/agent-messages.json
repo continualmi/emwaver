@@ -119,20 +119,36 @@
     "content": "Hello! I'm the EMWaver Agent. I'm ready to help you interact with your hardware.\n\nI see you have a **MacBook Air** available as a host. To get started, I can:\n\n1.  **Scan for connected hardware** (like an EMWaver board or CC1101 module).\n2.  **Create a simple UI script** to test the connection and display some controls.\n3.  **Run a hardware test** (like toggling a GPIO pin or scanning an I2C bus).\n\nWhat would you like to do first?",
     "created_at_ms": 1774252523962
   },
-  "844dc3c0-228f-4b15-86e4-b702029362a5": {
-    "id": "844dc3c0-228f-4b15-86e4-b702029362a5",
-    "conversation_id": "e601ce41-02dc-4e07-941f-1be0ca4a4839",
+  "ca9aedbf-f8b5-4202-a00f-5ae233707fd4": {
+    "id": "ca9aedbf-f8b5-4202-a00f-5ae233707fd4",
+    "conversation_id": "2877fcf7-1d25-4bd6-8766-64c4ee83a4fd",
     "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
     "role": "user",
-    "content": "Hello",
-    "created_at_ms": 1774556306224
+    "content": "Hello2",
+    "created_at_ms": 1774558796886
   },
-  "9d5a1a01-daf7-478f-9302-01ebbc4815b3": {
-    "id": "9d5a1a01-daf7-478f-9302-01ebbc4815b3",
-    "conversation_id": "e601ce41-02dc-4e07-941f-1be0ca4a4839",
+  "5bc9d40f-0255-4310-b37d-330110f59001": {
+    "id": "5bc9d40f-0255-4310-b37d-330110f59001",
+    "conversation_id": "2877fcf7-1d25-4bd6-8766-64c4ee83a4fd",
     "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
     "role": "assistant",
-    "content": "Hello! I am the **EMWaver Agent**. I'm here to help you explore hardware, write scripts, and control your devices.\n\nTo get started, I can:\n1.  **List your available devices** (hosts) to see what we can connect to.\n2.  **Write and run EMWaver scripts** (`.emw`) to interact with GPIO, SPI, I2C, or the Sampler.\n3.  **Help you debug** hardware connections or analyze signals.\n\nWhat would you like to do first?",
-    "created_at_ms": 1774556309046
+    "content": "Hello! I am the **EMWaver Agent**.\n\nI'm ready to help you explore hardware, write `.emw` scripts, and interact with your devices. \n\nTo get started, you can:\n1. **List your available devices** (hosts).\n2. **Run a script** to control GPIO, SPI, I2C, or UART.\n3. **Create a custom UI** to monitor sensors or control hardware.\n\nWhat would you like to do first?",
+    "created_at_ms": 1774558799131
+  },
+  "7f2e524b-bd78-4e6a-bc12-66b0a5950edf": {
+    "id": "7f2e524b-bd78-4e6a-bc12-66b0a5950edf",
+    "conversation_id": "e5c62bb0-bd2c-4790-bb91-a3854bb9c3cc",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "user",
+    "content": "Hello 23",
+    "created_at_ms": 1774559491901
+  },
+  "568d0842-a942-4d8b-8362-703f646c7897": {
+    "id": "568d0842-a942-4d8b-8362-703f646c7897",
+    "conversation_id": "e5c62bb0-bd2c-4790-bb91-a3854bb9c3cc",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "assistant",
+    "content": "Hello! I am the **EMWaver Agent**. I'm ready to help you explore hardware, write `.emw` scripts, and interact with your devices.\n\nHow can I help you today? If you have a specific host or hardware task in mind (like toggling a GPIO, scanning an I2C bus, or capturing signals), let me know!",
+    "created_at_ms": 1774559494195
   }
 }
