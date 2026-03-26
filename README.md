@@ -96,7 +96,7 @@ Current committed hardware package:
 - [Pick-and-place](PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv)
 - [Gerbers](Gerber_EMWAVER_LINK_PCB_EMWAVER_LINK_2026-03-26.zip)
 - [PCB PDF](PCB_PCB_EMWAVER_LINK_2026-03-26.pdf)
-- [Case STL](emwaver.stl)
+- [Case STL](EMWAVER_LINK_CASE.stl)
 
 ## Ordering With JLCPCB
 
