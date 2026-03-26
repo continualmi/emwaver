@@ -1,6 +1,6 @@
 # EMWaver Core
 
-![EMWaver Core](catalog/images/emwaver-core.png)
+![EMWaver Core](catalog/images/EMWAVER.png)
 
 EMWaver Core is the STM32-based EMWaver board without a built-in CC1101 radio. It keeps the compact hands-on board format with two GPIO blocks and infrared support.
 
