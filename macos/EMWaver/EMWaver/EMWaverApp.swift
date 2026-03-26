@@ -38,6 +38,8 @@ struct EMWaverApp: App {
                 .environmentObject(accountDevices)
                 .environmentObject(appRouter)
                 .task {
+                    await auth.waitForInitialRestore()
+
                     // Best-effort background heartbeat + host discovery.
                     hostSessions.start(auth: auth, device: device)
                     hostDirectory.start(auth: auth)

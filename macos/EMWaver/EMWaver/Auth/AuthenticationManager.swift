@@ -9,6 +9,7 @@ import AppKit
 final class AuthenticationManager: ObservableObject {
     @Published private(set) var session: AuthSession?
     @Published private(set) var isSigningIn = false
+    @Published private(set) var didCompleteInitialRestore = false
     @Published var lastError: String?
     @Published var isSignInSheetPresented = false
     @Published var isWebHandoffSheetPresented = false
@@ -183,9 +184,17 @@ final class AuthenticationManager: ObservableObject {
         session = nil
     }
 
+    func waitForInitialRestore() async {
+        while !didCompleteInitialRestore {
+            await Task.yield()
+        }
+    }
+
     // MARK: - Restore
 
     private func restoreSessionIfPossible() async {
+        defer { didCompleteInitialRestore = true }
+
         // Avoid fighting an interactive sign-in.
         guard session == nil else { return }
 
