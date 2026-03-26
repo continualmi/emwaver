@@ -1,6 +1,6 @@
 # EMWaver Air
 
-![EMWaver Air](catalog/images/emwaver.png)
+![EMWaver Air](catalog/images/IMG_0068.jpg)
 
 EMWaver Air is the ESP32-S3 all-in-one EMWaver board. It combines radio, infrared, USB, and wireless support in a single device.
 
