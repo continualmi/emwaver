@@ -57,7 +57,6 @@ You should also expect to need:
 
 Current external design references:
 
-- OSHWLab: [emwaver_diy_v2](https://oshwlab.com/maarnotto/emwaver_diy_v2)
 - EasyEDA: [project `a9ecc255b85443dd9903fbab629f9e0b`](https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b)
 
 Current local mirrored catalog files:
@@ -76,7 +75,7 @@ Current local mirrored catalog files:
 
 This repo does not yet include committed local Gerbers, BOM, pick-and-place files, or editable EDA exports for the shield. Right now the practical path is:
 
-1. Open the design in OSHWLab or EasyEDA.
+1. Open the design in EasyEDA.
 2. Export the fabrication package you need.
 3. Save fabrication outputs under `hardware/revisions/v1/fabrication/`.
 4. Save editable project/source files under `hardware/revisions/v1/source/`.
@@ -111,7 +110,7 @@ This repository intentionally does not document a manual firmware-build workflow
 
 ## Build status
 
-The current source material available in-repo is the catalog package plus external design links. Manufacturing exports and local revision source files still need to be added here as the hardware package is filled out.
+The current source material available in-repo is the catalog package plus the remaining external design reference. Manufacturing exports and local revision source files still need to be added here as the hardware package is filled out.
 
 <p align="center">
   <img src="catalog/images/EMWAVER_SHIELD.png" alt="EMWaver Shield render" width="70%" />

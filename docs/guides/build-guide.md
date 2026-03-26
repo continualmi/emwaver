@@ -29,7 +29,6 @@ Depending on the exact assembly path, you may also need standard passives, heade
 
 Current design references:
 
-- OSHWLab: [emwaver_diy_v2](https://oshwlab.com/maarnotto/emwaver_diy_v2)
 - EasyEDA: [project `a9ecc255b85443dd9903fbab629f9e0b`](https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b)
 
 Use [../reference/design-sources.md](../reference/design-sources.md) for the current structure and what still needs to be imported into this repo.
@@ -38,7 +37,7 @@ Use [../reference/design-sources.md](../reference/design-sources.md) for the cur
 
 Today, this repo does not yet contain committed local fabrication exports for the shield. So the near-term path is:
 
-1. open the design in EasyEDA/OSHWLab,
+1. open the design in EasyEDA,
 2. export Gerbers, BOM, and pick-and-place data,
 3. save those outputs into `hardware/revisions/v1/fabrication/`,
 4. place the editable source package into `hardware/revisions/v1/source/`.
