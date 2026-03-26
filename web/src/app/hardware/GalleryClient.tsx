@@ -1,7 +1,7 @@
 "use client";
 
-import Image from "next/image";
 import { useState } from "react";
+import { CatalogImage } from "@/components/CatalogImage";
 
 export function GalleryClient({ images, title }: { images: string[]; title: string }) {
   const [active, setActive] = useState(images[0] || "");
@@ -10,7 +10,7 @@ export function GalleryClient({ images, title }: { images: string[]; title: stri
     <div className="overflow-hidden rounded-3xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-3 md:p-4">
       <div className="overflow-hidden rounded-[1.35rem] border border-[color:var(--line)] bg-[color:var(--image-well)]">
         <div className="relative h-[320px] w-full md:h-[460px]">
-          <Image src={active} alt={title} fill unoptimized className="object-contain object-center" />
+          <CatalogImage src={active} alt={title} className="h-full w-full object-contain object-center" />
         </div>
       </div>
 
@@ -29,12 +29,10 @@ export function GalleryClient({ images, title }: { images: string[]; title: stri
                 }`}
               >
                 <div className="relative h-20 w-24 bg-[color:var(--image-well)]">
-                  <Image
+                  <CatalogImage
                     src={image}
                     alt={`${title} ${index + 1}`}
-                    fill
-                    unoptimized
-                    className="object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
               </button>

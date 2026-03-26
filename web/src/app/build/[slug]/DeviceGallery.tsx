@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CatalogImage } from "@/components/CatalogImage";
 
 export function DeviceGallery({
   images,
@@ -15,7 +16,7 @@ export function DeviceGallery({
     <div className="space-y-4">
       <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
         <div className="relative flex aspect-[4/3] items-center justify-center">
-          <img
+          <CatalogImage
             src={active}
             alt={title}
             className="h-full w-full object-cover"
@@ -37,7 +38,7 @@ export function DeviceGallery({
               }`}
               aria-label={`Show ${title} image ${index + 1}`}
             >
-              <img
+              <CatalogImage
                 src={image}
                 alt={`${title} ${index + 1}`}
                 className="h-full w-full object-cover"
