@@ -45,6 +45,7 @@ Auth UX rule:
 - once a supported board reconnects with readable `board_type + hardware_uid`, the app should restore/sync it automatically instead of requiring a manual claim button.
 - interactive sign-in is now `Sign in with Continual`, using the Society-hosted EMWaver handoff page and a pasted one-time code instead of direct in-app Google/Firebase sign-in.
 - Society owns the one-time-code exchange at `/api/auth/handoff/code/consume`; macOS should not call any EMWaver-specific handoff consume route.
+- app startup should wait for the initial keychain-backed session restore to finish before the first entitlement-gated refreshes, so a persisted signed-in Pro account does not briefly downgrade to local-only UI after relaunch.
 
 ## 2.2 Device + transport + host management
 

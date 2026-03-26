@@ -345,6 +345,7 @@ struct ContentView: View {
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
+            await auth.waitForInitialRestore()
             await entitlements.refresh(auth: auth, force: true)
             firmwareUpdater.refreshDfuPresence()
             syncConnectedDeviceAccessIfNeeded()
@@ -352,7 +353,7 @@ struct ContentView: View {
                 triggerAutomaticFirmwarePromptIfNeeded()
             }
         }
-        .onChange(of: auth.isSignedIn) { _ in
+        .onChange(of: auth.session) { _ in
             Task { await entitlements.refresh(auth: auth, force: true) }
             syncConnectedDeviceAccessIfNeeded()
         }
