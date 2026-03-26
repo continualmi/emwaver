@@ -205,7 +205,7 @@ Store distribution policy migrated from AGENTS:
 
 ## 7) Assets and branding notes
 
-- Current image assets are under `public/`.
+- Current image assets are under `public/`, but board catalog manifests may also point image entries at repo-backed `github:` paths so lineup repos can own their own photo/render sets.
 - `legacy-static/` contains historical web artifacts and should be treated as migration/reference content.
 - If replacing hero/product visuals, keep optimized sizes and preserve route-stable filenames only when needed by existing links.
 
