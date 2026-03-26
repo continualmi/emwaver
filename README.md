@@ -1,6 +1,6 @@
 # Infrared Waver
 
-![Infrared Waver](assets/images/infrared-waver.png)
+![Infrared Waver](catalog/images/infrared-waver.png)
 
 Infrared Waver is a low-cost STM32F042 board focused on infrared capture and replay with native USB connectivity.
 
