@@ -185,7 +185,7 @@ The following is the intended documentation set for this repo. Human-readable ex
 - [x] Device overview README
 - [ ] Pinout reference
 - [x] Schematic PDF
-- [x] Editable hardware design files
+- [ ] Editable hardware design files
 - [x] Gerber export
 - [x] BOM export
 - [x] CPL export
