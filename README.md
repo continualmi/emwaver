@@ -1,6 +1,6 @@
 # GPIO Waver
 
-![GPIO Waver](catalog/images/gpio-waver.png)
+![GPIO Waver](catalog/images/GPIO_WAVER.png)
 
 GPIO Waver is a low-cost STM32F042 board focused on GPIO expansion and prototyping for the EMWaver hardware family.
 
