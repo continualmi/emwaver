@@ -14,17 +14,19 @@ Overall completion: `36%` (`12/33` clips done)
 
 ## Current Direction
 
-Primary message: EMWaver is a script-first hardware platform. Scripts generate UI, that UI runs across clients, and the controls interact with real hardware on both EMWaver Carrier and EMWaver Core.
+Primary message: EMWaver is a script-first hardware platform. Scripts generate UI, that UI runs across clients, agents can create or extend those flows, remote web control keeps the same model, and the controls interact with real hardware across EMWaver Carrier, EMWaver Core, and EMWaver Link.
 
 Planning decisions:
 
 - This is the launch video, not a general montage.
 - The main proof is `scripts -> generated UI -> real hardware interaction`.
-- `cc1101` is the primary hardware example for this cut.
-- Both `EMWaver Carrier` and `EMWaver Core` should appear as product classes, even if the same script is used.
-- `macOS` and `Android` are still the most useful runtime surfaces to record first.
+- The lineup story now matters: `EMWaver Carrier`, `EMWaver Core`, and `EMWaver Link` should all read as one product family.
+- `cc1101` remains the primary hardware example for this cut.
+- The final cut must include an Agent moment.
+- The final cut must include a Web Remote moment.
+- The final cut must include platform breadth across native client surfaces, not just `macOS` and `Android`.
 - Voiceover is expected; the clips should be directed to support dictated narration.
-- The strongest story is "write or open a script once, get a usable UI, run hardware from it."
+- The strongest story is "write, generate, or open a script once, get a usable UI, run hardware from it anywhere."
 
 ## Target Cut
 
@@ -32,28 +34,36 @@ Target length: `45-75s`
 
 Suggested story arc:
 
-1. Product identity: EMWaver Core and EMWaver Carrier are part of one platform.
+1. Product identity: EMWaver Carrier, EMWaver Core, and EMWaver Link are part of one platform.
 2. Script-first model: open a script and show that the platform renders its UI automatically.
 3. Hardware control: use the generated UI to drive a real `cc1101` flow.
-4. Product breadth: show the same model across Core and Carrier.
-5. Platform breadth: show the same model on `macOS` and `Android`.
-6. Closing claim: EMWaver is the platform for running hardware scripts, not just a board demo.
+4. Product breadth: show the same model across Carrier, Core, and Link.
+5. Agent moment: show the Agent producing or extending a usable script/UI flow.
+6. Web remote moment: show the same control model through the web remote surface.
+7. Platform breadth: show the same model across `macOS`, `Android`, `iOS`, and `Windows`.
+8. Closing claim: EMWaver is a multi-product, multi-surface hardware platform, not just a board demo.
 
 ## Launch Video Narrative
 
-This cut should answer four questions in order:
+This cut should answer seven questions in order:
 
 1. What is EMWaver?
 2. What makes it different?
 3. Does it actually control real hardware?
-4. Does the same model hold across products and platforms?
+4. Is this one lineup or a set of disconnected devices?
+5. Does the Agent belong to the core product experience?
+6. Does the same model extend to remote web control?
+7. Does the same model hold across products and platforms?
 
 The answer should be:
 
 - EMWaver is a platform for running hardware scripts.
 - Those scripts generate UI automatically.
 - That UI directly drives real hardware behavior.
-- The same platform works on Core, Carrier, `macOS`, and `Android`.
+- The same platform spans `Carrier`, `Core`, and `Link`.
+- The Agent is part of how scripts get created and improved.
+- The web remote keeps the same control model beyond native apps.
+- The same platform works across `macOS`, `Android`, `iOS`, and `Windows`.
 
 ## Voiceover Direction
 
@@ -73,10 +83,12 @@ Working voiceover transcript:
 3. `You open a script, and EMWaver turns it into a real interface automatically.`
 4. `That interface is not a mockup. It runs against real hardware.`
 5. `Here the same platform is driving cc1101-based workflows.`
-6. `The model stays the same across EMWaver Carrier and EMWaver Core.`
-7. `It also stays consistent across desktop and mobile clients.`
-8. `The result is simple: write or run scripts, get UI instantly, and interact with hardware directly.`
-9. `That is EMWaver.`
+6. `The model stays the same across EMWaver Carrier, EMWaver Core, and EMWaver Link.`
+7. `The Agent can help create and extend those script-driven interfaces.`
+8. `The same control model also works through the web remote surface.`
+9. `It stays consistent across desktop and mobile clients.`
+10. `The result is simple: write, generate, or run scripts, get UI instantly, and interact with hardware directly.`
+11. `That is EMWaver.`
 
 Optional tighter closing line:
 
@@ -84,7 +96,7 @@ Optional tighter closing line:
 
 ## Must-Have Recordings
 
-These are the next clips that matter most for a strong first promo cut:
+These are the required clips for the final lineup/platform cut:
 
 | Priority | Clip | Why it matters |
 | --- | --- | --- |
@@ -92,8 +104,15 @@ These are the next clips that matter most for a strong first promo cut:
 | `P0` | `new_macos_script_opens_and_generates_ui_cc1101.MOV` | Proves the central product claim: scripts render usable UI automatically. |
 | `P0` | `new_macos_cc1101_real_interaction_demo.MOV` | Shows the generated UI driving real hardware behavior. |
 | `P0` | `new_android_same_script_same_ui_cc1101.MOV` | Proves the script/UI model is not desktop-only. |
+| `P0` | `link_001_product_identity_closeup.MOV` | Establishes `EMWaver Link` as the third product in the lineup. |
+| `P0` | `link_003_macos_same_cc1101_script_built_in_radio.MOV` | Proves that Link keeps the same script/UI model while simplifying setup. |
+| `P0` | `clip_026_macos_agent_prompt_generates_script.MOV` | Makes the Agent a visible product capability rather than a spoken claim. |
+| `P0` | `clip_024_web_remote_ui_parity_demo.MOV` | Proves that EMWaver's control model extends to the web remote surface. |
+| `P0` | `clip_020_ios_android_functional_ui_parity.MOV` | Adds platform breadth on mobile beyond a single-client proof. |
+| `P0` | `clip_022_windows_mobile_ui_parity_comparison.MOV` | Adds platform breadth on desktop beyond the macOS proof. |
 | `P1` | `new_core_vs_carrier_same_script_match_cut.MOV` | Makes the product-class equivalence explicit. |
-| `P1` | `clip_021_macos_mobile_ui_parity_comparison.MOV` | Useful as a compressed proof point if the dedicated parity clip looks strong. |
+| `P1` | `link_004_core_vs_link_same_script_match_cut.MOV` | Compresses the lineup story into a single comparison beat. |
+| `P1` | `clip_021_macos_mobile_ui_parity_comparison.MOV` | Useful as a compressed proof point if the dedicated parity clips look strong. |
 
 ## Next Recording Order
 
@@ -177,11 +196,17 @@ Preferred duration: `3-5s`
 Recommended final sequence:
 
 1. `new_core_carrier_hero_clip.MOV`
-2. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
-3. `new_macos_cc1101_real_interaction_demo.MOV`
-4. `new_android_same_script_same_ui_cc1101.MOV`
-5. `new_core_vs_carrier_same_script_match_cut.MOV`
-6. Optional closing reuse of `clip_001_device_closeup_rotation.MOV`
+2. `link_001_product_identity_closeup.MOV`
+3. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
+4. `new_macos_cc1101_real_interaction_demo.MOV`
+5. `link_003_macos_same_cc1101_script_built_in_radio.MOV`
+6. `clip_026_macos_agent_prompt_generates_script.MOV`
+7. `clip_024_web_remote_ui_parity_demo.MOV`
+8. `new_android_same_script_same_ui_cc1101.MOV`
+9. `clip_020_ios_android_functional_ui_parity.MOV`
+10. `clip_022_windows_mobile_ui_parity_comparison.MOV`
+11. `new_core_vs_carrier_same_script_match_cut.MOV`
+12. Optional closing reuse of `clip_001_device_closeup_rotation.MOV`
 
 ## On-Screen Text
 
@@ -192,8 +217,10 @@ Recommended text cards or overlays:
 - `EMWaver`
 - `Scripts generate UI`
 - `Real hardware interaction`
-- `Carrier + Core`
-- `macOS + Android`
+- `Carrier + Core + Link`
+- `Agent-assisted`
+- `Web remote`
+- `macOS + Android + iOS + Windows`
 
 Avoid:
 
@@ -213,12 +240,15 @@ Keep for this cut if quality is strong:
 - `new_macos_cc1101_real_interaction_demo.MOV`
 - `new_android_same_script_same_ui_cc1101.MOV`
 - `new_core_vs_carrier_same_script_match_cut.MOV`
-
-Deprioritize for now:
-
+- `link_001_product_identity_closeup.MOV`
+- `link_003_macos_same_cc1101_script_built_in_radio.MOV`
 - `clip_020_ios_android_functional_ui_parity.MOV`
 - `clip_022_windows_mobile_ui_parity_comparison.MOV`
 - `clip_024_web_remote_ui_parity_demo.MOV`
+- `clip_026_macos_agent_prompt_generates_script.MOV`
+
+Deprioritize for now:
+
 - `clip_025_remote_host_servo_control_from_web.MOV`
 - `clip_027_macos_agent_tests_nrf24_until_passing.MOV`
 - `clip_029_hardware_catalog_overview_scroll.MOV`
