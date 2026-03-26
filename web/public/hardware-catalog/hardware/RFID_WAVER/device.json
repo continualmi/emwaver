@@ -21,7 +21,7 @@
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/rfid_waver_mirrored",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=cf5e03b0384a499194ce0b0c5843f05a",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/rfid-waver",
   "schematicUrl": "",
   "reproductionCost": { "amount": 45, "currency": "USD", "units": 5 }
 }

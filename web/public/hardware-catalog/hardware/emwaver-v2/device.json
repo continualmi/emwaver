@@ -24,7 +24,7 @@
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/emwaver_uno_v4",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=036ce7a2421a409f8c70045b2cd9ee92",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/emwaver-air",
   "schematicUrl": "",
   "reproductionCost": { "amount": 60, "currency": "USD", "units": 2 }
 }

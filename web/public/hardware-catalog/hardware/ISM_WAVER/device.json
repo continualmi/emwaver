@@ -18,7 +18,7 @@
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/ism_waver_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=a531cea32a194916ad32bc29ba2defc4",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/ism-waver",
   "schematicUrl": "",
   "reproductionCost": { "amount": 50, "currency": "USD", "units": 5 }
 }

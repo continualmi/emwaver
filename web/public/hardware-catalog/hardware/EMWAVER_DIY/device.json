@@ -20,7 +20,7 @@
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "",
   "easyEdaUrl": "",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/emwaver-core",
   "schematicUrl": "",
   "reproductionCost": null
 }
