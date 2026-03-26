@@ -18,7 +18,7 @@
   "appSupport": ["android", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/gpio_waver_15pin_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=0b47c659e31e48a995d46823b686f589",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/gpio-waver",
   "schematicUrl": "",
   "reproductionCost": { "amount": 48, "currency": "USD", "units": 5 }
 }

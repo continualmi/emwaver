@@ -28,7 +28,7 @@
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/emwaver_diy_v1",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=77f23930811d4bbb902d73bc4b0a6764",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/emwaver-carrier",
   "schematicUrl": "",
   "reproductionCost": { "amount": 38, "currency": "USD", "units": 2 }
 }

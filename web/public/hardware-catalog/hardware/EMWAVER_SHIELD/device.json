@@ -21,7 +21,7 @@
   "appSupport": ["android", "ios", "desktop"],
   "oshwLabUrl": "https://oshwlab.com/maarnotto/emwaver_diy_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b",
-  "githubUrl": "",
+  "githubUrl": "https://github.com/continualmi/emwaver-shield",
   "schematicUrl": "",
   "reproductionCost": { "amount": 32, "currency": "USD", "units": 5 }
 }
