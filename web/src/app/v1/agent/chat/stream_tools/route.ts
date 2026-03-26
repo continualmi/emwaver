@@ -13,7 +13,6 @@ function sse(event: string, data: unknown) {
 }
 
 function streamResponse(run: (controller: ReadableStreamDefaultController<Uint8Array>) => Promise<void>) {
-  const encoder = new TextEncoder();
   return new Response(
     new ReadableStream({
       async start(controller) {
@@ -120,13 +119,17 @@ export async function POST(request: NextRequest) {
 
       while (toolIterations < 8) {
         toolIterations += 1;
-        const response = await createChatCompletion({
-          model,
-          messages,
-          max_tokens: maxTokens,
-          temperature,
-          tools: toolSchemasV1(),
-        });
+        const response = await createChatCompletion(
+          identity,
+          {
+            model,
+            messages,
+            max_tokens: maxTokens,
+            temperature,
+            tools: toolSchemasV1(),
+          },
+          { surfaceKey: "agent", workloadKey: "tool_loop" },
+        );
 
         const choices = (response.choices as Array<Record<string, unknown>> | undefined) || [];
         const message = (choices[0]?.message as Record<string, unknown> | undefined) || {};

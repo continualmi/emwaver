@@ -48,5 +48,12 @@
     "title": "Chat",
     "created_at_ms": 1774252508743,
     "updated_at_ms": 1774252523962
+  },
+  "e601ce41-02dc-4e07-941f-1be0ca4a4839": {
+    "id": "e601ce41-02dc-4e07-941f-1be0ca4a4839",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "title": "Chat",
+    "created_at_ms": 1774556306097,
+    "updated_at_ms": 1774556309046
   }
 }

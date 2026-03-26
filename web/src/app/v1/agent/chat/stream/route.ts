@@ -9,7 +9,6 @@ function sse(event: string, data: unknown) {
 }
 
 function streamResponse(run: (controller: ReadableStreamDefaultController<Uint8Array>) => Promise<void>) {
-  const encoder = new TextEncoder();
   return new Response(
     new ReadableStream({
       async start(controller) {
@@ -48,16 +47,25 @@ function validatePayload(payload: RequestPayload) {
   return { conversationId, userContent, maxTokens, temperature };
 }
 
-async function handlePlainStream(identityUid: string, conversationId: string, userContent: string, maxTokens: number, temperature: number) {
+async function handlePlainStream(
+  identity: Awaited<ReturnType<typeof requireIdentity>>,
+  conversationId: string,
+  userContent: string,
+  maxTokens: number,
+  temperature: number,
+) {
+  if (!identity) {
+    throw new Error("Unauthorized");
+  }
   agentStore.appendMessage({
     conversation_id: conversationId,
-    firebase_uid: identityUid,
+    firebase_uid: identity.uid,
     role: "user",
     content: userContent,
   });
 
   const model = openAIModel();
-  const history = agentStore.listMessages(conversationId, identityUid).map((message) => ({
+  const history = agentStore.listMessages(conversationId, identity.uid).map((message) => ({
     role: message.role,
     content: message.content,
   }));
@@ -66,7 +74,7 @@ async function handlePlainStream(identityUid: string, conversationId: string, us
     const encoder = new TextEncoder();
     const parts: string[] = [];
     try {
-      await createChatCompletionStream({
+      await createChatCompletionStream(identity, {
         model,
         messages: history,
         max_tokens: maxTokens,
@@ -78,7 +86,7 @@ async function handlePlainStream(identityUid: string, conversationId: string, us
           parts.push(delta);
           controller.enqueue(encoder.encode(sse("delta", { text: delta })));
         }
-      });
+      }, { surfaceKey: "agent", workloadKey: "chat" });
 
       const full = parts.join("").trim();
       if (!full) {
@@ -88,7 +96,7 @@ async function handlePlainStream(identityUid: string, conversationId: string, us
 
       const message = agentStore.appendMessage({
         conversation_id: conversationId,
-        firebase_uid: identityUid,
+        firebase_uid: identity.uid,
         role: "assistant",
         content: full,
       });
@@ -121,7 +129,7 @@ export async function POST(request: NextRequest) {
     return new Response(JSON.stringify({ error: "Not found" }), { status: 404 });
   }
 
-  return handlePlainStream(identity.uid, validated.conversationId, validated.userContent, validated.maxTokens, validated.temperature);
+  return handlePlainStream(identity, validated.conversationId, validated.userContent, validated.maxTokens, validated.temperature);
 }
 
 export async function PUT(request: NextRequest) {
