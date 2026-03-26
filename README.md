@@ -91,12 +91,12 @@ If EMWaver Link depends on external libraries or footprints, document those vers
 
 Current committed hardware package:
 
-- [hardware/README.md](hardware/README.md)
-- [BOM](hardware/revisions/v1/fabrication/BOM_EMWaver_2026-01-21.csv)
-- [CPL](hardware/revisions/v1/fabrication/CPL_EMWaver_2026-01-21.csv)
-- [Gerbers](hardware/revisions/v1/fabrication/Gerber_EMWaver_2026-01-21.zip)
-- [PCB PDF](hardware/revisions/v1/fabrication/PCB_emwaver_2025-12-09.pdf)
-- [Case STL](hardware/revisions/v1/fabrication/emwaver.stl)
+- [Schematic PDF](Schematic_EMWAVER_LINK_2026-03-26.pdf)
+- [BOM](BOM_EMWAVER_LINK_2026-03-26.csv)
+- [Pick-and-place](PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv)
+- [Gerbers](Gerber_EMWAVER_LINK_PCB_EMWAVER_LINK_2026-03-26.zip)
+- [PCB PDF](PCB_PCB_EMWAVER_LINK_2026-03-26.pdf)
+- [Case STL](emwaver.stl)
 
 ## Ordering With JLCPCB
 
@@ -184,8 +184,8 @@ The following is the intended documentation set for this repo. Human-readable ex
 
 - [x] Device overview README
 - [ ] Pinout reference
-- [ ] Schematic PDF
-- [ ] Editable hardware design files
+- [x] Schematic PDF
+- [x] Editable hardware design files
 - [x] Gerber export
 - [x] BOM export
 - [x] CPL export
