@@ -29,6 +29,14 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/emwaver_diy_v1",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=77f23930811d4bbb902d73bc4b0a6764",
   "githubUrl": "https://github.com/continualmi/emwaver-carrier",
+  "buildAssets": {
+    "bom": "github:BOM_EMWAVER_CARRIER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv",
+    "gerbers": "github:Gerber_EMWAVER_CARRIER_PCB_EMWAVER_CARRIER_2026-03-26.zip",
+    "schematic": "github:Schematic_EMWAVER_CARRIER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_EMWAVER_CARRIER_2026-03-26.pdf",
+    "case": "github:EMWAVER_CARRIER_CASE.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 38, "currency": "USD", "units": 2 }
 }

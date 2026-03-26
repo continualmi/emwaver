@@ -21,6 +21,14 @@
   "oshwLabUrl": "",
   "easyEdaUrl": "",
   "githubUrl": "https://github.com/continualmi/emwaver-core",
+  "buildAssets": {
+    "bom": "github:BOM_EMWAVER_CORE_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_EMWAVER_CORE_2026-03-26.csv",
+    "gerbers": "github:Gerber_EMWAVER_CORE_PCB_EMWAVER_CORE_2026-03-26.zip",
+    "schematic": "github:Schematic_EMWAVER_CORE_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_EMWAVER_CORE_2026-03-26.pdf",
+    "case": "github:EMWAVER_CORE_CASE_FRONT.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": null
 }

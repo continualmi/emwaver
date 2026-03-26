@@ -20,6 +20,14 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/infrared_waver_v3",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=25c0c8121454409f86ffdb9b60234285",
   "githubUrl": "https://github.com/continualmi/infrared-waver",
+  "buildAssets": {
+    "bom": "github:BOM_INFRARED_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_INFRARED_WAVER_PCB_INFRARED_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_INFRARED_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_INFRARED_WAVER_2026-03-26.pdf",
+    "case": "github:INFRARED_WAVER_CASE.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 36, "currency": "USD", "units": 5 }
 }

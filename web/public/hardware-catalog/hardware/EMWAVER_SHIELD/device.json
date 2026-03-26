@@ -22,6 +22,13 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/emwaver_diy_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b",
   "githubUrl": "https://github.com/continualmi/emwaver-shield",
+  "buildAssets": {
+    "bom": "github:BOM_EMWAVER_SHIELD_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_EMWAVER_SHIELD_2026-03-26.csv",
+    "gerbers": "github:Gerber_EMWAVER_SHIELD_PCB_EMWAVER_SHIELD_2026-03-26.zip",
+    "schematic": "github:Schematic_EMWAVER_SHIELD_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_EMWAVER_SHIELD_2026-03-26.pdf"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 32, "currency": "USD", "units": 5 }
 }

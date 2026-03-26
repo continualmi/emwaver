@@ -19,6 +19,14 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/gpio_waver_15pin_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=0b47c659e31e48a995d46823b686f589",
   "githubUrl": "https://github.com/continualmi/gpio-waver",
+  "buildAssets": {
+    "bom": "github:BOM_GPIO_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_GPIO_WAVER_PCB_GPIO_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_GPIO_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_GPIO_WAVER_2026-03-26.pdf",
+    "case": "github:GPIO_WAVER_CASE.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 48, "currency": "USD", "units": 5 }
 }

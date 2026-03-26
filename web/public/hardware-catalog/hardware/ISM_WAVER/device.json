@@ -19,6 +19,14 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/ism_waver_v2",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=a531cea32a194916ad32bc29ba2defc4",
   "githubUrl": "https://github.com/continualmi/ism-waver",
+  "buildAssets": {
+    "bom": "github:BOM_ISM_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_ISM_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_ISM_WAVER_PCB_ISM_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_ISM_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_ISM_WAVER_2026-03-26.pdf",
+    "case": "github:ISM_WAVER_CASE.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 50, "currency": "USD", "units": 5 }
 }

@@ -22,6 +22,14 @@
   "oshwLabUrl": "https://oshwlab.com/maarnotto/rfid_waver_mirrored",
   "easyEdaUrl": "https://easyeda.com/editor#project_id=cf5e03b0384a499194ce0b0c5843f05a",
   "githubUrl": "https://github.com/continualmi/rfid-waver",
+  "buildAssets": {
+    "bom": "github:BOM_RFID_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_RFID_WAVER_PCB_RFID_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_RFID_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_RFID_WAVER_2026-03-26.pdf",
+    "case": "github:RFID_WAVER_CASE.stl"
+  },
   "schematicUrl": "",
   "reproductionCost": { "amount": 45, "currency": "USD", "units": 5 }
 }
