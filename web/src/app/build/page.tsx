@@ -221,10 +221,10 @@ export default function BuildPage() {
           </div>
         </section>
 
-        {/* ─── CURRENT BOARDS (with images) ─── */}
+        {/* ─── EMWAVER LINEUP (with images) ─── */}
         <DeviceSection
-          title="Current boards"
-          subtitle="The boards we actually build and use today."
+          title="EMWaver lineup"
+          subtitle="The EMWaver devices we actively build and use today."
           devices={currentBoards}
         />
 
