@@ -1,6 +1,6 @@
 # ISM Waver
 
-![ISM Waver](catalog/images/ism-waver.png)
+![ISM Waver](catalog/images/ISM_WAVER_DUAL.png)
 
 ISM Waver is a dual-band ISM board built around the STM32F042 with CC1101 radio support and native USB.
 
