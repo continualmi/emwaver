@@ -57,11 +57,14 @@ export default function DocsIndex() {
       <h2>Quick start</h2>
       <ol>
         <li>
-          <strong>Get a board</strong> — build an{" "}
+          <strong>Get a board</strong> — the easiest path is any supported off-the-shelf
+          ESP32-S3 dev board, so you do not need to build anything first. If you want
+          purpose-built hardware, you can also build or buy from the{" "}
+          <Link href="/build">EMWaver lineup</Link>, including the{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             EMWaver Shield
-          </a>{" "}
-          from the open-source hardware files, or use an off-the-shelf ESP32-S3 dev board.
+          </a>
+          , which is a shield-style carrier for an ESP32-S3 dev module.
         </li>
         <li>
           <strong>Install the app</strong> — available on the{" "}
