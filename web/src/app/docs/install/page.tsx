@@ -69,16 +69,21 @@ export default function InstallDocPage() {
       </p>
       <ul>
         <li>
-          <strong>EMWaver Shield</strong> (STM32F042) — purpose-built board with IR TX/RX and
-          module headers.{" "}
+          <strong>ESP32-S3 dev board</strong> — supported directly by EMWaver, so you can get
+          started without building anything from the lineup.
+        </li>
+        <li>
+          <strong>EMWaver Shield</strong> (ESP32-S3) — a shield-style carrier for an ESP32-S3
+          dev module, with IR TX/RX, radio-module support, and expanded headers.{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
             Build files on GitHub
           </a>
           .
         </li>
         <li>
-          <strong>ESP32-S3 dev board</strong> — any off-the-shelf ESP32-S3 dev board works. No
-          custom hardware needed.
+          <strong>EMWaver lineup</strong> — optional custom EMWaver devices and modules are listed in the{" "}
+          <Link href="/docs/hardware">hardware docs</Link> and on the{" "}
+          <Link href="/build">Build page</Link>.
         </li>
       </ul>
 
