@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { SiteHeader } from "@/components/SiteHeader";
+import { CatalogImage } from "@/components/CatalogImage";
 import {
   getCurrentBoards,
   getArchiveDevices,
@@ -50,12 +51,10 @@ function DeviceCard({ device }: { device: HardwareDevice }) {
         className="absolute inset-0 z-0"
       />
       <div className="relative aspect-[4/3] w-full overflow-hidden bg-[color:var(--image-well)]">
-        <Image
+        <CatalogImage
           src={device.image}
           alt={device.title}
-          fill
-          unoptimized
-          className="object-cover transition group-hover:scale-[1.02]"
+          className="h-full w-full object-cover transition group-hover:scale-[1.02]"
         />
       </div>
       <div className="relative z-10 pointer-events-none p-4">

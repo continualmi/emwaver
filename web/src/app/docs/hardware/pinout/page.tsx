@@ -1,4 +1,4 @@
-import Image from "next/image";
+import { CatalogImage } from "@/components/CatalogImage";
 import { getCurrentBoards, type HardwareDevice } from "@/lib/hardwareCatalog";
 
 function getMcuLabel(device: HardwareDevice): string {
@@ -59,12 +59,10 @@ export default function PinoutDocPage() {
           >
             <div className="flex flex-wrap items-start gap-4">
               <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)]">
-                <Image
+                <CatalogImage
                   src={device.image}
                   alt={device.title}
-                  fill
-                  unoptimized
-                  className="object-cover"
+                  className="h-full w-full object-cover"
                 />
               </div>
               <div className="min-w-0 flex-1">
