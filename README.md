@@ -1,6 +1,6 @@
 # EMWaver Link
 
-![EMWaver Link](catalog/images/emwaver-link.webp)
+![EMWaver Link](catalog/images/IMG_0149.webp)
 
 EMWaver Link is the STM32-based EMWaver board with built-in CC1101 radio support for the host-backed USB path of the EMWaver platform.
 
