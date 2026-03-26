@@ -1,0 +1,33 @@
+{
+  "title": "INFRARED_WAVER",
+  "displayTitle": "Infrared Waver",
+  "group": "stm32",
+  "image": "github:catalog/images/INFRARED_WAVER.png",
+  "images": [
+    "github:catalog/images/IMG_0061.jpg",
+    "github:catalog/images/IMG_0053.jpg",
+    "github:catalog/images/IMG_0054.jpg",
+    "github:catalog/images/IMG_0055.jpg",
+    "github:catalog/images/IMG_0056.jpg",
+    "github:catalog/images/INFRARED_WAVER.png"
+  ],
+  "casingImage": "github:catalog/images/INFRARED_WAVER_CASING.png",
+  "onshapeUrl": "https://cad.onshape.com/documents/ae514e04e9142f1950f842d0/w/b56970aa7caefb19ccd7a35b/e/cc4c22d50b560a15ef8bcd57",
+  "description": "Infrared Waver is a low-cost IR board based on the STM32F042 (48 MHz) with crystal-less native USB 2.0. It features two IR LEDs and an IR receiver for working with infrared remote controls. With the EMWaver app you can record, analyze, and replay IR signals to replicate compatible remotes. It communicates over USB (no BLE), intended for Android (USB OTG) and the desktop EMWaver app. Bonus: the native USB stack also enables USB device emulation.",
+  "designDate": "2024-08-24",
+  "tags": ["IR", "STM32F042", "USB"],
+  "appSupport": ["android", "desktop"],
+  "oshwLabUrl": "https://oshwlab.com/maarnotto/infrared_waver_v3",
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=25c0c8121454409f86ffdb9b60234285",
+  "githubUrl": "https://github.com/continualmi/infrared-waver",
+  "buildAssets": {
+    "bom": "github:BOM_INFRARED_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_INFRARED_WAVER_PCB_INFRARED_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_INFRARED_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_INFRARED_WAVER_2026-03-26.pdf",
+    "case": "github:INFRARED_WAVER_CASE.stl"
+  },
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 36, "currency": "USD", "units": 5 }
+}
