@@ -118,5 +118,21 @@
     "role": "assistant",
     "content": "Hello! I'm the EMWaver Agent. I'm ready to help you interact with your hardware.\n\nI see you have a **MacBook Air** available as a host. To get started, I can:\n\n1.  **Scan for connected hardware** (like an EMWaver board or CC1101 module).\n2.  **Create a simple UI script** to test the connection and display some controls.\n3.  **Run a hardware test** (like toggling a GPIO pin or scanning an I2C bus).\n\nWhat would you like to do first?",
     "created_at_ms": 1774252523962
+  },
+  "844dc3c0-228f-4b15-86e4-b702029362a5": {
+    "id": "844dc3c0-228f-4b15-86e4-b702029362a5",
+    "conversation_id": "e601ce41-02dc-4e07-941f-1be0ca4a4839",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "user",
+    "content": "Hello",
+    "created_at_ms": 1774556306224
+  },
+  "9d5a1a01-daf7-478f-9302-01ebbc4815b3": {
+    "id": "9d5a1a01-daf7-478f-9302-01ebbc4815b3",
+    "conversation_id": "e601ce41-02dc-4e07-941f-1be0ca4a4839",
+    "firebase_uid": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+    "role": "assistant",
+    "content": "Hello! I am the **EMWaver Agent**. I'm here to help you explore hardware, write scripts, and control your devices.\n\nTo get started, I can:\n1.  **List your available devices** (hosts) to see what we can connect to.\n2.  **Write and run EMWaver scripts** (`.emw`) to interact with GPIO, SPI, I2C, or the Sampler.\n3.  **Help you debug** hardware connections or analyze signals.\n\nWhat would you like to do first?",
+    "created_at_ms": 1774556309046
   }
 }
