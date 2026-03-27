@@ -1,0 +1,20 @@
+{
+  "git.autoRepositoryDetection": "openEditors",
+  "git.openRepositoryInParentFolders": "never",
+  "git.ignoredRepositories": [
+    "/Users/luisml/continualmi",
+    "/Users/luisml/continualmi/emwaver-air",
+    "/Users/luisml/continualmi/emwaver-carrier",
+    "/Users/luisml/continualmi/emwaver-core",
+    "/Users/luisml/continualmi/emwaver-link",
+    "/Users/luisml/continualmi/emwaver-shield",
+    "/Users/luisml/continualmi/gpio-waver",
+    "/Users/luisml/continualmi/infrared-waver",
+    "/Users/luisml/continualmi/ism-waver",
+    "/Users/luisml/continualmi/mdl",
+    "/Users/luisml/continualmi/mgpt",
+    "/Users/luisml/continualmi/montelua",
+    "/Users/luisml/continualmi/rfid-waver",
+    "/Users/luisml/continualmi/society"
+  ]
+}
