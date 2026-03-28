@@ -27,11 +27,18 @@ export function getEmwaverAppUrl() {
   return readEnv("CANONICAL_APP_URL") || readEnv("NEXT_PUBLIC_SITE_URL") || "http://localhost:3920";
 }
 
-export function getContinualPlatformUrl() {
-  return readEnv("CONTINUAL_PLATFORM_URL")
-    || readEnv("SOCIETY_SITE_URL")
-    || readEnv("NEXT_PUBLIC_SOCIETY_SITE_URL")
-    || "https://continualmi.com";
+export function getModelBaseUrl() {
+  return (readEnv("MODEL_BASE_URL") || "https://openrouter.ai/api/v1").replace(/\/+$/, "");
+}
+
+export function getModelApiKey() {
+  return readEnv("OPENROUTER_API_KEY") || readEnv("MODEL_API_KEY");
+}
+
+export function getModelRequestTimeoutMs() {
+  const raw = Number.parseInt(readEnv("MODEL_REQUEST_TIMEOUT_MS"), 10);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return 60_000;
 }
 
 export function getEmwaverSessionSecret() {
