@@ -194,8 +194,8 @@ Workflow:
 
 - The Continual MI organization workspace on this machine is rooted at `/Users/luisml/continualmi`.
 - For shared Continual MI company context and a compact summary of every repo, read `../AGENTS.md`.
-- Short version: Continual MI is an LLC founded by Luís Marnoto from Sintra, Portugal, focused on advancing machine intelligence and continual learning; EMWaver is the electronics/software product, Monte Lua (`mdl`) is the AI game SaaS, `imgpt` and `mgpt` are continual-operation model research, `cua` is an applied computer-use experiment, and `society` is the company site.
-- Related organization repos are expected to be cloned inside that directory, for example `/Users/luisml/continualmi/emwaver`, `/Users/luisml/continualmi/emwaver-shield`, `/Users/luisml/continualmi/society`, `/Users/luisml/continualmi/mdl`, `/Users/luisml/continualmi/imgpt`, `/Users/luisml/continualmi/mgpt`, and `/Users/luisml/continualmi/cua`.
-- From this repository, the other organization repos are available one directory up and down again as sibling paths such as `../emwaver-shield`, `../society`, `../mdl`, `../imgpt`, `../mgpt`, and `../cua`.
+- Short version: Continual MI is an LLC founded by Luís Marnoto from Sintra, Portugal, focused on advancing machine intelligence and continual learning; EMWaver is the electronics/software product, `mdl` is the shared Monte Lua engine/platform, `montelua` is the extracted Monte Lua game package, `mgpt` is the continual-operation model research repo, and `society` is the company site and shared platform backend.
+- Related organization repos are expected to be cloned inside that directory, for example `/Users/luisml/continualmi/emwaver`, `/Users/luisml/continualmi/emwaver-shield`, `/Users/luisml/continualmi/society`, `/Users/luisml/continualmi/mdl`, `/Users/luisml/continualmi/montelua`, and `/Users/luisml/continualmi/mgpt`.
+- From this repository, the other organization repos are available one directory up and down again as sibling paths such as `../emwaver-shield`, `../society`, `../mdl`, `../montelua`, and `../mgpt`.
 - Agents working in this repo may inspect and modify files across those sibling repositories when a task requires coordinated cross-repo changes.
 - Keep cross-repo edits intentional and update the relevant local docs in each touched repository.
