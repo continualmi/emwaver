@@ -2,10 +2,25 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { Pool, type PoolClient } from "pg";
 import Stripe from "stripe";
+import {
+  CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS,
+  TOP_UP_UNIT_PLATFORM_TOKENS,
+  TOP_UP_USD_PER_1M_TOKENS,
+  ensureCoreUserRecord,
+  ensureSharedWalletAllowance as ensureSharedWalletAllowanceCore,
+  findCoreUserByFirebaseUid,
+  getCoreUserById,
+  getSharedEntitlementState,
+  getWalletSummary as getSharedWalletSummary,
+  importLegacyWalletState as importLegacyWalletStateCore,
+  loadCoreSchemaSql,
+  setProductEntitlementOverride,
+  syncCoreSubscriptionRecord,
+  type CoreIdentityInput,
+} from "continual-core";
 
-export const CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS = 10_000_000;
-export const TOPUP_USD_PER_1M_TOKENS = 1;
-export const EMWAVER_PLATFORM_TOKENS_PER_TOPUP_UNIT = 1_000_000;
+export { CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS, TOP_UP_USD_PER_1M_TOKENS as TOPUP_USD_PER_1M_TOKENS };
+export const EMWAVER_PLATFORM_TOKENS_PER_TOPUP_UNIT = TOP_UP_UNIT_PLATFORM_TOKENS;
 
 declare global {
   var __emwaverPlatformPgPool: Pool | undefined;
@@ -82,8 +97,11 @@ export function getPlatformPgPool() {
 }
 
 async function resolveSharedSchemaSql() {
-  const schemaPath = path.resolve(process.cwd(), "../../mdl/db/schema.sql");
-  return readFile(schemaPath, "utf8");
+  const [coreSchemaSql, emwaverSchemaSql] = await Promise.all([
+    loadCoreSchemaSql(),
+    readFile(path.resolve(process.cwd(), "src/server/emwaver-schema.sql"), "utf8"),
+  ]);
+  return `${coreSchemaSql}\n\n${emwaverSchemaSql}`;
 }
 
 export async function ensurePlatformSchema() {
@@ -100,313 +118,73 @@ export async function ensurePlatformSchema() {
   await global.__emwaverPlatformSchemaReady;
 }
 
-function asIso(value: string | Date | null | undefined) {
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(parsed.getTime())) return null;
-  return parsed.toISOString();
-}
-
-function canonicalPeriodBounds(row: { current_period_start?: string | Date | null; current_period_end?: string | Date | null }) {
-  const now = new Date();
-  const start = row.current_period_start ? new Date(row.current_period_start) : now;
-  const end = row.current_period_end ? new Date(row.current_period_end) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-  return {
-    start: Number.isNaN(start.getTime()) ? now : start,
-    end: Number.isNaN(end.getTime()) ? new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) : end,
-  };
-}
-
 function looksLikeUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+const runtime = {
+  ensureSchema: ensurePlatformSchema,
+  getPool: getPlatformPgPool,
+};
+
 export async function getPlatformUserById(userId: string, clientArg?: PoolClient): Promise<PlatformUser | null> {
-  await ensurePlatformSchema();
-  const client = clientArg ?? await getPlatformPgPool().connect();
-  const shouldRelease = !clientArg;
-  try {
-    const result = await client.query(
-      `
-        select id, firebase_uid, email, display_name, stripe_customer_id
-        from core.users
-        where id = $1::uuid
-        limit 1
-      `,
-      [userId],
-    );
-    return result.rowCount ? (result.rows[0] as PlatformUser) : null;
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  return getCoreUserById(runtime, userId, clientArg) as Promise<PlatformUser | null>;
 }
 
 export async function ensurePlatformUser(input: PlatformIdentityInput, clientArg?: PoolClient): Promise<PlatformUser> {
-  await ensurePlatformSchema();
-  const client = clientArg ?? await getPlatformPgPool().connect();
-  const shouldRelease = !clientArg;
   const normalizedEmail = input.email?.trim() || null;
   const normalizedDisplayName = input.displayName?.trim()
     || normalizedEmail?.split("@")[0]
     || input.firebaseUid.trim()
     || "EMWaver user";
-  try {
-    if (looksLikeUuid(input.firebaseUid)) {
-      const existing = await getPlatformUserById(input.firebaseUid, client);
-      if (existing) {
-        if (normalizedEmail !== null || input.displayName !== null) {
-          const updated = await client.query(
-            `
-              update core.users
-              set
-                email = coalesce($2, email),
-                display_name = coalesce($3, display_name),
-                updated_at = now()
-              where id = $1::uuid
-              returning id, firebase_uid, email, display_name, stripe_customer_id
-            `,
-            [input.firebaseUid, normalizedEmail, normalizedDisplayName],
-          );
-          return updated.rows[0] as PlatformUser;
-        }
-        return existing;
+  const identityInput: CoreIdentityInput = looksLikeUuid(input.firebaseUid)
+    ? {
+        canonicalUserId: input.firebaseUid,
+        email: normalizedEmail,
+        displayName: normalizedDisplayName,
+        identities: [
+          {
+            provider: "continual",
+            providerUserId: input.firebaseUid,
+            email: normalizedEmail,
+            displayName: normalizedDisplayName,
+          },
+        ],
       }
-    }
-
-    const result = await client.query(
-      `
-        insert into core.users (firebase_uid, email, display_name)
-        values ($1, $2, $3)
-        on conflict (firebase_uid)
-        do update set
-          email = excluded.email,
-          display_name = excluded.display_name,
-          updated_at = now()
-        returning id, firebase_uid, email, display_name, stripe_customer_id
-      `,
-      [input.firebaseUid, normalizedEmail, normalizedDisplayName],
-    );
-
-    const user = result.rows[0] as PlatformUser;
-
-    await client.query(
-      `
-        insert into core.auth_identities (user_id, provider, provider_user_id, email, display_name, metadata)
-        values ($1::uuid, 'firebase', $2, $3, $4, '{}'::jsonb)
-        on conflict (provider, provider_user_id)
-        do update set
-          user_id = excluded.user_id,
-          email = excluded.email,
-          display_name = excluded.display_name,
-          updated_at = now()
-      `,
-      [user.id, input.firebaseUid, normalizedEmail, normalizedDisplayName],
-    );
-
-    await client.query(
-      `
-        insert into core.wallet_accounts (user_id)
-        values ($1::uuid)
-        on conflict (user_id) do nothing
-      `,
-      [user.id],
-    );
-
-    return user;
-  } finally {
-    if (shouldRelease) client.release();
-  }
+    : {
+        firebaseUid: input.firebaseUid,
+        email: normalizedEmail,
+        displayName: normalizedDisplayName,
+        identities: [
+          {
+            provider: "firebase",
+            providerUserId: input.firebaseUid,
+            email: normalizedEmail,
+            displayName: normalizedDisplayName,
+          },
+        ],
+      };
+  return ensureCoreUserRecord(runtime, identityInput, clientArg) as Promise<PlatformUser>;
 }
 
 export async function findUserByFirebaseUid(firebaseUid: string) {
-  await ensurePlatformSchema();
   if (looksLikeUuid(firebaseUid)) {
     return getPlatformUserById(firebaseUid);
   }
-  const result = await getPlatformPgPool().query(
-    `
-      select id, firebase_uid, email, display_name, stripe_customer_id
-      from core.users
-      where firebase_uid = $1
-      limit 1
-    `,
-    [firebaseUid],
-  );
-  return result.rowCount ? (result.rows[0] as PlatformUser) : null;
-}
-
-async function grantWalletTokens(input: {
-  userId: string;
-  eventType: "subscription_allowance_grant" | "top_up_purchase" | "usage_debit" | "admin_adjustment" | "refund_reversal" | "legacy_import";
-  tokensDelta: number;
-  productKey?: string | null;
-  workloadKey?: string | null;
-  sourceRef?: string | null;
-  stripeCheckoutSessionId?: string | null;
-  stripePaymentIntentId?: string | null;
-  stripeSubscriptionId?: string | null;
-  metadata?: Record<string, unknown>;
-}, clientArg?: PoolClient) {
-  await ensurePlatformSchema();
-  const client = clientArg ?? await getPlatformPgPool().connect();
-  const shouldRelease = !clientArg;
-  try {
-    if (input.sourceRef) {
-      const existing = await client.query(
-        `select id from core.wallet_ledger where source_ref = $1 limit 1`,
-        [input.sourceRef],
-      );
-      if (existing.rowCount) return false;
-    }
-
-    await client.query(
-      `
-        insert into core.wallet_ledger (
-          user_id,
-          event_type,
-          product_key,
-          workload_key,
-          tokens_delta,
-          stripe_checkout_session_id,
-          stripe_payment_intent_id,
-          stripe_subscription_id,
-          source_ref,
-          metadata
-        )
-        values ($1::uuid, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb)
-      `,
-      [
-        input.userId,
-        input.eventType,
-        input.productKey ?? null,
-        input.workloadKey ?? null,
-        input.tokensDelta,
-        input.stripeCheckoutSessionId ?? null,
-        input.stripePaymentIntentId ?? null,
-        input.stripeSubscriptionId ?? null,
-        input.sourceRef ?? null,
-        JSON.stringify(input.metadata ?? {}),
-      ],
-    );
-
-    await client.query(
-      `
-        insert into core.wallet_accounts (user_id, balance_tokens)
-        values ($1::uuid, $2)
-        on conflict (user_id)
-        do update set
-          balance_tokens = core.wallet_accounts.balance_tokens + excluded.balance_tokens,
-          updated_at = now()
-      `,
-      [input.userId, input.tokensDelta],
-    );
-    return true;
-  } finally {
-    if (shouldRelease) client.release();
-  }
-}
-
-async function getActiveSubscription(client: PoolClient, userId: string) {
-  const result = await client.query(
-    `
-      select stripe_subscription_id, current_period_start, current_period_end
-      from mdl.user_subscriptions
-      where user_id = $1::uuid
-        and status = 'active'
-        and plan_id in ('plus', 'continual_pro')
-        and (ends_at is null or ends_at > now())
-      order by starts_at desc
-      limit 1
-    `,
-    [userId],
-  );
-  return result.rowCount ? (result.rows[0] as {
-    stripe_subscription_id: string | null;
-    current_period_start: string | Date | null;
-    current_period_end: string | Date | null;
-  }) : null;
+  return findCoreUserByFirebaseUid(runtime, firebaseUid) as Promise<PlatformUser | null>;
 }
 
 export async function ensureSharedWalletAllowance(userId: string, clientArg?: PoolClient) {
-  await ensurePlatformSchema();
-  const client = clientArg ?? await getPlatformPgPool().connect();
-  const shouldRelease = !clientArg;
-  try {
-    const subscription = await getActiveSubscription(client, userId);
-    if (!subscription) return null;
-
-    const period = canonicalPeriodBounds(subscription);
-    await grantWalletTokens({
-      userId,
-      eventType: "subscription_allowance_grant",
-      tokensDelta: CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS,
-      productKey: "core",
-      workloadKey: "continual_pro",
-      sourceRef: `subscription_allowance:${userId}:${period.start.toISOString()}`,
-      stripeSubscriptionId: subscription.stripe_subscription_id,
-      metadata: {
-        periodStart: period.start.toISOString(),
-        periodEnd: period.end.toISOString(),
-      },
-    }, client);
-
-    await client.query(
-      `
-        insert into core.wallet_accounts (user_id, monthly_allowance_tokens, current_period_start, current_period_end)
-        values ($1::uuid, $2, $3::timestamptz, $4::timestamptz)
-        on conflict (user_id)
-        do update set
-          monthly_allowance_tokens = excluded.monthly_allowance_tokens,
-          current_period_start = excluded.current_period_start,
-          current_period_end = excluded.current_period_end,
-          updated_at = now()
-      `,
-      [userId, CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS, period.start.toISOString(), period.end.toISOString()],
-    );
-
-    return {
-      resetsAt: period.end.toISOString(),
-    };
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  const result = await ensureSharedWalletAllowanceCore(runtime, userId, clientArg);
+  return result ? { resetsAt: result.periodEnd } : null;
 }
 
 export async function getEntitlementState(userId: string, productKey = "emwaver", clientArg?: PoolClient) {
-  await ensurePlatformSchema();
-  const client = clientArg ?? await getPlatformPgPool().connect();
-  const shouldRelease = !clientArg;
-  try {
-    const subscription = await getActiveSubscription(client, userId);
-    if (subscription) {
-      await ensureSharedWalletAllowance(userId, client);
-      return {
-        pro: true,
-        expiresAt: asIso(subscription.current_period_end),
-      };
-    }
-
-    const overrideResult = await client.query(
-      `
-        select ends_at
-        from core.entitlement_overrides
-        where user_id = $1::uuid
-          and product_key = $2
-          and entitlement_key = 'continual_pro'
-          and active = true
-          and (ends_at is null or ends_at > now())
-        limit 1
-      `,
-      [userId, productKey],
-    );
-
-    return {
-      pro: Number(overrideResult.rowCount ?? 0) > 0,
-      expiresAt: asIso(overrideResult.rows[0]?.ends_at ?? null),
-    };
-  } finally {
-    if (shouldRelease) client.release();
-  }
+  const result = await getSharedEntitlementState(runtime, userId, productKey, clientArg);
+  return {
+    pro: result.pro,
+    expiresAt: result.expiresAt,
+  };
 }
 
 export async function upsertEntitlementOverride(input: {
@@ -417,34 +195,7 @@ export async function upsertEntitlementOverride(input: {
   endsAt?: string | null;
   metadata?: Record<string, unknown>;
 }) {
-  await ensurePlatformSchema();
-  await getPlatformPgPool().query(
-    `
-      insert into core.entitlement_overrides (
-        user_id,
-        product_key,
-        entitlement_key,
-        active,
-        ends_at,
-        metadata
-      )
-      values ($1::uuid, $2, $3, $4, $5::timestamptz, $6::jsonb)
-      on conflict (user_id, product_key, entitlement_key)
-      do update set
-        active = excluded.active,
-        ends_at = excluded.ends_at,
-        metadata = excluded.metadata,
-        updated_at = now()
-    `,
-    [
-      input.userId,
-      input.productKey,
-      input.entitlementKey,
-      input.active,
-      input.endsAt ?? null,
-      JSON.stringify(input.metadata ?? {}),
-    ],
-  );
+  await setProductEntitlementOverride(runtime, input);
 }
 
 export async function importLegacyWalletState(input: {
@@ -455,69 +206,25 @@ export async function importLegacyWalletState(input: {
   sourceRef: string;
   metadata?: Record<string, unknown>;
 }) {
-  await ensurePlatformSchema();
-  const client = await getPlatformPgPool().connect();
-  try {
-    await client.query("begin");
-    await grantWalletTokens({
-      userId: input.userId,
-      eventType: "legacy_import",
-      tokensDelta: input.balanceTokens,
-      productKey: "emwaver",
-      workloadKey: "legacy_wallet_import",
-      sourceRef: input.sourceRef,
-      metadata: input.metadata,
-    }, client);
-
-    await client.query(
-      `
-        insert into core.wallet_accounts (user_id, monthly_allowance_tokens, current_period_start, current_period_end)
-        values ($1::uuid, $2, $3::timestamptz, $4::timestamptz)
-        on conflict (user_id)
-        do update set
-          monthly_allowance_tokens = excluded.monthly_allowance_tokens,
-          current_period_start = excluded.current_period_start,
-          current_period_end = excluded.current_period_end,
-          updated_at = now()
-      `,
-      [
-        input.userId,
-        CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS,
-        input.periodStartMs ? new Date(input.periodStartMs).toISOString() : null,
-        input.periodEndMs ? new Date(input.periodEndMs).toISOString() : null,
-      ],
-    );
-
-    await client.query("commit");
-  } catch (error) {
-    await client.query("rollback");
-    throw error;
-  } finally {
-    client.release();
-  }
+  await importLegacyWalletStateCore(runtime, {
+    userId: input.userId,
+    balanceTokens: input.balanceTokens,
+    periodStart: input.periodStartMs ? new Date(input.periodStartMs).toISOString() : null,
+    periodEnd: input.periodEndMs ? new Date(input.periodEndMs).toISOString() : null,
+    monthlyAllowanceTokens: CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS,
+    productKey: "emwaver",
+    workloadKey: "legacy_wallet_import",
+    sourceRef: input.sourceRef,
+    metadata: input.metadata,
+  });
 }
 
 export async function getWalletSummary(userId: string): Promise<WalletSummary> {
-  await ensurePlatformSchema();
-  await ensureSharedWalletAllowance(userId);
-  const result = await getPlatformPgPool().query(
-    `
-      select balance_tokens, monthly_allowance_tokens, current_period_end
-      from core.wallet_accounts
-      where user_id = $1::uuid
-      limit 1
-    `,
-    [userId],
-  );
-
-  if (!result.rowCount) {
-    return { balance: 0, monthlyAllowance: 0, resetsAt: null };
-  }
-
+  const wallet = await getSharedWalletSummary(runtime, userId);
   return {
-    balance: Number(result.rows[0].balance_tokens ?? 0),
-    monthlyAllowance: Number(result.rows[0].monthly_allowance_tokens ?? 0),
-    resetsAt: asIso(result.rows[0].current_period_end ?? null),
+    balance: wallet.balance,
+    monthlyAllowance: wallet.monthlyAllowance,
+    resetsAt: wallet.resetsAt,
   };
 }
 
@@ -834,75 +541,23 @@ export async function syncContinualSubscriptionFromStripe(subscription: Stripe.S
       [userId, customerId],
     );
 
-    await client.query(
-      `
-        update mdl.user_subscriptions
-        set status = case when status = 'active' then 'canceled' else status end,
-            ends_at = coalesce(ends_at, $2::timestamptz),
-            updated_at = now()
-        where user_id = $1::uuid
-          and status = 'active'
-          and stripe_subscription_id is distinct from $3
-      `,
-      [userId, timestampToIso(subscription.ended_at ?? subscription.cancel_at) ?? new Date().toISOString(), subscription.id],
-    );
-
     const item = subscription.items.data[0];
-    await client.query(
-      `
-        insert into mdl.user_subscriptions (
-          user_id,
-          plan_id,
-          stripe_subscription_id,
-          stripe_price_id,
-          status,
-          starts_at,
-          ends_at,
-          current_period_start,
-          current_period_end,
-          metadata
-        )
-        values (
-          $1::uuid,
-          'continual_pro',
-          $2,
-          $3,
-          $4,
-          $5::timestamptz,
-          $6::timestamptz,
-          $7::timestamptz,
-          $8::timestamptz,
-          $9::jsonb
-        )
-        on conflict (stripe_subscription_id)
-        do update set
-          plan_id = excluded.plan_id,
-          stripe_price_id = excluded.stripe_price_id,
-          status = excluded.status,
-          starts_at = excluded.starts_at,
-          ends_at = excluded.ends_at,
-          current_period_start = excluded.current_period_start,
-          current_period_end = excluded.current_period_end,
-          metadata = excluded.metadata,
-          updated_at = now()
-      `,
-      [
-        userId,
-        subscription.id,
-        item?.price?.id ?? null,
-        stripeStatusToAppStatus(subscription.status),
-        timestampToIso(subscription.start_date) ?? new Date().toISOString(),
-        stripeStatusToAppStatus(subscription.status) === "active"
-          ? null
-          : timestampToIso(subscription.ended_at ?? subscription.cancel_at ?? item?.current_period_end) ?? new Date().toISOString(),
-        timestampToIso(item?.current_period_start),
-        timestampToIso(item?.current_period_end),
-        JSON.stringify({
-          stripeStatus: subscription.status,
-          cancelAtPeriodEnd: subscription.cancel_at_period_end,
-        }),
-      ],
-    );
+    await syncCoreSubscriptionRecord(runtime, {
+      userId,
+      stripeSubscriptionId: subscription.id,
+      stripePriceId: item?.price?.id ?? null,
+      status: stripeStatusToAppStatus(subscription.status),
+      startsAt: timestampToIso(subscription.start_date) ?? new Date().toISOString(),
+      endsAt: stripeStatusToAppStatus(subscription.status) === "active"
+        ? null
+        : timestampToIso(subscription.ended_at ?? subscription.cancel_at ?? item?.current_period_end) ?? new Date().toISOString(),
+      currentPeriodStart: timestampToIso(item?.current_period_start),
+      currentPeriodEnd: timestampToIso(item?.current_period_end),
+      metadata: {
+        stripeStatus: subscription.status,
+        cancelAtPeriodEnd: subscription.cancel_at_period_end,
+      },
+    }, client);
 
     await ensureSharedWalletAllowance(userId, client);
     await client.query("commit");
