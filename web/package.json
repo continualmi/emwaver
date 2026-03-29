@@ -7,7 +7,10 @@
     "build": "next build --webpack",
     "start": "tsx server.ts",
     "lint": "eslint",
-    "migrate:core-state": "tsx --env-file=../.env scripts/migrate-core-state.mts"
+    "migrate:core-state": "tsx --env-file=../.env scripts/migrate-core-state.mts",
+    "shared-pg:inventory": "tsx scripts/shared-postgres-cutover.mts inventory",
+    "shared-pg:migrate": "tsx scripts/shared-postgres-cutover.mts migrate",
+    "shared-pg:verify": "tsx scripts/shared-postgres-cutover.mts verify"
   },
   "dependencies": {
     "@noble/ed25519": "^2.3.0",
