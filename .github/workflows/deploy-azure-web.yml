@@ -3,7 +3,7 @@ name: Deploy Web (Azure Container Apps)
 on:
   workflow_dispatch:
   push:
-    branches: [ main ]
+    branches: [ prod ]
     paths:
       - web/**
       - .dockerignore
