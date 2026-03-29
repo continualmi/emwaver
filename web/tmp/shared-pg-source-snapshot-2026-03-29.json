@@ -1,0 +1,118 @@
+{
+  "mode": "verify",
+  "sourceDatabaseUrlRedacted": "postgresql+psycopg://emwaverlogin:***@emwaverpostgres.postgres.database.azure.com:5432/postgres",
+  "targetDatabaseUrlRedacted": "postgresql://continualadmin:***@continualpg03231028.postgres.database.azure.com:5432/continual?sslmode=require",
+  "targetSchemaPrepared": true,
+  "inventory": {
+    "source": {
+      "legacyUsers": 2,
+      "legacyEntitlements": 1,
+      "legacyCredits": 1,
+      "legacyStoreOrders": 4,
+      "legacyHandoffCodes": 1,
+      "legacyDevices": 2,
+      "legacyAgentConversations": 6,
+      "legacyAgentMessages": 14,
+      "legacyHostSessions": 3
+    },
+    "target": {
+      "coreUsers": 9,
+      "coreEntitlements": 1,
+      "coreWalletAccounts": 9,
+      "coreStoreOrders": 4,
+      "emwaverAuthHandoffCodes": 1,
+      "emwaverProvisionedDevices": 0
+    }
+  },
+  "users": {
+    "sourceCount": 2,
+    "mapped": []
+  },
+  "migrated": {
+    "entitlements": 0,
+    "credits": 0,
+    "storeOrders": 0,
+    "handoffCodes": 0
+  },
+  "skipped": {
+    "legacyDevices": [
+      {
+        "firebaseUid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+        "deviceIdB64": "kN4OLeXBb4jSxb3iHg6pKQ==",
+        "deviceIdHex": "90de0e2de5c16f88d2c5bde21e0ea929",
+        "label": "",
+        "reason": "legacy_device_id_cannot_be_losslessly_mapped_to_board_type_plus_hardware_uid"
+      },
+      {
+        "firebaseUid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+        "deviceIdB64": "EtMVxgjpaQdySNZyR8NjZA==",
+        "deviceIdHex": "12d315c608e969077248d67247c36364",
+        "label": "",
+        "reason": "legacy_device_id_cannot_be_losslessly_mapped_to_board_type_plus_hardware_uid"
+      }
+    ],
+    "outOfScopeTables": [
+      {
+        "table": "public.agent_conversations",
+        "count": 6,
+        "reason": "agent_history_stays_out_of_scope_for_shared_pg_cutover"
+      },
+      {
+        "table": "public.agent_messages",
+        "count": 14,
+        "reason": "agent_history_stays_out_of_scope_for_shared_pg_cutover"
+      },
+      {
+        "table": "public.host_sessions",
+        "count": 3,
+        "reason": "single_instance_host_presence_stays_out_of_scope_for_shared_pg_cutover"
+      }
+    ]
+  },
+  "verification": {
+    "schemaPresence": [
+      "core",
+      "emwaver",
+      "mdl"
+    ],
+    "targetPublicLeaks": [],
+    "samples": {
+      "users": [
+        {
+          "firebaseUid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+          "targetUserId": "0d5f6340-eae7-4ae5-9de0-db7c674d4512",
+          "email": "maarnotto@gmail.com",
+          "entitlementRows": 1,
+          "walletRows": 1
+        },
+        {
+          "firebaseUid": "dev-user",
+          "targetUserId": "74b84a24-0bcf-4cf4-bc02-b8f56b1bbf02",
+          "email": null,
+          "entitlementRows": 0,
+          "walletRows": 1
+        }
+      ],
+      "storeOrders": [
+        {
+          "externalOrderId": "75ea2d48-d20c-48c5-87a2-4826d7c94330",
+          "found": true
+        },
+        {
+          "externalOrderId": "fe0f0fd5-222f-4311-8980-2aa2219abae7",
+          "found": true
+        },
+        {
+          "externalOrderId": "b6d1d676-66df-4d54-930b-e9a34d008ff8",
+          "found": true
+        }
+      ],
+      "handoffCodes": [
+        {
+          "codeHash": "2ca4626119067a19898adf649eb30d3cae6c2d54f9f85e10c9dad2a3684f523b",
+          "found": true
+        }
+      ]
+    }
+  }
+}
