@@ -1,0 +1,81 @@
+{
+  "mode": "inventory",
+  "sourceDatabaseUrlRedacted": "postgresql+psycopg://emwaverlogin:***@emwaverpostgres.postgres.database.azure.com:5432/postgres",
+  "targetDatabaseUrlRedacted": "postgresql://continualadmin:***@continualpg03231028.postgres.database.azure.com:5432/continual?sslmode=require",
+  "targetSchemaPrepared": false,
+  "inventory": {
+    "source": {
+      "legacyUsers": 2,
+      "legacyEntitlements": 1,
+      "legacyCredits": 1,
+      "legacyStoreOrders": 4,
+      "legacyHandoffCodes": 1,
+      "legacyDevices": 2,
+      "legacyAgentConversations": 6,
+      "legacyAgentMessages": 14,
+      "legacyHostSessions": 3
+    },
+    "target": {
+      "coreUsers": 8,
+      "coreEntitlements": 0,
+      "coreWalletAccounts": 8,
+      "coreStoreOrders": 0,
+      "emwaverAuthHandoffCodes": 0,
+      "emwaverProvisionedDevices": 0
+    }
+  },
+  "users": {
+    "sourceCount": 0,
+    "mapped": []
+  },
+  "migrated": {
+    "entitlements": 0,
+    "credits": 0,
+    "storeOrders": 0,
+    "handoffCodes": 0
+  },
+  "skipped": {
+    "legacyDevices": [
+      {
+        "firebaseUid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+        "deviceIdB64": "kN4OLeXBb4jSxb3iHg6pKQ==",
+        "deviceIdHex": "90de0e2de5c16f88d2c5bde21e0ea929",
+        "label": "",
+        "reason": "legacy_device_id_cannot_be_losslessly_mapped_to_board_type_plus_hardware_uid"
+      },
+      {
+        "firebaseUid": "j4JSra7T08N00sypMSdCuaRdo4W2",
+        "deviceIdB64": "EtMVxgjpaQdySNZyR8NjZA==",
+        "deviceIdHex": "12d315c608e969077248d67247c36364",
+        "label": "",
+        "reason": "legacy_device_id_cannot_be_losslessly_mapped_to_board_type_plus_hardware_uid"
+      }
+    ],
+    "outOfScopeTables": [
+      {
+        "table": "public.agent_conversations",
+        "count": 6,
+        "reason": "agent_history_stays_out_of_scope_for_shared_pg_cutover"
+      },
+      {
+        "table": "public.agent_messages",
+        "count": 14,
+        "reason": "agent_history_stays_out_of_scope_for_shared_pg_cutover"
+      },
+      {
+        "table": "public.host_sessions",
+        "count": 3,
+        "reason": "single_instance_host_presence_stays_out_of_scope_for_shared_pg_cutover"
+      }
+    ]
+  },
+  "verification": {
+    "schemaPresence": [],
+    "targetPublicLeaks": [],
+    "samples": {
+      "users": [],
+      "storeOrders": [],
+      "handoffCodes": []
+    }
+  }
+}

@@ -152,7 +152,7 @@ EMWaver now owns the Continual handoff code issue/consume routes used by native 
 
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- account/subscription truth now resolves through shared Postgres-backed `core` state,
+- account/subscription truth resolves through Postgres-backed `core` state on the shared Continual Postgres runtime,
 - interactive sign-in is owned by EMWaver and issues its own signed product session after local Firebase verification,
 - native apps use the EMWaver-owned pasted-code handoff flow and exchange the code for an EMWaver-native access token,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
@@ -204,6 +204,7 @@ Direction reflected in repo docs:
 - device/account flows are web-managed,
 - pricing and subscription UX should center on service plans rather than per-device purchases,
 - shared account, subscription, entitlement, and wallet truth should live in the shared production Postgres database under `core`, with EMWaver-local product tables in `emwaver`,
+- the production runtime now uses `continualpg03231028/continual` without changing the app-side `DATABASE_URL` contract,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
 Store distribution policy migrated from AGENTS:
