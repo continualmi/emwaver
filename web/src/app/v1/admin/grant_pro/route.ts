@@ -10,6 +10,11 @@ function isAdmin(uid: string, email: string | null | undefined) {
   return Boolean(env.provisioningAllowedEmail && normalizedEmail === env.provisioningAllowedEmail);
 }
 
+function parseBool(value: unknown, fallback: boolean) {
+  if (value == null) return fallback;
+  return ["1", "true", "yes", "on"].includes(String(value).trim().toLowerCase());
+}
+
 export async function POST(request: NextRequest) {
   const identity = await requireIdentity(request);
   if (!identity) return unauthorizedJson();
@@ -28,6 +33,8 @@ export async function POST(request: NextRequest) {
   }
 
   const expiresAtRaw = (payload as Record<string, unknown>).expires_at_ms;
+  const activeRaw = (payload as Record<string, unknown>).active;
+  const active = parseBool(activeRaw, true);
   let expires_at_ms: number | null = null;
   if (expiresAtRaw != null) {
     expires_at_ms = Number.parseInt(String(expiresAtRaw), 10);
@@ -36,11 +43,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  await entitlementsStore.set(uid, {
-    pro_active: true,
+  const row = await entitlementsStore.set(uid, {
+    pro_active: active,
     pro_expires_at_ms: expires_at_ms,
     updated_at_ms: Date.now(),
   });
 
-  return NextResponse.json({ ok: true, uid, pro_active: true, expires_at_ms });
+  return NextResponse.json({
+    ok: true,
+    uid,
+    pro_active: row.pro_active,
+    expires_at_ms: row.pro_expires_at_ms,
+  });
 }

@@ -72,8 +72,7 @@ Homepage content currently carries product narrative blocks:
 - remote/cloud control narrative,
 - CTA routes (`/build`, `/install`, `/scripts`).
 
-Society routes no longer render first-party in this frontend; `/society/*` now redirects to the dedicated Society frontend.
-Configure `SOCIETY_SITE_URL` or `NEXT_PUBLIC_SOCIETY_SITE_URL` if the redirect target is not the default `https://continualmi.com`.
+Society no longer acts as a first-party community runtime. `continualmi.com` is now a static company/product-entry site, while community activity happens on Discord.
 
 ## 4.2 Components
 
@@ -147,13 +146,14 @@ EMWaver now owns the Continual handoff code issue/consume routes used by native 
 
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- account/subscription/agent/society data is still partially JSON/local-disk backed under `web/.data/server/`,
+- account/subscription truth now resolves through shared Postgres-backed `core` state,
 - interactive sign-in is owned by EMWaver and issues its own signed product session after local Firebase verification,
 - native apps use the EMWaver-owned pasted-code handoff flow and exchange the code for an EMWaver-native access token,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
 - device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity and device-limit key,
-- entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,
+- legacy JSON migration remains only for explicit import scripts, not steady-state runtime reads,
 - host presence and WebSocket routing are currently single-instance in-memory,
+- deferred local-disk state still includes agent history, Society/forum data, some order/device caches, and user files,
 - the current shape is suitable for a single-instance deployment and should move to shared state if multi-instance scaling is needed later.
 
 ### 5.1 Files
@@ -196,6 +196,7 @@ Direction reflected in repo docs:
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,
 - pricing and subscription UX should center on service plans rather than per-device purchases,
+- shared account, subscription, entitlement, and wallet truth should live in the shared production Postgres database under `core`, with EMWaver-local product tables in `emwaver`,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
 Store distribution policy migrated from AGENTS:
