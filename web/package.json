@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "@noble/ed25519": "^2.3.0",
-    "continual-core": "github:continualmi/continual-core",
+    "continual-core": "file:../../continual-core",
     "dotenv": "^16.4.5",
     "firebase": "^10.14.1",
     "firebase-admin": "^13.6.0",

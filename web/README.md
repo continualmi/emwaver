@@ -34,6 +34,12 @@ Key scripts (`package.json`):
 - `npm run start`
 - `npm run lint`
 
+Local development expects the sibling workspace layout:
+- `/Users/luisml/continualmi/emwaver`
+- `/Users/luisml/continualmi/continual-core`
+
+The web app consumes `continual-core` through `file:../../continual-core`, so shared contract changes apply locally after reinstall/rebuild without publishing a package first.
+
 ---
 
 ## 3) Folder map
