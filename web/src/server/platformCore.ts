@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { Pool, type PoolClient } from "pg";
 import Stripe from "stripe";
@@ -13,7 +14,6 @@ import {
   getSharedEntitlementState,
   getWalletSummary as getSharedWalletSummary,
   importLegacyWalletState as importLegacyWalletStateCore,
-  loadCoreSchemaSql,
   setProductEntitlementOverride,
   syncCoreSubscriptionRecord,
   type CoreIdentityInput,
@@ -26,6 +26,9 @@ declare global {
   var __emwaverPlatformPgPool: Pool | undefined;
   var __emwaverPlatformSchemaReady: Promise<void> | undefined;
 }
+
+const require = createRequire(import.meta.url);
+const coreSchemaPath = path.join(path.dirname(require.resolve("continual-core")), "..", "db", "core-schema.sql");
 
 export type PlatformIdentityInput = {
   firebaseUid: string;
@@ -98,7 +101,7 @@ export function getPlatformPgPool() {
 
 async function resolveSharedSchemaSql() {
   const [coreSchemaSql, emwaverSchemaSql] = await Promise.all([
-    loadCoreSchemaSql(),
+    readFile(coreSchemaPath, "utf8"),
     readFile(path.resolve(process.cwd(), "src/server/emwaver-schema.sql"), "utf8"),
   ]);
   return `${coreSchemaSql}\n\n${emwaverSchemaSql}`;

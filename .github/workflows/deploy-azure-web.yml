@@ -31,6 +31,26 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Resolve continual-core ref
+        id: core_ref
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          REPO_URL="https://x-access-token:${GITHUB_TOKEN}@github.com/continualmi/continual-core.git"
+          CANDIDATE_REF="${GITHUB_REF_NAME}"
+          if git ls-remote --exit-code --heads "${REPO_URL}" "${CANDIDATE_REF}" >/dev/null 2>&1; then
+            echo "ref=${CANDIDATE_REF}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=main" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out continual-core
+        uses: actions/checkout@v4
+        with:
+          repository: continualmi/continual-core
+          ref: ${{ steps.core_ref.outputs.ref }}
+          path: continual-core
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
