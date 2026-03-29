@@ -1,5 +1,4 @@
-import { ensurePlatformUser, findUserByFirebaseUid, getEntitlementState, upsertEntitlementOverride } from "@/server/platformCore";
-import { readCollection } from "./jsonStore";
+import { ensurePlatformUser, getEntitlementState, upsertEntitlementOverride } from "@/server/platformCore";
 
 export type EntitlementRecord = {
   pro_active: boolean;
@@ -7,62 +6,23 @@ export type EntitlementRecord = {
   updated_at_ms: number;
 };
 
-function nowMs() {
-  return Date.now();
-}
-
 class EntitlementsStore {
-  private readonly rows = new Map<string, EntitlementRecord>(
-    Object.entries(readCollection<Record<string, EntitlementRecord>>("entitlements", {})),
-  );
-
-  private defaultRecord() {
-    const everyonePro = ["1", "true", "yes", "on"].includes((process.env.EMWAVER_DEFAULT_PRO || "").trim().toLowerCase());
+  private toRecord(platform: { pro: boolean; expiresAt: string | null }): EntitlementRecord {
     return {
-      pro_active: everyonePro,
-      pro_expires_at_ms: null,
-      updated_at_ms: nowMs(),
+      pro_active: platform.pro,
+      pro_expires_at_ms: platform.expiresAt ? new Date(platform.expiresAt).getTime() : null,
+      updated_at_ms: Date.now(),
     };
   }
 
-  private async importLegacy(uid: string, record: EntitlementRecord) {
-    const user = await findUserByFirebaseUid(uid);
-    if (!user || !record.pro_active) return;
-    await upsertEntitlementOverride({
-      userId: user.id,
-      productKey: "emwaver",
-      entitlementKey: "continual_pro",
-      active: true,
-      endsAt: record.pro_expires_at_ms ? new Date(record.pro_expires_at_ms).toISOString() : null,
-      metadata: {
-        source: "legacy_json",
-        updatedAtMs: record.updated_at_ms,
-      },
-    });
-  }
-
   async get(uid: string, identity?: { email?: string | null; displayName?: string | null }) {
-    const legacy = this.rows.get(uid) ?? this.defaultRecord();
     const user = await ensurePlatformUser({
       firebaseUid: uid,
       email: identity?.email ?? null,
       displayName: identity?.displayName ?? null,
     });
     const platform = await getEntitlementState(user.id, "emwaver");
-    if (platform.pro) {
-      return {
-        pro_active: true,
-        pro_expires_at_ms: platform.expiresAt ? new Date(platform.expiresAt).getTime() : null,
-        updated_at_ms: nowMs(),
-      };
-    }
-
-    if (legacy.pro_active) {
-      await this.importLegacy(uid, legacy);
-      return legacy;
-    }
-
-    return legacy;
+    return this.toRecord(platform);
   }
 
   async set(uid: string, record: EntitlementRecord, identity?: { email?: string | null; displayName?: string | null }) {
@@ -82,6 +42,8 @@ class EntitlementsStore {
         updatedAtMs: record.updated_at_ms,
       },
     });
+    const platform = await getEntitlementState(user.id, "emwaver");
+    return this.toRecord(platform);
   }
 }
 

@@ -1,18 +1,18 @@
 import {
   CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS,
   TOPUP_USD_PER_1M_TOKENS,
+  ensureSharedWalletAllowance,
   ensurePlatformUser,
   getWalletSummary,
-  importLegacyWalletState,
 } from "@/server/platformCore";
-import { readCollection } from "./jsonStore";
 
 export { CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS as PRO_MONTHLY_ALLOWANCE_TOKENS, TOPUP_USD_PER_1M_TOKENS };
 
 export type CreditRecord = {
   balance_tokens: number;
-  period_start_ms: number;
-  period_end_ms: number;
+  monthly_allowance_tokens: number;
+  period_start_ms: number | null;
+  period_end_ms: number | null;
   updated_at_ms: number;
 };
 
@@ -21,65 +21,21 @@ function nowMs() {
 }
 
 class CreditsStore {
-  private readonly rows = new Map<string, CreditRecord>(
-    Object.entries(readCollection<Record<string, CreditRecord>>("credits", {})),
-  );
-
-  private getLegacy(uid: string) {
-    const now = nowMs();
-    const existing = this.rows.get(uid);
-    if (!existing) {
-      return {
-        balance_tokens: 0,
-        period_start_ms: now,
-        period_end_ms: now,
-        updated_at_ms: now,
-      };
-    }
-
-    if (existing.period_end_ms <= now) {
-      return {
-        balance_tokens: 0,
-        period_start_ms: now,
-        period_end_ms: now,
-        updated_at_ms: now,
-      };
-    }
-
-    return existing;
-  }
-
   async getForUser(firebaseUid: string, identity?: { email?: string | null; displayName?: string | null }) {
     const user = await ensurePlatformUser({
       firebaseUid,
       email: identity?.email ?? null,
       displayName: identity?.displayName ?? null,
     });
+    await ensureSharedWalletAllowance(user.id);
     const wallet = await getWalletSummary(user.id);
-    if (wallet.balance > 0 || wallet.monthlyAllowance > 0 || wallet.resetsAt) {
-      return {
-        balance_tokens: wallet.balance,
-        period_start_ms: 0,
-        period_end_ms: wallet.resetsAt ? new Date(wallet.resetsAt).getTime() : 0,
-        updated_at_ms: nowMs(),
-      };
-    }
-
-    const legacy = this.getLegacy(firebaseUid);
-    if (legacy.balance_tokens > 0 || legacy.period_end_ms > legacy.period_start_ms) {
-      await importLegacyWalletState({
-        userId: user.id,
-        balanceTokens: legacy.balance_tokens,
-        periodStartMs: legacy.period_start_ms,
-        periodEndMs: legacy.period_end_ms,
-        sourceRef: `legacy_wallet:${firebaseUid}:${legacy.updated_at_ms}`,
-        metadata: {
-          firebaseUid,
-          source: "emwaver_json",
-        },
-      });
-    }
-    return legacy;
+    return {
+      balance_tokens: wallet.balance,
+      monthly_allowance_tokens: wallet.monthlyAllowance,
+      period_start_ms: null,
+      period_end_ms: wallet.resetsAt ? new Date(wallet.resetsAt).getTime() : null,
+      updated_at_ms: nowMs(),
+    };
   }
 }
 

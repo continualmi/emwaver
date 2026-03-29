@@ -6,7 +6,8 @@
     "dev": "tsx watch --env-file=../.env server.ts",
     "build": "next build --webpack",
     "start": "tsx server.ts",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:core-state": "tsx --env-file=../.env scripts/migrate-core-state.mts"
   },
   "dependencies": {
     "@noble/ed25519": "^2.3.0",
