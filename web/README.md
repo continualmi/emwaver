@@ -150,10 +150,11 @@ Current implementation notes:
 - interactive sign-in is owned by EMWaver and issues its own signed product session after local Firebase verification,
 - native apps use the EMWaver-owned pasted-code handoff flow and exchange the code for an EMWaver-native access token,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
-- device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity and device-limit key,
-- legacy JSON migration remains only for explicit import scripts, not steady-state runtime reads,
+- device provisioning is keyed by `board_type + hardware_uid`, and live provisioning state now resolves through Postgres-backed `emwaver.provisioned_devices`,
+- store orders now resolve through Postgres-backed `core.store_orders`,
+- legacy JSON data remains only as migration input for a few fallback imports, not as the intended steady-state source of truth,
 - host presence and WebSocket routing are currently single-instance in-memory,
-- deferred local-disk state still includes agent history, Society/forum data, some order/device caches, and user files,
+- deferred local-disk state still includes agent history, Society/forum data, and user files,
 - the current shape is suitable for a single-instance deployment and should move to shared state if multi-instance scaling is needed later.
 
 ### 5.1 Files

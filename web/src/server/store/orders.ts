@@ -5,7 +5,7 @@ import {
   listStoreOrdersByUser,
   upsertStoreOrder,
 } from "@/server/platformCore";
-import { readCollection, writeCollection } from "./jsonStore";
+import { readCollection } from "./jsonStore";
 
 export type OrderRecord = {
   id: string;
@@ -44,13 +44,9 @@ function mapPlatformOrder(row: Record<string, unknown>): OrderRecord {
 }
 
 class OrdersStore {
-  private readonly rows = new Map<string, OrderRecord>(
+  private readonly legacyRows = new Map<string, OrderRecord>(
     Object.entries(readCollection<Record<string, OrderRecord>>("orders", {})),
   );
-
-  private persist() {
-    writeCollection("orders", Object.fromEntries(this.rows.entries()));
-  }
 
   async createDraft(input: {
     firebase_uid: string | null;
@@ -76,13 +72,11 @@ class OrdersStore {
       created_at_ms: now,
       updated_at_ms: now,
     };
-    this.rows.set(order.id, order);
-    this.persist();
 
     const user = input.firebase_uid
       ? await ensurePlatformUser({ firebaseUid: input.firebase_uid, email: input.email, displayName: null })
       : null;
-    await upsertStoreOrder({
+    const persisted = await upsertStoreOrder({
       externalOrderId: order.id,
       userId: user?.id ?? null,
       email: input.email,
@@ -97,7 +91,7 @@ class OrdersStore {
       },
     });
 
-    return order;
+    return mapPlatformOrder(persisted);
   }
 
   async byUser(firebaseUid: string) {
@@ -106,9 +100,29 @@ class OrdersStore {
     if (platformOrders.length > 0) {
       return platformOrders.map((row) => mapPlatformOrder(row));
     }
-    return [...this.rows.values()]
-      .filter((row) => row.firebase_uid === firebaseUid)
-      .sort((a, b) => b.created_at_ms - a.created_at_ms);
+
+    const legacyMatches = [...this.legacyRows.values()].filter((row) => row.firebase_uid === firebaseUid);
+    if (legacyMatches.length > 0) {
+      await Promise.all(legacyMatches.map((row) => upsertStoreOrder({
+        externalOrderId: row.id,
+        userId: user.id,
+        email: row.email,
+        status: row.status,
+        quantity: row.quantity,
+        stripeCheckoutSessionId: row.stripe_checkout_session_id,
+        stripePaymentIntentId: row.stripe_payment_intent_id,
+        currency: row.currency,
+        amountTotal: row.amount_total,
+        shippingJson: row.shipping_json,
+        metadata: { firebaseUid },
+      })));
+      const migrated = await listStoreOrdersByUser(user.id);
+      if (migrated.length > 0) {
+        return migrated.map((row) => mapPlatformOrder(row));
+      }
+    }
+
+    return legacyMatches.sort((a, b) => b.created_at_ms - a.created_at_ms);
   }
 
   async claim(sessionId: string, firebaseUid: string) {
@@ -137,18 +151,14 @@ class OrdersStore {
       return { order: mapPlatformOrder(updated) } as const;
     }
 
-    const order = [...this.rows.values()]
+    const order = [...this.legacyRows.values()]
       .filter((row) => row.stripe_checkout_session_id === sessionId)
       .sort((a, b) => b.created_at_ms - a.created_at_ms)[0] || null;
     if (!order) return { error: "not_found" } as const;
     if (order.firebase_uid && order.firebase_uid !== firebaseUid) {
       return { error: "already_claimed" } as const;
     }
-    order.firebase_uid = firebaseUid;
-    order.updated_at_ms = nowMs();
-    this.rows.set(order.id, order);
-    this.persist();
-    await upsertStoreOrder({
+    const persisted = await upsertStoreOrder({
       externalOrderId: order.id,
       userId: user.id,
       email: order.email,
@@ -161,19 +171,13 @@ class OrdersStore {
       shippingJson: order.shipping_json,
       metadata: { firebaseUid },
     });
-    return { order } as const;
+    return { order: mapPlatformOrder(persisted) } as const;
   }
 
   async markCompleted(sessionId: string, updates: Partial<OrderRecord>) {
-    const order = [...this.rows.values()]
+    const order = [...this.legacyRows.values()]
       .filter((row) => row.stripe_checkout_session_id === sessionId)
       .sort((a, b) => b.created_at_ms - a.created_at_ms)[0] || null;
-
-    if (order) {
-      Object.assign(order, updates, { updated_at_ms: nowMs() });
-      this.rows.set(order.id, order);
-      this.persist();
-    }
 
     const firebaseUid = String(updates.firebase_uid || order?.firebase_uid || "").trim();
     const user = firebaseUid ? await ensurePlatformUser({ firebaseUid, email: order?.email ?? null, displayName: null }) : null;
