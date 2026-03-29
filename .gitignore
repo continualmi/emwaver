@@ -13,3 +13,7 @@ Thumbs.db
 
 # Large generated previews can be added intentionally when needed
 assets/images/tmp/
+
+# Playwright artifacts
+.playwright-cli/
+output/playwright/
