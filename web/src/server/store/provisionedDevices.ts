@@ -5,7 +5,7 @@ import {
   setProvisionedDeviceLabel,
   upsertProvisionedDevice,
 } from "@/server/platformCore";
-import { readCollection, writeCollection } from "./jsonStore";
+import { readCollection } from "./jsonStore";
 
 export type ProvisionedDeviceRecord = {
   board_type: string;
@@ -63,12 +63,11 @@ export function normalizeHardwareUid(value: string) {
 }
 
 class ProvisionedDevicesStore {
-  private readonly rows: Map<string, ProvisionedDeviceRecord>;
+  private readonly legacyRows: Map<string, ProvisionedDeviceRecord>;
 
   constructor() {
     const raw = readCollection<Record<string, ProvisionedDeviceRecord>>("provisioned_devices", {});
     const normalized = new Map<string, ProvisionedDeviceRecord>();
-    let changed = false;
 
     for (const row of Object.values(raw)) {
       const boardType = normalizeBoardType(row.board_type);
@@ -89,22 +88,10 @@ class ProvisionedDevicesStore {
         normalized.set(key, next);
       } else {
         normalized.set(key, mergeRows(existing, next));
-        changed = true;
-      }
-
-      if (row.board_type !== boardType || row.hardware_uid !== hardwareUid) {
-        changed = true;
       }
     }
 
-    this.rows = normalized;
-    if (changed) {
-      this.persist();
-    }
-  }
-
-  private persist() {
-    writeCollection("provisioned_devices", Object.fromEntries(this.rows.entries()));
+    this.legacyRows = normalized;
   }
 
   async get(boardType: string, hardwareUid: string) {
@@ -112,7 +99,19 @@ class ProvisionedDevicesStore {
     const normalizedHardwareUid = canonicalHardwareUid(normalizedBoardType, normalizeHardwareUid(hardwareUid));
     const platform = await getProvisionedDevice(normalizedBoardType, normalizedHardwareUid);
     if (platform) return mapPlatformDevice(platform);
-    return this.rows.get(makeKey(normalizedBoardType, normalizedHardwareUid)) || null;
+
+    const legacy = this.legacyRows.get(makeKey(normalizedBoardType, normalizedHardwareUid)) || null;
+    if (!legacy?.owner_firebase_uid) return legacy;
+
+    const user = await ensurePlatformUser({ firebaseUid: legacy.owner_firebase_uid, email: null, displayName: null });
+    const migrated = await upsertProvisionedDevice({
+      boardType: normalizedBoardType,
+      hardwareUid: normalizedHardwareUid,
+      ownerUserId: user.id,
+      ownerFirebaseUid: legacy.owner_firebase_uid,
+      label: legacy.label,
+    });
+    return mapPlatformDevice(migrated);
   }
 
   async listByUser(firebaseUid: string) {
@@ -122,8 +121,23 @@ class ProvisionedDevicesStore {
       return platformDevices.map((row) => mapPlatformDevice(row));
     }
 
+    const legacyMatches = [...this.legacyRows.values()].filter((row) => row.owner_firebase_uid === firebaseUid);
+    if (legacyMatches.length > 0) {
+      await Promise.all(legacyMatches.map((row) => upsertProvisionedDevice({
+        boardType: row.board_type,
+        hardwareUid: row.hardware_uid,
+        ownerUserId: user.id,
+        ownerFirebaseUid: firebaseUid,
+        label: row.label,
+      })));
+      const migrated = await listProvisionedDevicesByUser(user.id);
+      if (migrated.length > 0) {
+        return migrated.map((row) => mapPlatformDevice(row));
+      }
+    }
+
     const deduped = new Map<string, ProvisionedDeviceRecord>();
-    for (const row of this.rows.values()) {
+    for (const row of this.legacyRows.values()) {
       if (row.owner_firebase_uid !== firebaseUid) continue;
       const key = makeKey(row.board_type, canonicalHardwareUid(row.board_type, row.hardware_uid));
       const existing = deduped.get(key);
@@ -160,35 +174,19 @@ class ProvisionedDevicesStore {
     }
 
     const key = makeKey(boardType, hardwareUid);
-    const existing = this.rows.get(key);
-    if (existing && existing.owner_firebase_uid && existing.owner_firebase_uid !== input.ownerFirebaseUid) {
+    const existingLegacy = this.legacyRows.get(key);
+    if (existingLegacy && existingLegacy.owner_firebase_uid && existingLegacy.owner_firebase_uid !== input.ownerFirebaseUid) {
       return { error: "device_owned_by_another_user" } as const;
     }
-
-    const now = nowMs();
-    const local: ProvisionedDeviceRecord = existing ?? {
-      board_type: boardType,
-      hardware_uid: hardwareUid,
-      label: "",
-      owner_firebase_uid: input.ownerFirebaseUid,
-      created_at_ms: now,
-      updated_at_ms: now,
-      last_seen_at_ms: now,
-    };
-    local.owner_firebase_uid = input.ownerFirebaseUid;
-    local.updated_at_ms = now;
-    local.last_seen_at_ms = now;
-    this.rows.set(key, local);
-    this.persist();
 
     const device = await upsertProvisionedDevice({
       boardType,
       hardwareUid,
       ownerUserId: user.id,
       ownerFirebaseUid: input.ownerFirebaseUid,
-      label: local.label,
+      label: existingLegacy?.label ?? "",
     });
-    return { device: mapPlatformDevice(device), created: !existing } as const;
+    return { device: mapPlatformDevice(device), created: !existingLegacy } as const;
   }
 
   async setLabel(boardType: string, hardwareUid: string, firebaseUid: string, label: string) {
@@ -204,16 +202,28 @@ class ProvisionedDevicesStore {
     if (platform) return mapPlatformDevice(platform);
 
     const key = makeKey(normalizedBoardType, normalizedHardwareUid);
-    const existing = this.rows.get(key);
+    const existing = this.legacyRows.get(key);
     if (!existing || existing.owner_firebase_uid !== firebaseUid) return null;
-    const next: ProvisionedDeviceRecord = {
+
+    const user = await ensurePlatformUser({ firebaseUid, email: null, displayName: null });
+    await upsertProvisionedDevice({
+      boardType: normalizedBoardType,
+      hardwareUid: normalizedHardwareUid,
+      ownerUserId: user.id,
+      ownerFirebaseUid: firebaseUid,
+      label: existing.label,
+    });
+    const migrated = await setProvisionedDeviceLabel({
+      boardType: normalizedBoardType,
+      hardwareUid: normalizedHardwareUid,
+      userId: user.id,
+      label,
+    });
+    return migrated ? mapPlatformDevice(migrated) : {
       ...existing,
       label: label.slice(0, 128),
       updated_at_ms: nowMs(),
     };
-    this.rows.set(key, next);
-    this.persist();
-    return next;
   }
 
   async hasUserDevice(firebaseUid: string) {
