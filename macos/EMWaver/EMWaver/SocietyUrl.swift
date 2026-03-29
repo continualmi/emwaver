@@ -1,13 +1,10 @@
 import Foundation
 
-/// Resolve the base URL for the Society site.
-///
-/// Used for Continual handoff flows that are initiated by Society and completed by the macOS app.
+/// Compatibility wrapper kept to avoid stale project references while auth
+/// ownership finishes moving fully into the EMWaver frontend/backend pair.
 enum SocietyUrl {
     static func resolve() -> URL? {
-        let active = (ProcessInfo.processInfo.environment["SOCIETY_SITE_URL"] ?? "https://continualmi.com")
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return URL(string: active)
+        FrontendUrl.resolve()
     }
 
     static func effectiveString() -> String {

@@ -2,7 +2,7 @@ import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 
-import { verifyContinualHandoffToken, verifySessionToken } from "../session";
+import { verifySessionToken } from "../session";
 import { hostSessionsStore } from "../store/hostSessions";
 import type { RemoteConnection, RemoteSessionState } from "./state";
 
@@ -53,7 +53,7 @@ function forwardJson(socket: WebSocket, payload: Record<string, unknown>) {
 
 export async function handleWebSocketUpgrade({ req, socket, head, wsServer, remoteState }: UpgradeContext) {
   const token = tokenFromRequest(req);
-  const identity = verifySessionToken(token) || verifyContinualHandoffToken(token);
+  const identity = verifySessionToken(token);
   if (!identity) {
     socket.destroy();
     return;

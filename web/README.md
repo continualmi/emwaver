@@ -123,7 +123,7 @@ Current server routes in this folder include:
 - `POST /v1/agent/conversations`
 - `PATCH /v1/agent/conversations/:conversationId`
 
-Society now owns the Continual handoff code issue/consume routes used by the macOS app.
+EMWaver now owns the Continual handoff code issue/consume routes used by native apps.
 - `DELETE /v1/agent/conversations/:conversationId`
 - `GET /v1/agent/conversations/:conversationId/messages`
 - `POST /v1/agent/conversations/:conversationId/messages`
@@ -147,9 +147,9 @@ Society now owns the Continual handoff code issue/consume routes used by the mac
 
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- account/subscription/agent/society data is currently JSON/local-disk backed under `web/.data/server/`,
-- interactive sign-in is owned by Society/Continual, and EMWaver issues its own signed product session only after verifying a Society handoff token,
-- native apps currently use the Society-owned pasted-code handoff flow, then exchange the code for an EMWaver-native access token,
+- account/subscription/agent/society data is still partially JSON/local-disk backed under `web/.data/server/`,
+- interactive sign-in is owned by EMWaver and issues its own signed product session after local Firebase verification,
+- native apps use the EMWaver-owned pasted-code handoff flow and exchange the code for an EMWaver-native access token,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
 - device provisioning is keyed by `board_type + hardware_uid`, and client/backend flows use that as the only activation identity and device-limit key,
 - entitlements are currently local JSON-backed with optional `EMWAVER_DEFAULT_PRO=1` development override,

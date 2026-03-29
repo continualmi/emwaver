@@ -105,7 +105,7 @@ public final class CloudAuthManager {
     }
 
     public void beginWebSignIn(@NonNull Context context) {
-        String url = "https://continualmi.com/emwaver/handoff";
+        String url = CloudConfig.getFrontendBaseUrl(context).trim() + "/emwaver/handoff";
         Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
         browser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         context.startActivity(browser);
