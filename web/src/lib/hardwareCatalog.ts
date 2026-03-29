@@ -186,10 +186,11 @@ function resolveBuildAssets(
   caseDownloads: { label: string; href: string }[],
 ): BuildAsset[] {
   const githubUrl = normalizeString(data.githubUrl) || null;
-  const manifestAssets = data.buildAssets && typeof data.buildAssets === "object"
-    ? data.buildAssets
-    : {};
-  const manifestFolders =
+  const manifestAssets: Partial<Record<BuildAssetKey, string>> =
+    data.buildAssets && typeof data.buildAssets === "object"
+      ? data.buildAssets
+      : {};
+  const manifestFolders: Partial<Record<BuildAssetKey, string>> =
     data.buildAssetFolders && typeof data.buildAssetFolders === "object"
       ? data.buildAssetFolders
       : {};

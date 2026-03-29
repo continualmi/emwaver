@@ -1,5 +1,4 @@
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import path from "node:path";
 import { Pool, type PoolClient } from "pg";
 import Stripe from "stripe";
@@ -27,8 +26,13 @@ declare global {
   var __emwaverPlatformSchemaReady: Promise<void> | undefined;
 }
 
-const require = createRequire(import.meta.url);
-const coreSchemaPath = path.join(path.dirname(require.resolve("continual-core")), "..", "db", "core-schema.sql");
+const coreSchemaPath = path.join(
+  process.cwd(),
+  "node_modules",
+  "continual-core",
+  "db",
+  "core-schema.sql",
+);
 
 export type PlatformIdentityInput = {
   firebaseUid: string;

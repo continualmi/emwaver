@@ -349,11 +349,11 @@ async function migrateEntitlements(
       productKey: "emwaver",
       entitlementKey: "continual_pro",
       active: Boolean(row.pro_active),
-      startsAt: toIsoFromMs(row.created_at_ms),
       endsAt: toIsoFromMs(row.pro_expires_at_ms),
       metadata: {
         source: "emwaver_legacy_pg",
         legacyFirebaseUid: row.firebase_uid,
+        startsAt: toIsoFromMs(row.created_at_ms),
         updatedAtMs: row.updated_at_ms,
       },
     });

@@ -205,7 +205,6 @@ class ProvisionedDevicesStore {
     const existing = this.legacyRows.get(key);
     if (!existing || existing.owner_firebase_uid !== firebaseUid) return null;
 
-    const user = await ensurePlatformUser({ firebaseUid, email: null, displayName: null });
     await upsertProvisionedDevice({
       boardType: normalizedBoardType,
       hardwareUid: normalizedHardwareUid,
