@@ -162,7 +162,7 @@ internal sealed class CloudAuthManager
 
     internal Uri BuildSigninUrl()
     {
-        var baseUrl = "https://continualmi.com";
+        var baseUrl = _cfg.BackendBaseUrl;
         return new Uri($"{baseUrl}/emwaver/handoff");
     }
 

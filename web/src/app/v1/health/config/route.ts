@@ -10,7 +10,7 @@ export function GET() {
       firebase_project_id_configured: Boolean(env.firebaseProjectId),
       firebase_admin_json_b64_configured: hasEnv("FIREBASE_ADMIN_JSON_B64"),
       firebase_service_account_json_configured: hasEnv("FIREBASE_SERVICE_ACCOUNT_JSON"),
-      handoff_token_mint_ready: hasEnv("CONTINUAL_AUTH_HANDOFF_SECRET") || hasEnv("SOCIETY_HANDOFF_SECRET"),
+      handoff_token_mint_ready: hasEnv("EMWAVER_SESSION_SECRET"),
     },
     storage: {
       database_url_configured: hasEnv("DATABASE_URL"),

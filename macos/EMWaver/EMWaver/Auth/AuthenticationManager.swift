@@ -83,8 +83,8 @@ final class AuthenticationManager: ObservableObject {
         isSignInSheetPresented = false
 
         // Open the canonical shared Continual handoff page and then prompt for the code.
-        guard var base = SocietyUrl.resolve() else {
-            lastError = "Missing Continual platform URL"
+        guard var base = FrontendUrl.resolve() else {
+            lastError = "Missing EMWaver frontend URL"
             return
         }
         base.appendPathComponent("emwaver")
@@ -111,19 +111,17 @@ final class AuthenticationManager: ObservableObject {
             return
         }
 
-        guard let base = SocietyUrl.resolve() else {
-            lastError = "Missing Continual platform URL"
+        guard let base = BackendUrl.resolve() else {
+            lastError = "Missing EMWaver backend URL"
             return
         }
 
         var consumeURL = base
 
         do {
-            // Consume handoff code -> Continual session token.
-            consumeURL.appendPathComponent("api")
+            consumeURL.appendPathComponent("v1")
             consumeURL.appendPathComponent("auth")
             consumeURL.appendPathComponent("handoff")
-            consumeURL.appendPathComponent("code")
             consumeURL.appendPathComponent("consume")
 
             var req = URLRequest(url: consumeURL)
@@ -131,7 +129,6 @@ final class AuthenticationManager: ObservableObject {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: [
                 "code": trimmed,
-                "product": "emwaver"
             ])
 
             let (data, res) = try await URLSession.shared.data(for: req)

@@ -1,7 +1,5 @@
 "use client";
 
-import { societySiteUrl } from "./societySite";
-
 const CANONICAL_EMWAVER_APP_URL = "https://emwaver-web.azurewebsites.net";
 
 function emwaverAppUrl() {
@@ -48,14 +46,10 @@ export async function signOutSession() {
 }
 
 export function buildContinualSignInUrl(nextPath?: string) {
-  const callback = new URL("/auth/callback", emwaverAppUrl());
-  if (nextPath && nextPath.startsWith("/")) {
-    callback.searchParams.set("next", nextPath);
+  const url = new URL("/signin", emwaverAppUrl());
+  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+    url.searchParams.set("redirect", nextPath);
   }
-
-  const url = new URL("/api/auth/handoff", societySiteUrl());
-  url.searchParams.set("product", "emwaver");
-  url.searchParams.set("returnTo", callback.toString());
   return url.toString();
 }
 
@@ -64,5 +58,5 @@ export function redirectToContinualSignIn(nextPath?: string) {
 }
 
 export function emwaverNativeHandoffUrl() {
-  return new URL("/emwaver/handoff", societySiteUrl()).toString();
+  return new URL("/emwaver/handoff", emwaverAppUrl()).toString();
 }

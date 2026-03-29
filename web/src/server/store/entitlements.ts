@@ -1,5 +1,5 @@
 import { ensurePlatformUser, findUserByFirebaseUid, getEntitlementState, upsertEntitlementOverride } from "@/server/platformCore";
-import { readCollection, writeCollection } from "./jsonStore";
+import { readCollection } from "./jsonStore";
 
 export type EntitlementRecord = {
   pro_active: boolean;
@@ -15,10 +15,6 @@ class EntitlementsStore {
   private readonly rows = new Map<string, EntitlementRecord>(
     Object.entries(readCollection<Record<string, EntitlementRecord>>("entitlements", {})),
   );
-
-  private persist() {
-    writeCollection("entitlements", Object.fromEntries(this.rows.entries()));
-  }
 
   private defaultRecord() {
     const everyonePro = ["1", "true", "yes", "on"].includes((process.env.EMWAVER_DEFAULT_PRO || "").trim().toLowerCase());
@@ -70,8 +66,6 @@ class EntitlementsStore {
   }
 
   async set(uid: string, record: EntitlementRecord, identity?: { email?: string | null; displayName?: string | null }) {
-    this.rows.set(uid, record);
-    this.persist();
     const user = await ensurePlatformUser({
       firebaseUid: uid,
       email: identity?.email ?? null,

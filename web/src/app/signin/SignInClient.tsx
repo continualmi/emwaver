@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo } from "react";
+import { signInWithPopup } from "firebase/auth";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import { SiteHeader } from "@/components/SiteHeader";
-import { buildContinualSignInUrl } from "@/lib/clientSession";
+import { firebaseAuth, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
 
 function normalizeRedirect(raw: string | null) {
   if (!raw) return "/cloud";
@@ -14,8 +15,37 @@ function normalizeRedirect(raw: string | null) {
 
 export default function SignInClient() {
   const params = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const redirectPath = useMemo(() => normalizeRedirect(params.get("redirect")), [params]);
-  const signInUrl = useMemo(() => buildContinualSignInUrl(redirectPath), [redirectPath]);
+
+  async function handleSignIn() {
+    setBusy(true);
+    setError(null);
+
+    try {
+      const credential = await signInWithPopup(firebaseAuth(), googleProvider());
+      const idToken = await credential.user.getIdToken();
+
+      const response = await fetch("/api/auth/session", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ idToken }),
+      });
+      const json = await response.json().catch(() => null) as { error?: string } | null;
+      if (!response.ok) {
+        throw new Error(json?.error || "Unable to complete sign-in.");
+      }
+
+      window.location.assign(redirectPath);
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : "Unable to complete sign-in.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="min-h-dvh docs-mode">
@@ -30,16 +60,20 @@ export default function SignInClient() {
           <div className="mt-6 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-xs font-semibold tracking-wide text-[color:var(--ink-dim)]">Continue</div>
             <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-              You&apos;ll sign in on the Continual platform, then return to EMWaver.
+              Sign in directly with EMWaver using your Continual Google account, then return to EMWaver.
             </div>
 
+            {error ? <div className="mt-4 text-sm text-red-400">{error}</div> : null}
+
             <div className="mt-4">
-              <a
-                href={signInUrl}
+              <button
+                type="button"
+                onClick={() => void handleSignIn()}
+                disabled={busy || !isFirebaseConfigured()}
                 className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95"
               >
-                Continue with Continual
-              </a>
+                {busy ? "Signing in..." : "Continue with Google"}
+              </button>
             </div>
 
             <div className="pt-5 text-xs text-[color:var(--ink-dim)]">After sign-in you’ll be redirected to {redirectPath}.</div>

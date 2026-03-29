@@ -82,9 +82,9 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
 The iOS app now relies on the shared Continual account flow:
-- the app opens the Society-hosted EMWaver handoff page in the browser,
+- the app opens the EMWaver-hosted handoff page in the browser,
 - the user signs in with Continual,
-- Society issues a one-time EMWaver code,
+- EMWaver issues a one-time EMWaver code,
 - the app exchanges that code with EMWaver for an EMWaver-native session token.
 
 Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
