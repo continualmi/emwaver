@@ -241,6 +241,8 @@ This single app is the backend for the web surface, so backend-dependent flows r
 
 - Deployed as a single Azure Container App (Consumption) with scale-to-zero enabled for the current dev phase.
 - GitHub Actions builds and deploys this folder as the unified web/backend service.
+- Production image publishing uses GitHub Container Registry as `ghcr.io/continualmi/emwaver-web`.
+- The old split-image `emwaver-frontend` / `emwaver-backend` container path is retired; `emwaver-web` is the only production web deploy artifact.
 
 Keep deployment assumptions aligned with:
 - same-origin backend base URL resolution,
