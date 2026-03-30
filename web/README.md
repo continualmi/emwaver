@@ -106,6 +106,9 @@ Important shared components include:
 The app serves the same-origin backend routes under `/v1/*` and related service endpoints.
 
 Current server routes in this folder include:
+- `POST /api/auth/session`
+- `POST /api/auth/signout`
+- `POST /api/auth/handoff/code/start`
 - `GET /health`
 - `GET /health/config`
 - `GET /openapi.json`
@@ -127,8 +130,6 @@ Current server routes in this folder include:
 - `GET /v1/agent/conversations`
 - `POST /v1/agent/conversations`
 - `PATCH /v1/agent/conversations/:conversationId`
-
-EMWaver now owns the Continual handoff code issue/consume routes used by native apps.
 - `DELETE /v1/agent/conversations/:conversationId`
 - `GET /v1/agent/conversations/:conversationId/messages`
 - `POST /v1/agent/conversations/:conversationId/messages`
@@ -142,6 +143,7 @@ EMWaver now owns the Continual handoff code issue/consume routes used by native 
 - `POST /v1/pro/checkout_session`
 - `POST /v1/pro/portal`
 - `POST /v1/pro/stripe/webhook`
+- `POST /v1/auth/handoff/consume`
 - `POST /v1/admin/grant_pro`
 - `GET /v1/society/posts`
 - `GET /v1/society/posts/:postId`
@@ -153,8 +155,8 @@ EMWaver now owns the Continual handoff code issue/consume routes used by native 
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
 - account/subscription truth resolves through Postgres-backed `core` state on the shared Continual Postgres runtime,
-- interactive sign-in is owned by EMWaver and issues its own signed product session after local Firebase verification,
-- native apps use the EMWaver-owned pasted-code handoff flow and exchange the code for an EMWaver-native access token,
+- interactive sign-in is owned by EMWaver: `/signin` completes Firebase verification, then `/api/auth/session` issues an EMWaver-signed product session,
+- authenticated web sessions can mint native one-time codes through `/api/auth/handoff/code/start`, and native apps consume those codes through `/v1/auth/handoff/consume`,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
 - device provisioning is keyed by `board_type + hardware_uid`, and live provisioning state now resolves through Postgres-backed `emwaver.provisioned_devices`,
 - store orders now resolve through Postgres-backed `core.store_orders`,
@@ -199,7 +201,8 @@ This frontend is where build/account hardware-related web flows live.
 Direction reflected in repo docs:
 - `/build` is the primary board catalog + self-build page,
 - device detail pages on `/build/[slug]` should expose build-resource actions (for example BOM, CPL, Gerbers, schematics, PCB docs) as GitHub-backed links, using direct file downloads when an exact repo file path is known and otherwise linking out to the relevant hardware repo/folder,
-- `/account` handles attached-device/account relationship UX,
+- `/cloud` is the signed-in dashboard for files, hosts, and activated-device visibility,
+- account/session/Pro management now lives in the header account-pill modal, and `/account` is only a legacy redirect to `/cloud`,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,
 - pricing and subscription UX should center on service plans rather than per-device purchases,
@@ -240,7 +243,7 @@ This single app is the backend for the web surface, so backend-dependent flows r
 ## 9) Deployment
 
 - Deployed as a single Azure Container App (Consumption) with scale-to-zero enabled for the current dev phase.
-- GitHub Actions builds and deploys this folder as the unified web/backend service.
+- GitHub Actions builds and deploys this folder as the unified web/backend service on pushes to the `prod` branch.
 - Production image publishing uses GitHub Container Registry as `ghcr.io/continualmi/emwaver-web`.
 - The old split-image `emwaver-frontend` / `emwaver-backend` container path is retired; `emwaver-web` is the only production web deploy artifact.
 
