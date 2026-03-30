@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { NextRequest } from "next/server";
 import type { ResponseCookies } from "next/dist/compiled/@edge-runtime/cookies";
 
+import { resolveApiKeySessionUser } from "./apiKeys";
 import { getEmwaverAppUrl, getEmwaverSessionMaxAgeSeconds, getEmwaverSessionSecret } from "./env";
 
 export const EMWAVER_SESSION_COOKIE_NAME = "emwaver_session";
@@ -106,10 +107,19 @@ export function bearerToken(headers: Headers): string | null {
   return token || null;
 }
 
-export function getSessionUserFromRequest(req: NextRequest) {
+export async function getBearerUserFromToken(token: string): Promise<SessionUser | null> {
+  const sessionUser = verifySessionToken(token);
+  if (sessionUser) return sessionUser;
+
+  const apiKeyUser = await resolveApiKeySessionUser(token);
+  if (!apiKeyUser) return null;
+  return apiKeyUser;
+}
+
+export async function getSessionUserFromRequest(req: NextRequest) {
   const bearer = bearerToken(req.headers);
   if (bearer) {
-    return verifySessionToken(bearer);
+    return getBearerUserFromToken(bearer);
   }
 
   const cookieToken = req.cookies.get(EMWAVER_SESSION_COOKIE_NAME)?.value?.trim();

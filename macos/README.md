@@ -38,14 +38,14 @@ Entry points:
 - Firebase auth service,
 - Google OAuth provider,
 - keychain store,
-- sign-in sheets (including web handoff sheet).
+- API key entry and account-link UI.
 
 Auth UX rule:
-- sign-in must remain available even when no EMWaver device is connected, so new users can authenticate before flashing a supported board.
+- API key entry must remain available even when no EMWaver device is connected, so new users can link the app before flashing a supported board.
 - once a supported board reconnects with readable `board_type + hardware_uid`, the app should restore/sync it automatically instead of requiring a manual claim button.
-- interactive sign-in is now `Sign in with Continual`, using the EMWaver-hosted handoff page and a pasted one-time code instead of direct in-app Google/Firebase sign-in.
-- EMWaver owns the one-time-code exchange at `/v1/auth/handoff/consume`; native clients should not call any Society handoff route.
-- app startup should wait for the initial keychain-backed session restore to finish before the first entitlement-gated refreshes, so a persisted signed-in Pro account does not briefly downgrade to local-only UI after relaunch.
+- native clients now use an EMWaver API key created on the web account page and pasted into the app.
+- the app stores the API key in Keychain and uses it as the bearer credential for `/v1/*` routes.
+- app startup should wait for the initial keychain-backed credential restore to finish before the first entitlement-gated refreshes, so a persisted keyed account does not briefly downgrade to local-only UI after relaunch.
 
 ## 2.2 Device + transport + host management
 
@@ -101,7 +101,7 @@ The macOS app bundles the canonical committed firmware image at `firmware/emwave
 Current macOS responsibility in this area:
 - first-party restore/sync + provision flow for supported devices,
 - backend-tethered activation using `/provisioning/mint` with `board_type + hardware_uid`,
-- Continual handoff initiation via the EMWaver frontend URL and EMWaver-owned code consumption,
+- account key entry plus web-managed key creation/replacement on the EMWaver frontend,
 - device access governed by account subscription entitlements and allowed device counts rather than per-device purchases,
 - reading supported-board hardware UID in Run Mode before activation,
 - unified in-app device list with local cache fallback for Offline Mode,

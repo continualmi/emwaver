@@ -126,6 +126,7 @@ Current server routes in this folder include:
 - `POST /v1/devices/seen`
 - `GET /v1/devices/my`
 - `POST /v1/devices/label`
+- `GET /v1/auth/key`
 - `POST /provisioning/mint`
 - `GET /v1/agent/conversations`
 - `POST /v1/agent/conversations`
@@ -156,7 +157,8 @@ Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
 - account/subscription truth resolves through Postgres-backed `core` state on the shared Continual Postgres runtime,
 - interactive sign-in is owned by EMWaver: `/signin` completes Firebase verification, then `/api/auth/session` issues an EMWaver-signed product session,
-- authenticated web sessions can mint native one-time codes through `/api/auth/handoff/code/start`, and native apps consume those codes through `/v1/auth/handoff/consume`,
+- browser flows continue to use the EMWaver session cookie, while native apps can now use a web-managed EMWaver API key as their bearer credential,
+- authenticated web sessions can still mint native one-time codes through `/api/auth/handoff/code/start`, and native apps can still consume those codes through `/v1/auth/handoff/consume` while older clients are migrated,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
 - device provisioning is keyed by `board_type + hardware_uid`, and live provisioning state now resolves through Postgres-backed `emwaver.provisioned_devices`,
 - store orders now resolve through Postgres-backed `core.store_orders`,

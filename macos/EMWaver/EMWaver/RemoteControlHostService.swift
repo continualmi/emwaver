@@ -83,8 +83,8 @@ final class RemoteControlHostService: ObservableObject {
         let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
         let tok: String
-        if let session = auth.session, !session.idToken.isEmpty {
-            tok = session.idToken
+        if !auth.accessToken.isEmpty {
+            tok = auth.accessToken
         } else if allowAnonSync {
             tok = ""
         } else {

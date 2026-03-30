@@ -20,13 +20,13 @@ struct HostsView: View {
             if !proEnabled {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Remote host sessions are an EMWaver Pro feature.")
+                        Text("Remote host sessions are a Continual Pro feature.")
                             .font(.headline)
                         Text("You can browse host presence, but controlling a host is locked until you upgrade.")
                             .foregroundStyle(.secondary)
                             .font(.callout)
 
-                        Button("Get EMWaver Pro…") {
+                        Button("Get Continual Pro…") {
                             onRequestUpgrade?()
                         }
                         .buttonStyle(.bordered)
@@ -50,7 +50,7 @@ struct HostsView: View {
                     VStack(alignment: .leading, spacing: 6) {
                         Text("No host sessions detected")
                             .font(.headline)
-                        Text("A host session appears when a signed-in EMWaver app sends heartbeats to the backend.")
+                        Text("A host session appears when an EMWaver app with a saved key sends heartbeats to the backend.")
                             .foregroundStyle(.secondary)
                             .font(.callout)
                     }
@@ -107,11 +107,11 @@ struct HostsView: View {
             }
             .frame(minWidth: 900, minHeight: 560)
         }
-        .alert("EMWaver Pro required", isPresented: $showingLockedNotice) {
-            Button("Get EMWaver Pro…") { onRequestUpgrade?() }
+        .alert("Continual Pro required", isPresented: $showingLockedNotice) {
+            Button("Get Continual Pro…") { onRequestUpgrade?() }
             Button("Cancel", role: .cancel) {}
         } message: {
-            Text("Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.")
+            Text("Remote host control is locked. Upgrade to Continual Pro to control host sessions.")
         }
     }
 

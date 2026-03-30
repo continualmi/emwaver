@@ -97,10 +97,10 @@ export default function InstallDocPage() {
         standard USB MIDI device.
       </blockquote>
 
-      <h2>4. Sign in</h2>
+      <h2>4. Add your key</h2>
       <p>
-        Sign in with your account. Sign-in is available even without a device connected, so you
-        can authenticate first and plug in your board after.
+        Create your EMWaver API key on the web account page, then paste it into the app. You can
+        do this before connecting a device so activation is ready when your board is plugged in.
       </p>
 
       <h2>5. Activate</h2>

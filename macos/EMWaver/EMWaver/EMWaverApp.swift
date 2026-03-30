@@ -59,14 +59,17 @@ struct EMWaverApp: App {
         .commands {
             CommandMenu("Account") {
                 if auth.isSignedIn {
-                    Button("Sign Out") {
-                        Task { await auth.signOut() }
+                    Button("Remove Key") {
+                        Task { await auth.removeKey() }
                     }
                 } else {
-                    Button("Sign In…") {
+                    Button("Enter API Key…") {
                         auth.isSignInSheetPresented = true
                     }
-                    .disabled(!auth.canSignInWithGoogle)
+                }
+
+                Button("Manage Key on Web") {
+                    auth.openAccountManagement()
                 }
             }
 

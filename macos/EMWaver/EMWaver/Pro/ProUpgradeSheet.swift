@@ -11,7 +11,7 @@ struct ProUpgradeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("EMWaver Pro")
+                Text("Continual Pro")
                     .font(.title2.weight(.semibold))
 
                 Spacer()
@@ -20,7 +20,7 @@ struct ProUpgradeSheet: View {
                     .buttonStyle(.bordered)
             }
 
-            Text("\(featureName) requires EMWaver Pro.")
+            Text("\(featureName) requires Continual Pro.")
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 10) {
@@ -30,17 +30,17 @@ struct ProUpgradeSheet: View {
             }
             .padding(.top, 6)
 
-            Text("Agent access is included with EMWaver Pro, subject to usage limits.")
+                Text("Agent access is included with Continual Pro, subject to usage limits.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             Divider()
 
             if !auth.isSignedIn {
-                Text("To subscribe, sign in and attach a genuine EMWaver device to your account first.")
+                Text("To subscribe, enter your EMWaver key and attach a genuine EMWaver device to your account first.")
                     .foregroundStyle(.secondary)
 
-                Button("Sign In…") {
+                Button("Enter API Key…") {
                     auth.isSignInSheetPresented = true
                 }
                 .buttonStyle(.borderedProminent)

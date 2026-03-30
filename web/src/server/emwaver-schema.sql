@@ -30,3 +30,18 @@ create table if not exists emwaver.auth_handoff_codes (
 
 create index if not exists emwaver_auth_handoff_codes_user_expires_idx
   on emwaver.auth_handoff_codes (user_id, expires_at desc);
+
+create table if not exists emwaver.account_api_keys (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null unique references core.users(id) on delete cascade,
+  key_hash text not null unique,
+  key_prefix text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  last_used_at timestamptz,
+  revoked_at timestamptz
+);
+
+create index if not exists emwaver_account_api_keys_active_idx
+  on emwaver.account_api_keys (user_id)
+  where revoked_at is null;

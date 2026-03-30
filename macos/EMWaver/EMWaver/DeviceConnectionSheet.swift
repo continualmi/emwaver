@@ -66,10 +66,10 @@ struct DeviceConnectionSheet: View {
 
     private var currentDeviceClaimStatusResolved: Bool {
         guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return true }
-        return accountDevices.claimStatusResolved(
+            return accountDevices.claimStatusResolved(
             boardType: currentBoardType,
             hardwareUid: hardwareUid,
-            signedIn: auth.isSignedIn
+            signedIn: auth.hasSavedKey
         )
     }
 
@@ -224,7 +224,7 @@ struct DeviceConnectionSheet: View {
         }
         if currentDeviceIsRegistered {
             if !auth.isSignedIn {
-                return "This device matches a locally cached device record. Sign in to confirm which account it belongs to."
+                return "This device matches a locally cached device record. Enter your EMWaver key to confirm which account it belongs to."
             }
             if accountDevices.isOfflineMode {
                 return "This device is claimed and available from the local cache."
@@ -240,17 +240,17 @@ struct DeviceConnectionSheet: View {
         if auth.isSignedIn {
             return "This device is connected, but it is not claimed in your account yet."
         }
-        return "This device is connected, but it is not claimed yet. Sign in to set it up."
+        return "This device is connected, but it is not claimed yet. Enter your EMWaver key to set it up."
     }
 
     private var devicesIntroText: String {
         if !auth.isSignedIn {
             if let syncAt = accountDevices.lastSyncAt {
-                return "Signed out. Showing locally cached devices from the last sync on \(syncAt.formatted(date: .abbreviated, time: .shortened))."
+                return "No key saved. Showing locally cached devices from the last sync on \(syncAt.formatted(date: .abbreviated, time: .shortened))."
             }
-            return "Signed out. Showing locally cached devices."
+            return "No key saved. Showing locally cached devices."
         }
-        let signedInLabel = auth.session?.email.flatMap { $0.isEmpty ? nil : $0 } ?? auth.userLabel
+        let signedInLabel = auth.account?.email.flatMap { $0.isEmpty ? nil : $0 } ?? auth.userLabel
         if let syncAt = accountDevices.lastSyncAt {
             if accountDevices.isOfflineMode {
                 return "Signed in as \(signedInLabel). Showing locally cached devices."
@@ -263,17 +263,17 @@ struct DeviceConnectionSheet: View {
         if auth.isSignedIn {
             return "Signed in as \(signedInLabel). Your device list will sync when available."
         }
-        return "Sign in to sync your devices. Cached devices remain available in Offline Mode."
+        return "Enter your EMWaver key to sync your devices. Cached devices remain available in Offline Mode."
     }
 
     private var accountStatusText: String {
-        if let email = auth.session?.email, !email.isEmpty {
+        if let email = auth.account?.email, !email.isEmpty {
             return "Account: \(email)"
         }
         if auth.isSignedIn {
             return "Account: \(auth.userLabel)"
         }
-        return "Account: not signed in"
+        return "Account: no key saved"
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

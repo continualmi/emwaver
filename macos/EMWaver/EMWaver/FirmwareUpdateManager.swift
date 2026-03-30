@@ -177,8 +177,8 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        guard let session = auth.session else {
-            updateError = "Sign in to activate this device."
+        guard !auth.accessToken.isEmpty else {
+            updateError = "Enter your EMWaver key to activate this device."
             appendLog(updateError ?? "Activation failed")
             return
         }
@@ -222,7 +222,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 var req = URLRequest(url: url)
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
                 req.httpBody = try JSONSerialization.data(withJSONObject: [
                     "board_type": boardType,
                     "hardware_uid": hardwareUidHex,
@@ -231,6 +231,11 @@ final class FirmwareUpdateManager: ObservableObject {
                 let (data, res) = try await URLSession.shared.data(for: req)
                 let code = (res as? HTTPURLResponse)?.statusCode ?? -1
                 if code < 200 || code >= 300 {
+                    if code == 401 {
+                        await MainActor.run {
+                            auth.handleUnauthorizedResponse()
+                        }
+                    }
                     let msg = String(data: data, encoding: .utf8) ?? ""
                     throw NSError(domain: "FirmwareUpdateManager", code: code, userInfo: [NSLocalizedDescriptionKey: "Mint failed: \(msg)"])
                 }
@@ -294,8 +299,8 @@ final class FirmwareUpdateManager: ObservableObject {
             return
         }
 
-        guard let session = auth.session else {
-            updateError = "Sign in to set up this device."
+        guard !auth.accessToken.isEmpty else {
+            updateError = "Enter your EMWaver key to set up this device."
             appendLog(updateError ?? "ESP setup failed")
             return
         }
@@ -343,7 +348,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 var req = URLRequest(url: baseURL.appendingPathComponent("provisioning/mint"))
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
                 req.httpBody = try JSONSerialization.data(withJSONObject: [
                     "board_type": "esp32s3",
                     "hardware_uid": hardwareUidHex,
@@ -352,6 +357,11 @@ final class FirmwareUpdateManager: ObservableObject {
                 let (data, res) = try await URLSession.shared.data(for: req)
                 let code = (res as? HTTPURLResponse)?.statusCode ?? -1
                 if code < 200 || code >= 300 {
+                    if code == 401 {
+                        await MainActor.run {
+                            auth.handleUnauthorizedResponse()
+                        }
+                    }
                     let msg = String(data: data, encoding: .utf8) ?? ""
                     throw NSError(domain: "FirmwareUpdateManager", code: code, userInfo: [
                         NSLocalizedDescriptionKey: msg.isEmpty ? "Device claim failed." : msg

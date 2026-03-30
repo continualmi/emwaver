@@ -7,7 +7,7 @@ import { createSessionToken } from "@/server/session";
 import { setSessionCookie } from "@/server/session";
 
 export async function GET(request: NextRequest) {
-  const user = getVerifiedIdentityFromRequest(request);
+  const user = await getVerifiedIdentityFromRequest(request);
   if (!user) {
     return NextResponse.json({ error: "Authentication required" }, { status: 401 });
   }

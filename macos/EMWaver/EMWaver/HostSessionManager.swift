@@ -53,8 +53,8 @@ final class HostSessionManager: ObservableObject {
 
         let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
-        if let session = auth.session, !session.idToken.isEmpty {
-            return (baseURL: base, accessToken: session.idToken)
+        if !auth.accessToken.isEmpty {
+            return (baseURL: base, accessToken: auth.accessToken)
         }
         if allowAnonSync {
             return (baseURL: base, accessToken: "")
@@ -96,7 +96,10 @@ final class HostSessionManager: ObservableObject {
             }
             req.httpBody = body
 
-            _ = try await urlSession.data(for: req)
+            let (_, res) = try await urlSession.data(for: req)
+            if (res as? HTTPURLResponse)?.statusCode == 401 {
+                auth.handleUnauthorizedResponse()
+            }
         } catch {
             // Best-effort: presence should not impact UX.
         }

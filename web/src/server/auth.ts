@@ -11,8 +11,8 @@ export type VerifiedIdentity = {
   identities?: SessionUser["identities"];
 };
 
-export function getVerifiedIdentityFromRequest(req: NextRequest): VerifiedIdentity | null {
-  const user = getSessionUserFromRequest(req);
+export async function getVerifiedIdentityFromRequest(req: NextRequest): Promise<VerifiedIdentity | null> {
+  const user = await getSessionUserFromRequest(req);
   if (!user) return null;
   return {
     uid: user.uid,

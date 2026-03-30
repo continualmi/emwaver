@@ -52,7 +52,7 @@ final class EntitlementsManager: ObservableObject {
 
         // In dev we sometimes run with auth disabled.
         let allowAnon = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
-        let token = auth.session?.idToken ?? ""
+        let token = auth.accessToken
 
         // If we're not signed in, we can still show a predictable state.
         if token.isEmpty, !allowAnon {
@@ -75,6 +75,9 @@ final class EntitlementsManager: ObservableObject {
 
             let (entData, entRes) = try await urlSession.data(for: entReq)
             if let http = entRes as? HTTPURLResponse, http.statusCode >= 400 {
+                if http.statusCode == 401 {
+                    auth.handleUnauthorizedResponse()
+                }
                 let text = String(data: entData, encoding: .utf8) ?? ""
                 throw NSError(domain: "Entitlements", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : text])
             }
@@ -93,6 +96,9 @@ final class EntitlementsManager: ObservableObject {
 
             let (elData, elRes) = try await urlSession.data(for: elReq)
             if let http = elRes as? HTTPURLResponse, http.statusCode >= 400 {
+                if http.statusCode == 401 {
+                    auth.handleUnauthorizedResponse()
+                }
                 let text = String(data: elData, encoding: .utf8) ?? ""
                 throw NSError(domain: "Eligibility", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : text])
             }

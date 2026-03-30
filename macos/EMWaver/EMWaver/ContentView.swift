@@ -142,8 +142,8 @@ struct ContentView: View {
                             return nil
                         }
 
-                        if let session = auth.session, !session.idToken.isEmpty {
-                            return (baseURL: base, accessToken: session.idToken)
+                        if !auth.accessToken.isEmpty {
+                            return (baseURL: base, accessToken: auth.accessToken)
                         }
 
                         if allowAnonSync {
@@ -156,8 +156,8 @@ struct ContentView: View {
                         // Cloud-stored conversations (Pro-only). We still run inference locally for now.
                         guard (entitlements.entitlements?.features.agent ?? false) else { return nil }
                         guard let base = BackendUrl.resolve() else { return nil }
-                        guard let session = auth.session, !session.idToken.isEmpty else { return nil }
-                        return (baseURL: base, accessToken: session.idToken)
+                        guard !auth.accessToken.isEmpty else { return nil }
+                        return (baseURL: base, accessToken: auth.accessToken)
                     },
                     hostStatusSink: { running, name in
                         // Treat "preview showing" as "script running" on macOS.
@@ -275,15 +275,19 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
-                        if let email = auth.session?.email, !email.isEmpty {
+                        if let email = auth.account?.email, !email.isEmpty {
                             Text(email)
                                 .foregroundStyle(.secondary)
                         }
 
                         Divider()
 
-                        Button("Sign Out") {
-                            Task { await auth.signOut() }
+                        Button("Remove Key") {
+                            Task { await auth.removeKey() }
+                        }
+
+                        Button("Manage Key on Web") {
+                            auth.openAccountManagement()
                         }
                     } label: {
                         Label(auth.userLabel, systemImage: "person.crop.circle")
@@ -292,17 +296,13 @@ struct ContentView: View {
                     Button {
                         auth.isSignInSheetPresented = true
                     } label: {
-                        Label("Sign In", systemImage: "person.crop.circle.badge.plus")
+                        Label("Enter Key", systemImage: "key.fill")
                     }
                 }
             }
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
-                .environmentObject(auth)
-        }
-        .sheet(isPresented: $auth.isWebHandoffSheetPresented) {
-            WebSignInHandoffSheet()
                 .environmentObject(auth)
         }
         .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
@@ -353,7 +353,7 @@ struct ContentView: View {
                 triggerAutomaticFirmwarePromptIfNeeded()
             }
         }
-        .onChange(of: auth.session) { _ in
+        .onChange(of: auth.accessToken) { _ in
             Task { await entitlements.refresh(auth: auth, force: true) }
             syncConnectedDeviceAccessIfNeeded()
         }

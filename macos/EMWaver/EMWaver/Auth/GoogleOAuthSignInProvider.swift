@@ -25,7 +25,7 @@ final class GoogleOAuthSignInProvider: NSObject, GoogleSignInProviding {
         !env("EMWAVER_GOOGLE_CLIENT_ID").isEmpty && !env("EMWAVER_FIREBASE_WEB_API_KEY").isEmpty
     }
 
-    func signIn() async throws -> AuthSession {
+    func signIn() async throws -> AuthAccount {
         let googleClientId = env("EMWAVER_GOOGLE_CLIENT_ID")
         let googleClientSecret = env("EMWAVER_GOOGLE_CLIENT_SECRET") // optional
         let firebaseWebApiKey = env("EMWAVER_FIREBASE_WEB_API_KEY")
@@ -103,12 +103,10 @@ final class GoogleOAuthSignInProvider: NSObject, GoogleSignInProviding {
             throw AuthError.failed("Firebase response missing idToken")
         }
 
-        return AuthSession(
+        return AuthAccount(
             uid: fb.localId ?? "",
             email: fb.email,
-            displayName: fb.displayName,
-            idToken: fb.idToken,
-            refreshToken: fb.refreshToken
+            displayName: fb.displayName
         )
     }
 

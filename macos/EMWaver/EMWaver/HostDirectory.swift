@@ -125,8 +125,8 @@ final class HostDirectory: ObservableObject {
 
         let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
 
-        if let session = auth.session, !session.idToken.isEmpty {
-            return (baseURL: base, accessToken: session.idToken)
+        if !auth.accessToken.isEmpty {
+            return (baseURL: base, accessToken: auth.accessToken)
         }
         if allowAnonSync {
             return (baseURL: base, accessToken: "")
@@ -156,6 +156,9 @@ final class HostDirectory: ObservableObject {
             let (data, res) = try await urlSession.data(for: req)
             let http = res as? HTTPURLResponse
             if let http, http.statusCode >= 400 {
+                if http.statusCode == 401 {
+                    auth.handleUnauthorizedResponse()
+                }
                 let text = String(data: data, encoding: .utf8) ?? ""
                 throw NSError(domain: "HostDirectory", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: text.isEmpty ? "HTTP \(http.statusCode)" : text])
             }

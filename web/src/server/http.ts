@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getVerifiedIdentityFromRequest, type VerifiedIdentity } from "./auth";
 
 export async function requireIdentity(request: NextRequest): Promise<VerifiedIdentity | null> {
-  return getVerifiedIdentityFromRequest(request);
+  return await getVerifiedIdentityFromRequest(request);
 }
 
 export function unauthorizedJson() {

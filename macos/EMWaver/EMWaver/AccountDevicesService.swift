@@ -101,7 +101,7 @@ final class AccountDevicesService: ObservableObject {
         }
         pathMonitor.start(queue: monitorQueue)
 
-        auth.$session
+        auth.$accessToken
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refresh(auth: auth)
@@ -187,11 +187,11 @@ final class AccountDevicesService: ObservableObject {
         let normalizedUid = normalized(hardwareUid)
         guard !normalizedBoardType.isEmpty, !normalizedUid.isEmpty else { return }
         guard !isOfflineMode else { return }
-        guard let session = auth.session, !session.idToken.isEmpty else { return }
+        guard !auth.accessToken.isEmpty else { return }
         guard let base = BackendUrl.resolve() else { return }
         guard !hasOfflineAccess(boardType: normalizedBoardType, hardwareUid: normalizedUid) else { return }
 
-        let key = "\(normalizedBoardType):\(normalizedUid):\(session.uid)"
+        let key = "\(normalizedBoardType):\(normalizedUid):\(auth.account?.uid ?? "unknown")"
         guard seenSyncTasks[key] == nil else { return }
 
         seenSyncTasks[key] = Task { [weak self] in
@@ -210,7 +210,7 @@ final class AccountDevicesService: ObservableObject {
                 var req = URLRequest(url: url)
                 req.httpMethod = "POST"
                 req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-                req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+                req.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
                 req.httpBody = try JSONSerialization.data(withJSONObject: [
                     "board_type": normalizedBoardType,
                     "hardware_uid": normalizedUid,
@@ -239,7 +239,7 @@ final class AccountDevicesService: ObservableObject {
             loadCache()
             return
         }
-        guard let session = auth.session, !session.idToken.isEmpty else {
+        guard !auth.accessToken.isEmpty else {
             loadCache()
             return
         }
@@ -258,11 +258,14 @@ final class AccountDevicesService: ObservableObject {
             var req = URLRequest(url: url)
             req.httpMethod = "GET"
             req.setValue("application/json", forHTTPHeaderField: "Accept")
-            req.setValue("Bearer \(session.idToken)", forHTTPHeaderField: "Authorization")
+            req.setValue("Bearer \(auth.accessToken)", forHTTPHeaderField: "Authorization")
 
             let (data, res) = try await URLSession.shared.data(for: req)
             let code = (res as? HTTPURLResponse)?.statusCode ?? -1
             guard code >= 200 && code < 300 else {
+                if code == 401 {
+                    auth.handleUnauthorizedResponse()
+                }
                 let msg = String(data: data, encoding: .utf8) ?? ""
                 throw NSError(domain: "AccountDevicesService", code: code, userInfo: [
                     NSLocalizedDescriptionKey: msg.isEmpty ? "Device list fetch failed (HTTP \(code))" : msg

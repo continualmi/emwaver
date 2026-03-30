@@ -11,6 +11,15 @@ type Entitlements = {
   features?: { [k: string]: boolean };
 };
 
+type KeyStatus = {
+  exists: boolean;
+  keyPrefix: string | null;
+  createdAtMs: number | null;
+  updatedAtMs: number | null;
+  lastUsedAtMs: number | null;
+  revokedAtMs: number | null;
+};
+
 function errorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
   return String(error);
@@ -31,10 +40,59 @@ async function openProPortal(idToken: string): Promise<string> {
   return String(json.url || "");
 }
 
+async function fetchApiKeyStatus(): Promise<KeyStatus> {
+  const res = await fetch("/api/auth/key", { cache: "no-store" });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  const json = JSON.parse(text) as { key?: KeyStatus };
+  return json.key ?? {
+    exists: false,
+    keyPrefix: null,
+    createdAtMs: null,
+    updatedAtMs: null,
+    lastUsedAtMs: null,
+    revokedAtMs: null,
+  };
+}
+
+async function createApiKey(): Promise<{ apiKey: string; key: KeyStatus }> {
+  const res = await fetch("/api/auth/key", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+  const json = JSON.parse(text) as { api_key?: string; key?: KeyStatus };
+  return {
+    apiKey: typeof json.api_key === "string" ? json.api_key : "",
+    key: json.key ?? {
+      exists: false,
+      keyPrefix: null,
+      createdAtMs: null,
+      updatedAtMs: null,
+      lastUsedAtMs: null,
+      revokedAtMs: null,
+    },
+  };
+}
+
+async function revokeApiKey() {
+  const res = await fetch("/api/auth/key", {
+    method: "DELETE",
+    headers: { "content-type": "application/json" },
+    body: "{}",
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(text || `HTTP ${res.status}`);
+}
+
 export function AccountPanel() {
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [idToken, setIdToken] = useState<string>("");
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [apiKeyStatus, setApiKeyStatus] = useState<KeyStatus | null>(null);
+  const [freshApiKey, setFreshApiKey] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -46,13 +104,20 @@ export function AccountPanel() {
         setUserEmail(null);
         setIdToken("");
         setEntitlements(null);
+        setApiKeyStatus(null);
+        setFreshApiKey("");
         return;
       }
       setUserEmail(session.user.email || session.user.name || "Signed in");
       const tok = session.accessToken;
       setIdToken(tok);
       try {
-        setEntitlements(await getEntitlements(tok));
+        const [nextEntitlements, nextKeyStatus] = await Promise.all([
+          getEntitlements(tok),
+          fetchApiKeyStatus(),
+        ]);
+        setEntitlements(nextEntitlements);
+        setApiKeyStatus(nextKeyStatus);
       } catch (nextError: unknown) {
         setError(errorMessage(nextError));
       }
@@ -71,6 +136,8 @@ export function AccountPanel() {
       setUserEmail(null);
       setIdToken("");
       setEntitlements(null);
+      setApiKeyStatus(null);
+      setFreshApiKey("");
     } finally {
       setBusy(false);
     }
@@ -81,7 +148,12 @@ export function AccountPanel() {
     setBusy(true);
     setError(null);
     try {
-      setEntitlements(await getEntitlements(idToken));
+      const [nextEntitlements, nextKeyStatus] = await Promise.all([
+        getEntitlements(idToken),
+        fetchApiKeyStatus(),
+      ]);
+      setEntitlements(nextEntitlements);
+      setApiKeyStatus(nextKeyStatus);
     } catch (error: unknown) {
       setError(errorMessage(error));
     } finally {
@@ -99,6 +171,41 @@ export function AccountPanel() {
       window.location.href = url;
     } catch (error: unknown) {
       setError(errorMessage(error));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doCreateApiKey() {
+    setBusy(true);
+    setError(null);
+    try {
+      const next = await createApiKey();
+      setFreshApiKey(next.apiKey);
+      setApiKeyStatus(next.key);
+    } catch (nextError: unknown) {
+      setError(errorMessage(nextError));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function doRevokeApiKey() {
+    setBusy(true);
+    setError(null);
+    try {
+      await revokeApiKey();
+      setFreshApiKey("");
+      setApiKeyStatus({
+        exists: false,
+        keyPrefix: null,
+        createdAtMs: null,
+        updatedAtMs: null,
+        lastUsedAtMs: null,
+        revokedAtMs: null,
+      });
+    } catch (nextError: unknown) {
+      setError(errorMessage(nextError));
     } finally {
       setBusy(false);
     }
@@ -143,6 +250,12 @@ export function AccountPanel() {
             >
               Manage Continual Pro
             </button>
+            <a
+              href="/account"
+              className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
+            >
+              Manage API key
+            </a>
             <button
               type="button"
               onClick={() => void doSignOut()}
@@ -183,7 +296,59 @@ export function AccountPanel() {
               Activated devices now live on the Dashboard so you can see them alongside your cloud files and hosts.
             </div>
             <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
-              Use this modal for sign-in, session status, and Pro management.
+              Native apps now use a single EMWaver API key that you create here on the web and paste into the app.
+            </div>
+            <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-[color:var(--ink)]">EMWaver app key</div>
+                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
+                    Use this key in macOS, iOS, Android, and other EMWaver apps to access your activated devices.
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void doCreateApiKey()}
+                    disabled={busy}
+                    className="rounded-lg bg-[color:var(--ink)] px-3 py-1.5 text-xs font-semibold text-[color:var(--paper)] disabled:opacity-50"
+                  >
+                    {apiKeyStatus?.exists ? "Replace key" : "Create key"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void doRevokeApiKey()}
+                    disabled={busy || !apiKeyStatus?.exists}
+                    className="rounded-lg border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-semibold text-[color:var(--ink)] disabled:opacity-50"
+                  >
+                    Revoke key
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-4 space-y-2 text-xs text-[color:var(--ink-dim)]">
+                <div>
+                  Status: {apiKeyStatus?.exists ? `active (${apiKeyStatus.keyPrefix || "EMW key"})` : "no key created yet"}
+                </div>
+                {apiKeyStatus?.createdAtMs ? (
+                  <div>Created: {new Date(apiKeyStatus.createdAtMs).toLocaleString()}</div>
+                ) : null}
+                {apiKeyStatus?.lastUsedAtMs ? (
+                  <div>Last used: {new Date(apiKeyStatus.lastUsedAtMs).toLocaleString()}</div>
+                ) : null}
+              </div>
+
+              {freshApiKey ? (
+                <div className="mt-4 rounded-xl border border-[color:var(--line)] bg-[color:var(--paper)] p-4">
+                  <div className="text-xs font-semibold text-[color:var(--ink)]">Copy this key now</div>
+                  <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
+                    This is the full key value. Treat it like a password for your EMWaver apps.
+                  </div>
+                  <div className="mt-3 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3 font-mono text-xs text-[color:var(--ink)] break-all">
+                    {freshApiKey}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>

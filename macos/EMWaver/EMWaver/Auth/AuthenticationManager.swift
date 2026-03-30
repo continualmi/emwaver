@@ -7,18 +7,16 @@ import AppKit
 
 @MainActor
 final class AuthenticationManager: ObservableObject {
-    @Published private(set) var session: AuthSession?
-    @Published private(set) var isSigningIn = false
+    @Published private(set) var account: AuthAccount?
+    @Published private(set) var accessToken: String = ""
+    @Published private(set) var hasSavedKey = false
+    @Published private(set) var isValidatingKey = false
     @Published private(set) var didCompleteInitialRestore = false
     @Published var lastError: String?
     @Published var isSignInSheetPresented = false
-    @Published var isWebHandoffSheetPresented = false
 
-    private let provider: GoogleSignInProviding
-    private let firebase = FirebaseAuthService()
-
-    private let refreshTokenAccount = "firebase_refresh_token"
-    private let profileAccount = "firebase_profile"
+    private let apiKeyAccount = "emwaver_api_key"
+    private let profileAccount = "emwaver_api_key_profile"
 
     private struct StoredProfile: Codable {
         var uid: String
@@ -26,159 +24,63 @@ final class AuthenticationManager: ObservableObject {
         var displayName: String?
     }
 
-    init(provider: GoogleSignInProviding? = nil) {
-        self.provider = provider ?? GoogleOAuthSignInProvider()
-
-        // Best-effort session restore.
+    init() {
         Task { [weak self] in
-            await self?.restoreSessionIfPossible()
+            await self?.restoreCredentialIfPossible()
         }
     }
 
     var isSignedIn: Bool {
-        session != nil
-    }
-
-    var canSignInWithGoogle: Bool {
-        provider.isAvailable
+        hasSavedKey && account != nil
     }
 
     var userLabel: String {
-        if let name = session?.displayName, !name.isEmpty {
+        if let name = account?.displayName, !name.isEmpty {
             return name
         }
-        if let email = session?.email, !email.isEmpty {
+        if let email = account?.email, !email.isEmpty {
             return email
         }
-        return "Account"
+        return hasSavedKey ? "EMWaver key" : "No key"
     }
 
-    func signInWithGoogle() async {
-        guard !isSigningIn else { return }
+    func saveApiKey(_ apiKey: String) async {
+        guard !isValidatingKey else { return }
         lastError = nil
-        isSigningIn = true
-        defer { isSigningIn = false }
+        isValidatingKey = true
+        defer { isValidatingKey = false }
 
         do {
-            let s = try await provider.signIn()
-            session = s
+            let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.isEmpty {
+                throw AuthError.failed("Enter an EMWaver API key.")
+            }
 
-            // Persist refresh token + profile for restore.
-            try KeychainStore.setString(s.refreshToken, account: refreshTokenAccount)
-            let profile = StoredProfile(uid: s.uid, email: s.email, displayName: s.displayName)
-            let profileData = try JSONEncoder().encode(profile)
-            let profileStr = String(data: profileData, encoding: .utf8) ?? ""
-            try KeychainStore.setString(profileStr, account: profileAccount)
+            let validated = try await validateApiKey(trimmed)
+            try KeychainStore.setString(trimmed, account: apiKeyAccount)
+            try persistProfile(validated)
+            accessToken = trimmed
+            hasSavedKey = true
+            account = validated
+            isSignInSheetPresented = false
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
-    // MARK: - Web sign-in handoff
+    func removeKey() async {
+        clearStoredCredential(lastError: nil)
+    }
 
-    func beginWebSignInHandoff() {
-        lastError = nil
-
-        // Close the sign-in sheet first; SwiftUI doesn't reliably present two sheets at once.
-        isSignInSheetPresented = false
-
-        // Open the canonical shared Continual handoff page and then prompt for the code.
+    func openAccountManagement() {
         guard var base = FrontendUrl.resolve() else {
             lastError = "Missing EMWaver frontend URL"
             return
         }
-        base.appendPathComponent("emwaver")
-        base.appendPathComponent("handoff")
+        base.appendPathComponent("account")
 #if canImport(AppKit)
         NSWorkspace.shared.open(base)
-        #endif
-
-        // Present the handoff sheet after the sign-in sheet has had a moment to dismiss.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            self.isWebHandoffSheetPresented = true
-        }
-    }
-
-    func consumeWebHandoffCode(code: String) async {
-        guard !isSigningIn else { return }
-        lastError = nil
-        isSigningIn = true
-        defer { isSigningIn = false }
-
-        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            lastError = "Missing code"
-            return
-        }
-
-        guard let base = BackendUrl.resolve() else {
-            lastError = "Missing EMWaver backend URL"
-            return
-        }
-
-        var consumeURL = base
-
-        do {
-            consumeURL.appendPathComponent("v1")
-            consumeURL.appendPathComponent("auth")
-            consumeURL.appendPathComponent("handoff")
-            consumeURL.appendPathComponent("consume")
-
-            var req = URLRequest(url: consumeURL)
-            req.httpMethod = "POST"
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: [
-                "code": trimmed,
-            ])
-
-            let (data, res) = try await URLSession.shared.data(for: req)
-            let http = (res as? HTTPURLResponse)?.statusCode ?? -1
-            if http < 200 || http >= 300 {
-                let msg = String(data: data, encoding: .utf8) ?? ""
-                let detail = msg.isEmpty ? "HTTP \(http)" : msg
-                throw AuthError.failed("Handoff consume failed at \(consumeURL.absoluteString): \(detail)")
-            }
-
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let accessToken = (json?["access_token"] as? String) ?? (json?["handoff_token"] as? String) ?? ""
-            if accessToken.isEmpty {
-                throw AuthError.failed("Missing session token")
-            }
-            let user = json?["user"] as? [String: Any]
-
-            let newSession = AuthSession(
-                uid: (user?["uid"] as? String) ?? "",
-                email: user?["email"] as? String,
-                displayName: user?["name"] as? String,
-                idToken: accessToken,
-                refreshToken: accessToken
-            )
-
-            // Persist refresh token + profile for restore.
-            try KeychainStore.setString(newSession.refreshToken, account: refreshTokenAccount)
-            let profile = StoredProfile(uid: newSession.uid, email: newSession.email, displayName: newSession.displayName)
-            let profileData = try JSONEncoder().encode(profile)
-            let profileStr = String(data: profileData, encoding: .utf8) ?? ""
-            try KeychainStore.setString(profileStr, account: profileAccount)
-
-            session = newSession
-        } catch let urlError as URLError {
-            lastError = "Could not reach \(consumeURL.absoluteString): \(urlError.localizedDescription)"
-        } catch {
-            let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-            if message.isEmpty {
-                lastError = "Handoff consume failed at \(consumeURL.absoluteString)"
-            } else {
-                lastError = message
-            }
-        }
-    }
-
-    func signOut() async {
-        await provider.signOut()
-        KeychainStore.delete(account: refreshTokenAccount)
-        KeychainStore.delete(account: profileAccount)
-        session = nil
+#endif
     }
 
     func waitForInitialRestore() async {
@@ -187,18 +89,67 @@ final class AuthenticationManager: ObservableObject {
         }
     }
 
-    // MARK: - Restore
+    func handleUnauthorizedResponse(message: String = "Saved EMWaver key is no longer valid. Enter a new key to keep using account features.") {
+        clearStoredCredential(lastError: message)
+    }
 
-    private func restoreSessionIfPossible() async {
-        defer { didCompleteInitialRestore = true }
+    private func validateApiKey(_ apiKey: String) async throws -> AuthAccount {
+        guard let base = BackendUrl.resolve() else {
+            throw AuthError.failed("Missing EMWaver backend URL")
+        }
 
-        // Avoid fighting an interactive sign-in.
-        guard session == nil else { return }
+        var url = base
+        url.appendPathComponent("v1")
+        url.appendPathComponent("auth")
+        url.appendPathComponent("key")
+
+        var req = URLRequest(url: url)
+        req.httpMethod = "GET"
+        req.setValue("application/json", forHTTPHeaderField: "Accept")
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
 
         do {
-            guard let token = try KeychainStore.getString(account: refreshTokenAccount), !token.isEmpty else {
+            let (data, res) = try await URLSession.shared.data(for: req)
+            let http = (res as? HTTPURLResponse)?.statusCode ?? -1
+            if http < 200 || http >= 300 {
+                let msg = String(data: data, encoding: .utf8) ?? ""
+                throw AuthError.failed(msg.isEmpty ? "API key validation failed (HTTP \(http))" : msg)
+            }
+
+            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let user = json?["user"] as? [String: Any]
+            let uid = (user?["uid"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if uid.isEmpty {
+                throw AuthError.failed("API key validation response was missing account identity.")
+            }
+
+            return AuthAccount(
+                uid: uid,
+                email: user?["email"] as? String,
+                displayName: user?["name"] as? String
+            )
+        } catch let urlError as URLError {
+            throw AuthError.failed("Could not reach \(url.absoluteString): \(urlError.localizedDescription)")
+        }
+    }
+
+    private func persistProfile(_ profile: AuthAccount) throws {
+        let stored = StoredProfile(uid: profile.uid, email: profile.email, displayName: profile.displayName)
+        let profileData = try JSONEncoder().encode(stored)
+        let profileStr = String(data: profileData, encoding: .utf8) ?? ""
+        try KeychainStore.setString(profileStr, account: profileAccount)
+    }
+
+    private func restoreCredentialIfPossible() async {
+        defer { didCompleteInitialRestore = true }
+
+        do {
+            guard let token = try KeychainStore.getString(account: apiKeyAccount), !token.isEmpty else {
                 return
             }
+
+            accessToken = token
+            hasSavedKey = true
 
             var storedProfile: StoredProfile? = nil
             if let raw = try KeychainStore.getString(account: profileAccount) {
@@ -208,19 +159,26 @@ final class AuthenticationManager: ObservableObject {
                 }
             }
 
-            let newSession = AuthSession(
-                uid: storedProfile?.uid ?? "",
-                email: storedProfile?.email,
-                displayName: storedProfile?.displayName,
-                idToken: token,
-                refreshToken: token
-            )
-
-            session = newSession
+            if let storedProfile, !storedProfile.uid.isEmpty {
+                account = AuthAccount(
+                    uid: storedProfile.uid,
+                    email: storedProfile.email,
+                    displayName: storedProfile.displayName
+                )
+            } else {
+                account = nil
+            }
         } catch {
-            // Best-effort: clear invalid tokens.
-            KeychainStore.delete(account: refreshTokenAccount)
-            KeychainStore.delete(account: profileAccount)
+            clearStoredCredential(lastError: nil)
         }
+    }
+
+    private func clearStoredCredential(lastError: String?) {
+        KeychainStore.delete(account: apiKeyAccount)
+        KeychainStore.delete(account: profileAccount)
+        accessToken = ""
+        hasSavedKey = false
+        account = nil
+        self.lastError = lastError
     }
 }

@@ -6,7 +6,7 @@ function openapiSpec(baseUrl: string) {
     info: {
       title: "EMWaver Backend API",
       version: "v1",
-      description: "Unified EMWaver web/backend API. Auth: EMWaver session cookie for browser flows or Authorization: Bearer <emwaver_session_token> for native/app flows.",
+      description: "Unified EMWaver web/backend API. Auth: EMWaver session cookie for browser flows or Authorization: Bearer <emwaver_api_key_or_session_token> for native/app flows.",
     },
     servers: [{ url: baseUrl }],
     components: {
@@ -14,8 +14,8 @@ function openapiSpec(baseUrl: string) {
         bearerAuth: {
           type: "http",
           scheme: "bearer",
-          bearerFormat: "JWT",
-          description: "EMWaver access token minted after verified Continual handoff",
+          bearerFormat: "opaque",
+          description: "EMWaver API key or EMWaver session token",
         },
       },
     },
@@ -24,6 +24,9 @@ function openapiSpec(baseUrl: string) {
       "/v1/files": {
         get: { summary: "List all files for the current user" },
         delete: { summary: "Delete a file by name" },
+      },
+      "/v1/auth/key": {
+        get: { summary: "Validate the current bearer credential and return account identity" },
       },
       "/v1/files/upload": {
         post: { summary: "Upload a file by name (overwrite)" },

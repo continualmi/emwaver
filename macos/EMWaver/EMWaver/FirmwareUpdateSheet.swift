@@ -31,7 +31,7 @@ struct FirmwareUpdateSheet: View {
         if auth.isSignedIn {
             return "This board will become available after the firmware is installed and the device reconnects."
         }
-        return "Sign in after flashing if you want this board synced to your account."
+        return "Enter your EMWaver key before flashing if you want this board synced to your account."
     }
 
     private var isEspWorkflow: Bool {
