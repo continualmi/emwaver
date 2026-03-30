@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { WEB_ROOT } from "@/lib/repoPaths";
 
 function dataRoot() {
-  return path.resolve(process.cwd(), ".data", "server");
+  return path.resolve(WEB_ROOT, ".data", "server");
 }
 
 function filePath(name: string) {

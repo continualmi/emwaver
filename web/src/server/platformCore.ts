@@ -17,6 +17,7 @@ import {
   syncCoreSubscriptionRecord,
   type CoreIdentityInput,
 } from "continual-core";
+import { WEB_ROOT } from "@/lib/repoPaths";
 
 export { CONTINUAL_PRO_MONTHLY_ALLOWANCE_TOKENS, TOP_UP_USD_PER_1M_TOKENS as TOPUP_USD_PER_1M_TOKENS };
 export const EMWAVER_PLATFORM_TOKENS_PER_TOPUP_UNIT = TOP_UP_UNIT_PLATFORM_TOKENS;
@@ -27,7 +28,7 @@ declare global {
 }
 
 const coreSchemaPath = path.join(
-  process.cwd(),
+  WEB_ROOT,
   "node_modules",
   "continual-core",
   "db",
@@ -106,7 +107,7 @@ export function getPlatformPgPool() {
 async function resolveSharedSchemaSql() {
   const [coreSchemaSql, emwaverSchemaSql] = await Promise.all([
     readFile(coreSchemaPath, "utf8"),
-    readFile(path.resolve(process.cwd(), "src/server/emwaver-schema.sql"), "utf8"),
+    readFile(path.resolve(WEB_ROOT, "src/server/emwaver-schema.sql"), "utf8"),
   ]);
   return `${coreSchemaSql}\n\n${emwaverSchemaSql}`;
 }
