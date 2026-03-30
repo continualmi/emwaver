@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { PUBLIC_DIR } from "@/lib/repoPaths";
 
 export type DeviceInfo = {
   slug: string;
@@ -24,10 +25,7 @@ export type DeviceInfo = {
   reproductionCost?: { amount: number; currency: string; units: number } | null;
 };
 
-const CATALOG_DIR = path.join(
-  process.cwd(),
-  "public/hardware-catalog/hardware",
-);
+const CATALOG_DIR = path.join(PUBLIC_DIR, "hardware-catalog", "hardware");
 
 export function resolveImagePath(slug: string, imagePath: string): string {
   if (imagePath.includes("/"))

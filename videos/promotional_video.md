@@ -8,7 +8,7 @@ Drive folder link: `https://drive.google.com/drive/u/2/folders/1hPoiWPKId1ZUcjdp
 
 ## Progress
 
-Overall completion: `36%` (`12/33` clips done)
+Overall completion: `39%` (`13/33` clips done)
 
 `[#########-----------]`
 
@@ -104,7 +104,7 @@ These are the required clips for the final lineup/platform cut:
 | `P0` | `new_macos_script_opens_and_generates_ui_cc1101.MOV` | Proves the central product claim: scripts render usable UI automatically. |
 | `P0` | `new_macos_cc1101_real_interaction_demo.MOV` | Shows the generated UI driving real hardware behavior. |
 | `P0` | `new_android_same_script_same_ui_cc1101.MOV` | Proves the script/UI model is not desktop-only. |
-| `P0` | `link_001_product_identity_closeup.MOV` | Establishes `EMWaver Link` as the third product in the lineup. |
+| `P0` | `link_001_product_identity_closeup.MOV` `✅ recorded 2026-03-30` | Establishes `EMWaver Link` as the third product in the lineup. |
 | `P0` | `link_003_macos_same_cc1101_script_built_in_radio.MOV` | Proves that Link keeps the same script/UI model while simplifying setup. |
 | `P0` | `clip_026_macos_agent_prompt_generates_script.MOV` | Makes the Agent a visible product capability rather than a spoken claim. |
 | `P0` | `clip_024_web_remote_ui_parity_demo.MOV` | Proves that EMWaver's control model extends to the web remote surface. |
@@ -196,7 +196,7 @@ Preferred duration: `3-5s`
 Recommended final sequence:
 
 1. `new_core_carrier_hero_clip.MOV`
-2. `link_001_product_identity_closeup.MOV`
+2. `link_001_product_identity_closeup.MOV` `✅ recorded 2026-03-30`
 3. `new_macos_script_opens_and_generates_ui_cc1101.MOV`
 4. `new_macos_cc1101_real_interaction_demo.MOV`
 5. `link_003_macos_same_cc1101_script_built_in_radio.MOV`
@@ -280,7 +280,7 @@ Proposed Link clips:
 
 | Priority | Clip | Why it matters |
 | --- | --- | --- |
-| `P0` | `link_001_product_identity_closeup.MOV` | Establishes `EMWaver Link` as a distinct product body in the same family as Core. |
+| `P0` | `link_001_product_identity_closeup.MOV` `✅ recorded 2026-03-30` | Establishes `EMWaver Link` as a distinct product body in the same family as Core. |
 | `P0` | `link_002_no_module_setup_cc1101_ready.MOV` | Proves the key product claim: `cc1101` is ready without attaching a module. |
 | `P0` | `link_003_macos_same_cc1101_script_built_in_radio.MOV` | Shows the same script/UI model working on `Link` with built-in radio hardware. |
 | `P1` | `link_004_core_vs_link_same_script_match_cut.MOV` | Makes the modular-vs-integrated hardware choice visually obvious while preserving one platform story. |
@@ -370,6 +370,7 @@ Preferred duration: `4-7s`
 | `new_android_same_script_same_ui_cc1101.MOV` | `2026-03-25` | `✅` | Android screen recording of the same `cc1101` script and generated UI flow used on macOS, captured to prove the script-first control model carries across platforms. |
 | `new_core_vs_carrier_same_script_match_cut.MOV` | `2026-03-25` | `✅` | Short comparison clip alternating the same script model across `EMWaver Carrier` and `EMWaver Core`, making the shared platform story explicit rather than reading as two unrelated devices. |
 | `clip_013_cc1101_capture_tesla_charge_port_signal_from_stored_device.MOV` | `2026-03-25` | `✅` | On `EMWaver Link`, capture the Tesla charge-port opening signal from another device where the signal is already stored, using the built-in `cc1101` path to show a believable sub-GHz acquisition flow without needing the original source action in frame. |
+| `link_001_product_identity_closeup.MOV` | `2026-03-30` | `✅` | Clean product-only close-up of `EMWaver Link`, framed to make the device feel premium, intentional, and self-contained as the third product body in the EMWaver lineup. |
 | `clip_014_cc1101_retransmit_garage_open.MOV` | `TBD` | `pending` | Outdoors near a real garage, retransmit the captured garage signal from `sampler.emw` and show the garage door beginning to open as visual proof of replay success. |
 | `clip_015_cc1101_capture_tesla_charge_port_signal.MOV` | `TBD` | `pending` | Capture the Tesla charging port open signal from the charging cable remote action using CC1101, with clear framing of the source action and sampled signal state. |
 | `clip_016_cc1101_retransmit_tesla_charge_port_open.MOV` | `TBD` | `pending` | Retransmit the captured Tesla charging port signal via CC1101 and show the charge port opening response to confirm end-to-end capture and replay behavior. |

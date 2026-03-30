@@ -3,12 +3,13 @@ import next from "next";
 import { parse } from "node:url";
 import { WebSocketServer } from "ws";
 
+import { WEB_ROOT } from "./src/lib/repoPaths";
 import { env } from "./src/server/env";
 import { handleWebSocketUpgrade } from "./src/server/ws/upgrade";
 import { getRemoteSessionState } from "./src/server/ws/state";
 
 const dev = env.nodeEnv !== "production";
-const app = next({ dev, dir: process.cwd() });
+const app = next({ dev, dir: WEB_ROOT });
 const handle = app.getRequestHandler();
 
 async function main() {

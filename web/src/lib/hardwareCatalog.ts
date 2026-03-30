@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { PUBLIC_DIR } from "@/lib/repoPaths";
 
 export type HardwareDevice = {
   slug: string;
@@ -47,7 +48,7 @@ type DeviceManifest = Partial<HardwareDevice> & {
   buildAssetFolders?: Partial<Record<BuildAssetKey, string>>;
 };
 
-const PUBLIC_ROOT = path.join(process.cwd(), "public", "hardware-catalog", "hardware");
+const PUBLIC_ROOT = path.join(PUBLIC_DIR, "hardware-catalog", "hardware");
 const MANIFEST_FILE = path.join(PUBLIC_ROOT, "devices.json");
 
 const CURRENT_BOARD_IDS = [
