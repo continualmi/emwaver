@@ -7,9 +7,7 @@
 package com.emwaver.emwaverandroidapp.cloud;
 
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
-import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 
@@ -20,20 +18,18 @@ import org.json.JSONObject;
 
 import java.io.IOException;
 
-import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
-import okhttp3.RequestBody;
 import okhttp3.Response;
 
 /**
  * Simple auth helper for Android.
  *
- * Source of truth is the EMWaver access token issued after a Continual handoff.
+ * Source of truth is the EMWaver API key created on the web account page.
  */
 public final class CloudAuthManager {
     private static final String PREFS = "emwaver.auth";
-    private static final String KEY_ACCESS_TOKEN = "access_token";
+    private static final String KEY_API_KEY = "api_key";
     private static final String KEY_EMAIL = "email";
     private static final String KEY_NAME = "name";
 
@@ -79,7 +75,7 @@ public final class CloudAuthManager {
     }
 
     public boolean isSignedIn(@NonNull Context context) {
-        return !prefs(context).getString(KEY_ACCESS_TOKEN, "").trim().isEmpty();
+        return !prefs(context).getString(KEY_API_KEY, "").trim().isEmpty();
     }
 
     @Nullable
@@ -104,98 +100,87 @@ public final class CloudAuthManager {
         return context != null ? getSignedInDisplayName(context) : null;
     }
 
-    public void beginWebSignIn(@NonNull Context context) {
-        String url = CloudConfig.getFrontendBaseUrl(context).trim() + "/emwaver/handoff";
-        Intent browser = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
-        browser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        context.startActivity(browser);
-    }
-
-    public void consumeWebHandoffCodeAsync(
+    public void saveApiKeyAsync(
             @NonNull Context context,
-            @Nullable String code,
+            @Nullable String apiKey,
             @NonNull SignInCallback callback
     ) {
-        final String trimmed = code == null ? "" : code.trim().toUpperCase();
+        final String trimmed = apiKey == null ? "" : apiKey.trim();
         if (trimmed.isEmpty()) {
-            callback.onResult(false, "Missing handoff code");
+            callback.onResult(false, "Enter an EMWaver API key");
             return;
         }
 
         new Thread(() -> {
             try {
-                SessionResult session = fetchAccessToken(context, trimmed);
+                SessionResult session = validateApiKey(context, trimmed);
                 prefs(context).edit()
-                        .putString(KEY_ACCESS_TOKEN, session.accessToken)
+                        .putString(KEY_API_KEY, trimmed)
                         .putString(KEY_EMAIL, session.email)
                         .putString(KEY_NAME, session.name)
                         .apply();
                 mainHandler.post(() -> callback.onResult(true, null));
             } catch (Exception e) {
-                String msg = e.getMessage() != null ? e.getMessage() : "Sign in failed";
+                String msg = e.getMessage() != null ? e.getMessage() : "Key validation failed";
                 mainHandler.post(() -> callback.onResult(false, msg));
             }
         }).start();
     }
 
-    @NonNull
     private static final class SessionResult {
-        final String accessToken;
         final String email;
         final String name;
 
-        SessionResult(String accessToken, String email, String name) {
-            this.accessToken = accessToken;
+        SessionResult(String email, String name) {
             this.email = email;
             this.name = name;
         }
     }
 
     @NonNull
-    private SessionResult fetchAccessToken(@NonNull Context context, @NonNull String code) throws Exception {
-        String url = CloudConfig.getBackendBaseUrl(context).trim() + "/v1/auth/handoff/consume";
-        JSONObject payload = new JSONObject();
-        payload.put("code", code);
-
-        RequestBody body = RequestBody.create(
-                payload.toString(),
-                MediaType.parse("application/json")
-        );
+    private SessionResult validateApiKey(@NonNull Context context, @NonNull String apiKey) throws Exception {
+        String url = CloudConfig.getBackendBaseUrl(context).trim() + "/v1/auth/key";
 
         Request req = new Request.Builder()
                 .url(url)
-                .post(body)
+                .get()
+                .addHeader("Accept", "application/json")
+                .addHeader("Authorization", "Bearer " + apiKey)
                 .build();
 
         try (Response res = http.newCall(req).execute()) {
             String json = res.body() != null ? res.body().string() : "";
             if (!res.isSuccessful()) {
                 throw new IOException(json.isEmpty()
-                        ? ("Handoff consume failed: HTTP " + res.code())
+                        ? ("Key validation failed: HTTP " + res.code())
                         : json);
             }
 
             JSONObject root = new JSONObject(json);
-            String accessToken = root.optString("access_token", "");
-            if (accessToken.isEmpty()) {
-                throw new IOException("Missing access_token");
-            }
             JSONObject user = root.optJSONObject("user");
+            if (user == null && root.has("email")) {
+                user = root;
+            }
+            if (user == null) {
+                user = root.optJSONObject("account");
+            }
+            if (user == null) {
+                throw new IOException("Missing user");
+            }
             return new SessionResult(
-                    accessToken,
-                    user != null ? user.optString("email", "") : "",
-                    user != null ? user.optString("name", "") : ""
+                    user.optString("email", ""),
+                    user.optString("name", user.optString("displayName", user.optString("display_name", "")))
             );
         }
     }
 
     /**
-     * Returns a Firebase ID token for backend Authorization: Bearer <token>.
+     * Returns the saved EMWaver API key for backend Authorization: Bearer <token>.
      * Returns "" when not signed in.
      */
     @NonNull
     public String getIdTokenBlocking(@NonNull Context context) {
-        return prefs(context).getString(KEY_ACCESS_TOKEN, "");
+        return prefs(context).getString(KEY_API_KEY, "");
     }
 
     @NonNull

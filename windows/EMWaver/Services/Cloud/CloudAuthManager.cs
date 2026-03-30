@@ -1,45 +1,64 @@
 using System;
-using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
-using System.Net.Http.Json;
+using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
+using Windows.System;
 
 namespace EMWaver.Services.Cloud;
 
 internal sealed class CloudAuthManager
 {
-    private const string KeyIdToken = "cloud.emwaver.accessToken";
-    private const string KeyRefreshToken = "cloud.emwaver.sessionToken";
+    private const string KeyApiKey = "cloud.emwaver.apiKey";
+    private const string KeyEmail = "cloud.emwaver.email";
+    private const string KeyName = "cloud.emwaver.name";
+    private const string KeyUid = "cloud.emwaver.uid";
+
+    private const string LegacyKeyIdToken = "cloud.emwaver.accessToken";
+    private const string LegacyKeyRefreshToken = "cloud.emwaver.sessionToken";
+
+    private const string PersistFileName = "cloud_api_key.json";
+    private const string LegacyPersistFileName = "cloud_auth.json";
 
     private readonly CloudConfig _cfg;
-    private readonly FirebaseAuthService _firebase;
     private readonly HttpClient _http = new();
-    private readonly SemaphoreSlim _tokenRefreshLock = new(1, 1);
 
-    private string? _idToken;
-    private string? _refreshToken;
+    private string? _apiKey;
+    private string? _email;
+    private string? _displayName;
+    private string? _uid;
 
     internal event Action? Changed;
 
-    private sealed record Persisted(string? IdToken, string? RefreshToken);
+    private sealed record Persisted(string? ApiKey, string? Uid, string? Email, string? DisplayName);
+    private sealed record ValidationResult(string? Uid, string? Email, string? DisplayName);
 
-    internal CloudAuthManager(CloudConfig cfg, GoogleOAuthPkce google, FirebaseAuthService firebase)
+    internal CloudAuthManager(CloudConfig cfg)
     {
         _cfg = cfg;
-        _firebase = firebase;
 
-        // Best-effort hydrate tokens so IsSignedIn works in unpackaged runs.
         TryLoadPersisted();
-
-        // Also try LocalSettings (packaged) if we don't already have them.
-        if (string.IsNullOrWhiteSpace(_idToken))
+        if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            _idToken = TryReadLocalSetting(KeyIdToken);
-            _refreshToken = TryReadLocalSetting(KeyRefreshToken);
+            _apiKey = TryReadLocalSetting(KeyApiKey);
+        }
+
+        if (string.IsNullOrWhiteSpace(_uid))
+        {
+            _uid = TryReadLocalSetting(KeyUid);
+        }
+
+        if (string.IsNullOrWhiteSpace(_email))
+        {
+            _email = TryReadLocalSetting(KeyEmail);
+        }
+
+        if (string.IsNullOrWhiteSpace(_displayName))
+        {
+            _displayName = TryReadLocalSetting(KeyName);
         }
     }
 
@@ -47,22 +66,25 @@ internal sealed class CloudAuthManager
 
     internal string? GetIdToken()
     {
-        if (!string.IsNullOrWhiteSpace(_idToken))
+        if (!string.IsNullOrWhiteSpace(_apiKey))
         {
-            return _idToken;
+            return _apiKey;
         }
 
-        // Packaged: try LocalSettings.
-        var ls = TryReadLocalSetting(KeyIdToken);
+        var ls = TryReadLocalSetting(KeyApiKey);
         if (!string.IsNullOrWhiteSpace(ls))
         {
-            _idToken = ls;
-            return _idToken;
+            _apiKey = ls;
+            return _apiKey;
         }
 
-        // Unpackaged: try file.
         TryLoadPersisted();
-        return _idToken;
+        if (!string.IsNullOrWhiteSpace(_apiKey))
+        {
+            return _apiKey;
+        }
+
+        return null;
     }
 
     internal async Task<string> EnsureSignedInAsync(CancellationToken ct)
@@ -73,190 +95,140 @@ internal sealed class CloudAuthManager
             return existing!;
         }
 
-        return await SignInInteractiveAsync(ct);
+        await SignInInteractiveAsync(ct);
+        throw new InvalidOperationException(
+            "Create or replace your EMWaver API key on the web, then paste it into the Account dialog."
+        );
     }
 
     internal async Task<string?> GetValidIdTokenAsync(CancellationToken ct, bool interactiveSignIn)
     {
         var token = GetIdToken();
-        if (!string.IsNullOrWhiteSpace(token) && !IsLikelyExpired(token!))
+        if (!string.IsNullOrWhiteSpace(token))
         {
             return token;
         }
 
-        await _tokenRefreshLock.WaitAsync(ct);
-        try
+        if (interactiveSignIn)
         {
-            token = GetIdToken();
-            if (!string.IsNullOrWhiteSpace(token) && !IsLikelyExpired(token!))
-            {
-                return token;
-            }
-
-            if (interactiveSignIn)
-            {
-                return await SignInInteractiveAsync(ct);
-            }
-
-            // If we couldn't refresh, do not return an expired token.
-            return null;
+            await SignInInteractiveAsync(ct);
         }
-        finally
-        {
-            _tokenRefreshLock.Release();
-        }
+
+        return null;
     }
 
-    internal Task<string> SignInInteractiveAsync(CancellationToken ct)
+    internal async Task<string> SaveApiKeyAsync(string apiKey, CancellationToken ct)
     {
-        _ = ct;
-        var signin = BuildSigninUrl();
-        OpenBrowser(signin.ToString());
-
-        return Task.FromException<string>(new InvalidOperationException(
-            "Complete sign-in in your browser, then paste the one-time EMW handoff code in Settings."
-        ));
-    }
-
-    internal async Task<string> SignInWithHandoffCodeAsync(string code, CancellationToken ct)
-    {
-        var trimmed = (code ?? "").Trim().ToUpperInvariant();
+        var trimmed = (apiKey ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
         {
-            throw new InvalidOperationException("Missing handoff code");
+            throw new InvalidOperationException("Enter an EMWaver API key.");
         }
 
-        var consume = new Uri(new Uri(_cfg.BackendBaseUrl.TrimEnd('/') + "/"), "v1/auth/handoff/consume");
-        using var req = new HttpRequestMessage(HttpMethod.Post, consume)
-        {
-            Content = JsonContent.Create(new { code = trimmed })
-        };
-        using var res = await _http.SendAsync(req, ct);
-        var resJson = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(resJson) ? $"HTTP {(int)res.StatusCode}" : resJson);
-        }
+        var validation = await ValidateApiKeyAsync(trimmed, ct);
+        _apiKey = trimmed;
+        _uid = validation.Uid;
+        _email = validation.Email;
+        _displayName = validation.DisplayName;
 
-        using var doc = JsonDocument.Parse(resJson);
-        var root = doc.RootElement;
-        var accessToken = root.TryGetProperty("access_token", out var tokenEl) ? tokenEl.GetString() : null;
-        if (string.IsNullOrWhiteSpace(accessToken))
-        {
-            throw new InvalidOperationException("Missing access_token");
-        }
-
-        _idToken = accessToken;
-        _refreshToken = accessToken;
-
-        // Best-effort persistence in BOTH contexts:
-        // - Packaged apps: ApplicationData.Current.LocalSettings
-        // - Unpackaged/dev: LocalAppData json file
-        TryWriteLocalSetting(KeyIdToken, _idToken);
-        TryWriteLocalSetting(KeyRefreshToken, _refreshToken);
-        TrySavePersisted();
+        PersistCredential();
         Changed?.Invoke();
-
-        return _idToken ?? "";
+        return _apiKey;
     }
 
-    internal Uri BuildSigninUrl()
+    internal async Task SignInInteractiveAsync(CancellationToken ct)
     {
-        var baseUrl = _cfg.BackendBaseUrl;
-        return new Uri($"{baseUrl}/emwaver/handoff");
+        await OpenAccountManagementAsync(ct);
     }
 
-    private static void OpenBrowser(string url)
+    internal async Task OpenAccountManagementAsync(CancellationToken ct)
     {
-        var psi = new ProcessStartInfo
+        ct.ThrowIfCancellationRequested();
+
+        var url = BuildAccountManagementUrl();
+        var opened = await Launcher.LaunchUriAsync(url);
+        if (!opened)
         {
-            FileName = url,
-            UseShellExecute = true,
-        };
-        Process.Start(psi);
+            throw new InvalidOperationException("Failed to open the EMWaver account page.");
+        }
     }
 
     internal void SignOut()
     {
-        _idToken = null;
-        _refreshToken = null;
+        _apiKey = null;
+        _uid = null;
+        _email = null;
+        _displayName = null;
 
-        TryRemoveLocalSetting(KeyIdToken);
-        TryRemoveLocalSetting(KeyRefreshToken);
-
-        try
-        {
-            var path = PersistPath();
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
-        }
-        catch
-        {
-        }
+        TryRemoveLocalSetting(KeyApiKey);
+        TryRemoveLocalSetting(KeyUid);
+        TryRemoveLocalSetting(KeyEmail);
+        TryRemoveLocalSetting(KeyName);
+        TryRemoveLocalSetting(LegacyKeyIdToken);
+        TryRemoveLocalSetting(LegacyKeyRefreshToken);
+        TryDeletePersisted(PersistFileName);
+        TryDeletePersisted(LegacyPersistFileName);
 
         Changed?.Invoke();
     }
 
-    private string? GetRefreshToken()
+    private Uri BuildAccountManagementUrl()
     {
-        if (!string.IsNullOrWhiteSpace(_refreshToken))
-        {
-            return _refreshToken;
-        }
-
-        var ls = TryReadLocalSetting(KeyRefreshToken);
-        if (!string.IsNullOrWhiteSpace(ls))
-        {
-            _refreshToken = ls;
-            return _refreshToken;
-        }
-
-        TryLoadPersisted();
-        return _refreshToken;
+        var baseUrl = FrontendUrl.Resolve().TrimEnd('/');
+        return new Uri($"{baseUrl}/account");
     }
 
-    private static bool IsLikelyExpired(string jwt)
+    private async Task<ValidationResult> ValidateApiKeyAsync(string apiKey, CancellationToken ct)
     {
-        try
+        var url = new Uri(new Uri(_cfg.BackendBaseUrl.TrimEnd('/') + "/"), "v1/auth/key");
+        using var req = new HttpRequestMessage(HttpMethod.Get, url);
+        req.Headers.Accept.ParseAdd("application/json");
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+
+        using var res = await _http.SendAsync(req, ct);
+        var json = await res.Content.ReadAsStringAsync(ct);
+        if (!res.IsSuccessStatusCode)
         {
-            var parts = jwt.Split('.');
-            if (parts.Length < 2) return false;
-
-            var payload = parts[1]
-                .Replace('-', '+')
-                .Replace('_', '/');
-            payload = payload.PadRight(payload.Length + ((4 - payload.Length % 4) % 4), '=');
-
-            var bytes = Convert.FromBase64String(payload);
-            using var doc = JsonDocument.Parse(bytes);
-            if (!doc.RootElement.TryGetProperty("exp", out var expEl)) return false;
-
-            long expSeconds;
-            if (expEl.ValueKind == JsonValueKind.Number)
-            {
-                if (!expEl.TryGetInt64(out expSeconds)) return false;
-            }
-            else if (expEl.ValueKind == JsonValueKind.String && long.TryParse(expEl.GetString(), out var parsed))
-            {
-                expSeconds = parsed;
-            }
-            else
-            {
-                return false;
-            }
-
-            var expAt = DateTimeOffset.FromUnixTimeSeconds(expSeconds);
-            return expAt <= DateTimeOffset.UtcNow.AddMinutes(2);
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(json)
+                ? $"API key validation failed (HTTP {(int)res.StatusCode})"
+                : json);
         }
-        catch
+
+        using var doc = JsonDocument.Parse(json);
+        if (!doc.RootElement.TryGetProperty("user", out var user) || user.ValueKind != JsonValueKind.Object)
         {
-            return false;
+            throw new InvalidOperationException("API key validation response was missing account identity.");
         }
+
+        var uid = ReadString(user, "uid");
+        if (string.IsNullOrWhiteSpace(uid))
+        {
+            throw new InvalidOperationException("API key validation response was missing account identity.");
+        }
+
+        return new ValidationResult(
+            Uid: uid,
+            Email: ReadString(user, "email"),
+            DisplayName: ReadString(user, "name")
+        );
     }
 
-    // MARK: - Persistence helpers
+    private void PersistCredential()
+    {
+        TryWriteLocalSetting(KeyApiKey, _apiKey);
+        TryWriteLocalSetting(KeyUid, _uid);
+        TryWriteLocalSetting(KeyEmail, _email);
+        TryWriteLocalSetting(KeyName, _displayName);
+        TryRemoveLocalSetting(LegacyKeyIdToken);
+        TryRemoveLocalSetting(LegacyKeyRefreshToken);
+        TryDeletePersisted(LegacyPersistFileName);
+        TrySavePersisted();
+    }
+
+    private static string? ReadString(JsonElement element, string propertyName)
+    {
+        return element.TryGetProperty(propertyName, out var prop) ? prop.GetString()?.Trim() : null;
+    }
 
     private static string? TryReadLocalSetting(string key)
     {
@@ -302,20 +274,20 @@ internal sealed class CloudAuthManager
         }
     }
 
-    private static string PersistPath()
+    private static string PersistPath(string fileName)
     {
         var dir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "EMWaver"
         );
-        return Path.Combine(dir, "cloud_auth.json");
+        return Path.Combine(dir, fileName);
     }
 
     private void TryLoadPersisted()
     {
         try
         {
-            var path = PersistPath();
+            var path = PersistPath(PersistFileName);
             if (!File.Exists(path))
             {
                 return;
@@ -325,8 +297,10 @@ internal sealed class CloudAuthManager
             var data = JsonSerializer.Deserialize<Persisted>(json);
             if (data != null)
             {
-                if (!string.IsNullOrWhiteSpace(data.IdToken)) _idToken = data.IdToken;
-                if (!string.IsNullOrWhiteSpace(data.RefreshToken)) _refreshToken = data.RefreshToken;
+                if (!string.IsNullOrWhiteSpace(data.ApiKey)) _apiKey = data.ApiKey;
+                if (!string.IsNullOrWhiteSpace(data.Uid)) _uid = data.Uid;
+                if (!string.IsNullOrWhiteSpace(data.Email)) _email = data.Email;
+                if (!string.IsNullOrWhiteSpace(data.DisplayName)) _displayName = data.DisplayName;
             }
         }
         catch
@@ -338,10 +312,25 @@ internal sealed class CloudAuthManager
     {
         try
         {
-            var path = PersistPath();
+            var path = PersistPath(PersistFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(path) ?? ".");
-            var json = JsonSerializer.Serialize(new Persisted(_idToken, _refreshToken));
+            var json = JsonSerializer.Serialize(new Persisted(_apiKey, _uid, _email, _displayName));
             File.WriteAllText(path, json);
+        }
+        catch
+        {
+        }
+    }
+
+    private static void TryDeletePersisted(string fileName)
+    {
+        try
+        {
+            var path = PersistPath(fileName);
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
         }
         catch
         {

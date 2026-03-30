@@ -30,12 +30,16 @@ Key app entry:
 - `GoogleOAuthSignInProvider.swift`
 - `KeychainStore.swift`
 - `SignInSheet.swift`
-- `WebSignInHandoffSheet.swift`
 
 Responsibilities:
 - sign-in state,
-- Continual handoff-code exchange and EMWaver session token handling,
+- session restore and EMWaver session token handling,
 - secure local persistence.
+
+Current guidance:
+- the old web handoff-code sheet has been removed from iOS,
+- activation keys are managed on the web for now,
+- iOS should guide users to the web account page rather than pretending to complete the new key-based flow locally until that native path exists.
 
 ## 2.2 Device and transport managers
 
@@ -81,11 +85,10 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The iOS app now relies on the shared Continual account flow:
-- the app opens the EMWaver-hosted handoff page in the browser,
-- the user signs in with Continual,
-- EMWaver issues a one-time EMWaver code,
-- the app exchanges that code with EMWaver for an EMWaver-native session token.
+The iOS app now uses web-managed activation-key guidance rather than the old browser-code handoff flow:
+- the sign-in sheet points users to the EMWaver web account page,
+- activation keys are expected to be created or replaced on the web,
+- the native iOS API-key sign-in flow is still a follow-up, not this app’s current responsibility.
 
 Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
 

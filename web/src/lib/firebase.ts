@@ -1,5 +1,5 @@
 import { initializeApp, getApps } from "firebase/app";
-import { getAuth, GoogleAuthProvider } from "firebase/auth";
+import { getAuth, getRedirectResult, GoogleAuthProvider, signInWithRedirect } from "firebase/auth";
 
 export function isFirebaseConfigured(): boolean {
   const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -40,5 +40,15 @@ export function firebaseAuth() {
 }
 
 export function googleProvider() {
-  return new GoogleAuthProvider();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: "select_account" });
+  return provider;
+}
+
+export async function beginGoogleRedirectSignIn() {
+  await signInWithRedirect(firebaseAuth(), googleProvider());
+}
+
+export async function consumeGoogleRedirectResult() {
+  return getRedirectResult(firebaseAuth());
 }

@@ -3,6 +3,12 @@
 const CANONICAL_EMWAVER_APP_URL = "https://emwaver-web.azurewebsites.net";
 
 function emwaverAppUrl() {
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname.trim().toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1") {
+      return window.location.origin.replace(/\/+$/, "");
+    }
+  }
   const value = process.env.NEXT_PUBLIC_SITE_URL || process.env.NEXT_PUBLIC_EMWAVER_FRONTEND_URL_CLOUD || CANONICAL_EMWAVER_APP_URL;
   return value.trim().replace(/\/+$/, "");
 }
@@ -53,10 +59,14 @@ export function buildContinualSignInUrl(nextPath?: string) {
   return url.toString();
 }
 
-export function redirectToContinualSignIn(nextPath?: string) {
-  window.location.assign(buildContinualSignInUrl(nextPath));
+export function buildContinualSignInCompleteUrl(nextPath?: string) {
+  const url = new URL("/signin/complete", emwaverAppUrl());
+  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+    url.searchParams.set("redirect", nextPath);
+  }
+  return url.toString();
 }
 
-export function emwaverNativeHandoffUrl() {
-  return new URL("/emwaver/handoff", emwaverAppUrl()).toString();
+export function redirectToContinualSignIn(nextPath?: string) {
+  window.location.assign(buildContinualSignInUrl(nextPath));
 }

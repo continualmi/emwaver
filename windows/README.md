@@ -100,7 +100,7 @@ Windows is intended to track the current macOS app in the device activation / pr
 What Windows already has:
 - USB run-mode transport,
 - STM32 DFU firmware flashing,
-- cloud sign-in, host session, remote control, and Pro entitlement plumbing.
+- web-managed API-key auth, host session, remote control, and Pro entitlement plumbing.
 
 Windows now includes:
 - board-aware device state (`board_type`, hardware UID, last detected board info),
@@ -110,6 +110,7 @@ Windows now includes:
 - bundled ESP32-S3 flashing helper + bundled ESP images when present in the workspace/build output,
 - ESP bootloader detection and BOOT / RESET guidance,
 - activity-log surfaces around setup and update.
+- web-managed API-key auth for cloud/account features, with the account dialog validating keys against `/v1/auth/key` and opening the EMWaver web account page for management.
 
 ---
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { EmwAuthGoogleButton } from "@/components/EmwAuthGoogleButton";
 import { backendFetch } from "@/lib/backend";
 import { fetchSessionState, redirectToContinualSignIn, signOutSession } from "@/lib/clientSession";
 
@@ -225,14 +226,13 @@ export function AccountPanel() {
         </div>
 
         {!userEmail ? (
-          <button
-            type="button"
+          <EmwAuthGoogleButton
+            busy={busy}
+            label="Continue with Google"
+            busyLabel="Opening Google..."
+            className="min-w-[16rem]"
             onClick={() => void doSignIn()}
-            disabled={busy}
-            className="inline-flex items-center justify-center rounded-xl bg-[color:var(--ink)] px-4 py-2 text-sm font-semibold text-[color:var(--paper)] hover:opacity-95 disabled:opacity-50"
-          >
-            {busy ? "Signing in..." : "Sign in with Continual"}
-          </button>
+          />
         ) : (
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>

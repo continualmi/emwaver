@@ -96,7 +96,7 @@ Important shared components include:
   - SSE streaming chat,
   - host list APIs.
 - `remoteSessions.ts` / `remoteAttach.ts` — WS message types + connection helpers for host/web control sessions.
-- `clientSession.ts` — browser session bootstrap, sign-in redirect helpers, and sign-out helpers.
+- `clientSession.ts` — browser session bootstrap, sign-in route helpers, and sign-out helpers.
 - `store.ts` — subscription/checkout helpers.
 
 ---
@@ -108,7 +108,6 @@ The app serves the same-origin backend routes under `/v1/*` and related service 
 Current server routes in this folder include:
 - `POST /api/auth/session`
 - `POST /api/auth/signout`
-- `POST /api/auth/handoff/code/start`
 - `GET /health`
 - `GET /health/config`
 - `GET /openapi.json`
@@ -144,7 +143,6 @@ Current server routes in this folder include:
 - `POST /v1/pro/checkout_session`
 - `POST /v1/pro/portal`
 - `POST /v1/pro/stripe/webhook`
-- `POST /v1/auth/handoff/consume`
 - `POST /v1/admin/grant_pro`
 - `GET /v1/society/posts`
 - `GET /v1/society/posts/:postId`
@@ -156,9 +154,8 @@ Current server routes in this folder include:
 Current implementation notes:
 - file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
 - account/subscription truth resolves through Postgres-backed `core` state on the shared Continual Postgres runtime,
-- interactive sign-in is owned by EMWaver: `/signin` completes Firebase verification, then `/api/auth/session` issues an EMWaver-signed product session,
+- interactive sign-in is owned by EMWaver: `/signin` renders the branded auth shell and `/signin/complete` finishes same-tab Google redirect sign-in before `/api/auth/session` issues an EMWaver-signed product session,
 - browser flows continue to use the EMWaver session cookie, while native apps can now use a web-managed EMWaver API key as their bearer credential,
-- authenticated web sessions can still mint native one-time codes through `/api/auth/handoff/code/start`, and native apps can still consume those codes through `/v1/auth/handoff/consume` while older clients are migrated,
 - agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
 - device provisioning is keyed by `board_type + hardware_uid`, and live provisioning state now resolves through Postgres-backed `emwaver.provisioned_devices`,
 - store orders now resolve through Postgres-backed `core.store_orders`,
@@ -204,6 +201,7 @@ Direction reflected in repo docs:
 - `/build` is the primary board catalog + self-build page,
 - device detail pages on `/build/[slug]` should expose build-resource actions (for example BOM, CPL, Gerbers, schematics, PCB docs) as GitHub-backed links, using direct file downloads when an exact repo file path is known and otherwise linking out to the relevant hardware repo/folder,
 - `/cloud` is the signed-in dashboard for files, hosts, and activated-device visibility,
+- `/signin` is the only intended browser sign-in entrypoint and uses same-tab Google redirect instead of popup windows,
 - account/session/Pro management now lives in the header account-pill modal, and `/account` is only a legacy redirect to `/cloud`,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,

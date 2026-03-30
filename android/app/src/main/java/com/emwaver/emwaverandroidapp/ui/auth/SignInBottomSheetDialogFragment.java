@@ -3,6 +3,8 @@ package com.emwaver.emwaverandroidapp.ui.auth;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
+import android.content.Intent;
+import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -13,6 +15,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.R;
+import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
 import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
@@ -20,12 +23,12 @@ import com.google.android.material.button.MaterialButton;
 public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
     public static final String FRAGMENT_RESULT_KEY = "emwaver.sign_in";
-    public static final String ARG_HANDOFF_CODE = "handoff_code";
 
     private TextView errorText;
-    private TextView notConfiguredText;
+    private TextView helperText;
     private MaterialButton continueButton;
-    private EditText handoffCodeInput;
+    private MaterialButton manageButton;
+    private EditText apiKeyInput;
 
     private boolean isBusy = false;
     @Nullable private String lastError;
@@ -49,11 +52,12 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
         MaterialButton notNow = view.findViewById(R.id.sign_in_not_now);
         continueButton = view.findViewById(R.id.sign_in_google);
+        manageButton = view.findViewById(R.id.sign_in_manage_web);
         errorText = view.findViewById(R.id.sign_in_error);
-        notConfiguredText = view.findViewById(R.id.sign_in_not_configured);
-        handoffCodeInput = view.findViewById(R.id.sign_in_code_input);
-        if (handoffCodeInput != null) {
-            handoffCodeInput.addTextChangedListener(new TextWatcher() {
+        helperText = view.findViewById(R.id.sign_in_not_configured);
+        apiKeyInput = view.findViewById(R.id.sign_in_code_input);
+        if (apiKeyInput != null) {
+            apiKeyInput.addTextChangedListener(new TextWatcher() {
                 @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
                 @Override public void onTextChanged(CharSequence s, int start, int before, int count) { applyStateToUi(); }
                 @Override public void afterTextChanged(Editable s) {}
@@ -61,6 +65,9 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         }
 
         notNow.setOnClickListener(v -> dismiss());
+        if (manageButton != null) {
+            manageButton.setOnClickListener(v -> openAccountPage());
+        }
 
         CloudAuthManager auth = CloudAuthManager.getInstance();
         auth.ensureInitialized(requireContext());
@@ -70,31 +77,20 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
             lastError = null;
             applyStateToUi();
 
-            String enteredCode = handoffCodeInput != null ? handoffCodeInput.getText().toString().trim() : "";
-            if (!enteredCode.isEmpty()) {
-                consumeHandoffCode(enteredCode);
-                return;
+            String enteredApiKey = apiKeyInput != null ? apiKeyInput.getText().toString().trim() : "";
+            if (!enteredApiKey.isEmpty()) {
+                saveApiKey(enteredApiKey);
             }
-
-            auth.beginWebSignIn(requireContext());
         });
-
-        String handoffCode = getArguments() != null ? getArguments().getString(ARG_HANDOFF_CODE, "") : "";
-        if (handoffCode != null && !handoffCode.trim().isEmpty()) {
-            if (handoffCodeInput != null) {
-                handoffCodeInput.setText(handoffCode.trim());
-            }
-            consumeHandoffCode(handoffCode);
-        }
 
         applyStateToUi();
     }
 
-    private void consumeHandoffCode(@NonNull String code) {
+    private void saveApiKey(@NonNull String apiKey) {
         isBusy = true;
         applyStateToUi();
 
-        CloudAuthManager.getInstance().consumeWebHandoffCodeAsync(requireContext(), code, (success, errorMessage) -> {
+        CloudAuthManager.getInstance().saveApiKeyAsync(requireContext(), apiKey, (success, errorMessage) -> {
             isBusy = false;
             if (success) {
                 Bundle b = new Bundle();
@@ -103,24 +99,34 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
                 dismiss();
                 return;
             }
-            setError(errorMessage != null && !errorMessage.isEmpty() ? errorMessage : "Sign in failed");
+            setError(errorMessage != null && !errorMessage.isEmpty() ? errorMessage : "Key validation failed");
         });
     }
 
+    private void openAccountPage() {
+        String baseUrl = CloudConfig.getFrontendBaseUrl(requireContext()).trim();
+        Uri uri = Uri.parse(baseUrl.endsWith("/") ? baseUrl + "cloud" : baseUrl + "/cloud");
+        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
+        startActivity(intent);
+    }
+
     private void applyStateToUi() {
-        if (notConfiguredText != null) {
-            notConfiguredText.setVisibility(View.VISIBLE);
-            notConfiguredText.setText("Sign-in opens the EMWaver website in your browser. Copy the one-time code shown there, then paste it here.");
+        if (helperText != null) {
+            helperText.setVisibility(View.VISIBLE);
+            helperText.setText("Create your EMWaver API key on the web account page, then paste it here. The key works across EMWaver apps and keeps your activated devices tied to your account.");
         }
         if (continueButton != null) {
-            continueButton.setEnabled(!isBusy);
-            boolean hasCode = handoffCodeInput != null
-                    && handoffCodeInput.getText() != null
-                    && handoffCodeInput.getText().toString().trim().length() > 0;
-            continueButton.setText(isBusy ? "Completing sign in..." : (hasCode ? "Continue with Code" : "Open Browser"));
+            boolean hasKey = apiKeyInput != null
+                    && apiKeyInput.getText() != null
+                    && apiKeyInput.getText().toString().trim().length() > 0;
+            continueButton.setEnabled(!isBusy && hasKey);
+            continueButton.setText(isBusy ? "Saving key..." : "Save key");
         }
-        if (handoffCodeInput != null) {
-            handoffCodeInput.setEnabled(!isBusy);
+        if (manageButton != null) {
+            manageButton.setEnabled(!isBusy);
+        }
+        if (apiKeyInput != null) {
+            apiKeyInput.setEnabled(!isBusy);
         }
         if (errorText != null) {
             if (lastError != null && !lastError.isEmpty()) {

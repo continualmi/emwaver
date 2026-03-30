@@ -70,8 +70,6 @@ public class MainActivity extends AppCompatActivity {
 
         binding = ActivityMainBinding.inflate(getLayoutInflater());
         setContentView(binding.getRoot());
-
-        handleSignInHandoffIntent(getIntent());
         
         NavHostFragment navHostFragment = (NavHostFragment) getSupportFragmentManager()
                 .findFragmentById(R.id.nav_host_fragment_activity_main);
@@ -469,8 +467,6 @@ public class MainActivity extends AppCompatActivity {
         super.onNewIntent(intent);
         setIntent(intent);
 
-        handleSignInHandoffIntent(intent);
-
         // If Android launched us due to a USB attach event, kick the USB scan.
         if (intent != null && UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(intent.getAction())) {
             new Handler(Looper.getMainLooper()).postDelayed(() -> {
@@ -484,28 +480,4 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private void handleSignInHandoffIntent(Intent intent) {
-        if (intent == null) return;
-        if (!Intent.ACTION_VIEW.equals(intent.getAction())) return;
-
-        android.net.Uri data = intent.getData();
-        if (data == null) return;
-        if (!"emwaver".equalsIgnoreCase(data.getScheme())) return;
-        if (!"oauth".equalsIgnoreCase(data.getHost())) return;
-        if (!"/callback".equals(data.getPath())) return;
-
-        String code = data.getQueryParameter("code");
-        if (code == null || code.trim().isEmpty()) {
-            Toast.makeText(this, "Missing handoff code from sign-in redirect.", Toast.LENGTH_LONG).show();
-            return;
-        }
-
-        Bundle args = new Bundle();
-        args.putString(SignInBottomSheetDialogFragment.ARG_HANDOFF_CODE, code);
-
-        SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
-        dialog.setArguments(args);
-        dialog.show(getSupportFragmentManager(), "SignIn");
-    }
-    
 }

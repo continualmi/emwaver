@@ -1,8 +1,9 @@
+using EMWaver;
+using EMWaver.Services.Cloud;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Threading;
-using EMWaver.Services.Cloud;
 
 namespace EMWaver.Dialogs;
 
@@ -24,22 +25,22 @@ public sealed partial class AccountDialog : ContentDialog
     {
         var signedIn = AppServices.CloudAuth.IsSignedIn;
         AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
-        AuthDetailText.Text = message ?? string.Empty;
+        AuthDetailText.Text = message ?? (signedIn
+            ? "Your saved API key is active. Paste a replacement any time, or manage the key on the web."
+            : "Create or replace your EMWaver API key on the web, then paste it here.");
 
-        SignInButton.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
-        HandoffPanel.Visibility = signedIn ? Visibility.Collapsed : Visibility.Visible;
-
+        SaveButton.Content = signedIn ? "Replace Key" : "Save Key";
         SignOutButton.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
         SignOutButton.IsEnabled = signedIn;
     }
 
-    private async void OnSignInClick(object sender, RoutedEventArgs e)
+    private async void OnManageOnWebClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            var url = AppServices.CloudAuth.BuildSigninUrl();
-            await Windows.System.Launcher.LaunchUriAsync(url);
-            RefreshUi("Complete sign-in in browser, then paste the one-time handoff code and press Continue.");
+            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
+            await AppServices.CloudAuth.OpenAccountManagementAsync(cts.Token);
+            RefreshUi("The EMWaver account page opened in your browser.");
         }
         catch (Exception ex)
         {
@@ -47,15 +48,16 @@ public sealed partial class AccountDialog : ContentDialog
         }
     }
 
-    private async void OnConsumeHandoffClick(object sender, RoutedEventArgs e)
+    private async void OnSaveKeyClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            var code = (HandoffCodeBox.Text ?? string.Empty).Trim();
+            var apiKey = (ApiKeyBox.Password ?? string.Empty).Trim();
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            await AppServices.CloudAuth.SignInWithHandoffCodeAsync(code, cts.Token);
-            HandoffCodeBox.Text = string.Empty;
-            RefreshUi("Signed in.");
+            await AppServices.CloudAuth.SaveApiKeyAsync(apiKey, cts.Token);
+            ApiKeyBox.Password = string.Empty;
+            AppServices.AccountDevices.Refresh();
+            RefreshUi("Saved the EMWaver API key.");
         }
         catch (Exception ex)
         {
@@ -66,6 +68,8 @@ public sealed partial class AccountDialog : ContentDialog
     private void OnSignOutClick(object sender, RoutedEventArgs e)
     {
         AppServices.CloudAuth.SignOut();
+        AppServices.AccountDevices.Refresh();
+        ApiKeyBox.Password = string.Empty;
         RefreshUi("Signed out.");
     }
 }

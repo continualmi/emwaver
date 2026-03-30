@@ -12,14 +12,10 @@ internal static class AppServices
     internal static readonly FirmwareUpdateManager FirmwareUpdater = new();
     internal static readonly AppSettings Settings = new();
 
-    // Cloud sync (Google via Firebase Auth + Azure Blob storage via backend SAS URLs)
+    // Cloud sync and account auth (web-managed EMWaver API keys + Azure Blob storage via backend SAS URLs)
     internal static readonly HttpClient Http = new();
     internal static CloudConfig CloudConfig = CloudConfig.FromEnvironment();
-    internal static CloudAuthManager CloudAuth = new(
-        CloudConfig,
-        google: new GoogleOAuthPkce(Http),
-        firebase: new FirebaseAuthService(Http)
-    );
+    internal static CloudAuthManager CloudAuth = new(CloudConfig);
     internal static CloudFilesClient CloudFiles = new(Http, CloudConfig, CloudAuth);
     internal static CloudHostsClient CloudHosts = new(Http, CloudConfig, CloudAuth);
 
@@ -44,11 +40,7 @@ internal static class AppServices
     internal static void ReloadCloud()
     {
         CloudConfig = CloudConfig.FromEnvironment();
-        CloudAuth = new CloudAuthManager(
-            CloudConfig,
-            google: new GoogleOAuthPkce(Http),
-            firebase: new FirebaseAuthService(Http)
-        );
+        CloudAuth = new CloudAuthManager(CloudConfig);
         CloudFiles = new CloudFilesClient(Http, CloudConfig, CloudAuth);
         CloudHosts = new CloudHostsClient(Http, CloudConfig, CloudAuth);
         HostSession = new HostSessionManager(

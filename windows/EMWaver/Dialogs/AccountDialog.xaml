@@ -3,26 +3,36 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="Account"
-    PrimaryButtonText="Close"
-    DefaultButton="Primary"
-    MinWidth="520">
+    CloseButtonText="Close"
+    DefaultButton="Close"
+    MinWidth="560">
 
-    <StackPanel Spacing="10">
+    <StackPanel Spacing="14">
+        <StackPanel Spacing="6">
+            <TextBlock Text="EMWaver API key" FontSize="22" FontWeight="SemiBold" />
+            <TextBlock
+                x:Name="AuthDetailText"
+                Text="Create or replace your EMWaver API key on the web, then paste it here."
+                Opacity="0.75"
+                TextWrapping="Wrap" />
+        </StackPanel>
+
+        <StackPanel Spacing="8">
+            <TextBlock Text="API key" FontWeight="SemiBold" />
+            <PasswordBox
+                x:Name="ApiKeyBox"
+                PlaceholderText="emw_sk_..."
+                PasswordRevealMode="Peek" />
+        </StackPanel>
+
         <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
             <TextBlock Text="Status:" />
             <TextBlock x:Name="AuthStatusText" Text="Signed out" />
         </StackPanel>
 
-        <TextBlock x:Name="AuthDetailText" Text="" Opacity="0.75" TextWrapping="Wrap" />
-
-        <StackPanel x:Name="HandoffPanel" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-            <TextBlock Text="Handoff code:" />
-            <TextBox x:Name="HandoffCodeBox" Width="240" PlaceholderText="EMW-XXXXXX" Foreground="{ThemeResource TextFillColorPrimaryBrush}" />
-            <Button x:Name="ConsumeHandoffButton" Content="Continue" Click="OnConsumeHandoffClick" />
-        </StackPanel>
-
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <Button x:Name="SignInButton" Content="Open web sign-in" Click="OnSignInClick" />
+            <Button x:Name="ManageOnWebButton" Content="Manage on Web" Click="OnManageOnWebClick" />
+            <Button x:Name="SaveButton" Content="Save Key" Click="OnSaveKeyClick" />
             <Button x:Name="SignOutButton" Content="Sign out" Click="OnSignOutClick" Visibility="Collapsed" />
         </StackPanel>
     </StackPanel>

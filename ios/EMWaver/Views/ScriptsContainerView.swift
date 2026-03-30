@@ -157,7 +157,7 @@ struct ScriptsContainerView: View {
                                     Task { await auth.signOut() }
                                 }
                             } else {
-                                Button("Sign In") {
+                                Button("Activation Key") {
                                     auth.isSignInSheetPresented = true
                                 }
                                 Button("Cloud Settings") {
@@ -165,7 +165,7 @@ struct ScriptsContainerView: View {
                                 }
                             }
                         } label: {
-                            Image(systemName: auth.isSignedIn ? "person.crop.circle" : "person.crop.circle.badge.plus")
+                            Image(systemName: auth.isSignedIn ? "person.crop.circle" : "key.fill")
                         }
 
                     }
@@ -173,13 +173,6 @@ struct ScriptsContainerView: View {
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
-                .environmentObject(auth)
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $auth.isWebHandoffSheetPresented) {
-            WebSignInHandoffSheet()
-                .environmentObject(auth)
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
         }

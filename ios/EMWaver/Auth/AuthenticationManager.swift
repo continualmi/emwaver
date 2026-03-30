@@ -1,20 +1,14 @@
 import Combine
 import Foundation
 
-#if canImport(UIKit)
-import UIKit
-#endif
-
 @MainActor
 final class AuthenticationManager: ObservableObject {
     @Published private(set) var session: AuthSession?
     @Published private(set) var isSigningIn = false
     @Published var lastError: String?
     @Published var isSignInSheetPresented = false
-    @Published var isWebHandoffSheetPresented = false
 
     private let provider: GoogleSignInProviding
-    private let firebase = FirebaseAuthService()
 
     private let refreshTokenAccount = "firebase_refresh_token"
     private let profileAccount = "firebase_profile"
@@ -77,89 +71,6 @@ final class AuthenticationManager: ObservableObject {
         KeychainStore.delete(account: refreshTokenAccount)
         KeychainStore.delete(account: profileAccount)
         session = nil
-    }
-
-    func beginWebSignInHandoff() {
-        lastError = nil
-        isSignInSheetPresented = false
-
-        guard var base = URL(string: "https://continualmi.com") else {
-            lastError = "Missing Continual platform URL"
-            return
-        }
-        base.appendPathComponent("emwaver")
-        base.appendPathComponent("handoff")
-        #if canImport(UIKit)
-        UIApplication.shared.open(base)
-        #endif
-
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            self.isWebHandoffSheetPresented = true
-        }
-    }
-
-    func consumeWebHandoffCode(code: String) async {
-        guard !isSigningIn else { return }
-        lastError = nil
-        isSigningIn = true
-        defer { isSigningIn = false }
-
-        let trimmed = code.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.isEmpty {
-            lastError = "Missing code"
-            return
-        }
-
-        guard let base = CloudConfig.backendBaseURL() else {
-            lastError = "Missing backend URL"
-            return
-        }
-
-        var consumeURL = base
-
-        do {
-            consumeURL.appendPathComponent("v1")
-            consumeURL.appendPathComponent("auth")
-            consumeURL.appendPathComponent("handoff")
-            consumeURL.appendPathComponent("consume")
-
-            var req = URLRequest(url: consumeURL)
-            req.httpMethod = "POST"
-            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            req.httpBody = try JSONSerialization.data(withJSONObject: ["code": trimmed])
-
-            let (data, res) = try await URLSession.shared.data(for: req)
-            let http = (res as? HTTPURLResponse)?.statusCode ?? -1
-            if http < 200 || http >= 300 {
-                let msg = String(data: data, encoding: .utf8) ?? ""
-                throw AuthError.failed(msg.isEmpty ? "HTTP \(http)" : msg)
-            }
-
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let accessToken = (json?["access_token"] as? String) ?? ""
-            if accessToken.isEmpty {
-                throw AuthError.failed("Missing access_token")
-            }
-            let user = json?["user"] as? [String: Any]
-
-            let newSession = AuthSession(
-                uid: (user?["uid"] as? String) ?? "",
-                email: user?["email"] as? String,
-                displayName: user?["name"] as? String,
-                idToken: accessToken,
-                refreshToken: accessToken
-            )
-
-            try KeychainStore.setString(newSession.refreshToken, account: refreshTokenAccount)
-            let profile = StoredProfile(uid: newSession.uid, email: newSession.email, displayName: newSession.displayName)
-            let profileData = try JSONEncoder().encode(profile)
-            let profileStr = String(data: profileData, encoding: .utf8) ?? ""
-            try KeychainStore.setString(profileStr, account: profileAccount)
-
-            session = newSession
-        } catch {
-            lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
     }
 
     // MARK: - Restore
