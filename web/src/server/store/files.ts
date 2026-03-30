@@ -1,5 +1,6 @@
 import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { WEB_ROOT } from "@/lib/repoPaths";
 
 type StoredFileMeta = {
   name: string;
@@ -21,7 +22,7 @@ function sanitizeName(raw: string): string | null {
 }
 
 function dataRoot() {
-  return path.resolve(process.cwd(), ".data", "user-files");
+  return path.resolve(WEB_ROOT, ".data", "user-files");
 }
 
 function userRoot(uid: string) {

@@ -68,7 +68,8 @@ expandEnvReferences();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  outputFileTracingRoot: path.resolve(__dirname, ".."),
+  transpilePackages: ["continual-core"],
+  outputFileTracingRoot: path.resolve(__dirname, "../.."),
   env: {
     NEXT_PUBLIC_EMWAVER_BACKEND_URL:
       process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || process.env.EMWAVER_BACKEND_URL,
