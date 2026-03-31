@@ -3,137 +3,168 @@ import Link from "next/link";
 export default function DocsIndex() {
   return (
     <>
-      <h1>EMWaver Documentation</h1>
-      <p>
-        EMWaver is a USB device that turns your phone or computer into a full electronics lab.
-        Plug it in, open the app, and start interacting with hardware — capture and replay IR
-        signals, talk to SPI/I2C/UART peripherals, control GPIO, read sensors, and more. No
-        toolchains, no firmware builds, no IDE required.
-      </p>
+      <section className="rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--glass)] px-6 py-7 shadow-[0_24px_70px_var(--shadow)] md:px-8 md:py-9">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
+          Documentation
+        </div>
+        <h1 className="mt-3 max-w-3xl text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
+          Start with the product, not the toolchain.
+        </h1>
+        <p className="mt-4 max-w-3xl text-base leading-8 text-[color:var(--ink-dim)]">
+          EMWaver turns your phone or computer into the working surface for hardware control.
+          Plug in a supported board, open the app, and start interacting with peripherals,
+          signals, and scripts without firmware builds or IDE setup.
+        </p>
+
+        <div className="mt-8 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
+              Step 1
+            </div>
+            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Get a supported board</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+              Start with an ESP32-S3 dev board or open the EMWaver hardware lineup and build files.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
+              Step 2
+            </div>
+            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Install the app</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+              Use the store build for your platform, sign in, and let EMWaver manage activation and updates.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
+              Step 3
+            </div>
+            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Run or generate a script</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+              Use built-in examples, write your own <code>.emw</code> file, or let the Agent assemble the flow.
+            </p>
+          </div>
+        </div>
+      </section>
 
       <h2>What you can do</h2>
-      <ul>
-        <li>
-          <strong>Infrared</strong> — EMWaver devices have built-in IR receive/transmit
-          support. Capture signals from any remote, analyze the waveform, and replay it.
-          Works out of the box on supported IR-capable boards, including the EMWaver Shield.
-        </li>
-        <li>
-          <strong>Sub-GHz radio</strong> — some EMWaver boards include a built-in CC1101,
-          while others let you plug in a compatible radio module. Control it from a script,
-          read registers, configure RF parameters, and transmit or receive packets.
-        </li>
-        <li>
-          <strong>RFID</strong> — plug in an MFRC522 module and scan cards, read UIDs,
-          read/write blocks.
-        </li>
-        <li>
-          <strong>Sensors and peripherals</strong> — use SPI, I2C, UART, ADC, and PWM to talk
-          to anything you connect. Temperature sensors, accelerometers, displays, motor
-          controllers — if it has a bus interface, you can drive it from a script.
-        </li>
-        <li>
-          <strong>GPIO</strong> — direct digital I/O for LEDs, relays, buttons, or any simple
-          on/off control.
-        </li>
-        <li>
-          <strong>Signal capture</strong> — high-speed bit sampling with a built-in waveform
-          plot that supports pan, zoom, and retransmit.
-        </li>
-      </ul>
+      <div className="mt-4 grid gap-3 md:grid-cols-2">
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+          <h3 className="mt-0">Infrared and signal work</h3>
+          <p>
+            Capture and replay remote signals, inspect waveforms, zoom through samples, and retransmit
+            directly from supported IR-capable boards.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+          <h3 className="mt-0">Buses and peripherals</h3>
+          <p>
+            Drive SPI, I2C, UART, ADC, PWM, and GPIO from scripts to talk to sensors, displays,
+            motor drivers, RFID modules, and board-level interfaces.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+          <h3 className="mt-0">Sub-GHz and RFID</h3>
+          <p>
+            Work with CC1101-based radio setups and MFRC522-style RFID modules without leaving the
+            same scripting model or app surface.
+          </p>
+        </div>
+        <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+          <h3 className="mt-0">Agent-assisted flows</h3>
+          <p>
+            Ask the Agent to generate scripts, build control panels, run on real hardware, and iterate
+            on the result from the same workspace.
+          </p>
+        </div>
+      </div>
 
       <h2>How it works</h2>
       <p>
-        Everything happens through <strong>scripts</strong> — small <code>.emw</code> files
-        (JavaScript) that define both hardware logic and UI in one file. When you run a script,
-        the app renders native buttons, sliders, plots, and controls on your device. Edit the
-        script, run it again — instant results, no compile or flash step.
+        Everything runs through <strong>scripts</strong> using small <code>.emw</code> files that define
+        both hardware logic and UI in one place. When you run a script, the app renders controls, plots,
+        and inputs directly on your device. Edit the file and run again for immediate feedback.
       </p>
       <p>
-        The board handles I/O (reading pins, driving SPI, sampling signals). Your phone or
-        computer handles everything else — rendering the UI, storing data, running the script
-        engine, and connecting to the cloud.
+        The board handles the physical I/O. Your phone or computer handles rendering, storage, script
+        execution, account access, and cloud connectivity.
       </p>
 
-      <h2>Quick start</h2>
+      <h2>Quick start details</h2>
       <ol>
         <li>
-          <strong>Get a board</strong> — the easiest path is any supported off-the-shelf
-          ESP32-S3 dev board, so you do not need to build anything first. If you want
-          purpose-built hardware, you can also build or buy from the{" "}
-          <Link href="/build">EMWaver lineup</Link>, including the{" "}
+          <strong>Choose hardware</strong> from the <Link href="/build">build catalog</Link> or start with a supported
+          ESP32-S3 dev board. Purpose-built hardware is also available in the{" "}
           <a href="https://github.com/continualmi/emwaver-shield" target="_blank" rel="noreferrer">
-            EMWaver Shield
+            EMWaver Shield repository
           </a>
-          , which is a shield-style carrier for an ESP32-S3 dev module.
+          .
         </li>
         <li>
-          <strong>Install the app</strong> — available on the{" "}
-          <Link href="/docs/install">App Store, Google Play, and Microsoft Store</Link>.
+          <strong>Install the app</strong> through the{" "}
+          <Link href="/docs/install">App Store, Google Play, or Microsoft Store</Link>.
         </li>
         <li>
-          <strong>Plug in and activate</strong> — connect via USB, sign in, and the app handles
-          firmware and device activation automatically.
+          <strong>Plug in and activate</strong>. EMWaver handles firmware and activation automatically once you sign in.
         </li>
         <li>
-          <strong>Run a script</strong> — open the Scripts tab and run one of the built-in
-          scripts (<code>sampler.emw</code>, <code>cc1101.emw</code>, <code>rfid.emw</code>,
-          etc.) or write your own.
+          <strong>Open a script</strong> such as <code>sampler.emw</code>, <code>cc1101.emw</code>, or <code>rfid.emw</code>,
+          then adapt it or generate a new one.
         </li>
       </ol>
 
-      <h2>AI agent</h2>
-      <p>
-        EMWaver has a built-in AI agent that can write scripts, generate UI, run them on
-        real hardware, interact with the controls it created, and iterate. Describe what you
-        want — &quot;build a dashboard for this I2C sensor&quot; — and the agent builds and
-        tests it autonomously.
-      </p>
-
       <h2>Apps</h2>
-      <p>
-        Native apps on every platform. Same scripts, same experience:
-      </p>
       <ul>
-        <li><strong>macOS</strong> and <strong>iOS</strong> — App Store</li>
-        <li><strong>Android</strong> — Google Play</li>
-        <li><strong>Windows</strong> — Microsoft Store</li>
+        <li><strong>iPhone, iPad, and macOS</strong> through the App Store</li>
+        <li><strong>Android</strong> through Google Play</li>
+        <li><strong>Windows</strong> through Microsoft Store</li>
       </ul>
 
       <h2>What to read next</h2>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="mt-4 grid gap-3">
         <Link
           href="/docs/scripts"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+          className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
-          <div className="text-xs font-semibold text-[color:var(--copper)]">Scripts</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Scripting guide</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            How scripts work, device APIs, UI widgets, built-in scripts.
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">Scripts</div>
+            <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Learn the scripting model</div>
+            <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
+              Device APIs, UI widgets, script structure, and the built-in examples.
+            </div>
+          </div>
+          <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
+            Open
           </div>
         </Link>
         <Link
           href="/docs/hardware"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+          className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
-          <div className="text-xs font-semibold text-[color:var(--aqua)]">Hardware</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-            Boards &amp; repos
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">Hardware</div>
+            <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Browse supported boards and repos</div>
+            <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
+              Board families, pinout details, open hardware files, and current build resources.
+            </div>
           </div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Supported boards, open-source hardware files, pinout.
+          <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
+            Open
           </div>
         </Link>
         <Link
           href="/docs/community"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+          className="group flex items-start justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-5 py-4 no-underline transition hover:bg-[color:var(--surface-2)]"
         >
-          <div className="text-xs font-semibold text-[color:var(--copper)]">Community</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-            Get help
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">Community</div>
+            <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Get support and discuss builds</div>
+            <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
+              Join Continual Society on Discord for troubleshooting, ideas, and EMWaver discussion.
+            </div>
           </div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Join the Continual Society Discord for support, bugs, and discussion.
+          <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
+            Open
           </div>
         </Link>
       </div>
