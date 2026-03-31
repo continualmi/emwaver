@@ -32,14 +32,14 @@ Key app entry:
 - `SignInSheet.swift`
 
 Responsibilities:
-- sign-in state,
-- session restore and EMWaver session token handling,
-- secure local persistence.
+- account-linked cloud state for host/sync access,
+- the current web-managed API-key guidance surface,
+- secure local persistence for the remaining auth/session data still present in the app.
 
 Current guidance:
 - the old web handoff-code sheet has been removed from iOS,
-- activation keys are managed on the web for now,
-- iOS should guide users to the web account page rather than pretending to complete the new key-based flow locally until that native path exists.
+- EMWaver API keys are managed on the web for now,
+- iOS currently opens the web account page instead of completing native API-key entry or validation in-app.
 
 ## 2.2 Device and transport managers
 
@@ -85,9 +85,9 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The iOS app now uses web-managed activation-key guidance rather than the old browser-code handoff flow:
+The iOS app now uses web-managed API-key guidance rather than the old browser-code handoff flow:
 - the sign-in sheet points users to the EMWaver web account page,
-- activation keys are expected to be created or replaced on the web,
+- EMWaver API keys are expected to be created or replaced on the web,
 - the native iOS API-key sign-in flow is still a follow-up, not this app’s current responsibility.
 
 Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
