@@ -83,7 +83,7 @@ Society no longer acts as a first-party community runtime. `continualmi.com` is 
 ## 4.2 Components
 
 Important shared components include:
-- `SiteHeader`, `SiteFooter` (global framing)
+- `SiteHeader` and `AccountPill` (global framing and account access)
 - `InformativeShell` (content shell)
 - `EmwUiRenderer`, `EmwUiPreview`, `RemoteEmwUi` (rendering EMW UI trees/snapshots for web experiences)
 
@@ -126,6 +126,9 @@ Current server routes in this folder include:
 - `GET /v1/devices/my`
 - `POST /v1/devices/label`
 - `GET /v1/auth/key`
+- `GET /api/auth/key`
+- `POST /api/auth/key`
+- `DELETE /api/auth/key`
 - `POST /provisioning/mint`
 - `GET /v1/agent/conversations`
 - `POST /v1/agent/conversations`
@@ -202,7 +205,7 @@ Direction reflected in repo docs:
 - device detail pages on `/build/[slug]` should expose build-resource actions (for example BOM, CPL, Gerbers, schematics, PCB docs) as GitHub-backed links, using direct file downloads when an exact repo file path is known and otherwise linking out to the relevant hardware repo/folder,
 - `/cloud` is the signed-in dashboard for files, hosts, and activated-device visibility,
 - `/signin` is the only intended browser sign-in entrypoint and uses same-tab Google redirect instead of popup windows,
-- account/session/Pro management now lives in the header account-pill modal, and `/account` is only a legacy redirect to `/cloud`,
+- account/session/Pro management now lives in the header account-pill modal, and `/account` is a dedicated account page built around the same account panel,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
 - device/account flows are web-managed,
 - pricing and subscription UX should center on service plans rather than per-device purchases,

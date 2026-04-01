@@ -99,8 +99,10 @@ export default function InstallDocPage() {
 
       <h2>4. Add your key</h2>
       <p>
-        Create your EMWaver API key on the web account page, then paste it into the app. You can
-        do this before connecting a device so activation is ready when your board is plugged in.
+        Open <strong>Account settings</strong> from the header on the web app, create your EMWaver API
+        key there, then paste it into the app. If you prefer a dedicated page, you can also use{" "}
+        <Link href="/account">the account page</Link>. You can do this before connecting a device so
+        activation is ready when your board is plugged in.
       </p>
 
       <h2>5. Activate</h2>
