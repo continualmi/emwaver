@@ -2,12 +2,6 @@ name: Deploy Web (Azure Container Apps)
 
 on:
   workflow_dispatch:
-  push:
-    branches: [ prod ]
-    paths:
-      - web/**
-      - .dockerignore
-      - .github/workflows/deploy-azure-web.yml
 
 permissions:
   contents: read
@@ -29,6 +23,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Require main branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "Production deploys must be run from main. Current ref: ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
       - name: Check out repository
         uses: actions/checkout@v4
 
