@@ -1,0 +1,4 @@
+interface:
+  display_name: "T7 Video Ingest"
+  short_description: "Move or copy recent T7 staging clips"
+  default_prompt: "List recently exported video clips from /Volumes/T7/iPhone, identify the newest likely recording, and move or copy the selected clip into the appropriate Samsung T7 project clips folder safely, defaulting to /Volumes/T7/EMWaver_Final_Video/clips unless the user asks for another destination."
