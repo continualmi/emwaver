@@ -107,6 +107,12 @@ We intentionally give up:
 - The EMWaver board may ship as a premium, purpose-built option when ready.
 - Future hardware evolution (e.g., EMArm direction) should not fragment the multi-board platform UX.
 
+### Strategic role inside Continual MI
+
+- EMWaver is an important product surface, but it is not the company's primary benchmark for continual intelligence.
+- MDL is currently the main mission vehicle for continual-learning evaluation and long-horizon product loops.
+- EMWaver work should stay focused, launch-closing, and product-driven so it does not consume the bandwidth needed for MDL and MGPT progress.
+
 ---
 
 ## 4) Documentation Ownership
@@ -136,6 +142,7 @@ Use the local README first when working in a folder:
 - `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
+- `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `web/README.md` — unified Next.js + Node web app and TypeScript backend
@@ -160,6 +167,7 @@ If a folder has a README, detailed documentation should live there.
 - `daemon/` — headless host runtime (beta scope).
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 - `videos/` — video planning metadata, clip backlog, creative direction, and promo writing.
+- `.agents/skills/` — EMWaver-specific Codex skills that now live with the product repo.
 
 ---
 

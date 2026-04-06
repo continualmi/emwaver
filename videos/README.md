@@ -2,6 +2,8 @@
 
 This folder stores video planning metadata.
 
+Public EMWaver video pages now live on the canonical EMWaver web frontend under `web/` and `emwaver.ai`.
+
 ## Plan and Principle
 
 EMWaver video content here is promotional and lightweight.

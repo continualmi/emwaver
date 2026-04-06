@@ -14,7 +14,7 @@ Overall completion: `39%` (`13/33` clips done)
 
 ## Current Direction
 
-Primary message: EMWaver is a script-first hardware platform. Scripts generate UI, that UI runs across clients, agents can create or extend those flows, remote web control keeps the same model, and the controls interact with real hardware across EMWaver Carrier, EMWaver Core, and EMWaver Link.
+Primary message: EMWaver is a script-first hardware platform. Scripts generate UI, that UI runs across clients, agents can create or extend those flows, remote web control keeps the same model, and the controls interact with real hardware across EMWaver Carrier, EMWaver Core, and EMWaver Link. The canonical public home for this media is the EMWaver web frontend on `emwaver.ai`.
 
 Planning decisions:
 

@@ -2,7 +2,7 @@
 
 Next.js + Node unified web app for EMWaver’s public web surface and web-based cloud flows.
 
-This folder is the canonical EMWaver web surface in the repo. It now owns the public website, web APIs, agent endpoints, subscription/account flows, and the WebSocket relay under one Next.js + Node deployment.
+This folder is the canonical EMWaver web surface in the repo. It now owns the public website, media pages, docs, web APIs, agent endpoints, subscription/account flows, and the WebSocket relay under one Next.js + Node deployment.
 
 ---
 
@@ -10,6 +10,7 @@ This folder is the canonical EMWaver web surface in the repo. It now owns the pu
 
 `/web` currently contains:
 - public landing/site pages,
+- public video/media pages,
 - install/build/account/subscription UX surfaces,
 - hardware catalog + builder web surfaces,
 - web integrations for backend APIs,
@@ -78,7 +79,7 @@ Homepage content currently carries product narrative blocks:
 - remote/cloud control narrative,
 - CTA routes (`/build`, `/install`, `/scripts`).
 
-Society no longer acts as a first-party community runtime. `continualmi.com` is now a static company/product-entry site, while community activity happens on Discord.
+Society no longer acts as an EMWaver entry surface. `continualmi.com` is now a static company/research/MDL site, while EMWaver public web/media/docs live here and community activity happens on Discord.
 
 ## 4.2 Components
 

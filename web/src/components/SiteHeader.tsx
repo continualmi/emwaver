@@ -11,6 +11,7 @@ const nav = [
   { href: "/build", label: "Build" },
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
+  { href: "/videos", label: "Videos" },
   { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },
   { href: "/cloud", label: "Dashboard" },
