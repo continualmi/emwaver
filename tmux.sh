@@ -4,6 +4,8 @@ set -euo pipefail
 
 SESSION="${1:-emwaver}"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WEB_DIR="$PROJECT_DIR/web"
+ANDROID_DIR="$PROJECT_DIR/android"
 
 window_exists() {
   local window_name="$1"
@@ -18,67 +20,40 @@ attach_or_switch() {
   fi
 }
 
+session_created=0
 if ! tmux has-session -t="$SESSION" 2>/dev/null; then
-  tmux new-session -ds "$SESSION" -c "$PROJECT_DIR"
+  tmux new-session -ds "$SESSION" -c "$WEB_DIR"
+  session_created=1
+fi
+
+if window_exists 'emwaver'; then
+  tmux select-window -t "$SESSION:emwaver"
+  attach_or_switch
+  exit 0
 fi
 
 FIRST_WINDOW_INDEX="$(tmux list-windows -t "$SESSION" -F '#{window_index}' | head -n1)"
 FIRST_WINDOW_TARGET="$SESSION:$FIRST_WINDOW_INDEX"
 
-# If layout already exists, skip re-creating panes/windows.
-if window_exists 'dev' && window_exists 'dev-ops'; then
-  attach_or_switch
-  exit 0
-fi
-
-# Window 1: Dev (backend + frontend) — 2 panes, all terminal-only
-if window_exists 'dev'; then
-  PANE_BACKEND=$(tmux display-message -p -t "$SESSION:dev" '#{pane_id}')
-else
-  # Force the first pane to the correct directory just in case
-  tmux send-keys -t "$FIRST_WINDOW_TARGET" 'cd ' "$PROJECT_DIR" C-m
+pane_web=""
+if (( session_created == 1 )); then
+  tmux send-keys -t "$FIRST_WINDOW_TARGET" 'cd ' "$WEB_DIR" C-m
   tmux clear-history -t "$FIRST_WINDOW_TARGET"
-
-  tmux rename-window -t "$FIRST_WINDOW_TARGET" 'dev'
-
-  # Layout:
-  #   [ backend ] | [ frontend ]
-  PANE_BACKEND=$(tmux display-message -p -t "$FIRST_WINDOW_TARGET" '#{pane_id}')
-  PANE_FRONTEND=$(tmux split-window -h -t "$PANE_BACKEND" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-
-  # backend
-  tmux send-keys -t "$PANE_BACKEND" 'cd backend' C-m
-  tmux send-keys -t "$PANE_BACKEND" 'python app.py' C-m
-
-  # frontend
-  tmux send-keys -t "$PANE_FRONTEND" 'cd frontend' C-m
-  tmux send-keys -t "$PANE_FRONTEND" 'npm run dev' C-m
-fi
-
-# Window 2: Dev Ops (2x2 Grid) — typed only
-# Android | macOS app build
-# emwaver.sh | emwaver daemon TUI
-if window_exists 'dev-ops'; then
-  PANE_TOP_LEFT=$(tmux display-message -p -t "$SESSION:dev-ops" '#{pane_id}')
+  tmux rename-window -t "$FIRST_WINDOW_TARGET" 'emwaver'
+  pane_web="$(tmux display-message -p -t "$FIRST_WINDOW_TARGET" '#{pane_id}')"
 else
-  PANE_TOP_LEFT=$(tmux new-window -t "$SESSION" -n 'dev-ops' -c "$PROJECT_DIR" -P -F '#{pane_id}')
-  PANE_TOP_RIGHT=$(tmux split-window -h -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-  PANE_BOTTOM_LEFT=$(tmux split-window -v -l 50% -t "$PANE_TOP_LEFT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-  PANE_BOTTOM_RIGHT=$(tmux split-window -v -l 50% -t "$PANE_TOP_RIGHT" -c "$PROJECT_DIR" -P -F '#{pane_id}')
-
-  # Typed only (no enter)
-  tmux send-keys -t "$PANE_TOP_LEFT" 'cd android' C-m
-  tmux send-keys -t "$PANE_TOP_LEFT" './gradlew installDebug'
-
-  tmux send-keys -t "$PANE_TOP_RIGHT" 'cd macos/EMWaver' C-m
-  tmux send-keys -t "$PANE_TOP_RIGHT" 'xcodebuild -project EMWaver.xcodeproj -scheme EMWaver CODE_SIGNING_ALLOWED=NO build'
-  tmux send-keys -t "$PANE_BOTTOM_LEFT" './emwaver.sh '
-  tmux send-keys -t "$PANE_BOTTOM_RIGHT" './emwaver.sh tui'
+  pane_web="$(tmux new-window -t "$SESSION" -n 'emwaver' -c "$WEB_DIR" -P -F '#{pane_id}')"
 fi
 
-# Start on dev window
+pane_android=$(tmux split-window -h -t "$pane_web" -c "$ANDROID_DIR" -P -F '#{pane_id}')
 
-tmux select-window -t "$SESSION:dev"
-tmux select-pane -t "$PANE_BACKEND"
+tmux send-keys -t "$pane_web" "cd $WEB_DIR" C-m
+tmux send-keys -t "$pane_web" 'npm run dev' C-m
+
+tmux send-keys -t "$pane_android" "cd $ANDROID_DIR" C-m
+tmux send-keys -t "$pane_android" './gradlew installDebug'
+
+tmux select-window -t "$SESSION:emwaver"
+tmux select-pane -t "$pane_web"
 
 attach_or_switch
