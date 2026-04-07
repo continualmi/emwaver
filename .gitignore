@@ -1,5 +1,16 @@
 # Repo-wide ignores (keep this file minimal; prefer per-project .gitignore)
 
+# Sibling EMWaver / *-waver repos (optional local clones; same names as umbrella .gitignore)
+/emwaver-air/
+/emwaver-carrier/
+/emwaver-core/
+/emwaver-link/
+/emwaver-shield/
+/gpio-waver/
+/infrared-waver/
+/ism-waver/
+/rfid-waver/
+
 # Log files
 *.log
 
