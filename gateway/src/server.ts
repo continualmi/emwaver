@@ -256,10 +256,33 @@ const indexHtml = `<!doctype html>
       .preview { display: grid; gap: 10px; }
       .node { border: 1px solid var(--line); border-radius: 8px; background: #11171b; padding: 10px; }
       .ui-column { display: flex; flex-direction: column; }
-      .ui-row { display: flex; align-items: center; }
+      .ui-row { display: flex; align-items: center; flex-wrap: wrap; }
+      .ui-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .ui-text { color: var(--text); }
       .ui-muted { color: var(--muted); }
       .ui-control { width: 100%; }
+      .ui-field { display: grid; gap: 6px; }
+      .ui-label { color: var(--muted); font-size: 12px; font-weight: 800; }
+      .ui-input {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #0f1418;
+        color: var(--text);
+        padding: 8px 10px;
+      }
+      .ui-editor { min-height: 160px; height: 160px; }
+      .ui-card, .ui-tile { border: 1px solid var(--line); border-radius: 8px; background: #11171b; padding: 12px; }
+      .ui-card { display: flex; flex-direction: column; gap: 10px; }
+      .ui-tile { display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; }
+      .ui-tile-title, .ui-card-title { color: var(--muted); font-size: 12px; font-weight: 800; }
+      .ui-tile-value { color: var(--text); font-size: 14px; }
+      .ui-scroll { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; background: #0f1418; overflow: auto; }
+      .ui-divider { height: 1px; width: 100%; background: var(--line); }
+      .ui-progress { display: grid; gap: 6px; }
+      .ui-progress-track { height: 8px; overflow: hidden; border-radius: 999px; background: var(--panel-2); }
+      .ui-progress-fill { height: 100%; background: var(--accent); }
+      .ui-log { border: 1px solid var(--line); border-radius: 8px; background: #0f1418; padding: 10px; color: var(--muted); }
       .plot-card { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 8px; background: #0f1418; padding: 10px; }
       .plot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 800; }
       .plot-surface { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0b1013; overflow: hidden; touch-action: none; user-select: none; }
@@ -411,6 +434,16 @@ const indexHtml = `<!doctype html>
       function spacingStyle(el, props) {
         if (typeof props.spacing === "number") el.style.gap = props.spacing + "px";
         if (typeof props.padding === "number") el.style.padding = props.padding + "px";
+      }
+
+      function sizeStyle(el, props) {
+        if (typeof props.height === "number") el.style.height = props.height + "px";
+        if (typeof props.maxHeight === "number") el.style.maxHeight = props.maxHeight + "px";
+        if (typeof props.minColumnWidth === "number" && el.classList.contains("ui-grid")) {
+          el.style.gridTemplateColumns = "repeat(auto-fit, minmax(" + props.minColumnWidth + "px, 1fr))";
+        } else if (typeof props.columns === "number" && props.columns > 0 && el.classList.contains("ui-grid")) {
+          el.style.gridTemplateColumns = "repeat(" + Math.floor(props.columns) + ", minmax(0, 1fr))";
+        }
       }
 
       function finiteNumber(value, fallback) {
@@ -581,6 +614,15 @@ const indexHtml = `<!doctype html>
           const el = document.createElement("div");
           el.className = node.type === "column" ? "ui-column" : "ui-row";
           spacingStyle(el, props);
+          sizeStyle(el, props);
+          for (const child of children) el.appendChild(renderNode(child));
+          return el;
+        }
+        if (node.type === "grid") {
+          const el = document.createElement("div");
+          el.className = "ui-grid";
+          spacingStyle(el, props);
+          sizeStyle(el, props);
           for (const child of children) el.appendChild(renderNode(child));
           return el;
         }
@@ -590,9 +632,34 @@ const indexHtml = `<!doctype html>
           el.textContent = String(props.text || "");
           return el;
         }
+        if (node.type === "divider") {
+          const el = document.createElement("div");
+          el.className = "ui-divider";
+          return el;
+        }
+        if (node.type === "spacer") {
+          const el = document.createElement("div");
+          el.style.height = (typeof props.height === "number" ? props.height : 12) + "px";
+          return el;
+        }
         if (node.type === "button") {
           const el = document.createElement("button");
           el.textContent = String(props.label || props.title || "Button");
+          el.onclick = () => sendUiEvent(String(props.id || node.id || ""), "tap", {});
+          return el;
+        }
+        if (node.type === "tile") {
+          const el = document.createElement("button");
+          el.className = "ui-tile";
+          spacingStyle(el, props);
+          const title = document.createElement("div");
+          title.className = "ui-tile-title";
+          title.textContent = String(props.title || props.label || "");
+          const value = document.createElement("div");
+          value.className = "ui-tile-value";
+          value.textContent = String(props.value ?? props.text ?? "");
+          if (title.textContent) el.appendChild(title);
+          el.appendChild(value);
           el.onclick = () => sendUiEvent(String(props.id || node.id || ""), "tap", {});
           return el;
         }
@@ -607,6 +674,51 @@ const indexHtml = `<!doctype html>
           el.onchange = () => sendUiEvent(String(props.id || node.id || ""), "change", { value: Number(el.value) });
           return el;
         }
+        if (node.type === "textField") {
+          const wrap = document.createElement("div");
+          wrap.className = "ui-field";
+          spacingStyle(wrap, props);
+          if (props.label) {
+            const label = document.createElement("div");
+            label.className = "ui-label";
+            label.textContent = String(props.label);
+            wrap.appendChild(label);
+          }
+          const el = document.createElement("input");
+          el.className = "ui-input";
+          el.type = "text";
+          el.value = String(props.value ?? props.text ?? "");
+          el.placeholder = String(props.placeholder || "");
+          el.onchange = () => sendUiEvent(String(props.id || node.id || ""), "change", { value: el.value });
+          el.onkeydown = (event) => {
+            if (event.key === "Enter") sendUiEvent(String(props.id || node.id || ""), "submit", { value: el.value });
+          };
+          wrap.appendChild(el);
+          return wrap;
+        }
+        if (node.type === "textEditor") {
+          const wrap = document.createElement("div");
+          wrap.className = "ui-field";
+          spacingStyle(wrap, props);
+          if (props.label) {
+            const label = document.createElement("div");
+            label.className = "ui-label";
+            label.textContent = String(props.label);
+            wrap.appendChild(label);
+          }
+          const el = document.createElement("textarea");
+          el.className = "ui-input ui-editor";
+          el.value = String(props.value ?? props.text ?? "");
+          el.placeholder = String(props.placeholder || "");
+          el.onchange = () => sendUiEvent(String(props.id || node.id || ""), "change", { value: el.value });
+          el.onkeydown = (event) => {
+            if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+              sendUiEvent(String(props.id || node.id || ""), "submit", { value: el.value });
+            }
+          };
+          wrap.appendChild(el);
+          return wrap;
+        }
         if (node.type === "picker") {
           const el = document.createElement("select");
           el.className = "ui-control";
@@ -619,6 +731,62 @@ const indexHtml = `<!doctype html>
           }
           el.value = String(props.selected ?? "");
           el.onchange = () => sendUiEvent(String(props.id || node.id || ""), "change", { value: el.value });
+          return el;
+        }
+        if (node.type === "scroll") {
+          const el = document.createElement("div");
+          el.className = "ui-scroll";
+          spacingStyle(el, props);
+          sizeStyle(el, props);
+          for (const child of children) el.appendChild(renderNode(child));
+          return el;
+        }
+        if (node.type === "card") {
+          const el = document.createElement("div");
+          el.className = "ui-card";
+          spacingStyle(el, props);
+          if (props.title || props.subtitle) {
+            const head = document.createElement("div");
+            if (props.title) {
+              const title = document.createElement("div");
+              title.className = "ui-card-title";
+              title.textContent = String(props.title);
+              head.appendChild(title);
+            }
+            if (props.subtitle) {
+              const subtitle = document.createElement("div");
+              subtitle.className = "ui-muted";
+              subtitle.textContent = String(props.subtitle);
+              head.appendChild(subtitle);
+            }
+            el.appendChild(head);
+          }
+          for (const child of children) el.appendChild(renderNode(child));
+          return el;
+        }
+        if (node.type === "progress") {
+          const el = document.createElement("div");
+          el.className = "ui-progress";
+          const max = finiteNumber(props.total ?? props.max, 100);
+          const value = finiteNumber(props.value, 0);
+          const pct = max > 0 ? Math.max(0, Math.min(1, value / max)) : 0;
+          const track = document.createElement("div");
+          track.className = "ui-progress-track";
+          const fill = document.createElement("div");
+          fill.className = "ui-progress-fill";
+          fill.style.width = Math.round(pct * 100) + "%";
+          track.appendChild(fill);
+          const label = document.createElement("div");
+          label.className = "ui-muted";
+          label.textContent = Math.round(pct * 100) + "%";
+          el.appendChild(track);
+          el.appendChild(label);
+          return el;
+        }
+        if (node.type === "logViewer") {
+          const el = document.createElement("pre");
+          el.className = "ui-log";
+          el.textContent = String(props.text ?? props.value ?? "");
           return el;
         }
         if (node.type === "plot") {

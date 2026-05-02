@@ -106,6 +106,10 @@ async function verifyIndexHtml() {
     "Native App",
     "Ask Agent",
     "plot.data",
+    "textField",
+    "textEditor",
+    "logViewer",
+    "ui-grid",
     "No cloud relay required",
   ]) {
     if (!body.includes(required)) {
@@ -116,6 +120,14 @@ async function verifyIndexHtml() {
     if (body.includes(forbidden)) {
       throw new Error(`gateway index contains forbidden hosted/cloud marker: ${forbidden}`);
     }
+  }
+
+  const scripts = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  if (scripts.length === 0) {
+    throw new Error("gateway index contains no browser script");
+  }
+  for (const script of scripts) {
+    new Function(script);
   }
 }
 

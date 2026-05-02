@@ -313,7 +313,7 @@ Acceptance criteria:
 
 ## `REBIRTH-021` Move Reusable Control UI To Gateway
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: web/gateway
 

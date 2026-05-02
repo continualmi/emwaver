@@ -24,7 +24,7 @@ The rebirth is complete only when:
 | Create rebirth plan | `REBIRTH.md` | done |
 | Create issue backlog | `REBIRTH_ISSUES.md` | done |
 | Local gateway folder | `gateway/README.md`, `gateway/package.json`, `gateway/src/server.ts` | done |
-| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, live UI, SVG plot rendering, Agent, protocol log, and local native-app/device status | prototype done |
+| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, bundled-script UI nodes, SVG plot rendering, Agent, protocol log, and local native-app/device status | local control parity done; browser polish still separate |
 | Bundled script loading | `/v1/examples` reads `assets/default-scripts/*.emw` | done |
 | Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot`, `plot.viewport`, and `plot.data` relay | prototype done |
 | Gateway account-free | no sign-in/token required by gateway; verified by `npm run verify` | done |
