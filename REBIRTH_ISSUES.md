@@ -584,6 +584,8 @@ Acceptance criteria:
 
 Move reusable board/module photos, renders, diagrams, and related media into canonical `hardware/<repo-name>/` locations so the same image is not duplicated across `web/`, docs, and imported hardware folders.
 
+Inventory: `hardware/ASSET_DEDUP_INVENTORY.md`.
+
 Acceptance criteria:
 
 - Inventory duplicated board/module images across `web/public`, docs, and `hardware/`.

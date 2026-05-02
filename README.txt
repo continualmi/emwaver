@@ -18,5 +18,6 @@ Web direction: `web/` should trend toward static public pages/docs/downloads/boa
 Web static migration inventory: `web/STATIC_MIGRATION_INVENTORY.md`
 Current headless CLI/daemon work: `daemon/`
 Hardware monorepo: the nine primary hardware repos now live under flat `hardware/<repo-name>/` paths; board/module media assets should be canonical there and reused by web/docs instead of duplicated.
+Hardware asset dedup inventory: `hardware/ASSET_DEDUP_INVENTORY.md`
 All repo-wide product constraints and documentation routing live in `AGENTS.md`.
 Ask Codex/Claude Code "how does emwaver work" to get started
