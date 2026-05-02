@@ -24,7 +24,7 @@ The rebirth is complete only when:
 | Create rebirth plan | `REBIRTH.md` | done |
 | Create issue backlog | `REBIRTH_ISSUES.md` | done |
 | Local gateway folder | `gateway/README.md`, `gateway/package.json`, `gateway/src/server.ts` | done |
-| Localhost browser UI | `gateway/src/server.ts` serves three-pane UI | prototype done |
+| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, live UI, Agent, protocol log, and local native-app/device status | prototype done |
 | Bundled script loading | `/v1/examples` reads `assets/default-scripts/*.emw` | done |
 | Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot` | prototype done |
 | Gateway account-free | no sign-in/token required by gateway; verified by `npm run verify` | done |
@@ -94,6 +94,7 @@ This verifies:
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,
 - gateway `/health`,
 - gateway `/v1/examples` loading canonical default scripts,
+- gateway local native-app/device status UI,
 - missing Agent config response,
 - configured mock Agent forwarding,
 - CLI Agent missing-key and configured mock behavior,

@@ -107,7 +107,7 @@ Acceptance criteria:
 
 ## `REBIRTH-007` Add Local Device Status Messages
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P1`
 - Target: gateway protocol
 

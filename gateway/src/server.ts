@@ -242,6 +242,12 @@ const indexHtml = `<!doctype html>
       .examples { display: grid; gap: 8px; }
       .example { width: 100%; text-align: left; }
       .example.active { border-color: var(--accent); }
+      .sidebar-stack { display: grid; gap: 14px; }
+      .side-section { display: grid; gap: 8px; }
+      .side-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 12px; font-weight: 800; text-transform: uppercase; }
+      .device-card { border: 1px solid var(--line); border-radius: 8px; background: #11171b; padding: 10px; }
+      .device-name { color: var(--text); font-size: 13px; font-weight: 800; }
+      .device-meta { color: var(--muted); font-size: 12px; padding-top: 2px; }
       .editor-panel { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; }
       .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); padding: 10px 12px; }
       .toolbar-left, .toolbar-right { display: flex; align-items: center; gap: 8px; min-width: 0; }
@@ -282,7 +288,20 @@ const indexHtml = `<!doctype html>
       <main class="main">
         <aside class="panel">
           <div class="panel-head"><span>Scripts</span><span class="sub">bundled</span></div>
-          <div class="panel-body"><div id="examples" class="examples"></div></div>
+          <div class="panel-body">
+            <div class="sidebar-stack">
+              <div class="side-section">
+                <div id="examples" class="examples"></div>
+              </div>
+              <div class="side-section">
+                <div class="side-title"><span>Native App</span><span id="deviceStatusLabel">offline</span></div>
+                <div id="deviceStatus" class="device-card">
+                  <div class="device-name">Waiting for EMWaver app</div>
+                  <div class="device-meta">Start the native app on this machine to run scripts against hardware.</div>
+                </div>
+              </div>
+            </div>
+          </div>
         </aside>
         <section class="panel editor-panel">
           <div class="toolbar">
@@ -324,6 +343,8 @@ const indexHtml = `<!doctype html>
       const filename = document.getElementById("filename");
       const rev = document.getElementById("rev");
       const examplesEl = document.getElementById("examples");
+      const deviceStatusEl = document.getElementById("deviceStatus");
+      const deviceStatusLabel = document.getElementById("deviceStatusLabel");
       const agentPrompt = document.getElementById("agentPrompt");
       const agentOutput = document.getElementById("agentOutput");
       let selectedName = examples[0].name;
@@ -445,6 +466,30 @@ const indexHtml = `<!doctype html>
         preview.appendChild(renderNode(root));
       }
 
+      function renderDeviceStatus(msg) {
+        const connected = Boolean(msg.connected);
+        deviceStatusLabel.textContent = connected ? "online" : "offline";
+        const devices = Array.isArray(msg.devices) ? msg.devices : [];
+        if (!connected || devices.length === 0) {
+          deviceStatusEl.innerHTML = '<div class="device-name">Waiting for EMWaver app</div><div class="device-meta">Start the native app on this machine to run scripts against hardware.</div>';
+          return;
+        }
+        deviceStatusEl.innerHTML = "";
+        for (const device of devices) {
+          const card = document.createElement("div");
+          card.className = "device-card";
+          const name = document.createElement("div");
+          name.className = "device-name";
+          name.textContent = String(device.name || device.id || "EMWaver device");
+          const meta = document.createElement("div");
+          meta.className = "device-meta";
+          meta.textContent = String(device.connected ? "connected" : "available") + " via " + String(msg.runtimeOwner || "native app");
+          card.appendChild(name);
+          card.appendChild(meta);
+          deviceStatusEl.appendChild(card);
+        }
+      }
+
       function sendUiEvent(targetNodeId, name, payload) {
         if (!ws || ws.readyState !== WebSocket.OPEN || !scriptInstanceId) return;
         ws.send(JSON.stringify({ type: "ui.event", hostSessionId: "local", scriptInstanceId, baseRev: currentRev, targetNodeId, name, payload: payload || {} }));
@@ -459,7 +504,10 @@ const indexHtml = `<!doctype html>
       ws.onmessage = (event) => {
         const msg = JSON.parse(String(event.data || "{}"));
         appendLog(msg);
-        if (msg.type === "device.status") setStatus(msg.connected ? "native app connected" : "waiting for native app", msg.connected ? "open" : "");
+        if (msg.type === "device.status") {
+          setStatus(msg.connected ? "native app connected" : "waiting for native app", msg.connected ? "open" : "");
+          renderDeviceStatus(msg);
+        }
         if (msg.type === "script.started") scriptInstanceId = msg.scriptInstanceId || "";
         if (msg.type === "script.stopped") {
           scriptInstanceId = "";
