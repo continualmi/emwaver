@@ -373,9 +373,18 @@ fn doctor() -> Result<()> {
     let mut issues = 0usize;
 
     println!("EMWaver doctor");
+    println!(
+        "platform: {} {}",
+        std::env::consts::OS,
+        std::env::consts::ARCH
+    );
 
     let root = repo_root();
     println!("repo root: {}", root.display());
+    println!("state dir: {}", state_dir()?.display());
+    println!("pidfile: {}", pidfile_path()?.display());
+    println!("logfile: {}", logfile_path()?.display());
+    println!("{}", autostart_status()?);
 
     let gateway = gateway_dir();
     if gateway.join("package.json").exists() {

@@ -256,7 +256,7 @@ Acceptance criteria:
 
 ## `REBIRTH-017` Add `emwaver doctor`
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P1`
 - Target: CLI/diagnostics
 
@@ -358,7 +358,7 @@ Acceptance criteria:
 
 ## `REBIRTH-023A` Remove Cloud Script Storage Direction From Core
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: product/web/gateway
 
