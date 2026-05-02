@@ -66,10 +66,21 @@ function expandEnvReferences() {
 
 expandEnvReferences();
 
+const staticExportEnabled = process.env.EMWAVER_STATIC_EXPORT === "1";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["continual-core"],
   outputFileTracingRoot: path.resolve(__dirname, "../.."),
+  ...(staticExportEnabled
+    ? {
+        output: "export" as const,
+        trailingSlash: true,
+        images: {
+          unoptimized: true,
+        },
+      }
+    : {}),
   env: {
     NEXT_PUBLIC_EMWAVER_BACKEND_URL:
       process.env.NEXT_PUBLIC_EMWAVER_BACKEND_URL || process.env.EMWAVER_BACKEND_URL,

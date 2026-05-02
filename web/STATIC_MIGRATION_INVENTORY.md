@@ -91,6 +91,7 @@ browser / CLI
 
 ## Static Export Blockers
 
+- `npm run build:static` currently fails while compiling backend route handlers because `src/app/api/auth/session/route.ts` imports `src/server/platformCore.ts`, which imports `continual-core`. In this checkout layout the package cannot be resolved from `web/`; more importantly, static export should not compile the legacy auth/backend route set at all.
 - Route handlers under `src/app/**/route.ts` require a runtime and must be removed from the public static route set or moved to a backend.
 - `server.ts` owns `/v1/ws`; static export cannot support hosted WebSocket upgrades.
 - Account pages import session/backend helpers that assume same-origin APIs.
@@ -100,6 +101,7 @@ browser / CLI
 ## Progress
 
 - `/cloud` now renders a static local-first gateway handoff and no longer imports auth, Pro entitlements, cloud files, hosted hosts, backend WebSocket helpers, or dashboard device panels.
+- `npm run build:static` enables a conditional Next static export mode via `EMWAVER_STATIC_EXPORT=1`, matching the Society-style `output: "export"` direction while keeping the existing runtime build unchanged.
 
 ## Migration Order
 

@@ -44,6 +44,7 @@ It does **not** host firmware/device logic directly; hardware operations happen 
 Key scripts (`package.json`):
 - `npm run dev`
 - `npm run build`
+- `npm run build:static`
 - `npm run start`
 - `npm run lint`
 
@@ -256,7 +257,16 @@ npm run dev
 
 Open: `http://localhost:3200`
 
-This single app is the backend for the web surface, so backend-dependent flows run from the same process. The custom `server.ts` entrypoint is required for `/v1/ws`.
+This single app is still the backend for the legacy web surface, so backend-dependent flows run from the same process. The custom `server.ts` entrypoint is required for `/v1/ws`.
+
+Static export migration:
+
+```bash
+cd web
+npm run build:static
+```
+
+`build:static` sets `EMWAVER_STATIC_EXPORT=1`, switches Next to `output: "export"`, writes static output to `out/`, and keeps the default `npm run build` path unchanged for the current runtime deployment. Route handlers and other backend-dependent pages remain migration blockers until they are removed from the public static route set or moved to a focused backend.
 
 ---
 
