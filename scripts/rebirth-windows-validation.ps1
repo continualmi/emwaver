@@ -7,6 +7,20 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+function Invoke-Checked {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$FilePath,
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Arguments
+    )
+
+    & $FilePath @Arguments
+    if ($LASTEXITCODE -ne 0) {
+        throw "$FilePath failed with exit code $LASTEXITCODE"
+    }
+}
+
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $WindowsDir = Join-Path $RepoRoot "windows"
 $Solution = Join-Path $WindowsDir "EMWaver.sln"
@@ -21,21 +35,21 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw "dotnet was not found. Install the .NET SDK required by windows/EMWaver/EMWaver.csproj."
 }
 
-dotnet --info
+Invoke-Checked dotnet --info
 
 if (-not $SkipBuild) {
     Write-Host ""
     Write-Host "== Restore Windows app =="
-    dotnet restore $Solution
+    Invoke-Checked dotnet restore $Solution
 
     Write-Host ""
     Write-Host "== Build Windows app =="
-    dotnet build $Solution -c Debug -p:Platform=x64 --no-restore
+    Invoke-Checked dotnet build $Solution -c Debug -p:Platform=x64 --no-restore
 }
 
 Write-Host ""
 Write-Host "== Windows simulator tests =="
-dotnet test $TestsProject -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=normal"
+Invoke-Checked dotnet test $TestsProject -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=normal"
 
 if ($Ci) {
     Write-Host ""

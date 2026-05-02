@@ -68,6 +68,8 @@ jobs:
           workspaces: daemon
 
       - name: Run Linux rebirth validation
+        env:
+          EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE: "1"
         run: scripts/rebirth-linux-validation.sh
 
   windows-hosted:

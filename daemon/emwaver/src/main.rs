@@ -375,6 +375,8 @@ fn command_available(name: &str) -> bool {
 
 fn doctor() -> Result<()> {
     let mut issues = 0usize;
+    let allow_midi_unavailable =
+        env_trim("EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE").as_deref() == Some("1");
 
     println!("EMWaver doctor");
     println!(
@@ -433,8 +435,12 @@ fn doctor() -> Result<()> {
             }
         }
         Err(err) => {
-            issues += 1;
-            println!("device check failed: {err:#}");
+            if allow_midi_unavailable {
+                println!("device check skipped: {err:#}");
+            } else {
+                issues += 1;
+                println!("device check failed: {err:#}");
+            }
         }
     }
 
