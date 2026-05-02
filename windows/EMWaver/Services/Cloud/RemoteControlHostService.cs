@@ -119,6 +119,11 @@ internal sealed class RemoteControlHostService
             return new HostSocketConfig(local, "app");
         }
 
+        if (!HostedRemoteControlEnabled())
+        {
+            return null;
+        }
+
         var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
         var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
         if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
@@ -138,6 +143,11 @@ internal sealed class RemoteControlHostService
         }
 
         return new HostSocketConfig(wsUrl, "host");
+    }
+
+    private static bool HostedRemoteControlEnabled()
+    {
+        return (Environment.GetEnvironmentVariable("EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED") ?? "") == "1";
     }
 
     private static string? ResolveLocalGatewayWsUrl()

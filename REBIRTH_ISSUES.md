@@ -759,7 +759,7 @@ Acceptance criteria:
 
 ## `REBIRTH-050` Remove Hosted Native-App Remote Control From Core
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P0`
 - Target: product/native/gateway
 
@@ -771,6 +771,10 @@ Acceptance criteria:
 - macOS/Windows hosted remote-control services are classified as migration debt or optional future hosted-service code, not core launch scope.
 - Gateway docs explain SSH/VPN/Tailscale/port-forwarding as user-owned remote access options.
 - No local gateway/native-app path requires hosted session registration, hosted relay, or account auth.
+
+Progress:
+
+- macOS and Windows native app host sockets now only fall back to hosted `/v1/ws` when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; localhost gateway remains the default path.
 
 ## First Implementation Slice
 

@@ -80,8 +80,13 @@ final class RemoteControlHostService: ObservableObject {
             return HostSocketConfig(wsURL: local, role: "app")
         }
 
+        guard hostedRemoteControlEnabled() else { return nil }
         guard let backend = backendConfig() else { return nil }
         return HostSocketConfig(wsURL: backend.wsURL, role: "host")
+    }
+
+    private func hostedRemoteControlEnabled() -> Bool {
+        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED"] == "1"
     }
 
     private func localGatewayWsURL() -> URL? {
