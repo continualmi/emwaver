@@ -495,7 +495,7 @@ Acceptance criteria:
 
 ## `REBIRTH-034` Import One Hardware Repo As Trial
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: hardware
 

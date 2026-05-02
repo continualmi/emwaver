@@ -49,7 +49,11 @@ hardware/modules/rfid-waver/
 
 ## Current Status
 
-No hardware repositories have been imported here yet.
+The first history-preserving trial import is complete:
+
+```text
+hardware/modules/gpio-waver/
+```
 
 See `hardware/IMPORT_INVENTORY.md` for the current source inventory and target prefix map.
 

@@ -40,7 +40,7 @@ The rebirth is complete only when:
 | Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles and relays messages | prototype done |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
-| Trial hardware import | not run; requires clean worktree and creates merge commits | incomplete |
+| Trial hardware import | `hardware/modules/gpio-waver/` imported in `4f45903a` | done |
 | Full hardware import | not run | incomplete |
 | AGENTS source of truth updated | `AGENTS.md` | done |
 | README/planning updated | `README.txt`, `PLANNING.md` | done |
@@ -84,7 +84,7 @@ It does not verify:
 - native app runtime integration,
 - Rust CLI build,
 - `emwaver run`,
-- hardware subtree imports.
+- remaining hardware subtree imports.
 
 ## Blockers
 
@@ -117,10 +117,10 @@ That blocks safe implementation/verification of:
 
 Before running imports:
 
-1. commit or stash current rebirth work,
-2. run `./hardware/import-subtrees.sh gpio-waver`,
+1. ensure worktree is clean,
+2. run `./hardware/import-subtrees.sh all` or import remaining repos one-by-one,
 3. inspect history and tree shape,
-4. run full import if trial is acceptable.
+4. push import commits.
 
 ## Remaining P0 Work
 
@@ -128,7 +128,7 @@ Before running imports:
 - Build/verify shared device transport layer.
 - Implement `emwaver run`.
 - Wire native macOS/Windows app to the local gateway WebSocket.
-- Run trial hardware import.
+- Run remaining hardware imports.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.
