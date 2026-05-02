@@ -237,15 +237,15 @@ Target shape:
 
 ```text
 hardware/
-  boards/
-    emwaver-core/
-    emwaver-carrier/
-    emwaver-link/
-  modules/
-    gpio-waver/
-    infrared-waver/
-    ism-waver/
-    rfid-waver/
+  emwaver-air/
+  emwaver-carrier/
+  emwaver-core/
+  emwaver-link/
+  emwaver-shield/
+  gpio-waver/
+  infrared-waver/
+  ism-waver/
+  rfid-waver/
 ```
 
 The purpose is to make EMWaver feel like one complete open platform:
@@ -256,11 +256,10 @@ The purpose is to make EMWaver feel like one complete open platform:
 - firmware/app support can reference canonical hardware definitions,
 - the project is easier to trust as open-source infrastructure.
 
-Hardware imports should preserve git history where practical. Prefer history-preserving imports such as `git subtree` or a `git filter-repo` based migration into stable prefixes like:
+Hardware imports should preserve git history where practical. Prefer history-preserving imports such as `git subtree` or a `git filter-repo` based migration into stable flat prefixes like:
 
 ```text
-hardware/boards/<board-name>/
-hardware/modules/<module-name>/
+hardware/<repo-name>/
 ```
 
 Rules for the merged hardware tree:
@@ -313,7 +312,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 ## Phase 5: Hardware Monorepo Import
 
 - Inventory the existing EMWaver hardware repositories.
-- Decide the final `hardware/boards/` and `hardware/modules/` prefixes.
+- Confirm the final flat `hardware/<repo-name>/` prefixes.
 - Import one hardware repo first as a trial.
 - Preserve history with `git subtree` or equivalent.
 - Add local READMEs where needed so each imported hardware folder is understandable in place.

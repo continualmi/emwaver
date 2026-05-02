@@ -98,7 +98,7 @@ Backlog coverage:
 ## Hardware Monorepo
 
 - Hardware repository inventory exists.
-- Target `hardware/boards/*` and `hardware/modules/*` prefixes are defined.
+- Target flat `hardware/<repo-name>/` prefixes are defined.
 - At least one hardware repo is imported with useful history preserved.
 - `hardware/README.md` documents structure and large file policy.
 

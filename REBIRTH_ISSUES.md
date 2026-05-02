@@ -486,7 +486,7 @@ Acceptance criteria:
 - Priority: `P0`
 - Target: hardware
 
-Decide final `hardware/boards/*` and `hardware/modules/*` paths.
+Decide final flat `hardware/<repo-name>/` paths.
 
 Acceptance criteria:
 
@@ -532,7 +532,7 @@ Add a top-level hardware index.
 
 Acceptance criteria:
 
-- Explains `boards/` versus `modules/`.
+- Explains the flat hardware repo layout.
 - Lists imported hardware projects.
 - Documents large/generated output policy.
 

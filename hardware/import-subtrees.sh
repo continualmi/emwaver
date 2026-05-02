@@ -25,9 +25,8 @@ fi
 
 import_repo() {
   local name="$1"
-  local category="$2"
   local source="$SOURCE_ROOT/$name"
-  local prefix="hardware/$category/$name"
+  local prefix="hardware/$name"
 
   if [[ ! -d "$source/.git" ]]; then
     echo "Missing source git repo: $source" >&2
@@ -35,8 +34,8 @@ import_repo() {
   fi
 
   if [[ -e "$prefix" ]]; then
-    echo "Target prefix already exists: $prefix" >&2
-    exit 1
+    echo "Skipping existing target prefix: $prefix"
+    return
   fi
 
   echo "Importing $name -> $prefix"
@@ -45,18 +44,18 @@ import_repo() {
 
 case "${1:-}" in
   gpio-waver)
-    import_repo "gpio-waver" "modules"
+    import_repo "gpio-waver"
     ;;
   all)
-    import_repo "emwaver-air" "boards"
-    import_repo "emwaver-carrier" "boards"
-    import_repo "emwaver-core" "boards"
-    import_repo "emwaver-link" "boards"
-    import_repo "emwaver-shield" "boards"
-    import_repo "gpio-waver" "modules"
-    import_repo "infrared-waver" "modules"
-    import_repo "ism-waver" "modules"
-    import_repo "rfid-waver" "modules"
+    import_repo "emwaver-air"
+    import_repo "emwaver-carrier"
+    import_repo "emwaver-core"
+    import_repo "emwaver-link"
+    import_repo "emwaver-shield"
+    import_repo "gpio-waver"
+    import_repo "infrared-waver"
+    import_repo "ism-waver"
+    import_repo "rfid-waver"
     ;;
   *)
     echo "Usage: $0 gpio-waver|all" >&2

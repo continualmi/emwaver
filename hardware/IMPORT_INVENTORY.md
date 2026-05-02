@@ -14,15 +14,15 @@ All listed local repositories are git repositories on branch `main` with `origin
 
 | Repository | Local source | Remote | Category | Target prefix | Import status |
 | --- | --- | --- | --- | --- | --- |
-| `emwaver-air` | `/Users/luisml/Documents/emwaver/emwaver-air` | `git@github.com:continualmi/emwaver-air.git` | board | `hardware/boards/emwaver-air/` | pending |
-| `emwaver-carrier` | `/Users/luisml/Documents/emwaver/emwaver-carrier` | `git@github.com:continualmi/emwaver-carrier.git` | board | `hardware/boards/emwaver-carrier/` | pending |
-| `emwaver-core` | `/Users/luisml/Documents/emwaver/emwaver-core` | `git@github.com:continualmi/emwaver-core.git` | board | `hardware/boards/emwaver-core/` | pending |
-| `emwaver-link` | `/Users/luisml/Documents/emwaver/emwaver-link` | `git@github.com:continualmi/emwaver-link.git` | board | `hardware/boards/emwaver-link/` | pending |
-| `emwaver-shield` | `/Users/luisml/Documents/emwaver/emwaver-shield` | `git@github.com:continualmi/emwaver-shield.git` | board | `hardware/boards/emwaver-shield/` | pending |
-| `gpio-waver` | `/Users/luisml/Documents/emwaver/gpio-waver` | `git@github.com:continualmi/gpio-waver.git` | module | `hardware/modules/gpio-waver/` | imported in `4f45903a` |
-| `infrared-waver` | `/Users/luisml/Documents/emwaver/infrared-waver` | `git@github.com:continualmi/infrared-waver.git` | module | `hardware/modules/infrared-waver/` | pending |
-| `ism-waver` | `/Users/luisml/Documents/emwaver/ism-waver` | `git@github.com:continualmi/ism-waver.git` | module | `hardware/modules/ism-waver/` | pending |
-| `rfid-waver` | `/Users/luisml/Documents/emwaver/rfid-waver` | `git@github.com:continualmi/rfid-waver.git` | module | `hardware/modules/rfid-waver/` | pending |
+| `emwaver-air` | `/Users/luisml/Documents/emwaver/emwaver-air` | `git@github.com:continualmi/emwaver-air.git` | board | `hardware/emwaver-air/` | pending |
+| `emwaver-carrier` | `/Users/luisml/Documents/emwaver/emwaver-carrier` | `git@github.com:continualmi/emwaver-carrier.git` | board | `hardware/emwaver-carrier/` | pending |
+| `emwaver-core` | `/Users/luisml/Documents/emwaver/emwaver-core` | `git@github.com:continualmi/emwaver-core.git` | board | `hardware/emwaver-core/` | pending |
+| `emwaver-link` | `/Users/luisml/Documents/emwaver/emwaver-link` | `git@github.com:continualmi/emwaver-link.git` | board | `hardware/emwaver-link/` | pending |
+| `emwaver-shield` | `/Users/luisml/Documents/emwaver/emwaver-shield` | `git@github.com:continualmi/emwaver-shield.git` | board | `hardware/emwaver-shield/` | pending |
+| `gpio-waver` | `/Users/luisml/Documents/emwaver/gpio-waver` | `git@github.com:continualmi/gpio-waver.git` | module | `hardware/gpio-waver/` | imported in `4f45903a`, flattened after import |
+| `infrared-waver` | `/Users/luisml/Documents/emwaver/infrared-waver` | `git@github.com:continualmi/infrared-waver.git` | module | `hardware/infrared-waver/` | pending |
+| `ism-waver` | `/Users/luisml/Documents/emwaver/ism-waver` | `git@github.com:continualmi/ism-waver.git` | module | `hardware/ism-waver/` | pending |
+| `rfid-waver` | `/Users/luisml/Documents/emwaver/rfid-waver` | `git@github.com:continualmi/rfid-waver.git` | module | `hardware/rfid-waver/` | pending |
 
 ## Catalog References Found In This Repo
 
@@ -68,7 +68,7 @@ The trial import has been completed:
 Result:
 
 ```text
-hardware/modules/gpio-waver/
+hardware/gpio-waver/
 ```
 
 The import produced commit `4f45903a` with message `Import gpio-waver hardware history`.

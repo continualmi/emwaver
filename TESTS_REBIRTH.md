@@ -29,7 +29,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | --- | --- | --- |
 | Local hardware repo inventory | `pass` | Repos found under `/Users/luisml/Documents/emwaver/`, all git repos on `main` with `continualmi` remotes. |
 | Hardware import script dirty guard | `pass` | `./hardware/import-subtrees.sh` refused to run in a dirty worktree before creating subtree commits. |
-| Trial hardware import | `pass` | `./hardware/import-subtrees.sh gpio-waver` imported `gpio-waver` under `hardware/modules/gpio-waver/` in commit `4f45903a`. |
+| Trial hardware import | `pass` | `./hardware/import-subtrees.sh gpio-waver` imported `gpio-waver` with history in commit `4f45903a`; the repo now lives at `hardware/gpio-waver/`. |
 
 ## Platform Device Access
 

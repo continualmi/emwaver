@@ -2,40 +2,24 @@
 
 This folder is the target home for EMWaver hardware design repositories in the reborn open-source monorepo.
 
-Hardware imports should preserve git history where practical and land under stable prefixes:
+Hardware imports should preserve git history where practical and land under stable flat prefixes:
 
 ```text
 hardware/
-  boards/
-  modules/
+  emwaver-air/
+  emwaver-carrier/
+  emwaver-core/
+  emwaver-link/
+  emwaver-shield/
+  gpio-waver/
+  infrared-waver/
+  ism-waver/
+  rfid-waver/
 ```
 
-## Boards
+## Layout
 
-Boards are complete or primary EMWaver-compatible hardware targets.
-
-Planned prefixes:
-
-```text
-hardware/boards/emwaver-air/
-hardware/boards/emwaver-carrier/
-hardware/boards/emwaver-core/
-hardware/boards/emwaver-link/
-hardware/boards/emwaver-shield/
-```
-
-## Modules
-
-Modules are attachable/specialized hardware blocks used by EMWaver scripts and board setups.
-
-Planned prefixes:
-
-```text
-hardware/modules/gpio-waver/
-hardware/modules/infrared-waver/
-hardware/modules/ism-waver/
-hardware/modules/rfid-waver/
-```
+Each imported hardware repository keeps its original repo name directly under `hardware/`. Do not add extra `boards/`, `modules/`, or other grouping folders above the imported repos.
 
 ## Import Policy
 
@@ -52,7 +36,7 @@ hardware/modules/rfid-waver/
 The first history-preserving trial import is complete:
 
 ```text
-hardware/modules/gpio-waver/
+hardware/gpio-waver/
 ```
 
 See `hardware/IMPORT_INVENTORY.md` for the current source inventory and target prefix map.
