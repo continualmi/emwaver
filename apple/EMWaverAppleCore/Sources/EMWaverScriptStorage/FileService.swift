@@ -58,7 +58,7 @@ public final class FileService {
         let documentsPath = fileManager.urls(for: .documentDirectory, in: .userDomainMask)[0]
         storageDir = documentsPath.appendingPathComponent("scripts", isDirectory: true)
 
-        // Keep signals alongside scripts to simplify user-visible storage + sync.
+        // Keep signals alongside scripts to simplify user-visible storage.
         // (Signals are still conceptually separate, but live in the same directory.)
         signalsDir = storageDir
 

@@ -112,7 +112,6 @@ struct ContentView: View {
                 ScriptsRootView(
                     previewManager: previewManager,
                     device: scriptDeviceBridge,
-                    syncProvider: nil,
                     agentCloudProvider: {
                         auth.agentEndpointConfig
                     },
@@ -122,7 +121,6 @@ struct ContentView: View {
                     },
                     agentEnabled: true,
                     onRequestAgentUpgrade: nil,
-                    onRequestSyncUpgrade: nil,
                     onRequestOpenSettings: {
                         showingSettings = true
                     }

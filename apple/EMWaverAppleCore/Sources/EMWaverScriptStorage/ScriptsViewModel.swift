@@ -27,18 +27,6 @@ public final class ScriptsViewModel: ObservableObject {
         }
     }
 
-    public enum SyncStatus: String, Equatable {
-        case localOnly
-        case unknown
-
-        public var iconSystemName: String {
-            switch self {
-            case .localOnly: return "circle.dashed"
-            case .unknown: return "questionmark.circle"
-            }
-        }
-    }
-
     public struct ScriptListItem: Identifiable, Equatable {
         public let id: String
         public var name: String
@@ -46,7 +34,6 @@ public final class ScriptsViewModel: ObservableObject {
         public var isAsset: Bool
         public var kind: FileKind
         public var modifiedAt: Date?
-        public var syncStatus: SyncStatus
     }
 
     public struct Notice: Identifiable {
@@ -137,12 +124,6 @@ public final class ScriptsViewModel: ObservableObject {
         } catch {
             showError(message: error.localizedDescription)
         }
-    }
-
-    public func sync(baseURL: URL, accessToken: String) async {
-        _ = baseURL
-        _ = accessToken
-        showInfo(title: "Local storage", message: "Scripts are stored on this device.")
     }
 
     public func scriptName(for id: String) -> String {
@@ -507,12 +488,12 @@ public final class ScriptsViewModel: ObservableObject {
             .filter { $0.metadata != nil }
             .map {
                 let modifiedAt = $0.metadata?.etag.flatMap { Self.dateFromEtagSeconds($0) }
-                return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt, syncStatus: .localOnly)
+                return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt)
             }
         custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         var assets = assetRecords.values.map {
-            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script, modifiedAt: nil, syncStatus: .unknown)
+            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script, modifiedAt: nil)
         }
         assets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
@@ -602,12 +583,6 @@ public final class ScriptsViewModel: ObservableObject {
     static func dateFromEtagSeconds(_ etag: String) -> Date? {
         guard let s = Int64(etag.trimmingCharacters(in: .whitespacesAndNewlines)) else { return nil }
         return Date(timeIntervalSince1970: TimeInterval(s))
-    }
-
-    func computeSyncStatus(name: String, localModifiedAt: Date?) -> SyncStatus {
-        _ = name
-        _ = localModifiedAt
-        return .localOnly
     }
 
     private func showInfo(title: String, message: String) {

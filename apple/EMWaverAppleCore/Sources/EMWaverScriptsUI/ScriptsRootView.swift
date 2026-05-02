@@ -64,12 +64,10 @@ public struct ScriptsRootView: View {
     public init(
         previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
-        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestSyncUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil
     ) {
         self.device = device
@@ -78,8 +76,6 @@ public struct ScriptsRootView: View {
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
         self.agentCloudProvider = agentCloudProvider
-        _ = syncProvider
-        _ = onRequestSyncUpgrade
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
             wrappedValue: AgentChatViewModel(cloudProvider: agentCloudProvider)
@@ -89,23 +85,19 @@ public struct ScriptsRootView: View {
     @MainActor
     public init(
         device: (any ScriptDevice)? = nil,
-        syncProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestSyncUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
             device: device,
-            syncProvider: syncProvider,
             agentCloudProvider: agentCloudProvider,
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade,
-            onRequestSyncUpgrade: onRequestSyncUpgrade,
             onRequestOpenSettings: onRequestOpenSettings
         )
     }

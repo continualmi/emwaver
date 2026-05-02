@@ -27,7 +27,7 @@ extension ScriptsViewModel {
                 kind = .signalText
             }
             let modifiedAt = entry.metadata.etag.flatMap { ScriptsViewModel.dateFromEtagSeconds($0) }
-            signals.append(ScriptListItem(id: entry.metadata.id, name: name, isDirty: false, isAsset: false, kind: kind, modifiedAt: modifiedAt, syncStatus: .localOnly))
+            signals.append(ScriptListItem(id: entry.metadata.id, name: name, isDirty: false, isAsset: false, kind: kind, modifiedAt: modifiedAt))
         }
         signals.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         signalFiles = signals
