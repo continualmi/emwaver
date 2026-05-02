@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using EMWaver.Scripting;
+using Xunit;
 
 namespace EMWaver.Tests;
 
