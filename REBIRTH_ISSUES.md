@@ -371,6 +371,23 @@ Acceptance criteria:
 - `web/` cloud file/script storage is treated as migration debt, not launch-critical core behavior.
 - No core local runtime path requires account-backed script sync.
 
+## `REBIRTH-023B` Move Public Web Toward Static Blob Deployment
+
+- Status: `todo`
+- Priority: `P1`
+- Target: web/deployment
+
+Gradually remove `web/` as a deployable backend/runtime and make the public EMWaver site a static export deployed like `~/continualmi/society`.
+
+Acceptance criteria:
+
+- `web/` public landing/docs/download/build/board-manager pages can be statically exported.
+- Static output can be deployed to a blob/static website container origin.
+- The containerized `emwaver-web` deploy path is marked as migration debt rather than the long-term public-site target.
+- Auth, cloud dashboard, hosted relay, and same-origin backend assumptions are removed from the public static route set.
+- Agent/API behavior is routed to a focused Continual MI backend endpoint instead of requiring the public site container.
+- Local hardware control and script rendering remain owned by `gateway/`.
+
 ## Epic 5: Cloud Removal From Core
 
 ## `REBIRTH-024` Remove Required Account From Hardware Control
@@ -556,6 +573,22 @@ Acceptance criteria:
 - Explains the flat hardware repo layout.
 - Lists imported hardware projects.
 - Documents large/generated output policy.
+
+## `REBIRTH-036A` Deduplicate Hardware Media Assets
+
+- Status: `todo`
+- Priority: `P1`
+- Target: hardware/web/assets
+
+Move reusable board/module photos, renders, diagrams, and related media into canonical `hardware/<repo-name>/` locations so the same image is not duplicated across `web/`, docs, and imported hardware folders.
+
+Acceptance criteria:
+
+- Inventory duplicated board/module images across `web/public`, docs, and `hardware/`.
+- Choose canonical asset locations under the relevant `hardware/<repo-name>/` folder.
+- Update board catalogs, static web pages, docs, and app references to use the canonical asset path or a generated static copy from it.
+- Remove duplicate image copies when no route-stable public filename requires them.
+- Document any intentional public/exported copies and their source hardware asset.
 
 ## Epic 8: Docs And Launch
 

@@ -1,10 +1,12 @@
 # EMWaver Public Web Surface (`/web`)
 
-Target direction: `web/` should trend toward mostly static public pages, docs, downloads, and product information.
+Target direction: `web/` should trend toward static public pages, docs, downloads, board/build references, and product information.
 
 This folder still contains legacy/transitional Next.js + Node auth, subscription, cloud dashboard, API, Agent, and WebSocket relay code. Those parts should be treated as migration debt for the local-first rebirth unless a task explicitly targets optional hosted services or paid Agent/API usage.
 
 The full `.emw` script rendering/control experience belongs in `gateway/`, not in `web/`.
+
+The deployment target should also simplify: move away from a long-running `emwaver-web` backend/container and toward a Society-style static export served from blob/static website hosting. If a page can be static, keep it static. Dynamic Agent/API or optional hosted-service behavior should move to a focused backend endpoint rather than keeping the public web surface as a catch-all runtime.
 
 Do not add new cloud script storage, script sync, or account-backed script libraries here for the open-source core path. Script files should be local-device data by default.
 
@@ -16,7 +18,8 @@ Do not add new cloud script storage, script sync, or account-backed script libra
 - public landing/site pages,
 - public video/media pages,
 - install/download/build information,
-- static docs and product pages.
+- static docs and product pages,
+- board manager/catalog pages backed by static manifests and canonical hardware assets.
 
 Transitional/migration-debt areas still present here:
 - account/auth/subscription UX surfaces,
@@ -231,7 +234,9 @@ Store distribution policy migrated from AGENTS:
 
 ## 7) Assets and branding notes
 
-- Current image assets are under `public/`, but board catalog manifests may also point image entries at repo-backed `github:` paths so lineup repos can own their own photo/render sets.
+- Board/module photos, renders, diagrams, and reusable hardware media should live once under the relevant `hardware/<repo-name>/` folder when they describe that hardware.
+- `web/` should reference canonical hardware assets or static exported copies generated from them instead of keeping duplicate board images under `public/`.
+- Current image assets are under `public/`, but board catalog manifests may also point image entries at repo-backed `github:` paths so imported hardware folders can own their own photo/render sets.
 - `legacy-static/` contains historical web artifacts and should be treated as migration/reference content.
 - If replacing hero/product visuals, keep optimized sizes and preserve route-stable filenames only when needed by existing links.
 
@@ -255,15 +260,22 @@ This single app is the backend for the web surface, so backend-dependent flows r
 
 ## 9) Deployment
 
-- Deployed as a single Azure Container App (Consumption) with scale-to-zero enabled for the current dev phase.
-- GitHub Actions builds and deploys this folder as the unified web/backend service on pushes to the `prod` branch.
-- Production image publishing uses GitHub Container Registry as `ghcr.io/continualmi/emwaver-web`.
-- The old split-image `emwaver-frontend` / `emwaver-backend` container path is retired; `emwaver-web` is the only production web deploy artifact.
+Current deployment is migration debt:
+- single Azure Container App deployment,
+- GitHub Actions image build/deploy on pushes to the `prod` branch,
+- production image publishing as `ghcr.io/continualmi/emwaver-web`,
+- legacy same-origin API/WebSocket assumptions.
 
-Keep deployment assumptions aligned with:
-- same-origin backend base URL resolution,
-- websocket URL derivation,
-- CORS and auth token flow.
+Target deployment:
+- static export for public EMWaver pages,
+- blob/static website container as the origin, similar to `~/continualmi/society`,
+- optional CDN/front-door layer for HTTPS, caching, and custom domains,
+- no long-running public web container for landing/docs/download/build pages.
+
+Dynamic code should move to the right owner before the static export becomes canonical:
+- localhost hardware control and script rendering: `gateway/`,
+- paid Agent: focused Continual MI Agent/API backend,
+- optional hosted services: separate hosted-service runtime if kept at all.
 
 ---
 

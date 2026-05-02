@@ -168,6 +168,15 @@ Move the heavy `.emw` script dashboard/control experience into `gateway/` over t
 
 Scripts and local project state should stay on the user's device by default. Gateway may support browser-local open/save and app-local storage, but the core product should not add cloud script storage or script syncing.
 
+`web/` should also move away from deployable backend/runtime responsibility. The target deployment model is closer to `society`: static pages exported and published to a simple blob/static website container, with CDN/front-door style routing in front of it if needed. The public EMWaver web surface should be landing pages, docs, install/build pages, board manager pages, product media, downloads, and static board/module references. It should not require a long-running `emwaver-web` container just to serve the public site.
+
+Any remaining dynamic behavior should be moved to the correct owner instead of keeping `web/` as a catch-all backend:
+
+- local script rendering/control goes to `gateway/`,
+- optional paid Agent API goes to a focused Continual MI Agent/backend endpoint,
+- optional hosted services, if they survive, should be separate from the static public site,
+- board/build pages should read from static manifests and repo-backed hardware assets where practical.
+
 Gradually remove from the local gateway path:
 
 - cloud auth,
@@ -324,6 +333,8 @@ hardware/<repo-name>/
 Rules for the merged hardware tree:
 
 - keep all hardware design assets under `hardware/`,
+- keep board photos, renders, diagrams, and reusable board/module media in the relevant `hardware/<repo-name>/` folder when they describe that hardware,
+- make `web/`, docs, board catalogs, and app surfaces reference canonical hardware assets instead of carrying duplicate copies,
 - keep app/runtime/platform source in the existing platform folders,
 - keep bundled app-consumed firmware payloads under `firmware/`,
 - keep board/module manufacturing details inside the relevant hardware subfolder,
@@ -378,6 +389,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Preserve history with `git subtree` or equivalent.
 - Add local READMEs where needed so each imported hardware folder is understandable in place.
 - Update product docs and scripts to reference the new in-repo hardware paths.
+- Move duplicated board/module images and reusable hardware media to canonical `hardware/<repo-name>/` asset locations.
 
 ## Phase 6: Optional Hosted Services
 
