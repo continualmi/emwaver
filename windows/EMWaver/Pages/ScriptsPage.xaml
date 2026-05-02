@@ -270,11 +270,11 @@
                                     Padding="10"
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
-                                    <TextBlock Text="Sign in with your EMWaver account to use ELM."
+                                    <TextBlock Text="Configure an Agent API key to enable Agent replies. Local scripts and hardware control remain available."
                                                TextWrapping="Wrap"
                                                Opacity="0.85"
                                                VerticalAlignment="Center" />
-                                    <Button Content="Sign In…" Click="OnAgentSignInClick" />
+                                    <Button Content="Configure…" Visibility="Collapsed" Click="OnAgentSignInClick" />
                                 </StackPanel>
                             </Border>
 
@@ -287,11 +287,11 @@
                                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                                 <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
                                     <FontIcon Glyph="&#xE72E;" Opacity="0.8"/>
-                                    <TextBlock Text="ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
+                                    <TextBlock Text="Configure an Agent API key to enable Agent replies."
                                                TextWrapping="Wrap"
                                                Opacity="0.85"
                                                VerticalAlignment="Center" />
-                                    <Button Content="Get EMWaver Pro…" Click="OnGetProClick" />
+                                    <Button Content="Configure Agent…" Visibility="Collapsed" Click="OnGetProClick" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

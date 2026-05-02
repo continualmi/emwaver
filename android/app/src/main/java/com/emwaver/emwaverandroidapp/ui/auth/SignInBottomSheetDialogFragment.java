@@ -113,7 +113,7 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
     private void applyStateToUi() {
         if (helperText != null) {
             helperText.setVisibility(View.VISIBLE);
-            helperText.setText("Create your EMWaver API key on the web account page, then paste it here. The key works across EMWaver apps and keeps your activated devices tied to your account.");
+            helperText.setText("Agent replies require an API key. Local scripts and hardware control do not require a key.");
         }
         if (continueButton != null) {
             boolean hasKey = apiKeyInput != null
@@ -123,6 +123,7 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
             continueButton.setText(isBusy ? "Saving key..." : "Save key");
         }
         if (manageButton != null) {
+            manageButton.setVisibility(View.GONE);
             manageButton.setEnabled(!isBusy);
         }
         if (apiKeyInput != null) {

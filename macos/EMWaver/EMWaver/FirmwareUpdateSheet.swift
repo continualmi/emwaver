@@ -1,37 +1,11 @@
 import SwiftUI
 
 struct FirmwareUpdateSheet: View {
-    @EnvironmentObject var auth: AuthenticationManager
-    @EnvironmentObject var accountDevices: AccountDevicesService
     @ObservedObject var device: MacUSBManager
     @ObservedObject var updater: FirmwareUpdateManager
 
-    private var currentHardwareUidHex: String? {
-        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
-        guard let value, !value.isEmpty else { return nil }
-        return value
-    }
-
     private var boardType: String {
         updater.presentedBoardType ?? device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
-    }
-
-    private var currentDeviceIsRegistered: Bool {
-        guard let hardwareUid = currentHardwareUidHex else { return false }
-        return accountDevices.hasOfflineAccess(boardType: boardType, hardwareUid: hardwareUid)
-    }
-
-    private var registrationStatusText: String {
-        if currentDeviceIsRegistered {
-            if auth.isSignedIn {
-                return "This board is already available in your account."
-            }
-            return "This board matches a locally cached device record."
-        }
-        if auth.isSignedIn {
-            return "This board will become available after the firmware is installed and the device reconnects."
-        }
-        return "Enter your EMWaver key before flashing if you want this board synced to your account."
     }
 
     private var isEspWorkflow: Bool {
@@ -42,11 +16,7 @@ struct FirmwareUpdateSheet: View {
     }
 
     private var needsManagedFirmwareInstall: Bool {
-        device.isConnected &&
-        device.deviceEmwaverVersion != nil &&
-        currentHardwareUidHex == nil &&
-        device.hardwareUidUnsupportedByFirmware &&
-        !isEspWorkflow
+        false
     }
 
     private var isAwaitingUpdateMode: Bool {
@@ -96,7 +66,7 @@ struct FirmwareUpdateSheet: View {
             return "The device is in Update Mode and ready to flash."
         }
         if showPrepareUpdateModePrompt {
-            return "This firmware returned a version, but not a hardware UID."
+            return "This firmware can be updated from the local app."
         }
         if isAwaitingUpdateMode {
             return "The app is waiting for the board to appear in Update Mode."
@@ -140,7 +110,7 @@ struct FirmwareUpdateSheet: View {
             } else if showPrepareUpdateModePrompt {
                 promptCard(
                     title: "Do you want to put this device into Update Mode?",
-                    body: "EMWaver can talk to the board, but this firmware does not expose a hardware UID yet. The app can switch it into Update Mode and prepare the flash flow for you."
+                    body: "EMWaver can talk to the board. The app can switch it into Update Mode and prepare the local flash flow for you."
                 )
             } else if isAwaitingUpdateMode {
                 promptCard(
@@ -271,10 +241,6 @@ struct FirmwareUpdateSheet: View {
                         .font(.caption.weight(.medium))
                         .foregroundStyle((updater.espBootloaderConnected || updater.espBootloaderPort != nil) ? Color.green : .secondary)
 
-                    Text(registrationStatusText)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
                     Text("1. Hold BOOT")
                     Text("2. Press and release RESET")
                     Text("3. Release BOOT")
@@ -287,11 +253,7 @@ struct FirmwareUpdateSheet: View {
                         .disabled(updater.isFlashing)
 
                         Button("Flash firmware") {
-                            if currentDeviceIsRegistered {
-                                updater.startUpdate(device: device)
-                            } else {
-                                updater.startEspClaimAndFlash(auth: auth, accountDevices: accountDevices, device: device)
-                            }
+                            updater.startUpdate(device: device)
                         }
                         .buttonStyle(.borderedProminent)
                         .disabled(updater.isFlashing || (!updater.espBootloaderConnected && updater.espBootloaderPort == nil))

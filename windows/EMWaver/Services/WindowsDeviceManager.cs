@@ -31,7 +31,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private static class EmwOpcode
     {
         internal const byte Version = 0x01;
-        internal const byte HardwareUidGet = 0x08;
         internal const byte EnterDfu = 0x06;
     }
 
@@ -63,34 +62,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             if (_deviceEmwaverVersion != value)
             {
                 _deviceEmwaverVersion = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    private string? _hardwareUidHex;
-    public string? HardwareUidHex
-    {
-        get => _hardwareUidHex;
-        private set
-        {
-            if (_hardwareUidHex != value)
-            {
-                _hardwareUidHex = value;
-                OnPropertyChanged();
-            }
-        }
-    }
-
-    private string? _lastDetectedHardwareUidHex;
-    public string? LastDetectedHardwareUidHex
-    {
-        get => _lastDetectedHardwareUidHex;
-        internal set
-        {
-            if (_lastDetectedHardwareUidHex != value)
-            {
-                _lastDetectedHardwareUidHex = value;
                 OnPropertyChanged();
             }
         }
@@ -304,7 +275,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             LastErrorText = null;
             DeviceEmwaverVersion = null;
-            HardwareUidHex = null;
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
@@ -344,13 +314,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             {
                 try
                 {
-                    var hardwareUid = await ReadHardwareUidAsync(timeoutMs: 1200);
-                    var boardType = InferBoardType(port.DisplayName, hardwareUid);
-                    var hardwareUidHex = hardwareUid == null ? null : BitConverter.ToString(hardwareUid).Replace("-", "");
+                    var boardType = InferBoardType(port.DisplayName);
                     RunOnUi(() =>
                     {
-                        HardwareUidHex = hardwareUidHex;
-                        LastDetectedHardwareUidHex = hardwareUidHex ?? LastDetectedHardwareUidHex;
                         ConnectedBoardType = boardType;
                         LastDetectedBoardType = boardType;
                     });
@@ -359,8 +325,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 {
                     RunOnUi(() =>
                     {
-                        HardwareUidHex = null;
-                        ConnectedBoardType = InferBoardType(port.DisplayName, null);
+                        ConnectedBoardType = InferBoardType(port.DisplayName);
                         LastDetectedBoardType = ConnectedBoardType;
                     });
                 }
@@ -414,7 +379,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         ConnectedPort = null;
         DeviceEmwaverVersion = null;
-        HardwareUidHex = null;
         ConnectedBoardType = null;
 
         // Keep parity with iOS/macOS: avoid stale capture across sessions.
@@ -454,36 +418,14 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
-    internal async Task<byte[]?> ReadHardwareUidAsync(int timeoutMs)
-    {
-        var lane = await SendCommandAsync(
-            commandLane: new byte[] { EmwOpcode.HardwareUidGet },
-            timeoutMs: timeoutMs,
-            responsePredicate: lane18 => lane18.Length >= 7 && lane18[0] == 0x80
-        );
-
-        if (lane == null || lane.Length < 7 || lane[0] != 0x80)
-        {
-            return null;
-        }
-
-        var payloadCount = Math.Min(Math.Max(0, lane.Length - 1), 12);
-        if (payloadCount != 6 && payloadCount != 12)
-        {
-            return null;
-        }
-
-        return lane.Skip(1).Take(payloadCount).ToArray();
-    }
-
-    private static string InferBoardType(string? portName, byte[]? hardwareUid)
+    private static string InferBoardType(string? portName)
     {
         var name = (portName ?? string.Empty).ToLowerInvariant();
         if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("s3"))
         {
             return "esp32s3";
         }
-        if (hardwareUid != null && hardwareUid.Length == 12 && name.Contains("emwaver esp"))
+        if (name.Contains("emwaver esp"))
         {
             return "esp32s3";
         }

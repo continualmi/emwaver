@@ -97,7 +97,7 @@ internal sealed class GoogleOAuthPkce
             }
 
             var tokens = await ExchangeCodeAsync(code, clientId, clientSecret, redirectUri, verifier, ct);
-            html = "<html><body><h2>Signed in</h2><p>You can close this window.</p></body></html>";
+            html = "<html><body><h2>Key saved</h2><p>You can close this window.</p></body></html>";
 
             await WriteResponseAsync(resp, html);
             return tokens;

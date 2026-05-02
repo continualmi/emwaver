@@ -10,7 +10,7 @@
         android:id="@+id/sign_in_title"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Sign In"
+        android:text="Agent API key"
         android:textStyle="bold"
         android:textSize="18sp"
         android:textColor="@color/textPrimary" />
@@ -20,7 +20,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Create or paste your EMWaver API key from the web account page. The key unlocks cloud sync, activated devices, and the other EMWaver apps."
+        android:text="Enter an Agent API key to enable Agent replies. Local scripts and hardware control do not require a key."
         android:textColor="@color/textSecondary"
         android:textSize="13sp" />
 
@@ -38,7 +38,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="10dp"
-        android:text="You can manage your key on the EMWaver web account page."
+        android:text="Local scripts and hardware control do not require an account or key."
         android:textColor="@color/textSecondary"
         android:textSize="13sp" />
 
@@ -49,7 +49,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="12dp"
-        android:text="EMWaver API key"
+        android:text="Agent API key"
         android:textColor="@color/textSecondary"
         android:textSize="12sp"
         android:textStyle="bold" />
@@ -89,7 +89,8 @@
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Manage on Web" />
+            android:text="Manage Key"
+            android:visibility="gone" />
 
         <Space
             android:layout_width="0dp"

@@ -22,7 +22,7 @@
 
             <StackPanel Orientation="Horizontal" Spacing="10">
                 <Button x:Name="RefreshStateButton" Content="Refresh" Click="OnRefreshStateClick" />
-                <Button x:Name="OpenAccountButton" Content="Open account" Click="OnOpenAccountClick" />
+                <Button x:Name="OpenAccountButton" Content="Agent key" Visibility="Collapsed" Click="OnOpenAccountClick" />
             </StackPanel>
 
             <Border x:Name="ErrorPanel"

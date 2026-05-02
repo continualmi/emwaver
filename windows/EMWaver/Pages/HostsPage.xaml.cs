@@ -99,15 +99,15 @@ public sealed partial class HostsPage : Page
                 {
                     if (!signedIn)
                     {
-                        StatusText.Text = "Sign in, then attach a genuine EMWaver device to your account to become eligible for Pro.";
+                        StatusText.Text = "Remote sessions are not available here. Use the local gateway on this machine.";
                     }
                     else if (pro.Eligibility?.CanPurchasePro == true)
                     {
-                        StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
+                        StatusText.Text = "Remote sessions are not available here. Use the local gateway on this machine.";
                     }
                     else if (string.Equals(pro.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
                     {
-                        StatusText.Text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
+                        StatusText.Text = "Use the local gateway on this machine for hardware control.";
                     }
                     else
                     {
@@ -168,7 +168,7 @@ public sealed partial class HostsPage : Page
 
             if (!_proEnabled)
             {
-                StatusText.Text = "Remote host control is locked. Upgrade to EMWaver Pro to control host sessions.";
+                StatusText.Text = "Remote sessions are not available here. Use the local gateway on this machine.";
                 return;
             }
 

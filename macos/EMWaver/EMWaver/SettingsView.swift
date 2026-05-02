@@ -8,7 +8,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Device access") {
-                    Text("Claimed-device access is keyed by board type and hardware UID.")
+                    Text("Local scripts and hardware control work immediately.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

@@ -7,11 +7,11 @@ struct SignInSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("EMWaver API Key")
+            Text("Agent API Key")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Create your EMWaver key on the web, then paste it here for optional hosted services such as cloud sync, remote access, and expanded Agent features. Local scripts and local hardware control stay available without a key.")
+            Text("Enter an Agent API key to enable Agent replies. Local scripts and local hardware control stay available without a key.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -30,11 +30,6 @@ struct SignInSheet: View {
                 Button("Not Now") {
                     dismiss()
                 }
-
-                Button("Manage on Web") {
-                    auth.openAccountManagement()
-                }
-                .buttonStyle(.bordered)
 
                 Spacer()
 

@@ -52,7 +52,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func newConversation() {
         guard cloudProvider != nil else {
-            lastError = "Sign in to use the Agent."
+            lastError = "Agent API-key backend is not configured yet."
             return
         }
         Task { await self.createCloudConversation() }
@@ -74,7 +74,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func deleteConversation(_ id: UUID) {
         guard cloudProvider != nil else {
-            lastError = "Sign in to use the Agent."
+            lastError = "Agent API-key backend is not configured yet."
             return
         }
         Task { await self.deleteCloudConversation(id) }
@@ -93,7 +93,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func sendAgent(userText text: String) {
         guard cloudProvider != nil else {
-            lastError = "Sign in to use the Agent."
+            lastError = "Agent API-key backend is not configured yet."
             return
         }
 
@@ -142,7 +142,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func runCloudManagedToolLoop(userPrompt: String, placeholderId: UUID) async throws -> String {
         guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            throw AgentBackendError.serverError("Sign in to use the Agent.")
+            throw AgentBackendError.serverError("Agent API-key backend is not configured yet.")
         }
         guard let conversationId = selectedConversationId else {
             throw AgentBackendError.serverError("Create a conversation before sending a message.")
@@ -485,7 +485,7 @@ extension AgentChatViewModel {
 
     func createCloudConversation() async {
         guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Sign in to use the Agent."
+            self.lastError = "Agent API-key backend is not configured yet."
             return
         }
 
@@ -509,7 +509,7 @@ extension AgentChatViewModel {
 
     func loadCloudMessages(conversationId: UUID) async {
         guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Sign in to use the Agent."
+            self.lastError = "Agent API-key backend is not configured yet."
             return
         }
 
@@ -537,7 +537,7 @@ extension AgentChatViewModel {
 
     func deleteCloudConversation(_ id: UUID) async {
         guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Sign in to use the Agent."
+            self.lastError = "Agent API-key backend is not configured yet."
             return
         }
 

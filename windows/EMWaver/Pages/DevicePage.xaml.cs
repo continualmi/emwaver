@@ -68,16 +68,12 @@ public sealed partial class DevicePage : Page
     {
         var device = AppServices.Device;
         var updater = AppServices.FirmwareUpdater;
-        var accountDevices = AppServices.AccountDevices;
 
         AutoConnectSwitch.IsOn = device.AutoConnectEnabled;
         DisconnectButton.IsEnabled = device.IsConnected;
 
         var boardType = device.ConnectedBoardType ?? device.LastDetectedBoardType ?? (updater.EspBootloaderConnected ? "esp32s3" : "stm32f042");
-        var hardwareUid = device.HardwareUidHex ?? device.LastDetectedHardwareUidHex;
         var isEsp = string.Equals(boardType, "esp32s3", StringComparison.OrdinalIgnoreCase) || updater.EspBootloaderConnected;
-        var currentDeviceIsRegistered = !string.IsNullOrWhiteSpace(hardwareUid) && accountDevices.HasOfflineAccess(boardType, hardwareUid!);
-        var claimStatusResolved = string.IsNullOrWhiteSpace(hardwareUid) || accountDevices.ClaimStatusResolved(boardType, hardwareUid!, AppServices.CloudAuth.IsSignedIn);
 
         if (device.IsConnected)
         {
@@ -100,21 +96,17 @@ public sealed partial class DevicePage : Page
             ? $"EMWaver {device.DeviceEmwaverVersion}"
             : string.Empty;
         BoardTypeText.Text = string.IsNullOrWhiteSpace(boardType) ? string.Empty : $"Board: {boardType}";
-        HardwareUidText.Text = string.IsNullOrWhiteSpace(hardwareUid) ? string.Empty : $"Hardware UID: {hardwareUid}";
-        SecureText.Text = device.IsConnected
-            ? (currentDeviceIsRegistered ? "Claim status: Claimed" : "Claim status: Unclaimed")
-            : string.Empty;
+        HardwareUidText.Text = string.Empty;
+        SecureText.Text = string.Empty;
         DeviceIdText.Text = string.Empty;
         AttachStatusText.Text = string.Empty;
-        ClaimStatusText.Text = BuildClaimStatusText(isEsp, currentDeviceIsRegistered, claimStatusResolved);
-        OfflineStatusText.Text = accountDevices.IsOfflineMode
-            ? (currentDeviceIsRegistered ? "This device is available in Offline Mode." : "This device is not in the optional account cache. Local scripts still run without activation.")
-            : (AppServices.CloudAuth.IsSignedIn ? "Signed in for optional hosted services." : "Sign in only for optional hosted services.");
+        ClaimStatusText.Text = string.Empty;
+        OfflineStatusText.Text = string.Empty;
         UpdateModeStatusText.Text = updater.EspBootloaderConnected
             ? $"ESP bootloader detected on {updater.EspBootloaderPort ?? "serial port"}."
             : ((updater.DfuConnected || device.DfuConnected) ? "STM32 Update Mode detected." : "Update Mode not detected.");
         VerificationText.Text = string.Empty;
-        ErrorText.Text = updater.UpdateError ?? device.LastErrorText ?? accountDevices.LastError ?? string.Empty;
+        ErrorText.Text = updater.UpdateError ?? device.LastErrorText ?? string.Empty;
 
         FirmwareProgressBar.Value = updater.ProgressPct;
         FirmwareProgressText.Text = updater.IsFlashing
@@ -127,53 +119,26 @@ public sealed partial class DevicePage : Page
 
         UpdateModeButton.Content = isEsp ? "Refresh bootloader" : "Enter Update Mode";
         UpdateModeButton.IsEnabled = !updater.IsFlashing && (isEsp || device.IsConnected);
-        PrimaryFirmwareButton.Content = GetPrimaryFirmwareTitle(isEsp, currentDeviceIsRegistered, claimStatusResolved);
-        PrimaryFirmwareButton.IsEnabled = !updater.IsFlashing && CanRunFirmwareAction(isEsp, currentDeviceIsRegistered, claimStatusResolved, device, updater);
+        PrimaryFirmwareButton.Content = GetPrimaryFirmwareTitle(isEsp);
+        PrimaryFirmwareButton.IsEnabled = !updater.IsFlashing && CanRunFirmwareAction(isEsp, device, updater);
 
-        DevicesIntroText.Text = accountDevices.IsOfflineMode
-            ? "Cached account devices for optional hosted services."
-            : "Optional account cache and recently seen EMWaver devices.";
+        DevicesIntroText.Text = "Local devices.";
     }
 
-    private static string BuildClaimStatusText(bool isEsp, bool currentDeviceIsRegistered, bool claimStatusResolved)
+    private static string GetPrimaryFirmwareTitle(bool isEsp)
     {
-        if (!claimStatusResolved)
-        {
-            return isEsp
-                ? "Checking optional account cache for this ESP32-S3."
-                : "Checking optional account cache for this device.";
-        }
-        if (currentDeviceIsRegistered)
-        {
-            return isEsp
-                ? "This ESP32-S3 is in the optional account cache and ready to flash."
-                : "This device is in the optional account cache and ready to update.";
-        }
-        return isEsp
-            ? "This ESP32-S3 is not in the optional account cache yet. Firmware flashing remains local."
-            : "This device is not in the optional account cache yet. Local scripts are not gated.";
+        return isEsp ? "Flash firmware" : "Update firmware";
     }
 
-    private static string GetPrimaryFirmwareTitle(bool isEsp, bool currentDeviceIsRegistered, bool claimStatusResolved)
+    private static bool CanRunFirmwareAction(bool isEsp, WindowsDeviceManager device, FirmwareUpdateManager updater)
     {
-        if (!claimStatusResolved) return "Checking device";
-        if (currentDeviceIsRegistered) return isEsp ? "Flash firmware" : "Update firmware";
-        return isEsp ? "Claim and flash" : "Claim device";
-    }
-
-    private static bool CanRunFirmwareAction(bool isEsp, bool currentDeviceIsRegistered, bool claimStatusResolved, WindowsDeviceManager device, FirmwareUpdateManager updater)
-    {
-        if (!claimStatusResolved || updater.IsFlashing) return false;
+        if (updater.IsFlashing) return false;
         if (isEsp)
         {
             var bootloaderReady = updater.EspBootloaderConnected || !string.IsNullOrWhiteSpace(updater.EspBootloaderPort);
-            return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && AppServices.CloudAuth.IsSignedIn);
+            return bootloaderReady;
         }
-        if (currentDeviceIsRegistered)
-        {
-            return device.IsConnected || updater.DfuConnected;
-        }
-        return device.IsConnected && AppServices.CloudAuth.IsSignedIn;
+        return device.IsConnected || updater.DfuConnected;
     }
 
     private async void OnRefreshClick(object sender, RoutedEventArgs e)

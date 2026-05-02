@@ -217,10 +217,10 @@ public struct ScriptsRootView: View {
                         .foregroundStyle(.secondary)
 
                 case .proOnly:
-                    Text("Cloud sync is available with EMWaver Pro.")
+                    Text("Script sync is not available.")
                         .foregroundStyle(.secondary)
 
-                    Text("Upgrade to sync scripts and signals across devices.")
+                    Text("Use local files or app-local storage.")
                         .foregroundStyle(.secondary)
                 }
 
@@ -232,9 +232,8 @@ public struct ScriptsRootView: View {
                     Spacer()
 
                     if syncUpsellPhase == .proOnly {
-                        Button("Get Pro…") {
+                        Button("Close") {
                             showingSyncUpsell = false
-                            onRequestSyncUpgrade?()
                         }
                         .buttonStyle(.borderedProminent)
                     }

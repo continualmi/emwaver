@@ -12,7 +12,7 @@
                 <Button Content="Back" Click="OnBackClick" />
                 <TextBlock Text="Hosts" FontSize="20" FontWeight="SemiBold" />
                 <Button Content="Refresh" Click="OnRefreshClick" />
-                <Button x:Name="GetProButton" Content="Get EMWaver Pro…" Click="OnGetProClick" Visibility="Collapsed" />
+                <Button x:Name="GetProButton" Content="Configure Agent…" Click="OnGetProClick" Visibility="Collapsed" />
             </StackPanel>
 
             <TextBlock x:Name="StatusText" Text="" Opacity="0.75" TextWrapping="Wrap" />
@@ -25,8 +25,8 @@
                     Padding="12"
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="Remote host sessions are an EMWaver Pro feature." FontWeight="SemiBold" />
-                    <TextBlock Text="You can browse host presence, but controlling a host is locked until you upgrade."
+                    <TextBlock Text="Remote sessions are not available here." FontWeight="SemiBold" />
+                    <TextBlock Text="Use the local gateway on this machine for hardware control."
                                Opacity="0.75"
                                TextWrapping="Wrap" />
                 </StackPanel>

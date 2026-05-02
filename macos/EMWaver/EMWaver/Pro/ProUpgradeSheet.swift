@@ -11,7 +11,7 @@ struct ProUpgradeSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text("Continual Pro")
+                Text("Agent API")
                     .font(.title2.weight(.semibold))
 
                 Spacer()
@@ -20,28 +20,28 @@ struct ProUpgradeSheet: View {
                     .buttonStyle(.bordered)
             }
 
-            Text("\(featureName) requires Continual Pro.")
+            Text("\(featureName) will use a user-provided MGPT API key.")
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 10) {
-                Label("Remote host sessions", systemImage: "dot.radiowaves.left.and.right")
-                Label("File storage + sync across devices", systemImage: "arrow.triangle.2.circlepath")
-                Label("Agent", systemImage: "sparkles")
+                Label("Local script and device context", systemImage: "terminal")
+                Label("Server-side private Agent instructions", systemImage: "lock")
+                Label("MGPT-backed inference", systemImage: "sparkles")
             }
             .padding(.top, 6)
 
-                Text("Agent access is included with Continual Pro, subject to usage limits.")
+                Text("Configure an Agent API key to enable Agent replies.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
             Divider()
 
             if !auth.isSignedIn {
-                Text("To subscribe, enter your EMWaver key and attach a genuine EMWaver device to your account first.")
+                Text("Agent API-key setup is not wired here yet. Local scripts and hardware control do not require it.")
                     .foregroundStyle(.secondary)
 
-                Button("Enter API Key…") {
-                    auth.isSignInSheetPresented = true
+                Button("Close") {
+                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
             } else {
@@ -61,7 +61,7 @@ struct ProUpgradeSheet: View {
                         .buttonStyle(.bordered)
                     } else {
                         if el.reason == "no_device" {
-                            Text("To subscribe, connect and attach a genuine EMWaver device to your account first.")
+                            Text("Agent API-key setup is not available in this panel yet.")
                                 .foregroundStyle(.secondary)
                         } else {
                             Text("You’re not eligible to subscribe yet.")

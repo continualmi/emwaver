@@ -987,9 +987,7 @@ public sealed partial class ScriptsPage : Page
     {
         if (!_agentEnabled)
         {
-            SetAgentStatusText(_agentSignedIn
-                ? "ELM requires EMWaver Pro. Sending is locked."
-                : "Sign in with your EMWaver account to use ELM.");
+            SetAgentStatusText("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
             return;
         }
 
@@ -1081,9 +1079,7 @@ public sealed partial class ScriptsPage : Page
             await RefreshEntitlementsUiAsync(force: true);
             if (!_agentEnabled)
             {
-                SetAgentStatusText(_agentSignedIn
-                    ? "ELM requires EMWaver Pro. You can read chats and type, but sending is locked."
-                    : "Sign in with your EMWaver account to use ELM.");
+                SetAgentStatusText("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                 return;
             }
 
@@ -1203,16 +1199,15 @@ public sealed partial class ScriptsPage : Page
     {
         try
         {
-            var snap = await AppServices.Entitlements.RefreshAsync(force: force, CancellationToken.None);
-            _agentSignedIn = AppServices.CloudAuth.IsSignedIn;
-            var agentFeatureEnabled = snap.Entitlements?.FeatureFlags.Agent ?? false;
-            _agentEnabled = _agentSignedIn && (agentFeatureEnabled || snap.IsPro);
-            _cloudSyncEnabled = snap.Entitlements?.FeatureFlags.CloudFiles ?? false;
+            _ = await AppServices.Entitlements.RefreshAsync(force: force, CancellationToken.None);
+            _agentSignedIn = false;
+            _agentEnabled = false;
+            _cloudSyncEnabled = false;
 
             await RunOnUiAsync(async () =>
             {
-                AgentSignInNotice.Visibility = _agentSignedIn ? Visibility.Collapsed : Visibility.Visible;
-                AgentProNotice.Visibility = (!_agentSignedIn || _agentEnabled) ? Visibility.Collapsed : Visibility.Visible;
+                AgentSignInNotice.Visibility = _agentEnabled ? Visibility.Collapsed : Visibility.Visible;
+                AgentProNotice.Visibility = Visibility.Collapsed;
                 AgentSendButton.IsEnabled = _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
                 AgentInput.IsEnabled = _agentEnabled;
                 await Task.CompletedTask;
@@ -1463,7 +1458,7 @@ public sealed partial class ScriptsPage : Page
             if (!_cloudSyncEnabled && !allowAnonSync)
             {
                 await HideSyncProgressAsync();
-                await ShowInfoAsync("Sync", "Cloud sync is available with EMWaver Pro. Upgrade to sync scripts and signals across devices.");
+                await ShowInfoAsync("Sync", "Script sync is not available. Use local files or app-local storage.");
                 return;
             }
 
@@ -1486,7 +1481,7 @@ public sealed partial class ScriptsPage : Page
             }
             else
             {
-                await ShowInfoAsync("Sync", "Sign in first (Settings → Sign In) to sync with cloud.");
+                await ShowInfoAsync("Sync", "Script sync is not available.");
                 return;
             }
 

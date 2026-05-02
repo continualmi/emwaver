@@ -3,8 +3,6 @@ import SwiftUI
 struct DeviceConnectionSheet: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
-    @EnvironmentObject private var auth: AuthenticationManager
-    @EnvironmentObject private var accountDevices: AccountDevicesService
     @Environment(\.dismiss) private var dismiss
 
     private var statusLabel: (text: String, icon: String) {
@@ -31,52 +29,11 @@ struct DeviceConnectionSheet: View {
         if device.isConnected {
             if needsFirmwareInstall {
                 items.append("Needs firmware")
-            } else if currentDeviceIsRegistered {
-                items.append(auth.isSignedIn ? "Account cache" : "Cached")
-            } else if !currentDeviceClaimStatusResolved {
-                items.append("Checking")
             } else {
                 items.append("Local")
             }
         }
-        if let uid = shortHardwareUid {
-            items.append("UID \(uid)")
-        }
         return items
-    }
-
-    private var shortHardwareUid: String? {
-        guard let uid = currentHardwareUidHex, uid.count >= 8 else { return nil }
-        return String(uid.suffix(8))
-    }
-
-    private var currentDeviceOfflineStatus: String? {
-        guard accountDevices.isOfflineMode else { return nil }
-        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return nil }
-        if accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid) {
-            return "This device is available in Offline Mode."
-        }
-        return "This device is not in the optional account cache yet. Local scripts still run without activation."
-    }
-
-    private var currentDeviceIsRegistered: Bool {
-        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return false }
-        return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
-    }
-
-    private var currentDeviceClaimStatusResolved: Bool {
-        guard let hardwareUid = currentHardwareUidHex, !hardwareUid.isEmpty else { return true }
-            return accountDevices.claimStatusResolved(
-            boardType: currentBoardType,
-            hardwareUid: hardwareUid,
-            signedIn: auth.hasSavedKey
-        )
-    }
-
-    private var currentHardwareUidHex: String? {
-        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
-        guard let value, !value.isEmpty else { return nil }
-        return value
     }
 
     private var currentBoardType: String {
@@ -88,11 +45,7 @@ struct DeviceConnectionSheet: View {
     }
 
     private var needsFirmwareInstall: Bool {
-        device.isConnected &&
-        device.deviceEmwaverVersion != nil &&
-        currentHardwareUidHex == nil &&
-        device.hardwareUidUnsupportedByFirmware &&
-        !isEspBoard
+        false
     }
 
     var body: some View {
@@ -100,14 +53,12 @@ struct DeviceConnectionSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 overviewCard
-                devicesSection
             }
             .padding(24)
         }
         .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
         .onAppear {
             firmwareUpdater.refreshDfuPresence()
-            accountDevices.refresh(auth: auth)
         }
     }
 
@@ -141,25 +92,8 @@ struct DeviceConnectionSheet: View {
 
     private var overviewCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Image(systemName: accountDevices.isOfflineMode ? "wifi.slash" : "wifi")
-                Text(accountDevices.isOfflineMode ? "Offline Mode" : "Online")
-                    .fontWeight(.medium)
-            }
-            .font(.subheadline)
-
-            Text(accountStatusText)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
             Text(deviceStatusText)
                 .foregroundStyle(.secondary)
-
-            if let currentDeviceOfflineStatus, !currentDeviceOfflineStatus.isEmpty {
-                Text(currentDeviceOfflineStatus)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
 
             HStack(spacing: 10) {
                 Button("Disconnect") {
@@ -174,106 +108,11 @@ struct DeviceConnectionSheet: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
-    private var devicesSection: some View {
-        detailSection(title: "My devices") {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(devicesIntroText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if accountDevices.devices.isEmpty {
-                    Text(accountDevices.isOfflineMode ? "No cached devices on this Mac yet." : "No devices on this account yet.")
-                        .foregroundStyle(.secondary)
-                } else {
-                    LazyVStack(alignment: .leading, spacing: 10) {
-                        ForEach(accountDevices.devices) { entry in
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(entry.label.isEmpty ? (entry.boardType ?? "EMWaver device") : entry.label)
-                                    .font(.subheadline.weight(.medium))
-
-                                HStack(spacing: 10) {
-                                    if let boardType = entry.boardType, !boardType.isEmpty {
-                                        Text(boardType)
-                                    }
-                                    if let hardwareUid = entry.hardwareUid, !hardwareUid.isEmpty {
-                                        Text("UID \(hardwareUid.suffix(8))")
-                                    }
-                                    Text("Seen \(Date(timeIntervalSince1970: TimeInterval(entry.lastSeenAtMs) / 1000).formatted(date: .abbreviated, time: .shortened))")
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.vertical, 2)
-                        }
-                    }
-                }
-
-                if let err = accountDevices.lastError, !err.isEmpty, !accountDevices.isOfflineMode {
-                    Text(err)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-
     private var deviceStatusText: String {
         if needsFirmwareInstall {
-            return "This device is running firmware that does not expose a hardware UID yet. Install managed EMWaver firmware for full local diagnostics and optional account setup."
+            return "This device can be updated with managed EMWaver firmware for the best local runtime compatibility."
         }
-        if currentDeviceIsRegistered {
-            if !auth.isSignedIn {
-                return "This device matches a locally cached device record. Enter your EMWaver key to confirm which account it belongs to."
-            }
-            if accountDevices.isOfflineMode {
-                return "This device is available from the optional account cache."
-            }
-            return "This device is present in your EMWaver account cache."
-        }
-        if !currentDeviceClaimStatusResolved {
-            return "Checking whether this device is already present in your optional account cache."
-        }
-        if accountDevices.isOfflineMode {
-            return "This device is not in the optional account cache yet. Local scripts still run without activation."
-        }
-        if auth.isSignedIn {
-            return "This device is connected. Optional account setup is available, but local scripts are not gated."
-        }
-        return "This device is connected. Enter an EMWaver key only for optional hosted services."
-    }
-
-    private var devicesIntroText: String {
-        if !auth.isSignedIn {
-            if let syncAt = accountDevices.lastSyncAt {
-                return "No key saved. Showing locally cached devices from the last sync on \(syncAt.formatted(date: .abbreviated, time: .shortened))."
-            }
-            return "No key saved. Showing locally cached devices."
-        }
-        let signedInLabel = auth.account?.email.flatMap { $0.isEmpty ? nil : $0 } ?? auth.userLabel
-        if let syncAt = accountDevices.lastSyncAt {
-            if accountDevices.isOfflineMode {
-                return "Signed in as \(signedInLabel). Showing locally cached devices."
-            }
-            return "Signed in as \(signedInLabel). Last synced \(syncAt.formatted(date: .abbreviated, time: .shortened))."
-        }
-        if accountDevices.isOfflineMode {
-            return "Signed in as \(signedInLabel). Showing locally cached devices."
-        }
-        if auth.isSignedIn {
-            return "Signed in as \(signedInLabel). Your device list will sync when available."
-        }
-        return "Enter your EMWaver key to sync your devices. Cached devices remain available in Offline Mode."
-    }
-
-    private var accountStatusText: String {
-        if let email = auth.account?.email, !email.isEmpty {
-            return "Account: \(email)"
-        }
-        if auth.isSignedIn {
-            return "Account: \(auth.userLabel)"
-        }
-        return "Account: no key saved"
+        return "This device is ready for local scripts and hardware control."
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

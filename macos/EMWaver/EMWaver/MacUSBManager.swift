@@ -23,7 +23,6 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
-        static let hardwareUidGet: UInt8 = 0x08
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
@@ -43,11 +42,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
     }
 
-    @Published var hardwareUidHex: String? = nil
-    @Published var lastDetectedHardwareUidHex: String? = nil
     @Published var connectedBoardType: String? = nil
     @Published var lastDetectedBoardType: String? = nil
-    @Published var hardwareUidUnsupportedByFirmware: Bool = false
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
@@ -108,12 +104,12 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         return midiQueue.sync { connectedSource != 0 && connectedDestination != 0 }
     }
 
-    private func inferBoardType(portName: String?, hardwareUid: Data?) -> String {
+    private func inferBoardType(portName: String?) -> String {
         let name = (portName ?? "").lowercased()
         if name.contains("esp32") || name.contains("s3") {
             return "esp32s3"
         }
-        if let hardwareUid, (hardwareUid.count == 6 || hardwareUid.count == 12), name.contains("emwaver esp") {
+        if name.contains("emwaver esp") {
             return "esp32s3"
         }
         return "stm32f042"
@@ -412,10 +408,9 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.isConnected = true
             self.lastErrorText = nil
             self.deviceEmwaverVersion = nil
-            self.hardwareUidUnsupportedByFirmware = false
         }
 
-        // Mirror the desktop app behavior: query the device version and hardware UID automatically on connect.
+        // Query only local runtime metadata needed for display and update guidance.
         DispatchQueue.global(qos: .userInitiated).async {
             var v = self.queryDeviceVersion(timeoutMs: 1500)
             if v == nil {
@@ -423,20 +418,12 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
                 v = self.queryDeviceVersion(timeoutMs: 1500)
             }
 
-            var hardwareUid = (v != nil) ? self.readHardwareUid(timeoutMs: 1200) : nil
-            if v != nil && hardwareUid == nil {
-                Thread.sleep(forTimeInterval: 0.25)
-                hardwareUid = self.readHardwareUid(timeoutMs: 1200)
-            }
-            let boardType = self.inferBoardType(portName: displayName ?? candidate.name, hardwareUid: hardwareUid)
+            let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
-                self.hardwareUidHex = hardwareUid?.map { String(format: "%02X", $0) }.joined()
-                self.lastDetectedHardwareUidHex = self.hardwareUidHex ?? self.lastDetectedHardwareUidHex
                 self.connectedBoardType = boardType
                 self.lastDetectedBoardType = boardType
-                self.hardwareUidUnsupportedByFirmware = (v != nil && hardwareUid == nil)
             }
         }
     }
@@ -452,9 +439,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             self.isConnected = false
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
-            self.hardwareUidHex = nil
             self.connectedBoardType = nil
-            self.hardwareUidUnsupportedByFirmware = false
         }
     }
 
@@ -475,18 +460,6 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         if resp[0] != 0x80 { return nil }
         if resp.dropFirst(4).contains(where: { $0 != 0 }) { return nil }
         return "\(resp[1]).\(resp[2])"
-    }
-
-    func readHardwareUid(timeoutMs: Int) -> Data? {
-        guard let lane = sendCommandInternal(
-            Data([EmwOpcode.hardwareUidGet]),
-            timeout: timeoutMs,
-            responsePredicate: { lane in lane.count >= 7 && lane[0] == 0x80 }
-        ) else { return nil }
-        if lane[0] != 0x80 { return nil }
-        let payloadCount = min(max(0, lane.count - 1), 12)
-        guard payloadCount == 6 || payloadCount == 12 else { return nil }
-        return Data(lane[1..<(1 + payloadCount)])
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {

@@ -98,7 +98,7 @@ public class MainActivity extends AppCompatActivity {
                 connectionMenuItem = menu.findItem(R.id.action_connection);
                 MenuItem hostsItem = menu.findItem(R.id.action_hosts);
                 if (hostsItem != null) {
-                    hostsItem.setVisible(com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedServicesUiEnabled());
+                    hostsItem.setVisible(false);
                 }
             }
 
@@ -130,8 +130,8 @@ public class MainActivity extends AppCompatActivity {
                         String email = auth.getSignedInEmail();
                         new AlertDialog.Builder(MainActivity.this)
                                 .setTitle("Account")
-                                .setMessage(email != null && !email.isEmpty() ? email : "Signed in")
-                                .setPositiveButton("Sign out", (d, w) -> auth.signOut())
+                                .setMessage(email != null && !email.isEmpty() ? email : "Agent key saved")
+                                .setPositiveButton("Remove key", (d, w) -> auth.signOut())
                                 .setNegativeButton("Close", null)
                                 .show();
                     } else {

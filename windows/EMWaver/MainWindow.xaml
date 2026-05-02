@@ -106,12 +106,12 @@
 
                     <AppBarSeparator />
 
-                    <AppBarButton x:Name="ScriptSyncButton" Label="Sync" Click="OnScriptSyncClick">
+                    <AppBarButton x:Name="ScriptSyncButton" Label="Sync" Visibility="Collapsed" Click="OnScriptSyncClick">
                         <AppBarButton.Icon>
                             <FontIcon Glyph="&#xE753;" />
                         </AppBarButton.Icon>
                     </AppBarButton>
-                    <AppBarButton x:Name="HostsButton" Label="Hosts" Icon="Globe" Click="OnHostsClick" />
+                    <AppBarButton x:Name="HostsButton" Label="Hosts" Icon="Globe" Visibility="Collapsed" Click="OnHostsClick" />
                     <AppBarSeparator />
 
                     <AppBarElementContainer x:Name="RunningScriptContainer" Visibility="Collapsed">
@@ -145,7 +145,7 @@
                         </AppBarToggleButton.Icon>
                     </AppBarToggleButton>
 
-                    <AppBarButton x:Name="AccountButton" Label="Account" Icon="Contact" Click="OnAccountClick" />
+                    <AppBarButton x:Name="AccountButton" Label="Account" Icon="Contact" Visibility="Collapsed" Click="OnAccountClick" />
 
                     <CommandBar.SecondaryCommands>
                         <AppBarButton x:Name="ScriptNewButton" Label="New Script" Icon="Add" Click="OnScriptNewClick" />

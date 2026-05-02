@@ -194,13 +194,13 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("Agent requires EMWaver Pro. You can read chats and type, but sending is locked.")
+                    Text("Configure an Agent API key to enable Agent replies.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
                     Spacer()
 
-                    Button("Get EMWaver Pro…") {
+                    Button("Configure Agent…") {
                         onRequestUpgrade?()
                     }
                     .buttonStyle(.bordered)
@@ -226,10 +226,10 @@ public struct AgentChatPanelView: View {
     private var suggestions: some View {
         let items: [String] = [
             "How do I connect an EMWaver device over USB?",
-            "Show me where to find Host Sessions and what they do.",
+            "Help me write a script for a connected board.",
             "Help me write a script to blink a GPIO pin.",
             "How do I capture and replay an IR remote?",
-            "How do I sync scripts across devices?",
+            "How do I save scripts locally?",
         ]
 
         // Keep it lightweight: show when draft is empty.

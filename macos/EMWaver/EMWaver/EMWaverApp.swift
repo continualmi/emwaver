@@ -17,7 +17,7 @@ struct EMWaverApp: App {
     @State private var didActivateApp = false
 
     private var hostedServicesUiEnabled: Bool {
-        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_SERVICES_UI_ENABLED"] == "1"
+        false
     }
 
     init() {
@@ -44,41 +44,13 @@ struct EMWaverApp: App {
                 .task {
                     await auth.waitForInitialRestore()
 
-                    if hostedServicesUiEnabled {
-                        // Optional hosted-service heartbeat + host discovery.
-                        hostSessions.start(auth: auth, device: device)
-                        hostDirectory.start(auth: auth)
-                    }
-
-                    // Remote control host WS (web can attach + drive scripts/UI).
                     remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)
-
-                    accountDevices.start(auth: auth)
-
-                    // Pro entitlements/eligibility.
-                    await entitlements.refresh(auth: auth, force: true)
                 }
                 .onAppear {
                     activateAppIfNeeded()
                 }
         }
         .commands {
-            CommandMenu("Account") {
-                if auth.isSignedIn {
-                    Button("Remove Key") {
-                        Task { await auth.removeKey() }
-                    }
-                } else {
-                    Button("Enter API Key…") {
-                        auth.isSignInSheetPresented = true
-                    }
-                }
-
-                Button("Manage Key on Web") {
-                    auth.openAccountManagement()
-                }
-            }
-
             CommandMenu("Device") {
                 if device.isConnected {
                     Text("Status: Connected")

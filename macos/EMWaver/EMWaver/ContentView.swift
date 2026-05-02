@@ -20,8 +20,6 @@ struct ContentView: View {
     @ObservedObject var hostDirectory: HostDirectory
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
-    @EnvironmentObject private var accountDevices: AccountDevicesService
-    @EnvironmentObject private var entitlements: EntitlementsManager
     @EnvironmentObject private var appRouter: AppRouter
 
     let previewManager: ScriptPreviewManager
@@ -29,8 +27,6 @@ struct ContentView: View {
     @State private var showingHosts: Bool = false
     @State private var showingSettings: Bool = false
 
-    @State private var showingProUpgrade: Bool = false
-    @State private var proFeatureName: String = ""
     @State private var autoFirmwarePromptKey: String? = nil
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
@@ -50,12 +46,6 @@ struct ContentView: View {
         return ("cable.connector.slash", "Disconnected")
     }
 
-    private var currentHardwareUidHex: String? {
-        let value = device.hardwareUidHex ?? device.lastDetectedHardwareUidHex
-        guard let value, !value.isEmpty else { return nil }
-        return value
-    }
-
     private var currentBoardType: String {
         device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -72,11 +62,7 @@ struct ContentView: View {
     }
 
     private var needsAutomaticFirmwareRecovery: Bool {
-        guard device.isConnected else { return false }
-        guard device.deviceEmwaverVersion != nil else { return false }
-        guard currentHardwareUidHex == nil else { return false }
-        guard device.hardwareUidUnsupportedByFirmware else { return false }
-        return currentBoardType.caseInsensitiveCompare("stm32f042") == .orderedSame
+        false
     }
 
     private var autoRecoveryKey: String? {
@@ -112,13 +98,12 @@ struct ContentView: View {
     }
 
     private var scriptDeviceAttachmentKey: String {
-        let hardwareUid = currentHardwareUidHex ?? "none"
         let suffix = (scriptDeviceBridge == nil) ? "disconnected" : "ready"
-        return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
+        return "\(currentBoardType)-\(suffix)"
     }
 
     private var hostedServicesUiEnabled: Bool {
-        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_SERVICES_UI_ENABLED"] == "1"
+        false
     }
 
     var body: some View {
@@ -127,49 +112,15 @@ struct ContentView: View {
                 ScriptsRootView(
                     previewManager: previewManager,
                     device: scriptDeviceBridge,
-                    syncProvider: {
-                        // Local testing uses the repo root .env bootstrap.
-                        guard let base = BackendUrl.resolve() else { return nil }
-
-                        // For local dev: allow sync without sign-in when backend auth is disabled.
-                        // Set in Xcode Scheme env vars: EMWAVER_ALLOW_ANON_SYNC=1
-                        let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
-
-                        // Pro gating: cloud file sync is Pro-only.
-                        if !(entitlements.entitlements?.features.cloudFiles ?? false), !allowAnonSync {
-                            return nil
-                        }
-
-                        if !auth.accessToken.isEmpty {
-                            return (baseURL: base, accessToken: auth.accessToken)
-                        }
-
-                        if allowAnonSync {
-                            return (baseURL: base, accessToken: "")
-                        }
-
-                        return nil
-                    },
-                    agentCloudProvider: {
-                        // Cloud-stored conversations (Pro-only). We still run inference locally for now.
-                        guard (entitlements.entitlements?.features.agent ?? false) else { return nil }
-                        guard let base = BackendUrl.resolve() else { return nil }
-                        guard !auth.accessToken.isEmpty else { return nil }
-                        return (baseURL: base, accessToken: auth.accessToken)
-                    },
+                    syncProvider: nil,
+                    agentCloudProvider: nil,
                     hostStatusSink: { running, name in
                         // Treat "preview showing" as "script running" on macOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
                     },
-                    agentEnabled: (entitlements.entitlements?.features.agent ?? false),
-                    onRequestAgentUpgrade: {
-                        proFeatureName = "Agent"
-                        showingProUpgrade = true
-                    },
-                    onRequestSyncUpgrade: {
-                        proFeatureName = "Cloud sync"
-                        showingProUpgrade = true
-                    },
+                    agentEnabled: true,
+                    onRequestAgentUpgrade: nil,
+                    onRequestSyncUpgrade: nil,
                     onRequestOpenSettings: {
                         showingSettings = true
                     }
@@ -245,12 +196,11 @@ struct ContentView: View {
             if hostedServicesUiEnabled {
                 ToolbarItem(placement: .automatic) {
                     Button {
-                        // Hosted host sessions are optional service UI, hidden from the local-first core by default.
                         showingHosts = true
                     } label: {
                         Label("Hosted Hosts", systemImage: "dot.radiowaves.left.and.right")
                     }
-                    .help("View optional hosted host sessions on this account")
+                    .help("View host sessions")
                 }
             }
 
@@ -286,11 +236,8 @@ struct ContentView: View {
                             Task { await auth.removeKey() }
                         }
 
-                        Button("Manage Key on Web") {
-                            auth.openAccountManagement()
-                        }
                     } label: {
-                        Label(auth.userLabel, systemImage: "person.crop.circle")
+                        Label("Agent Key", systemImage: "key.fill")
                     }
                 } else {
                     Button {
@@ -307,23 +254,16 @@ struct ContentView: View {
         }
         .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
             DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
-                .environmentObject(auth)
-                .environmentObject(accountDevices)
         }
         .sheet(isPresented: $firmwareUpdater.isPresented) {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
-                .environmentObject(auth)
-                .environmentObject(accountDevices)
         }
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
                 HostsView(
                     directory: hostDirectory,
-                    proEnabled: (entitlements.entitlements?.features.cloudHosts ?? false),
-                    onRequestUpgrade: {
-                        proFeatureName = "Remote host sessions"
-                        showingProUpgrade = true
-                    }
+                    proEnabled: false,
+                    onRequestUpgrade: nil
                 ) {
                     await hostDirectory.refresh(auth: auth)
                 }
@@ -338,54 +278,25 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
-        .sheet(isPresented: $showingProUpgrade) {
-            ProUpgradeSheet(entitlements: entitlements, featureName: proFeatureName)
-                .environmentObject(auth)
-        }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
             await auth.waitForInitialRestore()
-            await entitlements.refresh(auth: auth, force: true)
             firmwareUpdater.refreshDfuPresence()
-            syncConnectedDeviceAccessIfNeeded()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
                 triggerAutomaticFirmwarePromptIfNeeded()
             }
         }
-        .onChange(of: auth.accessToken) { _ in
-            Task { await entitlements.refresh(auth: auth, force: true) }
-            syncConnectedDeviceAccessIfNeeded()
-        }
-        .onChange(of: device.hardwareUidHex) { _ in
-            accountDevices.refresh(auth: auth)
-            syncConnectedDeviceAccessIfNeeded()
-            triggerAutomaticFirmwarePromptIfNeeded()
-        }
-        .onChange(of: device.lastDetectedHardwareUidHex) { _ in
-            accountDevices.refresh(auth: auth)
-            syncConnectedDeviceAccessIfNeeded()
-        }
         .onChange(of: device.connectedBoardType) { _ in
-            accountDevices.refresh(auth: auth)
-            syncConnectedDeviceAccessIfNeeded()
             triggerAutomaticFirmwarePromptIfNeeded()
-        }
-        .onChange(of: device.lastDetectedBoardType) { _ in
-            accountDevices.refresh(auth: auth)
-            syncConnectedDeviceAccessIfNeeded()
         }
         .onChange(of: device.isConnected) { connected in
             if !connected && !firmwareUpdater.dfuConnected {
                 autoFirmwarePromptKey = nil
             }
-            syncConnectedDeviceAccessIfNeeded()
             triggerAutomaticFirmwarePromptIfNeeded()
         }
         .onChange(of: device.deviceEmwaverVersion) { _ in
-            triggerAutomaticFirmwarePromptIfNeeded()
-        }
-        .onChange(of: device.hardwareUidUnsupportedByFirmware) { _ in
             triggerAutomaticFirmwarePromptIfNeeded()
         }
         .onChange(of: firmwareUpdater.dfuConnected) { connected in
@@ -400,12 +311,6 @@ struct ContentView: View {
             }
         }
 
-    }
-
-    private func syncConnectedDeviceAccessIfNeeded() {
-        guard device.isConnected else { return }
-        guard let hardwareUid = currentHardwareUidHex else { return }
-        accountDevices.syncSeenDevice(boardType: currentBoardType, hardwareUid: hardwareUid, auth: auth)
     }
 
     private func triggerAutomaticFirmwarePromptIfNeeded() {

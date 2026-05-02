@@ -50,13 +50,7 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
-        HostsButton.Visibility = HostedServicesUiEnabled() ? Visibility.Visible : Visibility.Collapsed;
-
-        if (HostedServicesUiEnabled())
-        {
-            // Optional hosted-service heartbeat.
-            AppServices.HostSession.Start();
-        }
+        HostsButton.Visibility = Visibility.Collapsed;
 
         // Remote control host WS (web can attach + drive scripts/UI).
         AppServices.RemoteControlHost.Start();
@@ -601,13 +595,7 @@ public sealed partial class MainWindow : Window
 
     private void OnHostsClick(object sender, RoutedEventArgs e)
     {
-        if (!HostedServicesUiEnabled())
-        {
-            return;
-        }
-
-        ContentFrame.Navigate(typeof(HostsPage));
-        TopBackButton.IsEnabled = ContentFrame.CanGoBack;
+        return;
     }
 
     private static bool HostedServicesUiEnabled()

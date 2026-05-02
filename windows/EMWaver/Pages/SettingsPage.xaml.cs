@@ -98,24 +98,7 @@ public sealed partial class SettingsPage : Page
         try
         {
             var snap = await AppServices.Entitlements.RefreshAsync(force: true, CancellationToken.None);
-            var text = "You’re not eligible to subscribe yet.";
-
-            if (!AppServices.CloudAuth.IsSignedIn)
-            {
-                text = "To subscribe, sign in and attach a genuine EMWaver device to your account first.";
-            }
-            else if (snap.Entitlements?.Pro == true)
-            {
-                text = "EMWaver Pro is active.";
-            }
-            else if (snap.Eligibility?.CanPurchasePro == true)
-            {
-                text = "Eligible to subscribe.";
-            }
-            else if (string.Equals(snap.Eligibility?.Reason, "no_device", StringComparison.OrdinalIgnoreCase))
-            {
-                text = "To subscribe, connect and attach a genuine EMWaver device to your account first.";
-            }
+            var text = "Agent API-key setup is not available in this panel yet.";
 
             if (!string.IsNullOrWhiteSpace(snap.LastError))
             {

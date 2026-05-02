@@ -23,8 +23,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
         _updater.PropertyChanged += OnStateChanged;
         _device.PropertyChanged += OnStateChanged;
-        AppServices.AccountDevices.PropertyChanged += OnStateChanged;
-        AppServices.CloudAuth.Changed += OnAuthChanged;
 
         PrimaryButtonClick += OnPrimaryButtonClick;
         Closing += OnClosing;
@@ -43,7 +41,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         _updater.AttachUiDispatcher(_ui);
         _updater.ResetForPresent(_presentedBoardType);
         _ = _updater.RefreshDfuPresenceAsync();
-        AppServices.AccountDevices.Refresh();
         UpdateUi();
     }
 
@@ -57,8 +54,6 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
         _updater.PropertyChanged -= OnStateChanged;
         _device.PropertyChanged -= OnStateChanged;
-        AppServices.AccountDevices.PropertyChanged -= OnStateChanged;
-        AppServices.CloudAuth.Changed -= OnAuthChanged;
     }
 
     private async void OnPrimaryButtonClick(ContentDialog sender, ContentDialogButtonClickEventArgs args)
@@ -67,31 +62,7 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
 
         if (_updater.IsFlashing) return;
 
-        var isEsp = IsEspWorkflow();
-        var currentDeviceIsRegistered = CurrentDeviceIsRegistered();
-
-        if (isEsp)
-        {
-            if (currentDeviceIsRegistered)
-            {
-                await _updater.StartUpdateAsync(_device);
-            }
-            else
-            {
-                await _updater.StartEspClaimAndFlashAsync(AppServices.CloudAuth, AppServices.AccountDevices, _device);
-            }
-        }
-        else
-        {
-            if (currentDeviceIsRegistered)
-            {
-                await _updater.StartUpdateAsync(_device);
-            }
-            else
-            {
-                await _updater.StartMintAndProvisionAsync(AppServices.CloudAuth, _device);
-            }
-        }
+        await _updater.StartUpdateAsync(_device);
 
         UpdateUi();
     }
@@ -101,15 +72,9 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         _ = _ui.TryEnqueue(UpdateUi);
     }
 
-    private void OnAuthChanged()
-    {
-        _ = _ui.TryEnqueue(UpdateUi);
-    }
-
     private async void OnRefreshStateClick(object sender, RoutedEventArgs e)
     {
         await _updater.RefreshDfuPresenceAsync();
-        AppServices.AccountDevices.Refresh();
         UpdateUi();
     }
 
@@ -129,95 +94,39 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
         return string.Equals(boardType, "esp32s3", StringComparison.OrdinalIgnoreCase) || _updater.EspBootloaderConnected;
     }
 
-    private string? CurrentHardwareUid()
-    {
-        return _device.HardwareUidHex ?? _device.LastDetectedHardwareUidHex;
-    }
-
-    private bool CurrentDeviceIsRegistered()
-    {
-        var hardwareUid = CurrentHardwareUid();
-        var boardType = _presentedBoardType ?? _device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? "stm32f042";
-        return !string.IsNullOrWhiteSpace(hardwareUid) &&
-               AppServices.AccountDevices.HasOfflineAccess(boardType, hardwareUid!);
-    }
-
-    private bool CurrentDeviceClaimStatusResolved()
-    {
-        var hardwareUid = CurrentHardwareUid();
-        var boardType = _presentedBoardType ?? _device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? "stm32f042";
-        return string.IsNullOrWhiteSpace(hardwareUid) ||
-               AppServices.AccountDevices.ClaimStatusResolved(boardType, hardwareUid!, AppServices.CloudAuth.IsSignedIn);
-    }
-
     private string PrimaryActionTitle()
     {
-        var isEsp = IsEspWorkflow();
-        var currentDeviceIsRegistered = CurrentDeviceIsRegistered();
-        var claimStatusResolved = CurrentDeviceClaimStatusResolved();
-
-        if (!claimStatusResolved) return "Checking device";
-        if (currentDeviceIsRegistered) return isEsp ? "Flash firmware" : "Update device";
-        return isEsp ? "Claim and flash" : "Claim device";
+        return IsEspWorkflow() ? "Flash firmware" : "Update device";
     }
 
     private bool CanRunPrimaryAction()
     {
         var isEsp = IsEspWorkflow();
-        var currentDeviceIsRegistered = CurrentDeviceIsRegistered();
-        var claimStatusResolved = CurrentDeviceClaimStatusResolved();
-
-        if (!claimStatusResolved || _updater.IsFlashing) return false;
+        if (_updater.IsFlashing) return false;
         if (isEsp)
         {
             var bootloaderReady = _updater.EspBootloaderConnected || !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort);
-            return currentDeviceIsRegistered ? bootloaderReady : (bootloaderReady && AppServices.CloudAuth.IsSignedIn);
+            return bootloaderReady;
         }
-        if (currentDeviceIsRegistered)
-        {
-            return _device.IsConnected || _updater.DfuConnected;
-        }
-        return _device.IsConnected && AppServices.CloudAuth.IsSignedIn;
+        return _device.IsConnected || _updater.DfuConnected;
     }
 
     private void UpdateUi()
     {
         var isEsp = IsEspWorkflow();
         var boardType = _presentedBoardType ?? _device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? (isEsp ? "esp32s3" : "stm32f042");
-        var hardwareUid = CurrentHardwareUid();
-        var currentDeviceIsRegistered = CurrentDeviceIsRegistered();
-        var claimStatusResolved = CurrentDeviceClaimStatusResolved();
 
-        Title = currentDeviceIsRegistered
-            ? (isEsp ? "Flash ESP32-S3" : "Update EMWaver")
-            : (isEsp ? "Set Up ESP32-S3" : "Set Up EMWaver");
+        Title = isEsp ? "Flash ESP32-S3" : "Update EMWaver";
         PrimaryButtonText = PrimaryActionTitle();
         IsPrimaryButtonEnabled = CanRunPrimaryAction();
 
         SummaryTitleText.Text = isEsp ? "ESP32-S3 device" : "STM32 device";
-        SummaryText.Text = currentDeviceIsRegistered
-            ? (isEsp ? "This board is already claimed. Flash firmware when the bootloader is ready." : "This device is already claimed. Update firmware when it is connected in Run Mode or Update Mode.")
-            : (isEsp ? "Claim this ESP32-S3 and flash managed EMWaver firmware over the serial bootloader path." : "Claim this board and provision managed EMWaver firmware through the DFU flow.");
-        BoardInfoText.Text = string.IsNullOrWhiteSpace(hardwareUid)
-            ? $"Board: {boardType}"
-            : $"Board: {boardType} | Hardware UID: {hardwareUid}";
+        SummaryText.Text = isEsp
+            ? "Flash managed EMWaver firmware over the serial bootloader path."
+            : "Update managed EMWaver firmware through the DFU flow.";
+        BoardInfoText.Text = $"Board: {boardType}";
 
-        if (!claimStatusResolved)
-        {
-            ClaimStatusText.Text = "Checking whether this board is already claimed.";
-        }
-        else if (currentDeviceIsRegistered)
-        {
-            ClaimStatusText.Text = AppServices.CloudAuth.IsSignedIn
-                ? "This board is already claimed in your EMWaver account."
-                : "This board matches a locally cached claimed device.";
-        }
-        else
-        {
-            ClaimStatusText.Text = AppServices.CloudAuth.IsSignedIn
-                ? "This board is not claimed yet."
-                : "Sign in to claim this board.";
-        }
+        ClaimStatusText.Text = "";
 
         BootloaderStatusText.Text = isEsp
             ? (_updater.EspBootloaderConnected
@@ -227,9 +136,7 @@ public sealed partial class FirmwareUpdateDialog : ContentDialog
                 ? "STM32 Update Mode detected."
                 : "Device not in Update Mode yet. The app can request it from Run Mode.");
 
-        SignInStatusText.Text = AppServices.CloudAuth.IsSignedIn
-            ? "Signed in."
-            : "Sign in stays available even without a connected device.";
+        SignInStatusText.Text = "";
 
         ErrorPanel.Visibility = string.IsNullOrWhiteSpace(_updater.UpdateError) ? Visibility.Collapsed : Visibility.Visible;
         ErrorText.Text = _updater.UpdateError ?? "";

@@ -7,9 +7,6 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Text;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Devices.Enumeration;
@@ -19,18 +16,6 @@ namespace EMWaver.Services;
 
 internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
-    private sealed record MintResponse(
-        [property: JsonPropertyName("created")] bool? Created
-    );
-
-    private sealed record EspSerialIdentity(
-        string HardwareUidHex,
-        string MacHex,
-        int ChipRevision,
-        string FeaturesHex,
-        int Cores
-    );
-
     private DispatcherQueue? _ui;
     private Timer? _dfuPollTimer;
     private readonly List<string> _logLines = new();
@@ -272,158 +257,12 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     internal async Task StartMintAndProvisionAsync(CloudAuthManager auth, WindowsDeviceManager device)
     {
-        ResetTransientState();
-        AppendLog("Activation requested");
-        CompletionMessage = "Activation complete. Reconnect the device to use it.";
-        ProgressMessage = "Reading hardware UID...";
-
-        if (IsFlashing) return;
-        if (!device.IsConnected)
-        {
-            UpdateError = "Activation currently requires a device connected in Run mode so Windows can read its hardware UID.";
-            return;
-        }
-        var token = await auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            UpdateError = "Sign in to activate this device.";
-            return;
-        }
-
-        var boardType = device.ConnectedBoardType ?? device.LastDetectedBoardType ?? "stm32f042";
-        if (IsEspBoardType(boardType))
-        {
-            await StartEspClaimAndFlashAsync(auth, AppServices.AccountDevices, device);
-            return;
-        }
-
-        var hardwareUid = await device.ReadHardwareUidAsync(timeoutMs: 1200);
-        if (hardwareUid == null)
-        {
-            UpdateError = "Failed to read hardware UID from device.";
-            return;
-        }
-
-        var hardwareUidHex = BitConverter.ToString(hardwareUid).Replace("-", "");
-        AppendLog($"Board type: {boardType}");
-        AppendLog($"Hardware UID: {hardwareUidHex}");
-
-        MintResponse mint;
-        try
-        {
-            mint = await MintDeviceAsync(token!, boardType, hardwareUidHex);
-        }
-        catch (Exception ex)
-        {
-            UpdateError = ex.Message;
-            return;
-        }
-
-        AppendLog((mint.Created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded");
-        AppServices.AccountDevices.StoreClaimedDevice(boardType, hardwareUidHex);
-        AppendLog("Stored claimed device locally for immediate access");
-
-        ProgressMessage = "Switching device to Update Mode...";
-        device.RequestEnterUpdateMode();
-        device.Disconnect();
-
-        await WaitForDfuPresenceAsync();
-        if (!DfuConnected)
-        {
-            UpdateError ??= "Failed to enter Update Mode (DFU not detected).";
-            ProgressMessage = "";
-            return;
-        }
-
-        try
-        {
-            await RunStmFlashAsync();
-        }
-        catch (Exception ex)
-        {
-            UpdateError = ex.Message;
-            ProgressMessage = "";
-        }
+        await StartUpdateAsync(device);
     }
 
     internal async Task StartEspClaimAndFlashAsync(CloudAuthManager auth, AccountDevicesService accountDevices, WindowsDeviceManager device)
     {
-        ResetTransientState();
-        AppendLog("ESP setup requested");
-        CompletionMessage = "ESP setup complete. Reconnect the device in Run Mode.";
-        ProgressMessage = "Claiming device...";
-
-        if (IsFlashing) return;
-
-        var token = await auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            UpdateError = "Sign in to set up this device.";
-            return;
-        }
-
-        string hardwareUidHex;
-        if (!string.IsNullOrWhiteSpace(device.HardwareUidHex))
-        {
-            hardwareUidHex = Normalize(device.HardwareUidHex);
-            AppendLog("Using existing EMWaver runtime hardware UID");
-            AppendLog($"Hardware UID: {hardwareUidHex}");
-        }
-        else if (!string.IsNullOrWhiteSpace(device.LastDetectedHardwareUidHex))
-        {
-            hardwareUidHex = Normalize(device.LastDetectedHardwareUidHex);
-            AppendLog("Using cached ESP hardware UID");
-            AppendLog($"Hardware UID: {hardwareUidHex}");
-        }
-        else
-        {
-            var identity = await ReadEspSerialIdentityAsync();
-            hardwareUidHex = identity.HardwareUidHex;
-            device.LastDetectedHardwareUidHex = identity.HardwareUidHex;
-            device.LastDetectedBoardType = "esp32s3";
-            AppendLog("Read raw ESP identity from ROM bootloader");
-            AppendLog($"MAC: {identity.MacHex}");
-            AppendLog($"Chip revision: {identity.ChipRevision}");
-            AppendLog($"Features: {identity.FeaturesHex}");
-            AppendLog($"Cores: {identity.Cores}");
-            AppendLog($"Hardware UID: {identity.HardwareUidHex}");
-        }
-
-        MintResponse mint;
-        try
-        {
-            mint = await MintDeviceAsync(token!, "esp32s3", hardwareUidHex);
-        }
-        catch (Exception ex)
-        {
-            UpdateError = ex.Message;
-            return;
-        }
-
-        AppendLog((mint.Created ?? false) ? "Backend device claim succeeded" : "Backend device restore succeeded");
-        accountDevices.StoreClaimedDevice("esp32s3", hardwareUidHex);
-        await StartEspSerialUpdateAsync(device);
-    }
-
-    private async Task<MintResponse> MintDeviceAsync(string idToken, string boardType, string hardwareUidHex)
-    {
-        var url = $"{BackendUrl.Resolve().TrimEnd('/')}/provisioning/mint";
-        using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Post, url);
-        req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", idToken);
-        req.Content = new System.Net.Http.StringContent(
-            JsonSerializer.Serialize(new { board_type = boardType, hardware_uid = hardwareUidHex }),
-            Encoding.UTF8,
-            "application/json");
-
-        using var res = await AppServices.Http.SendAsync(req);
-        var body = await res.Content.ReadAsStringAsync();
-        if (!res.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(body) ? "Device claim failed." : body);
-        }
-
-        return JsonSerializer.Deserialize<MintResponse>(body) ??
-            throw new InvalidOperationException("Mint response was malformed.");
+        await StartUpdateAsync(device);
     }
 
     private async Task WaitForDfuPresenceAsync()
@@ -636,43 +475,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         return value.Contains("COM", StringComparison.OrdinalIgnoreCase) ||
                value.Contains("USB") ||
                value.Contains("UART");
-    }
-
-    private async Task<EspSerialIdentity> ReadEspSerialIdentityAsync()
-    {
-        var port = await ResolveEspFlashPortAsync();
-        AppendLog($"ESP identity port: {port}");
-
-        var (code, stdout, stderr) = await RunEspHelperAndWaitAsync("read-identity", "--port", port, "--baud", "115200");
-        if (code != 0)
-        {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(stderr) ? "Failed to read ESP serial identity." : stderr.Trim());
-        }
-
-        string? GetValue(string key)
-        {
-            foreach (var rawLine in stdout.Split('\n', StringSplitOptions.RemoveEmptyEntries))
-            {
-                if (rawLine.StartsWith($"{key}=", StringComparison.Ordinal))
-                {
-                    return rawLine[(key.Length + 1)..].Trim();
-                }
-            }
-            return null;
-        }
-
-        var hardwareUidHex = Normalize(GetValue("HARDWARE_UID_HEX"));
-        if (hardwareUidHex.Length == 0)
-        {
-            throw new InvalidOperationException("ESP serial identity is missing HARDWARE_UID_HEX.");
-        }
-
-        return new EspSerialIdentity(
-            hardwareUidHex,
-            Normalize(GetValue("MAC")).Replace(":", "", StringComparison.Ordinal),
-            int.TryParse(GetValue("CHIP_REVISION"), out var chipRevision) ? chipRevision : 0,
-            Normalize(GetValue("FEATURES")),
-            int.TryParse(GetValue("CORES"), out var cores) ? cores : 0);
     }
 
     private async Task RunEspFlashAsync(string port)

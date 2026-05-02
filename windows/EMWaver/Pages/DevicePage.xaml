@@ -23,7 +23,7 @@
         </StackPanel>
 
         <StackPanel Grid.Row="1" Grid.Column="0" Spacing="14">
-            <Border CornerRadius="12" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+            <Border Visibility="Collapsed" CornerRadius="12" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Ports" FontSize="16" FontWeight="SemiBold" />
                     <ListView x:Name="PortsList" SelectionMode="Single" Height="220" />
@@ -33,8 +33,8 @@
 
             <Border CornerRadius="12" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <StackPanel Spacing="8">
-                    <TextBlock Text="My devices" FontSize="16" FontWeight="SemiBold" />
-                    <TextBlock x:Name="DevicesIntroText" Text="Optional account cache and recently seen EMWaver devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock Text="Devices" FontSize="16" FontWeight="SemiBold" />
+                    <TextBlock x:Name="DevicesIntroText" Text="Local devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     <ListView x:Name="DevicesList" Height="220">
                         <ListView.ItemTemplate>
                             <DataTemplate>
@@ -42,8 +42,8 @@
                                     <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
                                     <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
                                         <Run Text="{Binding BoardType}" />
-                                        <Run Text="  UID " />
-                                        <Run Text="{Binding HardwareUid}" />
+                                        <Run Text="" />
+                                        <Run Text="" />
                                     </TextBlock>
                                 </StackPanel>
                             </DataTemplate>
@@ -60,7 +60,7 @@
                     <TextBlock x:Name="StatusText" Text="Disconnected" />
                     <TextBlock x:Name="VersionText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="BoardTypeText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                    <TextBlock x:Name="HardwareUidText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="HardwareUidText" Visibility="Collapsed" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     <TextBlock x:Name="SecureText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
                     <TextBlock x:Name="DeviceIdText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     <TextBlock x:Name="AttachStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />

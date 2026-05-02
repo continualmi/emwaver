@@ -85,7 +85,7 @@ public class AgentChatViewModel extends AndroidViewModel {
 
                 String token = auth.getIdTokenBlocking();
                 if (token.trim().isEmpty()) {
-                    postError("Please sign in to chat.");
+                    postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     return;
                 }
 
@@ -125,7 +125,7 @@ public class AgentChatViewModel extends AndroidViewModel {
 
                 String token = auth.getIdTokenBlocking();
                 if (token.trim().isEmpty()) {
-                    postError("Please sign in to chat.");
+                    postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     return;
                 }
 
@@ -170,7 +170,7 @@ public class AgentChatViewModel extends AndroidViewModel {
 
                 String token = auth.getIdTokenBlocking();
                 if (token.trim().isEmpty()) {
-                    postError("Please sign in to chat.");
+                    postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     isSendingLiveData.postValue(false);
                     return;
                 }
@@ -259,4 +259,3 @@ public class AgentChatViewModel extends AndroidViewModel {
         e.apply();
     }
 }
-

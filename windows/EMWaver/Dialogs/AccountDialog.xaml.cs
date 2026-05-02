@@ -24,10 +24,10 @@ public sealed partial class AccountDialog : ContentDialog
     private void RefreshUi(string? message = null)
     {
         var signedIn = AppServices.CloudAuth.IsSignedIn;
-        AuthStatusText.Text = signedIn ? "Signed in" : "Signed out";
+        AuthStatusText.Text = signedIn ? "Key saved" : "No key saved";
         AuthDetailText.Text = message ?? (signedIn
-            ? "Your saved API key is active. Paste a replacement any time, or manage the key on the web."
-            : "Create or replace your EMWaver API key on the web, then paste it here.");
+            ? "An Agent key is saved. Paste a replacement any time."
+            : "Agent replies require an API key. Local scripts and hardware control do not require a key.");
 
         SaveButton.Content = signedIn ? "Replace Key" : "Save Key";
         SignOutButton.Visibility = signedIn ? Visibility.Visible : Visibility.Collapsed;
@@ -70,6 +70,6 @@ public sealed partial class AccountDialog : ContentDialog
         AppServices.CloudAuth.SignOut();
         AppServices.AccountDevices.Refresh();
         ApiKeyBox.Password = string.Empty;
-        RefreshUi("Signed out.");
+        RefreshUi("Removed the Agent key.");
     }
 }

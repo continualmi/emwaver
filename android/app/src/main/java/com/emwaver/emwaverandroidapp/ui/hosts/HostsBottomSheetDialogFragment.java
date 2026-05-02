@@ -86,7 +86,7 @@ public final class HostsBottomSheetDialogFragment extends BottomSheetDialogFragm
                 if (accessToken == null || accessToken.trim().isEmpty()) {
                     requireActivity().runOnUiThread(() -> {
                         progress.setVisibility(View.GONE);
-                        status.setText("Signed in, but failed to fetch Firebase ID token. Try again in a moment.");
+                        status.setText("Agent key is saved, but host sessions are not available.");
                         adapter.setHosts(new ArrayList<>());
                     });
                     return;
