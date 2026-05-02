@@ -33,6 +33,22 @@ function getJson(url) {
   });
 }
 
+function getText(url) {
+  return new Promise((resolve, reject) => {
+    const req = http.get(url, (res) => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", (chunk) => {
+        body += chunk;
+      });
+      res.on("end", () => {
+        resolve({ status: res.statusCode, body });
+      });
+    });
+    req.on("error", reject);
+  });
+}
+
 async function waitForHealth() {
   const deadline = Date.now() + 5000;
   let lastError = null;
@@ -74,6 +90,32 @@ function postJson(url, payload) {
     req.on("error", reject);
     req.end(body);
   });
+}
+
+async function verifyIndexHtml() {
+  const index = await getText(`${baseUrl}/`);
+  if (index.status !== 200) {
+    throw new Error(`unexpected index status: ${index.status}`);
+  }
+  const body = String(index.body || "");
+  for (const required of [
+    "EMWaver Gateway",
+    "openFile",
+    ">Open<",
+    ">Save<",
+    "Native App",
+    "Ask Agent",
+    "No cloud relay required",
+  ]) {
+    if (!body.includes(required)) {
+      throw new Error(`gateway index missing required local UI marker: ${required}`);
+    }
+  }
+  for (const forbidden of ["/api/auth", "/v1/files", "Cloud Files", "Sign in", "subscription"]) {
+    if (body.includes(forbidden)) {
+      throw new Error(`gateway index contains forbidden hosted/cloud marker: ${forbidden}`);
+    }
+  }
 }
 
 function verifyWebSocket() {
@@ -246,6 +288,7 @@ try {
     throw new Error(`gateway exited early with ${code}\nstdout:\n${stdout}\nstderr:\n${stderr}`);
   });
   await Promise.race([waitForHealth(), earlyExit]);
+  await verifyIndexHtml();
   const agentMissing = await postJson(`${baseUrl}/v1/agent`, { prompt: "hello" });
   if (agentMissing.status !== 501 || agentMissing.body?.error !== "agent_not_configured") {
     throw new Error(`unexpected missing-agent response: ${JSON.stringify(agentMissing)}`);

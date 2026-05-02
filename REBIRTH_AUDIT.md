@@ -93,6 +93,7 @@ This verifies:
 - `emwaver run` against local gateway plus built macOS app,
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,
 - gateway `/health`,
+- gateway index guard for local Open/Save/native-app/Agent UI and no hosted auth/cloud file route markers,
 - gateway `/v1/examples` loading canonical default scripts,
 - gateway local native-app/device status UI,
 - gateway browser-local `.emw` open/save controls,
