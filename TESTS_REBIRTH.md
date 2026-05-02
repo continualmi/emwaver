@@ -41,7 +41,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
 | `emwaver run` source path | `blocked` | Implemented as a gateway controller command in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
 | `emwaver doctor` source path | `blocked` | Implemented in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
-| macOS local gateway app role | `build pass` | `RemoteControlHostService` connects to localhost gateway as `role=app`; macOS Debug build passed. Local runtime execution against a gateway/native app pair remains pending. |
+| macOS local gateway app role | `pass` | Local gateway plus built macOS app returned `hello.ack`, `device.status`, `script.started`, and `ui.snapshot` for a UI-only `.emw` script through `/v1/ws`. Hardware-backed script execution remains pending. |
 | Windows local gateway app role | `blocked` | `RemoteControlHostService.cs` connects to localhost gateway as `role=app` and activates snapshots on `script.run`; local validation blocked because `dotnet`/Windows toolchain are not installed here. |
 
 ## Validation Rules
