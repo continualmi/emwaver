@@ -17,15 +17,18 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **software-first**, AI-first electronics platform by **Continual MI**. It turns supported MCU boards into a full hardware lab through EMWaver-managed host-backed and autonomous device flows.
+EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, CLI/gateway flows, managed firmware, and optional Agent assistance.
 
 Core direction:
-- **Business model:** software-first SaaS — revenue comes from subscriptions for platform services plus AI usage/limits. No dependency on selling hardware to launch or operate.
+- **Business model:** open-source core plus paid Agent services. Revenue should come primarily from Agent/API usage and optional hosted services, not from gating local hardware access.
+- **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, cloud activation, hosted relay, or subscription check.
+- **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, reusing the existing script/control protocol without requiring cloud infrastructure.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
-- **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually — apps handle activation and updates.
+- **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
+- **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps/CLI/gateway flows should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
-- **AI:** agent-assisted workflows are first-class.
+- **AI:** Agent-assisted workflows are first-class and are the primary paid product direction.
 - **Client surfaces:** Android, iOS, macOS, Windows.
 - **Distribution:** official app stores for end-user apps.
 
@@ -35,15 +38,17 @@ Core direction:
 
 ### The Core Thesis
 
-1. **Managed electronics platform** — EMWaver uses host apps where that is the best fit, and supports autonomous board classes where direct cloud/device operation is the better product.
-2. **Software-first platform** — the product is the software stack (apps, firmware, cloud, AI), not the hardware. Users supply their own supported MCU board.
+1. **Local-first electronics platform** — EMWaver uses local apps, CLI, and localhost gateway flows as the default hardware-control path.
+2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, gateway, scripts, and Agent), not the hardware. Users supply their own supported MCU board.
 3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
-4. **Best beginner experience** — buy a cheap supported board, install the app, plug in, sign in, and start exploring without firmware toolchains.
+4. **Best beginner experience** — buy a cheap supported board, install EMWaver, plug in, and start exploring without accounts, cloud activation, or firmware toolchains.
 
 ### Explicit Tradeoffs
 
 We intentionally give up:
 - dependency on hardware sales for revenue or launch,
+- paid gating for local hardware control,
+- mandatory hosted relay/cloud paths for core use,
 - single-board hardware monopoly,
 - end-user firmware build/flash customization loops,
 - "MCU toolchain as required user workflow."
@@ -51,10 +56,11 @@ We intentionally give up:
 ### What We Gain
 
 - Launch without hardware supply chain.
-- Revenue from day one via subscriptions + AI.
+- Adoption from day one through an open-source local core.
+- Revenue through paid Agent usage and optional hosted services.
 - Multiple supported boards, one unified UX.
 - Cross-platform apps (Android/iOS/macOS/Windows).
-- Cloud-connected remote workflows.
+- Localhost gateway and SSH/VPN-friendly remote workflows.
 - Agent-driven exploration loops.
 - Larger addressable market (every compatible board owner).
 
@@ -62,20 +68,20 @@ We intentionally give up:
 
 ## 3) Important Strategic Notes (high-level)
 
-### Business model (software-first)
+### Business model (open-source core + Agent)
 
-- **Subscription-first access**: users subscribe to EMWaver services rather than purchasing individual device activations.
-- **Free tier**: may allow a small number of activated devices for local/basic use so onboarding remains low-friction.
-- **Continual Pro**: is the shared Continual MI subscription and the authoritative paid entitlement for EMWaver. It unlocks the full cloud product, including remote hosting/control, sync, higher device limits, and the full Agent experience. Any older `EMWaver Pro` wording should be treated as transitional product copy, not the long-term billing/account model.
-- **AI credits/usage**: agent usage remains a metered resource even when access is subscription-gated.
+- **Open-source core**: local runtime, local gateway, CLI, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
+- **Paid Agent**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI instructions and metered API usage.
+- **Optional hosted services**: hosted relay, sync, teams, classrooms, and remote fleet behavior may exist later, but they are not launch-critical and must not be required for local control.
+- **AI credits/usage**: Agent usage remains a metered resource.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
 
 ### Device trust model
 
-- EMWaver V1 device registration is keyed by immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) together with board type, so activation is tied to a physical board.
-- Backend registration is authoritative for `board_type + hardware_uid`; re-flashing the same physical board should restore its existing EMWaver activation state rather than consume another device slot.
-- Access is gated by account entitlements and device-count limits, not by per-device purchases.
-- Backend enforces subscription policy, device limits, rate limits, and payment verification.
+- Local hardware control must not be gated by backend activation or account ownership.
+- EMWaver may still read immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) together with board type for local naming, diagnostics, firmware compatibility, and optional hosted services.
+- Any hosted service registration should be keyed by `board_type + hardware_uid`, but that hosted registration must not be required for local `.emw` script execution.
+- Backend enforcement applies only to optional hosted services and paid Agent/API usage, not to the open-source local core.
 
 (Implementation details live in `macos/README.md` and `web/README.md`.)
 
@@ -94,8 +100,8 @@ We intentionally give up:
 
 ### Linux host scope
 
-- Linux support is **headless host (beta)**, not a Linux GUI app.
-- Remote controller surfaces render and control; host-backed boards keep runtime state on the host, while autonomous board classes may connect directly without a host.
+- Linux support is **headless/CLI/gateway-first**, not a Linux GUI app.
+- SSH, TUI, CLI, and localhost browser gateway workflows are the preferred Linux direction; host-backed boards keep runtime state on the machine that owns the hardware.
 
 ### Distribution and release posture
 
@@ -138,6 +144,13 @@ We intentionally give up:
 Use the local README first when working in a folder:
 
 - `README.txt` (repo root) — concise repo overview + doc index
+- `REBIRTH.md` (repo root) — local-first/open-source rebirth plan and product pivot
+- `REBIRTH_ISSUES.md` (repo root) — durable issue backlog for the rebirth plan
+- `REBIRTH_AUDIT.md` (repo root) — completion audit and remaining gaps for the active rebirth objective
+- `LAUNCH_MVP.md` (repo root) — minimum launch checklist for the local-first rebirth
+- `AGENT_API.md` (repo root) — paid Agent API-key and endpoint direction
+- `PACKAGING.md` (repo root) — CLI/gateway packaging direction for macOS, Linux, and Windows
+- `TESTS_REBIRTH.md` (repo root) — validation tracker for rebirth implementation work
 - `PLANNING.md` (repo root) — durable working tracker for current priorities, active work, blockers, and next steps
 - `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
 - `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
@@ -146,7 +159,9 @@ Use the local README first when working in a folder:
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `web/README.md` — unified Next.js + Node web app and TypeScript backend
+- `gateway/README.md` — localhost hardware control gateway direction
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
+- `hardware/README.md` — imported hardware design monorepo index and policy
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
 - `ios/README.md` — iOS app managers/views/assets
@@ -162,11 +177,13 @@ If a folder has a README, detailed documentation should live there.
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
 - `web/` — unified website/web app target (Next.js + Node, single deployment direction).
+- `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 - `videos/` — video planning metadata, clip backlog, creative direction, and promo writing.
+- `hardware/` — target location for imported EMWaver hardware design repositories.
 - `.agents/skills/` — EMWaver-specific Codex skills that now live with the product repo.
 
 ---
@@ -175,14 +192,15 @@ If a folder has a README, detailed documentation should live there.
 
 1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
-3. **Software-first business**: revenue comes from subscriptions and AI — not hardware sales.
-4. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
-5. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
-6. **Backend is authoritative** for subscription policy, device limits, cloud entitlements, and feature gating.
-7. **Activation is account-gated**: device access is governed by plan entitlements and allowed device counts, not individual device purchases.
-8. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
-9. **Linux host scope is headless/beta**: no Linux GUI app; remote-controller model only.
-10. **CI/Releases policy**: GitHub Actions are for web CI (and optional deployment); do not treat GitHub Releases as end-user distribution for apps.
+3. **Software-first business**: revenue comes from paid Agent/API usage and optional hosted services — not hardware sales or paid local device access.
+4. **Local hardware access is free/open**: core local `.emw` execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
+5. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
+6. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
+7. **Backend is authoritative only for hosted services and paid Agent/API usage**: do not put local core hardware access behind backend policy.
+8. **Activation is not a local gate**: optional hosted device registration may exist, but local board access is not governed by plan entitlements.
+9. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
+10. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
+11. **CI/Releases policy**: GitHub Actions are for web/gateway CI and optional deployment; do not treat GitHub Releases as end-user distribution for apps.
 
 ---
 
@@ -192,11 +210,14 @@ If a folder has a README, detailed documentation should live there.
 - When changing a specific subsystem, update that folder's README.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
+- Keep local gateway/runtime work account-free unless the task explicitly touches optional hosted services or paid Agent APIs.
+- Keep imported hardware repos under `hardware/` and preserve history where practical.
 
 Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits when a logical unit of work is complete,
-- ask before committing unless the user explicitly requested it.
+- commit and push to `main` whenever new work is completed and verified,
+- ask before committing unless the user explicitly requested committing/pushing for the current work.
 
 ## 9) Org Workspace
 

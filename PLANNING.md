@@ -15,30 +15,35 @@ Use it to capture:
 
 ## Current Focus
 
-- Promo video launch cut centered on the script-first `cc1101` story across `Core`, `Carrier`, `macOS`, and `Android`.
-- Hardware validation still needs local completion for `004_MFRC522_READ_WRITE_RFID_CARD` and `005_SERVO_PWM_POSITION_CONTROL`.
+- EMWaver rebirth: local-first open-source runtime, localhost gateway, CLI-driven `.emw` execution, hardware monorepo consolidation, and paid Agent as the primary business model.
+- First implementation slice is tracked in `REBIRTH_ISSUES.md`: gateway package, local WebSocket endpoint, runtime/device extraction, `emwaver run`, web control UI inventory, account-free local hardware control, and hardware repo inventory.
 
 ## Active Work
 
 | Priority | Area | Status | Notes |
 | --- | --- | --- | --- |
-| `P0` | Launch promo video | `in progress` | Recent work is concentrated in `videos/promotional_video.md`; main launch cut clips for Core/Carrier and macOS/Android parity were recorded on `2026-03-25`. |
-| `P0` | RFID local validation (`004`) | `pending` | Need end-to-end MFRC522 read/write/readback pass on real hardware. |
-| `P0` | Servo local validation (`005`) | `pending` | Need full `0 -> 180` movement confidence and slider-driven reliability check. |
-| `P1` | Remote test expansion | `pending` | Frontend -> macOS remote cases are ahead; most other controller/host combinations are still open in `TESTS.md`. |
-| `P1` | Link follow-up promo pass | `planned` | Use the second-wave plan captured in `videos/promotional_video.md` after the current launch cut. |
+| `P0` | Rebirth plan | `in progress` | `REBIRTH.md` captures the product pivot toward local-first open source EMWaver with paid Agent services. |
+| `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
+| `P0` | Local gateway | `todo` | Create `gateway/` as the localhost control surface and reuse the existing WebSocket protocol without cloud relay requirements. |
+| `P0` | Runtime + CLI | `todo` | Extract reusable `.emw` runtime/device layers and add local `emwaver run` behavior. |
+| `P0` | Hardware monorepo | `todo` | Inventory hardware repos and plan history-preserving imports under `hardware/`. |
+| `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
+| `P1` | Hardware validation (`004`, `005`) | `pending` | Still useful, but no longer the top planning focus while architecture pivots. |
 
 ## Next Up
 
-1. Finish the current launch promo selection/edit pass from the newly recorded clips.
-2. Run and mark local hardware test `004`.
-3. Run and mark local hardware test `005`.
-4. Revisit the next weekly slice in `SCHEDULE.md` once the above is complete.
+1. Create the initial `gateway/` package and README.
+2. Inventory current `web/` control UI files for gateway migration.
+3. Extract a reusable runtime/device plan from `daemon/emwaver-host`.
+4. Add the first local CLI target plan for `emwaver run`.
+5. Inventory hardware repositories for `hardware/` import.
 
 ## Blockers / Risks
 
-- Hardware-dependent validation depends on having the right boards/modules/cards/servo setup available.
-- `SCHEDULE.md` is currently older than the latest video work, so this file should be used as the more reliable high-level snapshot until the weekly schedule is refreshed.
+- The current `web/` app mixes public site, auth/billing, cloud relay, Agent routes, and hardware control UI; migration needs careful boundaries.
+- The current daemon runtime is coupled to outbound cloud WebSocket host behavior; local gateway and CLI need shared runtime/device extraction.
+- Hardware repo import should preserve history and avoid root-level clutter.
+- Existing product docs still describe the older software-first SaaS/cloud activation model and need follow-up updates.
 
 ## Notes
 

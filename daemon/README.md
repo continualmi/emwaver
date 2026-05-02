@@ -29,6 +29,7 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 - `install/install.sh` — install helper (Linux-oriented path).
 - `systemd/emwaver-host.service` — sample service unit.
 - `TODO.md` — active daemon backlog.
+- `RUNTIME_EXTRACTION.md` — local-first runtime/device extraction plan for CLI and gateway reuse.
 
 ---
 
@@ -39,6 +40,7 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 Main command groups (`emwaver/src/main.rs`):
 - `emwaver daemon start|stop|status|autostart`
 - `emwaver devices`
+- `emwaver gateway` / `emwaver web`
 - `emwaver tui`
 - `emwaver paths`
 
@@ -48,6 +50,14 @@ State paths are resolved via `directories::ProjectDirs`:
 - local data dir
 
 CLI can start `emwaver-host` in background, pass env overrides, and provide a minimal status TUI.
+
+The rebirth/local-first direction adds a development gateway command:
+
+```bash
+emwaver gateway --port 3921
+```
+
+This starts the localhost browser gateway from `gateway/`. It is a bridge toward local script control without Continual cloud auth or hosted relay requirements.
 
 ## 3.2 `emwaver-host` daemon
 

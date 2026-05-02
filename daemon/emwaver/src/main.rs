@@ -31,6 +31,20 @@ enum Commands {
     /// List MIDI devices and highlight likely EMWaver ports.
     Devices,
 
+    /// Start the localhost browser gateway.
+    Gateway {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+    },
+
+    /// Alias for `gateway`.
+    Web {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+    },
+
     /// Show where emwaver stores state/logs.
     Paths,
 }
@@ -264,6 +278,43 @@ fn print_paths() -> Result<()> {
     Ok(())
 }
 
+fn repo_root() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| PathBuf::from("."))
+}
+
+fn gateway_dir() -> PathBuf {
+    repo_root().join("gateway")
+}
+
+fn start_gateway(port: Option<u16>) -> Result<()> {
+    let dir = gateway_dir();
+    if !dir.join("package.json").exists() {
+        anyhow::bail!("gateway package not found at {}", dir.display());
+    }
+
+    let port_value = port.unwrap_or(3921);
+    println!("starting EMWaver gateway on http://127.0.0.1:{port_value}");
+    println!("gateway dir: {}", dir.display());
+
+    let status = Command::new("npm")
+        .arg("run")
+        .arg("start")
+        .current_dir(&dir)
+        .env("EMWAVER_GATEWAY_PORT", port_value.to_string())
+        .status()
+        .context("failed to start gateway with npm")?;
+
+    if !status.success() {
+        anyhow::bail!("gateway exited with status {status}");
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -296,6 +347,7 @@ fn main() -> Result<()> {
         },
         Commands::Tui => run_tui(),
         Commands::Devices => list_devices(),
+        Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),
         Commands::Paths => print_paths(),
     }
 }

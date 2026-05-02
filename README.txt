@@ -1,7 +1,16 @@
 EMWaver monorepo — a Continual MI project
-Software-first, AI-first electronics platform.
-Unified web app: `web/` (Next.js + Node).
-Canonical public site/media/docs surface: `web/` under `emwaver.ai`.
-Activation is keyed by immutable `board_type + hardware_uid`; firmware and app flows should rely on that system only, with access controlled by account subscription entitlements and device limits.
-All information available in AGENTS.md
+Local-first, open-source hardware scripting platform with optional paid Agent services.
+Rebirth plan: `REBIRTH.md`
+Durable rebirth issue backlog: `REBIRTH_ISSUES.md`
+Rebirth completion audit: `REBIRTH_AUDIT.md`
+Launch MVP checklist: `LAUNCH_MVP.md`
+Agent API direction: `AGENT_API.md`
+Packaging direction: `PACKAGING.md`
+Rebirth validation tracker: `TESTS_REBIRTH.md`
+Rust preflight: `scripts/check-rust-toolchain.sh`
+Current planning tracker: `PLANNING.md`
+Current web app: `web/` (Next.js + Node), to be split so public site/docs remain in `web/` and localhost hardware control moves toward `gateway/`.
+Current headless CLI/daemon work: `daemon/`
+Hardware monorepo direction: future hardware imports should live under `hardware/`.
+All repo-wide product constraints and documentation routing live in `AGENTS.md`.
 Ask Codex/Claude Code "how does emwaver work" to get started

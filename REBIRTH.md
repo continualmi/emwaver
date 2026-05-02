@@ -97,8 +97,8 @@ The local browser UI should talk directly to the local gateway:
 ```text
 localhost browser UI
   <-> localhost WebSocket
-  <-> .emw runtime
-  <-> local device transport
+  <-> native EMWaver app
+  <-> app-owned .emw runtime and local device transport
 ```
 
 This should reuse the existing WebSocket protocol shape where practical:
@@ -133,7 +133,7 @@ The rebirth direction should gradually separate these:
 gateway/
   localhost hardware control server
   local WebSocket protocol
-  local script runtime wiring
+  local native-app WebSocket bridge
   serves the control UI
 
 web/
@@ -178,6 +178,7 @@ emwaver-device
 gateway/
   localhost HTTP/WebSocket server
   browser control UI
+  native app bridge
 
 daemon/
   optional long-running host/service mode
@@ -288,7 +289,8 @@ This consolidation should support the local-first open-source pivot, but it shou
 ## Phase 2: Runtime Extraction
 
 - Extract reusable runtime/device pieces from the current daemon host.
-- Make CLI and gateway share the same `.emw` runtime.
+- Make CLI and daemon share reusable `.emw` runtime/device code where useful.
+- Keep gateway as a browser-to-native-app bridge rather than a second runtime.
 - Add `emwaver run`.
 - Add `emwaver devices`.
 - Add `emwaver doctor`.
