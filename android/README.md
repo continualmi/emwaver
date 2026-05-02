@@ -53,7 +53,7 @@ Notable UX coverage reflected by resources:
 - script lists/editor dialogs,
 - legacy hosted host sheet/remote host control activity,
 - agent chat dialogs,
-- legacy API-key sign-in + sync dialogs,
+- local Agent API-key dialog plus legacy sync dialogs,
 - device update dialogs.
 
 ---
@@ -109,7 +109,7 @@ Android Agent/auth direction:
 - Keep the Android Agent chat interface/runtime.
 - Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
-- Existing cloud/host/account dialogs are migration debt unless repurposed for the Agent API-key setup state.
+- Existing cloud/host/sync dialogs are migration debt unless repurposed for the Agent API-key setup state.
 
 Hosted remote-control posture:
 - Hosted host-session UI/heartbeat and hosted remote-control WebSocket behavior are disabled by default.

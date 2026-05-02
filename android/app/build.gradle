@@ -79,6 +79,8 @@ android {
         def staffOnly = envOr("EMWAVER_STAFF_ONLY", "0")
         def hostedServicesUi = envOr("EMWAVER_HOSTED_SERVICES_UI_ENABLED", "0")
         def hostedRemoteControl = envOr("EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", "0")
+        def agentEndpoint = envOr("EMWAVER_AGENT_ENDPOINT", "")
+        def continualAgentEndpoint = envOr("CONTINUAL_AGENT_ENDPOINT", "")
 
         buildConfigField "String", "EMWAVER_BACKEND_URL_CLOUD", '"' + cloudBackend + '"'
         buildConfigField "String", "EMWAVER_BACKEND_URL_LOCAL", '"' + localBackend + '"'
@@ -87,6 +89,8 @@ android {
         buildConfigField "boolean", "EMWAVER_STAFF_ONLY", (staffOnly == "1" ? "true" : "false")
         buildConfigField "boolean", "EMWAVER_HOSTED_SERVICES_UI_ENABLED", (hostedServicesUi == "1" ? "true" : "false")
         buildConfigField "boolean", "EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", (hostedRemoteControl == "1" ? "true" : "false")
+        buildConfigField "String", "EMWAVER_AGENT_ENDPOINT", '"' + agentEndpoint + '"'
+        buildConfigField "String", "CONTINUAL_AGENT_ENDPOINT", '"' + continualAgentEndpoint + '"'
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

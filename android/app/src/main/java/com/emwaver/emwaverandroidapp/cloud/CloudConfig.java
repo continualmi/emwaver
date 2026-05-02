@@ -50,6 +50,14 @@ public final class CloudConfig {
         return BuildConfig.EMWAVER_FRONTEND_URL_CLOUD;
     }
 
+    public static String getAgentEndpoint() {
+        String active = BuildConfig.EMWAVER_AGENT_ENDPOINT;
+        if (active == null || active.trim().isEmpty()) {
+            active = BuildConfig.CONTINUAL_AGENT_ENDPOINT;
+        }
+        return active != null ? active.trim() : "";
+    }
+
     public static boolean allowAnonSync() {
         // Android sign-in isn't wired yet; anon sync is the default dev behavior.
         return true;

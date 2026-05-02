@@ -14,18 +14,10 @@ import android.os.Looper;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import org.json.JSONObject;
-
-import java.io.IOException;
-
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.Response;
-
 /**
  * Simple auth helper for Android.
  *
- * Source of truth is the EMWaver API key created on the web account page.
+ * Source of truth is the Agent API key stored locally on this device.
  */
 public final class CloudAuthManager {
     private static final String PREFS = "emwaver.auth";
@@ -39,7 +31,6 @@ public final class CloudAuthManager {
 
     private static volatile CloudAuthManager instance;
 
-    private final OkHttpClient http = new OkHttpClient.Builder().build();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     @Nullable private Context appContext;
 
@@ -70,11 +61,19 @@ public final class CloudAuthManager {
     }
 
     public boolean isSignedIn() {
-        Context context = requireContext();
-        return context != null && isSignedIn(context);
+        return false;
     }
 
     public boolean isSignedIn(@NonNull Context context) {
+        return false;
+    }
+
+    public boolean hasAgentKey() {
+        Context context = requireContext();
+        return context != null && hasAgentKey(context);
+    }
+
+    public boolean hasAgentKey(@NonNull Context context) {
         return !prefs(context).getString(KEY_API_KEY, "").trim().isEmpty();
     }
 
@@ -107,76 +106,21 @@ public final class CloudAuthManager {
     ) {
         final String trimmed = apiKey == null ? "" : apiKey.trim();
         if (trimmed.isEmpty()) {
-            callback.onResult(false, "Enter an EMWaver API key");
+            callback.onResult(false, "Enter an Agent API key");
             return;
         }
 
-        new Thread(() -> {
-            try {
-                SessionResult session = validateApiKey(context, trimmed);
-                prefs(context).edit()
-                        .putString(KEY_API_KEY, trimmed)
-                        .putString(KEY_EMAIL, session.email)
-                        .putString(KEY_NAME, session.name)
-                        .apply();
-                mainHandler.post(() -> callback.onResult(true, null));
-            } catch (Exception e) {
-                String msg = e.getMessage() != null ? e.getMessage() : "Key validation failed";
-                mainHandler.post(() -> callback.onResult(false, msg));
-            }
-        }).start();
-    }
-
-    private static final class SessionResult {
-        final String email;
-        final String name;
-
-        SessionResult(String email, String name) {
-            this.email = email;
-            this.name = name;
-        }
-    }
-
-    @NonNull
-    private SessionResult validateApiKey(@NonNull Context context, @NonNull String apiKey) throws Exception {
-        String url = CloudConfig.getBackendBaseUrl(context).trim() + "/v1/auth/key";
-
-        Request req = new Request.Builder()
-                .url(url)
-                .get()
-                .addHeader("Accept", "application/json")
-                .addHeader("Authorization", "Bearer " + apiKey)
-                .build();
-
-        try (Response res = http.newCall(req).execute()) {
-            String json = res.body() != null ? res.body().string() : "";
-            if (!res.isSuccessful()) {
-                throw new IOException(json.isEmpty()
-                        ? ("Key validation failed: HTTP " + res.code())
-                        : json);
-            }
-
-            JSONObject root = new JSONObject(json);
-            JSONObject user = root.optJSONObject("user");
-            if (user == null && root.has("email")) {
-                user = root;
-            }
-            if (user == null) {
-                user = root.optJSONObject("account");
-            }
-            if (user == null) {
-                throw new IOException("Missing user");
-            }
-            return new SessionResult(
-                    user.optString("email", ""),
-                    user.optString("name", user.optString("displayName", user.optString("display_name", "")))
-            );
-        }
+        prefs(context).edit()
+                .putString(KEY_API_KEY, trimmed)
+                .putString(KEY_EMAIL, "")
+                .putString(KEY_NAME, "Agent key")
+                .apply();
+        mainHandler.post(() -> callback.onResult(true, null));
     }
 
     /**
-     * Returns the saved EMWaver API key for backend Authorization: Bearer <token>.
-     * Returns "" when not signed in.
+     * Returns the saved Agent API key for Authorization: Bearer <token>.
+     * Returns "" when no Agent key is saved.
      */
     @NonNull
     public String getIdTokenBlocking(@NonNull Context context) {

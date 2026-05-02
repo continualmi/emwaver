@@ -1,6 +1,6 @@
 /*
  * EMWaver
- * Copyright (c) 2026 Luís Marnoto
+ * Copyright (c) 2026 Luis Marnoto
  * All rights reserved.
  */
 
@@ -12,11 +12,9 @@ import androidx.annotation.Nullable;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -75,148 +73,76 @@ public final class AgentBackendApi {
     }
 
     @NonNull
-    private static String joinUrl(@NonNull String base, @NonNull String path) {
-        String b = base.trim();
-        if (b.endsWith("/")) b = b.substring(0, b.length() - 1);
-        String p = path.trim();
-        if (!p.startsWith("/")) p = "/" + p;
-        return b + p;
-    }
-
-    @NonNull
-    private static Request.Builder auth(@NonNull Request.Builder b, @NonNull String idToken) {
-        if (!idToken.trim().isEmpty()) {
-            b.header("Authorization", "Bearer " + idToken.trim());
+    private static Request.Builder auth(@NonNull Request.Builder b, @NonNull String apiKey) {
+        if (!apiKey.trim().isEmpty()) {
+            b.header("Authorization", "Bearer " + apiKey.trim());
         }
         return b;
     }
 
     @NonNull
-    public List<Conversation> listConversations(@NonNull String baseUrl, @NonNull String idToken) throws Exception {
-        Request req = auth(new Request.Builder()
-                        .url(joinUrl(baseUrl, "/v1/agent/conversations"))
-                        .get()
-                        .header("Accept", "application/json"),
-                idToken).build();
-
-        try (Response res = http.newCall(req).execute()) {
-            String body = res.body() != null ? res.body().string() : "";
-            if (res.code() == 401) throw new UnauthorizedException();
-            if (!res.isSuccessful()) throw new ServerErrorException(extractError(body, res.code()));
-
-            JSONObject obj = new JSONObject(body);
-            JSONArray arr = obj.optJSONArray("conversations");
-            List<Conversation> out = new ArrayList<>();
-            if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject c = arr.getJSONObject(i);
-                    out.add(new Conversation(
-                            c.getString("id"),
-                            c.optString("title", null),
-                            c.optLong("created_at_ms", 0),
-                            c.optLong("updated_at_ms", 0)
-                    ));
-                }
-            }
-            return out;
-        }
+    public List<Conversation> listConversations(@NonNull String endpoint, @NonNull String apiKey) {
+        return new ArrayList<>();
     }
 
     @NonNull
-    public Conversation createConversation(@NonNull String baseUrl, @NonNull String idToken, @Nullable String title) throws Exception {
-        JSONObject payload = new JSONObject();
-        payload.put("title", title != null ? title.trim() : "");
-
-        Request req = auth(new Request.Builder()
-                        .url(joinUrl(baseUrl, "/v1/agent/conversations"))
-                        .post(RequestBody.create(payload.toString(), JSON))
-                        .header("Accept", "application/json"),
-                idToken).build();
-
-        try (Response res = http.newCall(req).execute()) {
-            String body = res.body() != null ? res.body().string() : "";
-            if (res.code() == 401) throw new UnauthorizedException();
-            if (!res.isSuccessful()) throw new ServerErrorException(extractError(body, res.code()));
-
-            JSONObject obj = new JSONObject(body);
-            JSONObject c = obj.getJSONObject("conversation");
-            return new Conversation(
-                    c.getString("id"),
-                    c.optString("title", null),
-                    c.optLong("created_at_ms", 0),
-                    c.optLong("updated_at_ms", 0)
-            );
+    public Conversation createConversation(@NonNull String endpoint, @NonNull String apiKey, @Nullable String title) {
+        long now = System.currentTimeMillis();
+        String trimmed = title != null ? title.trim() : "";
+        if (trimmed.length() > 48) {
+            trimmed = trimmed.substring(0, 48).trim();
         }
+        return new Conversation(
+                UUID.randomUUID().toString(),
+                trimmed.isEmpty() ? "Chat" : trimmed,
+                now,
+                now
+        );
     }
 
-    public void deleteConversation(@NonNull String baseUrl, @NonNull String idToken, @NonNull String conversationId) throws Exception {
-        String url = joinUrl(baseUrl, "/v1/agent/conversations/" + conversationId);
-        Request req = auth(new Request.Builder()
-                        .url(url)
-                        .delete()
-                        .header("Accept", "application/json"),
-                idToken).build();
-
-        try (Response res = http.newCall(req).execute()) {
-            String body = res.body() != null ? res.body().string() : "";
-            if (res.code() == 401) throw new UnauthorizedException();
-            if (!res.isSuccessful()) throw new ServerErrorException(extractError(body, res.code()));
-        }
+    public void deleteConversation(@NonNull String endpoint, @NonNull String apiKey, @NonNull String conversationId) {
+        // Conversations are local UI state in the open-source app.
     }
 
     @NonNull
-    public List<Message> listMessages(@NonNull String baseUrl, @NonNull String idToken, @NonNull String conversationId) throws Exception {
-        String url = joinUrl(baseUrl, "/v1/agent/conversations/" + conversationId + "/messages");
-        Request req = auth(new Request.Builder()
-                        .url(url)
-                        .get()
-                        .header("Accept", "application/json"),
-                idToken).build();
-
-        try (Response res = http.newCall(req).execute()) {
-            String body = res.body() != null ? res.body().string() : "";
-            if (res.code() == 401) throw new UnauthorizedException();
-            if (!res.isSuccessful()) throw new ServerErrorException(extractError(body, res.code()));
-
-            JSONObject obj = new JSONObject(body);
-            JSONArray arr = obj.optJSONArray("messages");
-            List<Message> out = new ArrayList<>();
-            if (arr != null) {
-                for (int i = 0; i < arr.length(); i++) {
-                    JSONObject m = arr.getJSONObject(i);
-                    out.add(new Message(
-                            m.optString("id", "" + i),
-                            m.optString("role", "assistant"),
-                            m.optString("content", ""),
-                            m.optLong("created_at_ms", 0)
-                    ));
-                }
-            }
-            return out;
-        }
+    public List<Message> listMessages(@NonNull String endpoint, @NonNull String apiKey, @NonNull String conversationId) {
+        return new ArrayList<>();
     }
 
     public void chatStream(
-            @NonNull String baseUrl,
-            @NonNull String idToken,
+            @NonNull String endpoint,
+            @NonNull String apiKey,
             @NonNull String conversationId,
             @NonNull String message,
             @NonNull StreamListener listener
     ) {
+        String trimmedEndpoint = endpoint.trim();
+        if (trimmedEndpoint.isEmpty()) {
+            listener.onError("Agent endpoint is not configured.");
+            return;
+        }
+        if (apiKey.trim().isEmpty()) {
+            listener.onError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
+            return;
+        }
+
         JSONObject payload = new JSONObject();
         try {
-            payload.put("conversation_id", conversationId);
-            payload.put("message", message);
+            payload.put("mode", "debug");
+            payload.put("prompt", message);
+            payload.put("script", JSONObject.NULL);
+            payload.put("runtime", JSONObject.NULL);
+            payload.put("hardware", JSONObject.NULL);
         } catch (Exception e) {
             listener.onError(e.toString());
             return;
         }
 
         Request req = auth(new Request.Builder()
-                        .url(joinUrl(baseUrl, "/v1/agent/chat/stream_tools"))
+                        .url(trimmedEndpoint)
                         .post(RequestBody.create(payload.toString(), JSON))
-                        .header("Accept", "text/event-stream"),
-                idToken).build();
+                        .header("Accept", "application/json"),
+                apiKey).build();
 
         http.newCall(req).enqueue(new okhttp3.Callback() {
             @Override
@@ -226,39 +152,25 @@ public final class AgentBackendApi {
 
             @Override
             public void onResponse(@NonNull okhttp3.Call call, @NonNull Response response) {
-                if (response.code() == 401) {
-                    listener.onError("Unauthorized");
-                    response.close();
-                    return;
-                }
-                if (!response.isSuccessful()) {
-                    String body = "";
-                    try {
-                        body = response.body() != null ? response.body().string() : "";
-                    } catch (Exception ignored) {}
-                    listener.onError(extractError(body, response.code()));
-                    response.close();
-                    return;
-                }
-
                 try {
-                    BufferedReader reader = new BufferedReader(new InputStreamReader(
-                            response.body().byteStream(), StandardCharsets.UTF_8
-                    ));
+                    String body = response.body() != null ? response.body().string() : "";
+                    if (response.code() == 401) {
+                        listener.onError("Saved Agent key is not authorized.");
+                        return;
+                    }
+                    if (!response.isSuccessful()) {
+                        listener.onError(extractError(body, response.code()));
+                        return;
+                    }
 
-                    StringBuilder block = new StringBuilder();
-                    String line;
-                    while ((line = reader.readLine()) != null) {
-                        if (line.isEmpty()) {
-                            parseBlock(block.toString(), listener);
-                            block.setLength(0);
-                        } else {
-                            block.append(line).append("\n");
-                        }
-                    }
-                    if (block.length() > 0) {
-                        parseBlock(block.toString(), listener);
-                    }
+                    JSONObject obj = new JSONObject(body);
+                    String content = formatResponse(obj);
+                    listener.onDone(new Message(
+                            UUID.randomUUID().toString(),
+                            "assistant",
+                            content,
+                            System.currentTimeMillis()
+                    ), null);
                 } catch (Exception e) {
                     listener.onError(e.toString());
                 } finally {
@@ -268,65 +180,45 @@ public final class AgentBackendApi {
         });
     }
 
-    private static void parseBlock(@NonNull String raw, @NonNull StreamListener listener) {
-        String trimmed = raw.trim();
-        if (trimmed.isEmpty()) return;
+    @NonNull
+    private static String formatResponse(@NonNull JSONObject obj) {
+        List<String> pieces = new ArrayList<>();
+        String message = obj.optString("message", "").trim();
+        String code = obj.optString("code", "").trim();
+        String patch = obj.optString("patch", "").trim();
 
-        String event = "message";
-        List<String> dataLines = new ArrayList<>();
+        if (!message.isEmpty()) pieces.add(message);
+        if (!code.isEmpty()) pieces.add("```emw\n" + code + "\n```");
+        if (!patch.isEmpty()) pieces.add("Patch:\n" + patch);
 
-        String[] lines = trimmed.split("\\n");
-        for (String ln : lines) {
-            if (ln.startsWith("event:")) {
-                event = ln.substring("event:".length()).trim();
-            } else if (ln.startsWith("data:")) {
-                dataLines.add(ln.substring("data:".length()).trim());
+        JSONArray warnings = obj.optJSONArray("warnings");
+        if (warnings != null && warnings.length() > 0) {
+            StringBuilder out = new StringBuilder("Warnings:");
+            for (int i = 0; i < warnings.length(); i++) {
+                String warning = warnings.optString(i, "").trim();
+                if (!warning.isEmpty()) out.append("\n- ").append(warning);
             }
+            pieces.add(out.toString());
         }
 
-        String dataRaw = android.text.TextUtils.join("\n", dataLines).trim();
-        if (dataRaw.isEmpty()) return;
-
-        try {
-            JSONObject obj = new JSONObject(dataRaw);
-            if ("delta".equals(event)) {
-                listener.onDelta(obj.optString("text", ""));
-                return;
-            }
-            if ("error".equals(event)) {
-                listener.onError(obj.optString("error", "error"));
-                return;
-            }
-            if ("done".equals(event)) {
-                JSONObject msg = obj.getJSONObject("message");
-                Message m = new Message(
-                        msg.optString("id", ""),
-                        msg.optString("role", "assistant"),
-                        msg.optString("content", ""),
-                        msg.optLong("created_at_ms", 0)
-                );
-                listener.onDone(m, obj.optString("model", null));
-            }
-        } catch (Exception e) {
-            listener.onError(e.toString());
-        }
+        if (pieces.isEmpty()) return "Agent returned an empty reply.";
+        return String.join("\n\n", pieces);
     }
 
     @NonNull
-    private static String extractError(@NonNull String body, int statusCode) {
+    private static String extractError(@NonNull String body, int code) {
         try {
             JSONObject obj = new JSONObject(body);
-            String err = obj.optString("error", "");
-            if (!err.trim().isEmpty()) return err;
+            String message = obj.optString("message", "").trim();
+            if (!message.isEmpty()) return message;
+            String error = obj.optString("error", "").trim();
+            if (!error.isEmpty()) return error;
         } catch (Exception ignored) {}
-
-        String msg = body.trim();
-        if (!msg.isEmpty()) return msg;
-        return "HTTP " + statusCode;
+        String trimmed = body.trim();
+        return !trimmed.isEmpty() ? trimmed : ("HTTP " + code);
     }
 
     public static final class UnauthorizedException extends Exception {}
-
     public static final class ServerErrorException extends Exception {
         public ServerErrorException(@NonNull String message) { super(message); }
     }

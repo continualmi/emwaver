@@ -536,7 +536,7 @@ Acceptance criteria:
 - CLI Agent command uses the same API-key contract.
 - Apple shared Agent UI can call the MGPT Agent endpoint with app-local/keychain configuration.
 - Windows Agent UI can call the MGPT Agent endpoint with app-local configuration.
-- Android Agent UI can call the MGPT Agent endpoint with app-local/credential-store configuration.
+- Android Agent UI can call the MGPT Agent endpoint with app-local configuration.
 - Agent client requests include local script, selected board/module, runtime error/log, and relevant UI/device context.
 - Agent clients do not require EMWaver accounts, cloud chat storage, Pro entitlements, or hosted conversations.
 
@@ -545,7 +545,8 @@ Progress:
 - Gateway Agent panel and CLI Agent command use the API-key endpoint contract.
 - Apple shared Agent UI, macOS, and iOS now call a configured Agent endpoint with a locally stored API key instead of EMWaver account/conversation routes or web-account key setup.
 - Windows Agent UI now stores an Agent key locally and posts directly to the configured Agent endpoint instead of `/v1/agent/*` routes.
-- Remaining app work: Android endpoint-client parity, plus richer local device/runtime context payloads from native surfaces.
+- Android Agent UI now stores an Agent key locally and posts directly to the configured Agent endpoint instead of `/v1/agent/*` routes.
+- Remaining app work: richer local device/runtime context payloads from native surfaces, plus cleanup of legacy cloud/sync code still present outside the Agent path.
 
 ## `REBIRTH-031B` Remove Repo-Shipped Production Agent IP
 

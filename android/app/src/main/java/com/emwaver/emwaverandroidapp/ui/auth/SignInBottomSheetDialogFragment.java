@@ -3,8 +3,6 @@ package com.emwaver.emwaverandroidapp.ui.auth;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
-import android.content.Intent;
-import android.net.Uri;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -15,7 +13,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.R;
-import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
 import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
@@ -27,7 +24,6 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
     private TextView errorText;
     private TextView helperText;
     private MaterialButton continueButton;
-    private MaterialButton manageButton;
     private EditText apiKeyInput;
 
     private boolean isBusy = false;
@@ -52,7 +48,6 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
         MaterialButton notNow = view.findViewById(R.id.sign_in_not_now);
         continueButton = view.findViewById(R.id.sign_in_google);
-        manageButton = view.findViewById(R.id.sign_in_manage_web);
         errorText = view.findViewById(R.id.sign_in_error);
         helperText = view.findViewById(R.id.sign_in_not_configured);
         apiKeyInput = view.findViewById(R.id.sign_in_code_input);
@@ -65,10 +60,6 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         }
 
         notNow.setOnClickListener(v -> dismiss());
-        if (manageButton != null) {
-            manageButton.setOnClickListener(v -> openAccountPage());
-        }
-
         CloudAuthManager auth = CloudAuthManager.getInstance();
         auth.ensureInitialized(requireContext());
 
@@ -99,15 +90,8 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
                 dismiss();
                 return;
             }
-            setError(errorMessage != null && !errorMessage.isEmpty() ? errorMessage : "Key validation failed");
+            setError(errorMessage != null && !errorMessage.isEmpty() ? errorMessage : "Could not save key");
         });
-    }
-
-    private void openAccountPage() {
-        String baseUrl = CloudConfig.getFrontendBaseUrl(requireContext()).trim();
-        Uri uri = Uri.parse(baseUrl.endsWith("/") ? baseUrl + "cloud" : baseUrl + "/cloud");
-        Intent intent = new Intent(Intent.ACTION_VIEW, uri);
-        startActivity(intent);
     }
 
     private void applyStateToUi() {
@@ -121,10 +105,6 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
                     && apiKeyInput.getText().toString().trim().length() > 0;
             continueButton.setEnabled(!isBusy && hasKey);
             continueButton.setText(isBusy ? "Saving key..." : "Save key");
-        }
-        if (manageButton != null) {
-            manageButton.setVisibility(View.GONE);
-            manageButton.setEnabled(!isBusy);
         }
         if (apiKeyInput != null) {
             apiKeyInput.setEnabled(!isBusy);

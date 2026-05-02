@@ -126,11 +126,10 @@ public class MainActivity extends AppCompatActivity {
                     com.emwaver.emwaverandroidapp.cloud.CloudAuthManager auth = com.emwaver.emwaverandroidapp.cloud.CloudAuthManager.getInstance();
                     auth.ensureInitialized(MainActivity.this);
 
-                    if (auth.isSignedIn()) {
-                        String email = auth.getSignedInEmail();
+                    if (auth.hasAgentKey()) {
                         new AlertDialog.Builder(MainActivity.this)
-                                .setTitle("Account")
-                                .setMessage(email != null && !email.isEmpty() ? email : "Agent key saved")
+                                .setTitle("Agent Key")
+                                .setMessage("Agent key saved")
                                 .setPositiveButton("Remove key", (d, w) -> auth.signOut())
                                 .setNegativeButton("Close", null)
                                 .show();

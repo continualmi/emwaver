@@ -89,8 +89,8 @@ public class AgentChatViewModel extends AndroidViewModel {
                     return;
                 }
 
-                String base = CloudConfig.getBackendBaseUrl(ctx);
-                List<AgentBackendApi.Conversation> list = api.listConversations(base, token);
+                String endpoint = CloudConfig.getAgentEndpoint();
+                List<AgentBackendApi.Conversation> list = api.listConversations(endpoint, token);
                 conversationsLiveData.postValue(list);
             } catch (Exception e) {
                 postError(e.getMessage() != null ? e.getMessage() : e.toString());
@@ -108,7 +108,7 @@ public class AgentChatViewModel extends AndroidViewModel {
         conversationId = id;
         persistConversationId(getApplication(), id);
         clear();
-        loadConversation(id);
+        messagesLiveData.postValue(new ArrayList<>());
     }
 
     public void clear() {
@@ -129,8 +129,8 @@ public class AgentChatViewModel extends AndroidViewModel {
                     return;
                 }
 
-                String base = CloudConfig.getBackendBaseUrl(ctx);
-                List<AgentBackendApi.Message> remote = api.listMessages(base, token, id);
+                String endpoint = CloudConfig.getAgentEndpoint();
+                List<AgentBackendApi.Message> remote = api.listMessages(endpoint, token, id);
 
                 List<Message> mapped = new ArrayList<>();
                 for (AgentBackendApi.Message m : remote) {
@@ -175,22 +175,26 @@ public class AgentChatViewModel extends AndroidViewModel {
                     return;
                 }
 
-                String base = CloudConfig.getBackendBaseUrl(ctx);
+                String endpoint = CloudConfig.getAgentEndpoint();
 
                 String convoId = conversationId;
                 if (convoId == null || convoId.trim().isEmpty()) {
                     String title = trimmed.split("\\n")[0];
-                    AgentBackendApi.Conversation convo = api.createConversation(base, token, title);
+                    AgentBackendApi.Conversation convo = api.createConversation(endpoint, token, title);
                     convoId = convo.id;
                     conversationId = convoId;
                     persistConversationId(ctx, convoId);
-                    refreshConversations();
+                    List<AgentBackendApi.Conversation> current = conversationsLiveData.getValue();
+                    List<AgentBackendApi.Conversation> updatedConversations = new ArrayList<>();
+                    updatedConversations.add(convo);
+                    if (current != null) updatedConversations.addAll(current);
+                    conversationsLiveData.postValue(updatedConversations);
                 }
 
                 final StringBuilder accum = new StringBuilder();
                 final String finalConvoId = convoId;
 
-                api.chatStream(base, token, finalConvoId, trimmed, new AgentBackendApi.StreamListener() {
+                api.chatStream(endpoint, token, finalConvoId, trimmed, new AgentBackendApi.StreamListener() {
                     @Override
                     public void onDelta(@NonNull String t) {
                         if (t.isEmpty()) return;
