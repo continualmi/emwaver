@@ -8,9 +8,9 @@ import { beginGoogleRedirectSignIn, consumeGoogleRedirectResult, isFirebaseConfi
 import SignInShell from "../SignInShell";
 
 function normalizeRedirect(raw: string | null) {
-  if (!raw) return "/cloud";
+  if (!raw) return "/account";
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  return "/cloud";
+  return "/account";
 }
 
 export default function SignInCompleteClient() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 import { SiteHeader } from "@/components/SiteHeader";
@@ -198,7 +198,7 @@ export default function AgentChatPage() {
                 href="/cloud"
                 className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
               >
-                Dashboard
+                Gateway
               </Link>
               <button
                 onClick={doSignOut}

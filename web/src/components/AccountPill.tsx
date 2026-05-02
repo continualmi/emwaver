@@ -107,7 +107,7 @@ export function AccountPill({ variant = "pill", label, className = "" }: Account
   async function handleLogin() {
     setBusy(true);
     try {
-      redirectToContinualSignIn("/cloud");
+      redirectToContinualSignIn("/account");
     } finally {
       setBusy(false);
     }

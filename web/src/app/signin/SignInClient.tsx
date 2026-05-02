@@ -9,9 +9,9 @@ import { buildContinualSignInCompleteUrl } from "@/lib/clientSession";
 import SignInShell from "./SignInShell";
 
 function normalizeRedirect(raw: string | null) {
-  if (!raw) return "/cloud";
+  if (!raw) return "/account";
   if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  return "/cloud";
+  return "/account";
 }
 
 export default function SignInClient() {
@@ -22,7 +22,7 @@ export default function SignInClient() {
   return (
     <SignInShell
       title="Continue with Continual"
-      copy="Sign in to EMWaver with Google in the same tab, then return to your account, devices, and cloud workspace."
+      copy="Sign in to manage your Agent API key and optional Continual services. Local hardware scripts do not require sign-in."
       redirectPath={redirectPath}
       actions={(
         <>

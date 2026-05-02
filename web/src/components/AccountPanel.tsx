@@ -126,7 +126,7 @@ export function AccountPanel() {
   }, []);
 
   async function doSignIn() {
-    redirectToContinualSignIn("/cloud");
+    redirectToContinualSignIn("/account");
   }
 
   async function doSignOut() {
@@ -236,12 +236,6 @@ export function AccountPanel() {
         ) : (
           <div className="flex flex-wrap items-center gap-3">
             <div className="text-sm text-[color:var(--ink-dim)]">{userEmail}</div>
-            <a
-              href="/cloud"
-              className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-2 text-sm font-semibold text-[color:var(--ink)] hover:bg-[color:var(--surface-2)]"
-            >
-              Dashboard
-            </a>
             <button
               type="button"
               disabled={busy}
@@ -270,9 +264,9 @@ export function AccountPanel() {
 
       {!userEmail ? (
         <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-          <div className="text-sm font-semibold text-[color:var(--ink)]">Sign in to manage devices</div>
+          <div className="text-sm font-semibold text-[color:var(--ink)]">Sign in for optional services</div>
           <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Devices can be used locally without an account, but signing in lets you keep activated devices tied to your account.
+            Devices can be used locally without an account. Sign in only for optional Agent, API-key, account, and hosted-service features.
           </div>
         </div>
       ) : (
@@ -293,7 +287,7 @@ export function AccountPanel() {
           </div>
           <div className="mt-4 space-y-3 text-sm text-[color:var(--ink-dim)]">
             <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
-              Activated devices now live on the Dashboard so you can see them alongside your cloud files and hosts.
+              Local hardware control does not require this account. Account state is only for optional Agent/API-key and hosted-service features.
             </div>
             <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-4">
               Native apps now use a single EMWaver API key that you create here on the web and paste into the app.
@@ -303,7 +297,7 @@ export function AccountPanel() {
                 <div>
                   <div className="font-semibold text-[color:var(--ink)]">EMWaver app key</div>
                   <div className="pt-1 text-xs text-[color:var(--ink-dim)]">
-                    Use this key in macOS, iOS, Android, and other EMWaver apps to access your activated devices.
+                    Use this key for optional Agent/account services in EMWaver apps. It should not gate local script execution.
                   </div>
                 </div>
                 <div className="flex flex-wrap gap-2">

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 function normalizeNextPath(raw: string | null) {
-  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/cloud";
+  if (!raw || !raw.startsWith("/") || raw.startsWith("//")) return "/account";
   return raw;
 }
 
