@@ -50,8 +50,13 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
-        // Best-effort host session heartbeat.
-        AppServices.HostSession.Start();
+        HostsButton.Visibility = HostedServicesUiEnabled() ? Visibility.Visible : Visibility.Collapsed;
+
+        if (HostedServicesUiEnabled())
+        {
+            // Optional hosted-service heartbeat.
+            AppServices.HostSession.Start();
+        }
 
         // Remote control host WS (web can attach + drive scripts/UI).
         AppServices.RemoteControlHost.Start();
@@ -596,8 +601,18 @@ public sealed partial class MainWindow : Window
 
     private void OnHostsClick(object sender, RoutedEventArgs e)
     {
+        if (!HostedServicesUiEnabled())
+        {
+            return;
+        }
+
         ContentFrame.Navigate(typeof(HostsPage));
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
+    }
+
+    private static bool HostedServicesUiEnabled()
+    {
+        return (Environment.GetEnvironmentVariable("EMWAVER_HOSTED_SERVICES_UI_ENABLED") ?? "") == "1";
     }
 
     private void OnCloudSignInClick(object sender, RoutedEventArgs e)

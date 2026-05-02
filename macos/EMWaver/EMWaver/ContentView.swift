@@ -117,6 +117,10 @@ struct ContentView: View {
         return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
     }
 
+    private var hostedServicesUiEnabled: Bool {
+        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_SERVICES_UI_ENABLED"] == "1"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -238,14 +242,16 @@ struct ContentView: View {
                 .help("Device / connection options")
             }
 
-            ToolbarItem(placement: .automatic) {
-                Button {
-                    // Always open the Hosts panel; lock functionality inside if not Pro.
-                    showingHosts = true
-                } label: {
-                    Label("Hosts", systemImage: "dot.radiowaves.left.and.right")
+            if hostedServicesUiEnabled {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        // Hosted host sessions are optional service UI, hidden from the local-first core by default.
+                        showingHosts = true
+                    } label: {
+                        Label("Hosted Hosts", systemImage: "dot.radiowaves.left.and.right")
+                    }
+                    .help("View optional hosted host sessions on this account")
                 }
-                .help("View host sessions on this account")
             }
 
             ToolbarItem(placement: .automatic) {

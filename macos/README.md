@@ -69,6 +69,7 @@ Local-first gateway behavior:
 - Override with `EMWAVER_LOCAL_GATEWAY_URL`.
 - Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
 - Hosted remote-control fallback is outside the core local-first path and only activates when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`.
+- Hosted host-session directory UI and heartbeat are hidden from the local-first core by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
 - In local gateway mode, the macOS app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.

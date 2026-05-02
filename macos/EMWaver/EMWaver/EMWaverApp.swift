@@ -16,6 +16,10 @@ import AppKit
 struct EMWaverApp: App {
     @State private var didActivateApp = false
 
+    private var hostedServicesUiEnabled: Bool {
+        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_SERVICES_UI_ENABLED"] == "1"
+    }
+
     init() {
         EnvBootstrap.loadForDevIfAvailable()
     }
@@ -40,9 +44,11 @@ struct EMWaverApp: App {
                 .task {
                     await auth.waitForInitialRestore()
 
-                    // Best-effort background heartbeat + host discovery.
-                    hostSessions.start(auth: auth, device: device)
-                    hostDirectory.start(auth: auth)
+                    if hostedServicesUiEnabled {
+                        // Optional hosted-service heartbeat + host discovery.
+                        hostSessions.start(auth: auth, device: device)
+                        hostDirectory.start(auth: auth)
+                    }
 
                     // Remote control host WS (web can attach + drive scripts/UI).
                     remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)

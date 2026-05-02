@@ -777,6 +777,7 @@ Acceptance criteria:
 Progress:
 
 - macOS and Windows native app host sockets now only fall back to hosted `/v1/ws` when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; localhost gateway remains the default path.
+- macOS and Windows hosted host-session directory UI/heartbeat are hidden by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
 
 ## First Implementation Slice
 
