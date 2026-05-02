@@ -1,0 +1,19 @@
+.DS_Store
+Thumbs.db
+
+# Common export archives
+*.zip
+*.tar
+*.gz
+
+# Local editor files
+.idea/
+.vscode/
+*.swp
+
+# Large generated previews can be added intentionally when needed
+assets/images/tmp/
+
+# Playwright artifacts
+.playwright-cli/
+output/playwright/
