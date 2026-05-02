@@ -8,6 +8,7 @@ Agent API direction: `AGENT_API.md`
 Packaging direction: `PACKAGING.md`
 Rebirth validation tracker: `TESTS_REBIRTH.md`
 Shared mock device simulator goal: `SIMULATOR.md`
+Virtual simulator transport decision: `simulator/VIRTUAL_TRANSPORT.md`
 Rust preflight: `scripts/check-rust-toolchain.sh`
 Rebirth hardware validation helper: `scripts/rebirth-hardware-validation.sh`
 Linux rebirth validation runbook: `scripts/rebirth-linux-validation.sh`

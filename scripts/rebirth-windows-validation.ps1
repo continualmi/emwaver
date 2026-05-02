@@ -1,7 +1,8 @@
 param(
     [string]$GatewayPort = "3921",
     [string]$ScriptName = "blink.emw",
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$Ci
 )
 
 $ErrorActionPreference = "Stop"
@@ -9,6 +10,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $WindowsDir = Join-Path $RepoRoot "windows"
 $Solution = Join-Path $WindowsDir "EMWaver.sln"
+$TestsProject = Join-Path $WindowsDir "EMWaver.Tests\EMWaver.Tests.csproj"
 
 Write-Host "== EMWaver rebirth Windows validation =="
 Write-Host "repo: $RepoRoot"
@@ -29,6 +31,17 @@ if (-not $SkipBuild) {
     Write-Host ""
     Write-Host "== Build Windows app =="
     dotnet build $Solution -c Debug -p:Platform=x64 --no-restore
+}
+
+Write-Host ""
+Write-Host "== Windows simulator tests =="
+dotnet test $TestsProject -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=normal"
+
+if ($Ci) {
+    Write-Host ""
+    Write-Host "== Hosted CI scope =="
+    Write-Host "Windows restore/build and simulator tests completed. Hosted GitHub runners do not validate attached EMWaver USB/MIDI hardware or interactive local gateway control."
+    return
 }
 
 Write-Host ""

@@ -91,4 +91,6 @@ The Android app exposes `SimulatorScriptDeviceBridge`, which implements the same
 
 ## Later Option
 
-A virtual MIDI/USB transport simulator can be added later for end-to-end transport tests. It should be a second layer that consumes the same simulator scenarios, not a separate source of behavior.
+A virtual MIDI/USB transport simulator can be added later for local end-to-end transport tests, but it is not the portable baseline. The decision is documented in `simulator/VIRTUAL_TRANSPORT.md`.
+
+Any virtual transport must be a second layer that consumes the same simulator scenarios, not a separate source of behavior. It must stay opt-in and must not replace real hardware validation.

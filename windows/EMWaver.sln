@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31912.275
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EMWaver", "EMWaver\\EMWaver.csproj", "{6B66C6A8-6C10-4B2D-9D7D-89D3E0B2832B}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EMWaver.Tests", "EMWaver.Tests\\EMWaver.Tests.csproj", "{8F99BF0F-7A1D-44E5-BFD5-59488DA04D7D}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -14,6 +16,10 @@ Global
 		{6B66C6A8-6C10-4B2D-9D7D-89D3E0B2832B}.Debug|x64.Build.0 = Debug|x64
 		{6B66C6A8-6C10-4B2D-9D7D-89D3E0B2832B}.Release|x64.ActiveCfg = Release|x64
 		{6B66C6A8-6C10-4B2D-9D7D-89D3E0B2832B}.Release|x64.Build.0 = Release|x64
+		{8F99BF0F-7A1D-44E5-BFD5-59488DA04D7D}.Debug|x64.ActiveCfg = Debug|x64
+		{8F99BF0F-7A1D-44E5-BFD5-59488DA04D7D}.Debug|x64.Build.0 = Debug|x64
+		{8F99BF0F-7A1D-44E5-BFD5-59488DA04D7D}.Release|x64.ActiveCfg = Release|x64
+		{8F99BF0F-7A1D-44E5-BFD5-59488DA04D7D}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

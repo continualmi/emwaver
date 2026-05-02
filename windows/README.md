@@ -20,6 +20,7 @@ The local-first rule is that connected supported boards can run local `.emw` scr
 Project files:
 - solution: `windows/EMWaver.sln`
 - app project: `windows/EMWaver/EMWaver.csproj`
+- test project: `windows/EMWaver.Tests/EMWaver.Tests.csproj`
 
 ---
 
@@ -70,6 +71,8 @@ Transport logic lives under `Services/UsbMidiSysex.cs` and related device manage
 Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` modules, including plot/state helpers and script document handling.
 
 `Scripting/SimulatorCommandBridge.cs` is the Windows test adapter for the shared `simulator/fixtures/*.json` contract. It can be passed to `ScriptEngine.Setup` as the `sendPacket` delegate so hardware-touching `.emw` scripts can run in tests without a physical board.
+
+`EMWaver.Tests` contains the hosted-CI simulator smoke for Windows. It runs a hardware-touching `.emw` script through the real Windows `ScriptEngine` and `SimulatorCommandBridge`, then asserts the rendered UI includes values from `simulator/fixtures/basic-board.json`.
 
 ## 3.3 Remote host control
 
@@ -223,6 +226,7 @@ The main remaining work after the parity code changes is validation on a real Wi
 
 1. Build validation
 - confirm the WinUI project builds cleanly on Windows 11 with the expected SDK/toolchain.
+- confirm `scripts/rebirth-windows-validation.ps1 -Ci` passes on hosted Windows CI, including the simulator-backed script-engine test.
 
 2. STM32 hardware validation
 - verify DFU setup path on a fresh STM32 board,
@@ -253,9 +257,17 @@ Required:
 - Visual Studio 2022
   - .NET desktop workload
   - Windows App SDK / WinUI 3 tooling
-- .NET SDK 8.x
+- .NET SDK 10.x
 
 Open `EMWaver.sln` in Visual Studio for build/run/debug.
+
+Hosted CI uses:
+
+```powershell
+scripts/rebirth-windows-validation.ps1 -Ci
+```
+
+That command restores/builds the Windows solution and runs `EMWaver.Tests`. It does not validate attached USB/MIDI hardware or interactive local gateway control.
 
 ---
 

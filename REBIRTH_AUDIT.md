@@ -35,7 +35,7 @@ The rebirth is complete only when:
 | Agent CLI | `daemon/emwaver/src/main.rs` adds `emwaver agent` using `EMWAVER_AGENT_API_KEY` and endpoint env | missing-key and configured mock paths passed |
 | Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse |
 | Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers; `emwaver-host` consumes it | API/build done; selected-device error paths verified; hardware validation pending |
-| Shared device simulator | `SIMULATOR.md`, `simulator/fixtures/basic-board.json`, `emwaver-runtime::SimulatorCommandBridge`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, Android `SimulatorScriptDeviceBridge`, `REBIRTH-045` through `REBIRTH-049` | shared fixture plus Rust, Apple, Windows, and Android adapters added; optional virtual transport remains future work |
+| Shared device simulator | `SIMULATOR.md`, `simulator/fixtures/basic-board.json`, `simulator/VIRTUAL_TRANSPORT.md`, `emwaver-runtime::SimulatorCommandBridge`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, Android `SimulatorScriptDeviceBridge`, `REBIRTH-045` through `REBIRTH-049` | shared fixture plus Rust, Apple, Windows, and Android adapters added; virtual MIDI/USB evaluated and kept out of the portable baseline |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
@@ -58,6 +58,7 @@ The rebirth is complete only when:
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 | Linux validation runbook | `scripts/rebirth-linux-validation.sh` | added; execution on real Linux host with ALSA MIDI and hardware still pending |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
+| Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | added hosted Ubuntu dry-run validation, hosted Windows restore/build plus simulator script-engine tests, and dispatch-only self-hosted hardware jobs |
 
 ## Verification Evidence
 

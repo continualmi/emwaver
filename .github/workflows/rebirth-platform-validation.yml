@@ -1,0 +1,124 @@
+name: Rebirth Platform Validation
+
+on:
+  pull_request:
+    paths:
+      - "daemon/**"
+      - "windows/**"
+      - "assets/default-scripts/**"
+      - "simulator/**"
+      - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-hardware-validation.sh"
+      - "scripts/rebirth-linux-validation.sh"
+      - "scripts/rebirth-windows-validation.ps1"
+      - ".github/workflows/rebirth-platform-validation.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "daemon/**"
+      - "windows/**"
+      - "assets/default-scripts/**"
+      - "simulator/**"
+      - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-hardware-validation.sh"
+      - "scripts/rebirth-linux-validation.sh"
+      - "scripts/rebirth-windows-validation.ps1"
+      - ".github/workflows/rebirth-platform-validation.yml"
+  workflow_dispatch:
+    inputs:
+      run_hardware:
+        description: "Run hardware-in-the-loop jobs on self-hosted runners"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      emwaver_device_id:
+        description: "Device id from `emwaver devices` for self-hosted hardware jobs"
+        required: false
+        default: "0"
+      emwaver_test_script:
+        description: "Hardware script path for self-hosted hardware jobs"
+        required: false
+        default: "assets/default-scripts/blink.emw"
+
+permissions:
+  contents: read
+
+jobs:
+  linux-hosted:
+    name: Linux hosted validation
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux MIDI build and diagnostic tools
+        run: sudo apt-get update && sudo apt-get install -y alsa-utils libasound2-dev usbutils
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: daemon
+
+      - name: Run Linux rebirth validation
+        run: scripts/rebirth-linux-validation.sh
+
+  windows-hosted:
+    name: Windows hosted validation
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore, build, and test Windows simulator path
+        shell: pwsh
+        run: scripts/rebirth-windows-validation.ps1 -Ci
+
+  linux-hardware:
+    name: Linux hardware validation
+    if: github.event_name == 'workflow_dispatch' && inputs.run_hardware == 'true'
+    runs-on: [self-hosted, linux, emwaver-hardware]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run Linux hardware validation
+        env:
+          EMWAVER_DEVICE_ID: ${{ inputs.emwaver_device_id }}
+          EMWAVER_TEST_SCRIPT: ${{ inputs.emwaver_test_script }}
+        run: scripts/rebirth-linux-validation.sh
+
+  windows-hardware:
+    name: Windows hardware build and runbook
+    if: github.event_name == 'workflow_dispatch' && inputs.run_hardware == 'true'
+    runs-on: [self-hosted, windows, emwaver-hardware]
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Run Windows validation runbook
+        shell: pwsh
+        run: scripts/rebirth-windows-validation.ps1 -ScriptName "${{ inputs.emwaver_test_script }}"

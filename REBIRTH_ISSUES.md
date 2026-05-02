@@ -662,7 +662,7 @@ Acceptance criteria:
 
 ## `REBIRTH-044` Platform Device Access Validation
 
-- Status: `done`
+- Status: `in progress`
 - Priority: `P1`
 - Target: validation
 
@@ -674,6 +674,13 @@ Acceptance criteria:
 - Linux result is documented.
 - Windows result is documented.
 - Known permission/setup issues are captured.
+
+Progress:
+
+- Hosted Linux dry-run validation is wired in `.github/workflows/rebirth-platform-validation.yml`.
+- Hosted Windows restore/build validation is wired in `.github/workflows/rebirth-platform-validation.yml`.
+- Optional self-hosted Linux and Windows hardware jobs are workflow-dispatch only.
+- Real board validation remains pending until hardware runners or local workstations are available.
 
 ## Epic 10: Device Simulator
 
@@ -745,7 +752,7 @@ Progress:
 
 ## `REBIRTH-049` Add Optional Virtual Transport Simulator
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P2`
 - Target: simulator/transport
 
@@ -756,6 +763,12 @@ Acceptance criteria:
 - Decision documents OS support and CI feasibility.
 - Virtual transport reuses the shared simulator scenarios.
 - Protocol simulator remains the default portable test layer.
+
+Progress:
+
+- `simulator/VIRTUAL_TRANSPORT.md` records the decision that protocol-level fixtures remain the portable default.
+- Virtual MIDI/USB is allowed only as a future opt-in local integration harness that consumes the shared fixtures.
+- Required CI, launch validation, iOS, and Android tests should use the protocol-level simulator adapters instead of fake OS devices.
 
 ## Epic 11: Remote Control Scope
 
