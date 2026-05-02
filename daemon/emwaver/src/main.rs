@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::Duration;
 use tracing::{info, warn};
-use tungstenite::{connect, Message};
+use tungstenite::{connect, stream::MaybeTlsStream, Message};
 use url::Url;
 
 #[derive(Parser, Debug)]
@@ -432,10 +432,11 @@ fn run_script(
         .with_context(|| format!("failed to connect to local gateway at {url}"))?;
 
     let timeout = Duration::from_millis(timeout_ms.max(1));
-    ws.get_mut()
-        .get_mut()
-        .set_read_timeout(Some(timeout))
-        .context("failed to set gateway read timeout")?;
+    if let MaybeTlsStream::Plain(stream) = ws.get_mut() {
+        stream
+            .set_read_timeout(Some(timeout))
+            .context("failed to set gateway read timeout")?;
+    }
 
     ws.send(Message::Text(
         serde_json::json!({
@@ -520,6 +521,20 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
     let dir = gateway_dir();
     if !dir.join("package.json").exists() {
         anyhow::bail!("gateway package not found at {}", dir.display());
+    }
+
+    let tsx_bin = dir.join("node_modules").join(".bin").join("tsx");
+    if !tsx_bin.exists() {
+        println!("gateway dependencies missing; running `npm ci` in {}", dir.display());
+        let status = Command::new("npm")
+            .arg("ci")
+            .current_dir(&dir)
+            .status()
+            .context("failed to install gateway dependencies with npm ci")?;
+
+        if !status.success() {
+            anyhow::bail!("gateway dependency install exited with status {status}");
+        }
     }
 
     let port_value = port.unwrap_or(3921);

@@ -34,10 +34,10 @@ The rebirth is complete only when:
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
 | Runtime extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
 | Device transport extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
-| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | source implemented, build unverified |
-| `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | source implemented, build unverified |
+| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | build verified; local gateway/macOS app integration passed |
+| `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
-| `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
+| `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
 | Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
@@ -73,6 +73,10 @@ This verifies:
 - TypeScript typecheck,
 - macOS Debug app build,
 - macOS local gateway app-role integration for a UI-only `.emw` script,
+- Rust daemon workspace build,
+- `emwaver doctor`,
+- `emwaver run` against local gateway plus built macOS app,
+- `emwaver gateway --port` clean-checkout dependency install/start smoke,
 - gateway `/health`,
 - gateway `/v1/examples` loading canonical default scripts,
 - missing Agent config response,
@@ -94,25 +98,23 @@ It does not verify:
 
 ## Rust Toolchain
 
-The current shell does not expose:
-
-```bash
-cargo
-rustc
-```
-
-Preflight script:
+The Rust toolchain was installed with Homebrew and now passes preflight:
 
 ```bash
 ./scripts/check-rust-toolchain.sh
 ```
 
-That blocks safe implementation/verification of:
+Verified build:
+
+```bash
+cd daemon
+cargo build -p emwaver-host -p emwaver
+```
+
+Remaining Rust-side work:
 
 - `emwaver-runtime` for CLI/daemon reuse,
 - `emwaver-device` for CLI/daemon reuse,
-- `emwaver run` build/runtime verification,
-- Rust CLI `emwaver gateway` wrapper,
 - daemon refactor.
 
 ## Hardware Imports
@@ -135,7 +137,6 @@ Completed imports:
 
 - Build/verify Rust runtime extraction.
 - Build/verify shared device transport layer.
-- Build and verify `emwaver run` against a local gateway/native-app pair.
 - Verify Windows app local gateway WebSocket on a Windows 11 workstation.
 - Validate macOS local gateway script execution on real hardware.
 - Validate local hardware script execution on at least one supported board.

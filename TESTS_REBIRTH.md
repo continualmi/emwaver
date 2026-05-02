@@ -19,9 +19,11 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 
 | Test | Status | Evidence |
 | --- | --- | --- |
-| Rust toolchain preflight | `blocked` | `./scripts/check-rust-toolchain.sh` reports missing `cargo`/`rustc` in the current shell. |
-| Rust CLI build | `blocked` | Requires Rust toolchain preflight to pass first. |
-| `emwaver gateway --port` | `blocked` | Requires Rust CLI build. |
+| Rust toolchain preflight | `pass` | `./scripts/check-rust-toolchain.sh` reports Cargo/Rust available after Homebrew Rust install. |
+| Rust CLI build | `pass` | `cd daemon && cargo build -p emwaver-host -p emwaver` completed successfully. |
+| `emwaver doctor` | `pass` | `cargo run -q -p emwaver -- doctor` passed: gateway package, Node/npm, Cargo/Rust available; no MIDI ports found. |
+| `emwaver run` | `pass` | `cargo run -q -p emwaver -- run <temp>.emw --port 3938 --timeout-ms 12000` returned `started ...` through local gateway plus built macOS app. |
+| `emwaver gateway --port` | `pass` | With `gateway/node_modules` removed, `cargo run -q -p emwaver -- gateway --port 3940` ran `npm ci`, started the gateway, and `/health` returned the gateway service payload. |
 
 ## Hardware Repos
 
@@ -39,14 +41,14 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | macOS | `build pass` | `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` succeeded after the ESP helper wrapper fallback was added. Runtime/hardware validation is still pending. |
 | Linux | `pending` | Validate on a machine with device permissions and Cargo/toolchain installed. |
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
-| `emwaver run` source path | `blocked` | Implemented as a gateway controller command in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
-| `emwaver doctor` source path | `blocked` | Implemented in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
+| `emwaver run` source path | `pass` | Built and verified through local gateway plus built macOS app. |
+| `emwaver doctor` source path | `pass` | Built and verified locally. |
 | macOS local gateway app role | `pass` | Local gateway plus built macOS app returned `hello.ack`, `device.status`, `script.started`, and `ui.snapshot` for a UI-only `.emw` script through `/v1/ws`. Hardware-backed script execution remains pending. |
 | Windows local gateway app role | `blocked` | `RemoteControlHostService.cs` connects to localhost gateway as `role=app` and activates snapshots on `script.run`; local validation blocked because `dotnet`/Windows toolchain are not installed here. |
 
 ## Validation Rules
 
 - Do not treat TypeScript UI preview as proof of real hardware execution.
-- Do not mark `emwaver run` complete until the Rust CLI builds and the command is verified against a real local gateway/native app pair.
+- Do not treat `emwaver run` UI-only validation as proof of real hardware execution.
 - Do not mark local gateway hardware control complete until the gateway uses the real runtime/device bridge.
 - Hardware monorepo import is complete for the nine primary repos; catalog cleanup for older/generated hardware IDs remains separate follow-up work.
