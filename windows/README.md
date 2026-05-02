@@ -72,6 +72,13 @@ Remote control pages/services provide host listing and attach/control behavior f
 - `Pages/HostsPage*`
 - `Pages/RemoteHostControlPage*`
 
+Local-first gateway behavior:
+- `Services/Cloud/RemoteControlHostService.cs` can connect directly to the localhost gateway as `role=app`.
+- Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
+- Override with `EMWAVER_LOCAL_GATEWAY_URL`.
+- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1` to fall back to the hosted remote-control socket path.
+- In local gateway mode, the Windows app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
+
 ## 3.4 Firmware update path
 
 Firmware update dialogs/managers are present:

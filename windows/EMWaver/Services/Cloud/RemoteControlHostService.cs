@@ -31,6 +31,8 @@ internal sealed class RemoteControlHostService
     private string? _activeScriptInstanceId;
     private int _uiRev;
 
+    private sealed record HostSocketConfig(string WsUrl, string Role);
+
     internal IDelegate? Delegate { get; set; }
 
     internal bool IsRemoteControlled => _remoteControlled;
@@ -79,12 +81,8 @@ internal sealed class RemoteControlHostService
 
     private async Task ConnectOnceAsync(CancellationToken ct)
     {
-        var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-        var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
-        if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
-        {
-            return;
-        }
+        var socketConfig = await ResolveHostSocketConfigAsync();
+        if (socketConfig == null) return;
 
         var hostSessionId = Delegate?.GetHostSessionId() ?? "";
         if (string.IsNullOrWhiteSpace(hostSessionId))
@@ -93,26 +91,15 @@ internal sealed class RemoteControlHostService
             hostSessionId = AppServices.HostSession.HostSessionId;
         }
 
-        var baseUrl = _cfg.BackendBaseUrl?.Trim() ?? "";
-        if (string.IsNullOrWhiteSpace(baseUrl)) return;
-
-        var wsUrl = baseUrl.TrimEnd('/');
-        wsUrl = wsUrl.Replace("https://", "wss://").Replace("http://", "ws://");
-        wsUrl = wsUrl + "/v1/ws";
-        if (!string.IsNullOrWhiteSpace(tok))
-        {
-            wsUrl += "?token=" + Uri.EscapeDataString(tok.Trim());
-        }
-
         var ws = new ClientWebSocket();
         _ws = ws;
-        await ws.ConnectAsync(new Uri(wsUrl), ct);
+        await ws.ConnectAsync(new Uri(socketConfig.WsUrl), ct);
 
         // Hello
         await SendJsonAsync(new
         {
             type = "hello",
-            role = "host",
+            role = socketConfig.Role,
             protocolVersion = 1,
             hostSessionId = hostSessionId,
         }, ct);
@@ -122,6 +109,77 @@ internal sealed class RemoteControlHostService
         try { ws.Abort(); } catch { }
         _ws = null;
         SetRemoteControlled(false);
+    }
+
+    private async Task<HostSocketConfig?> ResolveHostSocketConfigAsync()
+    {
+        var local = ResolveLocalGatewayWsUrl();
+        if (!string.IsNullOrWhiteSpace(local))
+        {
+            return new HostSocketConfig(local, "app");
+        }
+
+        var allowAnon = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
+        var tok = await _auth.GetValidIdTokenAsync(CancellationToken.None, interactiveSignIn: false);
+        if (string.IsNullOrWhiteSpace(tok) && !allowAnon)
+        {
+            return null;
+        }
+
+        var baseUrl = _cfg.BackendBaseUrl?.Trim() ?? "";
+        if (string.IsNullOrWhiteSpace(baseUrl)) return null;
+
+        var wsUrl = baseUrl.TrimEnd('/');
+        wsUrl = wsUrl.Replace("https://", "wss://").Replace("http://", "ws://");
+        wsUrl = wsUrl + "/v1/ws";
+        if (!string.IsNullOrWhiteSpace(tok))
+        {
+            wsUrl += "?token=" + Uri.EscapeDataString(tok.Trim());
+        }
+
+        return new HostSocketConfig(wsUrl, "host");
+    }
+
+    private static string? ResolveLocalGatewayWsUrl()
+    {
+        if ((Environment.GetEnvironmentVariable("EMWAVER_LOCAL_GATEWAY_DISABLED") ?? "") == "1")
+        {
+            return null;
+        }
+
+        var raw = (Environment.GetEnvironmentVariable("EMWAVER_LOCAL_GATEWAY_URL") ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            raw = "ws://127.0.0.1:3921/v1/ws";
+        }
+
+        if (!Uri.TryCreate(raw, UriKind.Absolute, out var uri))
+        {
+            return null;
+        }
+
+        var builder = new UriBuilder(uri);
+        if (string.Equals(builder.Scheme, "http", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Scheme = "ws";
+        }
+        else if (string.Equals(builder.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+        {
+            builder.Scheme = "wss";
+        }
+
+        if (!string.Equals(builder.Scheme, "ws", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(builder.Scheme, "wss", StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        if (string.IsNullOrWhiteSpace(builder.Path) || builder.Path == "/")
+        {
+            builder.Path = "/v1/ws";
+        }
+
+        return builder.Uri.ToString();
     }
 
     private async Task ReceiveLoopAsync(CancellationToken ct)
@@ -162,6 +220,8 @@ internal sealed class RemoteControlHostService
 
             if (type == "script.run")
             {
+                SetRemoteControlled(true);
+
                 var source = root.TryGetProperty("source", out var s) ? (s.GetString() ?? "") : "";
                 var name = root.TryGetProperty("name", out var n) ? n.GetString() : null;
                 if (string.IsNullOrWhiteSpace(source))

@@ -37,7 +37,7 @@ The rebirth is complete only when:
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | source implemented, build unverified |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
-| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS `RemoteControlHostService` connects to localhost gateway as `role=app` | macOS source implemented, build blocked by missing ESP helper |
+| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | source implemented; macOS build blocked by missing ESP helper, Windows build blocked by missing local dotnet/Windows toolchain |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
@@ -132,7 +132,7 @@ Completed imports:
 - Build/verify Rust runtime extraction.
 - Build/verify shared device transport layer.
 - Build and verify `emwaver run` against a local gateway/native-app pair.
-- Wire Windows app to the local gateway WebSocket.
+- Verify Windows app local gateway WebSocket on a Windows 11 workstation.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.

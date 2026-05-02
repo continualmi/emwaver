@@ -24,7 +24,7 @@ Use it to capture:
 | --- | --- | --- | --- |
 | `P0` | Rebirth plan | `in progress` | `REBIRTH.md` captures the product pivot toward local-first open source EMWaver with paid Agent services. |
 | `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
-| `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge; macOS now connects as local `role=app`, and Windows still needs parity. |
+| `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge; macOS and Windows now have source-level local `role=app` wiring and need native validation. |
 | `P0` | Runtime + CLI | `in progress` | `emwaver run` now sends scripts to the localhost gateway/native-app bridge; Rust build and deeper runtime/device extraction remain blocked by missing toolchain. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
@@ -32,7 +32,7 @@ Use it to capture:
 
 ## Next Up
 
-1. Wire the Windows app WebSocket role to the localhost gateway.
+1. Validate macOS and Windows local gateway app-role wiring on native workstations.
 2. Inventory current `web/` control UI files for gateway migration.
 3. Build/verify the Rust CLI once `cargo`/`rustc` are installed.
 4. Extract a reusable runtime/device layer where native apps and the headless host actually need shared code.
