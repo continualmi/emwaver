@@ -35,21 +35,21 @@ if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
     throw "dotnet was not found. Install the .NET SDK required by windows/EMWaver/EMWaver.csproj."
 }
 
-Invoke-Checked dotnet --info
+Invoke-Checked dotnet @("--info")
 
 if (-not $SkipBuild) {
     Write-Host ""
     Write-Host "== Restore Windows app =="
-    Invoke-Checked dotnet restore $Solution
+    Invoke-Checked dotnet @("restore", $Solution)
 
     Write-Host ""
     Write-Host "== Build Windows app =="
-    Invoke-Checked dotnet build $Solution -c Debug -p:Platform=x64 --no-restore
+    Invoke-Checked dotnet @("build", $Solution, "-c", "Debug", "-p:Platform=x64", "--no-restore")
 }
 
 Write-Host ""
 Write-Host "== Windows simulator tests =="
-Invoke-Checked dotnet test $TestsProject -c Debug -p:Platform=x64 --no-build --logger "console;verbosity=normal"
+Invoke-Checked dotnet @("test", $TestsProject, "-c", "Debug", "-p:Platform=x64", "--no-build", "--logger", "console;verbosity=normal")
 
 if ($Ci) {
     Write-Host ""

@@ -25,7 +25,13 @@ echo "== Doctor =="
 
 echo
 echo "== Devices =="
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- devices)
+if ! (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- devices); then
+  if [[ "${EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE:-}" == "1" ]]; then
+    echo "device listing skipped: MIDI support unavailable in this hosted environment"
+  else
+    exit 1
+  fi
+fi
 
 echo
 echo "== UI-only direct runtime =="
