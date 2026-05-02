@@ -36,12 +36,12 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 
 | Platform | Status | Notes |
 | --- | --- | --- |
-| macOS | `pending` | Validate CLI/gateway shared transport after runtime/device extraction. |
+| macOS | `build pass` | `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` succeeded after the ESP helper wrapper fallback was added. Runtime/hardware validation is still pending. |
 | Linux | `pending` | Validate on a machine with device permissions and Cargo/toolchain installed. |
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
 | `emwaver run` source path | `blocked` | Implemented as a gateway controller command in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
 | `emwaver doctor` source path | `blocked` | Implemented in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
-| macOS local gateway app role | `blocked` | `RemoteControlHostService` connects to localhost gateway as `role=app`; `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` failed in the existing bundle phase because `macos/EMWaver/Tools/emwaver-esp-helper/emwaver-esp-helper` is missing. |
+| macOS local gateway app role | `build pass` | `RemoteControlHostService` connects to localhost gateway as `role=app`; macOS Debug build passed. Local runtime execution against a gateway/native app pair remains pending. |
 | Windows local gateway app role | `blocked` | `RemoteControlHostService.cs` connects to localhost gateway as `role=app` and activates snapshots on `script.run`; local validation blocked because `dotnet`/Windows toolchain are not installed here. |
 
 ## Validation Rules

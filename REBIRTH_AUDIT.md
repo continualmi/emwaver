@@ -38,7 +38,7 @@ The rebirth is complete only when:
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | source implemented, build unverified |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
-| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | source implemented; macOS build blocked by missing ESP helper, Windows build blocked by missing local dotnet/Windows toolchain |
+| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | macOS builds; Windows build blocked by missing local dotnet/Windows toolchain; real runtime/hardware validation pending |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
@@ -71,6 +71,7 @@ gateway agent proxy verify passed
 This verifies:
 
 - TypeScript typecheck,
+- macOS Debug app build,
 - gateway `/health`,
 - gateway `/v1/examples` loading canonical default scripts,
 - missing Agent config response,
@@ -83,6 +84,7 @@ It does not verify:
 
 - real hardware access,
 - native app runtime integration,
+- Windows app build,
 - Rust CLI build,
 - `emwaver run`,
 - remaining hardware subtree imports.
@@ -134,6 +136,7 @@ Completed imports:
 - Build/verify shared device transport layer.
 - Build and verify `emwaver run` against a local gateway/native-app pair.
 - Verify Windows app local gateway WebSocket on a Windows 11 workstation.
+- Validate macOS local gateway script execution with the built app and a local gateway.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.
