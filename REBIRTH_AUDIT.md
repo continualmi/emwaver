@@ -35,6 +35,7 @@ The rebirth is complete only when:
 | Runtime extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
 | Device transport extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | source implemented, build unverified |
+| `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | source implemented, build unverified |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
 | Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | source implemented; macOS build blocked by missing ESP helper, Windows build blocked by missing local dotnet/Windows toolchain |

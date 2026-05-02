@@ -34,6 +34,9 @@ enum Commands {
     /// List MIDI devices and highlight likely EMWaver ports.
     Devices,
 
+    /// Check local CLI, gateway, and device prerequisites.
+    Doctor,
+
     /// Run a .emw script through the local gateway/native app bridge.
     Run {
         /// Script file to run.
@@ -300,6 +303,80 @@ fn list_devices() -> Result<()> {
     Ok(())
 }
 
+fn command_available(name: &str) -> bool {
+    Command::new(name)
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn doctor() -> Result<()> {
+    let mut issues = 0usize;
+
+    println!("EMWaver doctor");
+
+    let root = repo_root();
+    println!("repo root: {}", root.display());
+
+    let gateway = gateway_dir();
+    if gateway.join("package.json").exists() {
+        println!("ok: gateway package found at {}", gateway.display());
+    } else {
+        issues += 1;
+        println!("missing: gateway package at {}", gateway.display());
+    }
+
+    if command_available("node") {
+        println!("ok: node is available");
+    } else {
+        issues += 1;
+        println!("missing: node");
+    }
+
+    if command_available("npm") {
+        println!("ok: npm is available");
+    } else {
+        issues += 1;
+        println!("missing: npm");
+    }
+
+    if command_available("cargo") {
+        println!("ok: cargo is available");
+    } else {
+        issues += 1;
+        println!("missing: cargo");
+    }
+
+    if command_available("rustc") {
+        println!("ok: rustc is available");
+    } else {
+        issues += 1;
+        println!("missing: rustc");
+    }
+
+    match list_devices_lines() {
+        Ok(lines) => {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        Err(err) => {
+            issues += 1;
+            println!("device check failed: {err:#}");
+        }
+    }
+
+    if issues == 0 {
+        println!("doctor: ok");
+        Ok(())
+    } else {
+        anyhow::bail!("doctor found {issues} issue(s)")
+    }
+}
+
 fn gateway_ws_url(port: Option<u16>, gateway_url: Option<String>) -> Result<Url> {
     if let Some(raw) = gateway_url {
         let mut url = Url::parse(raw.trim())
@@ -496,6 +573,7 @@ fn main() -> Result<()> {
         },
         Commands::Tui => run_tui(),
         Commands::Devices => list_devices(),
+        Commands::Doctor => doctor(),
         Commands::Run {
             script,
             name,

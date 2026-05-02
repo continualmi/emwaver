@@ -40,6 +40,7 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 Main command groups (`emwaver/src/main.rs`):
 - `emwaver daemon start|stop|status|autostart`
 - `emwaver devices`
+- `emwaver doctor`
 - `emwaver run <script.emw>`
 - `emwaver gateway` / `emwaver web`
 - `emwaver tui`
@@ -76,6 +77,14 @@ emwaver run scripts/blink.emw --gateway-url http://127.0.0.1:3930
 emwaver run scripts/blink.emw --name blink.emw --timeout-ms 10000
 emwaver run scripts/blink.emw --no-wait
 ```
+
+Local setup can be checked with:
+
+```bash
+emwaver doctor
+```
+
+`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, and MIDI device visibility.
 
 ## 3.2 `emwaver-host` daemon
 
