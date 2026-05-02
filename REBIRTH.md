@@ -203,7 +203,43 @@ emwaver doctor
 
 The daemon remains useful for always-on hosts, but it should not be required for ordinary local script execution.
 
-## 7) Agent Direction
+## 7) Shared Device Simulator Direction
+
+EMWaver development should include a reusable mock EMWaver device simulator so contributors can test `.emw` scripts and UI/runtime behavior without a physical board.
+
+The simulator should be a shared product/testing asset, not a single-platform shortcut. The first layer should model the EMWaver firmware command protocol behind each platform's local device/runtime bridge:
+
+```text
+.emw script/runtime
+  -> platform command bridge
+  -> shared simulator behavior
+  -> deterministic mock board state
+```
+
+This allows every platform to unit test with the same expected behavior:
+
+- Rust CLI/runtime,
+- macOS and iOS Swift runtime,
+- Windows C# runtime,
+- Android Kotlin runtime,
+- gateway/browser protocol tests.
+
+The initial simulator should focus on deterministic protocol coverage for core script APIs:
+
+- device identity and board metadata,
+- GPIO mode/read/write/pull/info,
+- ADC reads,
+- PWM start/write/stop,
+- minimal SPI/I2C/UART transfer stubs,
+- explicit error responses for unsupported commands.
+
+The shared source of truth should be data-driven where practical, such as fixtures/scenarios that describe mock pins, ADC values, bus responses, and expected command replies. Platform-specific code can adapt those fixtures to native test doubles.
+
+This is not a replacement for real hardware validation. It is a fast development and CI layer that catches runtime, script, UI, and protocol regressions before manual board testing.
+
+An optional later layer may add a virtual MIDI/USB transport simulator for end-to-end transport tests. That should come after the command-protocol simulator, because OS-level fake devices are harder to make portable.
+
+## 8) Agent Direction
 
 Phase two is to make the Agent the main paid product.
 
@@ -231,7 +267,7 @@ This keeps the open-source runtime useful while making the specialized Agent har
 
 Prompt secrecy alone should not be treated as the moat. The moat is the maintained Agent service and its practical usefulness.
 
-## 8) Hardware Monorepo Direction
+## 9) Hardware Monorepo Direction
 
 EMWaver should become a single open-source monorepo for the software, firmware, gateway, scripts, and hardware designs that make up the platform.
 
@@ -278,7 +314,7 @@ Rules for the merged hardware tree:
 
 This consolidation should support the local-first open-source pivot, but it should not block the gateway/CLI/runtime work.
 
-## 9) Phases
+## 10) Phases
 
 ## Phase 1: Local-First Gateway
 
@@ -297,6 +333,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Add `emwaver run`.
 - Add `emwaver devices`.
 - Add `emwaver doctor`.
+- Add a shared mock device simulator so runtime and platform tests can run hardware-touching `.emw` scripts without a connected board.
 
 ## Phase 3: Cloud Removal From Core
 
@@ -328,7 +365,7 @@ Only add hosted relay, sync, teams, classrooms, or remote fleet behavior if user
 
 These should remain optional services layered on top of a useful local open-source core.
 
-## 10) Product Language
+## 11) Product Language
 
 Use language like:
 
@@ -337,6 +374,7 @@ Use language like:
 - localhost gateway,
 - hardware scripting,
 - `.emw` runtime,
+- mock device simulator,
 - Agent-assisted scripting,
 - optional paid Agent.
 
@@ -348,7 +386,7 @@ Avoid centering:
 - remote relay as the main product,
 - account-first onboarding.
 
-## 11) Launch Story
+## 12) Launch Story
 
 The new launch story is:
 

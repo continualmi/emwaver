@@ -39,6 +39,7 @@ Backlog coverage:
 - CLI uses the shared runtime/device layer.
 - Runtime can execute scripts and emit UI snapshots.
 - Device command bridge can reach connected hardware.
+- Shared mock device simulator goal is defined so hardware-touching scripts can be tested without a physical board.
 
 Backlog coverage:
 
@@ -47,6 +48,7 @@ Backlog coverage:
 - `REBIRTH-012`
 - `REBIRTH-013`
 - `REBIRTH-014`
+- `REBIRTH-045`
 
 ## CLI
 
@@ -130,12 +132,14 @@ Backlog coverage:
 - CLI/gateway packaging direction is decided for macOS, Linux, and Windows.
 - Local dev command exists for gateway.
 - Device access validation is documented per desktop platform.
+- Device simulator work is tracked separately from real hardware validation.
 
 Backlog coverage:
 
 - `REBIRTH-042`
 - `REBIRTH-043`
 - `REBIRTH-044`
+- `REBIRTH-045`
 
 ## Not Required For MVP
 

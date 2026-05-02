@@ -16,7 +16,7 @@ Use it to capture:
 ## Current Focus
 
 - EMWaver rebirth: local-first open-source runtime, localhost gateway, CLI-driven `.emw` execution, hardware monorepo consolidation, and paid Agent as the primary business model.
-- First implementation slice is tracked in `REBIRTH_ISSUES.md`: gateway package, local WebSocket endpoint, runtime/device extraction, `emwaver run`, web control UI inventory, account-free local hardware control, and hardware repo inventory.
+- First implementation slice is tracked in `REBIRTH_ISSUES.md`: gateway package, local WebSocket endpoint, runtime/device extraction, shared mock device simulator contract, `emwaver run`, web control UI inventory, account-free local hardware control, and hardware repo inventory.
 
 ## Active Work
 
@@ -26,6 +26,7 @@ Use it to capture:
 | `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
 | `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge; macOS and Windows now have source-level local `role=app` wiring and need native validation. |
 | `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, selected-device daemon startup builds, direct UI-only `emwaver run` works, and `doctor` is verified locally. Hardware-backed validation remains. |
+| `P0` | Device simulator | `planned` | Add a shared protocol-level mock EMWaver device simulator so every platform can unit test hardware-touching `.emw` scripts without a connected board. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
 | `P1` | Hardware validation (`004`, `005`) | `pending` | Still useful, but no longer the top planning focus while architecture pivots. |
@@ -33,10 +34,11 @@ Use it to capture:
 ## Next Up
 
 1. Validate macOS and Windows local gateway app-role wiring on native workstations.
-2. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
-3. Validate local gateway script execution on real hardware.
-4. Validate `emwaver run --direct --device <id>` against attached hardware.
-5. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
+2. Add shared simulator fixtures and the first Rust simulator-backed `CommandBridge`.
+3. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
+4. Validate local gateway script execution on real hardware.
+5. Validate `emwaver run --direct --device <id>` against attached hardware.
+6. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
 
 ## Blockers / Risks
 

@@ -41,6 +41,14 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | `emwaver agent` missing key | `pass` | With Agent env unset, command exits with `agent_not_configured` setup guidance. |
 | `emwaver agent` configured mock | `pass` | Local mock endpoint received Bearer auth and script context, and CLI printed returned message/code. |
 
+## Device Simulator
+
+| Test | Status | Evidence |
+| --- | --- | --- |
+| Shared simulator goal | `planned` | `SIMULATOR.md` and `REBIRTH-045` define a reusable protocol-level mock device simulator for platform tests without real hardware. |
+| Shared simulator fixtures | `todo` | Future fixtures should define mock board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit error cases. |
+| Rust simulator bridge | `todo` | Future Rust `CommandBridge` test double should run hardware-touching `.emw` scripts without a connected board. |
+
 ## Hardware Repos
 
 | Test | Status | Evidence |

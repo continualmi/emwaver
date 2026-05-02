@@ -675,6 +675,82 @@ Acceptance criteria:
 - Windows result is documented.
 - Known permission/setup issues are captured.
 
+## Epic 10: Device Simulator
+
+## `REBIRTH-045` Define Shared EMWaver Device Simulator Contract
+
+- Status: `todo`
+- Priority: `P0`
+- Target: simulator/tests
+
+Define a reusable mock EMWaver device simulator that every platform can consume for unit tests without real hardware.
+
+Acceptance criteria:
+
+- `SIMULATOR.md` defines the simulator goal, architecture, and non-goals.
+- Simulator is specified as a shared command-protocol test layer, not as a fake OS device driver.
+- Fixture/scenario format is defined for board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit error cases.
+- Docs state simulator validation complements, but does not replace, real hardware validation.
+
+## `REBIRTH-046` Add Shared Simulator Fixtures
+
+- Status: `todo`
+- Priority: `P0`
+- Target: simulator/tests
+
+Add data-driven simulator scenarios that platform-specific test doubles can reuse.
+
+Acceptance criteria:
+
+- Fixtures live under a stable shared path such as `simulator/fixtures/`.
+- At least one basic board fixture defines board metadata, GPIO pins, ADC values, and PWM-capable pins.
+- Fixture format is documented.
+- CI can validate fixture syntax.
+
+## `REBIRTH-047` Add Rust Runtime Simulator Bridge
+
+- Status: `todo`
+- Priority: `P0`
+- Target: daemon/runtime/tests
+
+Use the shared simulator fixtures from the Rust runtime and CLI direct path.
+
+Acceptance criteria:
+
+- `emwaver-runtime` or a companion test helper can create a simulator-backed `CommandBridge`.
+- Rust tests run hardware-touching `.emw` scripts against the simulator without a connected board.
+- `emwaver run --direct --sim-device` or equivalent can smoke test scripts locally.
+- Simulator behavior is strict enough to surface unsupported commands.
+
+## `REBIRTH-048` Add Native Platform Simulator Adapters
+
+- Status: `todo`
+- Priority: `P1`
+- Target: apple/windows/android/tests
+
+Expose the same simulator behavior to native app test suites.
+
+Acceptance criteria:
+
+- Swift runtime tests can use simulator-backed command replies.
+- Windows runtime tests can use simulator-backed command replies.
+- Android runtime tests can use simulator-backed command replies.
+- Adapters read the shared fixtures or generated equivalents from the same source of truth.
+
+## `REBIRTH-049` Add Optional Virtual Transport Simulator
+
+- Status: `todo`
+- Priority: `P2`
+- Target: simulator/transport
+
+Evaluate a virtual MIDI/USB layer for end-to-end transport tests after protocol-level simulator coverage exists.
+
+Acceptance criteria:
+
+- Decision documents OS support and CI feasibility.
+- Virtual transport reuses the shared simulator scenarios.
+- Protocol simulator remains the default portable test layer.
+
 ## First Implementation Slice
 
 Start with these issues:
@@ -683,6 +759,7 @@ Start with these issues:
 - `REBIRTH-004` Add Local WebSocket Control Endpoint
 - `REBIRTH-010` Extract Reusable `.emw` Runtime
 - `REBIRTH-011` Extract Reusable Device Transport Layer
+- `REBIRTH-045` Define Shared EMWaver Device Simulator Contract
 - `REBIRTH-015` Add `emwaver run`
 - `REBIRTH-020` Inventory Current Control UI In `web/`
 - `REBIRTH-024` Remove Required Account From Hardware Control
