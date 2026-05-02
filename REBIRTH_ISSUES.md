@@ -210,7 +210,7 @@ Acceptance criteria:
 
 ## `REBIRTH-014` Runtime Tests For Script UI
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P1`
 - Target: tests
 

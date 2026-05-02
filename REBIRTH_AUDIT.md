@@ -83,7 +83,7 @@ This verifies:
 - macOS local gateway app-role integration for a UI-only `.emw` script,
 - Rust daemon workspace build,
 - initial `emwaver-runtime` and `emwaver-device` crate extraction,
-- runtime command bridge tests,
+- runtime render, packet bridge, script error, UI callback dispatch, and unknown-handler tests,
 - selected-device daemon startup CLI help,
 - `emwaver doctor`,
 - `emwaver run --direct --no-device` through the extracted Rust runtime,

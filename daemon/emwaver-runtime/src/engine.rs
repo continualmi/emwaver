@@ -317,4 +317,53 @@ mod tests {
         assert_eq!(calls[0].0, vec![1, 2, 255]);
         assert_eq!(calls[0].1, 25);
     }
+
+    #[test]
+    fn script_errors_are_reported() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        let err = engine.run_script("throw new Error('boom');").expect_err("script error");
+        assert!(format!("{err:#}").contains("script eval failed"));
+    }
+
+    #[test]
+    fn dispatch_ui_event_invokes_registered_callback() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"_scriptRegisterCallback("button-token", function(label) {
+                    _scriptRender(JSON.stringify({
+                        id: "root",
+                        type: "text",
+                        props: { text: label }
+                    }));
+                });"#,
+            )
+            .expect("register callback");
+
+        engine
+            .dispatch_ui_event("button-token", vec![JsonValue::String("clicked".to_string())])
+            .expect("dispatch event");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(tree.id, "root");
+        assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("clicked"));
+    }
+
+    #[test]
+    fn dispatch_ui_event_rejects_unknown_token() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        let err = engine
+            .dispatch_ui_event("missing", vec![])
+            .expect_err("unknown handler");
+        assert_eq!(err.to_string(), "unknown_handler_token");
+    }
 }
