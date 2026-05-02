@@ -32,6 +32,7 @@ The rebirth is complete only when:
 | Gateway Agent panel | `gateway/src/server.ts` Agent panel and `/v1/agent` proxy | done |
 | Agent missing-key behavior | `gateway/scripts/verify.mjs` checks `agent_not_configured` | done |
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
+| Agent CLI | `daemon/emwaver/src/main.rs` adds `emwaver agent` using `EMWAVER_AGENT_API_KEY` and endpoint env | missing-key and configured mock paths passed |
 | Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse |
 | Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers; `emwaver-host` consumes it | API/build done; hardware validation pending |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
@@ -67,6 +68,8 @@ cargo run -q -p emwaver -- daemon start --help
 cargo run -q -p emwaver -- devices
 cargo run -q -p emwaver -- doctor
 cargo run -q -p emwaver -- run <temp>.emw --direct --no-device
+cargo run -q -p emwaver -- agent "write blink"
+EMWAVER_AGENT_API_KEY=test-agent-key EMWAVER_AGENT_ENDPOINT=http://127.0.0.1:<mock>/agent cargo run -q -p emwaver -- agent --script <temp>.emw --mode debug "debug this"
 ```
 
 Latest result:
@@ -93,6 +96,7 @@ This verifies:
 - gateway `/v1/examples` loading canonical default scripts,
 - missing Agent config response,
 - configured mock Agent forwarding,
+- CLI Agent missing-key and configured mock behavior,
 - local WebSocket script run to app-produced UI snapshot,
 - local WebSocket UI event forwarding to mock native app.
 - local verifier coverage is also wired into `.github/workflows/gateway-ci.yml`.

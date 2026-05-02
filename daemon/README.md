@@ -45,6 +45,7 @@ Main command groups (`emwaver/src/main.rs`):
 - `emwaver doctor`
 - `emwaver run <script.emw>`
 - `emwaver gateway` / `emwaver web`
+- `emwaver agent`
 - `emwaver tui`
 - `emwaver paths`
 
@@ -98,6 +99,13 @@ emwaver doctor
 ```
 
 `doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, and MIDI device visibility.
+
+Agent help is optional and paid. It never gates local hardware control:
+
+```bash
+EMWAVER_AGENT_API_KEY=... EMWAVER_AGENT_ENDPOINT=... emwaver agent "write a GPIO blink script"
+emwaver agent --script scripts/blink.emw --mode debug "explain this error"
+```
 
 ## 3.2 `emwaver-host` daemon
 

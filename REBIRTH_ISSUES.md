@@ -455,7 +455,7 @@ Acceptance criteria:
 
 ## `REBIRTH-031` Add Agent CLI Command
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P1`
 - Target: CLI/Agent
 

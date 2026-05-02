@@ -95,6 +95,29 @@ enum Commands {
         port: Option<u16>,
     },
 
+    /// Ask the paid EMWaver Agent for script help.
+    Agent {
+        /// Prompt to send to the Agent.
+        #[arg(required = true)]
+        prompt: Vec<String>,
+
+        /// Include a local .emw script as context.
+        #[arg(long)]
+        script: Option<PathBuf>,
+
+        /// Agent mode: write, debug, explain, or patch.
+        #[arg(long, default_value = "write")]
+        mode: String,
+
+        /// Include a runtime error as context.
+        #[arg(long)]
+        error: Option<String>,
+
+        /// Override EMWAVER_AGENT_ENDPOINT for this request.
+        #[arg(long)]
+        endpoint: Option<String>,
+    },
+
     /// Show where emwaver stores state/logs.
     Paths,
 }
@@ -687,6 +710,108 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
     Ok(())
 }
 
+fn env_trim(key: &str) -> Option<String> {
+    let value = std::env::var(key).ok()?;
+    let trimmed = value.trim().to_string();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed)
+    }
+}
+
+fn run_agent(
+    prompt_parts: Vec<String>,
+    script: Option<PathBuf>,
+    mode: String,
+    error: Option<String>,
+    endpoint: Option<String>,
+) -> Result<()> {
+    let prompt = prompt_parts.join(" ").trim().to_string();
+    if prompt.is_empty() {
+        anyhow::bail!("agent prompt is required");
+    }
+
+    let api_key = env_trim("EMWAVER_AGENT_API_KEY").ok_or_else(|| {
+        anyhow::anyhow!("agent_not_configured: set EMWAVER_AGENT_API_KEY to use `emwaver agent`")
+    })?;
+    let endpoint = endpoint
+        .or_else(|| env_trim("EMWAVER_AGENT_ENDPOINT"))
+        .or_else(|| env_trim("CONTINUAL_AGENT_ENDPOINT"))
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "agent_not_configured: set EMWAVER_AGENT_ENDPOINT or CONTINUAL_AGENT_ENDPOINT"
+            )
+        })?;
+
+    let script_payload = if let Some(path) = script {
+        let source = fs::read_to_string(&path)
+            .with_context(|| format!("failed to read script at {}", path.display()))?;
+        Some(serde_json::json!({
+            "name": script_name(&path, None),
+            "source": source,
+        }))
+    } else {
+        None
+    };
+
+    let mut payload = serde_json::json!({
+        "mode": mode,
+        "prompt": prompt,
+    });
+    if let Some(script_payload) = script_payload {
+        payload["script"] = script_payload;
+    }
+    if let Some(error) = error {
+        payload["runtime"] = serde_json::json!({ "error": error });
+    }
+
+    let client = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(120))
+        .build()
+        .context("failed to create agent HTTP client")?;
+    let response = client
+        .post(&endpoint)
+        .bearer_auth(api_key)
+        .json(&payload)
+        .send()
+        .with_context(|| format!("agent request failed: {endpoint}"))?;
+
+    let status = response.status();
+    let body: serde_json::Value = response.json().unwrap_or_else(|_| serde_json::Value::Null);
+    if !status.is_success() {
+        let error = body
+            .get("error")
+            .and_then(|v| v.as_str())
+            .or_else(|| body.get("message").and_then(|v| v.as_str()))
+            .unwrap_or("agent_request_failed");
+        anyhow::bail!("agent request failed ({status}): {error}");
+    }
+
+    if let Some(message) = body.get("message").and_then(|v| v.as_str()) {
+        println!("{message}");
+    }
+    if let Some(code) = body.get("code").and_then(|v| v.as_str()) {
+        println!("\n```emw");
+        println!("{code}");
+        println!("```");
+    }
+    if let Some(patch) = body.get("patch").and_then(|v| v.as_str()) {
+        println!("\nPatch:\n{patch}");
+    }
+    if let Some(warnings) = body.get("warnings").and_then(|v| v.as_array()) {
+        for warning in warnings.iter().filter_map(|v| v.as_str()) {
+            println!("warning: {warning}");
+        }
+    }
+    if body.get("message").is_none() && body.get("code").is_none() && body.get("patch").is_none()
+    {
+        println!("{}", serde_json::to_string_pretty(&body)?);
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -752,6 +877,13 @@ fn main() -> Result<()> {
             bootstrap_path,
         ),
         Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),
+        Commands::Agent {
+            prompt,
+            script,
+            mode,
+            error,
+            endpoint,
+        } => run_agent(prompt, script, mode, error, endpoint),
         Commands::Paths => print_paths(),
     }
 }

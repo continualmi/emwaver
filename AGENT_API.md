@@ -128,7 +128,7 @@ emwaver agent "write a script for a CC1101 433.92 MHz ASK receiver"
 emwaver agent --script scripts/cc1101.emw "debug this"
 ```
 
-The CLI should use `EMWAVER_AGENT_API_KEY` initially.
+The CLI uses `EMWAVER_AGENT_API_KEY` and `EMWAVER_AGENT_ENDPOINT` initially. `CONTINUAL_AGENT_ENDPOINT` is accepted as an endpoint fallback.
 
 ## Non-Goals
 
