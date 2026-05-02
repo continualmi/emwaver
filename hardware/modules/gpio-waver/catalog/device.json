@@ -1,0 +1,30 @@
+{
+  "title": "GPIO_WAVER",
+  "displayTitle": "GPIO Waver",
+  "group": "stm32",
+  "image": "github:catalog/images/GPIO_WAVER.png",
+  "images": [
+    "github:catalog/images/IMG_0080.jpg",
+    "github:catalog/images/IMG_0081.jpg",
+    "github:catalog/images/IMG_0082.jpg",
+    "github:catalog/images/IMG_0083.jpg",
+    "github:catalog/images/GPIO_WAVER.png"
+  ],
+  "casingImage": "github:catalog/images/GPIO_WAVER_CASING.png",
+  "description": "GPIO Waver is a low-cost STM32F042 (48 MHz) board focused on expansion: it exposes two GPIO headers and little else. It’s ideal for prototyping new EMWaver add-on hardware, and it’s also the base board for modules like RFID Waver. It communicates over USB (no BLE) for Android (USB OTG) and the desktop EMWaver app. Bonus: the native USB stack also enables USB device emulation.",
+  "designDate": "2024-08-24",
+  "tags": ["GPIO", "STM32F042", "USB"],
+  "appSupport": ["android", "desktop"],
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=0b47c659e31e48a995d46823b686f589",
+  "githubUrl": "https://github.com/continualmi/gpio-waver",
+  "buildAssets": {
+    "bom": "github:BOM_GPIO_WAVER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv",
+    "gerbers": "github:Gerber_GPIO_WAVER_PCB_GPIO_WAVER_2026-03-26.zip",
+    "schematic": "github:Schematic_GPIO_WAVER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_GPIO_WAVER_2026-03-26.pdf",
+    "case": "github:GPIO_WAVER_CASE.stl"
+  },
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 48, "currency": "USD", "units": 5 }
+}
