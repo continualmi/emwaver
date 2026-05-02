@@ -76,6 +76,8 @@ The first implementation exposes this fixture through Rust as `SimulatorCommandB
 emwaver run path/to/script.emw --direct --sim-device
 ```
 
+The Apple shared package also exposes `SimulatorScriptDevice`, a Swift `ScriptDevice` implementation that reads the same fixture JSON for iOS/macOS runtime tests.
+
 ## Non-Goals
 
 - Replacing real hardware validation.

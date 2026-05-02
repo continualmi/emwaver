@@ -24,6 +24,7 @@ Core direction:
 - **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
 - **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, acting as a host controller for the local macOS/Windows app and reusing the existing script/control protocol without requiring cloud infrastructure.
+- **Remote control posture:** native apps should not be positioned as Continual-hosted remote-control hosts for the open-source core. macOS/Windows gateway control is same-machine localhost by default; remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
@@ -50,6 +51,7 @@ We intentionally give up:
 - dependency on hardware sales for revenue or launch,
 - paid gating for local hardware control,
 - mandatory hosted relay/cloud paths for core use,
+- Continual-hosted native-app remote control as a core cross-platform feature,
 - single-board hardware monopoly,
 - end-user firmware build/flash customization loops,
 - "MCU toolchain as required user workflow."

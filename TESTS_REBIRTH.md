@@ -48,6 +48,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Shared simulator goal | `pass` | `SIMULATOR.md` and `REBIRTH-045` define a reusable protocol-level mock device simulator for platform tests without real hardware. |
 | Shared simulator fixtures | `pass` | `simulator/fixtures/basic-board.json` defines mock board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit unsupported-command behavior through the Rust simulator bridge. |
 | Rust simulator bridge | `pass` | `emwaver-runtime::SimulatorCommandBridge` runs a hardware-touching `.emw` script in tests without a connected board, and `emwaver run --direct --sim-device` exposes the same bridge from the CLI. Local `cargo test -p emwaver-device -p emwaver-runtime` and a CLI simulator smoke passed. |
+| Apple simulator adapter | `build pass` | `SimulatorScriptDevice` implements the shared Apple `ScriptDevice` protocol from the same fixture JSON so iOS/macOS runtime tests can use simulator-backed command replies. `swift build` passed for `apple/EMWaverAppleCore` with pre-existing `FileService` Sendable warnings. |
 | Simulator CI smoke | `added` | `.github/workflows/daemon-ci.yml` runs a simulator-backed direct script smoke test and watches `simulator/**`. |
 
 ## Hardware Repos
@@ -75,6 +76,12 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | `emwaver doctor` source path | `pass` | Built and verified locally. |
 | macOS local gateway app role | `pass` | Local gateway plus built macOS app returned `hello.ack`, `device.status`, `script.started`, and `ui.snapshot` for a UI-only `.emw` script through `/v1/ws`. Hardware-backed script execution remains pending. |
 | Windows local gateway app role | `blocked` | `RemoteControlHostService.cs` connects to localhost gateway as `role=app` and activates snapshots on `script.run`; local validation blocked because `dotnet`/Windows toolchain are not installed here. |
+
+## Remote Control Scope
+
+| Test | Status | Evidence |
+| --- | --- | --- |
+| Core native remote control posture | `planned` | `REBIRTH-050` states macOS/Windows native apps should be same-machine localhost gateway hosts by default; hosted remote-control services are optional future hosted-service scope or migration debt. |
 
 ## Validation Rules
 

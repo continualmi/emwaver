@@ -724,7 +724,7 @@ Acceptance criteria:
 
 ## `REBIRTH-048` Add Native Platform Simulator Adapters
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P1`
 - Target: apple/windows/android/tests
 
@@ -736,6 +736,10 @@ Acceptance criteria:
 - Windows runtime tests can use simulator-backed command replies.
 - Android runtime tests can use simulator-backed command replies.
 - Adapters read the shared fixtures or generated equivalents from the same source of truth.
+
+Progress:
+
+- Apple shared `SimulatorScriptDevice` added for iOS/macOS tests.
 
 ## `REBIRTH-049` Add Optional Virtual Transport Simulator
 
@@ -750,6 +754,23 @@ Acceptance criteria:
 - Decision documents OS support and CI feasibility.
 - Virtual transport reuses the shared simulator scenarios.
 - Protocol simulator remains the default portable test layer.
+
+## Epic 11: Remote Control Scope
+
+## `REBIRTH-050` Remove Hosted Native-App Remote Control From Core
+
+- Status: `todo`
+- Priority: `P0`
+- Target: product/native/gateway
+
+Make same-machine localhost gateway control the default native app role and stop treating Continual-hosted macOS/Windows remote control as a core open-source feature.
+
+Acceptance criteria:
+
+- Product docs state native app gateway control is localhost/same-machine by default.
+- macOS/Windows hosted remote-control services are classified as migration debt or optional future hosted-service code, not core launch scope.
+- Gateway docs explain SSH/VPN/Tailscale/port-forwarding as user-owned remote access options.
+- No local gateway/native-app path requires hosted session registration, hosted relay, or account auth.
 
 ## First Implementation Slice
 

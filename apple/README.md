@@ -47,9 +47,12 @@ Script execution/runtime support and related infrastructure.
 Representative files:
 - `ScriptEngine.swift`
 - `ScriptDevice.swift`
+- `SimulatorScriptDevice.swift`
 - `ScriptPreviewManager.swift`
 - `PlotBufferStore.swift`
 - `RustBufferCore.swift` (interop surface)
+
+`SimulatorScriptDevice` is the shared iOS/macOS test adapter for `simulator/fixtures/*.json`. It implements `ScriptDevice` so Apple runtime tests can execute hardware-touching `.emw` scripts without a physical board.
 
 ## 2.4 `EMWaverScriptSwiftUI`
 

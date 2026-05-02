@@ -70,6 +70,23 @@ Remote hardware control can be documented as user-owned infrastructure:
 
 Continual-hosted relay/control should not be part of the launch-critical open-source product.
 
+Native macOS and Windows apps should not be positioned as Continual-hosted remote-control hosts in the open-source core. Their gateway role is same-machine localhost app control:
+
+```text
+browser on this machine
+  <-> localhost gateway
+  <-> local native app
+  <-> local board
+```
+
+If a user wants to control that machine from elsewhere, the product answer should be user-owned infrastructure around the local tool:
+
+- SSH into the machine and run `emwaver` CLI commands,
+- SSH port-forward the localhost gateway,
+- use VPN/Tailscale to reach the machine by deliberate user choice.
+
+Do not treat "macOS/Windows app visible anywhere through Continual cloud" as a core launch feature.
+
 ## 4) Gateway Direction
 
 `emwaver-web` should become the local browser control surface.
@@ -114,6 +131,8 @@ This should reuse the existing WebSocket protocol shape where practical:
 - device status/list messages
 
 The difference is that there is no hosted relay in the middle.
+
+Gateway should bind to localhost by default. Exposing it beyond the machine is a user-owned networking/security decision, not a Continual MI cloud responsibility.
 
 ## 5) Web Split
 
@@ -341,6 +360,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Remove cloud activation gates from core runtime.
 - Remove subscription checks from hardware access.
 - Keep any hosted service code outside the local gateway path.
+- Remove hosted native-app remote-control posture from the core product path; keep same-machine localhost gateway control as the default.
 
 ## Phase 4: Paid Agent
 

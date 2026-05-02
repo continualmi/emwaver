@@ -19,6 +19,7 @@ The MVP should prove:
 - Browser opens local control UI at `127.0.0.1`.
 - Local WebSocket supports browser and native-app roles plus `hello`, `script.run`, `script.started`, `script.error`, `ui.snapshot`, and `ui.event`.
 - Local gateway does not require account auth, cloud activation, subscription checks, or hosted relay.
+- Native app gateway control is same-machine localhost by default; hosted macOS/Windows remote control is not core MVP scope.
 
 Backlog coverage:
 
@@ -30,6 +31,7 @@ Backlog coverage:
 - `REBIRTH-006`
 - `REBIRTH-008`
 - `REBIRTH-009`
+- `REBIRTH-050`
 
 ## Runtime And Device
 
@@ -147,6 +149,7 @@ Backlog coverage:
 - Cloud file sync.
 - Team/classroom management.
 - Hosted remote fleet control.
+- Continual-hosted native-app remote control as a core cross-platform feature.
 - Account-gated device activation.
 - Hardware sales.
 
