@@ -71,6 +71,16 @@ emwaver run scripts/blink.emw
 
 `emwaver run` reads the local `.emw` file and sends `script.run` to the localhost gateway as a controller client. The gateway then forwards the command to the native EMWaver app connected as `role=app`/`role=host`. The CLI does not own a second hardware runtime in this path.
 
+For headless hosts, direct mode runs the extracted Rust runtime in-process:
+
+```bash
+emwaver run scripts/blink.emw --direct
+emwaver run scripts/blink.emw --direct --device 0
+emwaver run scripts/ui-only.emw --direct --no-device
+```
+
+Direct mode uses `emwaver-device` for MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects an input id from `emwaver devices`.
+
 Useful flags:
 
 ```bash
@@ -78,6 +88,7 @@ emwaver run scripts/blink.emw --port 3930
 emwaver run scripts/blink.emw --gateway-url http://127.0.0.1:3930
 emwaver run scripts/blink.emw --name blink.emw --timeout-ms 10000
 emwaver run scripts/blink.emw --no-wait
+emwaver run scripts/blink.emw --direct --bootstrap-path assets/default-scripts/script_bootstrap.emw
 ```
 
 Local setup can be checked with:

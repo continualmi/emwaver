@@ -34,7 +34,7 @@ The rebirth is complete only when:
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
 | Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse |
 | Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers; `emwaver-host` consumes it | API/build done; hardware validation pending |
-| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | build verified; local gateway/macOS app integration passed |
+| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
@@ -66,6 +66,7 @@ cargo build -p emwaver-host -p emwaver
 cargo run -q -p emwaver -- daemon start --help
 cargo run -q -p emwaver -- devices
 cargo run -q -p emwaver -- doctor
+cargo run -q -p emwaver -- run <temp>.emw --direct --no-device
 ```
 
 Latest result:
@@ -85,6 +86,7 @@ This verifies:
 - runtime command bridge tests,
 - selected-device daemon startup CLI help,
 - `emwaver doctor`,
+- `emwaver run --direct --no-device` through the extracted Rust runtime,
 - `emwaver run` against local gateway plus built macOS app,
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,
 - gateway `/health`,

@@ -606,6 +606,7 @@ dependencies = [
  "crossterm",
  "directories",
  "emwaver-device",
+ "emwaver-runtime",
  "nix",
  "ratatui",
  "serde_json",

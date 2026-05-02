@@ -152,7 +152,7 @@ Acceptance criteria:
 
 ## `REBIRTH-010` Extract Reusable `.emw` Runtime
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: daemon/runtime
 
@@ -238,6 +238,8 @@ Acceptance criteria:
 - Command connects to a default/local device when needed.
 - Command reports script errors clearly.
 - Command does not require account auth.
+- Gateway/native-app controller mode is the default.
+- `--direct` runs the extracted Rust runtime in-process.
 
 ## `REBIRTH-016` Add `emwaver run --device`
 

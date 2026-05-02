@@ -27,6 +27,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | `emwaver doctor` | `pass` | `cargo run -q -p emwaver -- doctor` passed: gateway package, Node/npm, Cargo/Rust available; no MIDI ports found. |
 | `emwaver devices` shared layer | `pass` | CLI device listing uses `emwaver_device::list_devices()` and is covered by the Rust CLI build plus `doctor` device visibility check. |
 | `emwaver run` | `pass` | `cargo run -q -p emwaver -- run <temp>.emw --port 3938 --timeout-ms 12000` returned `started ...` through local gateway plus built macOS app. |
+| `emwaver run --direct --no-device` | `pass` | UI-only script ran through the extracted Rust runtime and printed an app-shaped `ui.snapshot` without gateway, cloud, daemon, or hardware. |
 | `emwaver gateway --port` | `pass` | With `gateway/node_modules` removed, `cargo run -q -p emwaver -- gateway --port 3940` ran `npm ci`, started the gateway, and `/health` returned the gateway service payload. |
 
 ## Hardware Repos

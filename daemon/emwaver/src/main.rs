@@ -1,12 +1,15 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
+use emwaver_device::Device;
+use emwaver_runtime::{CommandBridge, Engine};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::sync::Arc;
 use std::time::Duration;
 use tracing::{info, warn};
 use tungstenite::{connect, stream::MaybeTlsStream, Message};
@@ -60,6 +63,22 @@ enum Commands {
         /// Send the script and return after the gateway accepts the message.
         #[arg(long)]
         no_wait: bool,
+
+        /// Run through the local headless Rust runtime instead of the gateway/native-app bridge.
+        #[arg(long)]
+        direct: bool,
+
+        /// MIDI input port id from `emwaver devices` for direct mode.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Run direct mode with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Override bootstrap script path for direct mode.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
     },
 
     /// Start the localhost browser gateway.
@@ -149,7 +168,9 @@ fn is_running(pid: i32) -> bool {
 
 fn daemon_running() -> Result<Option<i32>> {
     let pidfile = pidfile_path()?;
-    let Some(pid) = read_pid(&pidfile) else { return Ok(None); };
+    let Some(pid) = read_pid(&pidfile) else {
+        return Ok(None);
+    };
     if is_running(pid) {
         Ok(Some(pid))
     } else {
@@ -172,7 +193,9 @@ fn daemon_start(
             warn!("daemon already running (pid={pid}), stopping due to --force");
             daemon_stop()?;
         } else {
-            anyhow::bail!("daemon already running (pid={pid}). Use `emwaver daemon status` or pass --force");
+            anyhow::bail!(
+                "daemon already running (pid={pid}). Use `emwaver daemon status` or pass --force"
+            );
         }
     }
 
@@ -212,7 +235,10 @@ fn daemon_start(
     }
 
     // We are a terminal tool; good defaults.
-    cmd.env("RUST_LOG", std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()));
+    cmd.env(
+        "RUST_LOG",
+        std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+    );
 
     let child = cmd.spawn().context("failed to spawn emwaver-host")?;
     let pid = child.id() as i32;
@@ -260,7 +286,10 @@ fn autostart_status() -> Result<String> {
             .join("Library/LaunchAgents")
             .join("com.emwaver.daemon.plist");
         if plist.exists() {
-            return Ok(format!("autostart: configured (launchd plist exists: {})", plist.display()));
+            return Ok(format!(
+                "autostart: configured (launchd plist exists: {})",
+                plist.display()
+            ));
         }
         return Ok("autostart: not configured (no launchd plist)".to_string());
     }
@@ -383,8 +412,8 @@ fn doctor() -> Result<()> {
 
 fn gateway_ws_url(port: Option<u16>, gateway_url: Option<String>) -> Result<Url> {
     if let Some(raw) = gateway_url {
-        let mut url = Url::parse(raw.trim())
-            .with_context(|| format!("invalid gateway URL: {raw}"))?;
+        let mut url =
+            Url::parse(raw.trim()).with_context(|| format!("invalid gateway URL: {raw}"))?;
 
         match url.scheme() {
             "http" => {
@@ -412,8 +441,31 @@ fn gateway_ws_url(port: Option<u16>, gateway_url: Option<String>) -> Result<Url>
 fn script_name(script: &Path, explicit_name: Option<String>) -> String {
     explicit_name
         .filter(|s| !s.trim().is_empty())
-        .or_else(|| script.file_name().and_then(|s| s.to_str()).map(str::to_string))
+        .or_else(|| {
+            script
+                .file_name()
+                .and_then(|s| s.to_str())
+                .map(str::to_string)
+        })
         .unwrap_or_else(|| "script.emw".to_string())
+}
+
+struct DeviceCommandBridge {
+    device: Arc<Device>,
+}
+
+impl CommandBridge for DeviceCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
+}
+
+struct NoDeviceCommandBridge;
+
+impl CommandBridge for NoDeviceCommandBridge {
+    fn send_command(&self, _cmd_lane: &[u8], _timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        anyhow::bail!("hardware bridge is disabled")
+    }
 }
 
 fn run_script(
@@ -423,6 +475,10 @@ fn run_script(
     gateway_url: Option<String>,
     timeout_ms: u64,
     no_wait: bool,
+    direct: bool,
+    device: Option<String>,
+    no_device: bool,
+    bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
     let source = fs::read_to_string(&script)
         .with_context(|| format!("failed to read script at {}", script.display()))?;
@@ -431,6 +487,19 @@ fn run_script(
     }
 
     let name = script_name(&script, name);
+    if direct {
+        return run_script_direct(source, name, device, no_device, bootstrap_path);
+    }
+    if device.is_some() {
+        anyhow::bail!("--device is only supported with --direct for now");
+    }
+    if no_device {
+        anyhow::bail!("--no-device is only supported with --direct");
+    }
+    if bootstrap_path.is_some() {
+        anyhow::bail!("--bootstrap-path is only supported with --direct");
+    }
+
     let url = gateway_ws_url(port, gateway_url)?;
     let (mut ws, _response) = connect(url.as_str())
         .with_context(|| format!("failed to connect to local gateway at {url}"))?;
@@ -454,7 +523,9 @@ fn run_script(
 
     loop {
         let msg = ws.read().context("failed waiting for gateway hello.ack")?;
-        let Message::Text(text) = msg else { continue; };
+        let Message::Text(text) = msg else {
+            continue;
+        };
         let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
         if value.get("type").and_then(|v| v.as_str()) == Some("hello.ack") {
             break;
@@ -481,7 +552,9 @@ fn run_script(
             Ok(msg) => msg,
             Err(err) => anyhow::bail!("timed out waiting for script result from gateway: {err}"),
         };
-        let Message::Text(text) = msg else { continue; };
+        let Message::Text(text) = msg else {
+            continue;
+        };
         let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
         let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
@@ -500,6 +573,50 @@ fn run_script(
             _ => {}
         }
     }
+}
+
+fn run_script_direct(
+    source: String,
+    name: String,
+    device_id: Option<String>,
+    no_device: bool,
+    bootstrap_path: Option<PathBuf>,
+) -> Result<()> {
+    if no_device && device_id.is_some() {
+        anyhow::bail!("--device cannot be combined with --no-device");
+    }
+
+    let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
+    let bootstrap = fs::read_to_string(&bootstrap_path)
+        .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
+
+    let bridge: Arc<dyn CommandBridge> = if no_device {
+        Arc::new(NoDeviceCommandBridge)
+    } else {
+        let device = Device::new();
+        if let Some(device_id) = device_id {
+            device.connect_by_id(&device_id)?;
+        } else {
+            device.connect_auto()?;
+        }
+        Arc::new(DeviceCommandBridge { device })
+    };
+
+    let engine = Engine::new(&bootstrap, bridge)?;
+    engine.run_script(&source)?;
+
+    println!("ran {name} directly");
+    if let Some(root) = engine.latest_tree.lock().unwrap().clone() {
+        let snapshot = serde_json::json!({
+            "type": "ui.snapshot",
+            "scriptInstanceId": name,
+            "root": root,
+            "metadata": engine.latest_metadata.lock().unwrap().clone(),
+        });
+        println!("{}", serde_json::to_string(&snapshot)?);
+    }
+
+    Ok(())
 }
 
 fn print_paths() -> Result<()> {
@@ -521,6 +638,13 @@ fn gateway_dir() -> PathBuf {
     repo_root().join("gateway")
 }
 
+fn default_bootstrap_path() -> PathBuf {
+    repo_root()
+        .join("assets")
+        .join("default-scripts")
+        .join("script_bootstrap.emw")
+}
+
 fn start_gateway(port: Option<u16>) -> Result<()> {
     let dir = gateway_dir();
     if !dir.join("package.json").exists() {
@@ -529,7 +653,10 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
 
     let tsx_bin = dir.join("node_modules").join(".bin").join("tsx");
     if !tsx_bin.exists() {
-        println!("gateway dependencies missing; running `npm ci` in {}", dir.display());
+        println!(
+            "gateway dependencies missing; running `npm ci` in {}",
+            dir.display()
+        );
         let status = Command::new("npm")
             .arg("ci")
             .current_dir(&dir)
@@ -576,7 +703,14 @@ fn main() -> Result<()> {
                 bootstrap_path,
                 device_id,
                 force,
-            } => daemon_start(backend_url, id_token, host_session_id, bootstrap_path, device_id, force),
+            } => daemon_start(
+                backend_url,
+                id_token,
+                host_session_id,
+                bootstrap_path,
+                device_id,
+                force,
+            ),
             DaemonCmd::Stop => daemon_stop(),
             DaemonCmd::Status => {
                 match daemon_running()? {
@@ -601,7 +735,22 @@ fn main() -> Result<()> {
             gateway_url,
             timeout_ms,
             no_wait,
-        } => run_script(script, name, port, gateway_url, timeout_ms, no_wait),
+            direct,
+            device,
+            no_device,
+            bootstrap_path,
+        } => run_script(
+            script,
+            name,
+            port,
+            gateway_url,
+            timeout_ms,
+            no_wait,
+            direct,
+            device,
+            no_device,
+            bootstrap_path,
+        ),
         Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),
         Commands::Paths => print_paths(),
     }
@@ -649,7 +798,8 @@ fn run_tui() -> Result<()> {
                     .split(size);
 
                 let header = Paragraph::new(Text::from(vec![
-                    Line::from("EMWaver Daemon (beta)".to_string()).style(Style::default().add_modifier(Modifier::BOLD)),
+                    Line::from("EMWaver Daemon (beta)".to_string())
+                        .style(Style::default().add_modifier(Modifier::BOLD)),
                     Line::from(format!("daemon: {daemon_line}")),
                     Line::from(autostart),
                 ]))

@@ -8,6 +8,7 @@ license = "MIT"
 anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 emwaver-device = { path = "../emwaver-device" }
+emwaver-runtime = { path = "../emwaver-runtime" }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
