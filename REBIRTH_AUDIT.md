@@ -95,6 +95,7 @@ This verifies:
 - selected-device daemon startup CLI help,
 - `emwaver doctor`,
 - `emwaver run --direct --no-device` through the extracted Rust runtime,
+- direct `emwaver run` script-error reporting,
 - `emwaver run` against local gateway plus built macOS app,
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,
 - gateway `/health`,
