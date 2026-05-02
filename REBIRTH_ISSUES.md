@@ -512,7 +512,7 @@ Acceptance criteria:
 
 ## `REBIRTH-035` Import Remaining Hardware Repos
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P1`
 - Target: hardware
 
