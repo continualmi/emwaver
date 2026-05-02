@@ -134,4 +134,4 @@ emwaver gateway --port 3930
 
 If the selected port is already in use, the gateway exits with a specific port-conflict message. Browser auto-open is intentionally deferred until the local control UI is migrated beyond the prototype page.
 
-The current gateway server supports `hello`, `script.run`, `script.stop`, `ui.event`, `script.started`, `script.error`, and `ui.snapshot` over `/v1/ws`. Browser clients connect with role `web`; the native EMWaver app should connect with role `app` or `host`. Real hardware command execution and UI handler dispatch stay in the native app.
+The current gateway server supports `hello`, `script.run`, `script.stop`, `ui.event`, `plot.viewport`, `script.started`, `script.error`, `ui.snapshot`, and `plot.data` over `/v1/ws`. Browser clients connect with role `web`; the native EMWaver app should connect with role `app` or `host`. Real hardware command execution, plot compression, and UI handler dispatch stay in the native app.

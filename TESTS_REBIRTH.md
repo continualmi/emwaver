@@ -12,7 +12,8 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | `gateway typecheck` | `pass` | `npm run typecheck` completed successfully. |
 | `gateway /health` | `pass` | `GET http://127.0.0.1:3921/health` returned `{"ok":true,"service":"emwaver-gateway"}`. |
 | `gateway ws script.run` | `pass` | WebSocket to `/v1/ws` returned `hello.ack`, `device.status`, `script.started`, and `ui.snapshot` for `UI.render(UI.text({ text: "hello" }))`. |
-| `gateway verify` | `pass` | `npm run verify` passed after the native-app bridge update, including typecheck, `/health`, `/v1/examples`, `/v1/agent` missing-key behavior, configured mock Agent forwarding, and browser -> mock native app -> browser WebSocket `script.run` -> `ui.snapshot` plus `ui.event` -> `ui.event.ack`. |
+| `gateway verify` | `pass` | `npm run verify` passed after the plot bridge update, including typecheck, `/health`, `/v1/examples`, `/v1/agent` missing-key behavior, configured mock Agent forwarding, and browser -> mock native app -> browser WebSocket `script.run` -> `ui.snapshot`, `plot.viewport` -> `plot.data`, plus `ui.event` -> `ui.event.ack`. |
+| Gateway local plot support | `pass` | Gateway renders `plot` nodes as local SVG charts, sends `plot.viewport`, stores returned `plot.data`, and supports pan/zoom in the localhost UI. `npm run verify` covers the protocol route. |
 | Gateway local UI guard | `pass` | `npm run verify` checks the index page for local Open/Save/native-app/Agent markers and rejects hosted auth/cloud file route markers. |
 | Gateway local device status UI | `pass` | Sidebar now renders local native-app/device status from `device.status`; `npm run verify` still passes. |
 | Gateway local files UI | `pass` | Gateway editor has browser-local `.emw` open/save controls; `npm run verify` still passes. |

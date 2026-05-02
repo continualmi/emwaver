@@ -260,6 +260,11 @@ const indexHtml = `<!doctype html>
       .ui-text { color: var(--text); }
       .ui-muted { color: var(--muted); }
       .ui-control { width: 100%; }
+      .plot-card { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 8px; background: #0f1418; padding: 10px; }
+      .plot-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; font-weight: 800; }
+      .plot-surface { width: 100%; border: 1px solid var(--line); border-radius: 8px; background: #0b1013; overflow: hidden; touch-action: none; user-select: none; }
+      .plot-svg { display: block; width: 100%; height: 100%; }
+      .plot-help { color: var(--muted); font-size: 11px; }
       .log { display: grid; gap: 8px; }
       .log-entry { border-bottom: 1px solid var(--line); padding-bottom: 8px; color: var(--muted); }
       .agent-box { display: grid; gap: 8px; }
@@ -353,6 +358,10 @@ const indexHtml = `<!doctype html>
       let selectedName = examples[0].name;
       let scriptInstanceId = "";
       let currentRev = 0;
+      let plotDataByNodeId = {};
+      const plotViews = {};
+      const plotTimers = {};
+      const plotDrags = {};
       const ws = new WebSocket((location.protocol === "https:" ? "wss:" : "ws:") + "//" + location.host + "/v1/ws");
 
       function setStatus(value, kind) {
@@ -402,6 +411,161 @@ const indexHtml = `<!doctype html>
       function spacingStyle(el, props) {
         if (typeof props.spacing === "number") el.style.gap = props.spacing + "px";
         if (typeof props.padding === "number") el.style.padding = props.padding + "px";
+      }
+
+      function finiteNumber(value, fallback) {
+        const n = Number(value);
+        return Number.isFinite(n) ? n : fallback;
+      }
+
+      function nodeId(node, fallback) {
+        return String(node && (node.id || (node.props && node.props.id)) || fallback || "");
+      }
+
+      function collectPlotNodes(node, out) {
+        if (!node || typeof node !== "object") return;
+        if (node.type === "plot") out.push(node);
+        const children = Array.isArray(node.children) ? node.children : [];
+        for (const child of children) collectPlotNodes(child, out);
+      }
+
+      function requestPlotViewport(targetNodeId, range, bins) {
+        if (!ws || ws.readyState !== WebSocket.OPEN || !scriptInstanceId || !targetNodeId) return;
+        ws.send(JSON.stringify({
+          type: "plot.viewport",
+          hostSessionId: "local",
+          scriptInstanceId,
+          baseRev: currentRev,
+          targetNodeId,
+          payload: {
+            min: range.min,
+            max: range.max,
+            bins: bins || 400
+          }
+        }));
+      }
+
+      function schedulePlotViewport(targetNodeId, range, bins) {
+        plotViews[targetNodeId] = range;
+        if (plotTimers[targetNodeId]) clearTimeout(plotTimers[targetNodeId]);
+        plotTimers[targetNodeId] = setTimeout(() => {
+          plotTimers[targetNodeId] = null;
+          requestPlotViewport(targetNodeId, range, bins);
+        }, 120);
+      }
+
+      function clearObject(value) {
+        for (const key of Object.keys(value)) delete value[key];
+      }
+
+      function renderPlotNode(node, props) {
+        const targetNodeId = nodeId(node, props.id || "plot");
+        const plot = plotDataByNodeId[targetNodeId] || {};
+        const yMin = finiteNumber(props.yMin, -128);
+        const yMax = finiteNumber(props.yMax, 384);
+        const xMin = finiteNumber(plot.xMin ?? props.xMin, 0);
+        const xMax = finiteNumber(plot.xMax ?? props.xMax, xMin + 1);
+        const view = plotViews[targetNodeId] || { min: xMin, max: xMax > xMin ? xMax : xMin + 1 };
+        plotViews[targetNodeId] = view;
+
+        const dataX = Array.isArray(plot.dataX || props.dataX) ? (plot.dataX || props.dataX).map(Number).filter(Number.isFinite) : [];
+        const dataY = Array.isArray(plot.dataY || props.dataY) ? (plot.dataY || props.dataY).map(Number).filter(Number.isFinite) : [];
+        const pointCount = Math.min(dataX.length, dataY.length);
+        const w = 1000;
+        const h = 200;
+        const span = Math.max(1e-9, view.max - view.min);
+        const ySpan = Math.max(1e-9, yMax - yMin);
+        const points = [];
+        for (let i = 0; i < pointCount; i += 1) {
+          const x = dataX[i];
+          const y = dataY[i];
+          const px = ((x - view.min) / span) * w;
+          const py = (1 - ((y - yMin) / ySpan)) * h;
+          if (Number.isFinite(px) && Number.isFinite(py)) points.push(px.toFixed(2) + "," + py.toFixed(2));
+        }
+
+        const card = document.createElement("div");
+        card.className = "plot-card";
+        const head = document.createElement("div");
+        head.className = "plot-head";
+        const title = document.createElement("div");
+        title.textContent = String(props.title || props.id || "Plot");
+        const range = document.createElement("div");
+        range.textContent = "x [" + Math.round(view.min) + " .. " + Math.round(view.max) + "]";
+        head.appendChild(title);
+        head.appendChild(range);
+        card.appendChild(head);
+
+        if (props.errorText) {
+          const err = document.createElement("div");
+          err.className = "error";
+          err.textContent = String(props.errorText);
+          card.appendChild(err);
+        }
+
+        const surface = document.createElement("div");
+        surface.className = "plot-surface";
+        surface.style.height = (typeof props.height === "number" && Number.isFinite(props.height) ? props.height : 260) + "px";
+        const svgNs = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNs, "svg");
+        svg.setAttribute("class", "plot-svg");
+        svg.setAttribute("viewBox", "0 0 " + w + " " + h);
+        svg.setAttribute("preserveAspectRatio", "none");
+        if (points.length > 1) {
+          const polyline = document.createElementNS(svgNs, "polyline");
+          polyline.setAttribute("fill", "none");
+          polyline.setAttribute("stroke", "var(--accent)");
+          polyline.setAttribute("stroke-width", "2");
+          polyline.setAttribute("stroke-linejoin", "round");
+          polyline.setAttribute("stroke-linecap", "round");
+          polyline.setAttribute("points", points.join(" "));
+          svg.appendChild(polyline);
+        } else {
+          const text = document.createElementNS(svgNs, "text");
+          text.setAttribute("x", "20");
+          text.setAttribute("y", "40");
+          text.setAttribute("fill", "var(--muted)");
+          text.setAttribute("font-size", "24");
+          text.textContent = "waiting for plot.data...";
+          svg.appendChild(text);
+        }
+        surface.appendChild(svg);
+
+        surface.onwheel = (event) => {
+          event.preventDefault();
+          const rect = surface.getBoundingClientRect();
+          const t = (event.clientX - rect.left) / Math.max(1, rect.width);
+          const zoom = Math.exp(Number(event.deltaY || 0) * 0.002);
+          const nextSpan = Math.max(1, span * zoom);
+          const anchor = view.min + t * span;
+          const next = { min: anchor - t * nextSpan, max: anchor - t * nextSpan + nextSpan };
+          schedulePlotViewport(targetNodeId, next, finiteNumber(props.bins, 400));
+          renderSnapshot(lastSnapshotRoot);
+        };
+        surface.onmousedown = (event) => {
+          event.preventDefault();
+          plotDrags[targetNodeId] = { x0: event.clientX, min: view.min, max: view.max };
+        };
+        surface.onmousemove = (event) => {
+          const drag = plotDrags[targetNodeId];
+          if (!drag) return;
+          event.preventDefault();
+          const rect = surface.getBoundingClientRect();
+          const dragSpan = Math.max(1e-9, drag.max - drag.min);
+          const delta = (-(event.clientX - drag.x0) / Math.max(1, rect.width)) * dragSpan;
+          const next = { min: drag.min + delta, max: drag.max + delta };
+          schedulePlotViewport(targetNodeId, next, finiteNumber(props.bins, 400));
+          renderSnapshot(lastSnapshotRoot);
+        };
+        surface.onmouseup = () => { delete plotDrags[targetNodeId]; };
+        surface.onmouseleave = () => { delete plotDrags[targetNodeId]; };
+
+        card.appendChild(surface);
+        const help = document.createElement("div");
+        help.className = "plot-help";
+        help.textContent = "Drag to pan. Wheel to zoom. Data stays on the local native app and is streamed as compressed plot.data.";
+        card.appendChild(help);
+        return card;
       }
 
       function renderNode(node) {
@@ -457,6 +621,9 @@ const indexHtml = `<!doctype html>
           el.onchange = () => sendUiEvent(String(props.id || node.id || ""), "change", { value: el.value });
           return el;
         }
+        if (node.type === "plot") {
+          return renderPlotNode(node, props);
+        }
         const fallback = document.createElement("div");
         fallback.className = "node";
         fallback.textContent = node.type || "node";
@@ -467,6 +634,22 @@ const indexHtml = `<!doctype html>
       function renderSnapshot(root) {
         preview.innerHTML = "";
         preview.appendChild(renderNode(root));
+      }
+
+      let lastSnapshotRoot = null;
+
+      function requestInitialPlotViewports(root) {
+        const plots = [];
+        collectPlotNodes(root, plots);
+        for (const plot of plots) {
+          const props = plot.props || {};
+          const id = nodeId(plot, props.id || "plot");
+          if (!id) continue;
+          const min = finiteNumber(props.xMin ?? props.xDomainMin ?? props.xBoundsMin, 0);
+          const max = finiteNumber(props.xMax ?? props.xDomainMax ?? props.xBoundsMax, min + 1);
+          if (max <= min) continue;
+          requestPlotViewport(id, { min, max }, finiteNumber(props.bins, 400));
+        }
       }
 
       function renderDeviceStatus(msg) {
@@ -511,7 +694,12 @@ const indexHtml = `<!doctype html>
           setStatus(msg.connected ? "native app connected" : "waiting for native app", msg.connected ? "open" : "");
           renderDeviceStatus(msg);
         }
-        if (msg.type === "script.started") scriptInstanceId = msg.scriptInstanceId || "";
+        if (msg.type === "script.started") {
+          scriptInstanceId = msg.scriptInstanceId || "";
+          plotDataByNodeId = {};
+          clearObject(plotViews);
+          clearObject(plotDrags);
+        }
         if (msg.type === "script.stopped") {
           scriptInstanceId = "";
           preview.innerHTML = '<div class="ui-muted">Script stopped.</div>';
@@ -519,7 +707,21 @@ const indexHtml = `<!doctype html>
         if (msg.type === "ui.snapshot") {
           currentRev = Number(msg.rev || 0);
           rev.textContent = "rev " + currentRev;
+          lastSnapshotRoot = msg.root;
           renderSnapshot(msg.root);
+          requestInitialPlotViewports(msg.root);
+        }
+        if (msg.type === "plot.data") {
+          const targetNodeId = String(msg.targetNodeId || "");
+          if (targetNodeId) {
+            plotDataByNodeId[targetNodeId] = msg;
+            const min = finiteNumber(msg.xMin, NaN);
+            const max = finiteNumber(msg.xMax, NaN);
+            if (Number.isFinite(min) && Number.isFinite(max) && max > min) {
+              plotViews[targetNodeId] = { min, max };
+            }
+            renderSnapshot(lastSnapshotRoot);
+          }
         }
         if (msg.type === "script.error" || msg.type === "host.error") {
           const el = document.createElement("div");

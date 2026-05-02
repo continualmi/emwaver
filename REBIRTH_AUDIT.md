@@ -24,9 +24,9 @@ The rebirth is complete only when:
 | Create rebirth plan | `REBIRTH.md` | done |
 | Create issue backlog | `REBIRTH_ISSUES.md` | done |
 | Local gateway folder | `gateway/README.md`, `gateway/package.json`, `gateway/src/server.ts` | done |
-| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, live UI, Agent, protocol log, and local native-app/device status | prototype done |
+| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, live UI, SVG plot rendering, Agent, protocol log, and local native-app/device status | prototype done |
 | Bundled script loading | `/v1/examples` reads `assets/default-scripts/*.emw` | done |
-| Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot` | prototype done |
+| Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot`, `plot.viewport`, and `plot.data` relay | prototype done |
 | Gateway account-free | no sign-in/token required by gateway; verified by `npm run verify` | done |
 | Gateway cloud-free | no hosted relay/session discovery required by gateway | done |
 | Gateway Agent panel | `gateway/src/server.ts` Agent panel and `/v1/agent` proxy | done |
@@ -75,7 +75,7 @@ EMWAVER_AGENT_API_KEY=test-agent-key EMWAVER_AGENT_ENDPOINT=http://127.0.0.1:<mo
 Latest result:
 
 ```text
-gateway verify passed: hello.ack, device.status, script.started, ui.snapshot, ui.event.ack
+gateway verify passed: hello.ack, device.status, script.started, ui.snapshot, plot.data, ui.event.ack
 gateway agent proxy verify passed
 ```
 

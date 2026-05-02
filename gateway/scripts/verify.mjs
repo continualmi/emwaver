@@ -105,6 +105,7 @@ async function verifyIndexHtml() {
     ">Save<",
     "Native App",
     "Ask Agent",
+    "plot.data",
     "No cloud relay required",
   ]) {
     if (!body.includes(required)) {
@@ -124,6 +125,7 @@ function verifyWebSocket() {
     const ws = new WebSocket(wsUrl);
     const seen = [];
     let sawSnapshot = false;
+    let sawPlotData = false;
     let appReady = false;
     let webReady = false;
     const timeout = setTimeout(() => {
@@ -164,8 +166,35 @@ function verifyWebSocket() {
           hostSessionId: "local",
           scriptInstanceId: "verify-script-1",
           rev: 1,
-          root: { type: "text", props: { text: "hello" } },
+          root: {
+            id: "root",
+            type: "column",
+            props: {},
+            children: [
+              { id: "verify-text", type: "text", props: { text: "hello" } },
+              { id: "verify-plot", type: "plot", props: { xMin: 0, xMax: 10, yMin: 0, yMax: 1, bins: 4 } },
+            ],
+          },
           metadata: { owner: "mock-native-app" },
+        }));
+      }
+      if (msg.type === "plot.viewport") {
+        if (msg.targetNodeId !== "verify-plot" || msg.payload?.min !== 0 || msg.payload?.max !== 10) {
+          clearTimeout(timeout);
+          app.close();
+          ws.close();
+          reject(new Error(`unexpected plot.viewport: ${JSON.stringify(msg)}`));
+          return;
+        }
+        app.send(JSON.stringify({
+          type: "plot.data",
+          hostSessionId: "local",
+          scriptInstanceId: msg.scriptInstanceId,
+          targetNodeId: msg.targetNodeId,
+          xMin: msg.payload.min,
+          xMax: msg.payload.max,
+          dataX: [0, 5, 10],
+          dataY: [0, 1, 0],
         }));
       }
       if (msg.type === "ui.event") {
@@ -192,7 +221,7 @@ function verifyWebSocket() {
         maybeRun();
       }
       if (msg.type === "ui.snapshot") {
-        if (msg.root?.type !== "text" || msg.root?.props?.text !== "hello") {
+        if (msg.root?.type !== "column" || msg.root?.children?.[0]?.props?.text !== "hello") {
           clearTimeout(timeout);
           app.close();
           ws.close();
@@ -200,6 +229,14 @@ function verifyWebSocket() {
           return;
         }
         sawSnapshot = true;
+        ws.send(JSON.stringify({
+          type: "plot.viewport",
+          hostSessionId: "local",
+          scriptInstanceId: msg.scriptInstanceId,
+          baseRev: msg.rev,
+          targetNodeId: "verify-plot",
+          payload: { min: 0, max: 10, bins: 4 },
+        }));
         ws.send(JSON.stringify({
           type: "ui.event",
           hostSessionId: "local",
@@ -210,7 +247,10 @@ function verifyWebSocket() {
           payload: {},
         }));
       }
-      if (msg.type === "ui.event.ack" && sawSnapshot) {
+      if (msg.type === "plot.data" && msg.targetNodeId === "verify-plot") {
+        sawPlotData = true;
+      }
+      if (msg.type === "ui.event.ack" && sawSnapshot && sawPlotData) {
         clearTimeout(timeout);
         app.close();
         ws.close();
