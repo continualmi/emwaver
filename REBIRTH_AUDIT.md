@@ -49,7 +49,7 @@ The rebirth is complete only when:
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | blocked as expected on current machine |
+| Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 
 ## Verification Evidence
 
@@ -90,9 +90,7 @@ It does not verify:
 - real hardware access,
 - native app hardware-backed runtime integration,
 - Windows app build,
-- Rust CLI build,
-- `emwaver run`,
-- remaining hardware subtree imports.
+- shared Rust runtime/device extraction.
 
 ## Blockers
 
