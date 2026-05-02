@@ -2,11 +2,11 @@
 
 Target direction: `web/` should trend toward static public pages, docs, downloads, board/build references, and product information.
 
-This folder still contains legacy/transitional Next.js + Node auth, subscription, cloud dashboard, API, Agent, and WebSocket relay code. Those parts should be treated as migration debt for the local-first rebirth unless a task explicitly targets optional hosted services or paid Agent/API usage.
+This folder still contains legacy/transitional Next.js + Node auth, subscription, cloud dashboard, API, Agent, provisioning/minting, and WebSocket relay code. Those parts should be treated as migration debt for the local-first rebirth unless a task explicitly targets the paid Agent/API migration.
 
 The full `.emw` script rendering/control experience belongs in `gateway/`, not in `web/`.
 
-The deployment target should also simplify: move away from a long-running `emwaver-web` backend/container and toward a Society-style static export served from blob/static website hosting. If a page can be static, keep it static. Dynamic Agent/API or optional hosted-service behavior should move to a focused backend endpoint rather than keeping the public web surface as a catch-all runtime.
+The deployment target should also simplify: move away from a long-running `emwaver-web` backend/container and toward a Society-style static export served from blob/static website hosting. If a page can be static, keep it static. Dynamic Agent/API behavior should move to the focused Continual MI/MGPT backend rather than keeping the public web surface as a catch-all runtime.
 
 Do not add new cloud script storage, script sync, or account-backed script libraries here for the open-source core path. Script files should be local-device data by default.
 
@@ -142,7 +142,7 @@ Current server routes in this folder include:
 - `GET /api/auth/key`
 - `POST /api/auth/key`
 - `DELETE /api/auth/key`
-- `POST /provisioning/mint`
+- `POST /provisioning/mint` (legacy migration debt)
 - `GET /v1/agent/conversations`
 - `POST /v1/agent/conversations`
 - `PATCH /v1/agent/conversations/:conversationId`
@@ -168,12 +168,10 @@ Current server routes in this folder include:
 - `GET /v1/ws?token=...` (custom server upgrade path)
 
 Current implementation notes:
-- file storage is temporarily local filesystem-backed under `web/.data/user-files/` rather than Postgres,
-- account/subscription truth resolves through Postgres-backed `core` state on the shared Continual Postgres runtime,
-- interactive sign-in is owned by EMWaver: `/signin` renders the branded auth shell and `/signin/complete` finishes same-tab Google redirect sign-in before `/api/auth/session` issues an EMWaver-signed product session,
-- browser flows continue to use the EMWaver session cookie, while native apps can now use a web-managed EMWaver API key as their bearer credential,
-- agent model completions are routed by the EMWaver web server itself through its configured OpenAI-compatible backend,
-- device provisioning is keyed by `board_type + hardware_uid`, and live provisioning state now resolves through Postgres-backed `emwaver.provisioned_devices`,
+- file storage, account/subscription, sign-in, native app API-key auth, hosted relay, hosted Agent conversations, and device provisioning/minting are migration debt for the local-first open-source direction,
+- Agent inference should move to the future Continual MI/MGPT backend and use a user-provided Agent API key, not an EMWaver account/session,
+- production Agent prompts and private `.emw` instructions should not live in this repo or in the public web container,
+- local hardware control should not use `board_type + hardware_uid`, `/provisioning/mint`, device ownership, or device limits,
 - store orders now resolve through Postgres-backed `core.store_orders`,
 - legacy JSON data remains only as migration input for a few fallback imports, not as the intended steady-state source of truth,
 - host presence and WebSocket routing are currently single-instance in-memory,
@@ -188,13 +186,17 @@ Used by `backend.ts`:
 - `POST /v1/files/upload`
 - `DELETE /v1/files`
 
+These routes are migration debt for the local-first product. Scripts should stay on-device or in user-selected local files.
+
 ### 5.2 Agent
 
-Used by `backend.ts`:
+Legacy hosted routes used by `backend.ts`:
 - conversation listing/creation
 - message listing
 - chat request
 - stream chat (`text/event-stream`)
+
+Target direction: app-level Agent interfaces should call the future Continual MI/MGPT Agent endpoint with a user-provided Agent API key. The public `web/` app should not own Agent inference, prompt assembly, hosted conversations, account gates, or metering.
 
 ### 5.3 Hosts and remote sessions
 
@@ -202,6 +204,8 @@ Used by `backend.ts`:
 - WebSocket `GET /v1/ws?token=...` for web<->host session traffic
 
 Current remote-web implementation targets host sessions. Future autonomous device sessions will need their own presence/attach UX and client helpers.
+
+These hosted session routes are migration debt for the local-first open-source launch. Local control belongs in `gateway/`; power-user remote access should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
 
 WS URL conversion logic:
 - backend `https` => `wss`
@@ -211,19 +215,17 @@ WS URL conversion logic:
 
 ## 6) Product pages and subscription/account direction
 
-This frontend is where build/account hardware-related web flows live.
+This frontend should become static public build/docs/download/product pages.
 
 Direction reflected in repo docs:
 - `/build` is the primary board catalog + self-build page,
 - device detail pages on `/build/[slug]` should expose build-resource actions (for example BOM, CPL, Gerbers, schematics, PCB docs) as GitHub-backed links, using direct file downloads when an exact repo file path is known and otherwise linking out to the relevant hardware repo/folder,
-- `/cloud` is the signed-in dashboard for files, hosts, and activated-device visibility,
-- `/signin` is the only intended browser sign-in entrypoint and uses same-tab Google redirect instead of popup windows,
-- account/session/Pro management now lives in the header account-pill modal, and `/account` is a dedicated account page built around the same account panel,
+- `/cloud` should point users to the localhost gateway, not a signed-in cloud dashboard,
+- `/signin`, `/account`, and Pro/session management are migration debt for EMWaver itself; Agent API-key setup should not become an EMWaver account system,
 - `/order` and `/hardware` redirect into `/build` for legacy links,
-- device/account flows are web-managed,
-- pricing and subscription UX should center on service plans rather than per-device purchases,
-- shared account, subscription, entitlement, and wallet truth should live in the shared production Postgres database under `core`, with EMWaver-local product tables in `emwaver`,
-- the production runtime now uses `continualpg03231028/continual` without changing the app-side `DATABASE_URL` contract,
+- device/account/provisioning/minting flows should be removed from the core product path,
+- paid product UX should center on the Agent API key backed by Continual MI/MGPT, not per-device purchases, device limits, or EMWaver accounts,
+- shared account, subscription, entitlement, wallet, and EMWaver-local product tables are legacy hosted-web implementation details for this repo,
 - no direct end-user installer distribution pages as primary channel (store-first model).
 
 Store distribution policy migrated from AGENTS:
@@ -274,8 +276,7 @@ Target deployment:
 
 Dynamic code should move to the right owner before the static export becomes canonical:
 - localhost hardware control and script rendering: `gateway/`,
-- paid Agent: focused Continual MI Agent/API backend,
-- optional hosted services: separate hosted-service runtime if kept at all.
+- paid Agent: focused Continual MI/MGPT Agent/API backend.
 
 Migration inventory: `STATIC_MIGRATION_INVENTORY.md`.
 

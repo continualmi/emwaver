@@ -86,8 +86,9 @@ Representative files:
 
 Agent configuration direction:
 - the Apple shared Agent UI now uses one managed tool-calling agent mode,
-- app clients should call the EMWaver backend `/v1/agent/*` routes and let the web/backend layer own provider calls, tool execution loops, and metering,
-- the package should not depend on end-user provider login flows or free-form API key entry in the UI.
+- app clients should migrate from EMWaver backend `/v1/agent/*` routes to the future Continual MI/MGPT Agent endpoint,
+- the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with a user-provided Agent API key stored locally/keychain-backed,
+- the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
 
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`

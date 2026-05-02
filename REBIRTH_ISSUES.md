@@ -415,8 +415,24 @@ Local runtime should not block hardware access on backend activation.
 
 Acceptance criteria:
 
-- Local device identity can exist for naming/status.
+- Local device naming/status does not require immutable hardware UID reads.
 - Local script execution is not gated by backend ownership.
+
+## `REBIRTH-025A` Remove Hardware UID Minting/Claiming Model
+
+- Status: `todo`
+- Priority: `P0`
+- Target: runtime/native apps/web
+
+Remove the closed-source device identity model from the open-source core direction.
+
+Acceptance criteria:
+
+- Local runtime does not require hardware UID reads before script execution.
+- Firmware setup/update flows do not require device minting, claiming, or account registration.
+- Native app docs stop presenting `board_type + hardware_uid` as a product identity model.
+- Web provisioning/minting routes are retired or clearly marked as legacy migration debt.
+- Device limits are not part of the local runtime or UI model.
 
 ## `REBIRTH-026` Keep Hosted Service Code Outside Gateway Path
 
@@ -465,7 +481,7 @@ Acceptance criteria:
 
 ## `REBIRTH-029` Keep Agent Instructions Server-Side
 
-- Status: `done`
+- Status: `needs audit`
 - Priority: `P0`
 - Target: Agent/security
 
@@ -476,6 +492,7 @@ Acceptance criteria:
 - Client sends context but not private system instructions.
 - Server owns prompt assembly.
 - Docs state prompt secrecy is not the only moat.
+- Open-source repo does not ship production Agent system prompts or private `.emw` instruction packs.
 
 ## `REBIRTH-030` Add Agent Panel To Gateway UI
 
@@ -504,6 +521,39 @@ Acceptance criteria:
 - CLI can send a prompt plus optional script file.
 - CLI uses configured API key.
 - CLI prints useful response output.
+
+## `REBIRTH-031A` Migrate App Agent Runtimes To MGPT API-Key Client Contract
+
+- Status: `todo`
+- Priority: `P0`
+- Target: Agent/API/native apps/gateway
+
+Keep Agent interfaces in every app, but make them clients of the future Continual MI/MGPT Agent backend instead of EMWaver account/cloud chat routes.
+
+Acceptance criteria:
+
+- Gateway Agent panel uses `EMWAVER_AGENT_API_KEY` and `EMWAVER_AGENT_ENDPOINT`.
+- CLI Agent command uses the same API-key contract.
+- Apple shared Agent UI can call the MGPT Agent endpoint with app-local/keychain configuration.
+- Windows Agent UI can call the MGPT Agent endpoint with app-local/credential-store configuration.
+- Android Agent UI can call the MGPT Agent endpoint with app-local/credential-store configuration.
+- Agent client requests include local script, selected board/module, runtime error/log, and relevant UI/device context.
+- Agent clients do not require EMWaver accounts, cloud chat storage, Pro entitlements, or hosted conversations.
+
+## `REBIRTH-031B` Remove Repo-Shipped Production Agent IP
+
+- Status: `todo`
+- Priority: `P0`
+- Target: Agent/security
+
+Remove production Agent prompts/instructions from the open-source repo and keep them behind the Continual MI/MGPT backend.
+
+Acceptance criteria:
+
+- No production system prompt is bundled into app resources.
+- No web route loads a repo-local production Agent prompt for hosted inference.
+- Public docs preserve the Agent contract but not private prompt content.
+- Test fixtures remain generic and clearly non-production.
 
 ## Epic 7: Hardware Monorepo
 

@@ -11,11 +11,11 @@ Target: Windows 11 only.
 This folder contains the full Windows client:
 - USB transport integration,
 - script runtime UI and tooling pages,
-- remote host/session control views,
+- local gateway/app-host control views,
 - firmware update flow integration,
-- optional cloud/auth/account surfaces.
+- Agent client surfaces.
 
-The local-first rule is that connected supported boards can run local `.emw` scripts without account sign-in, backend activation, subscription checks, or claimed-device cache membership. Account/device registration remains optional hosted-service state, not a local runtime gate.
+The local-first rule is that connected supported boards can run local `.emw` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
 Project files:
 - solution: `windows/EMWaver.sln`
@@ -102,7 +102,7 @@ The current packaged Windows firmware payload is copied from the repo root firmw
 Windows now follows the same board-class split as macOS:
 - STM32 boards use the managed DFU setup/update flow.
 - ESP32-S3 boards use the bundled serial flashing helper plus bundled ESP images.
-- Windows setup/update UI is board-aware and can optionally register devices before flashing when hosted services need that state.
+- Windows setup/update UI is board-aware. It should not require device registration before flashing.
 
 ## 3.5 App settings and appearance
 
@@ -112,22 +112,22 @@ Settings surface includes app-level preferences such as:
 
 ## 3.6 Current parity status vs macOS
 
-Windows is intended to track the current macOS app in the firmware setup/update and optional account registration layer.
+Windows is intended to track the current macOS app in the firmware setup/update and local gateway layers.
 
 What Windows already has:
 - USB run-mode transport,
 - STM32 DFU firmware flashing,
-- web-managed API-key auth, host session, remote control, and Pro entitlement plumbing.
+- legacy web-managed API-key auth, host session, remote control, and Pro entitlement plumbing that should be migrated away from local hardware paths.
 
 Windows now includes:
-- board-aware device state (`board_type`, hardware UID, last detected board info),
-- backend-tethered optional account registration / restore flow using `/provisioning/mint`,
-- cached account-device list with offline-mode fallback for hosted-service visibility,
+- board-aware device state (`board_type`, last detected board info),
+- legacy backend-tethered account registration / restore flow using `/provisioning/mint` that is migration debt,
+- legacy cached account-device list for hosted-service visibility,
 - board-specific update UX split between STM32 DFU and ESP32-S3 serial flashing,
 - bundled ESP32-S3 flashing helper + bundled ESP images when present in the workspace/build output,
 - ESP bootloader detection and BOOT / RESET guidance,
 - activity-log surfaces around setup and update.
-- web-managed API-key auth for cloud/account features, with the account dialog validating keys against `/v1/auth/key` and opening the EMWaver web account page for management.
+- legacy web-managed API-key auth for cloud/account features, with the account dialog validating keys against `/v1/auth/key` and opening the EMWaver web account page for management. The target Agent model is a user-provided MGPT Agent API key, not an EMWaver account key.
 
 ---
 
@@ -136,25 +136,25 @@ Windows now includes:
 The parity work in this folder specifically addressed the older Windows gaps relative to macOS:
 
 1. Device model
-- `Services/WindowsDeviceManager.cs` now tracks hardware UID, connected board type, and last-detected board info in addition to version/runtime state.
+- `Services/WindowsDeviceManager.cs` should track connected board type and last-detected board info without requiring hardware UID identity for local use.
 
 2. Update architecture
 - `Services/FirmwareUpdateManager.cs` now splits STM32 managed DFU from ESP32-S3 serial flashing.
-- STM32 optional account registration/update is keyed by `board_type + hardware_uid` and then flashes managed firmware.
+- STM32 setup/update should not depend on account registration, `board_type + hardware_uid` minting, or hosted ownership state.
 - ESP32-S3 setup/update uses the bundled helper + bundled image set when present.
 
 3. Device UI / wording
-- `Pages/DevicePage*` and `Dialogs/FirmwareUpdateDialog*` are now board-aware and expose optional account-cache state, offline messaging, verification, and activity logs.
+- `Pages/DevicePage*` and `Dialogs/FirmwareUpdateDialog*` are board-aware; optional account-cache state is legacy migration debt.
 
 4. Optional account / device-cache integration
-- Windows now has a local account-device cache equivalent to macOS `AccountDevicesService`; local script execution does not depend on that cache.
-- Account-cached devices are keyed by `board_type + hardware_uid` for offline-aware hosted-service behavior.
+- Windows still has legacy local account-device cache code; local script execution must not depend on that cache and the cache should be removed from the core path.
+- Account-cached devices keyed by `board_type + hardware_uid` are legacy closed-source-platform behavior and should not be extended.
 
 5. ESP32-S3 support
 - Windows now detects ESP bootloader availability, resolves flash-capable serial ports, and guides the user toward the serial flashing path instead of forcing STM32 DFU semantics onto ESP boards.
 
 6. Operator diagnostics
-- Windows now exposes flashing and provisioning activity logs.
+- Windows now exposes flashing activity logs; provisioning/minting logs are legacy migration debt.
 
 ---
 
@@ -165,28 +165,26 @@ To bring Windows to feature parity with the current macOS implementation, Window
 ### 5.1 Device state and transport
 
 Windows should:
-- read hardware UID in Run Mode using the shared device opcode,
+- avoid requiring hardware UID reads in Run Mode before local use,
 - infer / store current board type and last detected board type,
-- preserve last detected hardware UID for ESP and reconnect scenarios,
-- rely on `board_type + hardware_uid` only.
+- preserve last detected board metadata for ESP and reconnect scenarios without using immutable UID as a gate,
+- avoid `board_type + hardware_uid` as a required identity model.
 
 ### 5.2 Optional account registration / restore / attach
 
 Windows should:
-- call `/provisioning/mint` with `board_type + hardware_uid` only for optional hosted-service setup,
-- maintain a local account-device cache keyed by `board_type + hardware_uid`,
-- support offline account-cache visibility from the cached device list.
+- remove `/provisioning/mint` and `board_type + hardware_uid` assumptions from the core setup path,
+- remove local account-device cache behavior from local hardware control,
+- remove offline account-cache visibility from the core local device UX.
 
-Windows should treat hosted registration as account-plan enforcement only for hosted services:
-- backend entitlements determine whether another device can be registered on the account for hosted features,
-- no account, activation, or per-device purchase flow should be required to use an additional board locally.
+No account, activation, minting, hardware-UID registration, device limit, or per-device purchase flow should be required to use an additional board locally.
 
 ### 5.3 STM32 update flow
 
 Windows STM32 flow should match the current managed model:
 - STM32 boards can be locally provisioned/updated from the app,
 - account-cached STM32 boards update through the same DFU path,
-- update UI clearly distinguishes local setup/update vs optional account-cache behavior.
+- update UI removes optional account-cache behavior from the core local setup/update flow.
 
 ### 5.4 ESP32-S3 update flow
 
@@ -204,8 +202,7 @@ Windows ESP flow should match the macOS board-class split:
 Windows should have a board-aware device surface that shows:
 - connection / update / ESP bootloader status,
 - board type,
-- hardware UID summary,
-- optional account-cache state,
+- board/runtime summary,
 - offline availability messaging,
 - a local "My devices" view from cache/backend,
 - board-aware primary actions:
@@ -215,8 +212,8 @@ Windows should have a board-aware device surface that shows:
 ### 5.6 Diagnostics
 
 Windows should expose:
-- flashing / provisioning activity logs,
-- clear operator-readable error messages for serial-port selection, bootloader entry, and backend provisioning failures.
+- flashing activity logs,
+- clear operator-readable error messages for serial-port selection and bootloader entry.
 
 ---
 
@@ -235,7 +232,7 @@ The main remaining work after the parity code changes is validation on a real Wi
 3. ESP32-S3 hardware validation
 - build the Windows `emwaver-esp-helper.exe`,
 - confirm the helper is copied into app output,
-- confirm serial-port detection, bootloader detection, optional account registration/flash, and reconnect-to-Run-Mode behavior on actual ESP32-S3 boards.
+- confirm serial-port detection, bootloader detection, local flash, and reconnect-to-Run-Mode behavior on actual ESP32-S3 boards.
 
 4. UX cleanup after workstation testing
 - tighten copy, progress wording, and any Windows-specific driver or COM-port edge cases found during manual tests.

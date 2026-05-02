@@ -1,6 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { loadRepoAgentSystemPrompt } from "@/server/agentPrompt";
 import { ToolError, toolSchemasV1 } from "@/server/agentTools";
 import { unauthorizedJson, requireIdentity } from "@/server/http";
 import { createChatCompletion, openAIModel, type ChatMessage } from "@/server/openaiCompat";
@@ -75,13 +74,9 @@ export async function POST(request: NextRequest) {
 
   try {
     const model = openAIModel();
-    let messages: ChatMessage[] = agentStore
+    const messages: ChatMessage[] = agentStore
       .listMessages(conversationId, identity.uid)
       .map((message) => ({ role: message.role, content: message.content }));
-    const sysPrompt = loadRepoAgentSystemPrompt();
-    if (sysPrompt) {
-      messages = [{ role: "system", content: sysPrompt }, ...messages];
-    }
 
     let assistantContent = "";
     let toolIterations = 0;

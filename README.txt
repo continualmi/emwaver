@@ -1,10 +1,10 @@
 EMWaver monorepo — a Continual MI project
-Local-first, open-source hardware scripting platform with optional paid Agent services.
+Local-first, open-source hardware scripting platform with optional paid Agent API usage.
 Rebirth plan: `REBIRTH.md`
 Durable rebirth issue backlog: `REBIRTH_ISSUES.md`
 Rebirth completion audit: `REBIRTH_AUDIT.md`
 Launch MVP checklist: `LAUNCH_MVP.md`
-Agent API direction: `AGENT_API.md`
+Agent API direction: `AGENT_API.md` — app-level Agent interfaces stay, but inference goes through a user API key to the future Continual MI/MGPT backend; production prompts/instructions do not belong in this open-source repo.
 Packaging direction: `PACKAGING.md`
 Rebirth validation tracker: `TESTS_REBIRTH.md`
 Shared mock device simulator goal: `SIMULATOR.md`

@@ -87,11 +87,11 @@ The launch direction is:
 
 ## Relationship To `web/`
 
-`web/` should trend toward mostly static public pages, docs, downloads, and product information. Existing auth, cloud dashboard, hosted relay, and backend control surfaces in `web/` are migration debt unless explicitly needed for optional hosted services or paid Agent/API usage.
+`web/` should trend toward mostly static public pages, docs, downloads, and product information. Existing auth, cloud dashboard, hosted relay, provisioning/minting, cloud file storage, and backend control surfaces in `web/` are migration debt. Paid Agent/API usage should move to the future Continual MI/MGPT backend instead of keeping an EMWaver cloud runtime.
 
 `gateway/` owns the localhost hardware control surface and should receive the full `.emw` script editor, renderer, live UI, event dispatch, plot, local file, and Agent-assisted control experience migrated from `web/`.
 
-Gateway scripts and local project state should stay on the user's device. Browser-local open/save and app-local files are acceptable; cloud script storage, account-backed project libraries, and script sync are not part of the core local gateway path.
+Gateway scripts and local project state should stay on the user's device. Browser-local open/save and app-local files are acceptable; cloud script storage, account-backed project libraries, script sync, hardware-UID registration, device minting, and device limits are not part of the core local gateway path.
 
 ## Initial Implementation Targets
 

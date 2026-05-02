@@ -20,8 +20,9 @@ Implementation details belong in folder-level `README.md` files.
 EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, CLI/gateway flows, managed firmware, and optional Agent assistance.
 
 Core direction:
-- **Business model:** open-source core plus paid Agent services. Revenue should come primarily from Agent/API usage and optional hosted services, not from gating local hardware access.
-- **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, cloud activation, hosted relay, or subscription check.
+- **Business model:** open-source core plus paid Agent API usage. Revenue should come from the Agent service, not from accounts, hosted cloud control, or gating local hardware access.
+- **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
+- **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
 - **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, acting as a host controller for the local macOS/Windows app and reusing the existing script/control protocol without requiring cloud infrastructure.
 - **Remote control posture:** native apps should not be positioned as Continual-hosted remote-control hosts for the open-source core. macOS/Windows gateway control is same-machine localhost by default; remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
@@ -30,7 +31,7 @@ Core direction:
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps/CLI/gateway flows should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
-- **AI:** Agent-assisted workflows are first-class and are the primary paid product direction.
+- **AI:** Agent-assisted workflows are first-class and are the primary paid product direction. Each app may keep its own Agent interface/runtime, but those runtimes are API clients. The only planned network interface is an optional API key to a future Continual MI/MGPT Agent backend.
 - **Client surfaces:** Android, iOS, macOS, Windows.
 - **Distribution:** official app stores for end-user apps.
 
@@ -60,7 +61,7 @@ We intentionally give up:
 
 - Launch without hardware supply chain.
 - Adoption from day one through an open-source local core.
-- Revenue through paid Agent usage and optional hosted services.
+- Revenue through paid Agent API usage.
 - Multiple supported boards, one unified UX.
 - Cross-platform apps (Android/iOS/macOS/Windows).
 - Localhost gateway and SSH/VPN-friendly remote workflows.
@@ -71,11 +72,11 @@ We intentionally give up:
 
 ## 3) Important Strategic Notes (high-level)
 
-### Business model (open-source core + Agent)
+### Business model (open-source core + Agent API)
 
 - **Open-source core**: local runtime, local gateway, CLI, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
-- **Paid Agent**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI instructions and metered API usage.
-- **Optional hosted services**: hosted relay, sync, teams, classrooms, and remote fleet behavior may exist later, but they are not launch-critical and must not be required for local control.
+- **Paid Agent API**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI/MGPT instructions and metered API usage.
+- **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to the focused Continual MI/MGPT Agent backend unless a later product decision explicitly reopens cloud services.
 - **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
 - **AI credits/usage**: Agent usage remains a metered resource.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
@@ -83,9 +84,9 @@ We intentionally give up:
 ### Device trust model
 
 - Local hardware control must not be gated by backend activation or account ownership.
-- EMWaver may still read immutable per-board hardware UID (for example, STM32 unique ID registers or ESP32 factory chip identity/MAC-derived identifier) together with board type for local naming, diagnostics, firmware compatibility, and optional hosted services.
-- Any hosted service registration should be keyed by `board_type + hardware_uid`, but that hosted registration must not be required for local `.emw` script execution.
-- Backend enforcement applies only to optional hosted services and paid Agent/API usage, not to the open-source local core.
+- EMWaver should move away from hardware-UID identity as a product requirement. Local control should work immediately without reading immutable board IDs for activation, minting, ownership, device limits, or gates.
+- Do not introduce hosted device registration, device limits, device minting, or backend ownership checks for core EMWaver hardware control.
+- Backend enforcement applies only to the paid Agent API, not to the open-source local core.
 
 (Implementation details live in `macos/README.md` and `web/README.md`.)
 
@@ -99,8 +100,9 @@ We intentionally give up:
 ### Agent direction (model strategy)
 
 - EMWaver product language should refer to the **Agent**, not to an EMWaver-specific model line.
-- Near-term EMWaver AI is foundation-model-backed and product-managed rather than framed around a custom in-house model family.
+- Near-term EMWaver AI is served by the Continual MI/MGPT backend rather than by prompts or inference logic shipped in this repo.
 - Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
+- App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary `.emw` instruction packs, hidden board recipes, provider-routing logic, or metering policy.
 
 ### Linux host scope
 
@@ -180,7 +182,7 @@ If a folder has a README, detailed documentation should live there.
 
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
-- `web/` — public website/docs/downloads surface; should trend toward mostly static pages. Existing auth, billing, cloud dashboard, hosted relay, and backend surfaces are migration debt unless explicitly needed for optional hosted services or paid Agent/API usage.
+- `web/` — public website/docs/downloads surface; should trend toward static pages. Existing auth, billing, cloud dashboard, hosted relay, and backend surfaces are migration debt. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of keeping `web/` as an EMWaver cloud runtime.
 - `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control and the migrated script rendering/control UI.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
@@ -196,13 +198,13 @@ If a folder has a README, detailed documentation should live there.
 
 1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
-3. **Software-first business**: revenue comes from paid Agent/API usage and optional hosted services — not hardware sales or paid local device access.
+3. **Software-first business**: revenue comes from paid Agent/API usage through Continual MI/MGPT — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
 4. **Local hardware access is free/open**: core local `.emw` execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
 5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
 6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
 7. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
-8. **Backend is authoritative only for hosted services and paid Agent/API usage**: do not put local core hardware access behind backend policy.
-9. **Activation is not a local gate**: optional hosted device registration may exist, but local board access is not governed by plan entitlements.
+8. **Backend authority is Agent-only**: do not put local core hardware access behind backend policy, device registration, subscription checks, or account state.
+9. **No activation gate**: local board access is not governed by plan entitlements or hosted device ownership.
 10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
 11. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
 12. **CI/Releases policy**: GitHub Actions are for web/gateway CI and optional deployment; do not treat GitHub Releases as end-user distribution for apps.
@@ -215,7 +217,7 @@ If a folder has a README, detailed documentation should live there.
 - When changing a specific subsystem, update that folder's README.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
-- Keep local gateway/runtime work account-free unless the task explicitly touches optional hosted services or paid Agent APIs.
+- Keep local gateway/runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.
 - Keep imported hardware repos under `hardware/` and preserve history where practical.
 
 Workflow:

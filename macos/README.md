@@ -2,9 +2,9 @@
 
 Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
-This is the desktop Apple host app for local USB workflows, localhost gateway control, optional hosted remote control, optional cloud/auth integrations, and firmware/update UX on macOS.
+This is the desktop Apple host app for local USB workflows, localhost gateway control, Agent client UI, and firmware/update UX on macOS.
 
-The local-first rule is that connected supported boards can run local `.emw` scripts without account sign-in, backend activation, subscription checks, or claimed-device cache membership. The app may still read the board hardware UID and sync `board_type + hardware_uid` for optional hosted services, diagnostics, and account cache visibility, but that hosted registration is not a local runtime gate.
+The local-first rule is that connected supported boards can run local `.emw` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
@@ -42,7 +42,7 @@ Entry points:
 
 Auth UX rule:
 - API key entry must remain available even when no EMWaver device is connected, so new users can link the app before flashing a supported board.
-- once a supported board reconnects with readable `board_type + hardware_uid`, the app may restore/sync optional hosted-service state automatically instead of requiring a manual claim button.
+- supported boards should enter local script/update workflows without a manual claim button or hosted registration step.
 - native clients now use an EMWaver API key created on the web account page and pasted into the app.
 - the app stores the API key in Keychain and uses it as the bearer credential for `/v1/*` routes.
 - app startup should wait for the initial keychain-backed credential restore to finish before the first entitlement-gated refreshes, so a persisted keyed account does not briefly downgrade to local-only UI after relaunch.
@@ -60,7 +60,7 @@ Responsibilities:
 - local USB host operation,
 - remote attach/control pathways,
 - host presence and cloud session integration,
-- hardware-UID-backed optional account/cache awareness,
+- legacy hardware-UID/account/cache awareness is migration debt,
 - firmware provisioning/update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Local-first gateway behavior:
@@ -86,14 +86,15 @@ Representative views:
 
 `Pro/EntitlementsManager.swift` + `ProUpgradeSheet.swift` integrate subscription/entitlement UX.
 
-Billing/account authority rule:
-- `Continual Pro` is the canonical paid plan.
-- older `EMWaver Pro` strings in local UI should be treated as migration-era copy and updated toward `Continual Pro`.
+Account/cloud direction:
+- EMWaver should not require product accounts, cloud activation, or subscription gates for local hardware control.
+- Older billing/account and `EMWaver Pro` strings are migration debt unless they are specifically part of the future Agent API-key flow.
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
-- the Agent should call the managed EMWaver backend `/v1/agent/*` routes, with provider selection, tool loops, and metering owned server-side,
-- the macOS Agent UI should not require Codex login flows or manual provider API key entry.
+- the macOS Agent interface/runtime should stay, but migrate from EMWaver account/conversation routes to the future Continual MI/MGPT Agent endpoint,
+- provider selection, private prompts, tool policy, and metering belong server-side on MGPT,
+- the macOS client should use a user-provided Agent API key stored locally/keychain-backed, and local scripts/hardware must work without it.
 
 ## 3) Firmware update, optional account setup, and tooling
 
@@ -112,9 +113,9 @@ The macOS app bundles the canonical committed firmware image at `firmware/emwave
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
-- optional backend-tethered account registration using `/provisioning/mint` with `board_type + hardware_uid` for hosted services,
+- legacy backend-tethered account registration using `/provisioning/mint` is migration debt and should not be required for setup/update,
 - account key entry plus web-managed key creation/replacement on the EMWaver frontend for optional hosted features,
-- reading supported-board hardware UID in Run Mode for diagnostics, firmware compatibility, and optional account registration,
+- avoid requiring supported-board hardware UID reads in Run Mode before local use,
 - unified in-app device list with local cache fallback for Offline Mode,
 - bundled or operator-selected custom firmware images,
 - operator-readable progress and diagnostic logging for provisioning/update sessions.
@@ -123,7 +124,7 @@ Current macOS responsibility in this area:
 
 STM32 update flow:
 - run-mode connection over USB,
-- if firmware is missing the hardware UID command, immediately prompt the user to enter the managed update flow,
+- if firmware is missing optional metadata commands, keep local control/update guidance independent of account registration,
 - enter DFU/update mode from the app,
 - flash through the DFU helper.
 

@@ -2,7 +2,7 @@
 
 This document captures the product pivot for EMWaver.
 
-EMWaver should become a lazier, simpler, open-source-first hardware scripting system with almost no cloud responsibility for core use. The product should feel like a local tool that happens to have a powerful paid AI Agent, not a cloud platform that happens to control hardware.
+EMWaver should become a lazier, simpler, open-source-first hardware scripting system with no EMWaver cloud responsibility for core use. The product should feel like a local tool that happens to have a powerful paid AI Agent API, not a cloud platform that happens to control hardware.
 
 ## 1) New Thesis
 
@@ -20,11 +20,15 @@ Users should be able to:
 The core runtime should not require:
 
 - a Continual MI account,
+- an EMWaver account,
 - cloud activation,
 - a hosted relay,
 - remote session registration,
 - subscription checks,
 - backend device ownership,
+- hardware-UID registration,
+- device minting,
+- device limits,
 - cloud script storage,
 - cloud file sync,
 - account-backed project libraries.
@@ -44,11 +48,11 @@ Revenue should focus on the Agent:
 - explaining board/module behavior,
 - helping users adapt scripts across supported boards.
 
-The paid product is not device access. The paid product is expert assistance for the EMWaver scripting environment.
+The paid product is not device access. The paid product is expert assistance for the EMWaver scripting environment, accessed through a user-provided API key to the future Continual MI/MGPT Agent backend.
 
 ## 3) Cloud Responsibility
 
-Cloud should no longer be a launch requirement for hardware control.
+EMWaver should not have a cloud runtime or account system in the core product.
 
 Core EMWaver should work fully locally:
 
@@ -59,7 +63,7 @@ browser or CLI
   -> board firmware
 ```
 
-The only cloud dependency in the new direction should be the optional paid Agent API.
+The only network dependency in the new direction should be the optional paid Agent API. That API should live on a focused Continual MI/MGPT backend, not on an EMWaver cloud runtime.
 
 Remote hardware control can be documented as user-owned infrastructure:
 
@@ -68,7 +72,7 @@ Remote hardware control can be documented as user-owned infrastructure:
 - use `emwaver gateway` on localhost,
 - optionally access it over VPN/Tailscale/port-forwarding at the user's own discretion.
 
-Continual-hosted relay/control should not be part of the launch-critical open-source product.
+Continual-hosted relay/control should not be part of the open-source product plan.
 
 Native macOS and Windows apps should not be positioned as Continual-hosted remote-control hosts in the open-source core. Their gateway role is same-machine localhost app control:
 
@@ -173,8 +177,7 @@ Scripts and local project state should stay on the user's device by default. Gat
 Any remaining dynamic behavior should be moved to the correct owner instead of keeping `web/` as a catch-all backend:
 
 - local script rendering/control goes to `gateway/`,
-- optional paid Agent API goes to a focused Continual MI Agent/backend endpoint,
-- optional hosted services, if they survive, should be separate from the static public site,
+- optional paid Agent API goes to a focused Continual MI/MGPT Agent backend endpoint,
 - board/build pages should read from static manifests and repo-backed hardware assets where practical.
 
 Gradually remove from the local gateway path:
@@ -183,6 +186,9 @@ Gradually remove from the local gateway path:
 - account-required flows,
 - subscription checks,
 - device activation gates,
+- hardware-UID identity gates,
+- device minting/claiming flows,
+- backend device limits,
 - remote host heartbeat,
 - cloud host/session discovery,
 - cloud file assumptions,
@@ -271,7 +277,7 @@ An optional later layer may add a virtual MIDI/USB transport simulator for end-t
 
 Phase two is to make the Agent the main paid product.
 
-The Agent should be accessed through a simple API key connected to a Continual MI backend endpoint.
+The Agent should be accessed through a simple API key connected to the future Continual MI/MGPT backend endpoint. EMWaver should not introduce its own account model for this.
 
 The backend should own and protect:
 
@@ -281,6 +287,14 @@ The backend should own and protect:
 - module-specific guidance,
 - product policy,
 - usage metering.
+
+The open-source repo should keep Agent interfaces and request contracts, but it should not contain proprietary Agent IP:
+
+- no production system prompts,
+- no private `.emw` instruction packs,
+- no hidden board recipes,
+- no provider routing logic,
+- no metering or account policy.
 
 The client should send user intent, relevant script context, selected board/module metadata, and runtime errors. The server should apply the private Agent instructions and return useful `.emw` code, patches, explanations, or debugging guidance.
 
@@ -370,6 +384,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Remove cloud auth assumptions from local control.
 - Remove cloud activation gates from core runtime.
 - Remove subscription checks from hardware access.
+- Remove hardware-UID registration, minting, claiming, and device-limit assumptions from core runtime.
 - Keep any hosted service code outside the local gateway path.
 - Remove hosted native-app remote-control posture from the core product path; keep same-machine localhost gateway control as the default.
 
@@ -379,7 +394,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Keep prompts and specialized instructions server-side.
 - Integrate Agent into the local browser UI.
 - Integrate Agent into the CLI.
-- Meter Agent usage through Continual MI.
+- Meter Agent usage through the Continual MI/MGPT backend.
 
 ## Phase 5: Hardware Monorepo Import
 
@@ -391,11 +406,18 @@ This consolidation should support the local-first open-source pivot, but it shou
 - Update product docs and scripts to reference the new in-repo hardware paths.
 - Move duplicated board/module images and reusable hardware media to canonical `hardware/<repo-name>/` asset locations.
 
-## Phase 6: Optional Hosted Services
+## Phase 6: Remove EMWaver Cloud Surface
 
-Only add hosted relay, sync, teams, classrooms, or remote fleet behavior if users clearly ask for it.
+Remove or retire the remaining EMWaver account/cloud surfaces instead of productizing them:
 
-These should remain optional services layered on top of a useful local open-source core.
+- auth/account pages,
+- cloud dashboard routes,
+- hosted relay and host directory routes,
+- cloud script file APIs,
+- sync assumptions,
+- billing/subscription UI tied to local hardware access.
+
+The surviving paid network surface should be the Agent API key path to the Continual MI/MGPT backend.
 
 ## 11) Product Language
 
@@ -408,11 +430,13 @@ Use language like:
 - `.emw` runtime,
 - mock device simulator,
 - Agent-assisted scripting,
-- optional paid Agent.
+- optional paid Agent,
+- Agent API key.
 
 Avoid centering:
 
 - cloud platform,
+- accounts,
 - device activation,
 - subscription-gated hardware,
 - remote relay as the main product,

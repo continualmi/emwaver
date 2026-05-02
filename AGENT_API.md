@@ -17,17 +17,28 @@ The Agent helps with:
 
 The Agent must not be required for local hardware access.
 
+Each app should keep an Agent runtime/interface:
+
+- gateway Agent panel,
+- CLI `emwaver agent`,
+- macOS/iOS Agent chat surfaces,
+- Windows Agent chat surface,
+- Android Agent chat surface.
+
+Those app runtimes are clients. They collect local script/device/UI/error context, manage chat UX, and call the Agent endpoint. They must not embed production system prompts or private Agent instructions.
+
 ## Authentication
 
-Use a simple Continual MI Agent API key.
+Use a simple Continual MI/MGPT Agent API key.
 
 Initial client-side configuration targets:
 
 ```text
 EMWAVER_AGENT_API_KEY
+EMWAVER_AGENT_ENDPOINT
 ```
 
-Future persisted local configuration can use an EMWaver config file, but the environment variable is sufficient for the first CLI/gateway integration.
+Future persisted local configuration can use an app-local EMWaver config file or platform keychain/credential store, but the environment variables are sufficient for the first CLI/gateway integration. This key is for Agent inference only; it is not an EMWaver account.
 
 Missing key behavior:
 
@@ -97,7 +108,7 @@ Response:
 
 ## Server-Side Responsibility
 
-The Continual MI backend should own:
+The Continual MI/MGPT backend should own:
 
 - Agent system prompt,
 - `.emw` language instructions,
@@ -108,6 +119,21 @@ The Continual MI backend should own:
 - provider/model routing.
 
 The open-source client should send user intent and relevant context, not private system instructions.
+
+The open-source repo should keep only:
+
+- Agent UI/runtime clients,
+- endpoint/request/response contracts,
+- harmless development fixtures,
+- generic examples that can be public.
+
+The open-source repo should not contain production Agent IP:
+
+- private system prompts,
+- proprietary `.emw` language instruction packs,
+- hidden board/module recipes,
+- provider selection logic,
+- metering implementation.
 
 Prompt secrecy is not the full moat. The real moat is the maintained Agent service: high-quality `.emw` expertise, hardware recipes, runtime-aware debugging, examples, and tight CLI/gateway integration.
 

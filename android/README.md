@@ -2,7 +2,7 @@
 
 Native Android EMWaver application (Gradle project, Java/Kotlin-style Android app structure).
 
-This app provides mobile EMWaver device workflows: USB communication, scripting surfaces, settings, optional hosted host/remote control UI, auth/cloud migration dialogs, and firmware asset packaging.
+This app provides mobile EMWaver device workflows: USB communication, scripting surfaces, settings, Agent client UI, and firmware asset packaging.
 
 ---
 
@@ -51,9 +51,9 @@ Key components:
 
 Notable UX coverage reflected by resources:
 - script lists/editor dialogs,
-- optional hosted host sheet/remote host control activity,
+- legacy hosted host sheet/remote host control activity,
 - agent chat dialogs,
-- API-key sign-in + sync dialogs,
+- legacy API-key sign-in + sync dialogs,
 - device update dialogs.
 
 ---
@@ -105,10 +105,11 @@ Current Android board split:
 
 When changing Android transport, connection lifecycle, or firmware update UX behavior, update this README in the same PR.
 
-Android auth direction:
-- EMWaver apps now use a shared EMWaver API key instead of the old browser handoff code flow.
-- `CloudAuthManager.getIdTokenBlocking()` still returns the saved bearer credential for cloud/host/agent callers, but that value is now the API key persisted from the web account page.
-- The sign-in dialog should guide users to paste their key or open the web account page to manage it.
+Android Agent/auth direction:
+- Keep the Android Agent chat interface/runtime.
+- Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
+- Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
+- Existing cloud/host/account dialogs are migration debt unless repurposed for the Agent API-key setup state.
 
 Hosted remote-control posture:
 - Hosted host-session UI/heartbeat and hosted remote-control WebSocket behavior are disabled by default.
