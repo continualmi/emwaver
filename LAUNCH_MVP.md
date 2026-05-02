@@ -99,7 +99,7 @@ Backlog coverage:
 
 - Hardware repository inventory exists.
 - Target flat `hardware/<repo-name>/` prefixes are defined.
-- At least one hardware repo is imported with useful history preserved.
+- The nine primary hardware repos are imported with useful history preserved.
 - `hardware/README.md` documents structure and large file policy.
 
 Backlog coverage:

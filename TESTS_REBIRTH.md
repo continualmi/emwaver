@@ -30,6 +30,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Local hardware repo inventory | `pass` | Repos found under `/Users/luisml/Documents/emwaver/`, all git repos on `main` with `continualmi` remotes. |
 | Hardware import script dirty guard | `pass` | `./hardware/import-subtrees.sh` refused to run in a dirty worktree before creating subtree commits. |
 | Trial hardware import | `pass` | `./hardware/import-subtrees.sh gpio-waver` imported `gpio-waver` with history in commit `4f45903a`; the repo now lives at `hardware/gpio-waver/`. |
+| Full hardware import | `pass` | `./hardware/import-subtrees.sh all` imported the remaining eight repos as subtree commits and skipped existing `hardware/gpio-waver/`. |
 
 ## Platform Device Access
 
@@ -44,4 +45,4 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 - Do not treat TypeScript UI preview as proof of real hardware execution.
 - Do not mark `emwaver run` complete until it runs through the shared runtime/device layer.
 - Do not mark local gateway hardware control complete until the gateway uses the real runtime/device bridge.
-- Do not mark hardware monorepo import complete until at least one repo is imported under `hardware/` with useful history preserved.
+- Hardware monorepo import is complete for the nine primary repos; catalog cleanup for older/generated hardware IDs remains separate follow-up work.

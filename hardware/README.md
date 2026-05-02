@@ -33,10 +33,18 @@ Each imported hardware repository keeps its original repo name directly under `h
 
 ## Current Status
 
-The first history-preserving trial import is complete:
+The nine primary hardware repositories are imported with history preserved:
 
 ```text
+hardware/emwaver-air/
+hardware/emwaver-carrier/
+hardware/emwaver-core/
+hardware/emwaver-link/
+hardware/emwaver-shield/
 hardware/gpio-waver/
+hardware/infrared-waver/
+hardware/ism-waver/
+hardware/rfid-waver/
 ```
 
 See `hardware/IMPORT_INVENTORY.md` for the current source inventory and target prefix map.

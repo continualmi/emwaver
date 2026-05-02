@@ -41,7 +41,7 @@ The rebirth is complete only when:
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
-| Full hardware import | not run | incomplete |
+| Full hardware import | all nine primary hardware repos imported under flat `hardware/<repo-name>/` paths | done |
 | AGENTS source of truth updated | `AGENTS.md` | done |
 | README/planning updated | `README.txt`, `PLANNING.md` | done |
 | Launch MVP defined | `LAUNCH_MVP.md` | done |
@@ -115,12 +115,17 @@ That blocks safe implementation/verification of:
 
 `git subtree add` creates merge commits. The import script intentionally refuses to run in a dirty worktree.
 
-Before running imports:
+Completed imports:
 
-1. ensure worktree is clean,
-2. run `./hardware/import-subtrees.sh all` or import remaining repos one-by-one,
-3. inspect history and tree shape,
-4. push import commits.
+- `hardware/emwaver-air/`
+- `hardware/emwaver-carrier/`
+- `hardware/emwaver-core/`
+- `hardware/emwaver-link/`
+- `hardware/emwaver-shield/`
+- `hardware/gpio-waver/`
+- `hardware/infrared-waver/`
+- `hardware/ism-waver/`
+- `hardware/rfid-waver/`
 
 ## Remaining P0 Work
 
@@ -128,7 +133,6 @@ Before running imports:
 - Build/verify shared device transport layer.
 - Implement `emwaver run`.
 - Wire native macOS/Windows app to the local gateway WebSocket.
-- Run remaining hardware imports.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.

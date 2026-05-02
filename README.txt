@@ -11,6 +11,6 @@ Rust preflight: `scripts/check-rust-toolchain.sh`
 Current planning tracker: `PLANNING.md`
 Current web app: `web/` (Next.js + Node), to be split so public site/docs remain in `web/` and localhost hardware control moves toward `gateway/`.
 Current headless CLI/daemon work: `daemon/`
-Hardware monorepo direction: future hardware imports should live under `hardware/`.
+Hardware monorepo: the nine primary hardware repos now live under flat `hardware/<repo-name>/` paths.
 All repo-wide product constraints and documentation routing live in `AGENTS.md`.
 Ask Codex/Claude Code "how does emwaver work" to get started
