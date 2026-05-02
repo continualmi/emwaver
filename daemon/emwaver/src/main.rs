@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use emwaver_device::Device;
-use emwaver_runtime::{CommandBridge, Engine};
+use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
@@ -75,6 +75,10 @@ enum Commands {
         /// Run direct mode with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
         no_device: bool,
+
+        /// Run direct mode with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
 
         /// Override bootstrap script path for direct mode.
         #[arg(long)]
@@ -510,6 +514,7 @@ fn run_script(
     direct: bool,
     device: Option<String>,
     no_device: bool,
+    sim_device: bool,
     bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
     let source = fs::read_to_string(&script)
@@ -520,13 +525,16 @@ fn run_script(
 
     let name = script_name(&script, name);
     if direct {
-        return run_script_direct(source, name, device, no_device, bootstrap_path);
+        return run_script_direct(source, name, device, no_device, sim_device, bootstrap_path);
     }
     if device.is_some() {
         anyhow::bail!("--device is only supported with --direct for now");
     }
     if no_device {
         anyhow::bail!("--no-device is only supported with --direct");
+    }
+    if sim_device {
+        anyhow::bail!("--sim-device is only supported with --direct");
     }
     if bootstrap_path.is_some() {
         anyhow::bail!("--bootstrap-path is only supported with --direct");
@@ -612,10 +620,17 @@ fn run_script_direct(
     name: String,
     device_id: Option<String>,
     no_device: bool,
+    sim_device: bool,
     bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
     if no_device && device_id.is_some() {
         anyhow::bail!("--device cannot be combined with --no-device");
+    }
+    if sim_device && device_id.is_some() {
+        anyhow::bail!("--device cannot be combined with --sim-device");
+    }
+    if sim_device && no_device {
+        anyhow::bail!("--no-device cannot be combined with --sim-device");
     }
 
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
@@ -624,6 +639,8 @@ fn run_script_direct(
 
     let bridge: Arc<dyn CommandBridge> = if no_device {
         Arc::new(NoDeviceCommandBridge)
+    } else if sim_device {
+        Arc::new(SimulatorCommandBridge::basic_board()?)
     } else {
         let device = Device::new();
         if let Some(device_id) = device_id {
@@ -813,8 +830,7 @@ fn run_agent(
             println!("warning: {warning}");
         }
     }
-    if body.get("message").is_none() && body.get("code").is_none() && body.get("patch").is_none()
-    {
+    if body.get("message").is_none() && body.get("code").is_none() && body.get("patch").is_none() {
         println!("{}", serde_json::to_string_pretty(&body)?);
     }
 
@@ -872,6 +888,7 @@ fn main() -> Result<()> {
             direct,
             device,
             no_device,
+            sim_device,
             bootstrap_path,
         } => run_script(
             script,
@@ -883,6 +900,7 @@ fn main() -> Result<()> {
             direct,
             device,
             no_device,
+            sim_device,
             bootstrap_path,
         ),
         Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),

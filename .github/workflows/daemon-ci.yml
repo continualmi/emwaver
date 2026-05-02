@@ -5,6 +5,7 @@ on:
     paths:
       - "daemon/**"
       - "assets/default-scripts/**"
+      - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - ".github/workflows/daemon-ci.yml"
   push:
@@ -13,6 +14,7 @@ on:
     paths:
       - "daemon/**"
       - "assets/default-scripts/**"
+      - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - ".github/workflows/daemon-ci.yml"
   workflow_dispatch:
@@ -54,7 +56,22 @@ jobs:
         working-directory: daemon
         run: |
           set -euo pipefail
-          tmp="$(mktemp /tmp/emwaver-ci.XXXXXX).emw"
+          tmp="$(mktemp /tmp/emwaver-ci.XXXXXX)"
           trap 'rm -f "$tmp"' EXIT
           printf 'UI.render(UI.text({ text: "ci" }));\n' > "$tmp"
           cargo run -q -p emwaver -- run "$tmp" --direct --no-device
+
+      - name: Smoke test simulator-backed script run
+        working-directory: daemon
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp /tmp/emwaver-sim-ci.XXXXXX)"
+          trap 'rm -f "$tmp"' EXIT
+          {
+            printf 'pinMode(13, OUTPUT);\n'
+            printf 'digitalWrite(13, HIGH);\n'
+            printf 'var board = device.boardType({ refresh: true });\n'
+            printf 'var value = analogRead(0);\n'
+            printf 'UI.render(UI.column({ children: [UI.text({ text: board }), UI.text({ text: String(value) })] }));\n'
+          } > "$tmp"
+          cargo run -q -p emwaver -- run "$tmp" --direct --sim-device

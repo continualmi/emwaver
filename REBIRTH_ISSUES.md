@@ -679,7 +679,7 @@ Acceptance criteria:
 
 ## `REBIRTH-045` Define Shared EMWaver Device Simulator Contract
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: simulator/tests
 
@@ -694,7 +694,7 @@ Acceptance criteria:
 
 ## `REBIRTH-046` Add Shared Simulator Fixtures
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: simulator/tests
 
@@ -709,7 +709,7 @@ Acceptance criteria:
 
 ## `REBIRTH-047` Add Rust Runtime Simulator Bridge
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: daemon/runtime/tests
 

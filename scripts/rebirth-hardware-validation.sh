@@ -29,10 +29,22 @@ echo "== Devices =="
 
 echo
 echo "== UI-only direct runtime =="
-tmp="$(mktemp /tmp/emwaver-rebirth-ui.XXXXXX).emw"
-trap 'rm -f "$tmp"' EXIT
+tmp="$(mktemp /tmp/emwaver-rebirth-ui.XXXXXX)"
+sim_tmp="$(mktemp /tmp/emwaver-rebirth-sim.XXXXXX)"
+trap 'rm -f "$tmp" "$sim_tmp"' EXIT
 printf 'UI.render(UI.text({ text: "rebirth validation" }));\n' > "$tmp"
 (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$tmp" --direct --no-device)
+
+echo
+echo "== Simulator-backed direct runtime =="
+{
+  printf 'pinMode(13, OUTPUT);\n'
+  printf 'digitalWrite(13, HIGH);\n'
+  printf 'var board = device.boardType({ refresh: true });\n'
+  printf 'var value = analogRead(0);\n'
+  printf 'UI.render(UI.column({ children: [UI.text({ text: board }), UI.text({ text: String(value) })] }));\n'
+} > "$sim_tmp"
+(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$sim_tmp" --direct --sim-device)
 
 if [[ -n "${EMWAVER_DEVICE_ID:-}" ]]; then
   echo

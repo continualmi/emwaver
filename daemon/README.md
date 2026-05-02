@@ -78,9 +78,11 @@ For headless hosts, direct mode runs the extracted Rust runtime in-process:
 emwaver run scripts/blink.emw --direct
 emwaver run scripts/blink.emw --direct --device 0
 emwaver run scripts/ui-only.emw --direct --no-device
+emwaver run scripts/blink.emw --direct --sim-device
 ```
 
 Direct mode uses `emwaver-device` for MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects an input id from `emwaver devices`.
+`--sim-device` uses the shared mock EMWaver device simulator so hardware-touching scripts can be smoke-tested without a connected board.
 
 Useful flags:
 

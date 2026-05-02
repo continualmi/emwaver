@@ -45,9 +45,10 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 
 | Test | Status | Evidence |
 | --- | --- | --- |
-| Shared simulator goal | `planned` | `SIMULATOR.md` and `REBIRTH-045` define a reusable protocol-level mock device simulator for platform tests without real hardware. |
-| Shared simulator fixtures | `todo` | Future fixtures should define mock board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit error cases. |
-| Rust simulator bridge | `todo` | Future Rust `CommandBridge` test double should run hardware-touching `.emw` scripts without a connected board. |
+| Shared simulator goal | `pass` | `SIMULATOR.md` and `REBIRTH-045` define a reusable protocol-level mock device simulator for platform tests without real hardware. |
+| Shared simulator fixtures | `pass` | `simulator/fixtures/basic-board.json` defines mock board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit unsupported-command behavior through the Rust simulator bridge. |
+| Rust simulator bridge | `pass` | `emwaver-runtime::SimulatorCommandBridge` runs a hardware-touching `.emw` script in tests without a connected board, and `emwaver run --direct --sim-device` exposes the same bridge from the CLI. Local `cargo test -p emwaver-device -p emwaver-runtime` and a CLI simulator smoke passed. |
+| Simulator CI smoke | `added` | `.github/workflows/daemon-ci.yml` runs a simulator-backed direct script smoke test and watches `simulator/**`. |
 
 ## Hardware Repos
 

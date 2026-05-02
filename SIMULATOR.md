@@ -48,6 +48,8 @@ simulator/
     bus-stubs.json
 ```
 
+The initial fixture path is `simulator/fixtures/basic-board.json`.
+
 Fixtures should describe:
 
 - board type and firmware metadata,
@@ -67,6 +69,12 @@ Initial coverage should include:
 - PWM start/write/stop,
 - minimal SPI/I2C/UART transfer stubs,
 - explicit unsupported-command errors.
+
+The first implementation exposes this fixture through Rust as `SimulatorCommandBridge`, which can be used by `emwaver-runtime` tests and by:
+
+```bash
+emwaver run path/to/script.emw --direct --sim-device
+```
 
 ## Non-Goals
 
