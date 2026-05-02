@@ -1,0 +1,60 @@
+name: Daemon CI
+
+on:
+  pull_request:
+    paths:
+      - "daemon/**"
+      - "assets/default-scripts/**"
+      - "scripts/check-rust-toolchain.sh"
+      - ".github/workflows/daemon-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "daemon/**"
+      - "assets/default-scripts/**"
+      - "scripts/check-rust-toolchain.sh"
+      - ".github/workflows/daemon-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux MIDI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: daemon
+
+      - name: Rust preflight
+        run: scripts/check-rust-toolchain.sh
+
+      - name: Test extracted runtime and device crates
+        working-directory: daemon
+        run: cargo test -p emwaver-runtime -p emwaver-device
+
+      - name: Build host and CLI
+        working-directory: daemon
+        run: cargo build -p emwaver-host -p emwaver
+
+      - name: Smoke test direct UI-only script run
+        working-directory: daemon
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp /tmp/emwaver-ci.XXXXXX).emw"
+          trap 'rm -f "$tmp"' EXIT
+          printf 'UI.render(UI.text({ text: "ci" }));\n' > "$tmp"
+          cargo run -q -p emwaver -- run "$tmp" --direct --no-device
