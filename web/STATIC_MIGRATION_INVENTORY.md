@@ -49,7 +49,7 @@ browser / CLI
 | `/pro` | `Agent/backend` | Paid plan page can be static, but checkout/portal actions need a focused backend endpoint. |
 | `/signin` and `/signin/complete` | `hosted-service debt` | Not needed for local hardware control. Static site can link to Agent account management later. |
 | `/account` | `hosted-service debt` | Account panel is not part of static public core. |
-| `/cloud` | `remove from core` | Cloud dashboard mixes files, hosts, control UI, and account state. Local control belongs in `gateway/`; cloud dashboard is optional hosted service debt. |
+| `/cloud` | `static web handoff` | Replaced with a static localhost gateway handoff page. The old cloud dashboard behavior is no longer in this core route. |
 | `/cloud/hosts/*` | `remove from core` | Hosted remote host/session control. Not part of local-first launch. |
 | `/cloud/agent` | `Agent/backend` | Agent UX should become API-key based and can be rebuilt in gateway/CLI against a focused Agent endpoint. |
 
@@ -93,9 +93,13 @@ browser / CLI
 
 - Route handlers under `src/app/**/route.ts` require a runtime and must be removed from the public static route set or moved to a backend.
 - `server.ts` owns `/v1/ws`; static export cannot support hosted WebSocket upgrades.
-- Account pages and cloud dashboard import session/backend helpers that assume same-origin APIs.
+- Account pages import session/backend helpers that assume same-origin APIs.
 - Store/Stripe and Agent endpoints are server-only and must be separated before static deploy is canonical.
 - Some board/catalog images still live under `web/public`; reusable hardware media should be canonical under `hardware/<repo-name>/`.
+
+## Progress
+
+- `/cloud` now renders a static local-first gateway handoff and no longer imports auth, Pro entitlements, cloud files, hosted hosts, backend WebSocket helpers, or dashboard device panels.
 
 ## Migration Order
 
