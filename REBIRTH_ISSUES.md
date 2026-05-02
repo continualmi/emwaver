@@ -373,7 +373,7 @@ Acceptance criteria:
 
 ## `REBIRTH-023B` Move Public Web Toward Static Blob Deployment
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P1`
 - Target: web/deployment
 
@@ -539,6 +539,12 @@ Acceptance criteria:
 - Android Agent UI can call the MGPT Agent endpoint with app-local/credential-store configuration.
 - Agent client requests include local script, selected board/module, runtime error/log, and relevant UI/device context.
 - Agent clients do not require EMWaver accounts, cloud chat storage, Pro entitlements, or hosted conversations.
+
+Progress:
+
+- Gateway Agent panel and CLI Agent command use the API-key endpoint contract.
+- Apple shared Agent UI and the macOS host app now call a configured Agent endpoint with a locally stored API key instead of EMWaver account/conversation routes.
+- Remaining app work: Windows and Android endpoint-client parity, plus richer local script/device/runtime context payloads from native surfaces.
 
 ## `REBIRTH-031B` Remove Repo-Shipped Production Agent IP
 

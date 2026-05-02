@@ -82,12 +82,11 @@ Representative files:
 - `EmwCodeEditor.swift`
 - `SignalViewerView.swift`
 - `AgentChat*` files
-- `AgentCloudAPI.swift`
 
 Agent configuration direction:
-- the Apple shared Agent UI now uses one managed tool-calling agent mode,
-- app clients should migrate from EMWaver backend `/v1/agent/*` routes to the future Continual MI/MGPT Agent endpoint,
-- the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with a user-provided Agent API key stored locally/keychain-backed,
+- the Apple shared Agent UI uses a host-provided Agent endpoint plus user-provided API key,
+- app clients should not call EMWaver account/conversation routes for Agent chat,
+- the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with an API key stored locally/keychain-backed by the host app,
 - the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
 
 Also bundles package resources, including firmware payload under:

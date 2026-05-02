@@ -35,17 +35,15 @@ Entry points:
 
 `macos/EMWaver/EMWaver/Auth/`:
 - authentication manager + models,
-- Firebase auth service,
-- Google OAuth provider,
 - keychain store,
-- API key entry and account-link UI.
+- Agent API-key entry UI.
 
 Auth UX rule:
-- API key entry must remain available even when no EMWaver device is connected, so new users can link the app before flashing a supported board.
+- Agent API-key entry must remain available even when no EMWaver device is connected, so users can configure optional Agent replies independently of local hardware control.
 - supported boards should enter local script/update workflows without a manual claim button or hosted registration step.
-- native clients now use an EMWaver API key created on the web account page and pasted into the app.
-- the app stores the API key in Keychain and uses it as the bearer credential for `/v1/*` routes.
-- app startup should wait for the initial keychain-backed credential restore to finish before the first entitlement-gated refreshes, so a persisted keyed account does not briefly downgrade to local-only UI after relaunch.
+- native clients use a user-provided Agent API key and endpoint.
+- the app stores the API key in Keychain and uses it as the bearer credential for the configured Agent endpoint.
+- local scripts, flashing, and device control must not depend on this key.
 
 ## 2.2 Device + transport + host management
 
@@ -92,7 +90,7 @@ Account/cloud direction:
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
-- the macOS Agent interface/runtime should stay, but migrate from EMWaver account/conversation routes to the future Continual MI/MGPT Agent endpoint,
+- the macOS Agent interface/runtime calls the endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
 - provider selection, private prompts, tool policy, and metering belong server-side on MGPT,
 - the macOS client should use a user-provided Agent API key stored locally/keychain-backed, and local scripts/hardware must work without it.
 
@@ -114,7 +112,7 @@ Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
 - legacy backend-tethered account registration using `/provisioning/mint` is migration debt and should not be required for setup/update,
-- account key entry plus web-managed key creation/replacement on the EMWaver frontend for optional hosted features,
+- local Agent key entry for optional Agent replies,
 - avoid requiring supported-board hardware UID reads in Run Mode before local use,
 - unified in-app device list with local cache fallback for Offline Mode,
 - bundled or operator-selected custom firmware images,

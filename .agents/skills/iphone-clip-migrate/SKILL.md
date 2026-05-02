@@ -1,6 +1,6 @@
 ---
 name: iphone-clip-migrate
-description: Use when Codex needs to manage the Samsung T7 post-export ingest flow: find video clips in `/Volumes/T7/iPhone`, list likely recent candidates, and move or copy a selected clip into a project folder such as `/Volumes/T7/EMWaver_Final_Video/clips`.
+description: "Use when Codex needs to manage the Samsung T7 post-export ingest flow: find video clips in `/Volumes/T7/iPhone`, list likely recent candidates, and move or copy a selected clip into a project folder such as `/Volumes/T7/EMWaver_Final_Video/clips`."
 ---
 
 # iPhone Clip Migrate

@@ -11,3 +11,12 @@ enum BackendUrl {
         resolve()?.absoluteString ?? ""
     }
 }
+
+enum AgentEndpointUrl {
+    static func resolve() -> URL? {
+        let env = ProcessInfo.processInfo.environment
+        let active = (env["EMWAVER_AGENT_ENDPOINT"] ?? env["CONTINUAL_AGENT_ENDPOINT"] ?? "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return URL(string: active)
+    }
+}

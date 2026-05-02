@@ -35,13 +35,17 @@ final class AuthenticationManager: ObservableObject {
     }
 
     var userLabel: String {
-        if let name = account?.displayName, !name.isEmpty {
-            return name
+        hasSavedKey ? "Agent key" : "No key"
+    }
+
+    var agentEndpointConfig: (baseURL: URL, accessToken: String)? {
+        guard hasSavedKey, !accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
         }
-        if let email = account?.email, !email.isEmpty {
-            return email
+        guard let endpoint = AgentEndpointUrl.resolve() else {
+            return nil
         }
-        return hasSavedKey ? "EMWaver key" : "No key"
+        return (baseURL: endpoint, accessToken: accessToken)
     }
 
     func saveApiKey(_ apiKey: String) async {
@@ -53,15 +57,15 @@ final class AuthenticationManager: ObservableObject {
         do {
             let trimmed = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty {
-                throw AuthError.failed("Enter an EMWaver API key.")
+                throw AuthError.failed("Enter an Agent API key.")
             }
 
-            let validated = try await validateApiKey(trimmed)
             try KeychainStore.setString(trimmed, account: apiKeyAccount)
-            try persistProfile(validated)
+            let profile = AuthAccount(uid: "agent-key", email: nil, displayName: "Agent key")
+            try persistProfile(profile)
             accessToken = trimmed
             hasSavedKey = true
-            account = validated
+            account = profile
             isSignInSheetPresented = false
         } catch {
             lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -73,14 +77,7 @@ final class AuthenticationManager: ObservableObject {
     }
 
     func openAccountManagement() {
-        guard var base = FrontendUrl.resolve() else {
-            lastError = "Missing EMWaver frontend URL"
-            return
-        }
-        base.appendPathComponent("account")
-#if canImport(AppKit)
-        NSWorkspace.shared.open(base)
-#endif
+        lastError = "Agent API-key setup is local to this app."
     }
 
     func waitForInitialRestore() async {
@@ -89,48 +86,8 @@ final class AuthenticationManager: ObservableObject {
         }
     }
 
-    func handleUnauthorizedResponse(message: String = "Saved EMWaver key is no longer valid. Enter a new key to keep using account features.") {
+    func handleUnauthorizedResponse(message: String = "Saved Agent key is no longer valid. Enter a new key to keep using Agent replies.") {
         clearStoredCredential(lastError: message)
-    }
-
-    private func validateApiKey(_ apiKey: String) async throws -> AuthAccount {
-        guard let base = BackendUrl.resolve() else {
-            throw AuthError.failed("Missing EMWaver backend URL")
-        }
-
-        var url = base
-        url.appendPathComponent("v1")
-        url.appendPathComponent("auth")
-        url.appendPathComponent("key")
-
-        var req = URLRequest(url: url)
-        req.httpMethod = "GET"
-        req.setValue("application/json", forHTTPHeaderField: "Accept")
-        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-
-        do {
-            let (data, res) = try await URLSession.shared.data(for: req)
-            let http = (res as? HTTPURLResponse)?.statusCode ?? -1
-            if http < 200 || http >= 300 {
-                let msg = String(data: data, encoding: .utf8) ?? ""
-                throw AuthError.failed(msg.isEmpty ? "API key validation failed (HTTP \(http))" : msg)
-            }
-
-            let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-            let user = json?["user"] as? [String: Any]
-            let uid = (user?["uid"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-            if uid.isEmpty {
-                throw AuthError.failed("API key validation response was missing account identity.")
-            }
-
-            return AuthAccount(
-                uid: uid,
-                email: user?["email"] as? String,
-                displayName: user?["name"] as? String
-            )
-        } catch let urlError as URLError {
-            throw AuthError.failed("Could not reach \(url.absoluteString): \(urlError.localizedDescription)")
-        }
     }
 
     private func persistProfile(_ profile: AuthAccount) throws {

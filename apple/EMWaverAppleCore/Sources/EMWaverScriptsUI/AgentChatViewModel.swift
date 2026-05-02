@@ -22,7 +22,8 @@ public final class AgentChatViewModel: ObservableObject {
 
     private var assistantPlaceholderId: UUID?
 
-    // Backend context for cloud-backed conversations and managed Agent execution.
+    // Endpoint context for API-key Agent execution. The tuple names are kept
+    // for source compatibility with existing app callers.
     private let cloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
     public init(cloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
@@ -30,9 +31,6 @@ public final class AgentChatViewModel: ObservableObject {
         self.messages = []
         self.conversations = []
         self.selectedConversationId = nil
-        if cloudProvider != nil {
-            Task { await self.refreshCloudConversations() }
-        }
     }
 
     public var isAgentConfigured: Bool {
@@ -55,16 +53,12 @@ public final class AgentChatViewModel: ObservableObject {
             lastError = "Agent API-key backend is not configured yet."
             return
         }
-        Task { await self.createCloudConversation() }
+        startLocalConversation()
     }
 
     public func selectConversation(_ id: UUID) {
         selectedConversationId = id
-        guard cloudProvider != nil else {
-            messages = []
-            return
-        }
-        Task { await self.loadCloudMessages(conversationId: id) }
+        messages = []
     }
 
     public func setModelForSelectedConversation(_ modelId: String) {
@@ -77,7 +71,11 @@ public final class AgentChatViewModel: ObservableObject {
             lastError = "Agent API-key backend is not configured yet."
             return
         }
-        Task { await self.deleteCloudConversation(id) }
+        conversations.removeAll { $0.id == id }
+        if selectedConversationId == id {
+            selectedConversationId = conversations.first?.id
+            messages = []
+        }
     }
 
     public func send() {
@@ -103,9 +101,10 @@ public final class AgentChatViewModel: ObservableObject {
 
         Task {
             do {
-                // Ensure cloud conversation exists.
                 if self.selectedConversationId == nil {
-                    await self.createCloudConversation()
+                    await MainActor.run {
+                        self.startLocalConversation()
+                    }
                 }
 
                 // Placeholder assistant message while the managed Agent runs.
@@ -123,7 +122,7 @@ public final class AgentChatViewModel: ObservableObject {
                     )
                     self.isSending = false
                     self.assistantPlaceholderId = nil
-                    Task { await self.refreshCloudConversations() }
+                    self.touchSelectedConversation()
                 }
             } catch {
                 await MainActor.run {
@@ -138,25 +137,32 @@ public final class AgentChatViewModel: ObservableObject {
         }
     }
 
-    // MARK: - Backend-managed Agent
+    // MARK: - API-key Agent endpoint
 
     private func runCloudManagedToolLoop(userPrompt: String, placeholderId: UUID) async throws -> String {
         guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
             throw AgentBackendError.serverError("Agent API-key backend is not configured yet.")
         }
-        guard let conversationId = selectedConversationId else {
-            throw AgentBackendError.serverError("Create a conversation before sending a message.")
-        }
 
-        let api = AgentCloudAPI()
-        let response = try await api.chat(
-            baseURL: ctx.baseURL,
-            token: ctx.accessToken,
-            conversationId: conversationId.uuidString.lowercased(),
-            message: userPrompt
+        let response = try await AgentEndpointAPI().send(
+            endpoint: ctx.baseURL,
+            apiKey: ctx.accessToken,
+            request: AgentEndpointRequest(
+                mode: "debug",
+                prompt: userPrompt,
+                script: nil,
+                runtime: nil,
+                hardware: nil
+            )
         )
 
-        let reply = response.message.content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pieces = [
+            response.message,
+            response.code.map { "```emw\n\($0)\n```" },
+            response.patch.map { "Patch:\n\($0)" },
+            response.warnings?.isEmpty == false ? "Warnings:\n" + (response.warnings ?? []).map { "- \($0)" }.joined(separator: "\n") : nil,
+        ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        let reply = pieces.joined(separator: "\n\n")
         await MainActor.run {
             self.replaceMessage(
                 id: placeholderId,
@@ -219,6 +225,24 @@ public final class AgentChatViewModel: ObservableObject {
 
     private var defaultConversationTitle: String {
         "Chat"
+    }
+
+    private func startLocalConversation() {
+        let id = UUID()
+        let info = ConversationInfo(id: id, title: defaultConversationTitle, updatedAt: Date())
+        conversations = [info] + conversations
+        selectedConversationId = id
+        messages = []
+    }
+
+    private func touchSelectedConversation() {
+        guard let selectedConversationId else { return }
+        let now = Date()
+        conversations = conversations.map { info in
+            info.id == selectedConversationId
+                ? ConversationInfo(id: info.id, title: info.title, updatedAt: now)
+                : info
+        }
     }
 }
 
@@ -444,136 +468,4 @@ private enum PatchApplier {
         out.replaceSubrange(idx0..<(idx0 + consumed), with: newBlock)
         return out
     }
-}
-
-
-extension AgentChatViewModel {
-    func refreshCloudConversations() async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            return
-        }
-
-        do {
-            let api = AgentCloudAPI()
-            let rows = try await api.listConversations(baseURL: ctx.baseURL, token: ctx.accessToken)
-
-            let infos: [ConversationInfo] = rows.compactMap { r in
-                guard let id = UUID(uuidString: r.id) else { return nil }
-                return ConversationInfo(
-                    id: id,
-                    title: r.title ?? defaultConversationTitle,
-                    updatedAt: Date(timeIntervalSince1970: TimeInterval(r.updated_at_ms) / 1000.0)
-                )
-            }
-
-            self.conversations = infos
-
-            // Auto-select first conversation if none selected.
-            if self.selectedConversationId == nil {
-                if let first = infos.first?.id {
-                    self.selectConversation(first)
-                } else {
-                    // Create an initial conversation.
-                    await self.createCloudConversation()
-                }
-            }
-
-        } catch {
-            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    func createCloudConversation() async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Agent API-key backend is not configured yet."
-            return
-        }
-
-        do {
-            let api = AgentCloudAPI()
-            let c = try await api.createConversation(
-                baseURL: ctx.baseURL,
-                token: ctx.accessToken,
-                title: defaultConversationTitle
-            )
-            guard let id = UUID(uuidString: c.id) else {
-                throw NSError(domain: "AgentCloud", code: 1, userInfo: [NSLocalizedDescriptionKey: "Invalid conversation id"]) 
-            }
-
-            await refreshCloudConversations()
-            selectConversation(id)
-        } catch {
-            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    func loadCloudMessages(conversationId: UUID) async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Agent API-key backend is not configured yet."
-            return
-        }
-
-        let cid = conversationId.uuidString.lowercased()
-
-        do {
-            let api = AgentCloudAPI()
-            let rows = try await api.listMessages(baseURL: ctx.baseURL, token: ctx.accessToken, conversationId: cid)
-
-            self.messages = rows.map { r in
-                let mid = UUID(uuidString: r.id) ?? UUID()
-                let role: AgentChatRole
-                switch r.role {
-                case "assistant": role = .assistant
-                case "system": role = .system
-                default: role = .user
-                }
-                return AgentChatMessage(id: mid, role: role, text: r.content)
-            }
-
-        } catch {
-            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    func deleteCloudConversation(_ id: UUID) async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            self.lastError = "Agent API-key backend is not configured yet."
-            return
-        }
-
-        do {
-            let api = AgentCloudAPI()
-            try await api.deleteConversation(baseURL: ctx.baseURL, token: ctx.accessToken, conversationId: id.uuidString.lowercased())
-
-            if self.selectedConversationId == id {
-                self.selectedConversationId = nil
-                self.messages = []
-            }
-
-            await refreshCloudConversations()
-        } catch {
-            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
-    func appendCloudMessage(conversationId: UUID, role: String, content: String) async {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            return
-        }
-
-        do {
-            let api = AgentCloudAPI()
-            _ = try await api.appendMessage(
-                baseURL: ctx.baseURL,
-                token: ctx.accessToken,
-                conversationId: conversationId.uuidString.lowercased(),
-                role: role,
-                content: content
-            )
-        } catch {
-            // Best-effort; keep UI responsive even if persistence fails.
-            self.lastError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-        }
-    }
-
 }

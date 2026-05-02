@@ -113,7 +113,9 @@ struct ContentView: View {
                     previewManager: previewManager,
                     device: scriptDeviceBridge,
                     syncProvider: nil,
-                    agentCloudProvider: nil,
+                    agentCloudProvider: {
+                        auth.agentEndpointConfig
+                    },
                     hostStatusSink: { running, name in
                         // Treat "preview showing" as "script running" on macOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
