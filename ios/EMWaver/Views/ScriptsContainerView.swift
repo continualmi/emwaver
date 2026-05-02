@@ -38,6 +38,9 @@ struct ScriptsContainerView: View {
 
                     return nil
                 },
+                    agentCloudProvider: {
+                        auth.agentEndpointConfig
+                    },
                     hostStatusSink: { running, name in
                         // Treat preview showing as script running on iOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
@@ -145,7 +148,17 @@ struct ScriptsContainerView: View {
                         }
 
                         Menu {
-                            if auth.isSignedIn {
+                            if auth.hasSavedKey {
+                                Text(auth.userLabel)
+                                    .foregroundStyle(.secondary)
+                                Divider()
+                                Button("Replace Agent Key") {
+                                    auth.isSignInSheetPresented = true
+                                }
+                                Button("Clear Agent Key", role: .destructive) {
+                                    auth.clearAgentApiKey()
+                                }
+                            } else if auth.isSignedIn {
                                 if let email = auth.session?.email, !email.isEmpty {
                                     Text(email)
                                         .foregroundStyle(.secondary)
@@ -159,7 +172,7 @@ struct ScriptsContainerView: View {
                                     Task { await auth.signOut() }
                                 }
                             } else {
-                                Button("Activation Key") {
+                                Button("Agent Key") {
                                     auth.isSignInSheetPresented = true
                                 }
                                 Button("Cloud Settings") {

@@ -524,7 +524,7 @@ Acceptance criteria:
 
 ## `REBIRTH-031A` Migrate App Agent Runtimes To MGPT API-Key Client Contract
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P0`
 - Target: Agent/API/native apps/gateway
 
@@ -543,7 +543,7 @@ Acceptance criteria:
 Progress:
 
 - Gateway Agent panel and CLI Agent command use the API-key endpoint contract.
-- Apple shared Agent UI and the macOS host app now call a configured Agent endpoint with a locally stored API key instead of EMWaver account/conversation routes.
+- Apple shared Agent UI, macOS, and iOS now call a configured Agent endpoint with a locally stored API key instead of EMWaver account/conversation routes or web-account key setup.
 - Remaining app work: Windows and Android endpoint-client parity, plus richer local script/device/runtime context payloads from native surfaces.
 
 ## `REBIRTH-031B` Remove Repo-Shipped Production Agent IP

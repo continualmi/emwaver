@@ -5,48 +5,56 @@ import UIKit
 
 struct SignInSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @EnvironmentObject private var auth: AuthenticationManager
+    @State private var apiKey = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Activation Key")
+            Text("Agent Key")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("EMWaver activation keys are managed on the web. Use the web account page to create or replace your key, then return here once the native key-based sign-in flow is ready.")
+            Text("Store an optional Agent API key on this device. Local scripts and hardware control work without it.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
+            SecureField("Agent API key", text: $apiKey)
+                .textContentType(.password)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.never)
+
+            if let lastError = auth.lastError, !lastError.isEmpty {
+                Text(lastError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
             HStack(spacing: 10) {
-                Button("Not Now") {
+                Button("Cancel") {
                     dismiss()
                 }
 
                 Spacer()
 
                 Button {
-                    openWebAccount()
-                    dismiss()
+                    Task { await auth.saveAgentApiKey(apiKey) }
                 } label: {
-                    Text("Open Web Account")
+                    Text("Save Key")
                 }
                 .buttonStyle(.borderedProminent)
+                .disabled(apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(20)
-    }
-
-    private func openWebAccount() {
-        guard let base = CloudConfig.backendBaseURL() else {
-            return
+        .onAppear {
+            apiKey = ""
+            auth.lastError = nil
         }
-        var url = base
-        url.appendPathComponent("cloud")
-#if canImport(UIKit)
-        UIApplication.shared.open(url)
-#endif
     }
 }
 
 #Preview {
     SignInSheet()
+        .environmentObject(AuthenticationManager())
 }

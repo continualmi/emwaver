@@ -2,7 +2,7 @@
 
 Native iOS EMWaver application (Swift/SwiftUI + Xcode project).
 
-This app provides mobile UX for EMWaver device control, scripts, optional hosted workflows, cloud sync/auth migration surfaces, and firmware asset integration.
+This app provides mobile UX for EMWaver device control, scripts, optional Agent assistance, optional hosted migration surfaces, and firmware asset integration.
 
 ---
 
@@ -32,14 +32,13 @@ Key app entry:
 - `SignInSheet.swift`
 
 Responsibilities:
-- account-linked cloud state for host/sync access,
-- the current web-managed API-key guidance surface,
-- secure local persistence for the remaining auth/session data still present in the app.
+- local Agent API-key persistence for optional Agent replies,
+- secure local persistence for the remaining hosted/session data still present in the app.
 
 Current guidance:
 - the old web handoff-code sheet has been removed from iOS,
-- EMWaver API keys are managed on the web for now,
-- iOS currently opens the web account page instead of completing native API-key entry or validation in-app.
+- the visible key sheet stores a user-provided Agent API key locally,
+- local scripts and hardware control must not depend on this key.
 
 ## 2.2 Device and transport managers
 
@@ -85,10 +84,7 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The iOS app now uses web-managed API-key guidance rather than the old browser-code handoff flow:
-- the sign-in sheet points users to the EMWaver web account page,
-- EMWaver API keys are expected to be created or replaced on the web,
-- the native iOS API-key sign-in flow is still a follow-up, not this app’s current responsibility.
+The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain. Agent calls require `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`; local device/script use does not.
 
 Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
 
