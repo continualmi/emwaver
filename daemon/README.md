@@ -108,6 +108,8 @@ EMWAVER_AGENT_API_KEY=... EMWAVER_AGENT_ENDPOINT=... emwaver agent "write a GPIO
 emwaver agent --script scripts/blink.emw --mode debug "explain this error"
 ```
 
+`emwaver tui` remains daemon/status-oriented for the rebirth. Script-aware terminal UI is intentionally deferred until local CLI/gateway hardware execution is validated across platforms; the browser gateway is the script-control UI surface for now.
+
 ## 3.2 `emwaver-host` daemon
 
 Entry (`emwaver-host/src/main.rs`) does:

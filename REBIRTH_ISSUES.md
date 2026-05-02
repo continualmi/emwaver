@@ -167,7 +167,7 @@ Acceptance criteria:
 
 ## `REBIRTH-011` Extract Reusable Device Transport Layer
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: daemon/device
 
@@ -271,7 +271,7 @@ Acceptance criteria:
 
 ## `REBIRTH-018` Decide Future Of `emwaver tui`
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P1`
 - Target: CLI/TUI
 
