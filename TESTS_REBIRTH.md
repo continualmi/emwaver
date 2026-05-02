@@ -23,6 +23,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Rust CLI build | `pass` | `cd daemon && cargo build -p emwaver-host -p emwaver` completed successfully. |
 | Runtime/device crate extraction | `pass` | `emwaver-runtime` and `emwaver-device` are workspace crates consumed by `emwaver-host`; `cargo build -p emwaver-host -p emwaver` passed. |
 | Runtime command bridge | `pass` | `emwaver-runtime` defines `CommandBridge`, no longer depends on `emwaver-device`, and `cargo test -p emwaver-runtime` passed. |
+| Selected device API | `build pass` | `emwaver-device::Device::connect_by_id()` and `emwaver daemon start --device-id <id>` compile; hardware behavior still needs a connected board. |
 | `emwaver doctor` | `pass` | `cargo run -q -p emwaver -- doctor` passed: gateway package, Node/npm, Cargo/Rust available; no MIDI ports found. |
 | `emwaver devices` shared layer | `pass` | CLI device listing uses `emwaver_device::list_devices()` and is covered by the Rust CLI build plus `doctor` device visibility check. |
 | `emwaver run` | `pass` | `cargo run -q -p emwaver -- run <temp>.emw --port 3938 --timeout-ms 12000` returned `started ...` through local gateway plus built macOS app. |

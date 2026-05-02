@@ -36,7 +36,6 @@ cargo build -p emwaver-host -p emwaver
 
 Remaining extraction work:
 
-- expose selected-device connection APIs beyond auto-connect,
 - decide whether `emwaver run` should stay a gateway controller command or also get a direct headless runtime mode.
 
 ## Previous Coupling
@@ -136,8 +135,8 @@ pub fn list_devices() -> anyhow::Result<Vec<DeviceInfo>>;
 pub struct Device { ... }
 
 impl Device {
-    pub fn connect_auto() -> anyhow::Result<Arc<Self>>;
-    pub fn connect_by_id(id: &str) -> anyhow::Result<Arc<Self>>;
+    pub fn connect_auto(self: &Arc<Self>) -> anyhow::Result<()>;
+    pub fn connect_by_id(self: &Arc<Self>, id: &str) -> anyhow::Result<()>;
 }
 ```
 
@@ -224,12 +223,11 @@ Hardware tests remain manual until device test rigs exist.
 9. Replace concrete `Device` dependency with `CommandBridge`.
 10. Keep gateway production work as a browser-to-native-app bridge.
 
-Items 1, 2, 3, 4, 5, 6, 7, 8, and 9 are implemented and build-verified.
+Items 1, 2, 3, 4, 5, 6, 7, 8, and 9 are implemented and build-verified. Selected-device daemon startup is implemented with `emwaver daemon start --device-id <id>` and `EMWAVER_DEVICE_ID`.
 
 ## Remaining Verification
 
 The initial runtime/device extraction is build-verified. Keep the broader runtime work open until:
 
-- selected-device APIs exist beyond `connect_auto`,
 - daemon behavior is verified after those APIs land,
 - `emwaver run --device <id>` behavior is decided and tested if direct runtime mode is added.

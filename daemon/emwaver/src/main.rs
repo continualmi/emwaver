@@ -100,6 +100,10 @@ enum DaemonCmd {
         #[arg(long)]
         bootstrap_path: Option<String>,
 
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device_id: Option<String>,
+
         /// Replace any existing pidfile by stopping the previous daemon.
         #[arg(long)]
         force: bool,
@@ -160,6 +164,7 @@ fn daemon_start(
     id_token: Option<String>,
     host_session_id: Option<String>,
     bootstrap_path: Option<String>,
+    device_id: Option<String>,
     force: bool,
 ) -> Result<()> {
     if let Some(pid) = daemon_running()? {
@@ -201,6 +206,9 @@ fn daemon_start(
     }
     if let Some(v) = bootstrap_path {
         cmd.env("EMWAVER_BOOTSTRAP_PATH", v);
+    }
+    if let Some(v) = device_id {
+        cmd.env("EMWAVER_DEVICE_ID", v);
     }
 
     // We are a terminal tool; good defaults.
@@ -566,8 +574,9 @@ fn main() -> Result<()> {
                 id_token,
                 host_session_id,
                 bootstrap_path,
+                device_id,
                 force,
-            } => daemon_start(backend_url, id_token, host_session_id, bootstrap_path, force),
+            } => daemon_start(backend_url, id_token, host_session_id, bootstrap_path, device_id, force),
             DaemonCmd::Stop => daemon_stop(),
             DaemonCmd::Status => {
                 match daemon_running()? {
@@ -667,7 +676,7 @@ fn run_tui() -> Result<()> {
                         }
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
-                            let _ = daemon_start(None, None, None, None, false);
+                            let _ = daemon_start(None, None, None, None, None, false);
                         }
                         KeyCode::Char('t') => {
                             let _ = daemon_stop();

@@ -20,15 +20,49 @@ pub fn list_devices() -> Result<Vec<DeviceInfo>> {
 
     for (i, p) in ports.iter().enumerate() {
         let name = midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"));
-        let lower = name.to_lowercase();
+        let likely_emwaver = is_likely_emwaver_name(&name);
         out.push(DeviceInfo {
             id: i.to_string(),
             name,
-            likely_emwaver: lower.contains("emw") || lower.contains("emwaver"),
+            likely_emwaver,
         });
     }
 
     Ok(out)
+}
+
+fn is_likely_emwaver_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.contains("emw") || lower.contains("emwaver")
+}
+
+fn pick_likely_port(names: &[(usize, String)]) -> usize {
+    for (i, name) in names {
+        if is_likely_emwaver_name(name) {
+            return *i;
+        }
+    }
+    names.first().map(|x| x.0).unwrap_or(0)
+}
+
+fn pick_output_for_input(in_idx: usize, input_name: &str, out_names: &[(usize, String)]) -> usize {
+    let input_lower = input_name.to_lowercase();
+
+    for (i, output_name) in out_names {
+        let output_lower = output_name.to_lowercase();
+        if output_lower == input_lower
+            || output_lower.contains(&input_lower)
+            || input_lower.contains(&output_lower)
+        {
+            return *i;
+        }
+    }
+
+    if out_names.iter().any(|(i, _)| *i == in_idx) {
+        return in_idx;
+    }
+
+    pick_likely_port(out_names)
 }
 
 struct DeviceState {
@@ -92,16 +126,49 @@ impl Device {
             anyhow::bail!("no MIDI ports found");
         }
 
-        // Prefer ports containing "EMW".
-        let pick_port = |names: Vec<(usize, String)>| -> usize {
-            for (i, n) in &names {
-                let l = n.to_lowercase();
-                if l.contains("emw") || l.contains("emwaver") {
-                    return *i;
-                }
-            }
-            names.first().map(|x| x.0).unwrap_or(0)
-        };
+        let in_names: Vec<(usize, String)> = in_ports
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"))))
+            .collect();
+        let out_names: Vec<(usize, String)> = out_ports
+            .iter()
+            .enumerate()
+            .map(|(i, p)| (i, midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}"))))
+            .collect();
+
+        let in_idx = pick_likely_port(&in_names);
+        let out_idx = pick_likely_port(&out_names);
+
+        self.connect_midi(midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx)
+    }
+
+    /// Connect to a MIDI input port listed by `list_devices()`.
+    ///
+    /// The selected id names the input port. Output selection prefers an output
+    /// port with a matching name, then the same index, then the usual EMWaver
+    /// auto-detect fallback.
+    pub fn connect_by_id(self: &Arc<Self>, id: &str) -> Result<()> {
+        let in_idx: usize = id
+            .trim()
+            .parse()
+            .with_context(|| format!("invalid MIDI input port id: {id}"))?;
+
+        let midi_in = MidiInput::new("emwaver-host-in")?;
+        let mut midi_in = midi_in;
+        midi_in.ignore(Ignore::None);
+
+        let midi_out = MidiOutput::new("emwaver-host-out")?;
+
+        let in_ports = midi_in.ports();
+        let out_ports = midi_out.ports();
+
+        if in_ports.is_empty() || out_ports.is_empty() {
+            anyhow::bail!("no MIDI ports found");
+        }
+        if in_idx >= in_ports.len() {
+            anyhow::bail!("MIDI input port id {in_idx} is out of range");
+        }
 
         let in_names: Vec<(usize, String)> = in_ports
             .iter()
@@ -114,9 +181,22 @@ impl Device {
             .map(|(i, p)| (i, midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}"))))
             .collect();
 
-        let in_idx = pick_port(in_names.clone());
-        let out_idx = pick_port(out_names.clone());
+        let out_idx = pick_output_for_input(in_idx, &in_names[in_idx].1, &out_names);
 
+        self.connect_midi(midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx)
+    }
+
+    fn connect_midi(
+        self: &Arc<Self>,
+        midi_in: MidiInput,
+        midi_out: MidiOutput,
+        in_ports: Vec<midir::MidiInputPort>,
+        out_ports: Vec<midir::MidiOutputPort>,
+        in_names: Vec<(usize, String)>,
+        out_names: Vec<(usize, String)>,
+        in_idx: usize,
+        out_idx: usize,
+    ) -> Result<()> {
         info!("midi in ports: {:?}", in_names);
         info!("midi out ports: {:?}", out_names);
         info!("connecting midi in #{in_idx}, out #{out_idx}");

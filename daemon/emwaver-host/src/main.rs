@@ -120,9 +120,13 @@ async fn main() -> Result<()> {
         .with_context(|| format!("failed to read bootstrap at {bootstrap_path}"))?;
 
     let device = Device::new();
-    // Auto-connect to the EMWaver USB-MIDI port (best-effort).
-    // If no ports are present yet, this will error and the process will exit.
-    device.connect_auto()?;
+    // Auto-connect to the EMWaver USB-MIDI port unless a specific input port id
+    // from `emwaver devices` is provided.
+    if let Some(device_id) = env_trim("EMWAVER_DEVICE_ID") {
+        device.connect_by_id(&device_id)?;
+    } else {
+        device.connect_auto()?;
+    }
 
     let bridge = Arc::new(DeviceCommandBridge { device });
     let engine = Engine::new(&bootstrap, bridge)?;

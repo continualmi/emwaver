@@ -93,7 +93,7 @@ emwaver doctor
 Entry (`emwaver-host/src/main.rs`) does:
 1. load config from env (`EMWAVER_BACKEND_URL`, token, host session id),
 2. read bootstrap script,
-3. auto-connect local MIDI device (`device.connect_auto()`),
+3. connect local MIDI device (`EMWAVER_DEVICE_ID` selects an `emwaver devices` input id; otherwise `device.connect_auto()`),
 4. initialize script engine,
 5. heartbeat host presence (`/v1/hosts/heartbeat`),
 6. connect WS (`/v1/ws`) as `role=host`,
@@ -138,6 +138,7 @@ Snapshots are sent when tree changes (revision increments).
 Daemon-side transport is local USB.
 
 - Device detection/listing uses MIDI port enumeration.
+- `emwaver daemon start --device-id <id>` pins the host to a listed MIDI input id.
 - Device command path routes through local `Device` abstraction and packet send/response semantics.
 - Remote side never directly owns USB — only forwards commands/events through daemon session.
 

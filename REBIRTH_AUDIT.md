@@ -32,8 +32,8 @@ The rebirth is complete only when:
 | Gateway Agent panel | `gateway/src/server.ts` Agent panel and `/v1/agent` proxy | done |
 | Agent missing-key behavior | `gateway/scripts/verify.mjs` checks `agent_not_configured` | done |
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
-| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse; selected-device API still pending |
-| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device` and protocol helpers; `emwaver-host` consumes it | initial crate extraction done; richer device API still pending |
+| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse |
+| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers; `emwaver-host` consumes it | API/build done; hardware validation pending |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | build verified; local gateway/macOS app integration passed |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
@@ -91,7 +91,7 @@ It does not verify:
 - real hardware access,
 - native app hardware-backed runtime integration,
 - Windows app build,
-- selected-device APIs.
+- selected-device hardware behavior.
 
 ## Blockers
 
@@ -112,7 +112,6 @@ cargo build -p emwaver-host -p emwaver
 
 Remaining Rust-side work:
 
-- expose selected-device connection APIs beyond auto-connect,
 - daemon refactor.
 
 ## Hardware Imports
@@ -133,7 +132,6 @@ Completed imports:
 
 ## Remaining P0 Work
 
-- Finish selected-device connection API beyond auto-connect.
 - Verify Windows app local gateway WebSocket on a Windows 11 workstation.
 - Validate macOS local gateway script execution on real hardware.
 - Validate local hardware script execution on at least one supported board.
