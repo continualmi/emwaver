@@ -420,7 +420,7 @@ Acceptance criteria:
 
 ## `REBIRTH-025A` Remove Hardware UID Minting/Claiming Model
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: runtime/native apps/web
 
@@ -481,7 +481,7 @@ Acceptance criteria:
 
 ## `REBIRTH-029` Keep Agent Instructions Server-Side
 
-- Status: `needs audit`
+- Status: `done`
 - Priority: `P0`
 - Target: Agent/security
 
@@ -542,7 +542,7 @@ Acceptance criteria:
 
 ## `REBIRTH-031B` Remove Repo-Shipped Production Agent IP
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: Agent/security
 

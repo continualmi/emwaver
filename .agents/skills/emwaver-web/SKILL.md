@@ -1,6 +1,6 @@
 ---
 name: emwaver-web
-description: Use when working on the EMWaver web app in /web, including the public site, account and subscription flows, same-origin /v1 APIs, agent routes, WebSocket relay, JSON-backed server stores, or shared `continual-core` integration.
+description: Use when working on the EMWaver web app in /web, including the public site, static export migration, docs/downloads/board pages, agent-route migration, legacy WebSocket relay, JSON-backed stores, or local-first web/gateway boundary.
 ---
 
 # EMWaver Web
@@ -11,27 +11,27 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/web`](/Users/l
 
 1. [`/Users/luisml/continualmi/emwaver/web/README.md`](/Users/luisml/continualmi/emwaver/web/README.md)
 2. [`/Users/luisml/continualmi/emwaver/AGENTS.md`](/Users/luisml/continualmi/emwaver/AGENTS.md)
-3. [`/Users/luisml/continualmi/PLANNING.md`](/Users/luisml/continualmi/PLANNING.md) if the task touches auth, billing, tokens, or shared platform migration
+3. [`/Users/luisml/continualmi/PLANNING.md`](/Users/luisml/continualmi/PLANNING.md) if the task touches static export, auth/cloud removal, Agent API boundaries, or shared platform migration
 
 ## Scope
 
-- This folder owns the public EMWaver web surface plus the Node-backed API and WS relay.
-- It is the canonical home for landing pages, build/install/account flows, `/v1/*` service routes, agent endpoints, and Stripe/account work.
-- Hardware operations are orchestrated through apps, daemon hosts, autonomous devices, and backend APIs, not directly from the browser.
-- Current deployment shape is single Next.js + Node service with a custom `server.ts` entrypoint for WebSocket handling.
+- This folder owns the public EMWaver web surface and should trend toward static pages/docs/downloads/board references.
+- Existing account, billing, cloud dashboard, backend API, WebSocket relay, file sync, host session, and device provisioning code is migration debt unless isolated for the optional Agent API transition.
+- Local hardware control and heavy `.emw` script rendering/control should move to `gateway/`, not remain a hosted web responsibility.
+- Current deployment shape is still a single Next.js + Node service with a custom `server.ts` entrypoint, but the target is Society-style static hosting for public pages.
 
 ## Where things live
 
 - [`/Users/luisml/continualmi/emwaver/web/src/app`](/Users/luisml/continualmi/emwaver/web/src/app): Next.js App Router pages and route handlers
 - [`/Users/luisml/continualmi/emwaver/web/src/components`](/Users/luisml/continualmi/emwaver/web/src/components): site UI and EMW UI renderers
 - [`/Users/luisml/continualmi/emwaver/web/src/lib`](/Users/luisml/continualmi/emwaver/web/src/lib): frontend helpers, API wrappers, sessions, catalog, remote attach helpers
-- [`/Users/luisml/continualmi/emwaver/web/src/server`](/Users/luisml/continualmi/emwaver/web/src/server): auth, platform client, server env, agent integration, Stripe, WS state
-- [`/Users/luisml/continualmi/emwaver/web/src/server/store`](/Users/luisml/continualmi/emwaver/web/src/server/store): JSON/local-disk backed state for entitlements, files, orders, host sessions, devices, agent conversations
+- [`/Users/luisml/continualmi/emwaver/web/src/server`](/Users/luisml/continualmi/emwaver/web/src/server): legacy auth/cloud/platform code plus transitional Agent integration
+- [`/Users/luisml/continualmi/emwaver/web/src/server/store`](/Users/luisml/continualmi/emwaver/web/src/server/store): legacy JSON/local-disk backed state for entitlements, files, orders, host sessions, devices, and agent conversations
 - [`/Users/luisml/continualmi/emwaver/web/server.ts`](/Users/luisml/continualmi/emwaver/web/server.ts): unified Next.js + Node runtime entrypoint
 
 ## High-value modules
 
-- [`/Users/luisml/continualmi/emwaver/web/src/server/auth.ts`](/Users/luisml/continualmi/emwaver/web/src/server/auth.ts): product session auth handling
+- [`/Users/luisml/continualmi/emwaver/web/src/server/auth.ts`](/Users/luisml/continualmi/emwaver/web/src/server/auth.ts): legacy product session auth handling
 - [`/Users/luisml/continualmi/emwaver/web/src/server/continualHandoff.ts`](/Users/luisml/continualmi/emwaver/web/src/server/continualHandoff.ts): shared-platform handoff verification
 - [`/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts`](/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts): EMWaver integration layer for the shared `continual-core` contract
 - [`/Users/luisml/continualmi/emwaver/web/src/server/agentTools.ts`](/Users/luisml/continualmi/emwaver/web/src/server/agentTools.ts) and [`/Users/luisml/continualmi/emwaver/web/src/server/openaiCompat.ts`](/Users/luisml/continualmi/emwaver/web/src/server/openaiCompat.ts): backend-managed agent routing
@@ -41,29 +41,25 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/web`](/Users/l
 
 ## Important constraints
 
-- EMWaver owns its own product sign-in UX and product sessions.
-- Shared account, wallet, entitlement, and subscription semantics should come from the shared `continual-core` contract and shared `core` schema rather than a central Society runtime API.
-- Agent model completions are product-managed inside EMWaver. Do not add client-side provider secrets or direct user-managed provider auth.
-- Current persistence is intentionally transitional: local filesystem and JSON-backed state under `.data`. Treat that as temporary and avoid deepening it unnecessarily.
-- Host presence and WS routing are currently single-instance and in-memory.
-- Pricing and subscription UX should center on service plans, not per-device purchases.
-- Device provisioning, restore, and limits are keyed only by `board_type + hardware_uid`.
+- EMWaver should not own a product account system for core local use. Existing sign-in/session/account code is migration debt.
+- Any future paid account/subscription semantics should belong to the focused Continual MI/MGPT Agent API backend, not to a general EMWaver cloud runtime.
+- Agent inference should move toward a focused Continual MI/MGPT API-key backend. Do not ship production prompts, hidden `.emw` instruction packs, provider-routing logic, or metering policy in this repo.
+- Current persistence is transitional: local filesystem and JSON-backed state under `.data`. Treat that as temporary and avoid deepening it.
+- Host presence, WS routing, file sync, device provisioning, Stripe, and account UX are not part of the desired local-first public web target.
+- Local hardware access must not be gated by account state, subscription policy, hardware UID, device activation, minting, claiming, or device limits.
 
 ## Routing cues
 
-- Marketing and install/account/build UX live in `src/app`.
-- Device/account helpers and session bootstrap live in `src/lib`.
-- Auth, entitlements, credits, agent, files, provisioning, and Stripe logic live in `src/server` plus `src/server/store`.
-- Remote host web control uses `src/lib/remoteSessions.ts`, `src/lib/remoteAttach.ts`, and `src/server/ws`.
+- Marketing, docs, install, downloads, and board/build pages live in `src/app`.
+- Device/account helpers, auth, entitlements, credits, files, provisioning, Stripe, and hosted relay logic are migration-debt surfaces under `src/lib`, `src/server`, and `src/server/store`.
+- Local browser hardware control belongs in `gateway/`.
 
 ## Common task routing
 
 - Marketing, docs, or public information architecture: [`/Users/luisml/continualmi/emwaver/web/src/app`](/Users/luisml/continualmi/emwaver/web/src/app)
-- Product session auth or shared-core account integration: [`/Users/luisml/continualmi/emwaver/web/src/server/auth.ts`](/Users/luisml/continualmi/emwaver/web/src/server/auth.ts), [`/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts`](/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts)
+- Legacy product session or account migration: [`/Users/luisml/continualmi/emwaver/web/src/server/auth.ts`](/Users/luisml/continualmi/emwaver/web/src/server/auth.ts), [`/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts`](/Users/luisml/continualmi/emwaver/web/src/server/platformCore.ts)
 - Agent conversation or tool-call behavior: [`/Users/luisml/continualmi/emwaver/web/src/app/v1/agent`](/Users/luisml/continualmi/emwaver/web/src/app/v1/agent), [`/Users/luisml/continualmi/emwaver/web/src/server/agentTools.ts`](/Users/luisml/continualmi/emwaver/web/src/server/agentTools.ts)
-- Device, entitlement, or provisioning behavior: [`/Users/luisml/continualmi/emwaver/web/src/app/v1/devices`](/Users/luisml/continualmi/emwaver/web/src/app/v1/devices), [`/Users/luisml/continualmi/emwaver/web/src/server/store/provisionedDevices.ts`](/Users/luisml/continualmi/emwaver/web/src/server/store/provisionedDevices.ts)
-- Store or Stripe work: [`/Users/luisml/continualmi/emwaver/web/src/app/v1/store`](/Users/luisml/continualmi/emwaver/web/src/app/v1/store), [`/Users/luisml/continualmi/emwaver/web/src/app/v1/pro`](/Users/luisml/continualmi/emwaver/web/src/app/v1/pro), [`/Users/luisml/continualmi/emwaver/web/src/server/stripe.ts`](/Users/luisml/continualmi/emwaver/web/src/server/stripe.ts)
-- Host presence and web control: [`/Users/luisml/continualmi/emwaver/web/src/app/v1/hosts`](/Users/luisml/continualmi/emwaver/web/src/app/v1/hosts), [`/Users/luisml/continualmi/emwaver/web/src/server/ws`](/Users/luisml/continualmi/emwaver/web/src/server/ws)
+- Legacy device, entitlement, provisioning, store, Stripe, host presence, and web control surfaces: inspect before removing, but do not expand them for core local hardware control.
 
 ## Validation posture
 

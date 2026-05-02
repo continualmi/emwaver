@@ -1,6 +1,6 @@
 ---
 name: emwaver-windows
-description: Use when working on the EMWaver Windows 11 app, including WinUI pages, USB and device services, board-aware firmware update flows, cloud/auth/account surfaces, or macOS parity work for activation and provisioning behavior.
+description: Use when working on the EMWaver Windows 11 app, including WinUI pages, USB and device services, board-aware firmware update flows, local gateway app-role control, Agent API key UI, or macOS parity work for local-first behavior.
 ---
 
 # EMWaver Windows
@@ -18,34 +18,34 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/windows`](/Use
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Program.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Program.cs), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/App.xaml`](/Users/luisml/continualmi/emwaver/windows/EMWaver/App.xaml), and [`/Users/luisml/continualmi/emwaver/windows/EMWaver/MainWindow.xaml`](/Users/luisml/continualmi/emwaver/windows/EMWaver/MainWindow.xaml): app entry and shell
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages): main UI pages
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs): dialog surfaces including firmware flows
-- [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services): transport, device lifecycle, firmware update, app services, cloud and Pro services
+- [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services): transport, device lifecycle, firmware update, app services, local gateway/app-role bridge, and legacy cloud surfaces
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting): script engine and plot/runtime support
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Assets/Firmware`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Assets/Firmware): packaged firmware assets
 
 ## Core behaviors to preserve
 
 - Windows targets Windows 11 only.
-- Activation and restore are keyed by `board_type + hardware_uid`.
-- Windows is intended to track macOS parity for claim, provision, update, offline cache, and entitlement behavior.
+- Windows is intended to track macOS parity for local device control, localhost gateway app-role behavior, and board-aware firmware updates.
+- Local scripts, local device control, and firmware update flows must not require accounts, activation, hardware UID reads, minting, claiming, device limits, or hosted relay.
 - STM32 and ESP32-S3 use different update paths; keep the app board-aware.
-- Use `Continual Pro` as canonical paid-plan language.
-- Treat `AccountDevicesService.cs`, `WindowsDeviceManager.cs`, and `FirmwareUpdateManager.cs` as the first files for activation/provisioning issues.
-- Treat `Services/Cloud/*` as the first place for auth, host session, and remote control issues.
+- Avoid Pro/account language in user-facing core UI. Optional Agent inference should be described as an Agent API key.
+- Treat `WindowsDeviceManager.cs` and `FirmwareUpdateManager.cs` as the first files for local transport/update issues.
+- Treat `Services/Cloud/*` as legacy or Agent-key migration debt unless a task explicitly needs the optional Agent API boundary.
 
 ## Implementation cues
 
 - `Services/UsbMidiSysex.cs` and `Services/WindowsDeviceManager.cs` are the main transport and device-state anchors.
 - `Services/FirmwareUpdateManager.cs` and `Services/Dfu.cs` own update logic.
-- `Services/Cloud` and `Services/Pro` handle account and entitlement plumbing.
+- `Services/Cloud` and `Services/Pro` are legacy/migration surfaces and should not be pulled into core local hardware control.
 - `Pages/DevicePage*`, `Pages/HostsPage*`, and `Pages/RemoteHostControlPage*` are the main user-facing surfaces for device state and remote control.
 - `Scripting/ScriptEngine.cs`, `Scripting/PlotBufferStore.cs`, and `Scripting/Render/ScriptRenderer.cs` are the core script-runtime entry points.
-- `Services/Agent/AgentApi.cs` is the native app bridge into backend-managed agent routes.
+- `Services/Agent/AgentApi.cs` is the native app bridge toward the future API-key Agent endpoint.
 
 ## Common task routing
 
-- Device state, claim, and offline cache: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/AccountDevicesService.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/AccountDevicesService.cs)
+- Device state and local transport: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/WindowsDeviceManager.cs)
 - Firmware update flow: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/FirmwareUpdateManager.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/FirmwareUpdateManager.cs), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs)
-- Cloud sign-in or remote host control: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud)
+- Agent key or legacy hosted host control: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services/Cloud)
 - Script UI/runtime bug: [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages/ScriptsPage.xaml.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages/ScriptsPage.xaml.cs)
 
 ## Validation posture

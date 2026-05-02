@@ -1,6 +1,6 @@
 ---
 name: emwaver-ios
-description: Use when working on the native EMWaver iOS app, including auth handoff, USB managers, script views, firmware asset integration, or deciding whether code belongs in /ios versus the shared /apple package.
+description: Use when working on the native EMWaver iOS app, including local USB managers, script views, Agent API key surfaces, firmware asset integration, or deciding whether code belongs in /ios versus the shared /apple package.
 ---
 
 # EMWaver iOS
@@ -16,8 +16,8 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/ios`](/Users/l
 ## Where things live
 
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/EMWaverApp.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/EMWaverApp.swift) and [`/Users/luisml/continualmi/emwaver/ios/EMWaver/ContentView.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/ContentView.swift): app entry and top-level shell
-- [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth): sign-in state, handoff exchange, keychain-backed session work
-- [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers): USB transport, host sessions, remote control, device managers
+- [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth): transitional Agent API key/session helpers
+- [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers): USB transport, local script/device managers, and legacy host/remote-control surfaces
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Views`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Views): app UI surfaces
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/firmware`](/Users/luisml/continualmi/emwaver/ios/EMWaver/firmware) and [`/Users/luisml/continualmi/emwaver/ios/EMWaver/ota`](/Users/luisml/continualmi/emwaver/ios/EMWaver/ota): bundled firmware payloads
 - [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Native`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Native): native interop and buffer-related components
@@ -27,17 +27,18 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/ios`](/Users/l
 
 - Keep iOS-specific UI and app state in `/ios`.
 - Move reusable Apple logic into [`/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore`](/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore).
-- The app should align with EMWaver-owned sign-in UX and shared `core` identity semantics from `continual-core`. Do not deepen product-local identity silos or reintroduce ad hoc direct-provider account ownership outside the shared `core` model.
+- Local scripts and local hardware control must not require accounts, cloud activation, hosted relay, sync, hardware UID gates, or subscription checks.
+- Agent UI may remain, but it should be an API-key client for the future Continual MI/MGPT backend and must not ship production prompts or proprietary instruction packs.
 - Keep transport and script runtime behavior aligned with firmware protocol contracts and existing Apple shared behavior.
-- Treat `USBManager.swift`, `USBManager+ScriptDevice.swift`, `UsbMidiSysex.swift`, `HostSessionManager.swift`, and `RemoteControl*` as the first files for device and remote-control debugging.
-- Auth work usually starts in `AuthenticationManager.swift`, `WebSignInHandoffSheet.swift`, and `KeychainStore.swift`.
-- If the change touches script rendering, agent chat, cloud files, or shared storage semantics, inspect the Apple package before duplicating logic locally.
-- When changing managers or auth flow, update [`/Users/luisml/continualmi/emwaver/ios/README.md`](/Users/luisml/continualmi/emwaver/ios/README.md).
+- Treat `USBManager.swift`, `USBManager+ScriptDevice.swift`, and `UsbMidiSysex.swift` as the first files for local device debugging.
+- Agent-key work usually starts in `AuthenticationManager.swift`, any remaining handoff/keychain helpers, and shared Apple Agent UI.
+- If the change touches script rendering, agent chat, or shared storage semantics, inspect the Apple package before duplicating logic locally.
+- When changing managers or Agent-key/session flow, update [`/Users/luisml/continualmi/emwaver/ios/README.md`](/Users/luisml/continualmi/emwaver/ios/README.md).
 
 ## Common task routing
 
 - App shell, navigation, or top-level state: [`/Users/luisml/continualmi/emwaver/ios/EMWaver/ContentView.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/ContentView.swift)
-- Sign-in and session restore: [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth/AuthenticationManager.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth/AuthenticationManager.swift)
+- Agent key/session helper work: [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth/AuthenticationManager.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Auth/AuthenticationManager.swift)
 - USB or device communication: [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/USBManager.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/USBManager.swift), [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/UsbMidiSysex.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/UsbMidiSysex.swift)
 - Remote host control: [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/HostSessionManager.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Managers/HostSessionManager.swift), [`/Users/luisml/continualmi/emwaver/ios/EMWaver/Views/RemoteHostControlView.swift`](/Users/luisml/continualmi/emwaver/ios/EMWaver/Views/RemoteHostControlView.swift)
 - Shared script runtime or UI: [`/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime`](/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime), [`/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI`](/Users/luisml/continualmi/emwaver/apple/EMWaverAppleCore/Sources/EMWaverScriptSwiftUI)

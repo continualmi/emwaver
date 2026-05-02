@@ -28,8 +28,8 @@ Use it to capture:
 | `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, selected-device daemon startup builds, direct UI-only `emwaver run` works, and `doctor` is verified locally. Hardware-backed validation remains. |
 | `P0` | Device simulator | `done for protocol adapters` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, and Android `SimulatorScriptDeviceBridge` are added; virtual transport was evaluated and kept optional/local-only. |
 | `P0` | Remote control scope | `done for defaults` | Native apps now default away from hosted remote control; hosted native `/v1/ws` and host directory/presence surfaces are opt-in flags, while macOS/Windows localhost gateway control remains the core path. |
-| `P0` | Agent interfaces | `needs migration` | App-level Agent runtimes/interfaces should stay on gateway, CLI, Apple, Windows, and Android, but they should become API-key clients for the future Continual MI/MGPT backend and stop depending on EMWaver accounts/cloud chat storage or repo-shipped production prompts. |
-| `P0` | Device identity gates | `needs removal` | Hardware UID reads, device minting/claiming, activation, and device limits are closed-source-platform remnants. The open-source core should work immediately without them. |
+| `P0` | Agent interfaces | `partially migrated` | Repo-shipped production prompt files are removed and native UI now frames Agent access as an API key. Remaining work: move native/web Agent calls off EMWaver account/conversation routes and onto the future MGPT API-key contract. |
+| `P0` | Device identity gates | `done for primary native paths` | macOS and Windows local connect/update paths no longer read hardware UIDs or gate flashing on minting/claiming/account state. Remaining work: remove legacy account-device services/routes as broader cloud cleanup permits. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Static public web | `planned` | `web/` should trend toward Society-style static export to blob/static website hosting; auth/cloud dashboard/API/WebSocket runtime remains migration debt or should move to focused backends. |
 | `P1` | Hardware media assets | `planned` | Board/module images, renders, and diagrams should be canonical under `hardware/<repo-name>/` and referenced by web/docs instead of duplicated. |
@@ -38,10 +38,10 @@ Use it to capture:
 
 ## Next Up
 
-1. Watch the hosted Linux/Windows rebirth validation workflow on GitHub Actions and fix any CI-specific failures.
-2. Validate macOS and Windows local gateway app-role wiring on native workstations.
-3. Validate the hosted-surface defaults on iOS/Android devices and Windows workstation builds.
-4. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
+1. Move native/web Agent calls from EMWaver account/conversation routes to the future MGPT API-key contract once that endpoint exists.
+2. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
+3. Validate macOS and Windows local gateway app-role wiring on native workstations.
+4. Validate the hosted-surface defaults on iOS/Android devices and Windows workstation builds.
 5. Validate local gateway script execution on real hardware.
 6. Validate `emwaver run --direct --device <id>` against attached hardware.
 7. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
@@ -56,7 +56,7 @@ Use it to capture:
 - Existing macOS/Windows remote host services should not pull hosted relay assumptions back into the core app/gateway experience.
 - Hardware repo import should preserve history and avoid root-level clutter.
 - Duplicated hardware media can make static pages and board docs drift; prefer canonical assets under `hardware/<repo-name>/`.
-- Existing product docs and native code still describe or implement older SaaS/cloud activation, UID, minting, and device-cache behavior; remove it from the local core path.
+- Some legacy product docs, services, and web routes still describe or implement older SaaS/cloud activation, UID, minting, and device-cache behavior; keep removing them from the local core path and avoid expanding them.
 
 ## Notes
 
