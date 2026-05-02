@@ -14,7 +14,10 @@ use std::sync::{Arc, Mutex};
 use tracing::error;
 
 use crate::ui_tree::UiNode;
-use emwaver_device::Device;
+
+pub trait CommandBridge: Send + Sync + 'static {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>>;
+}
 
 pub struct Engine {
     ctx: Mutex<BoaContext>,
@@ -24,11 +27,11 @@ pub struct Engine {
     pub latest_tree: Arc<Mutex<Option<UiNode>>>,
     pub latest_metadata: Arc<Mutex<JsonValue>>,
 
-    _device: Arc<Device>,
+    _bridge: Arc<dyn CommandBridge>,
 }
 
 impl Engine {
-    pub fn new(bootstrap_source: &str, device: Arc<Device>) -> Result<Self> {
+    pub fn new(bootstrap_source: &str, bridge: Arc<dyn CommandBridge>) -> Result<Self> {
         let mut ctx = BoaContext::default();
 
         let callbacks: Arc<Mutex<HashMap<String, JsValue>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -109,7 +112,7 @@ impl Engine {
 
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
-            let dev = device.clone();
+            let command_bridge = bridge.clone();
             let func = FunctionObjectBuilder::new(
                 ctx.realm(),
                 unsafe { NativeFunction::from_closure(move |_this, args, ctx| {
@@ -136,7 +139,7 @@ impl Engine {
                     }
 
                     let timeout = (timeout_ms.max(1) as u64).min(10_000);
-                    let resp = match dev.send_command(&cmd, timeout) {
+                    let resp = match command_bridge.send_command(&cmd, timeout) {
                         Ok(Some(resp)) => resp,
                         Ok(None) => Vec::<u8>::new(),
                         Err(_) => vec![0x81u8],
@@ -169,7 +172,7 @@ impl Engine {
             callbacks,
             latest_tree,
             latest_metadata,
-            _device: device,
+            _bridge: bridge,
         })
     }
 
@@ -250,4 +253,68 @@ fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
 
 fn map_js_err(e: boa_engine::JsError) -> anyhow::Error {
     anyhow::anyhow!(e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct RecordingBridge {
+        calls: Mutex<Vec<(Vec<u8>, u64)>>,
+        response: Option<Vec<u8>>,
+    }
+
+    impl RecordingBridge {
+        fn new(response: Option<Vec<u8>>) -> Self {
+            Self {
+                calls: Mutex::new(Vec::new()),
+                response,
+            }
+        }
+    }
+
+    impl CommandBridge for RecordingBridge {
+        fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+            self.calls.lock().unwrap().push((cmd_lane.to_vec(), timeout_ms));
+            Ok(self.response.clone())
+        }
+    }
+
+    #[test]
+    fn render_updates_latest_tree() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"_scriptRender(JSON.stringify({
+                    id: "root",
+                    type: "text",
+                    props: { text: "hello" }
+                }));"#,
+            )
+            .expect("run script");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(tree.id, "root");
+        assert_eq!(tree.node_type, "text");
+        assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("hello"));
+    }
+
+    #[test]
+    fn send_packet_uses_command_bridge() {
+        let bridge = Arc::new(RecordingBridge::new(Some(vec![0x10, 0x20])));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        engine
+            .run_script("_scriptSendPacket([1, 2, 255], 25);")
+            .expect("run script");
+
+        let calls = bridge.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0, vec![1, 2, 255]);
+        assert_eq!(calls[0].1, 25);
+    }
 }

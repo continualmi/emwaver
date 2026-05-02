@@ -36,7 +36,6 @@ cargo build -p emwaver-host -p emwaver
 
 Remaining extraction work:
 
-- make `Engine` depend on an abstract command bridge instead of concrete `Device`,
 - expose selected-device connection APIs beyond auto-connect,
 - decide whether `emwaver run` should stay a gateway controller command or also get a direct headless runtime mode.
 
@@ -104,7 +103,7 @@ pub trait CommandBridge: Send + Sync + 'static {
 }
 ```
 
-`Engine` should accept `Arc<dyn CommandBridge>` instead of `Arc<Device>`.
+`Engine` accepts `Arc<dyn CommandBridge>` instead of `Arc<Device>`, so it no longer depends on the concrete MIDI transport crate.
 
 This allows:
 
@@ -142,7 +141,7 @@ impl Device {
 }
 ```
 
-`Device` should implement `emwaver_runtime::CommandBridge`.
+`emwaver-host` adapts `Device` to `emwaver_runtime::CommandBridge` with a small host-side wrapper. This keeps `emwaver-runtime` independent of `emwaver-device`.
 
 ## `emwaver-host`
 
@@ -225,14 +224,12 @@ Hardware tests remain manual until device test rigs exist.
 9. Replace concrete `Device` dependency with `CommandBridge`.
 10. Keep gateway production work as a browser-to-native-app bridge.
 
-Items 1, 2, 3, 4, 5, 6, 7, and 8 are implemented and build-verified.
+Items 1, 2, 3, 4, 5, 6, 7, 8, and 9 are implemented and build-verified.
 
-## Current Blocker
+## Remaining Verification
 
-Do not mark the runtime extraction issues fully done until:
+The initial runtime/device extraction is build-verified. Keep the broader runtime work open until:
 
-- `cargo build` passes,
-- relevant Rust tests exist and pass,
-- `Engine` no longer depends on concrete `Device`,
-- daemon behavior is still compatible,
-- `emwaver run` has been tested locally.
+- selected-device APIs exist beyond `connect_auto`,
+- daemon behavior is verified after those APIs land,
+- `emwaver run --device <id>` behavior is decided and tested if direct runtime mode is added.

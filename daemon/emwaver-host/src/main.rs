@@ -3,6 +3,7 @@ use futures_util::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::fs;
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time::sleep;
 use tokio_tungstenite::tungstenite::Message;
@@ -14,7 +15,7 @@ mod heartbeat;
 
 use config::Config;
 use emwaver_device::Device;
-use emwaver_runtime::Engine;
+use emwaver_runtime::{CommandBridge, Engine};
 use heartbeat::heartbeat_once;
 
 // Headless host daemon (Model 1): headless script runtime + UI tree state machine.
@@ -37,6 +38,16 @@ struct Hello<'a> {
     protocol_version: i32,
     #[serde(rename = "hostSessionId")]
     host_session_id: &'a str,
+}
+
+struct DeviceCommandBridge {
+    device: Arc<Device>,
+}
+
+impl CommandBridge for DeviceCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
 }
 
 fn env_trim(key: &str) -> Option<String> {
@@ -113,7 +124,8 @@ async fn main() -> Result<()> {
     // If no ports are present yet, this will error and the process will exit.
     device.connect_auto()?;
 
-    let engine = Engine::new(&bootstrap, device)?;
+    let bridge = Arc::new(DeviceCommandBridge { device });
+    let engine = Engine::new(&bootstrap, bridge)?;
 
     loop {
         if let Err(e) = connect_once(&cfg, &engine).await {
