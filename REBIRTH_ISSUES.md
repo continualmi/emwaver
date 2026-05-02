@@ -375,7 +375,7 @@ Acceptance criteria:
 
 ## `REBIRTH-024` Remove Required Account From Hardware Control
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: product/runtime
 
@@ -388,7 +388,7 @@ Acceptance criteria:
 
 ## `REBIRTH-025` Remove Device Activation Gate From Local Runtime
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P0`
 - Target: runtime/product policy
 

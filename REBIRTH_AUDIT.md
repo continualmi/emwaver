@@ -40,6 +40,7 @@ The rebirth is complete only when:
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
 | Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
+| Local runtime account/activation gate | macOS `ContentView` passes connected USB device to `ScriptsRootView` without claimed-device cache membership; Windows `ScriptsPage` uses `AppServices.Device` directly | macOS build passed; Windows source reviewed, build blocked by missing Windows toolchain |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |

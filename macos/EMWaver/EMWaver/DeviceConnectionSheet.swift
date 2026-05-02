@@ -32,11 +32,11 @@ struct DeviceConnectionSheet: View {
             if needsFirmwareInstall {
                 items.append("Needs firmware")
             } else if currentDeviceIsRegistered {
-                items.append(auth.isSignedIn ? "Claimed" : "Cached")
+                items.append(auth.isSignedIn ? "Account cache" : "Cached")
             } else if !currentDeviceClaimStatusResolved {
                 items.append("Checking")
             } else {
-                items.append("Unclaimed")
+                items.append("Local")
             }
         }
         if let uid = shortHardwareUid {
@@ -56,7 +56,7 @@ struct DeviceConnectionSheet: View {
         if accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid) {
             return "This device is available in Offline Mode."
         }
-        return "This device needs online activation before it can be used in Offline Mode."
+        return "This device is not in the optional account cache yet. Local scripts still run without activation."
     }
 
     private var currentDeviceIsRegistered: Bool {
@@ -220,27 +220,27 @@ struct DeviceConnectionSheet: View {
 
     private var deviceStatusText: String {
         if needsFirmwareInstall {
-            return "This device is running firmware that does not expose a hardware UID yet. Install managed EMWaver firmware before claiming it."
+            return "This device is running firmware that does not expose a hardware UID yet. Install managed EMWaver firmware for full local diagnostics and optional account setup."
         }
         if currentDeviceIsRegistered {
             if !auth.isSignedIn {
                 return "This device matches a locally cached device record. Enter your EMWaver key to confirm which account it belongs to."
             }
             if accountDevices.isOfflineMode {
-                return "This device is claimed and available from the local cache."
+                return "This device is available from the optional account cache."
             }
-            return "This device is claimed in your EMWaver account."
+            return "This device is present in your EMWaver account cache."
         }
         if !currentDeviceClaimStatusResolved {
-            return "Checking whether this device is already claimed in your account."
+            return "Checking whether this device is already present in your optional account cache."
         }
         if accountDevices.isOfflineMode {
-            return "This device is not claimed in the local cache yet. Go online once to set it up."
+            return "This device is not in the optional account cache yet. Local scripts still run without activation."
         }
         if auth.isSignedIn {
-            return "This device is connected, but it is not claimed in your account yet."
+            return "This device is connected. Optional account setup is available, but local scripts are not gated."
         }
-        return "This device is connected, but it is not claimed yet. Enter your EMWaver key to set it up."
+        return "This device is connected. Enter an EMWaver key only for optional hosted services."
     }
 
     private var devicesIntroText: String {

@@ -34,7 +34,7 @@
             <Border CornerRadius="12" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <StackPanel Spacing="8">
                     <TextBlock Text="My devices" FontSize="16" FontWeight="SemiBold" />
-                    <TextBlock x:Name="DevicesIntroText" Text="Your claimed and cached EMWaver devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBlock x:Name="DevicesIntroText" Text="Optional account cache and recently seen EMWaver devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                     <ListView x:Name="DevicesList" Height="220">
                         <ListView.ItemTemplate>
                             <DataTemplate>

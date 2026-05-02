@@ -51,6 +51,8 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Platform | Status | Notes |
 | --- | --- | --- |
 | macOS | `build pass` | `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` succeeded after the ESP helper wrapper fallback was added. Runtime/hardware validation is still pending. |
+| macOS local runtime account gate | `build pass` | `ContentView` now passes the connected `MacUSBManager` into `ScriptsRootView` whenever USB is connected, without requiring `AccountDevicesService.hasOfflineAccess(...)`; Debug macOS build succeeded. |
+| Windows local runtime account gate | `source pass / build blocked` | `ScriptsPage` script runtime sends packets through `AppServices.Device` directly and does not consult `AccountDevicesService.HasOfflineAccess(...)`; device-page copy now treats account cache as optional. Build remains blocked here because `dotnet`/Windows toolchain is unavailable. |
 | Linux | `pending` | Validate on a machine with device permissions and Cargo/toolchain installed. |
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
 | `emwaver run` source path | `pass` | Built and verified through local gateway plus built macOS app. |

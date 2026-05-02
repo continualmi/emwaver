@@ -108,8 +108,8 @@ public sealed partial class DevicePage : Page
         AttachStatusText.Text = string.Empty;
         ClaimStatusText.Text = BuildClaimStatusText(isEsp, currentDeviceIsRegistered, claimStatusResolved);
         OfflineStatusText.Text = accountDevices.IsOfflineMode
-            ? (currentDeviceIsRegistered ? "This device is available in Offline Mode." : "This device needs online activation before it can be used in Offline Mode.")
-            : (AppServices.CloudAuth.IsSignedIn ? "Signed in." : "Sign in to claim and sync devices.");
+            ? (currentDeviceIsRegistered ? "This device is available in Offline Mode." : "This device is not in the optional account cache. Local scripts still run without activation.")
+            : (AppServices.CloudAuth.IsSignedIn ? "Signed in for optional hosted services." : "Sign in only for optional hosted services.");
         UpdateModeStatusText.Text = updater.EspBootloaderConnected
             ? $"ESP bootloader detected on {updater.EspBootloaderPort ?? "serial port"}."
             : ((updater.DfuConnected || device.DfuConnected) ? "STM32 Update Mode detected." : "Update Mode not detected.");
@@ -119,7 +119,7 @@ public sealed partial class DevicePage : Page
         FirmwareProgressBar.Value = updater.ProgressPct;
         FirmwareProgressText.Text = updater.IsFlashing
             ? $"{(string.IsNullOrWhiteSpace(updater.ProgressMessage) ? "Updating..." : updater.ProgressMessage)} ({(int)Math.Round(updater.ProgressPct)}%)"
-            : (updater.UpdateDone ? updater.CompletionMessage : "Open the firmware action to claim or update this device.");
+            : (updater.UpdateDone ? updater.CompletionMessage : "Open the firmware action to set up or update this device.");
         FirmwareStatusText.Text = isEsp
             ? "ESP32-S3 uses serial flashing on the flash-capable USB port."
             : "STM32 uses the managed DFU update flow.";
@@ -131,8 +131,8 @@ public sealed partial class DevicePage : Page
         PrimaryFirmwareButton.IsEnabled = !updater.IsFlashing && CanRunFirmwareAction(isEsp, currentDeviceIsRegistered, claimStatusResolved, device, updater);
 
         DevicesIntroText.Text = accountDevices.IsOfflineMode
-            ? "Cached devices available in Offline Mode."
-            : "Your claimed and recently seen EMWaver devices.";
+            ? "Cached account devices for optional hosted services."
+            : "Optional account cache and recently seen EMWaver devices.";
     }
 
     private static string BuildClaimStatusText(bool isEsp, bool currentDeviceIsRegistered, bool claimStatusResolved)
@@ -140,18 +140,18 @@ public sealed partial class DevicePage : Page
         if (!claimStatusResolved)
         {
             return isEsp
-                ? "Checking whether this ESP32-S3 is already claimed."
-                : "Checking whether this device is already claimed.";
+                ? "Checking optional account cache for this ESP32-S3."
+                : "Checking optional account cache for this device.";
         }
         if (currentDeviceIsRegistered)
         {
             return isEsp
-                ? "This ESP32-S3 is claimed and ready to flash."
-                : "This device is claimed and ready to update.";
+                ? "This ESP32-S3 is in the optional account cache and ready to flash."
+                : "This device is in the optional account cache and ready to update.";
         }
         return isEsp
-            ? "This ESP32-S3 is not claimed yet. Sign in and flash EMWaver firmware."
-            : "This device is not claimed yet. Sign in to claim and provision it.";
+            ? "This ESP32-S3 is not in the optional account cache yet. Firmware flashing remains local."
+            : "This device is not in the optional account cache yet. Local scripts are not gated.";
     }
 
     private static string GetPrimaryFirmwareTitle(bool isEsp, bool currentDeviceIsRegistered, bool claimStatusResolved)

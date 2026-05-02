@@ -71,11 +71,6 @@ struct ContentView: View {
         }
     }
 
-    private var deviceIsClaimed: Bool {
-        guard let hardwareUid = currentHardwareUidHex else { return false }
-        return accountDevices.hasOfflineAccess(boardType: currentBoardType, hardwareUid: hardwareUid)
-    }
-
     private var needsAutomaticFirmwareRecovery: Bool {
         guard device.isConnected else { return false }
         guard device.deviceEmwaverVersion != nil else { return false }
@@ -113,13 +108,12 @@ struct ContentView: View {
 
     private var scriptDeviceBridge: (any ScriptDevice)? {
         guard device.isConnected else { return nil }
-        guard deviceIsClaimed else { return nil }
         return device
     }
 
     private var scriptDeviceAttachmentKey: String {
         let hardwareUid = currentHardwareUidHex ?? "none"
-        let suffix = (scriptDeviceBridge == nil) ? "blocked" : "ready"
+        let suffix = (scriptDeviceBridge == nil) ? "disconnected" : "ready"
         return "\(currentBoardType)-\(hardwareUid)-\(suffix)"
     }
 

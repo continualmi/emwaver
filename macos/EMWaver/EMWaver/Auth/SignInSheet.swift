@@ -11,7 +11,7 @@ struct SignInSheet: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Create your EMWaver key on the web, then paste it here. Local scripts and cached activated devices stay on this Mac, but new device activation, cloud sync, remote access, and expanded Agent features require a saved key.")
+            Text("Create your EMWaver key on the web, then paste it here for optional hosted services such as cloud sync, remote access, and expanded Agent features. Local scripts and local hardware control stay available without a key.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
