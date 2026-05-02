@@ -9,6 +9,7 @@ Packaging direction: `PACKAGING.md`
 Rebirth validation tracker: `TESTS_REBIRTH.md`
 Rust preflight: `scripts/check-rust-toolchain.sh`
 Rebirth hardware validation helper: `scripts/rebirth-hardware-validation.sh`
+Linux rebirth validation runbook: `scripts/rebirth-linux-validation.sh`
 Windows rebirth validation runbook: `scripts/rebirth-windows-validation.ps1`
 Current planning tracker: `PLANNING.md`
 Web direction: `web/` should trend toward static public pages/docs/downloads; auth/cloud dashboard code is migration debt, and localhost script control lives in `gateway/`.

@@ -54,6 +54,7 @@ The rebirth is complete only when:
 | Daemon/runtime CI | `.github/workflows/daemon-ci.yml` | passed on GitHub Actions run `25249058504`: runtime/device tests, host/CLI build, and UI-only direct run |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
+| Linux validation runbook | `scripts/rebirth-linux-validation.sh` | added; execution on real Linux host with ALSA MIDI and hardware still pending |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
 
 ## Verification Evidence
