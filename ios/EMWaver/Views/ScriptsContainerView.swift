@@ -15,7 +15,6 @@ struct ScriptsContainerView: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
     @EnvironmentObject private var remoteControlHost: RemoteControlHostService
-    @State private var showingCloudSettings = false
     @State private var showingHosts = false
 
     @State private var showingRemoteOverlay = false
@@ -25,19 +24,6 @@ struct ScriptsContainerView: View {
             ZStack {
                 ScriptsRootView(
                     device: bleManager,
-                    syncProvider: {
-                    guard let base = CloudConfig.backendBaseURL() else { return nil }
-
-                    if auth.isSignedIn, let token = auth.session?.idToken, !token.isEmpty {
-                        return (baseURL: base, accessToken: token)
-                    }
-
-                    if CloudConfig.allowAnonSync() {
-                        return (baseURL: base, accessToken: "")
-                    }
-
-                    return nil
-                },
                     agentCloudProvider: {
                         auth.agentEndpointConfig
                     },
@@ -158,29 +144,13 @@ struct ScriptsContainerView: View {
                                 Button("Clear Agent Key", role: .destructive) {
                                     auth.clearAgentApiKey()
                                 }
-                            } else if auth.isSignedIn {
-                                if let email = auth.session?.email, !email.isEmpty {
-                                    Text(email)
-                                        .foregroundStyle(.secondary)
-                                }
-                                Divider()
-                                Button("Cloud Settings") {
-                                    showingCloudSettings = true
-                                }
-                                Divider()
-                                Button("Sign Out") {
-                                    Task { await auth.signOut() }
-                                }
                             } else {
                                 Button("Agent Key") {
                                     auth.isSignInSheetPresented = true
                                 }
-                                Button("Cloud Settings") {
-                                    showingCloudSettings = true
-                                }
                             }
                         } label: {
-                            Image(systemName: auth.isSignedIn ? "person.crop.circle" : "key.fill")
+                            Image(systemName: "key.fill")
                         }
 
                     }
@@ -189,11 +159,6 @@ struct ScriptsContainerView: View {
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showingCloudSettings) {
-            CloudSettingsSheet()
-                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $showingHosts) {

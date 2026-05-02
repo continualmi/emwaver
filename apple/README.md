@@ -2,7 +2,7 @@
 
 Shared Swift package used by both iOS and macOS EMWaver apps.
 
-This folder is where cross-platform Apple logic lives so iOS/macOS can share script runtime, transport abstractions, storage sync, and common UI components.
+This folder is where cross-platform Apple logic lives so iOS/macOS can share script runtime, transport abstractions, local storage, and common UI components.
 
 ---
 
@@ -64,12 +64,9 @@ Representative files:
 
 ## 2.5 `EMWaverScriptStorage`
 
-Storage and cloud sync helpers for scripts/signals/user files.
+Local storage helpers for scripts/signals/user files.
 
 Representative files:
-- `CloudFilesAPI.swift`
-- `CloudSyncEngine.swift`
-- `CloudSyncStateStore.swift`
 - `FileService.swift`
 - metadata and support models
 
@@ -98,7 +95,7 @@ Also bundles package resources, including firmware payload under:
 
 Without this package, iOS and macOS would diverge quickly in:
 - script model/runtime behavior,
-- cloud sync semantics,
+- local storage semantics,
 - transport behavior,
 - UI component behavior.
 

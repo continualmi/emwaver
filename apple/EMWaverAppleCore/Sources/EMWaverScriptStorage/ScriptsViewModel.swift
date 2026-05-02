@@ -6,11 +6,9 @@
 
 import Foundation
 import SwiftUI
-import os
 
 @MainActor
 public final class ScriptsViewModel: ObservableObject {
-    private static let log = OSLog(subsystem: "com.emwaver", category: "Sync")
     public enum FileKind: String, Equatable {
         case script
         case signalRaw
@@ -30,17 +28,11 @@ public final class ScriptsViewModel: ObservableObject {
     }
 
     public enum SyncStatus: String, Equatable {
-        case synced
-        case localNewer
-        case cloudNewer
         case localOnly
         case unknown
 
         public var iconSystemName: String {
             switch self {
-            case .synced: return "checkmark.circle"
-            case .localNewer: return "arrow.up.circle"
-            case .cloudNewer: return "arrow.down.circle"
             case .localOnly: return "circle.dashed"
             case .unknown: return "questionmark.circle"
             }
@@ -82,7 +74,6 @@ public final class ScriptsViewModel: ObservableObject {
     @Published public private(set) var assetScripts: [ScriptListItem] = []
     @Published public private(set) var customScripts: [ScriptListItem] = []
     @Published public var signalFiles: [ScriptListItem] = []
-    @Published public private(set) var cloudFilesByName: [String: CloudUserFile] = [:]
     @Published public var selectedScriptId: String?
     @Published public var notice: Notice?
     @Published public var isLoading = false
@@ -94,8 +85,6 @@ public final class ScriptsViewModel: ObservableObject {
 
     private let fileService: FileService
     private let defaults: UserDefaults
-    private let syncEngine = CloudSyncEngine()
-    private let cloudStateStore = CloudSyncStateStore()
 
     private let scriptExtension = ".emw"
     private let signalRawExtension = ".raw"
@@ -112,12 +101,6 @@ public final class ScriptsViewModel: ObservableObject {
         self.defaults = defaults
         selectedScriptId = defaults.string(forKey: lastScriptDefaultsKey)
         createUnsavedRecordIfNeeded()
-
-        // Load last known cloud snapshot (for main-screen badges) if present.
-        if let snap = cloudStateStore.load(storageDir: fileService.storageDirectoryURL()) {
-            cloudFilesByName = Dictionary(snap.files.map { ($0.name, $0) }, uniquingKeysWith: { a, b in b })
-        }
-
         rebuildScriptItems()
     }
 
@@ -157,53 +140,9 @@ public final class ScriptsViewModel: ObservableObject {
     }
 
     public func sync(baseURL: URL, accessToken: String) async {
-        isPerformingAction = true
-        performingActionText = "Preparing sync…"
-        defer {
-            isPerformingAction = false
-            performingActionText = nil
-        }
-
-        let debug = true
-        if debug {
-            os_log("%{public}@", log: Self.log, type: .fault, "[Sync] begin baseURL=\(baseURL.absoluteString) tokenLen=\(accessToken.count)")
-        }
-
-        do {
-            // All user files live in Documents/scripts on macOS.
-            let scriptsDir = fileService.storageDirectoryURL()
-            if debug { os_log("%{public}@", log: Self.log, type: .fault, "[Sync] dir=\(scriptsDir.path)") }
-
-            performingActionText = "Syncing scripts…"
-            let s = try await syncEngine.sync(
-                baseURL: baseURL,
-                accessToken: accessToken,
-                storageDir: scriptsDir
-            )
-
-            // Refresh cloud snapshot for badges (name -> mtime_ms).
-            do {
-                let cloud = try await CloudFilesAPI().listFiles(baseURL: baseURL, accessToken: accessToken)
-                cloudStateStore.save(storageDir: scriptsDir, files: cloud)
-                cloudFilesByName = Dictionary(cloud.map { ($0.name, $0) }, uniquingKeysWith: { a, b in b })
-            } catch {
-                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] failed to refresh cloud snapshot: \(error)")
-            }
-
-            await loadScripts()
-            if debug {
-                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] done uploaded=\(s.uploaded) downloaded=\(s.downloaded) skipped=\(s.skipped)")
-            }
-            showInfo(
-                title: "Sync complete",
-                message: "Uploaded: \(s.uploaded), Downloaded: \(s.downloaded), Skipped: \(s.skipped)"
-            )
-        } catch {
-            if debug {
-                os_log("%{public}@", log: Self.log, type: .fault, "[Sync] error: \(String(describing: error))")
-            }
-            showError(message: error.localizedDescription)
-        }
+        _ = baseURL
+        _ = accessToken
+        showInfo(title: "Local storage", message: "Scripts are stored on this device.")
     }
 
     public func scriptName(for id: String) -> String {
@@ -568,8 +507,7 @@ public final class ScriptsViewModel: ObservableObject {
             .filter { $0.metadata != nil }
             .map {
                 let modifiedAt = $0.metadata?.etag.flatMap { Self.dateFromEtagSeconds($0) }
-                let syncStatus = computeSyncStatus(name: $0.name, localModifiedAt: modifiedAt)
-                return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt, syncStatus: syncStatus)
+                return ScriptListItem(id: $0.id, name: $0.name, isDirty: $0.isDirty, isAsset: false, kind: .script, modifiedAt: modifiedAt, syncStatus: .localOnly)
             }
         custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
@@ -667,22 +605,9 @@ public final class ScriptsViewModel: ObservableObject {
     }
 
     func computeSyncStatus(name: String, localModifiedAt: Date?) -> SyncStatus {
-        // We only know cloud state if we've synced at least once (snapshot loaded).
-        guard let cloud = cloudFilesByName[name] else {
-            return .localOnly
-        }
-        guard let localModifiedAt else {
-            return .unknown
-        }
-        guard let cloudMtimeMs = cloud.mtimeMs else {
-            return .unknown
-        }
-
-        let localMs = Int64(localModifiedAt.timeIntervalSince1970 * 1000)
-        if localMs == cloudMtimeMs {
-            return .synced
-        }
-        return localMs > cloudMtimeMs ? .localNewer : .cloudNewer
+        _ = name
+        _ = localModifiedAt
+        return .localOnly
     }
 
     private func showInfo(title: String, message: String) {

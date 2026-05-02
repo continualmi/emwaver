@@ -23,13 +23,11 @@ public struct ScriptsRootView: View {
     private let agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
     private let device: (any ScriptDevice)?
-    private let syncProvider: (() -> (baseURL: URL, accessToken: String)?)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
 
     // Pro gating (caller-controlled).
     private let agentEnabled: Bool
     private let onRequestAgentUpgrade: (() -> Void)?
-    private let onRequestSyncUpgrade: (() -> Void)?
     private let onRequestOpenSettings: (() -> Void)?
 
     @State private var showingEditor = false
@@ -42,14 +40,6 @@ public struct ScriptsRootView: View {
     @State private var namePrompt: NamePrompt?
     @State private var deleteTarget: DeletionTarget?
     @State private var showingDeleteConfirmation = false
-
-    private enum SyncUpsellPhase {
-        case syncing
-        case proOnly
-    }
-
-    @State private var showingSyncUpsell = false
-    @State private var syncUpsellPhase: SyncUpsellPhase = .syncing
 
     private enum EditorMode {
         case script
@@ -83,13 +73,13 @@ public struct ScriptsRootView: View {
         onRequestOpenSettings: (() -> Void)? = nil
     ) {
         self.device = device
-        self.syncProvider = syncProvider
         self.hostStatusSink = hostStatusSink
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
-        self.onRequestSyncUpgrade = onRequestSyncUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
         self.agentCloudProvider = agentCloudProvider
+        _ = syncProvider
+        _ = onRequestSyncUpgrade
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
             wrappedValue: AgentChatViewModel(cloudProvider: agentCloudProvider)
@@ -200,49 +190,6 @@ public struct ScriptsRootView: View {
         .sheet(item: $signalRenamePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
-        .sheet(isPresented: $showingSyncUpsell) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("Sync")
-                    .font(.title3.weight(.semibold))
-
-                switch syncUpsellPhase {
-                case .syncing:
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Syncing…")
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Text("Checking cloud sync…")
-                        .foregroundStyle(.secondary)
-
-                case .proOnly:
-                    Text("Script sync is not available.")
-                        .foregroundStyle(.secondary)
-
-                    Text("Use local files or app-local storage.")
-                        .foregroundStyle(.secondary)
-                }
-
-                Spacer()
-
-                HStack {
-                    Button("Cancel") { showingSyncUpsell = false }
-
-                    Spacer()
-
-                    if syncUpsellPhase == .proOnly {
-                        Button("Close") {
-                            showingSyncUpsell = false
-                        }
-                        .buttonStyle(.borderedProminent)
-                    }
-                }
-            }
-            .padding(18)
-            .frame(minWidth: 420, minHeight: 200)
-            .interactiveDismissDisabled(syncUpsellPhase == .syncing)
-        }
         .confirmationDialog(
             "Delete script?",
             isPresented: $showingDeleteConfirmation,
@@ -343,21 +290,11 @@ public struct ScriptsRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     List {
-                        let allowAnonSync = (
-                            ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1"
-                        )
-                        let cloudIndicatorsEnabled: Bool = {
-                            guard let provider = syncProvider else { return false }
-                            guard let ctx = provider() else { return false }
-                            return !ctx.accessToken.isEmpty || allowAnonSync
-                        }()
-
                         if !viewModel.assetScripts.isEmpty {
                             ForEach(viewModel.assetScripts) { script in
                                 ScriptRow(
                                     script: script,
                                     isSelected: script.id == viewModel.selectedScriptId,
-                                    showCloudIndicators: cloudIndicatorsEnabled,
                                     onTap: { previewScript(script.id) },
                                     onEdit: { openEditor(for: script.id) }
                                 )
@@ -372,7 +309,6 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: script,
                                         isSelected: script.id == viewModel.selectedScriptId,
-                                        showCloudIndicators: cloudIndicatorsEnabled,
                                         onTap: { previewScript(script.id) },
                                         onEdit: { openEditor(for: script.id) }
                                     )
@@ -388,7 +324,6 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: item,
                                         isSelected: false,
-                                        showCloudIndicators: cloudIndicatorsEnabled,
                                         onTap: { openSignalEditor(item) },
                                         onEdit: { openSignalEditor(item) }
                                     )
@@ -937,40 +872,6 @@ public struct ScriptsRootView: View {
             }
 
             ToolbarItem(placement: .primaryAction) {
-                // Local dev convenience: allow sync without a token when backend auth is disabled.
-                let allowAnonSync = (
-                    ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1"
-                )
-
-                if let provider = syncProvider {
-                    Button {
-                        // If the caller provides a syncProvider but it returns nil, treat it as a
-                        // gated feature and upsell Pro.
-                        if let ctx = provider(), (!ctx.accessToken.isEmpty || allowAnonSync) {
-                            Task {
-                                await viewModel.sync(baseURL: ctx.baseURL, accessToken: ctx.accessToken)
-                            }
-                        } else {
-                            syncUpsellPhase = .syncing
-                            showingSyncUpsell = true
-
-                            Task {
-                                try? await Task.sleep(nanoseconds: 800_000_000)
-                                syncUpsellPhase = .proOnly
-                            }
-                        }
-                    } label: {
-                        #if canImport(AppKit)
-                        Image(systemName: "icloud.circle")
-                        #else
-                        Image(systemName: "arrow.triangle.2.circlepath")
-                        #endif
-                    }
-                    .help("Sync")
-                }
-            }
-
-            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("New Script") { openNewScriptEditor() }
 
@@ -1092,7 +993,6 @@ private struct EmwFileBadgeIcon: View {
 private struct ScriptRow: View {
     let script: ScriptsViewModel.ScriptListItem
     let isSelected: Bool
-    let showCloudIndicators: Bool
     let onTap: () -> Void
     let onEdit: () -> Void
 
@@ -1115,13 +1015,6 @@ private struct ScriptRow: View {
                         Text(modifiedAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    }
-
-                    if showCloudIndicators, !script.isAsset {
-                        Image(systemName: script.syncStatus.iconSystemName)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .accessibilityLabel(Text(script.syncStatus.rawValue))
                     }
 
                     if script.isDirty {

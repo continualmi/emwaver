@@ -48,8 +48,7 @@ public final class FileService {
     private let signalsDir: URL
     private let fileManager = FileManager.default
 
-    /// Exposes the local scripts storage directory so higher-level services (like cloud sync)
-    /// can work without duplicating path logic.
+    /// Exposes the local scripts storage directory so higher-level services can work without duplicating path logic.
     public func storageDirectoryURL() -> URL { storageDir }
 
     /// Signals are stored under Application Support/signals (matches sampler.emw usage).
