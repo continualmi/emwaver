@@ -34,7 +34,7 @@ The rebirth is complete only when:
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
 | Runtime extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
 | Device transport extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
-| `emwaver run` | not implemented | incomplete |
+| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | source implemented, build unverified |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
 | Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles and relays messages | prototype done |
@@ -107,7 +107,7 @@ That blocks safe implementation/verification of:
 
 - `emwaver-runtime` for CLI/daemon reuse,
 - `emwaver-device` for CLI/daemon reuse,
-- `emwaver run`,
+- `emwaver run` build/runtime verification,
 - Rust CLI `emwaver gateway` wrapper,
 - daemon refactor.
 
@@ -131,7 +131,7 @@ Completed imports:
 
 - Build/verify Rust runtime extraction.
 - Build/verify shared device transport layer.
-- Implement `emwaver run`.
+- Build and verify `emwaver run` against a local gateway/native-app pair.
 - Wire native macOS/Windows app to the local gateway WebSocket.
 - Validate local hardware script execution on at least one supported board.
 

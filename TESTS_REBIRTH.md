@@ -39,10 +39,11 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | macOS | `pending` | Validate CLI/gateway shared transport after runtime/device extraction. |
 | Linux | `pending` | Validate on a machine with device permissions and Cargo/toolchain installed. |
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
+| `emwaver run` source path | `blocked` | Implemented as a gateway controller command in `daemon/emwaver/src/main.rs`, but cannot compile without Cargo/Rust. |
 
 ## Validation Rules
 
 - Do not treat TypeScript UI preview as proof of real hardware execution.
-- Do not mark `emwaver run` complete until it runs through the shared runtime/device layer.
+- Do not mark `emwaver run` complete until the Rust CLI builds and the command is verified against a real local gateway/native app pair.
 - Do not mark local gateway hardware control complete until the gateway uses the real runtime/device bridge.
 - Hardware monorepo import is complete for the nine primary repos; catalog cleanup for older/generated hardware IDs remains separate follow-up work.

@@ -40,6 +40,7 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 Main command groups (`emwaver/src/main.rs`):
 - `emwaver daemon start|stop|status|autostart`
 - `emwaver devices`
+- `emwaver run <script.emw>`
 - `emwaver gateway` / `emwaver web`
 - `emwaver tui`
 - `emwaver paths`
@@ -58,6 +59,23 @@ emwaver gateway --port 3921
 ```
 
 This starts the localhost browser gateway from `gateway/`. It is a bridge toward local script control without Continual cloud auth or hosted relay requirements.
+
+The local-first direction also adds:
+
+```bash
+emwaver run scripts/blink.emw
+```
+
+`emwaver run` reads the local `.emw` file and sends `script.run` to the localhost gateway as a controller client. The gateway then forwards the command to the native EMWaver app connected as `role=app`/`role=host`. The CLI does not own a second hardware runtime in this path.
+
+Useful flags:
+
+```bash
+emwaver run scripts/blink.emw --port 3930
+emwaver run scripts/blink.emw --gateway-url http://127.0.0.1:3930
+emwaver run scripts/blink.emw --name blink.emw --timeout-ms 10000
+emwaver run scripts/blink.emw --no-wait
+```
 
 ## 3.2 `emwaver-host` daemon
 

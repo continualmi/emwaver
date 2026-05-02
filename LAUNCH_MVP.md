@@ -51,7 +51,7 @@ Backlog coverage:
 ## CLI
 
 - `emwaver devices` lists local devices.
-- `emwaver run path/to/script.emw` runs a script locally.
+- `emwaver run path/to/script.emw` sends a script to the localhost gateway/native-app bridge.
 - `emwaver doctor` reports common setup/permission problems.
 - SSH remote usage is documented.
 

@@ -8,7 +8,10 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::time::Duration;
 use tracing::{info, warn};
+use tungstenite::{connect, Message};
+use url::Url;
 
 #[derive(Parser, Debug)]
 #[command(name = "emwaver", about = "EMWaver headless host daemon CLI (beta)")]
@@ -30,6 +33,32 @@ enum Commands {
 
     /// List MIDI devices and highlight likely EMWaver ports.
     Devices,
+
+    /// Run a .emw script through the local gateway/native app bridge.
+    Run {
+        /// Script file to run.
+        script: PathBuf,
+
+        /// Display name sent with the script. Defaults to the script filename.
+        #[arg(long)]
+        name: Option<String>,
+
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// Override gateway base or WebSocket URL.
+        #[arg(long)]
+        gateway_url: Option<String>,
+
+        /// Wait this long for script.started, script.error, or host.error.
+        #[arg(long, default_value_t = 5000)]
+        timeout_ms: u64,
+
+        /// Send the script and return after the gateway accepts the message.
+        #[arg(long)]
+        no_wait: bool,
+    },
 
     /// Start the localhost browser gateway.
     Gateway {
@@ -271,6 +300,126 @@ fn list_devices() -> Result<()> {
     Ok(())
 }
 
+fn gateway_ws_url(port: Option<u16>, gateway_url: Option<String>) -> Result<Url> {
+    if let Some(raw) = gateway_url {
+        let mut url = Url::parse(raw.trim())
+            .with_context(|| format!("invalid gateway URL: {raw}"))?;
+
+        match url.scheme() {
+            "http" => {
+                url.set_scheme("ws").ok();
+            }
+            "https" => {
+                url.set_scheme("wss").ok();
+            }
+            "ws" | "wss" => {}
+            other => anyhow::bail!("unsupported gateway URL scheme: {other}"),
+        }
+
+        if url.path() == "/" || url.path().is_empty() {
+            url.set_path("/v1/ws");
+        }
+
+        return Ok(url);
+    }
+
+    let port_value = port.unwrap_or(3921);
+    Url::parse(&format!("ws://127.0.0.1:{port_value}/v1/ws"))
+        .context("failed to build localhost gateway WebSocket URL")
+}
+
+fn script_name(script: &Path, explicit_name: Option<String>) -> String {
+    explicit_name
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| script.file_name().and_then(|s| s.to_str()).map(str::to_string))
+        .unwrap_or_else(|| "script.emw".to_string())
+}
+
+fn run_script(
+    script: PathBuf,
+    name: Option<String>,
+    port: Option<u16>,
+    gateway_url: Option<String>,
+    timeout_ms: u64,
+    no_wait: bool,
+) -> Result<()> {
+    let source = fs::read_to_string(&script)
+        .with_context(|| format!("failed to read script at {}", script.display()))?;
+    if source.trim().is_empty() {
+        anyhow::bail!("script is empty: {}", script.display());
+    }
+
+    let name = script_name(&script, name);
+    let url = gateway_ws_url(port, gateway_url)?;
+    let (mut ws, _response) = connect(url.as_str())
+        .with_context(|| format!("failed to connect to local gateway at {url}"))?;
+
+    let timeout = Duration::from_millis(timeout_ms.max(1));
+    ws.get_mut()
+        .get_mut()
+        .set_read_timeout(Some(timeout))
+        .context("failed to set gateway read timeout")?;
+
+    ws.send(Message::Text(
+        serde_json::json!({
+            "type": "hello",
+            "role": "web",
+            "protocolVersion": 1,
+        })
+        .to_string(),
+    ))
+    .context("failed to send gateway hello")?;
+
+    loop {
+        let msg = ws.read().context("failed waiting for gateway hello.ack")?;
+        let Message::Text(text) = msg else { continue; };
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        if value.get("type").and_then(|v| v.as_str()) == Some("hello.ack") {
+            break;
+        }
+    }
+
+    ws.send(Message::Text(
+        serde_json::json!({
+            "type": "script.run",
+            "name": name,
+            "source": source,
+        })
+        .to_string(),
+    ))
+    .context("failed to send script.run")?;
+
+    if no_wait {
+        println!("sent {name} to {url}");
+        return Ok(());
+    }
+
+    loop {
+        let msg = match ws.read() {
+            Ok(msg) => msg,
+            Err(err) => anyhow::bail!("timed out waiting for script result from gateway: {err}"),
+        };
+        let Message::Text(text) = msg else { continue; };
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+        match msg_type {
+            "script.started" => {
+                println!("started {name}");
+                return Ok(());
+            }
+            "script.error" | "host.error" => {
+                let error = value
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown_error");
+                anyhow::bail!("{msg_type}: {error}");
+            }
+            _ => {}
+        }
+    }
+}
+
 fn print_paths() -> Result<()> {
     println!("state dir: {}", state_dir()?.display());
     println!("pidfile:  {}", pidfile_path()?.display());
@@ -347,6 +496,14 @@ fn main() -> Result<()> {
         },
         Commands::Tui => run_tui(),
         Commands::Devices => list_devices(),
+        Commands::Run {
+            script,
+            name,
+            port,
+            gateway_url,
+            timeout_ms,
+            no_wait,
+        } => run_script(script, name, port, gateway_url, timeout_ms, no_wait),
         Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),
         Commands::Paths => print_paths(),
     }

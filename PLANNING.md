@@ -25,7 +25,7 @@ Use it to capture:
 | `P0` | Rebirth plan | `in progress` | `REBIRTH.md` captures the product pivot toward local-first open source EMWaver with paid Agent services. |
 | `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
 | `P0` | Local gateway | `prototype done` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge and still needs native app wiring. |
-| `P0` | Runtime + CLI | `todo` | Extract reusable `.emw` runtime/device layers and add local `emwaver run` behavior. |
+| `P0` | Runtime + CLI | `in progress` | `emwaver run` now sends scripts to the localhost gateway/native-app bridge; Rust build and deeper runtime/device extraction remain blocked by missing toolchain. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
 | `P1` | Hardware validation (`004`, `005`) | `pending` | Still useful, but no longer the top planning focus while architecture pivots. |
@@ -34,8 +34,8 @@ Use it to capture:
 
 1. Wire the native macOS/Windows app WebSocket role to the localhost gateway.
 2. Inventory current `web/` control UI files for gateway migration.
-3. Extract a reusable runtime/device plan from `daemon/emwaver-host`.
-4. Add the first local CLI target plan for `emwaver run`.
+3. Build/verify the Rust CLI once `cargo`/`rustc` are installed.
+4. Extract a reusable runtime/device layer where native apps and the headless host actually need shared code.
 5. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
 
 ## Blockers / Risks
