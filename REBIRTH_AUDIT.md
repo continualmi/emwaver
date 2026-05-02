@@ -51,7 +51,7 @@ The rebirth is complete only when:
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Daemon/runtime CI | `.github/workflows/daemon-ci.yml` | added for runtime/device tests, host/CLI build, and UI-only direct run |
+| Daemon/runtime CI | `.github/workflows/daemon-ci.yml` | passed on GitHub Actions run `25249058504`: runtime/device tests, host/CLI build, and UI-only direct run |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |

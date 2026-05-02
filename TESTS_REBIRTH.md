@@ -26,7 +26,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | --- | --- | --- |
 | Rust toolchain preflight | `pass` | `./scripts/check-rust-toolchain.sh` reports Cargo/Rust available after Homebrew Rust install. |
 | Rust CLI build | `pass` | `cd daemon && cargo build -p emwaver-host -p emwaver` completed successfully. |
-| Daemon CI workflow | `added` | `.github/workflows/daemon-ci.yml` runs Rust preflight, `cargo test -p emwaver-runtime -p emwaver-device`, `cargo build -p emwaver-host -p emwaver`, and a UI-only `emwaver run --direct --no-device` smoke test for daemon changes. |
+| Daemon CI workflow | `pass` | GitHub Actions run `25249058504` passed: Rust preflight, `cargo test -p emwaver-runtime -p emwaver-device`, `cargo build -p emwaver-host -p emwaver`, and a UI-only `emwaver run --direct --no-device` smoke test. |
 | Runtime/device crate extraction | `pass` | `emwaver-runtime` and `emwaver-device` are workspace crates consumed by `emwaver-host`; `cargo build -p emwaver-host -p emwaver` passed. |
 | Runtime command bridge | `pass` | `emwaver-runtime` defines `CommandBridge`, no longer depends on `emwaver-device`, and `cargo test -p emwaver-runtime` passed with render, packet bridge, script error, UI callback dispatch, and unknown-handler coverage. |
 | Selected device API | `build pass` | `emwaver-device::Device::connect_by_id()` and `emwaver daemon start --device-id <id>` compile; hardware behavior still needs a connected board. |
