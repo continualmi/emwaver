@@ -33,7 +33,7 @@ Acceptance criteria:
 
 ## `REBIRTH-002` Add Local Gateway CLI Entrypoint
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: CLI/daemon
 
@@ -243,7 +243,7 @@ Acceptance criteria:
 
 ## `REBIRTH-016` Add `emwaver run --device`
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P1`
 - Target: CLI/device
 
