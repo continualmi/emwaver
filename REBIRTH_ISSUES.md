@@ -379,6 +379,8 @@ Acceptance criteria:
 
 Gradually remove `web/` as a deployable backend/runtime and make the public EMWaver site a static export deployed like `~/continualmi/society`.
 
+Inventory: `web/STATIC_MIGRATION_INVENTORY.md`.
+
 Acceptance criteria:
 
 - `web/` public landing/docs/download/build/board-manager pages can be statically exported.

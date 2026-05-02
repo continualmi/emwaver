@@ -277,6 +277,8 @@ Dynamic code should move to the right owner before the static export becomes can
 - paid Agent: focused Continual MI Agent/API backend,
 - optional hosted services: separate hosted-service runtime if kept at all.
 
+Migration inventory: `STATIC_MIGRATION_INVENTORY.md`.
+
 ---
 
 ## 10) Documentation maintenance rule

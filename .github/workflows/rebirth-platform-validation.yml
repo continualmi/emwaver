@@ -51,6 +51,7 @@ jobs:
   linux-hosted:
     name: Linux hosted validation
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -75,6 +76,7 @@ jobs:
   windows-hosted:
     name: Windows hosted validation
     runs-on: windows-latest
+    timeout-minutes: 12
 
     steps:
       - name: Check out repository
@@ -93,6 +95,7 @@ jobs:
     name: Linux hardware validation
     if: github.event_name == 'workflow_dispatch' && inputs.run_hardware == 'true'
     runs-on: [self-hosted, linux, emwaver-hardware]
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
@@ -111,6 +114,7 @@ jobs:
     name: Windows hardware build and runbook
     if: github.event_name == 'workflow_dispatch' && inputs.run_hardware == 'true'
     runs-on: [self-hosted, windows, emwaver-hardware]
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository
