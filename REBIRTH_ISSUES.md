@@ -19,7 +19,7 @@ Priority values:
 
 ## `REBIRTH-001` Create `gateway/` Package
 
-- Status: `done`
+- Status: `in progress`
 - Priority: `P0`
 - Target: repo structure
 
@@ -662,7 +662,7 @@ Acceptance criteria:
 
 ## `REBIRTH-044` Platform Device Access Validation
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P1`
 - Target: validation
 
@@ -761,7 +761,7 @@ Acceptance criteria:
 
 ## `REBIRTH-050` Remove Hosted Native-App Remote Control From Core
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P0`
 - Target: product/native/gateway
 
@@ -771,6 +771,7 @@ Acceptance criteria:
 
 - Product docs state native app gateway control is localhost/same-machine by default.
 - macOS/Windows hosted remote-control services are classified as migration debt or optional future hosted-service code, not core launch scope.
+- Mobile hosted host/session surfaces are hidden by default and opt-in only.
 - Gateway docs explain SSH/VPN/Tailscale/port-forwarding as user-owned remote access options.
 - No local gateway/native-app path requires hosted session registration, hosted relay, or account auth.
 
@@ -778,6 +779,8 @@ Progress:
 
 - macOS and Windows native app host sockets now only fall back to hosted `/v1/ws` when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; localhost gateway remains the default path.
 - macOS and Windows hosted host-session directory UI/heartbeat are hidden by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
+- iOS and Android hosted host-session UI/heartbeat are hidden by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
+- iOS and Android hosted `/v1/ws` remote-control host behavior is disabled by default and only activates when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`.
 
 ## First Implementation Slice
 

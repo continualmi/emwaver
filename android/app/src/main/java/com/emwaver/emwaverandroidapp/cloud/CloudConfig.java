@@ -25,6 +25,14 @@ public final class CloudConfig {
         return BuildConfig.EMWAVER_STAFF_ONLY;
     }
 
+    public static boolean isHostedServicesUiEnabled() {
+        return BuildConfig.EMWAVER_HOSTED_SERVICES_UI_ENABLED;
+    }
+
+    public static boolean isHostedRemoteControlEnabled() {
+        return BuildConfig.EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED;
+    }
+
     private static String readMode(Context context, String key) {
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         return p.getString(key, "cloud");

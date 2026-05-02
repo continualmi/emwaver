@@ -25,11 +25,15 @@ struct EMWaverApp: App {
                 .environmentObject(hostSessions)
                 .environmentObject(remoteControlHost)
                 .task {
-                    // Best-effort background heartbeat.
-                    hostSessions.start(auth: auth, device: bleManager)
+                    if CloudConfig.hostedServicesEnabled() || CloudConfig.hostedRemoteControlEnabled() {
+                        // Best-effort hosted presence for explicit development builds only.
+                        hostSessions.start(auth: auth, device: bleManager)
+                    }
 
-                    // Remote control host WS (web can attach + drive scripts/UI).
-                    remoteControlHost.start(auth: auth, device: bleManager, hostSessions: hostSessions)
+                    if CloudConfig.hostedRemoteControlEnabled() {
+                        // Hosted remote control WS is optional; local gateway control is the product default.
+                        remoteControlHost.start(auth: auth, device: bleManager, hostSessions: hostSessions)
+                    }
                 }
         }
     }

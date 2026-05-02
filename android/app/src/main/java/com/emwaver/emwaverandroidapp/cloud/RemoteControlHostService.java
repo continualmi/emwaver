@@ -89,6 +89,11 @@ public final class RemoteControlHostService {
     }
 
     public void start(@NonNull Context context) {
+        if (!CloudConfig.isHostedRemoteControlEnabled()) {
+            stop();
+            return;
+        }
+
         Context app = context.getApplicationContext();
         // Run connection attempts off main.
         new Thread(() -> connectLoop(app)).start();

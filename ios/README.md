@@ -2,7 +2,7 @@
 
 Native iOS EMWaver application (Swift/SwiftUI + Xcode project).
 
-This app provides mobile UX for EMWaver device control, scripts, remote host workflows, cloud sync/auth, and firmware asset integration.
+This app provides mobile UX for EMWaver device control, scripts, optional hosted workflows, cloud sync/auth migration surfaces, and firmware asset integration.
 
 ---
 
@@ -47,20 +47,20 @@ Current guidance:
 - `USBManager.swift`
 - `USBManager+ScriptDevice.swift`
 - `UsbMidiSysex.swift`
-- host/remote managers (`HostSessionManager`, `RemoteControl*`)
+- optional hosted host/remote managers (`HostSessionManager`, `RemoteControl*`)
 - cloud config / host directory helpers.
 
 Responsibilities:
 - USB device communication,
-- runtime host session behavior,
-- remote control integration,
+- optional hosted host session behavior,
+- optional hosted remote control integration,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
 
 ## 2.3 Views
 
 `ios/EMWaver/Views/`:
 - scripts container,
-- remote host control view,
+- optional remote host control view,
 - cloud/host sheets.
 
 ## 3) Bundled firmware assets
@@ -91,6 +91,8 @@ The iOS app now uses web-managed API-key guidance rather than the old browser-co
 - the native iOS API-key sign-in flow is still a follow-up, not this app’s current responsibility.
 
 Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
+
+Hosted host-session UI/heartbeat and hosted remote-control WebSocket behavior are disabled by default. Set `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1` to expose the hosted host directory/presence surfaces, and `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1` to allow the legacy hosted `/v1/ws` remote-control host path. Local device/script use must not depend on either flag.
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 

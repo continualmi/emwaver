@@ -96,6 +96,10 @@ public class MainActivity extends AppCompatActivity {
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
                 menuInflater.inflate(R.menu.main_top_menu, menu);
                 connectionMenuItem = menu.findItem(R.id.action_connection);
+                MenuItem hostsItem = menu.findItem(R.id.action_hosts);
+                if (hostsItem != null) {
+                    hostsItem.setVisible(com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedServicesUiEnabled());
+                }
             }
 
             @Override
@@ -143,11 +147,16 @@ public class MainActivity extends AppCompatActivity {
         // Initialize DeviceConnectionManager
         connectionManager = DeviceConnectionManager.getInstance(this);
 
-        // Best-effort host session heartbeat.
-        com.emwaver.emwaverandroidapp.cloud.CloudHostSessionManager.getInstance().start(this, connectionManager);
+        if (com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedServicesUiEnabled()
+                || com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedRemoteControlEnabled()) {
+            // Best-effort hosted presence for explicit development builds only.
+            com.emwaver.emwaverandroidapp.cloud.CloudHostSessionManager.getInstance().start(this, connectionManager);
+        }
 
-        // Remote control host WS (web can attach + drive scripts/UI).
-        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().start(this);
+        if (com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedRemoteControlEnabled()) {
+            // Hosted remote control WS is optional; local gateway control is the product default.
+            com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().start(this);
+        }
         
         // Request ALL necessary permissions at startup
         requestAllRequiredPermissions();

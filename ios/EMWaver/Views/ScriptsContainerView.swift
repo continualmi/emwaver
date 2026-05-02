@@ -127,10 +127,12 @@ struct ScriptsContainerView: View {
                     }
 
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        Button {
-                            showingHosts = true
-                        } label: {
-                            Image(systemName: "dot.radiowaves.left.and.right")
+                        if CloudConfig.hostedServicesEnabled() {
+                            Button {
+                                showingHosts = true
+                            } label: {
+                                Image(systemName: "dot.radiowaves.left.and.right")
+                            }
                         }
 
                         if remoteControlHost.isRemoteControlled {

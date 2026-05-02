@@ -14,4 +14,12 @@ enum CloudConfig {
         let env = AppEnvironment.string("EMWAVER_ALLOW_ANON_SYNC")
         return env == "1"
     }
+
+    static func hostedServicesEnabled() -> Bool {
+        AppEnvironment.string("EMWAVER_HOSTED_SERVICES_UI_ENABLED") == "1"
+    }
+
+    static func hostedRemoteControlEnabled() -> Bool {
+        AppEnvironment.string("EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED") == "1"
+    }
 }

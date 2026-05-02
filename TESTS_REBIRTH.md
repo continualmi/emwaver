@@ -83,7 +83,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 
 | Test | Status | Evidence |
 | --- | --- | --- |
-| Core native remote control posture | `macOS build pass / Windows build blocked` | `REBIRTH-050` states macOS/Windows native apps should be same-machine localhost gateway hosts by default. macOS and Windows host socket code only falls back to hosted `/v1/ws` when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; hosted host-session directory UI/heartbeat are hidden unless `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`. macOS Debug build passed; Windows build remains blocked because `dotnet` is unavailable here. |
+| Core native remote control posture | `macOS build pass / Android compile pass / iOS simulator build pass / Windows build blocked` | `REBIRTH-050` states native apps should default away from Continual-hosted remote control. macOS, Windows, iOS, and Android hosted `/v1/ws` host paths only activate with `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; hosted host-session directory UI/heartbeat are hidden unless `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`. macOS Debug build, Android Java compile, and iOS simulator build passed; future mobile build validation is paused on this machine by maintainer direction. Windows build remains blocked because `dotnet` is unavailable here. |
 
 ## Validation Rules
 

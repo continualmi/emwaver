@@ -77,12 +77,16 @@ android {
         def cloudFrontend = envOr("EMWAVER_FRONTEND_URL_CLOUD", "https://emwaver-web.azurewebsites.net")
         def localFrontend = envOr("EMWAVER_FRONTEND_URL_LOCAL", "http://127.0.0.1:3920")
         def staffOnly = envOr("EMWAVER_STAFF_ONLY", "0")
+        def hostedServicesUi = envOr("EMWAVER_HOSTED_SERVICES_UI_ENABLED", "0")
+        def hostedRemoteControl = envOr("EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", "0")
 
         buildConfigField "String", "EMWAVER_BACKEND_URL_CLOUD", '"' + cloudBackend + '"'
         buildConfigField "String", "EMWAVER_BACKEND_URL_LOCAL", '"' + localBackend + '"'
         buildConfigField "String", "EMWAVER_FRONTEND_URL_CLOUD", '"' + cloudFrontend + '"'
         buildConfigField "String", "EMWAVER_FRONTEND_URL_LOCAL", '"' + localFrontend + '"'
         buildConfigField "boolean", "EMWAVER_STAFF_ONLY", (staffOnly == "1" ? "true" : "false")
+        buildConfigField "boolean", "EMWAVER_HOSTED_SERVICES_UI_ENABLED", (hostedServicesUi == "1" ? "true" : "false")
+        buildConfigField "boolean", "EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", (hostedRemoteControl == "1" ? "true" : "false")
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }

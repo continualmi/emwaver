@@ -30,6 +30,11 @@ final class RemoteControlHostService: ObservableObject {
     }
 
     func start(auth: AuthenticationManager, device: USBManager, hostSessions: HostSessionManager) {
+        guard CloudConfig.hostedRemoteControlEnabled() else {
+            stop()
+            return
+        }
+
         self.auth = auth
         self.device = device
         self.hostSessions = hostSessions
