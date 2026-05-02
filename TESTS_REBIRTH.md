@@ -14,6 +14,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | `gateway ws script.run` | `pass` | WebSocket to `/v1/ws` returned `hello.ack`, `device.status`, `script.started`, and `ui.snapshot` for `UI.render(UI.text({ text: "hello" }))`. |
 | `gateway verify` | `pass` | `npm run verify` passed after the native-app bridge update, including typecheck, `/health`, `/v1/examples`, `/v1/agent` missing-key behavior, configured mock Agent forwarding, and browser -> mock native app -> browser WebSocket `script.run` -> `ui.snapshot` plus `ui.event` -> `ui.event.ack`. |
 | Gateway local device status UI | `pass` | Sidebar now renders local native-app/device status from `device.status`; `npm run verify` still passes. |
+| Gateway local files UI | `pass` | Gateway editor has browser-local `.emw` open/save controls; `npm run verify` still passes. |
 | Gateway CI workflow | `added` | `.github/workflows/gateway-ci.yml` runs `npm ci` and `npm run verify` for gateway changes. |
 
 ## CLI

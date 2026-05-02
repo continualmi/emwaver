@@ -1,21 +1,30 @@
-# EMWaver Unified Web App (`/web`)
+# EMWaver Public Web Surface (`/web`)
 
-Next.js + Node unified web app for EMWaver’s public web surface and web-based cloud flows.
+Target direction: `web/` should trend toward mostly static public pages, docs, downloads, and product information.
 
-This folder is the canonical EMWaver web surface in the repo. It now owns the public website, media pages, docs, web APIs, agent endpoints, subscription/account flows, and the WebSocket relay under one Next.js + Node deployment.
+This folder still contains legacy/transitional Next.js + Node auth, subscription, cloud dashboard, API, Agent, and WebSocket relay code. Those parts should be treated as migration debt for the local-first rebirth unless a task explicitly targets optional hosted services or paid Agent/API usage.
+
+The full `.emw` script rendering/control experience belongs in `gateway/`, not in `web/`.
+
+Do not add new cloud script storage, script sync, or account-backed script libraries here for the open-source core path. Script files should be local-device data by default.
 
 ---
 
 ## 1) Scope
 
-`/web` currently contains:
+`/web` target ownership:
 - public landing/site pages,
 - public video/media pages,
-- install/build/account/subscription UX surfaces,
-- hardware catalog + builder web surfaces,
+- install/download/build information,
+- static docs and product pages.
+
+Transitional/migration-debt areas still present here:
+- account/auth/subscription UX surfaces,
+- cloud dashboard and file/session flows,
+- cloud script storage/sync assumptions,
 - web integrations for backend APIs,
 - remote host/web-session client pieces,
-- shared UI runtime renderers for remote script UI previews.
+- shared UI renderer components that should move or be shared with `gateway/`.
 
 It does **not** host firmware/device logic directly; hardware operations happen through host apps, autonomous devices, and backend APIs.
 

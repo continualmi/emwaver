@@ -24,7 +24,7 @@ The rebirth is complete only when:
 | Create rebirth plan | `REBIRTH.md` | done |
 | Create issue backlog | `REBIRTH_ISSUES.md` | done |
 | Local gateway folder | `gateway/README.md`, `gateway/package.json`, `gateway/src/server.ts` | done |
-| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, live UI, Agent, protocol log, and local native-app/device status | prototype done |
+| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, live UI, Agent, protocol log, and local native-app/device status | prototype done |
 | Bundled script loading | `/v1/examples` reads `assets/default-scripts/*.emw` | done |
 | Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot` | prototype done |
 | Gateway account-free | no sign-in/token required by gateway; verified by `npm run verify` | done |
@@ -39,7 +39,7 @@ The rebirth is complete only when:
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
-| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
+| Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
@@ -95,6 +95,7 @@ This verifies:
 - gateway `/health`,
 - gateway `/v1/examples` loading canonical default scripts,
 - gateway local native-app/device status UI,
+- gateway browser-local `.emw` open/save controls,
 - missing Agent config response,
 - configured mock Agent forwarding,
 - CLI Agent missing-key and configured mock behavior,

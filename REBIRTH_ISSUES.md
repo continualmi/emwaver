@@ -322,7 +322,10 @@ Move or share the heavy `.emw` dashboard/control pieces with `gateway/`.
 Acceptance criteria:
 
 - Gateway can render the control UI.
+- Gateway has parity for script editor, live UI renderer, UI event dispatch, plot support, local file open/save, and Agent context submission.
 - Public site/docs remain in `web/`.
+- `web/` trends toward static public pages/docs/downloads.
+- Auth/cloud dashboard code in `web/` is tracked as migration debt instead of launch-critical local control.
 - Local control UI does not require hosted auth.
 
 ## `REBIRTH-022` Remove Auth Assumptions From Local Control UI
@@ -351,6 +354,22 @@ Acceptance criteria:
 
 - Local scripts can be loaded from local examples or user files.
 - Remote/cloud session widgets are absent or hidden in local mode.
+- No cloud script storage, script sync, or account-backed project library is required in local mode.
+
+## `REBIRTH-023A` Remove Cloud Script Storage Direction From Core
+
+- Status: `in progress`
+- Priority: `P0`
+- Target: product/web/gateway
+
+Make local-device script storage the default product direction.
+
+Acceptance criteria:
+
+- Docs state scripts/local project state live on the user's device by default.
+- `gateway/` supports local file open/save or app-local storage instead of cloud script storage.
+- `web/` cloud file/script storage is treated as migration debt, not launch-critical core behavior.
+- No core local runtime path requires account-backed script sync.
 
 ## Epic 5: Cloud Removal From Core
 

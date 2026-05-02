@@ -281,7 +281,7 @@ const indexHtml = `<!doctype html>
       <header>
         <div>
           <h1>EMWaver Gateway</h1>
-          <div class="sub">Localhost controller for the native EMWaver app. No cloud relay required.</div>
+          <div class="sub">Localhost controller for the native EMWaver macOS/Windows app. No cloud relay required.</div>
         </div>
         <div class="status"><span id="dot" class="dot"></span><span id="status">disconnected</span></div>
       </header>
@@ -307,6 +307,9 @@ const indexHtml = `<!doctype html>
           <div class="toolbar">
             <div class="toolbar-left"><span id="filename" class="filename">hello.emw</span></div>
             <div class="toolbar-right">
+              <input id="openFile" type="file" accept=".emw,text/plain" style="display: none" />
+              <button id="open">Open</button>
+              <button id="save">Save</button>
               <button id="run" class="primary">Run</button>
               <button id="stop" class="danger">Stop</button>
             </div>
@@ -529,6 +532,29 @@ const indexHtml = `<!doctype html>
       document.getElementById("run").onclick = () => {
         log.innerHTML = "";
         ws.send(JSON.stringify({ type: "script.run", name: selectedName, source: source.value }));
+      };
+      document.getElementById("open").onclick = () => {
+        document.getElementById("openFile").click();
+      };
+      document.getElementById("openFile").onchange = async (event) => {
+        const file = event.target.files && event.target.files[0];
+        if (!file) return;
+        selectedName = file.name || "script.emw";
+        filename.textContent = selectedName;
+        source.value = await file.text();
+        event.target.value = "";
+        for (const child of examplesEl.children) child.classList.remove("active");
+      };
+      document.getElementById("save").onclick = () => {
+        const blob = new Blob([source.value], { type: "text/plain;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = selectedName && selectedName.endsWith(".emw") ? selectedName : "script.emw";
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
       };
       document.getElementById("stop").onclick = () => {
         ws.send(JSON.stringify({ type: "script.stop", hostSessionId: "local", scriptInstanceId }));

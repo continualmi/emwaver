@@ -25,7 +25,9 @@ The core runtime should not require:
 - remote session registration,
 - subscription checks,
 - backend device ownership,
-- cloud file sync.
+- cloud script storage,
+- cloud file sync,
+- account-backed project libraries.
 
 The open-source core should be useful by itself.
 
@@ -131,20 +133,21 @@ The rebirth direction should gradually separate these:
 
 ```text
 gateway/
-  localhost hardware control server
+  localhost host-controller server
   local WebSocket protocol
-  local native-app WebSocket bridge
+  local macOS/Windows app WebSocket bridge
   serves the control UI
 
 web/
   public website
   docs
   downloads
-  Agent marketing/account surface
-  optional hosted Agent API entrypoint
+  mostly static product pages
 ```
 
-Move the heavy `.emw` script dashboard/control experience into `gateway/` over time.
+Move the heavy `.emw` script dashboard/control experience into `gateway/` over time. Gateway controls the local macOS/Windows app and reuses the native app-owned runtime/device stack. `web/` should not be the long-term owner of auth-gated hardware control, cloud dashboard behavior, hosted relay UI, or local script rendering.
+
+Scripts and local project state should stay on the user's device by default. Gateway may support browser-local open/save and app-local storage, but the core product should not add cloud script storage or script syncing.
 
 Gradually remove from the local gateway path:
 
@@ -154,7 +157,8 @@ Gradually remove from the local gateway path:
 - device activation gates,
 - remote host heartbeat,
 - cloud host/session discovery,
-- cloud file assumptions.
+- cloud file assumptions,
+- cloud script storage/sync assumptions.
 
 ## 6) Runtime And CLI Direction
 
@@ -289,7 +293,7 @@ This consolidation should support the local-first open-source pivot, but it shou
 
 - Extract reusable runtime/device pieces from the current daemon host.
 - Make CLI and daemon share reusable `.emw` runtime/device code where useful.
-- Keep gateway as a browser-to-native-app bridge rather than a second runtime.
+- Keep gateway as a browser-to-native-app host controller rather than a second runtime or third-party core service.
 - Add `emwaver run`.
 - Add `emwaver devices`.
 - Add `emwaver doctor`.

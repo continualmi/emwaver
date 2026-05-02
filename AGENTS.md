@@ -22,7 +22,8 @@ EMWaver is a **local-first**, open-source, AI-assisted electronics platform by *
 Core direction:
 - **Business model:** open-source core plus paid Agent services. Revenue should come primarily from Agent/API usage and optional hosted services, not from gating local hardware access.
 - **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, cloud activation, hosted relay, or subscription check.
-- **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, reusing the existing script/control protocol without requiring cloud infrastructure.
+- **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
+- **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, acting as a host controller for the local macOS/Windows app and reusing the existing script/control protocol without requiring cloud infrastructure.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
@@ -73,6 +74,7 @@ We intentionally give up:
 - **Open-source core**: local runtime, local gateway, CLI, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
 - **Paid Agent**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI instructions and metered API usage.
 - **Optional hosted services**: hosted relay, sync, teams, classrooms, and remote fleet behavior may exist later, but they are not launch-critical and must not be required for local control.
+- **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
 - **AI credits/usage**: Agent usage remains a metered resource.
 - **Hardware is optional**: the EMWaver board is a future premium option ("coming soon"), not a launch dependency. Third-party supported boards are first-class.
 
@@ -176,8 +178,8 @@ If a folder has a README, detailed documentation should live there.
 
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
-- `web/` — unified website/web app target (Next.js + Node, single deployment direction).
-- `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control.
+- `web/` — public website/docs/downloads surface; should trend toward mostly static pages. Existing auth, billing, cloud dashboard, hosted relay, and backend surfaces are migration debt unless explicitly needed for optional hosted services or paid Agent/API usage.
+- `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control and the migrated script rendering/control UI.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `daemon/` — headless host runtime (beta scope).
@@ -194,13 +196,14 @@ If a folder has a README, detailed documentation should live there.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
 3. **Software-first business**: revenue comes from paid Agent/API usage and optional hosted services — not hardware sales or paid local device access.
 4. **Local hardware access is free/open**: core local `.emw` execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
-5. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
-6. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
-7. **Backend is authoritative only for hosted services and paid Agent/API usage**: do not put local core hardware access behind backend policy.
-8. **Activation is not a local gate**: optional hosted device registration may exist, but local board access is not governed by plan entitlements.
-9. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
-10. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
-11. **CI/Releases policy**: GitHub Actions are for web/gateway CI and optional deployment; do not treat GitHub Releases as end-user distribution for apps.
+5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
+6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
+7. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
+8. **Backend is authoritative only for hosted services and paid Agent/API usage**: do not put local core hardware access behind backend policy.
+9. **Activation is not a local gate**: optional hosted device registration may exist, but local board access is not governed by plan entitlements.
+10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
+11. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
+12. **CI/Releases policy**: GitHub Actions are for web/gateway CI and optional deployment; do not treat GitHub Releases as end-user distribution for apps.
 
 ---
 

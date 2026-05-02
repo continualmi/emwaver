@@ -2,7 +2,7 @@
 
 The EMWaver gateway is the local-first browser control surface and WebSocket bridge.
 
-It is intended to run on the same machine as the native EMWaver app. It serves a localhost browser UI and exposes local HTTP/WebSocket APIs for sending `.emw` scripts to the native app, rendering app-produced UI snapshots in the browser, dispatching UI events back to the app, and reporting local app/device status.
+It is intended to run on the same machine as the native EMWaver app. It acts as a localhost host controller for the macOS/Windows app, not as a third-party core service. It serves a browser UI and exposes local HTTP/WebSocket APIs for sending `.emw` scripts to the native app, rendering app-produced UI snapshots in the browser, dispatching UI events back to the app, and reporting local app/device status.
 
 The gateway is not the hosted EMWaver web app.
 
@@ -31,14 +31,14 @@ The browser UI should talk directly to the local gateway:
 ```text
 localhost browser UI
   <-> localhost WebSocket
-  <-> native EMWaver app
+  <-> native EMWaver macOS/Windows app
   <-> app-owned .emw runtime and device transport
   <-> board firmware
 ```
 
 ## Local Responsibilities
 
-The gateway owns the local control plane:
+The gateway owns the local host-controller plane:
 
 - serve the browser control UI,
 - expose a local WebSocket endpoint,
@@ -71,7 +71,7 @@ Unlike the old hosted path, the local gateway should not require:
 
 An internal local host/session id may still be used if it keeps the protocol compatible, but it should not represent a hosted cloud session.
 
-The gateway should not become a second backend runtime. The native macOS/Windows app owns real `.emw` execution and hardware/device transport.
+The gateway should not become a second backend runtime or third-party control service. The native macOS/Windows app owns real `.emw` execution and hardware/device transport; gateway only controls and renders that local app session.
 
 ## Security Model
 
@@ -87,9 +87,11 @@ The launch direction is:
 
 ## Relationship To `web/`
 
-`web/` remains the public website, docs, downloads, account/Agent surface, and optional hosted service entrypoint.
+`web/` should trend toward mostly static public pages, docs, downloads, and product information. Existing auth, cloud dashboard, hosted relay, and backend control surfaces in `web/` are migration debt unless explicitly needed for optional hosted services or paid Agent/API usage.
 
-`gateway/` owns the localhost hardware control surface. Over time, the heavy `.emw` dashboard/control UI should move from `web/` into this folder or into shared UI code consumed by this folder.
+`gateway/` owns the localhost hardware control surface and should receive the full `.emw` script editor, renderer, live UI, event dispatch, plot, local file, and Agent-assisted control experience migrated from `web/`.
+
+Gateway scripts and local project state should stay on the user's device. Browser-local open/save and app-local files are acceptable; cloud script storage, account-backed project libraries, and script sync are not part of the core local gateway path.
 
 ## Initial Implementation Targets
 
