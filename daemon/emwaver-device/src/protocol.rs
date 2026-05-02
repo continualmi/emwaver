@@ -114,3 +114,41 @@ fn decode_payload_7bit(encoded: &[u8]) -> Result<[u8; SUPERFRAME_SIZE]> {
 
     Ok(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sysex_round_trips_superframe() {
+        let mut superframe = [0u8; SUPERFRAME_SIZE];
+        for (i, b) in superframe.iter_mut().enumerate() {
+            *b = ((i * 13) & 0xff) as u8;
+        }
+
+        let sysex = encode_superframe(&superframe);
+        let decoded = decode_sysex_to_superframe(&sysex).expect("decode sysex");
+
+        assert_eq!(decoded, superframe);
+    }
+
+    #[test]
+    fn rejects_invalid_sysex_markers() {
+        let mut superframe = [0u8; SUPERFRAME_SIZE];
+        superframe[0] = 0x81;
+        let mut sysex = encode_superframe(&superframe);
+        sysex[0] = 0x00;
+
+        assert!(decode_sysex_to_superframe(&sysex).is_err());
+    }
+
+    #[test]
+    fn make_superframe_truncates_to_lane_size() {
+        let cmd = vec![0xaa; LANE_SIZE + 4];
+        let stream = vec![0x55; LANE_SIZE + 4];
+        let superframe = make_superframe(Some(&cmd), Some(&stream));
+
+        assert!(superframe[..LANE_SIZE].iter().all(|b| *b == 0xaa));
+        assert!(superframe[LANE_SIZE..].iter().all(|b| *b == 0x55));
+    }
+}

@@ -1,7 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use midir::MidiInput;
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
@@ -275,22 +274,19 @@ fn autostart_status() -> Result<String> {
 }
 
 fn list_devices_lines() -> Result<Vec<String>> {
-    let midi_in = MidiInput::new("emwaver-cli")?;
-    let ports = midi_in.ports();
-    if ports.is_empty() {
+    let devices = emwaver_device::list_devices()?;
+    if devices.is_empty() {
         return Ok(vec!["No MIDI input ports found.".to_string()]);
     }
 
     let mut out: Vec<String> = vec!["MIDI input ports:".to_string()];
-    for (i, p) in ports.iter().enumerate() {
-        let name = midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"));
-        let l = name.to_lowercase();
-        let hint = if l.contains("emw") || l.contains("emwaver") {
+    for device in devices {
+        let hint = if device.likely_emwaver {
             "  <— likely EMWaver"
         } else {
             ""
         };
-        out.push(format!("  {i}: {name}{hint}"));
+        out.push(format!("  {}: {}{hint}", device.id, device.name));
     }
 
     Ok(out)

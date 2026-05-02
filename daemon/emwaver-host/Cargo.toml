@@ -6,6 +6,8 @@ license = "MIT"
 
 [dependencies]
 anyhow = "1"
+emwaver-device = { path = "../emwaver-device" }
+emwaver-runtime = { path = "../emwaver-runtime" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"
@@ -22,9 +24,3 @@ url = "2"
 # HTTP client (for heartbeat / auth flows later)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
 hostname = "0.4"
-
-# JS engine (Boa)
-boa_engine = "0.19"
-
-# USB MIDI SysEx transport (cross-platform)
-midir = "0.10"

@@ -6,6 +6,31 @@ use tracing::{info, warn};
 
 use crate::protocol::{decode_sysex_to_superframe, encode_superframe, make_superframe, LANE_SIZE, SUPERFRAME_SIZE};
 
+#[derive(Debug, Clone)]
+pub struct DeviceInfo {
+    pub id: String,
+    pub name: String,
+    pub likely_emwaver: bool,
+}
+
+pub fn list_devices() -> Result<Vec<DeviceInfo>> {
+    let midi_in = MidiInput::new("emwaver-device-list")?;
+    let ports = midi_in.ports();
+    let mut out = Vec::with_capacity(ports.len());
+
+    for (i, p) in ports.iter().enumerate() {
+        let name = midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"));
+        let lower = name.to_lowercase();
+        out.push(DeviceInfo {
+            id: i.to_string(),
+            name,
+            likely_emwaver: lower.contains("emw") || lower.contains("emwaver"),
+        });
+    }
+
+    Ok(out)
+}
+
 struct DeviceState {
     capture_buffer: Vec<u8>,
     rx_packets: Vec<Vec<u8>>, // lanes (18B)

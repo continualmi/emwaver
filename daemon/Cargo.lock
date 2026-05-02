@@ -605,7 +605,7 @@ dependencies = [
  "clap",
  "crossterm",
  "directories",
- "midir",
+ "emwaver-device",
  "nix",
  "ratatui",
  "serde_json",
@@ -616,14 +616,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "emwaver-device"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "midir",
+ "tracing",
+]
+
+[[package]]
 name = "emwaver-host"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "boa_engine",
+ "emwaver-device",
+ "emwaver-runtime",
  "futures-util",
  "hostname",
- "midir",
  "reqwest",
  "serde",
  "serde_json",
@@ -632,6 +641,18 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+]
+
+[[package]]
+name = "emwaver-runtime"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "boa_engine",
+ "emwaver-device",
+ "serde",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]

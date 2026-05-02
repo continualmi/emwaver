@@ -13,8 +13,8 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tracing::error;
 
-use crate::device::Device;
 use crate::ui_tree::UiNode;
+use emwaver_device::Device;
 
 pub struct Engine {
     ctx: Mutex<BoaContext>,

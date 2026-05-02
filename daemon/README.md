@@ -24,7 +24,9 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 ## 2) Workspace layout
 
 - `emwaver/` — CLI binary (`emwaver`) for daemon/device/status operations.
-- `emwaver-host/` — long-running daemon runtime.
+- `emwaver-device/` — reusable MIDI/SysEx device transport and EMWaver superframe protocol helpers.
+- `emwaver-runtime/` — reusable Boa-backed `.emw` runtime and streamed UI tree model.
+- `emwaver-host/` — long-running hosted daemon wrapper.
 - `dev` — convenience build/run wrapper.
 - `install/install.sh` — install helper (Linux-oriented path).
 - `systemd/emwaver-host.service` — sample service unit.
@@ -101,12 +103,14 @@ Reconnect loop is built-in with retry delay.
 
 ## 3.3 Script/UI engine
 
-`emwaver-host/src/engine.rs`:
+`emwaver-runtime/src/engine.rs`:
 - uses Boa JS runtime,
 - loads script bootstrap,
 - registers host bridge callbacks (`_scriptRender`, `_scriptSendPacket`, callback registry),
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
+
+`emwaver-device/src/device.rs` owns the reusable MIDI/SysEx transport used by the hosted wrapper.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 

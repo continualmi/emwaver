@@ -10,15 +10,11 @@ use tracing::{info, warn};
 use url::Url;
 
 mod config;
-mod device;
-mod engine;
 mod heartbeat;
-mod protocol;
-mod ui_tree;
 
 use config::Config;
-use device::Device;
-use engine::Engine;
+use emwaver_device::Device;
+use emwaver_runtime::Engine;
 use heartbeat::heartbeat_once;
 
 // Headless host daemon (Model 1): headless script runtime + UI tree state machine.
@@ -37,8 +33,10 @@ struct Incoming {
 struct Hello<'a> {
     r#type: &'a str,
     role: &'a str,
-    protocolVersion: i32,
-    hostSessionId: &'a str,
+    #[serde(rename = "protocolVersion")]
+    protocol_version: i32,
+    #[serde(rename = "hostSessionId")]
+    host_session_id: &'a str,
 }
 
 fn env_trim(key: &str) -> Option<String> {
@@ -138,8 +136,8 @@ async fn connect_once(cfg: &Config, engine: &Engine) -> Result<()> {
     let hello = Hello {
         r#type: "hello",
         role: "host",
-        protocolVersion: 1,
-        hostSessionId: &cfg.host_session_id,
+        protocol_version: 1,
+        host_session_id: &cfg.host_session_id,
     };
     ws.send(Message::Text(serde_json::to_string(&hello)?)).await?;
 

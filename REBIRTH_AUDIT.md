@@ -32,11 +32,11 @@ The rebirth is complete only when:
 | Gateway Agent panel | `gateway/src/server.ts` Agent panel and `/v1/agent` proxy | done |
 | Agent missing-key behavior | `gateway/scripts/verify.mjs` checks `agent_not_configured` | done |
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
-| Runtime extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
-| Device transport extraction | `daemon/RUNTIME_EXTRACTION.md` plan only | incomplete |
+| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine` and `UiNode`; `emwaver-host` consumes it | initial crate extraction done; command bridge abstraction still pending |
+| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device` and protocol helpers; `emwaver-host` consumes it | initial crate extraction done; richer device API still pending |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | build verified; local gateway/macOS app integration passed |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
-| `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
+| `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
 | Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app` | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
@@ -74,6 +74,7 @@ This verifies:
 - macOS Debug app build,
 - macOS local gateway app-role integration for a UI-only `.emw` script,
 - Rust daemon workspace build,
+- initial `emwaver-runtime` and `emwaver-device` crate extraction,
 - `emwaver doctor`,
 - `emwaver run` against local gateway plus built macOS app,
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,
@@ -90,7 +91,7 @@ It does not verify:
 - real hardware access,
 - native app hardware-backed runtime integration,
 - Windows app build,
-- shared Rust runtime/device extraction.
+- completed runtime command-bridge abstraction or selected-device APIs.
 
 ## Blockers
 
@@ -111,8 +112,8 @@ cargo build -p emwaver-host -p emwaver
 
 Remaining Rust-side work:
 
-- `emwaver-runtime` for CLI/daemon reuse,
-- `emwaver-device` for CLI/daemon reuse,
+- abstract `emwaver-runtime` over a command bridge instead of concrete device,
+- expose selected-device connection APIs beyond auto-connect,
 - daemon refactor.
 
 ## Hardware Imports
@@ -133,8 +134,8 @@ Completed imports:
 
 ## Remaining P0 Work
 
-- Build/verify Rust runtime extraction.
-- Build/verify shared device transport layer.
+- Finish runtime command-bridge abstraction.
+- Finish selected-device connection API beyond auto-connect.
 - Verify Windows app local gateway WebSocket on a Windows 11 workstation.
 - Validate macOS local gateway script execution on real hardware.
 - Validate local hardware script execution on at least one supported board.

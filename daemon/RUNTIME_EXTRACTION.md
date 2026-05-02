@@ -13,9 +13,36 @@ The current daemon host already contains the ingredients needed for a local-firs
 
 The rebirth direction requires separating reusable runtime/device pieces from the hosted daemon loop for CLI/daemon work. The localhost gateway should not own this runtime; it should bridge browser control to the native EMWaver app, which owns real `.emw` execution and hardware transport.
 
-## Current Coupling
+## Current Extraction Status
 
-Current files:
+Initial extraction is implemented:
+
+```text
+daemon/emwaver-runtime/
+  src/engine.rs
+  src/ui_tree.rs
+
+daemon/emwaver-device/
+  src/device.rs
+  src/protocol.rs
+```
+
+`emwaver-host` now consumes these crates instead of owning the runtime/device modules directly. Verified with:
+
+```bash
+cd daemon
+cargo build -p emwaver-host -p emwaver
+```
+
+Remaining extraction work:
+
+- make `Engine` depend on an abstract command bridge instead of concrete `Device`,
+- expose selected-device connection APIs beyond auto-connect,
+- decide whether `emwaver run` should stay a gateway controller command or also get a direct headless runtime mode.
+
+## Previous Coupling
+
+Before this extraction, the files were:
 
 ```text
 daemon/emwaver-host/src/engine.rs
@@ -34,7 +61,7 @@ daemon/emwaver-host/src/main.rs
   hosted backend heartbeat, outbound /v1/ws connection, remote message loop
 ```
 
-The problem is that CLI and gateway need `engine`, `device`, `protocol`, and `ui_tree` without inheriting the hosted backend heartbeat and outbound WebSocket loop.
+The problem was that CLI and gateway work needed `engine`, `device`, `protocol`, and `ui_tree` without inheriting the hosted backend heartbeat and outbound WebSocket loop.
 
 ## Target Workspace Shape
 
@@ -192,19 +219,20 @@ Hardware tests remain manual until device test rigs exist.
 3. Move `device.rs` into `emwaver-device`.
 4. Create `emwaver-runtime` and move `ui_tree.rs`.
 5. Move `engine.rs` into `emwaver-runtime`.
-6. Replace concrete `Device` dependency with `CommandBridge`.
-7. Update `emwaver-host` to use both crates.
-8. Update `emwaver` CLI `devices` to use `emwaver-device`.
-9. Add `emwaver run`.
+6. Update `emwaver-host` to use both crates.
+7. Update `emwaver` CLI `devices` to use `emwaver-device`.
+8. Add `emwaver run`.
+9. Replace concrete `Device` dependency with `CommandBridge`.
 10. Keep gateway production work as a browser-to-native-app bridge.
+
+Items 1, 2, 3, 4, 5, 6, 7, and 8 are implemented and build-verified.
 
 ## Current Blocker
 
-The current shell does not have `cargo` or `rustc` available, so Rust extraction cannot be safely built or verified here yet.
-
-Do not mark the runtime extraction issues done until:
+Do not mark the runtime extraction issues fully done until:
 
 - `cargo build` passes,
-- relevant Rust tests pass,
+- relevant Rust tests exist and pass,
+- `Engine` no longer depends on concrete `Device`,
 - daemon behavior is still compatible,
 - `emwaver run` has been tested locally.
