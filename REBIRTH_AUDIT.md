@@ -52,6 +52,7 @@ The rebirth is complete only when:
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
+| Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 
 ## Verification Evidence
 
@@ -71,6 +72,7 @@ cargo run -q -p emwaver -- doctor
 cargo run -q -p emwaver -- run <temp>.emw --direct --no-device
 cargo run -q -p emwaver -- agent "write blink"
 EMWAVER_AGENT_API_KEY=test-agent-key EMWAVER_AGENT_ENDPOINT=http://127.0.0.1:<mock>/agent cargo run -q -p emwaver -- agent --script <temp>.emw --mode debug "debug this"
+scripts/rebirth-hardware-validation.sh
 ```
 
 Latest result:

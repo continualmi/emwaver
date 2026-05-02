@@ -8,6 +8,7 @@ Agent API direction: `AGENT_API.md`
 Packaging direction: `PACKAGING.md`
 Rebirth validation tracker: `TESTS_REBIRTH.md`
 Rust preflight: `scripts/check-rust-toolchain.sh`
+Rebirth hardware validation helper: `scripts/rebirth-hardware-validation.sh`
 Current planning tracker: `PLANNING.md`
 Web direction: `web/` should trend toward static public pages/docs/downloads; auth/cloud dashboard code is migration debt, and localhost script control lives in `gateway/`.
 Current headless CLI/daemon work: `daemon/`

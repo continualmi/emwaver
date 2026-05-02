@@ -54,6 +54,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | --- | --- | --- |
 | macOS | `build pass` | `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` succeeded after the ESP helper wrapper fallback was added. Runtime/hardware validation is still pending. |
 | macOS local runtime account gate | `build pass` | `ContentView` now passes the connected `MacUSBManager` into `ScriptsRootView` whenever USB is connected, without requiring `AccountDevicesService.hasOfflineAccess(...)`; Debug macOS build succeeded. |
+| Rebirth hardware validation helper | `tool pass / hardware skipped` | `scripts/rebirth-hardware-validation.sh` builds the CLI, runs `doctor`, lists devices, and verifies UI-only direct runtime. On this machine it reported no MIDI ports and skipped hardware direct runtime until `EMWAVER_DEVICE_ID` is provided. |
 | Windows local runtime account gate | `source pass / build blocked` | `ScriptsPage` script runtime sends packets through `AppServices.Device` directly and does not consult `AccountDevicesService.HasOfflineAccess(...)`; device-page copy now treats account cache as optional. Build remains blocked here because `dotnet`/Windows toolchain is unavailable. |
 | Linux | `pending` | Validate on a machine with device permissions and Cargo/toolchain installed. |
 | Windows | `pending` | Validate USB/MIDI visibility through the Windows app/CLI environment. |
