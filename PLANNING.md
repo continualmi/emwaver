@@ -33,7 +33,7 @@ Use it to capture:
 ## Next Up
 
 1. Validate macOS and Windows local gateway app-role wiring on native workstations.
-2. Inventory current `web/` control UI files for gateway migration.
+2. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
 3. Validate local gateway script execution on real hardware.
 4. Validate `emwaver run --direct --device <id>` against attached hardware.
 5. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
