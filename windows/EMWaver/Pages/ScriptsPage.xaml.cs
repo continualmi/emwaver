@@ -1015,7 +1015,12 @@ public sealed partial class ScriptsPage : Page
                 convoId = convo.Id;
                 _agentConversationId = convoId;
                 SaveAgentConversationId(convoId);
-                await RefreshAgentConversationsAsync();
+                await RunOnUiAsync(async () =>
+                {
+                    _agentConversations.Insert(0, convo);
+                    AgentConversationsCombo.SelectedItem = convo;
+                    await Task.CompletedTask;
+                });
             }
 
             var accum = new StringBuilder();
@@ -1025,7 +1030,7 @@ public sealed partial class ScriptsPage : Page
 
             SetAgentSending(true);
 
-            await AgentApi.ChatStreamWithToolsAsync(convoId!, text, ev =>
+            await AgentApi.ChatStreamWithToolsAsync(convoId!, text, CurrentAgentScriptContext(), ev =>
             {
                 _ = DispatcherQueue.TryEnqueue(() =>
                 {
@@ -1083,22 +1088,7 @@ public sealed partial class ScriptsPage : Page
                 return;
             }
 
-            await RefreshAgentConversationsAsync();
-
-            EMWaver.Services.Agent.AgentApi.Conversation? selected = null;
-            if (!string.IsNullOrWhiteSpace(_agentConversationId))
-            {
-                selected = _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId);
-            }
-
-            selected ??= _agentConversations.FirstOrDefault();
-            if (selected != null)
-            {
-                AgentConversationsCombo.SelectedItem = selected;
-                _agentConversationId = selected.Id;
-                SaveAgentConversationId(selected.Id);
-                await LoadAgentConversationAsync(selected.Id);
-            }
+            SetAgentStatusText("");
         }
         catch (Exception ex)
         {
@@ -1108,26 +1098,9 @@ public sealed partial class ScriptsPage : Page
 
     private async Task RefreshAgentConversationsAsync()
     {
-        SetAgentStatusText("Loading chats…");
-        var list = await AgentApi.ListConversationsAsync(CancellationToken.None);
-
         await RunOnUiAsync(async () =>
         {
-            _agentConversations.Clear();
-            foreach (var c in list)
-            {
-                _agentConversations.Add(c);
-            }
-
-            var selected = !string.IsNullOrWhiteSpace(_agentConversationId)
-                ? _agentConversations.FirstOrDefault(c => c.Id == _agentConversationId)
-                : null;
-            selected ??= _agentConversations.FirstOrDefault();
-            if (selected != null)
-            {
-                AgentConversationsCombo.SelectedItem = selected;
-            }
-
+            SetAgentStatusText("");
             await Task.CompletedTask;
         });
     }
@@ -1136,20 +1109,29 @@ public sealed partial class ScriptsPage : Page
     {
         SetAgentStatusText("");
 
-        var msgs = await AgentApi.ListMessagesAsync(id, CancellationToken.None);
         await RunOnUiAsync(async () =>
         {
-            _agentMessages.Clear();
-            foreach (var m in msgs)
-            {
-                var role = string.Equals(m.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM";
-                _agentMessages.Add(new AgentMessageRow(role, m.Content));
-            }
-
             SetAgentStatusText("");
             ScrollAgentMessagesToBottom();
             await Task.CompletedTask;
         });
+    }
+
+    private EMWaver.Services.Agent.AgentApi.ScriptContext? CurrentAgentScriptContext()
+    {
+        var source = EditorBox.Text ?? "";
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return null;
+        }
+
+        var name = _current?.Name;
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            name = "untitled.emw";
+        }
+
+        return new EMWaver.Services.Agent.AgentApi.ScriptContext(name!, source);
     }
 
 
@@ -1199,9 +1181,9 @@ public sealed partial class ScriptsPage : Page
     {
         try
         {
-            _ = await AppServices.Entitlements.RefreshAsync(force: force, CancellationToken.None);
-            _agentSignedIn = false;
-            _agentEnabled = false;
+            _ = force;
+            _agentSignedIn = AppServices.CloudAuth.HasAgentKey;
+            _agentEnabled = _agentSignedIn;
             _cloudSyncEnabled = false;
 
             await RunOnUiAsync(async () =>

@@ -1,11 +1,12 @@
 using EMWaver.Services.Cloud;
 using System;
 using System.Collections.Generic;
-using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -20,272 +21,168 @@ internal sealed class AgentApi
 
     internal sealed record Message(string Id, string Role, string Content, long CreatedAtMs);
 
+    internal sealed record ScriptContext(string Name, string Source);
+
     internal enum StreamEventKind { Delta, Done, Tool, Error }
 
     internal sealed record StreamEvent(StreamEventKind Kind, string Text, Message? DoneMessage, string? Model);
 
+    private sealed record AgentEndpointRequest(
+        [property: JsonPropertyName("mode")] string Mode,
+        [property: JsonPropertyName("prompt")] string Prompt,
+        [property: JsonPropertyName("script")] ScriptContext? Script,
+        [property: JsonPropertyName("runtime")] object? Runtime,
+        [property: JsonPropertyName("hardware")] object? Hardware);
+
+    private sealed record AgentEndpointResponse(
+        [property: JsonPropertyName("message")] string? Message,
+        [property: JsonPropertyName("code")] string? Code,
+        [property: JsonPropertyName("patch")] string? Patch,
+        [property: JsonPropertyName("warnings")] List<string>? Warnings);
+
     private readonly HttpClient _http;
-    private readonly CloudConfig _cfg;
     private readonly CloudAuthManager _auth;
 
     internal AgentApi(HttpClient http, CloudConfig cfg, CloudAuthManager auth)
     {
         _http = http;
-        _cfg = cfg;
         _auth = auth;
     }
 
-    private Uri Build(string path)
+    internal Task<List<Conversation>> ListConversationsAsync(CancellationToken ct)
     {
-        var baseRaw = (_cfg.BackendBaseUrl ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))
-        {
-            throw new InvalidOperationException("Backend URL is not configured (Settings → Backend).");
-        }
-        return new Uri(baseUrl, path);
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new List<Conversation>());
     }
 
-    private async Task<string> RequireIdTokenAsync(CancellationToken ct)
+    internal Task<Conversation> CreateConversationAsync(string? title, CancellationToken ct)
     {
-        var tok = (await _auth.GetValidIdTokenAsync(ct, interactiveSignIn: false)) ?? "";
-        if (string.IsNullOrWhiteSpace(tok))
+        ct.ThrowIfCancellationRequested();
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var trimmed = (title ?? "").Trim();
+        if (trimmed.Length > 48)
         {
-            throw new InvalidOperationException("Please sign in to chat.");
+            trimmed = trimmed[..48].Trim();
         }
-        return tok;
+
+        return Task.FromResult(new Conversation(
+            Id: Guid.NewGuid().ToString("D"),
+            Title: string.IsNullOrWhiteSpace(trimmed) ? "Chat" : trimmed,
+            CreatedAtMs: now,
+            UpdatedAtMs: now));
     }
 
-    internal async Task<List<Conversation>> ListConversationsAsync(CancellationToken ct)
+    internal Task DeleteConversationAsync(string conversationId, CancellationToken ct)
     {
-        var tok = await RequireIdTokenAsync(ct);
-        using var req = new HttpRequestMessage(HttpMethod.Get, Build("/v1/agent/conversations"));
+        ct.ThrowIfCancellationRequested();
+        return Task.CompletedTask;
+    }
+
+    internal Task<List<Message>> ListMessagesAsync(string conversationId, CancellationToken ct)
+    {
+        ct.ThrowIfCancellationRequested();
+        return Task.FromResult(new List<Message>());
+    }
+
+    internal Task ChatStreamAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
+    {
+        return ChatStreamWithToolsAsync(conversationId, message, null, onEvent, ct);
+    }
+
+    internal async Task ChatStreamWithToolsAsync(
+        string conversationId,
+        string message,
+        ScriptContext? script,
+        Action<StreamEvent> onEvent,
+        CancellationToken ct)
+    {
+        var endpoint = ResolveEndpoint();
+        var key = RequireAgentKey();
+
+        using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
+        req.Content = new StringContent(
+            JsonSerializer.Serialize(new AgentEndpointRequest(
+                Mode: "debug",
+                Prompt: message,
+                Script: script,
+                Runtime: null,
+                Hardware: null)),
+            Encoding.UTF8,
+            "application/json");
 
         using var res = await _http.SendAsync(req, ct);
         var body = await res.Content.ReadAsStringAsync(ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
-
-        using var doc = JsonDocument.Parse(body);
-        var list = new List<Conversation>();
-        if (doc.RootElement.TryGetProperty("conversations", out var arr) && arr.ValueKind == JsonValueKind.Array)
+        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized)
         {
-            foreach (var el in arr.EnumerateArray())
-            {
-                list.Add(new Conversation(
-                    Id: el.GetProperty("id").GetString() ?? "",
-                    Title: el.TryGetProperty("title", out var t) ? t.GetString() : null,
-                    CreatedAtMs: el.TryGetProperty("created_at_ms", out var c) ? c.GetInt64() : 0,
-                    UpdatedAtMs: el.TryGetProperty("updated_at_ms", out var u) ? u.GetInt64() : 0
-                ));
-            }
+            throw new InvalidOperationException("Saved Agent key is not authorized.");
         }
-        return list;
-    }
-
-    internal async Task<Conversation> CreateConversationAsync(string? title, CancellationToken ct)
-    {
-        var tok = await RequireIdTokenAsync(ct);
-        using var req = new HttpRequestMessage(HttpMethod.Post, Build("/v1/agent/conversations"));
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
-        req.Content = new StringContent(JsonSerializer.Serialize(new { title = (title ?? "").Trim() }), Encoding.UTF8, "application/json");
-
-        using var res = await _http.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
-
-        using var doc = JsonDocument.Parse(body);
-        var c = doc.RootElement.GetProperty("conversation");
-        return new Conversation(
-            Id: c.GetProperty("id").GetString() ?? "",
-            Title: c.TryGetProperty("title", out var t) ? t.GetString() : null,
-            CreatedAtMs: c.TryGetProperty("created_at_ms", out var cr) ? cr.GetInt64() : 0,
-            UpdatedAtMs: c.TryGetProperty("updated_at_ms", out var up) ? up.GetInt64() : 0
-        );
-    }
-
-    internal async Task DeleteConversationAsync(string conversationId, CancellationToken ct)
-    {
-        var tok = await RequireIdTokenAsync(ct);
-        using var req = new HttpRequestMessage(HttpMethod.Delete, Build($"/v1/agent/conversations/{conversationId}"));
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
-
-        using var res = await _http.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
-    }
-
-    internal async Task<List<Message>> ListMessagesAsync(string conversationId, CancellationToken ct)
-    {
-        var tok = await RequireIdTokenAsync(ct);
-        using var req = new HttpRequestMessage(HttpMethod.Get, Build($"/v1/agent/conversations/{conversationId}/messages"));
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
-
-        using var res = await _http.SendAsync(req, ct);
-        var body = await res.Content.ReadAsStringAsync(ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
-        if (!res.IsSuccessStatusCode) throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
-
-        using var doc = JsonDocument.Parse(body);
-        var outList = new List<Message>();
-        if (doc.RootElement.TryGetProperty("messages", out var arr) && arr.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var el in arr.EnumerateArray())
-            {
-                outList.Add(new Message(
-                    Id: el.TryGetProperty("id", out var i) ? (i.GetString() ?? "") : "",
-                    Role: el.TryGetProperty("role", out var r) ? (r.GetString() ?? "assistant") : "assistant",
-                    Content: el.TryGetProperty("content", out var c) ? (c.GetString() ?? "") : "",
-                    CreatedAtMs: el.TryGetProperty("created_at_ms", out var m) ? m.GetInt64() : 0
-                ));
-            }
-        }
-        return outList;
-    }
-
-    internal async Task ChatStreamAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
-    {
-        await ChatStreamAsyncInternal("/v1/agent/chat/stream", conversationId, message, onEvent, ct);
-    }
-
-    internal async Task ChatStreamWithToolsAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
-    {
-        try
-        {
-            await ChatStreamAsyncInternal("/v1/agent/chat/stream_tools", conversationId, message, onEvent, ct);
-        }
-        catch (InvalidOperationException ex)
-        {
-            var msg = ex.Message ?? "";
-            if (msg.Contains("HTTP 404", StringComparison.OrdinalIgnoreCase) || msg.Contains("Not Found", StringComparison.OrdinalIgnoreCase))
-            {
-                await ChatStreamAsyncInternal("/v1/agent/chat/stream", conversationId, message, onEvent, ct);
-                return;
-            }
-
-            throw;
-        }
-    }
-
-    private async Task ChatStreamAsyncInternal(string path, string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
-    {
-        var tok = await RequireIdTokenAsync(ct);
-
-        using var req = new HttpRequestMessage(HttpMethod.Post, Build(path));
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", tok);
-        req.Content = new StringContent(JsonSerializer.Serialize(new { conversation_id = conversationId, message }), Encoding.UTF8, "application/json");
-
-        using var res = await _http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct);
-        if (res.StatusCode == System.Net.HttpStatusCode.Unauthorized) throw new InvalidOperationException("Unauthorized");
-
         if (!res.IsSuccessStatusCode)
         {
-            var body = await res.Content.ReadAsStringAsync(ct);
             throw new InvalidOperationException(ExtractError(body, (int)res.StatusCode));
         }
 
-        await using var stream = await res.Content.ReadAsStreamAsync(ct);
-        using var reader = new StreamReader(stream, Encoding.UTF8);
+        var response = JsonSerializer.Deserialize<AgentEndpointResponse>(body)
+            ?? throw new InvalidOperationException("Agent response was empty.");
 
-        var block = new StringBuilder();
-        while (!reader.EndOfStream && !ct.IsCancellationRequested)
-        {
-            var line = await reader.ReadLineAsync();
-            if (line == null) break;
-
-            if (line.Length == 0)
-            {
-                ParseBlock(block.ToString(), onEvent);
-                block.Clear();
-            }
-            else
-            {
-                block.Append(line).Append('\n');
-            }
-        }
-
-        if (block.Length > 0)
-        {
-            ParseBlock(block.ToString(), onEvent);
-        }
+        var content = FormatResponse(response);
+        onEvent(new StreamEvent(
+            StreamEventKind.Done,
+            "",
+            new Message(Guid.NewGuid().ToString("D"), "assistant", content, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
+            null));
     }
 
-    private static void ParseBlock(string raw, Action<StreamEvent> onEvent)
+    private Uri ResolveEndpoint()
     {
-        var trimmed = (raw ?? "").Trim();
-        if (string.IsNullOrWhiteSpace(trimmed)) return;
+        var active = new[]
+            {
+                Environment.GetEnvironmentVariable("EMWAVER_AGENT_ENDPOINT"),
+                Environment.GetEnvironmentVariable("CONTINUAL_AGENT_ENDPOINT"),
+            }
+            .Select(v => (v ?? "").Trim())
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
-        var ev = "message";
-        var dataLines = new List<string>();
-
-        foreach (var ln in trimmed.Split('\n'))
+        if (string.IsNullOrWhiteSpace(active) || !Uri.TryCreate(active, UriKind.Absolute, out var endpoint))
         {
-            if (ln.StartsWith("event:")) ev = ln.Substring("event:".Length).Trim();
-            else if (ln.StartsWith("data:")) dataLines.Add(ln.Substring("data:".Length).Trim());
+            throw new InvalidOperationException("Agent endpoint is not configured. Set EMWAVER_AGENT_ENDPOINT.");
         }
 
-        var dataRaw = string.Join("\n", dataLines).Trim();
-        if (string.IsNullOrWhiteSpace(dataRaw)) return;
+        return endpoint;
+    }
 
-        try
+    private string RequireAgentKey()
+    {
+        var key = (_auth.GetIdToken() ?? "").Trim();
+        if (string.IsNullOrWhiteSpace(key))
         {
-            using var doc = JsonDocument.Parse(dataRaw);
-            if (ev == "delta")
-            {
-                var t = doc.RootElement.TryGetProperty("text", out var te) ? (te.GetString() ?? "") : "";
-                onEvent(new StreamEvent(StreamEventKind.Delta, t, null, null));
-                return;
-            }
-
-            if (ev == "error")
-            {
-                var e = doc.RootElement.TryGetProperty("error", out var er) ? (er.GetString() ?? "error") : "error";
-                onEvent(new StreamEvent(StreamEventKind.Error, e, null, null));
-                return;
-            }
-
-            if (ev == "tool")
-            {
-                var name = doc.RootElement.TryGetProperty("name", out var nm) ? (nm.GetString() ?? "tool") : "tool";
-                string details = "";
-                if (doc.RootElement.TryGetProperty("arguments", out var argsEl))
-                {
-                    details = argsEl.ValueKind == JsonValueKind.String ? (argsEl.GetString() ?? "") : argsEl.GetRawText();
-                }
-                else if (doc.RootElement.TryGetProperty("result", out var resultEl))
-                {
-                    details = resultEl.GetRawText();
-                }
-
-                var t = "[tool] " + name + (string.IsNullOrWhiteSpace(details) ? "" : (" " + details));
-                onEvent(new StreamEvent(StreamEventKind.Tool, t, null, null));
-                return;
-            }
-
-            if (ev == "done")
-            {
-                var msg = doc.RootElement.GetProperty("message");
-                var m = new Message(
-                    Id: msg.TryGetProperty("id", out var i) ? (i.GetString() ?? "") : "",
-                    Role: msg.TryGetProperty("role", out var r) ? (r.GetString() ?? "assistant") : "assistant",
-                    Content: msg.TryGetProperty("content", out var c) ? (c.GetString() ?? "") : "",
-                    CreatedAtMs: msg.TryGetProperty("created_at_ms", out var ms) ? ms.GetInt64() : 0
-                );
-                var model = doc.RootElement.TryGetProperty("model", out var mo) ? mo.GetString() : null;
-                onEvent(new StreamEvent(StreamEventKind.Done, "", m, model));
-            }
+            throw new InvalidOperationException("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
         }
-        catch
+        return key;
+    }
+
+    private static string FormatResponse(AgentEndpointResponse response)
+    {
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(response.Message))
         {
-            // Ignore parse errors.
+            parts.Add(response.Message!.Trim());
         }
+        if (!string.IsNullOrWhiteSpace(response.Code))
+        {
+            parts.Add("```emw\n" + response.Code!.Trim() + "\n```");
+        }
+        if (!string.IsNullOrWhiteSpace(response.Patch))
+        {
+            parts.Add("Patch:\n" + response.Patch!.Trim());
+        }
+        if (response.Warnings is { Count: > 0 })
+        {
+            parts.Add("Warnings:\n" + string.Join("\n", response.Warnings.Where(w => !string.IsNullOrWhiteSpace(w)).Select(w => "- " + w.Trim())));
+        }
+
+        return parts.Count > 0 ? string.Join("\n\n", parts) : "Agent returned an empty reply.";
     }
 
     private static string ExtractError(string body, int statusCode)
@@ -293,6 +190,11 @@ internal sealed class AgentApi
         try
         {
             using var doc = JsonDocument.Parse(body);
+            if (doc.RootElement.TryGetProperty("message", out var m))
+            {
+                var s = m.GetString() ?? "";
+                if (!string.IsNullOrWhiteSpace(s)) return s;
+            }
             if (doc.RootElement.TryGetProperty("error", out var e))
             {
                 var s = e.GetString() ?? "";

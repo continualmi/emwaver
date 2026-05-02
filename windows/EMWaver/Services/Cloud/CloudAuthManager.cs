@@ -1,12 +1,9 @@
 using System;
 using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using Windows.Storage;
-using Windows.System;
 
 namespace EMWaver.Services.Cloud;
 
@@ -23,9 +20,6 @@ internal sealed class CloudAuthManager
     private const string PersistFileName = "cloud_api_key.json";
     private const string LegacyPersistFileName = "cloud_auth.json";
 
-    private readonly CloudConfig _cfg;
-    private readonly HttpClient _http = new();
-
     private string? _apiKey;
     private string? _email;
     private string? _displayName;
@@ -34,11 +28,9 @@ internal sealed class CloudAuthManager
     internal event Action? Changed;
 
     private sealed record Persisted(string? ApiKey, string? Uid, string? Email, string? DisplayName);
-    private sealed record ValidationResult(string? Uid, string? Email, string? DisplayName);
-
     internal CloudAuthManager(CloudConfig cfg)
     {
-        _cfg = cfg;
+        _ = cfg;
 
         TryLoadPersisted();
         if (string.IsNullOrWhiteSpace(_apiKey))
@@ -62,7 +54,9 @@ internal sealed class CloudAuthManager
         }
     }
 
-    internal bool IsSignedIn => !string.IsNullOrWhiteSpace(GetIdToken());
+    internal bool HasAgentKey => !string.IsNullOrWhiteSpace(GetIdToken());
+
+    internal bool IsSignedIn => false;
 
     internal string? GetIdToken()
     {
@@ -89,26 +83,12 @@ internal sealed class CloudAuthManager
 
     internal async Task<string> EnsureSignedInAsync(CancellationToken ct)
     {
-        var existing = await GetValidIdTokenAsync(ct, interactiveSignIn: false);
-        if (!string.IsNullOrWhiteSpace(existing))
-        {
-            return existing!;
-        }
-
         await SignInInteractiveAsync(ct);
-        throw new InvalidOperationException(
-            "Create or replace your EMWaver API key on the web, then paste it into the Account dialog."
-        );
+        throw new InvalidOperationException("Save an Agent API key in Settings to enable Agent replies.");
     }
 
     internal async Task<string?> GetValidIdTokenAsync(CancellationToken ct, bool interactiveSignIn)
     {
-        var token = GetIdToken();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            return token;
-        }
-
         if (interactiveSignIn)
         {
             await SignInInteractiveAsync(ct);
@@ -122,14 +102,14 @@ internal sealed class CloudAuthManager
         var trimmed = (apiKey ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(trimmed))
         {
-            throw new InvalidOperationException("Enter an EMWaver API key.");
+            throw new InvalidOperationException("Enter an Agent API key.");
         }
 
-        var validation = await ValidateApiKeyAsync(trimmed, ct);
+        await Task.CompletedTask;
         _apiKey = trimmed;
-        _uid = validation.Uid;
-        _email = validation.Email;
-        _displayName = validation.DisplayName;
+        _uid = "agent-key";
+        _email = null;
+        _displayName = "Agent key";
 
         PersistCredential();
         Changed?.Invoke();
@@ -138,19 +118,7 @@ internal sealed class CloudAuthManager
 
     internal async Task SignInInteractiveAsync(CancellationToken ct)
     {
-        await OpenAccountManagementAsync(ct);
-    }
-
-    internal async Task OpenAccountManagementAsync(CancellationToken ct)
-    {
-        ct.ThrowIfCancellationRequested();
-
-        var url = BuildAccountManagementUrl();
-        var opened = await Launcher.LaunchUriAsync(url);
-        if (!opened)
-        {
-            throw new InvalidOperationException("Failed to open the EMWaver account page.");
-        }
+        await Task.CompletedTask;
     }
 
     internal void SignOut()
@@ -172,47 +140,6 @@ internal sealed class CloudAuthManager
         Changed?.Invoke();
     }
 
-    private Uri BuildAccountManagementUrl()
-    {
-        var baseUrl = FrontendUrl.Resolve().TrimEnd('/');
-        return new Uri($"{baseUrl}/account");
-    }
-
-    private async Task<ValidationResult> ValidateApiKeyAsync(string apiKey, CancellationToken ct)
-    {
-        var url = new Uri(new Uri(_cfg.BackendBaseUrl.TrimEnd('/') + "/"), "v1/auth/key");
-        using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.Accept.ParseAdd("application/json");
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
-
-        using var res = await _http.SendAsync(req, ct);
-        var json = await res.Content.ReadAsStringAsync(ct);
-        if (!res.IsSuccessStatusCode)
-        {
-            throw new InvalidOperationException(string.IsNullOrWhiteSpace(json)
-                ? $"API key validation failed (HTTP {(int)res.StatusCode})"
-                : json);
-        }
-
-        using var doc = JsonDocument.Parse(json);
-        if (!doc.RootElement.TryGetProperty("user", out var user) || user.ValueKind != JsonValueKind.Object)
-        {
-            throw new InvalidOperationException("API key validation response was missing account identity.");
-        }
-
-        var uid = ReadString(user, "uid");
-        if (string.IsNullOrWhiteSpace(uid))
-        {
-            throw new InvalidOperationException("API key validation response was missing account identity.");
-        }
-
-        return new ValidationResult(
-            Uid: uid,
-            Email: ReadString(user, "email"),
-            DisplayName: ReadString(user, "name")
-        );
-    }
-
     private void PersistCredential()
     {
         TryWriteLocalSetting(KeyApiKey, _apiKey);
@@ -223,11 +150,6 @@ internal sealed class CloudAuthManager
         TryRemoveLocalSetting(LegacyKeyRefreshToken);
         TryDeletePersisted(LegacyPersistFileName);
         TrySavePersisted();
-    }
-
-    private static string? ReadString(JsonElement element, string propertyName)
-    {
-        return element.TryGetProperty(propertyName, out var prop) ? prop.GetString()?.Trim() : null;
     }
 
     private static string? TryReadLocalSetting(string key)

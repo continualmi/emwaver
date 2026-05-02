@@ -23,7 +23,7 @@ public sealed partial class AccountDialog : ContentDialog
 
     private void RefreshUi(string? message = null)
     {
-        var signedIn = AppServices.CloudAuth.IsSignedIn;
+        var signedIn = AppServices.CloudAuth.HasAgentKey;
         AuthStatusText.Text = signedIn ? "Key saved" : "No key saved";
         AuthDetailText.Text = message ?? (signedIn
             ? "An Agent key is saved. Paste a replacement any time."
@@ -34,20 +34,6 @@ public sealed partial class AccountDialog : ContentDialog
         SignOutButton.IsEnabled = signedIn;
     }
 
-    private async void OnManageOnWebClick(object sender, RoutedEventArgs e)
-    {
-        try
-        {
-            var cts = new CancellationTokenSource(TimeSpan.FromMinutes(1));
-            await AppServices.CloudAuth.OpenAccountManagementAsync(cts.Token);
-            RefreshUi("The EMWaver account page opened in your browser.");
-        }
-        catch (Exception ex)
-        {
-            RefreshUi(ex.Message);
-        }
-    }
-
     private async void OnSaveKeyClick(object sender, RoutedEventArgs e)
     {
         try
@@ -56,8 +42,7 @@ public sealed partial class AccountDialog : ContentDialog
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
             await AppServices.CloudAuth.SaveApiKeyAsync(apiKey, cts.Token);
             ApiKeyBox.Password = string.Empty;
-            AppServices.AccountDevices.Refresh();
-            RefreshUi("Saved the EMWaver API key.");
+            RefreshUi("Saved the Agent key.");
         }
         catch (Exception ex)
         {
@@ -68,7 +53,6 @@ public sealed partial class AccountDialog : ContentDialog
     private void OnSignOutClick(object sender, RoutedEventArgs e)
     {
         AppServices.CloudAuth.SignOut();
-        AppServices.AccountDevices.Refresh();
         ApiKeyBox.Password = string.Empty;
         RefreshUi("Removed the Agent key.");
     }

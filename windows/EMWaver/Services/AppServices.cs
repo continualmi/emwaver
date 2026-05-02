@@ -12,7 +12,7 @@ internal static class AppServices
     internal static readonly FirmwareUpdateManager FirmwareUpdater = new();
     internal static readonly AppSettings Settings = new();
 
-    // Cloud sync and account auth (web-managed EMWaver API keys + Azure Blob storage via backend SAS URLs)
+    // Legacy cloud clients are retained behind opt-in surfaces; Agent key storage is local-only.
     internal static readonly HttpClient Http = new();
     internal static CloudConfig CloudConfig = CloudConfig.FromEnvironment();
     internal static CloudAuthManager CloudAuth = new(CloudConfig);

@@ -127,7 +127,7 @@ Windows now includes:
 - bundled ESP32-S3 flashing helper + bundled ESP images when present in the workspace/build output,
 - ESP bootloader detection and BOOT / RESET guidance,
 - activity-log surfaces around setup and update.
-- legacy web-managed API-key auth for cloud/account features, with the account dialog validating keys against `/v1/auth/key` and opening the EMWaver web account page for management. The target Agent model is a user-provided MGPT Agent API key, not an EMWaver account key.
+- local Agent API-key auth for optional Agent replies; the account dialog stores a user-provided Agent key locally without backend validation.
 
 ---
 

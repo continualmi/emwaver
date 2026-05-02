@@ -31,7 +31,6 @@
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Spacing="10">
-            <Button x:Name="ManageOnWebButton" Content="Manage Key" Visibility="Collapsed" Click="OnManageOnWebClick" />
             <Button x:Name="SaveButton" Content="Save Key" Click="OnSaveKeyClick" />
             <Button x:Name="SignOutButton" Content="Remove Key" Click="OnSignOutClick" Visibility="Collapsed" />
         </StackPanel>
