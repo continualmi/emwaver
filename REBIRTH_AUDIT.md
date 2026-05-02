@@ -37,7 +37,7 @@ The rebirth is complete only when:
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge | source implemented, build unverified |
 | `emwaver devices` through shared layer | existing CLI still uses direct MIDI listing | incomplete |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; cannot build without Cargo | unverified |
-| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles and relays messages | prototype done |
+| Gateway bridges to native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS `RemoteControlHostService` connects to localhost gateway as `role=app` | macOS source implemented, build blocked by missing ESP helper |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
@@ -132,7 +132,7 @@ Completed imports:
 - Build/verify Rust runtime extraction.
 - Build/verify shared device transport layer.
 - Build and verify `emwaver run` against a local gateway/native-app pair.
-- Wire native macOS/Windows app to the local gateway WebSocket.
+- Wire Windows app to the local gateway WebSocket.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.

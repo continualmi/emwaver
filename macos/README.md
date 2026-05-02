@@ -63,6 +63,13 @@ Responsibilities:
 - hardware-UID-backed claim awareness,
 - activation/provision handoff into DFU update tooling for first-party setup on macOS.
 
+Local-first gateway behavior:
+- `RemoteControlHostService` can connect directly to the localhost gateway as `role=app`.
+- Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
+- Override with `EMWAVER_LOCAL_GATEWAY_URL`.
+- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1` to fall back to the hosted remote-control socket path.
+- In local gateway mode, the macOS app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
+
 ## 2.3 UI surfaces
 
 Representative views:

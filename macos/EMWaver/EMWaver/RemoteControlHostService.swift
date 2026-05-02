@@ -23,6 +23,11 @@ final class RemoteControlHostService: ObservableObject {
 
     private var uiRev: Int = 0
 
+    private struct HostSocketConfig {
+        let wsURL: URL
+        let role: String
+    }
+
     init(urlSession: URLSession = .shared) {
         self.urlSession = urlSession
     }
@@ -68,6 +73,41 @@ final class RemoteControlHostService: ObservableObject {
         treeCancellable = nil
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+    }
+
+    private func hostSocketConfig() -> HostSocketConfig? {
+        if let local = localGatewayWsURL() {
+            return HostSocketConfig(wsURL: local, role: "app")
+        }
+
+        guard let backend = backendConfig() else { return nil }
+        return HostSocketConfig(wsURL: backend.wsURL, role: "host")
+    }
+
+    private func localGatewayWsURL() -> URL? {
+        let env = ProcessInfo.processInfo.environment
+        if env["EMWAVER_LOCAL_GATEWAY_DISABLED"] == "1" {
+            return nil
+        }
+
+        let raw = env["EMWAVER_LOCAL_GATEWAY_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let fallback = "ws://127.0.0.1:3921/v1/ws"
+        let rawURL = (raw?.isEmpty == false) ? (raw ?? fallback) : fallback
+        guard let input = URL(string: rawURL) else { return nil }
+        guard var comps = URLComponents(url: input, resolvingAgainstBaseURL: false) else { return nil }
+
+        if comps.scheme == "http" {
+            comps.scheme = "ws"
+        } else if comps.scheme == "https" {
+            comps.scheme = "wss"
+        }
+
+        guard comps.scheme == "ws" || comps.scheme == "wss" else { return nil }
+        if comps.path.isEmpty || comps.path == "/" {
+            comps.path = "/v1/ws"
+        }
+
+        return comps.url
     }
 
     private func backendConfig() -> (wsURL: URL, accessToken: String)? {
@@ -124,7 +164,7 @@ final class RemoteControlHostService: ObservableObject {
     }
 
     private func connectOnce() async {
-        guard let cfg = backendConfig() else { return }
+        guard let cfg = hostSocketConfig() else { return }
         guard let hostSessions else { return }
 
         let task = urlSession.webSocketTask(with: cfg.wsURL)
@@ -134,7 +174,7 @@ final class RemoteControlHostService: ObservableObject {
         // Hello
         sendJson([
             "type": "hello",
-            "role": "host",
+            "role": cfg.role,
             "protocolVersion": 1,
             "hostSessionId": hostSessions.hostSessionId,
         ])
