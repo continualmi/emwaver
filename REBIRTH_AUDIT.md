@@ -53,12 +53,19 @@ The rebirth is complete only when:
 
 ## Verification Evidence
 
-Current verified command:
+Recent verified commands:
 
 ```bash
 cd gateway
 npm ci
 npm run verify
+
+cd daemon
+cargo test -p emwaver-device -p emwaver-runtime
+cargo build -p emwaver-host -p emwaver
+cargo run -q -p emwaver -- daemon start --help
+cargo run -q -p emwaver -- devices
+cargo run -q -p emwaver -- doctor
 ```
 
 Latest result:
@@ -75,6 +82,8 @@ This verifies:
 - macOS local gateway app-role integration for a UI-only `.emw` script,
 - Rust daemon workspace build,
 - initial `emwaver-runtime` and `emwaver-device` crate extraction,
+- runtime command bridge tests,
+- selected-device daemon startup CLI help,
 - `emwaver doctor`,
 - `emwaver run` against local gateway plus built macOS app,
 - `emwaver gateway --port` clean-checkout dependency install/start smoke,

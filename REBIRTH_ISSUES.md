@@ -197,7 +197,7 @@ Acceptance criteria:
 
 ## `REBIRTH-013` Make Daemon Use Shared Runtime
 
-- Status: `todo`
+- Status: `done`
 - Priority: `P1`
 - Target: daemon/runtime
 
@@ -210,7 +210,7 @@ Acceptance criteria:
 
 ## `REBIRTH-014` Runtime Tests For Script UI
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P1`
 - Target: tests
 
@@ -226,7 +226,7 @@ Acceptance criteria:
 
 ## `REBIRTH-015` Add `emwaver run`
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P0`
 - Target: CLI/runtime
 
@@ -254,7 +254,7 @@ Acceptance criteria:
 
 ## `REBIRTH-017` Add `emwaver doctor`
 
-- Status: `todo`
+- Status: `in progress`
 - Priority: `P1`
 - Target: CLI/diagnostics
 
