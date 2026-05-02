@@ -32,7 +32,7 @@ export default function DocsIndex() {
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Install the app</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use the store build for your platform, sign in, and let EMWaver manage activation and updates.
+              Use the store build for your platform, connect a board, and run scripts locally without a cloud account.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
@@ -87,7 +87,7 @@ export default function DocsIndex() {
       </p>
       <p>
         The board handles the physical I/O. Your phone or computer handles rendering, storage, script
-        execution, account access, and cloud connectivity.
+        execution, and local device transport.
       </p>
 
       <h2>Quick start details</h2>
@@ -105,7 +105,7 @@ export default function DocsIndex() {
           <Link href="/docs/install">App Store, Google Play, or Microsoft Store</Link>.
         </li>
         <li>
-          <strong>Plug in and activate</strong>. EMWaver handles firmware and activation automatically once you sign in.
+          <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
         </li>
         <li>
           <strong>Open a script</strong> such as <code>sampler.emw</code>, <code>cc1101.emw</code>, or <code>rfid.emw</code>,

@@ -53,7 +53,7 @@ function StoreBadges() {
 export default function InstallDocPage() {
   return (
     <>
-      <h1>Install &amp; activate</h1>
+      <h1>Install and run locally</h1>
       <p>
         Get the EMWaver app, connect your board, and start running scripts.
       </p>
@@ -97,30 +97,27 @@ export default function InstallDocPage() {
         standard USB MIDI device.
       </blockquote>
 
-      <h2>4. Add your key</h2>
+      <h2>4. Run local scripts</h2>
       <p>
-        Open <strong>Account settings</strong> from the header on the web app, create your EMWaver API
-        key there, then paste it into the app. If you prefer a dedicated page, you can also use{" "}
-        <Link href="/account">the account page</Link>. You can do this before connecting a device so
-        activation is ready when your board is plugged in.
+        Open the Scripts view in the app, pick a built-in script or create your own <code>.emw</code> file,
+        and press Run. Local script execution should not require sign-in, cloud activation, or a hosted relay.
       </p>
 
-      <h2>5. Activate</h2>
+      <h2>5. Use the localhost gateway</h2>
       <p>
-        When you connect a new board, the app reads its hardware UID, identifies the board type,
-        and activates it on the platform. The app handles firmware flashing automatically —
-        you don&apos;t need to build or flash anything manually.
+        On desktop, you can also start the browser gateway:
       </p>
+      <pre><code>{`emwaver gateway --port 3921`}</code></pre>
       <p>
-        If you re-flash the same physical board later, the platform restores its existing
-        activation automatically.
+        Then open <code>http://127.0.0.1:3921</code>. The gateway controls the local native app on the
+        same machine; the app owns script execution and USB/device transport.
       </p>
 
-      <h2>6. Run scripts</h2>
+      <h2>6. Optional Agent key</h2>
       <p>
-        Once activated, go to the Scripts tab, pick a built-in script (or create your own), and
-        press Run. See the{" "}
-        <Link href="/docs/scripts">scripting guide</Link> for details.
+        The paid Agent can use an API key to help write and debug scripts, but that key should not be required
+        for ordinary local hardware control. See the{" "}
+        <Link href="/docs/scripts">scripting guide</Link> for script details.
       </p>
     </>
   );

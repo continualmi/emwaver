@@ -14,7 +14,7 @@ const nav = [
   { href: "/videos", label: "Videos" },
   { href: societyRouteUrl("/society"), label: "Society" },
   { href: "/pro", label: "Pro" },
-  { href: "/cloud", label: "Dashboard" },
+  { href: "/cloud", label: "Gateway" },
 ];
 
 export function SiteHeader() {
