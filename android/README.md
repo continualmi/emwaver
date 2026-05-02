@@ -35,6 +35,7 @@ Key components:
 - `CommandSender.java` — command dispatch path.
 - `NativeBuffer.java` — native/buffer integration surface.
 - `scripts/ScriptEngine.java` + `scripts/ScriptRenderView.java` — Rhino bridge + native script UI rendering (including Sampler buffer bridges and native `UI.plot` waveform rendering for `sampler.emw` parity).
+- `scripts/ScriptDeviceBridge.java` + `scripts/SimulatorScriptDeviceBridge.java` — pluggable real/simulated script device bridge for tests.
 - Activities for primary UX and settings.
 
 ---
@@ -89,6 +90,10 @@ Use the appropriate connected device/emulator setup (USB host behavior testing n
 3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
 4. Keep app-level dialogs/resources synced with underlying feature availability.
 5. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
+
+Simulator testing:
+- `scripts/SimulatorScriptDeviceBridge.java` reads the shared `simulator/fixtures/*.json` contract and implements the same bridge used by `ScriptEngine`.
+- Use it in Android runtime tests to run hardware-touching `.emw` scripts without a physical USB device.
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.

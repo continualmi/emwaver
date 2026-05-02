@@ -49,6 +49,8 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Shared simulator fixtures | `pass` | `simulator/fixtures/basic-board.json` defines mock board metadata, GPIO, ADC, PWM, SPI/I2C/UART stubs, and explicit unsupported-command behavior through the Rust simulator bridge. |
 | Rust simulator bridge | `pass` | `emwaver-runtime::SimulatorCommandBridge` runs a hardware-touching `.emw` script in tests without a connected board, and `emwaver run --direct --sim-device` exposes the same bridge from the CLI. Local `cargo test -p emwaver-device -p emwaver-runtime` and a CLI simulator smoke passed. |
 | Apple simulator adapter | `build pass` | `SimulatorScriptDevice` implements the shared Apple `ScriptDevice` protocol from the same fixture JSON so iOS/macOS runtime tests can use simulator-backed command replies. `swift build` passed for `apple/EMWaverAppleCore` with pre-existing `FileService` Sendable warnings. |
+| Windows simulator adapter | `source added / build blocked` | `Scripting/SimulatorCommandBridge.cs` reads the shared fixture JSON and provides a `sendPacket` delegate compatible with `ScriptEngine.Setup`; Windows build remains blocked here because `dotnet` is unavailable. |
+| Android simulator adapter | `build pass` | `ScriptDeviceBridge` lets real USB and simulator bridges share the same script engine path; `SimulatorScriptDeviceBridge` reads the shared fixture JSON for Android runtime tests. `./gradlew :app:compileDebugJavaWithJavac` passed with Java 8 deprecation warnings. |
 | Simulator CI smoke | `added` | `.github/workflows/daemon-ci.yml` runs a simulator-backed direct script smoke test and watches `simulator/**`. |
 
 ## Hardware Repos

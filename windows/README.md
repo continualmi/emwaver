@@ -48,6 +48,7 @@ Scripting/runtime:
 - `Scripting/ScriptEngine.cs`
 - `Scripting/ScriptModel.cs`
 - `Scripting/PlotBufferStore.cs`
+- `Scripting/SimulatorCommandBridge.cs`
 
 Auxiliary:
 - `Dialogs/*`
@@ -68,6 +69,8 @@ Transport logic lives under `Services/UsbMidiSysex.cs` and related device manage
 
 Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` modules, including plot/state helpers and script document handling.
 
+`Scripting/SimulatorCommandBridge.cs` is the Windows test adapter for the shared `simulator/fixtures/*.json` contract. It can be passed to `ScriptEngine.Setup` as the `sendPacket` delegate so hardware-touching `.emw` scripts can run in tests without a physical board.
+
 ## 3.3 Remote host control
 
 Remote control pages/services provide host listing and attach/control behavior for cloud-connected hosts:
@@ -78,7 +81,8 @@ Local-first gateway behavior:
 - `Services/Cloud/RemoteControlHostService.cs` can connect directly to the localhost gateway as `role=app`.
 - Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
 - Override with `EMWAVER_LOCAL_GATEWAY_URL`.
-- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1` to fall back to the hosted remote-control socket path.
+- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
+- Hosted remote-control fallback is outside the core local-first path and only activates when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`.
 - In local gateway mode, the Windows app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
 
 ## 3.4 Firmware update path

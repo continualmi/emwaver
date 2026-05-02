@@ -26,7 +26,7 @@ Use it to capture:
 | `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
 | `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge; macOS and Windows now have source-level local `role=app` wiring and need native validation. |
 | `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, selected-device daemon startup builds, direct UI-only `emwaver run` works, and `doctor` is verified locally. Hardware-backed validation remains. |
-| `P0` | Device simulator | `in progress` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, and Apple `SimulatorScriptDevice` are added; Windows and Android adapters remain. |
+| `P0` | Device simulator | `done for protocol adapters` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, and Android `SimulatorScriptDeviceBridge` are added; optional virtual transport remains later scope. |
 | `P0` | Remote control scope | `planned` | Native apps should default to same-machine localhost gateway control; hosted macOS/Windows remote control is not core launch scope. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
@@ -35,12 +35,11 @@ Use it to capture:
 ## Next Up
 
 1. Validate macOS and Windows local gateway app-role wiring on native workstations.
-2. Add Windows and Android simulator adapters from the shared fixture contract.
-3. Audit macOS/Windows hosted remote-control services and keep them outside the core localhost gateway path.
-4. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
-5. Validate local gateway script execution on real hardware.
-6. Validate `emwaver run --direct --device <id>` against attached hardware.
-7. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
+2. Audit remaining hosted/session UI surfaces and keep them outside the core localhost gateway path.
+3. Continue gateway UI migration from the completed `gateway/WEB_CONTROL_INVENTORY.md` classification.
+4. Validate local gateway script execution on real hardware.
+5. Validate `emwaver run --direct --device <id>` against attached hardware.
+6. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
 
 ## Blockers / Risks
 

@@ -724,7 +724,7 @@ Acceptance criteria:
 
 ## `REBIRTH-048` Add Native Platform Simulator Adapters
 
-- Status: `in progress`
+- Status: `done`
 - Priority: `P1`
 - Target: apple/windows/android/tests
 
@@ -740,6 +740,8 @@ Acceptance criteria:
 Progress:
 
 - Apple shared `SimulatorScriptDevice` added for iOS/macOS tests.
+- Windows `SimulatorCommandBridge` added for `ScriptEngine.Setup` tests.
+- Android `SimulatorScriptDeviceBridge` added for `ScriptEngine` tests.
 
 ## `REBIRTH-049` Add Optional Virtual Transport Simulator
 

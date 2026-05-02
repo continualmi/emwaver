@@ -78,6 +78,10 @@ emwaver run path/to/script.emw --direct --sim-device
 
 The Apple shared package also exposes `SimulatorScriptDevice`, a Swift `ScriptDevice` implementation that reads the same fixture JSON for iOS/macOS runtime tests.
 
+The Windows app exposes `Scripting/SimulatorCommandBridge.cs`, which reads the same fixture JSON and provides a `sendPacket` delegate compatible with `ScriptEngine.Setup`.
+
+The Android app exposes `SimulatorScriptDeviceBridge`, which implements the same `ScriptDeviceBridge` seam used by the Rhino `ScriptEngine`.
+
 ## Non-Goals
 
 - Replacing real hardware validation.

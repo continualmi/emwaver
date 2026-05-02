@@ -68,7 +68,7 @@ public final class ScriptEngine {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Map<String, Function> callbackRegistry = new ConcurrentHashMap<>();
     private final Map<String, Object> globalBindings = new ConcurrentHashMap<>();
-    private volatile ScriptDeviceConnection deviceConnection;
+    private volatile ScriptDeviceBridge deviceConnection;
 
     private volatile Scriptable scope;
     private volatile boolean initialized;
@@ -84,7 +84,7 @@ public final class ScriptEngine {
         bootstrapSource = source != null ? source : "";
     }
 
-    public void setDeviceConnection(ScriptDeviceConnection deviceConnection) {
+    public void setDeviceConnection(ScriptDeviceBridge deviceConnection) {
         this.deviceConnection = deviceConnection;
     }
 
@@ -338,7 +338,7 @@ public final class ScriptEngine {
                 if (args.length < 1) {
                     return Context.getUndefinedValue();
                 }
-                ScriptDeviceConnection connection = deviceConnection;
+                ScriptDeviceBridge connection = deviceConnection;
                 if (connection == null || !connection.isConnected()) {
                     return null;
                 }
@@ -411,7 +411,7 @@ public final class ScriptEngine {
             @Override
             public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
                 samplerManualBuffer = null;
-                ScriptDeviceConnection connection = deviceConnection;
+                ScriptDeviceBridge connection = deviceConnection;
                 if (connection != null) {
                     connection.clearBuffer();
                 }
@@ -475,7 +475,7 @@ public final class ScriptEngine {
                 if (data == null) {
                     return 0;
                 }
-                ScriptDeviceConnection connection = deviceConnection;
+                ScriptDeviceBridge connection = deviceConnection;
                 if (connection == null) {
                     return 0;
                 }
@@ -536,7 +536,7 @@ public final class ScriptEngine {
                     return 0;
                 }
 
-                ScriptDeviceConnection connection = deviceConnection;
+                ScriptDeviceBridge connection = deviceConnection;
                 if (connection == null || !connection.isConnected()) {
                     return 0;
                 }
@@ -982,7 +982,7 @@ public final class ScriptEngine {
         if (manual != null) {
             return Arrays.copyOf(manual, manual.length);
         }
-        ScriptDeviceConnection connection = deviceConnection;
+        ScriptDeviceBridge connection = deviceConnection;
         if (connection == null) {
             return new byte[0];
         }

@@ -18,7 +18,7 @@ import com.emwaver.emwaverandroidapp.DeviceConnectionService;
  * Script JS bridge for device I/O that routes through DeviceConnectionManager.
  * Exposed to Rhino as a global object (e.g. `DeviceConnection`).
  */
-public final class ScriptDeviceConnection {
+public final class ScriptDeviceConnection implements ScriptDeviceBridge {
     private final DeviceConnectionManager connectionManager;
 
     public ScriptDeviceConnection(Context context) {
@@ -56,6 +56,7 @@ public final class ScriptDeviceConnection {
 
     /** Sends a raw command packet and waits for the response. */
     @Nullable
+    @Override
     public byte[] sendPacket(byte[] data, int timeoutMs) {
         return sendCommand(data, timeoutMs);
     }
@@ -73,6 +74,7 @@ public final class ScriptDeviceConnection {
         service.write(bytes);
     }
 
+    @Override
     public void transmitBuffer() {
         DeviceConnectionService service = activeService();
         if (service == null) {
@@ -81,6 +83,7 @@ public final class ScriptDeviceConnection {
         service.transmitBuffer();
     }
 
+    @Override
     public void clearBuffer() {
         DeviceConnectionService service = activeService();
         if (service == null) {
@@ -89,6 +92,7 @@ public final class ScriptDeviceConnection {
         service.clearBuffer();
     }
 
+    @Override
     public int getBufferLength() {
         DeviceConnectionService service = activeService();
         if (service == null) {
@@ -98,6 +102,7 @@ public final class ScriptDeviceConnection {
     }
 
     @Nullable
+    @Override
     public byte[] getBuffer() {
         DeviceConnectionService service = activeService();
         if (service == null) {
@@ -106,6 +111,7 @@ public final class ScriptDeviceConnection {
         return service.getBuffer();
     }
 
+    @Override
     public void loadBuffer(byte[] data) {
         DeviceConnectionService service = activeService();
         if (service == null) {
