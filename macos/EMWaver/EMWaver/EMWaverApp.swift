@@ -29,17 +29,13 @@ struct EMWaverApp: App {
     @StateObject private var hostSessions = HostSessionManager()
     @StateObject private var hostDirectory = HostDirectory()
     @StateObject private var remoteControlHost = RemoteControlHostService()
-    @StateObject private var accountDevices = AccountDevicesService()
     @StateObject private var previewManager = ScriptPreviewManager()
-    @StateObject private var entitlements = EntitlementsManager()
     @StateObject private var appRouter = AppRouter()
 
     var body: some Scene {
         WindowGroup {
             ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory, remoteControlHost: remoteControlHost, previewManager: previewManager)
                 .environmentObject(auth)
-                .environmentObject(entitlements)
-                .environmentObject(accountDevices)
                 .environmentObject(appRouter)
                 .task {
                     await auth.waitForInitialRestore()

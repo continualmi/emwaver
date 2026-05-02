@@ -261,9 +261,7 @@ struct ContentView: View {
         .sheet(isPresented: $showingHosts) {
             NavigationStack {
                 HostsView(
-                    directory: hostDirectory,
-                    proEnabled: false,
-                    onRequestUpgrade: nil
+                    directory: hostDirectory
                 ) {
                     await hostDirectory.refresh(auth: auth)
                 }
@@ -332,7 +330,5 @@ struct ContentView: View {
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())
-    .environmentObject(AccountDevicesService())
-    .environmentObject(EntitlementsManager())
     .environmentObject(AppRouter())
 }

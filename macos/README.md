@@ -34,7 +34,7 @@ Entry points:
 ## 2.1 Auth and account
 
 `macos/EMWaver/EMWaver/Auth/`:
-- authentication manager + models,
+- local Agent API-key manager + model,
 - keychain store,
 - Agent API-key entry UI.
 
@@ -57,9 +57,9 @@ Core files include:
 Responsibilities:
 - local USB host operation,
 - remote attach/control pathways,
-- host presence and cloud session integration,
-- legacy hardware-UID/account/cache awareness is migration debt,
-- firmware provisioning/update tooling for first-party setup on macOS without gating local script execution on account ownership.
+- localhost gateway app-role integration,
+- optional hosted host presence/relay integration behind explicit development flags,
+- firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Local-first gateway behavior:
 - `RemoteControlHostService` can connect directly to the localhost gateway as `role=app`.
@@ -79,14 +79,6 @@ Representative views:
 - `RemoteHostControlView.swift`
 - `SettingsView.swift`
 - firmware/device connection sheets.
-
-## 2.4 Pro and entitlements
-
-`Pro/EntitlementsManager.swift` + `ProUpgradeSheet.swift` integrate subscription/entitlement UX.
-
-Account/cloud direction:
-- EMWaver should not require product accounts, cloud activation, or subscription gates for local hardware control.
-- Older billing/account and `EMWaver Pro` strings are migration debt unless they are specifically part of the future Agent API-key flow.
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
@@ -111,12 +103,10 @@ The macOS app bundles the canonical committed firmware image at `firmware/emwave
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
 - first-party firmware setup/update flows for supported devices,
-- legacy backend-tethered account registration using `/provisioning/mint` is migration debt and should not be required for setup/update,
 - local Agent key entry for optional Agent replies,
 - avoid requiring supported-board hardware UID reads in Run Mode before local use,
-- unified in-app device list with local cache fallback for Offline Mode,
 - bundled or operator-selected custom firmware images,
-- operator-readable progress and diagnostic logging for provisioning/update sessions.
+- operator-readable progress and diagnostic logging for update sessions.
 
 ### Board-specific update model
 
@@ -167,7 +157,7 @@ As with other app folders, avoid relying on Linux agent environment for native a
 
 1. Keep macOS-specific host UI and settings here; move shared logic to `/apple`.
 2. Keep remote-control protocol compatibility aligned with backend and other clients.
-3. Ensure firmware update helper integration remains stable when changing update or optional account setup flow.
+3. Ensure firmware update helper integration remains stable when changing update flow.
 4. Document any new app-level env/config toggles in this README.
 
 ---

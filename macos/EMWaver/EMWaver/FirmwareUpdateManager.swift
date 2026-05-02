@@ -157,14 +157,6 @@ final class FirmwareUpdateManager: ObservableObject {
         }
     }
 
-    func startMintAndProvision(auth: AuthenticationManager, accountDevices: AccountDevicesService, device: MacUSBManager) {
-        startUpdate(device: device)
-    }
-
-    func startEspClaimAndFlash(auth: AuthenticationManager, accountDevices: AccountDevicesService, device: MacUSBManager) {
-        startUpdate(device: device)
-    }
-
     func clearLogs() {
         logLines.removeAll(keepingCapacity: false)
     }
