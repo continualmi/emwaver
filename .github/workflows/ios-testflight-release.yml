@@ -26,7 +26,7 @@ concurrency:
 jobs:
   testflight:
     name: Build and upload iOS app
-    runs-on: macos-15
+    runs-on: macos-26
     environment: app-store
     timeout-minutes: 60
 
