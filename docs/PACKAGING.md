@@ -13,6 +13,7 @@ GitHub Actions can publish direct-download preview builds for app testing while 
 Current workflows:
 
 - `.github/workflows/android-apk-release.yml` builds `EMWaver-android.apk` on Ubuntu with Gradle.
+- `.github/workflows/android-play-release.yml` builds a signed Android App Bundle and uploads it to Google Play through Fastlane, defaulting to the internal testing track and draft release status.
 - `.github/workflows/macos-dmg-release.yml` builds the macOS app on a macOS runner and packages `EMWaver-macos.dmg`.
 - `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app and packages `EMWaver-windows-x64.zip`, containing `EMWaver.exe` and its required runtime files.
 - iOS distribution is automated locally through `scripts/ios-release.sh` and `ios/fastlane/`, and TestFlight upload can run through `.github/workflows/ios-testflight-release.yml` after the protected `app-store` GitHub Environment secrets are configured. Apple review submission remains a manual App Store Connect checkpoint.
@@ -30,6 +31,36 @@ https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip
 The EMWaver repository is private, so GitHub Release asset URLs are not public install links. Public preview files are mirrored into the Society static site under `public/emwaver/downloads/`.
 
 The macOS DMG is unsigned/notarization-free until Apple signing credentials are wired into CI. The Android APK is unsigned until Play/App signing or a GitHub Actions signing secret path is added. Windows currently ships as a ZIP because a raw WinUI `.exe` is not a complete redistributable package.
+
+## Android Play Store
+
+Google Play distribution is handled from `android/fastlane/` and `.github/workflows/android-play-release.yml`.
+
+Required protected GitHub Environment:
+
+```text
+play-store
+```
+
+Required GitHub secrets:
+
+```text
+ANDROID_KEYSTORE_BASE64
+ANDROID_KEYSTORE_PASSWORD
+ANDROID_KEY_ALIAS
+ANDROID_KEY_PASSWORD
+GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+```
+
+`ANDROID_KEYSTORE_BASE64` is the base64-encoded Android upload keystore. `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` is the full JSON key for a Google Play service account with access to the EMWaver app in Play Console.
+
+The workflow builds `app-release.aab` and uploads to the `internal` track by default with `draft` release status, leaving rollout and production promotion as Play Console checkpoints. Manual workflow inputs can override `versionCode`, `versionName`, changelog text, and target track.
+
+The Play Console package name must match the Android application id:
+
+```text
+com.emwaver.emwaverandroidapp
+```
 
 ## macOS
 

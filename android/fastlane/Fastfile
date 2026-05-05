@@ -1,0 +1,64 @@
+opt_out_usage
+
+default_platform(:android)
+
+platform :android do
+  before_all do
+    ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
+  end
+
+  desc "Build the Android release app bundle without uploading"
+  lane :archive do
+    validate_release_signing!
+
+    gradle(
+      task: "bundleRelease",
+      project_dir: "."
+    )
+  end
+
+  desc "Upload an Android App Bundle to Google Play internal testing"
+  lane :beta do
+    google_play_json_key_from_env
+    validate_release_signing!
+
+    gradle(
+      task: "bundleRelease",
+      project_dir: "."
+    )
+
+    upload_to_play_store(
+      package_name: "com.emwaver.emwaverandroidapp",
+      json_key: ENV.fetch("GOOGLE_PLAY_JSON_KEY_PATH"),
+      aab: "app/build/outputs/bundle/release/app-release.aab",
+      track: ENV.fetch("GOOGLE_PLAY_TRACK", "internal"),
+      release_status: ENV.fetch("GOOGLE_PLAY_RELEASE_STATUS", "draft"),
+      skip_upload_metadata: true,
+      skip_upload_changelogs: changelog_text.empty?,
+      changelogs: changelog_text.empty? ? nil : {
+        "en-US" => changelog_text
+      }
+    )
+  end
+
+  private_lane :google_play_json_key_from_env do
+    UI.user_error!("Missing GOOGLE_PLAY_JSON_KEY_PATH") if ENV["GOOGLE_PLAY_JSON_KEY_PATH"].to_s.empty?
+    UI.user_error!("Google Play JSON key does not exist at #{ENV.fetch('GOOGLE_PLAY_JSON_KEY_PATH')}") unless File.exist?(ENV.fetch("GOOGLE_PLAY_JSON_KEY_PATH"))
+  end
+
+  def validate_release_signing!
+    required = %w[
+      ANDROID_KEYSTORE_PATH
+      ANDROID_KEYSTORE_PASSWORD
+      ANDROID_KEY_ALIAS
+      ANDROID_KEY_PASSWORD
+    ]
+    missing = required.select { |key| ENV[key].to_s.empty? }
+    UI.user_error!("Missing Android release signing env vars: #{missing.join(', ')}") unless missing.empty?
+    UI.user_error!("Android keystore does not exist at #{ENV.fetch('ANDROID_KEYSTORE_PATH')}") unless File.exist?(ENV.fetch("ANDROID_KEYSTORE_PATH"))
+  end
+
+  def changelog_text
+    ENV.fetch("EMWAVER_ANDROID_CHANGELOG", "").strip
+  end
+end

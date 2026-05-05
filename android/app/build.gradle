@@ -66,8 +66,8 @@ android {
         applicationId "com.emwaver.emwaverandroidapp"
         minSdk 24
         targetSdk 35
-        versionCode 2
-        versionName "1.0.0"
+        versionCode envOr("EMWAVER_ANDROID_VERSION_CODE", "2").toInteger()
+        versionName envOr("EMWAVER_ANDROID_VERSION_NAME", "1.0.0")
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
@@ -80,8 +80,23 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        def keystorePath = envOr("ANDROID_KEYSTORE_PATH", "")
+        if (keystorePath) {
+            release {
+                storeFile file(keystorePath)
+                storePassword envOr("ANDROID_KEYSTORE_PASSWORD", "")
+                keyAlias envOr("ANDROID_KEY_ALIAS", "")
+                keyPassword envOr("ANDROID_KEY_PASSWORD", "")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (signingConfigs.findByName("release") != null) {
+                signingConfig signingConfigs.release
+            }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

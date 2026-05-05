@@ -80,6 +80,11 @@ or run from Android Studio.
 
 Use the appropriate connected device/emulator setup (USB host behavior testing needs real device support).
 
+Release distribution:
+- direct preview APKs are built by `.github/workflows/android-apk-release.yml`.
+- Google Play app bundles are built and uploaded by `.github/workflows/android-play-release.yml` through `android/fastlane/`.
+- Play uploads require the protected `play-store` GitHub Environment secrets documented in `docs/PACKAGING.md`.
+
 ---
 
 ## 6) Guardrails

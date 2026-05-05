@@ -1,0 +1,2 @@
+json_key_file(ENV["GOOGLE_PLAY_JSON_KEY_PATH"]) if ENV["GOOGLE_PLAY_JSON_KEY_PATH"]
+package_name("com.emwaver.emwaverandroidapp")
