@@ -45,12 +45,14 @@ Missing key behavior:
 - CLI: print a setup message and exit non-zero for Agent commands.
 - Gateway UI: show an Agent setup state while leaving local script control available.
 
-## Endpoint Shape
+## MGPT Endpoint Shape
 
-Initial endpoint concept:
+The Agent endpoint is MGPT's general-purpose stateful Responses API. EMWaver is only one client. MGPT has no notion of EMWaver, MDL, boards, scripts, flashing, or product-specific schemas at this boundary.
+
+Endpoint concept:
 
 ```http
-POST /v1/emwaver/agent
+POST /backend-api/mgpt/responses
 Authorization: Bearer <agent_api_key>
 Content-Type: application/json
 ```
@@ -67,39 +69,21 @@ Request:
 
 ```json
 {
-  "mode": "write|debug|explain|patch",
-  "prompt": "Write a script for an MFRC522 card read.",
-  "script": {
-    "name": "rfid.emw",
-    "source": "..."
-  },
-  "runtime": {
-    "error": "script error text",
-    "logs": ["optional log lines"]
-  },
-  "hardware": {
-    "boardType": "stm32f042",
-    "modules": ["rfid-waver"],
-    "connectedDevice": {
-      "boardType": "stm32f042",
-      "firmwareVersion": "optional"
-    }
-  },
-  "context": {
-    "selectedExample": "optional",
-    "uiSnapshot": {}
-  }
+  "universe": "persistent-universe-id",
+  "userInput": "Write a script for an MFRC522 card read."
 }
 ```
+
+`userInput` is the canonical new user message. Any app-specific context must be abstracted before this boundary, usually by turning it into user-visible conversation text. Clients may omit `universe` only when the configured endpoint creates or resolves a default universe for the API key; otherwise they should persist one universe id per local workspace/project.
 
 Response:
 
 ```json
 {
   "message": "Explanation for the user.",
-  "code": "optional full .emw source",
-  "patch": "optional patch-style edit",
-  "warnings": ["optional safety or hardware notes"],
+  "code": "optional generated text/code when the client asks for code",
+  "patch": "optional patch-style edit when the client asks for one",
+  "warnings": ["optional generic notes"],
   "usage": {
     "metered": true
   }
@@ -110,15 +94,15 @@ Response:
 
 The Continual MI/MGPT backend should own:
 
-- Agent system prompt,
-- `.emw` language instructions,
-- board/runtime rules,
-- module recipes,
-- safety and policy constraints,
+- universe creation, ownership checks, cache reads, and cache-miss recovery,
+- private system prompts,
+- generic model/runtime policy,
 - usage metering,
 - provider/model routing.
 
 The open-source client should send user intent and relevant context, not private system instructions.
+
+For the hot path, MGPT should read the universe from Redis using the existing MDL/MGPT universe cache shape. EMWaver apps must not perform database reads, store prompt snapshots, serialize full universe documents, or send EMWaver-specific schemas to MGPT. Their MGPT-facing job is to send `universe` and `userInput`.
 
 The open-source repo should keep only:
 
@@ -142,19 +126,19 @@ Prompt secrecy is not the full moat. The real moat is the maintained Agent servi
 Gateway:
 
 - add an Agent panel,
-- include current script source,
-- include selected board/module metadata,
-- include latest script error or UI snapshot when useful,
+- send only `universe` and `userInput` to the MGPT-facing endpoint,
+- fold any user-approved local context into `userInput` before the boundary when needed,
 - let users intentionally apply returned code or patch.
 
 CLI:
 
 ```bash
+EMWAVER_AGENT_UNIVERSE=... emwaver agent "write a script for a CC1101 433.92 MHz ASK receiver"
 emwaver agent "write a script for a CC1101 433.92 MHz ASK receiver"
 emwaver agent --script scripts/cc1101.emw "debug this"
 ```
 
-The CLI uses `EMWAVER_AGENT_API_KEY` and `EMWAVER_AGENT_ENDPOINT` initially. `CONTINUAL_AGENT_ENDPOINT` is accepted as an endpoint fallback.
+The CLI uses `EMWAVER_AGENT_API_KEY` and `EMWAVER_AGENT_ENDPOINT` initially. `CONTINUAL_AGENT_ENDPOINT` is accepted as an endpoint fallback. `EMWAVER_AGENT_UNIVERSE` and `CONTINUAL_AGENT_UNIVERSE` bind the local client to a persistent MGPT universe when set.
 
 ## Non-Goals
 

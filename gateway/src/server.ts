@@ -25,6 +25,23 @@ function stringEnv(name: string): string {
   return String(process.env[name] || "").trim();
 }
 
+function normalizeAgentPayload(payload: JsonObject): JsonObject {
+  const configuredUniverse = stringEnv("EMWAVER_AGENT_UNIVERSE") || stringEnv("CONTINUAL_AGENT_UNIVERSE");
+  const universe = typeof payload.universe === "string" && payload.universe.trim()
+    ? payload.universe.trim()
+    : configuredUniverse;
+  const userInput = typeof payload.userInput === "string" && payload.userInput.trim()
+    ? payload.userInput
+    : typeof payload.prompt === "string"
+      ? payload.prompt
+      : "";
+
+  return {
+    ...(universe ? { universe } : {}),
+    userInput,
+  };
+}
+
 function loadBundledExamples(): Array<{ name: string; source: string }> {
   if (!existsSync(DEFAULT_SCRIPTS_DIR)) return [];
   return readdirSync(DEFAULT_SCRIPTS_DIR)
@@ -67,7 +84,7 @@ async function handleAgentRequest(payload: JsonObject): Promise<{ status: number
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
     },
-    body: JSON.stringify(payload),
+    body: JSON.stringify(normalizeAgentPayload(payload)),
   });
 
   const text = await response.text();

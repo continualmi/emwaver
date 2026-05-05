@@ -685,26 +685,28 @@ fn run_agent(
             )
         })?;
 
-    let script_payload = if let Some(path) = script {
+    let mut user_input = prompt.clone();
+    if let Some(path) = script {
         let source = fs::read_to_string(&path)
             .with_context(|| format!("failed to read script at {}", path.display()))?;
-        Some(serde_json::json!({
-            "name": script_name(&path, None),
-            "source": source,
-        }))
-    } else {
-        None
-    };
-
-    let mut payload = serde_json::json!({
-        "mode": mode,
-        "prompt": prompt,
-    });
-    if let Some(script_payload) = script_payload {
-        payload["script"] = script_payload;
+        user_input.push_str(&format!(
+            "\n\nScript `{}`:\n```emw\n{}\n```",
+            script_name(&path, None),
+            source
+        ));
     }
     if let Some(error) = error {
-        payload["runtime"] = serde_json::json!({ "error": error });
+        user_input.push_str(&format!("\n\nRuntime error:\n```text\n{error}\n```"));
+    }
+    if mode != "write" {
+        user_input.push_str(&format!("\n\nRequested mode: {mode}"));
+    }
+
+    let mut payload = serde_json::json!({
+        "userInput": user_input,
+    });
+    if let Some(universe) = env_trim("EMWAVER_AGENT_UNIVERSE").or_else(|| env_trim("CONTINUAL_AGENT_UNIVERSE")) {
+        payload["universe"] = serde_json::json!(universe);
     }
 
     let client = reqwest::blocking::Client::builder()

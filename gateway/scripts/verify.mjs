@@ -371,6 +371,7 @@ await withMockAgent(async (requests) => {
       EMWAVER_GATEWAY_PORT: String(configuredGatewayPort),
       EMWAVER_AGENT_API_KEY: "test-agent-key",
       EMWAVER_AGENT_ENDPOINT: agentUrl,
+      EMWAVER_AGENT_UNIVERSE: "test-universe-1",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -401,8 +402,11 @@ await withMockAgent(async (requests) => {
     if (requests.length !== 1 || requests[0].authorization !== "Bearer test-agent-key") {
       throw new Error(`unexpected mock agent request: ${JSON.stringify(requests)}`);
     }
-    if (requests[0].body?.script?.name !== "verify.emw") {
-      throw new Error(`agent request did not include script context: ${JSON.stringify(requests[0].body)}`);
+    if (requests[0].body?.universe !== "test-universe-1" || requests[0].body?.userInput !== "debug") {
+      throw new Error(`agent request did not include universe turn fields: ${JSON.stringify(requests[0].body)}`);
+    }
+    if ("script" in requests[0].body || "hardware" in requests[0].body || "runtime" in requests[0].body || "mode" in requests[0].body || "prompt" in requests[0].body) {
+      throw new Error(`agent request leaked product-specific fields: ${JSON.stringify(requests[0].body)}`);
     }
     console.log("gateway agent proxy verify passed");
   } finally {

@@ -27,11 +27,8 @@ internal sealed class AgentApi
     internal sealed record StreamEvent(StreamEventKind Kind, string Text, Message? DoneMessage, string? Model);
 
     private sealed record AgentEndpointRequest(
-        [property: JsonPropertyName("mode")] string Mode,
-        [property: JsonPropertyName("prompt")] string Prompt,
-        [property: JsonPropertyName("script")] ScriptContext? Script,
-        [property: JsonPropertyName("runtime")] object? Runtime,
-        [property: JsonPropertyName("hardware")] object? Hardware);
+        [property: JsonPropertyName("universe")] string? Universe,
+        [property: JsonPropertyName("userInput")] string UserInput);
 
     private sealed record AgentEndpointResponse(
         [property: JsonPropertyName("message")] string? Message,
@@ -103,11 +100,8 @@ internal sealed class AgentApi
         req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         req.Content = new StringContent(
             JsonSerializer.Serialize(new AgentEndpointRequest(
-                Mode: "debug",
-                Prompt: message,
-                Script: script,
-                Runtime: null,
-                Hardware: null)),
+                Universe: ResolveUniverse(),
+                UserInput: BuildUserInput(message, script))),
             Encoding.UTF8,
             "application/json");
 
@@ -149,6 +143,31 @@ internal sealed class AgentApi
         }
 
         return endpoint;
+    }
+
+    private static string BuildUserInput(string message, ScriptContext? script)
+    {
+        var text = (message ?? "").Trim();
+        if (script is null || string.IsNullOrWhiteSpace(script.Source))
+        {
+            return text;
+        }
+
+        var name = string.IsNullOrWhiteSpace(script.Name) ? "script.emw" : script.Name.Trim();
+        return text + "\n\nScript `" + name + "`:\n```emw\n" + script.Source.Trim() + "\n```";
+    }
+
+    private static string? ResolveUniverse()
+    {
+        var active = new[]
+            {
+                Environment.GetEnvironmentVariable("EMWAVER_AGENT_UNIVERSE"),
+                Environment.GetEnvironmentVariable("CONTINUAL_AGENT_UNIVERSE"),
+            }
+            .Select(v => (v ?? "").Trim())
+            .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
+
+        return string.IsNullOrWhiteSpace(active) ? null : active;
     }
 
     private string RequireAgentKey()

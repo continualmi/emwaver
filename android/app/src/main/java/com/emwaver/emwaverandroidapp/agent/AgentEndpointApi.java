@@ -128,11 +128,14 @@ public final class AgentEndpointApi {
 
         JSONObject payload = new JSONObject();
         try {
-            payload.put("mode", "debug");
-            payload.put("prompt", message);
-            payload.put("script", JSONObject.NULL);
-            payload.put("runtime", JSONObject.NULL);
-            payload.put("hardware", JSONObject.NULL);
+            String universe = firstNonEmpty(
+                    System.getenv("EMWAVER_AGENT_UNIVERSE"),
+                    System.getenv("CONTINUAL_AGENT_UNIVERSE")
+            );
+            if (!universe.isEmpty()) {
+                payload.put("universe", universe);
+            }
+            payload.put("userInput", message);
         } catch (Exception e) {
             listener.onError(e.toString());
             return;
@@ -216,6 +219,14 @@ public final class AgentEndpointApi {
         } catch (Exception ignored) {}
         String trimmed = body.trim();
         return !trimmed.isEmpty() ? trimmed : ("HTTP " + code);
+    }
+
+    @NonNull
+    private static String firstNonEmpty(@Nullable String first, @Nullable String second) {
+        String a = first != null ? first.trim() : "";
+        if (!a.isEmpty()) return a;
+        String b = second != null ? second.trim() : "";
+        return b;
     }
 
     public static final class UnauthorizedException extends Exception {}
