@@ -37,7 +37,7 @@ platform :ios do
   desc "Upload a build to TestFlight"
   lane :beta do
     api_key = app_store_connect_api_key_from_env
-    increment_build_number_for_upload(api_key)
+    increment_build_number_for_upload(api_key: api_key)
     configure_ci_app_store_signing
 
     build_app(
@@ -63,6 +63,32 @@ platform :ios do
   desc "Upload App Store metadata and the latest local IPA. Final App Review submission is still confirmed in App Store Connect."
   lane :release do
     api_key = app_store_connect_api_key_from_env
+
+    upload_app_store_candidate(api_key: api_key)
+  end
+
+  desc "Build and upload an App Store production candidate. Final App Review submission is still confirmed in App Store Connect."
+  lane :app_store_upload do
+    api_key = app_store_connect_api_key_from_env
+    increment_build_number_for_upload(api_key: api_key)
+    configure_ci_app_store_signing
+
+    build_app(
+      project: "EMWaver.xcodeproj",
+      scheme: "EMWaver",
+      configuration: "Release",
+      export_options: export_options_path,
+      output_directory: "../build/ios",
+      output_name: "EMWaver.ipa",
+      clean: true,
+      xcargs: xcode_args
+    )
+
+    upload_app_store_candidate(api_key: api_key)
+  end
+
+  private_lane :upload_app_store_candidate do |options|
+    api_key = options[:api_key]
 
     deliver(
       api_key: api_key,
