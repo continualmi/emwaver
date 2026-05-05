@@ -82,7 +82,9 @@ Representative files:
 
 Agent configuration direction:
 - the Apple shared Agent UI uses a host-provided Agent endpoint plus user-provided API key,
-- app clients should not call EMWaver account/conversation routes for Agent chat,
+- app clients call the MGPT stateful Responses API for Agent chat,
+- on first Agent send, the shared UI creates a persistent universe from the server-side stored prompt `emwaver-prompt`,
+- subsequent turns send only `universe` and `userInput` to MGPT,
 - the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with an API key stored locally/keychain-backed by the host app,
 - the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
 

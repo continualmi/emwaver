@@ -12,6 +12,8 @@ public final class AgentChatViewModel: ObservableObject {
     private static let log = OSLog(subsystem: "com.emwaver", category: "AgentChat")
 
     public static let defaultModelId = "managed-by-server"
+    private static let storedPromptName = "emwaver-prompt"
+    private static let universeDefaultsKey = "emwaver.agent.mgptUniverse"
 
     @Published public private(set) var messages: [AgentChatMessage] = []
     @Published public private(set) var conversations: [ConversationInfo] = []
@@ -21,6 +23,7 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public var lastError: String?
 
     private var assistantPlaceholderId: UUID?
+    private var selectedUniverseId: String?
 
     // Endpoint context for API-key Agent execution. The tuple names are kept
     // for source compatibility with existing app callers.
@@ -29,8 +32,16 @@ public final class AgentChatViewModel: ObservableObject {
     public init(endpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
         self.endpointProvider = endpointProvider
         self.messages = []
-        self.conversations = []
-        self.selectedConversationId = nil
+        let storedUniverse = UserDefaults.standard.string(forKey: Self.universeDefaultsKey)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        self.selectedUniverseId = storedUniverse?.isEmpty == false ? storedUniverse : nil
+        if let selectedUniverseId = self.selectedUniverseId, let id = UUID(uuidString: selectedUniverseId) {
+            self.conversations = [ConversationInfo(id: id, title: "Chat", updatedAt: Date())]
+            self.selectedConversationId = id
+        } else {
+            self.conversations = []
+            self.selectedConversationId = nil
+        }
     }
 
     public var isAgentConfigured: Bool {
@@ -143,21 +154,21 @@ public final class AgentChatViewModel: ObservableObject {
         guard let provider = endpointProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
             throw AgentEndpointError.serverError("Agent API endpoint is not configured yet.")
         }
+        let api = AgentEndpointAPI()
+        let universe = try await ensureUniverseId(api: api, endpoint: ctx.baseURL, apiKey: ctx.accessToken)
 
-        let response = try await AgentEndpointAPI().send(
+        let response = try await api.send(
             endpoint: ctx.baseURL,
             apiKey: ctx.accessToken,
             request: AgentEndpointRequest(
-                mode: "debug",
-                prompt: userPrompt,
-                script: nil,
-                runtime: nil,
-                hardware: nil
+                universe: universe,
+                userInput: userPrompt
             )
         )
 
         let pieces = [
             response.message,
+            response.assistantRaw,
             response.code.map { "```emw\n\($0)\n```" },
             response.patch.map { "Patch:\n\($0)" },
             response.warnings?.isEmpty == false ? "Warnings:\n" + (response.warnings ?? []).map { "- \($0)" }.joined(separator: "\n") : nil,
@@ -173,6 +184,34 @@ public final class AgentChatViewModel: ObservableObject {
             throw AgentEndpointError.serverError("Agent model produced no text")
         }
         return reply
+    }
+
+    private func ensureUniverseId(api: AgentEndpointAPI, endpoint: URL, apiKey: String) async throws -> String {
+        if let selectedUniverseId, !selectedUniverseId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return selectedUniverseId
+        }
+
+        let created = try await api.createUniverse(
+            endpoint: endpoint,
+            apiKey: apiKey,
+            storedPrompt: Self.storedPromptName,
+            displayName: "EMWaver Agent"
+        )
+        let universe = created.universe.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !universe.isEmpty else {
+            throw AgentEndpointError.invalidResponse
+        }
+        await MainActor.run {
+            self.selectedUniverseId = universe
+            UserDefaults.standard.set(universe, forKey: Self.universeDefaultsKey)
+            if let id = UUID(uuidString: universe) {
+                self.selectedConversationId = id
+                if !self.conversations.contains(where: { $0.id == id }) {
+                    self.conversations = [ConversationInfo(id: id, title: self.defaultConversationTitle, updatedAt: Date())] + self.conversations
+                }
+            }
+        }
+        return universe
     }
 
     private func makeToolBubbleText(name: String, args: [String: Any], fetchedURL: String? = nil) -> String {
@@ -229,6 +268,8 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func startLocalConversation() {
         let id = UUID()
+        selectedUniverseId = nil
+        UserDefaults.standard.removeObject(forKey: Self.universeDefaultsKey)
         let info = ConversationInfo(id: id, title: defaultConversationTitle, updatedAt: Date())
         conversations = [info] + conversations
         selectedConversationId = id

@@ -74,7 +74,8 @@ Representative views:
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
-- the macOS Agent interface/runtime calls the endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
+- the macOS Agent interface/runtime calls the MGPT responses endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
+- the shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends `universe` + `userInput`,
 - provider selection, private prompts, tool policy, and metering belong server-side on MGPT,
 - the macOS client should use a user-provided Agent API key stored locally/keychain-backed, and local scripts/hardware must work without it.
 
