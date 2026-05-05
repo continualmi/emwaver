@@ -224,7 +224,7 @@ Workflow:
 - sync branch before work (`git pull --rebase`),
 - make focused commits when a logical unit of work is complete,
 - commit and push to `main` whenever new work is completed and verified,
-- ask before committing unless the user explicitly requested committing/pushing for the current work.
+- agents must not leave completed verified work unpushed unless the user explicitly says not to commit or push for that work.
 
 ## 9) Org Workspace
 

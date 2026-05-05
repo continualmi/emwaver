@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
-  { href: "/build", label: "Build" },
+  { href: "/", label: "Build" },
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
   { href: "/videos", label: "Videos" },
@@ -60,7 +60,10 @@ export function SiteHeader() {
           <nav className="hidden items-center gap-2 text-[13px] text-[color:var(--ink-dim)] md:flex">
             {nav.map((item) => {
               const external = item.href.startsWith("http");
-              const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+              const active =
+                item.href === "/"
+                  ? pathname === "/" || pathname.startsWith("/build")
+                  : pathname === item.href || pathname.startsWith(`${item.href}/`);
               const navClass =
                 "rounded-lg px-3 py-2 transition " +
                 (active
@@ -105,7 +108,10 @@ export function SiteHeader() {
             <div className="flex flex-col gap-2 text-sm text-[color:var(--ink)]">
               {nav.map((item) => {
                 const external = item.href.startsWith("http");
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const active =
+                  item.href === "/"
+                    ? pathname === "/" || pathname.startsWith("/build")
+                    : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const navClass =
                   "rounded-xl px-3 py-3 transition " +
                   (active

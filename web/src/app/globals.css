@@ -1,122 +1,13 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════════
-   EMWaver Design Tokens — Light / Dark (system-automatic)
-   Light is default; dark activates via prefers-color-scheme.
+   EMWaver Design Tokens — Dark only
    ═══════════════════════════════════════════════════════════ */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: dark;
 
-  /* ── Base palette ── */
-  --paper:       #ffffff;
-  --paper-2:     #f5f6f8;
-  --ink:         #1a1d26;
-  --ink-dim:     rgba(26, 29, 38, 0.62);
-  --line:        rgba(26, 29, 38, 0.12);
-
-  /* ── Accents ── */
-  --aqua:        #0fa885;
-  --sky:         #2a8fd4;
-  --copper:      #c47a2e;
-  --danger:      #dc2f4e;
-
-  /* ── Surfaces ── */
-  --surface:     rgba(0, 0, 0, 0.04);
-  --surface-2:   rgba(0, 0, 0, 0.065);
-  --surface-3:   rgba(0, 0, 0, 0.03);
-  --glass:       rgba(255, 255, 255, 0.82);
-  --glass-heavy: rgba(255, 255, 255, 0.92);
-  --image-well:  rgba(0, 0, 0, 0.04);
-
-  /* ── Shadows / overlays ── */
-  --shadow:          rgba(0, 0, 0, 0.08);
-  --shadow-heavy:    rgba(0, 0, 0, 0.12);
-  --overlay:         rgba(0, 0, 0, 0.06);
-  --scrim:           rgba(0, 0, 0, 0.18);
-
-  /* ── Accent tints ── */
-  --aqua-tint:       rgba(15, 168, 133, 0.08);
-  --aqua-tint-2:     rgba(15, 168, 133, 0.12);
-  --sky-tint:        rgba(42, 143, 212, 0.08);
-  --sky-tint-2:      rgba(42, 143, 212, 0.12);
-  --copper-tint:     rgba(196, 122, 46, 0.08);
-  --copper-tint-2:   rgba(196, 122, 46, 0.12);
-  --danger-tint:     rgba(220, 47, 78, 0.08);
-  --amber-tint:      rgba(217, 152, 41, 0.08);
-  --red-tint:        rgba(220, 47, 78, 0.08);
-
-  /* ── Typography helpers ── */
-  --code-bg:         rgba(0, 0, 0, 0.05);
-  --code-border:     rgba(0, 0, 0, 0.10);
-  --code-text:       #3a3f4b;
-
-  /* ── Prose / docs ── */
-  --link-underline:      rgba(42, 143, 212, 0.35);
-  --link-underline-hover: rgba(42, 143, 212, 0.70);
-  --blockquote-border:   rgba(15, 168, 133, 0.45);
-  --blockquote-bg:       rgba(15, 168, 133, 0.06);
-  --blockquote-text:     rgba(26, 29, 38, 0.72);
-  --table-header-bg:     rgba(0, 0, 0, 0.04);
-  --table-header-text:   rgba(26, 29, 38, 0.88);
-  --table-border:        rgba(26, 29, 38, 0.10);
-  --table-cell-border:   rgba(26, 29, 38, 0.06);
-
-  /* ── Grid pattern (docs overlay) ── */
-  --grid-line:      rgba(26, 29, 38, 0.04);
-  --grid-line-2:    rgba(26, 29, 38, 0.03);
-  --grid-opacity:   0.06;
-
-  /* ── Docs nav ── */
-  --nav-heading:        rgba(26, 29, 38, 0.42);
-  --nav-item:           rgba(26, 29, 38, 0.56);
-  --nav-item-hover-bg:  rgba(0, 0, 0, 0.04);
-  --nav-hover-border:   rgba(26, 29, 38, 0.20);
-
-  /* ── Backgrounds (body, docs, dashboard) ── */
-  --body-gradient: linear-gradient(180deg, #ffffff 0%, #f5f6f8 60%, #f0f1f4 100%);
-  --body-glow-1:   rgba(42, 143, 212, 0.06);
-  --body-glow-2:   rgba(15, 168, 133, 0.05);
-  --body-glow-3:   rgba(196, 122, 46, 0.04);
-  --docs-overlay-1: rgba(15, 168, 133, 0.03);
-  --docs-overlay-2: rgba(42, 143, 212, 0.03);
-  --docs-overlay-bg: linear-gradient(180deg, rgba(255,255,255,0.34) 0%, rgba(245,246,248,0.44) 100%);
-  --dash-overlay-1: rgba(15, 168, 133, 0.04);
-  --dash-overlay-2: rgba(42, 143, 212, 0.03);
-  --dash-overlay-bg: linear-gradient(to bottom, rgba(255,255,255,0.42), rgba(245,246,248,0.52));
-
-  /* ── Global bg image ── */
-  --bg-image-opacity:      0.22;
-  --bg-docs-image-opacity:  0.17;
-  --bg-dash-image-opacity:  0.13;
-  --bg-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(15,168,133,0.03), transparent 62%),
-    radial-gradient(900px 600px at 85% 20%, rgba(42,143,212,0.03), transparent 64%),
-    linear-gradient(to bottom, rgba(255,255,255,0.34), rgba(245,246,248,0.44));
-  --bg-docs-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(15,168,133,0.04), transparent 62%),
-    radial-gradient(900px 600px at 85% 20%, rgba(42,143,212,0.03), transparent 62%),
-    linear-gradient(to bottom, rgba(255,255,255,0.38), rgba(245,246,248,0.48));
-  --bg-dash-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(15,168,133,0.05), transparent 60%),
-    radial-gradient(900px 600px at 85% 20%, rgba(42,143,212,0.04), transparent 62%),
-    linear-gradient(to bottom, rgba(255,255,255,0.46), rgba(245,246,248,0.56));
-
-  /* ── Hero card glow ── */
-  --hero-glow-white: rgba(0, 0, 0, 0.03);
-  --hero-glow-aqua:  rgba(15, 168, 133, 0.04);
-  --card-glow-aqua:  rgba(15, 168, 133, 0.06);
-  --card-glow-sky:   rgba(42, 143, 212, 0.05);
-
-  /* ── SVG / plot ── */
-  --plot-stroke:     rgba(26, 29, 38, 0.80);
-  --plot-text:       rgba(26, 29, 38, 0.50);
-
-  /* ── Misc ── */
-  --destructive-text: #dc2f4e;
-  --mobile-drawer-shadow: rgba(0, 0, 0, 0.12);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    /* ── Base palette ── */
+/* ── Base palette ── */
     --paper:       #070a12;
     --paper-2:     #0b1020;
     --ink:         #e9eefc;
@@ -220,7 +111,6 @@
     /* ── Misc ── */
     --destructive-text: rgb(251, 113, 133);
     --mobile-drawer-shadow: rgba(0, 0, 0, 0.5);
-  }
 }
 
 @theme inline {

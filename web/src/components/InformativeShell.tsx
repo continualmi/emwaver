@@ -7,7 +7,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { href: "/build", label: "Build" },
+  { href: "/", label: "Build" },
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
   { href: "/docs/hardware", label: "Hardware" },

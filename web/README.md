@@ -1,6 +1,6 @@
 # EMWaver Public Web Surface (`/web`)
 
-`web/` is now the static public EMWaver site: landing pages, docs, install guidance, build/board references, hardware pages, news, videos, and script examples.
+`web/` is now the static public EMWaver site: build/board references, docs, install guidance, hardware pages, news, videos, and script examples.
 
 It must not own EMWaver accounts, auth sessions, subscription checks, hosted relay behavior, cloud script storage, device provisioning, hosted Agent conversations, Stripe/Firebase/Postgres integration, or local hardware control. Local hardware control belongs in `gateway/`; paid Agent behavior belongs in the future Continual MI/MGPT Agent API backend.
 
@@ -32,8 +32,8 @@ There is no `src/server/`, custom `server.ts`, `/v1/*`, `/api/auth/*`, `/cloud`,
 
 ## Current Public Routes
 
-- `/`
-- `/build`
+- `/` - Build catalog landing page
+- `/build` - compatibility route for the Build catalog
 - `/build/[slug]`
 - `/docs`
 - `/docs/...`
