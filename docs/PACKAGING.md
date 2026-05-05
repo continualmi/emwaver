@@ -54,6 +54,15 @@ GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
 
 `ANDROID_KEYSTORE_BASE64` is the base64-encoded Android upload keystore. `GOOGLE_PLAY_SERVICE_ACCOUNT_JSON` is the full JSON key for a Google Play service account with access to the EMWaver app in Play Console.
 
+Current setup note as of 2026-05-05:
+
+- The `play-store` GitHub Environment has been created for `continualmi/emwaver`.
+- All five required environment secrets have been added.
+- A new Android upload key was generated under the local ignored `.local-secrets/android-play/` folder.
+- The matching public upload certificate was submitted through Play Console's upload-key reset flow.
+- Play Console shows the upload-key reset request as pending; Google activation can take roughly two days.
+- Do not run the Android Play workflow until Play Console shows the new upload key is active, otherwise Google Play may reject the uploaded `.aab`.
+
 The workflow builds `app-release.aab` and uploads to the `internal` track by default with `draft` release status, leaving rollout and production promotion as Play Console checkpoints. Manual workflow inputs can override `versionCode`, `versionName`, changelog text, and target track.
 
 The Play Console package name must match the Android application id:
