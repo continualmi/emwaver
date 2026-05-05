@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "tsx watch --env-file=../.env server.ts",
+    "dev": "next dev --webpack -p 3920",
+    "dev:server": "tsx watch server.ts",
     "build": "next build --webpack",
     "build:static": "EMWAVER_STATIC_EXPORT=1 next build --webpack",
     "start": "tsx server.ts",
