@@ -116,7 +116,7 @@ Backlog coverage:
 ## Docs
 
 - `AGENTS.md` reflects local-first/open-source strategy.
-- `README.txt` points to rebirth plan and issues.
+- `README.md` points to rebirth plan and issues.
 - `PLANNING.md` reflects current rebirth priorities.
 - Local gateway getting-started docs exist.
 - Launch MVP checklist exists.

@@ -149,7 +149,8 @@ We intentionally give up:
 
 Use the local README first when working in a folder:
 
-- `README.txt` (repo root) — concise repo overview + doc index
+- `README.md` (repo root) — public open-source overview, website links, repo map, and doc index
+- `README.txt` (repo root) — compatibility pointer to `README.md`
 - `REBIRTH.md` (repo root) — local-first/open-source rebirth plan and product pivot
 - `REBIRTH_ISSUES.md` (repo root) — durable issue backlog for the rebirth plan
 - `REBIRTH_AUDIT.md` (repo root) — completion audit and remaining gaps for the active rebirth objective

@@ -48,7 +48,7 @@ The rebirth is complete only when:
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
 | Full hardware import | all nine primary hardware repos imported under flat `hardware/<repo-name>/` paths | done |
 | AGENTS source of truth updated | `AGENTS.md` | done |
-| README/planning updated | `README.txt`, `PLANNING.md` | done |
+| README/planning updated | `README.md`, `README.txt`, `PLANNING.md` | done |
 | Launch MVP defined | `LAUNCH_MVP.md` | done |
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
