@@ -93,7 +93,7 @@ One-time setup on the release Mac:
 ```sh
 export APP_STORE_CONNECT_API_KEY_ID="..."
 export APP_STORE_CONNECT_API_ISSUER_ID="..."
-export APP_STORE_CONNECT_API_KEY_PATH="$HOME/secure/AuthKey_....p8"
+export EMWAVER_APP_STORE_CONNECT_API_KEY_PATH="$HOME/secure/AuthKey_....p8"
 ```
 
 Optional release variables:

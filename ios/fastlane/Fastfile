@@ -36,7 +36,7 @@ platform :ios do
 
   desc "Upload a build to TestFlight"
   lane :beta do
-    app_store_connect_api_key_from_env
+    api_key = app_store_connect_api_key_from_env
     increment_build_number_if_requested
     configure_ci_app_store_signing
 
@@ -52,6 +52,7 @@ platform :ios do
     )
 
     upload_to_testflight(
+      api_key: api_key,
       ipa: "../build/ios/EMWaver.ipa",
       skip_waiting_for_build_processing: true,
       distribute_external: false,
@@ -61,9 +62,10 @@ platform :ios do
 
   desc "Upload App Store metadata and the latest local IPA. Final App Review submission is still confirmed in App Store Connect."
   lane :release do
-    app_store_connect_api_key_from_env
+    api_key = app_store_connect_api_key_from_env
 
     deliver(
+      api_key: api_key,
       ipa: "../build/ios/EMWaver.ipa",
       metadata_path: "fastlane/metadata",
       screenshots_path: "fastlane/screenshots",
@@ -79,7 +81,7 @@ platform :ios do
     required = %w[
       APP_STORE_CONNECT_API_KEY_ID
       APP_STORE_CONNECT_API_ISSUER_ID
-      APP_STORE_CONNECT_API_KEY_PATH
+      EMWAVER_APP_STORE_CONNECT_API_KEY_PATH
     ]
     missing = required.select { |key| ENV[key].to_s.empty? }
     UI.user_error!("Missing App Store Connect API env vars: #{missing.join(', ')}") unless missing.empty?
@@ -87,7 +89,7 @@ platform :ios do
     app_store_connect_api_key(
       key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
       issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
-      key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
+      key_filepath: ENV.fetch("EMWAVER_APP_STORE_CONNECT_API_KEY_PATH"),
       in_house: false
     )
   end
