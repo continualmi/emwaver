@@ -1,0 +1,66 @@
+name: macOS DMG Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Build macOS app
+        working-directory: macos/EMWaver
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project EMWaver.xcodeproj \
+            -scheme EMWaver \
+            -configuration Release \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Create DMG
+        run: |
+          set -euo pipefail
+          mkdir -p dist dmg-root
+          cp -R macos/EMWaver/build/Build/Products/Release/EMWaver.app dmg-root/
+          hdiutil create \
+            -volname "EMWaver" \
+            -srcfolder dmg-root \
+            -ov \
+            -format UDZO \
+            dist/EMWaver-macos.dmg
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-macos-dmg
+          path: dist/EMWaver-macos.dmg
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: dist/EMWaver-macos.dmg
+

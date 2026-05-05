@@ -1,0 +1,59 @@
+name: Android APK Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+
+      - name: Stage bundled firmware for Android assets
+        run: |
+          set -euo pipefail
+          mkdir -p stm/emwaver-firmware/Release
+          cp firmware/emwaver.bin stm/emwaver-firmware/Release/emwaver-firmware.bin
+
+      - name: Build Android release APK
+        working-directory: android
+        run: ./gradlew assembleRelease
+
+      - name: Collect APK
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release-unsigned.apk dist/EMWaver-android.apk
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-android-apk
+          path: dist/EMWaver-android.apk
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: dist/EMWaver-android.apk

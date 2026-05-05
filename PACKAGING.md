@@ -6,6 +6,28 @@ The reborn EMWaver should package a local-first CLI and localhost gateway for de
 
 ## Targets
 
+## Preview app release workflows
+
+GitHub Actions can publish direct-download preview builds for app testing while store distribution remains the primary end-user path.
+
+Current workflows:
+
+- `.github/workflows/android-apk-release.yml` builds `EMWaver-android.apk` on Ubuntu with Gradle.
+- `.github/workflows/macos-dmg-release.yml` builds the macOS app on a macOS runner and packages `EMWaver-macos.dmg`.
+- `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app and packages `EMWaver-windows-x64.zip`, containing `EMWaver.exe` and its required runtime files.
+
+Each workflow can be run manually from GitHub Actions with a release tag, defaulting to `emwaver-preview`, or by pushing a tag matching `emwaver-v*`.
+
+Stable preview URLs:
+
+```text
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.apk
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip
+```
+
+The macOS DMG is unsigned/notarization-free until Apple signing credentials are wired into CI. The Android APK is unsigned until Play/App signing or a GitHub Actions signing secret path is added. Windows currently ships as a ZIP because a raw WinUI `.exe` is not a complete redistributable package.
+
 ## macOS
 
 Primary user-facing options:

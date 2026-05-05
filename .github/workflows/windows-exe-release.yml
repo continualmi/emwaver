@@ -1,0 +1,58 @@
+name: Windows EXE Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore Windows app
+        working-directory: windows
+        run: dotnet restore EMWaver.sln
+
+      - name: Test Windows app
+        working-directory: windows
+        run: dotnet test EMWaver.Tests/EMWaver.Tests.csproj --configuration Release --no-restore
+
+      - name: Publish Windows app
+        working-directory: windows
+        run: dotnet publish EMWaver/EMWaver.csproj --configuration Release --runtime win-x64 --self-contained false --output ../dist/windows-x64
+
+      - name: Package Windows app
+        shell: pwsh
+        run: Compress-Archive -Path dist/windows-x64/* -DestinationPath dist/EMWaver-windows-x64.zip -Force
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-windows-x64
+          path: dist/EMWaver-windows-x64.zip
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: dist/EMWaver-windows-x64.zip
+
