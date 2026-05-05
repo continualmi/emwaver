@@ -24,11 +24,11 @@ platform :ios do
       project: "EMWaver.xcodeproj",
       scheme: "EMWaver",
       configuration: "Release",
-      export_options: "exportOptions.plist",
+      export_options: export_options_path,
       output_directory: "../build/ios",
       output_name: "EMWaver.ipa",
       clean: true,
-      xcargs: "DEVELOPMENT_TEAM=9VA9KTUXXN"
+      xcargs: xcode_args
     )
   end
 
@@ -41,11 +41,11 @@ platform :ios do
       project: "EMWaver.xcodeproj",
       scheme: "EMWaver",
       configuration: "Release",
-      export_options: "exportOptions.plist",
+      export_options: export_options_path,
       output_directory: "../build/ios",
       output_name: "EMWaver.ipa",
       clean: true,
-      xcargs: "DEVELOPMENT_TEAM=9VA9KTUXXN"
+      xcargs: xcode_args
     )
 
     upload_to_testflight(
@@ -103,5 +103,13 @@ platform :ios do
 
   def changelog_text
     ENV.fetch("EMWAVER_IOS_CHANGELOG", "").strip
+  end
+
+  def export_options_path
+    ENV.fetch("EMWAVER_IOS_EXPORT_OPTIONS", "exportOptions.plist")
+  end
+
+  def xcode_args
+    ENV.fetch("EMWAVER_IOS_XCARGS", "DEVELOPMENT_TEAM=9VA9KTUXXN")
   end
 end

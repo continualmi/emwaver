@@ -124,6 +124,31 @@ Apple review remains a manual App Store Connect checkpoint: select the processed
 
 Fastlane metadata lives in `ios/fastlane/metadata/en-US/`. Screenshots can be added under `ios/fastlane/screenshots/en-US/` and will be uploaded by the `release` lane.
 
+## 6.1 GitHub Actions TestFlight release
+
+`.github/workflows/ios-testflight-release.yml` can build a signed IPA on a GitHub macOS runner and upload it to TestFlight. Configure a protected GitHub Environment named `app-store` and store these environment secrets there:
+
+```text
+APP_STORE_CONNECT_API_KEY_ID
+APP_STORE_CONNECT_API_ISSUER_ID
+APP_STORE_CONNECT_API_KEY_BASE64
+IOS_DISTRIBUTION_CERTIFICATE_BASE64
+IOS_DISTRIBUTION_CERTIFICATE_PASSWORD
+IOS_PROVISIONING_PROFILE_BASE64
+IOS_PROVISIONING_PROFILE_NAME
+IOS_KEYCHAIN_PASSWORD
+```
+
+Create the base64 values on macOS without line wrapping:
+
+```sh
+base64 -i AuthKey_XXXXXXXXXX.p8 | pbcopy
+base64 -i distribution.p12 | pbcopy
+base64 -i EMWaver_AppStore.mobileprovision | pbcopy
+```
+
+The workflow runs manually from GitHub Actions or when pushing tags matching `ios-v*` or `emwaver-ios-v*`. Keep the `app-store` environment protected with required reviewers so Apple signing secrets are only exposed after explicit approval.
+
 ---
 
 ## 7) Contributor guardrails
