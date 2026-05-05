@@ -1419,14 +1419,14 @@ public sealed partial class ScriptsPage : Page
         if (_currentSignal != null)
         {
             var signalName = _currentSignal.FileName;
-            var confirmed = await ConfirmAsync(
+            var signalDeleteConfirmed = await ConfirmAsync(
                 title: "Delete signal?",
                 message: $"Delete '{signalName}'?",
                 primaryButtonText: "Delete",
                 closeButtonText: "Cancel"
             );
 
-            if (!confirmed)
+            if (!signalDeleteConfirmed)
             {
                 return;
             }
