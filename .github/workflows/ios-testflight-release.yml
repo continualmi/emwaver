@@ -41,7 +41,7 @@ jobs:
       EMWAVER_IOS_XCARGS: >-
         DEVELOPMENT_TEAM=9VA9KTUXXN
         CODE_SIGN_STYLE=Manual
-        CODE_SIGN_IDENTITY=Apple Distribution
+        CODE_SIGN_IDENTITY="Apple Distribution"
         PROVISIONING_PROFILE_SPECIFIER=${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
 
     steps:
