@@ -7,6 +7,21 @@ ESP32-S3-MINI-1-N8 module, CC1101-class 433 MHz radio, IR receive/transmit,
 USB-C, BLE/Wi-Fi capability, an 8-pin GPIO add-on header, and a 2x4 radio-style
 expansion header on one board.
 
+## Visual Identification
+
+Catalog photos show a compact black square board with rounded corners, a
+USB-C receptacle on one edge, a second USB-C/serial-programming connector on the
+adjacent edge, a shielded ESP32-S3 module, an E07 radio module, two visible IR
+emitters, and silkscreened add-on header labels. Case photos show it docking to
+a phone with the EMWaver GPIO control screen open.
+
+Representative catalog images:
+
+- [top-side board photo](catalog/images/IMG_0068.jpg)
+- [angled board photo](catalog/images/IMG_0069.jpg)
+- [case / phone workflow photo](catalog/images/IMG_0074.jpg)
+- [catalog render](catalog/images/emwaver.png)
+
 ## Build Assets
 
 | File | Purpose |

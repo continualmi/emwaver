@@ -10,6 +10,21 @@ EMWaver apps remain the normal software path. This repo documents hardware
 reproduction and bring-up; it is not the source of truth for app, backend,
 provisioning, or private firmware release workflows.
 
+## Visual Identification
+
+Catalog photos show a long black shield with two dense through-hole header rows,
+a vertical USB-C connector, front-side IR parts, a 120-marked component near the
+IR section, a copper helical antenna at one end, and an RFM69HW module on the
+back side. Phone photos show the shield attached along the lower edge of a phone
+for app-driven control.
+
+Representative catalog images:
+
+- [front-side shield photo](catalog/images/IMG_0067.jpg)
+- [back-side radio module photo](catalog/images/IMG_0096.jpg)
+- [phone workflow photo](catalog/images/emwaver-shield-phone.jpg)
+- [catalog render](catalog/images/EMWAVER_SHIELD.png)
+
 ## Build Assets
 
 | File | Purpose |

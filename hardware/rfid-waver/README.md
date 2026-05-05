@@ -6,6 +6,20 @@ RFID Waver is an MFRC522-based 13.56 MHz RFID add-on module intended to pair
 with GPIO Waver. Together they provide RFID read/write workflows through the
 EMWaver app where supported by the tag/card type.
 
+## Visual Identification
+
+Catalog photos show a square black RFID add-on with a printed contactless-symbol
+antenna area, a USB-C-facing dock position when paired with GPIO Waver, and
+through-hole header rows along the edges. Phone workflow photos show the RFID UI
+open with read/write block controls while the board is docked below the phone.
+
+Representative catalog images:
+
+- [RFID antenna board photo](catalog/images/IMG_0062.jpg)
+- [phone RFID workflow](catalog/images/IMG_0049.jpg)
+- [case reference](catalog/images/RFID_WAVER_CASING.png)
+- [catalog render](catalog/images/RFID_WAVER.png)
+
 ## Build Assets
 
 | File | Purpose |

@@ -5,6 +5,20 @@
 GPIO Waver is a low-cost STM32F042G6U6 USB board focused on GPIO expansion and
 prototyping. It is also the base board for add-ons such as RFID Waver.
 
+## Visual Identification
+
+Catalog photos show a narrow white/black USB-C board meant to dock along the
+bottom edge of a phone. Two long black header blocks sit on either side of the
+USB-C connector, and usage photos show clearly printed pin labels facing outward
+while the EMWaver app runs on the phone.
+
+Representative catalog images:
+
+- [side/front board photo](catalog/images/IMG_0080.jpg)
+- [phone-docked workflow photo](catalog/images/IMG_0083.jpg)
+- [case reference](catalog/images/GPIO_WAVER_CASING.png)
+- [catalog render](catalog/images/GPIO_WAVER.png)
+
 ## Build Assets
 
 | File | Purpose |

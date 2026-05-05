@@ -7,6 +7,21 @@ CC1101-class radio support. It is the integrated USB radio board in the current
 EMWaver family: native USB, IR receive/transmit, 433 MHz radio, antenna, case,
 and app-managed local control.
 
+## Visual Identification
+
+Catalog photos show a compact black board inside a clear case. The visible top
+side includes an E07 radio module, a Rainsun 433 MHz antenna, a 2x4 module
+header, status LEDs, IR parts, USB-C, and a small board-to-phone USB-C plug.
+Workflow photos show the board connected directly to a phone and running the
+EMWaver shell over USB.
+
+Representative catalog images:
+
+- [clear-case top-side photo](catalog/images/IMG_0149.webp)
+- [phone USB shell workflow](catalog/images/IMG_0184.webp)
+- [gallery detail photo](catalog/images/IMG_0153.webp)
+- [catalog render](catalog/images/emwaver-link.png)
+
 ## Build Assets
 
 | File | Purpose |
@@ -97,10 +112,10 @@ payloads generated from the CubeIDE build.
 
 ## Images
 
-- `catalog/images/IMG_0149.webp` and neighboring `IMG_*.webp` files contain the
-  current gallery photos.
-- `catalog/images/emwaver-link.png` and `emwaver-link-all.png` are catalog
-  renders/marketing images.
+- `catalog/images/IMG_0149.webp` and neighboring `IMG_*.webp` files contain
+  current board, case, and phone-workflow gallery photos.
+- `catalog/images/emwaver-link.png`, `emwaver-link.webp`, and
+  `emwaver-link-all.png` are catalog render/marketing images.
 
 ## Documentation Gaps To Close
 

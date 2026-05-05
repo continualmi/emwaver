@@ -6,6 +6,20 @@ EMWaver Core is the compact STM32F042G6U6 USB board without a built-in CC1101
 radio. It keeps the core EMWaver local hardware-control surface: USB-C, IR
 receive/transmit, and GPIO/module headers.
 
+## Visual Identification
+
+Catalog photos show a small blue board designed to sit at the bottom edge of a
+phone over USB-C. The rear silkscreen exposes labeled header groups for `VCC`,
+`GND`, `MOSI`, `MISO`, `SCK`, `NSS`, `A3`, and related GPIO/module pins, while
+app photos show sampler and script workflows running with the board attached.
+
+Representative catalog images:
+
+- [phone sampler workflow](catalog/images/IMG_0201.jpg)
+- [labeled rear pin view](catalog/images/IMG_0209.jpg)
+- [assembled board detail](catalog/images/IMG_0202.jpg)
+- [catalog render](catalog/images/EMWAVER.png)
+
 ## Build Assets
 
 | File | Purpose |

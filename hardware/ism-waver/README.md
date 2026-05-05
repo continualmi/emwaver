@@ -5,6 +5,20 @@
 ISM Waver is a dual-band sub-GHz board built around STM32F042G6U6 and CC1101.
 It targets common 315 MHz and 433 MHz ISM workflows with native USB control.
 
+## Visual Identification
+
+Catalog photos show a slim black board in a clear shell with a forked dual-antenna
+shape at the far end: one branch is marked `433` and the other `315`. A USB-C
+connector sits at the opposite edge, with the CC1101/RF circuitry between the
+USB and antenna branches.
+
+Representative catalog images:
+
+- [angled dual-antenna photo](catalog/images/IMG_0059.jpg)
+- [top dual-band photo](catalog/images/IMG_0060.jpg)
+- [case reference](catalog/images/ISM_WAVER_CASING.png)
+- [catalog render](catalog/images/ISM_WAVER_DUAL.png)
+
 ## Build Assets
 
 | File | Purpose |

@@ -6,6 +6,21 @@ EMWaver Carrier is the bring-your-own-MCU ESP32-S3 carrier board. It provides
 USB-C, IR receive/transmit, CC1101 module support, and expansion headers around
 an ESP32-S3 DevKit-class module.
 
+## Visual Identification
+
+Catalog photos show a pale square carrier PCB with rounded corners, long parallel
+female sockets for the ESP32-S3 DevKit footprint, two smaller 2x4 module sockets,
+two IR parts near the top edge, and a USB-C connector on the lower edge. Assembled
+photos show a blue ESP32-S3 DevKit and antenna/radio module plugged into the
+carrier above a black EMWaver-branded lower face.
+
+Representative catalog images:
+
+- [bare carrier top](catalog/images/IMG_0093.jpg)
+- [assembled carrier with modules](catalog/images/IMG_0087.jpg)
+- [case / enclosure reference](catalog/images/EMWAVER_DIY_CASING.png)
+- [catalog render](catalog/images/EMWAVER_DIY.png)
+
 ## Build Assets
 
 | File | Purpose |

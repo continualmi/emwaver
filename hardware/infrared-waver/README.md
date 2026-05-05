@@ -6,6 +6,20 @@ Infrared Waver is a low-cost STM32F042G6U6 USB board for infrared capture and
 replay. It includes an IR receiver, high-current IR LED driver, USB-C, and the
 same app-managed EMWaver firmware path as the other STM32 boards.
 
+## Visual Identification
+
+Catalog photos show a small cased USB-C board with a front window exposing two
+clear IR emitters and a black IR receiver. Phone workflow photos show the board
+docked at the bottom of a phone while the EMWaver sampler records and retransmits
+IR waveforms.
+
+Representative catalog images:
+
+- [front IR window photo](catalog/images/IMG_0061.jpg)
+- [phone sampler workflow](catalog/images/IMG_0053.jpg)
+- [case reference](catalog/images/INFRARED_WAVER_CASING.png)
+- [catalog render](catalog/images/INFRARED_WAVER.png)
+
 ## Build Assets
 
 | File | Purpose |
