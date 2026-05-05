@@ -2,6 +2,7 @@
   "name": "emwaver-web",
   "version": "1.0.0",
   "private": true,
+  "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev --webpack -p 3920",
     "dev:server": "tsx watch server.ts",

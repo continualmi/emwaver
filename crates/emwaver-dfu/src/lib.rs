@@ -1,7 +1,7 @@
 /*
  * EMWaver
  * Copyright (c) 2026 Luís Marnoto
- * All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 use rusb::{Context, DeviceHandle, Direction, Recipient, RequestType, UsbContext};

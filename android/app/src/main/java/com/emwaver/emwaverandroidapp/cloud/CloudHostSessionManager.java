@@ -1,7 +1,7 @@
 /*
  * EMWaver
  * Copyright (c) 2026 Luís Marnoto
- * All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
  */
 
 package com.emwaver.emwaverandroidapp.cloud;

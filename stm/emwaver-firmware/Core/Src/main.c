@@ -17,6 +17,7 @@
   *
   * EMWaver modifications
   * Copyright (c) 2026 Luís Marnoto
+  * SPDX-License-Identifier: Apache-2.0
 */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/

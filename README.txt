@@ -1,5 +1,6 @@
 EMWaver monorepo — a Continual MI project
 Local-first, open-source hardware scripting platform with optional paid Agent API usage.
+License: Apache-2.0 (see `LICENSE`).
 Rebirth plan: `REBIRTH.md`
 Durable rebirth issue backlog: `REBIRTH_ISSUES.md`
 Rebirth completion audit: `REBIRTH_AUDIT.md`
