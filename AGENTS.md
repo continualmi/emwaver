@@ -165,7 +165,7 @@ Use the local README first when working in a folder:
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
-- `../society/README.md` — Continual MI static site; hidden EMWaver public pages live under `/emwaver`
+- `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
 - `gateway/README.md` — localhost hardware control gateway direction
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `hardware/README.md` — imported hardware design monorepo index and policy

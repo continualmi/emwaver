@@ -47,7 +47,7 @@ Use it to capture:
 
 ## Blockers / Risks
 
-- Society static export/deploy now owns EMWaver public pages; keep `/emwaver` hidden from primary navigation until launch-ready.
+- Society static export/deploy now owns EMWaver public pages; `/emwaver` is linked from the Society primary navigation.
 - Existing native Agent implementations should keep converging on the MGPT API-key contract and richer local context payloads.
 - Hardware repo import should preserve history and avoid root-level clutter.
 - Duplicated hardware media can make static pages and board docs drift; prefer canonical assets under `hardware/<repo-name>/`.

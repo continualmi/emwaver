@@ -23,7 +23,7 @@ Read first:
 ## Scope
 
 - Society owns the static export and Azure Storage deployment for public pages.
-- EMWaver pages are generated under `/emwaver/*` but stay hidden from Society top navigation until launch-ready.
+- EMWaver pages are generated under `/emwaver/*` and are linked from the Society top navigation.
 - Runtime, firmware, gateway, app code, local hardware control, and Agent API clients remain in the EMWaver repo.
 
 ## Guardrails
