@@ -88,7 +88,7 @@ We intentionally give up:
 - Do not introduce hosted device registration, device limits, device minting, or backend ownership checks for core EMWaver hardware control.
 - Backend enforcement applies only to the paid Agent API, not to the open-source local core.
 
-(Implementation details live in `macos/README.md` and `web/README.md`.)
+(Implementation details live in `macos/README.md`; public static web pages live in `../society` under `/emwaver`.)
 
 ### Supported boards
 
@@ -164,7 +164,7 @@ Use the local README first when working in a folder:
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
-- `web/README.md` — unified Next.js + Node web app and TypeScript backend
+- `../society/README.md` — Continual MI static site; hidden EMWaver public pages live under `/emwaver`
 - `gateway/README.md` — localhost hardware control gateway direction
 - `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `hardware/README.md` — imported hardware design monorepo index and policy
@@ -182,7 +182,7 @@ If a folder has a README, detailed documentation should live there.
 
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
-- `web/` — public website/docs/downloads surface; should trend toward static pages. Existing auth, billing, cloud dashboard, hosted relay, and backend surfaces are migration debt. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of keeping `web/` as an EMWaver cloud runtime.
+- Public website/docs/downloads surface — owned by `../society` under `/emwaver`; this repo no longer carries a standalone `web/` app. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of an EMWaver cloud runtime.
 - `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control and the migrated script rendering/control UI.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
@@ -207,7 +207,7 @@ If a folder has a README, detailed documentation should live there.
 9. **No activation gate**: local board access is not governed by plan entitlements or hosted device ownership.
 10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
 11. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
-12. **CI/Releases policy**: GitHub Actions are for web/gateway CI and optional deployment; do not treat GitHub Releases as end-user distribution for apps.
+12. **CI/Releases policy**: GitHub Actions are for gateway/platform CI and optional deployment; public static pages deploy from `../society`, and GitHub Releases are not end-user app distribution for apps.
 
 ---
 
