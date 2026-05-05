@@ -45,6 +45,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
+import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
 import com.emwaver.emwaverandroidapp.ui.agent.AgentChatBottomSheetDialogFragment;
 import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
 
@@ -96,10 +97,6 @@ public class MainActivity extends AppCompatActivity {
             public void onCreateMenu(@NonNull Menu menu, @NonNull MenuInflater menuInflater) {
                 menuInflater.inflate(R.menu.main_top_menu, menu);
                 connectionMenuItem = menu.findItem(R.id.action_connection);
-                MenuItem hostsItem = menu.findItem(R.id.action_hosts);
-                if (hostsItem != null) {
-                    hostsItem.setVisible(false);
-                }
             }
 
             @Override
@@ -117,20 +114,15 @@ public class MainActivity extends AppCompatActivity {
                     dialog.show(getSupportFragmentManager(), "AgentChat");
                     return true;
                 }
-                if (menuItem.getItemId() == R.id.action_hosts) {
-                    com.emwaver.emwaverandroidapp.ui.hosts.HostsBottomSheetDialogFragment dialog = new com.emwaver.emwaverandroidapp.ui.hosts.HostsBottomSheetDialogFragment();
-                    dialog.show(getSupportFragmentManager(), "Hosts");
-                    return true;
-                }
                 if (menuItem.getItemId() == R.id.action_sign_in) {
-                    com.emwaver.emwaverandroidapp.cloud.CloudAuthManager auth = com.emwaver.emwaverandroidapp.cloud.CloudAuthManager.getInstance();
-                    auth.ensureInitialized(MainActivity.this);
+                    AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                    keyStore.ensureInitialized(MainActivity.this);
 
-                    if (auth.hasAgentKey()) {
+                    if (keyStore.hasAgentKey()) {
                         new AlertDialog.Builder(MainActivity.this)
                                 .setTitle("Agent Key")
                                 .setMessage("Agent key saved")
-                                .setPositiveButton("Remove key", (d, w) -> auth.signOut())
+                                .setPositiveButton("Remove key", (d, w) -> keyStore.clear())
                                 .setNegativeButton("Close", null)
                                 .show();
                     } else {
@@ -146,17 +138,6 @@ public class MainActivity extends AppCompatActivity {
         // Initialize DeviceConnectionManager
         connectionManager = DeviceConnectionManager.getInstance(this);
 
-        if (com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedServicesUiEnabled()
-                || com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedRemoteControlEnabled()) {
-            // Best-effort hosted presence for explicit development builds only.
-            com.emwaver.emwaverandroidapp.cloud.CloudHostSessionManager.getInstance().start(this, connectionManager);
-        }
-
-        if (com.emwaver.emwaverandroidapp.cloud.CloudConfig.isHostedRemoteControlEnabled()) {
-            // Hosted remote control WS is optional; local gateway control is the product default.
-            com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().start(this);
-        }
-        
         // Request ALL necessary permissions at startup
         requestAllRequiredPermissions();
         

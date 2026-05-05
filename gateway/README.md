@@ -64,8 +64,8 @@ Unlike the old hosted path, the local gateway should not require:
 
 - hosted `/v1/hosts/heartbeat`,
 - remote session discovery,
-- `EMWAVER_BACKEND_URL`,
-- `EMWAVER_ID_TOKEN`,
+- backend URL configuration,
+- identity-token configuration,
 - subscription checks,
 - backend device ownership.
 
@@ -87,7 +87,7 @@ The launch direction is:
 
 ## Relationship To `web/`
 
-`web/` should trend toward mostly static public pages, docs, downloads, and product information. Existing auth, cloud dashboard, hosted relay, provisioning/minting, cloud file storage, and backend control surfaces in `web/` are migration debt. Paid Agent/API usage should move to the future Continual MI/MGPT backend instead of keeping an EMWaver cloud runtime.
+`web/` owns mostly static public pages, docs, downloads, and product information. Hosted auth, cloud dashboard, relay, provisioning/minting, cloud file storage, and EMWaver backend control surfaces have been removed from the current web app route set. Paid Agent/API usage belongs to the future Continual MI/MGPT backend instead of an EMWaver cloud runtime.
 
 `gateway/` owns the localhost hardware control surface and should receive the full `.emw` script editor, renderer, live UI, event dispatch, plot, local file, and Agent-assisted control experience migrated from `web/`.
 
@@ -135,5 +135,7 @@ emwaver gateway --port 3930
 If the selected port is already in use, the gateway exits with a specific port-conflict message. Browser auto-open is intentionally deferred until the local control UI is migrated beyond the prototype page.
 
 The current gateway server supports `hello`, `script.run`, `script.stop`, `ui.event`, `plot.viewport`, `script.started`, `script.error`, `ui.snapshot`, and `plot.data` over `/v1/ws`. Browser clients connect with role `web`; the native EMWaver app should connect with role `app` or `host`. Real hardware command execution, plot compression, and UI handler dispatch stay in the native app.
+
+The gateway browser surface is a React dashboard restored from the old web script control UI, with hosted account, subscription, cloud file, and hosted host-selection behavior removed. It keeps the local script editor, bundled examples, preview/live switch, Run/Stop controls, UI snapshot rendering, UI events, Agent panel, and plot support.
 
 The current browser renderer supports the bundled-script UI node set: `column`, `row`, `grid`, `text`, `button`, `tile`, `slider`, `picker`, `textField`, `textEditor`, `scroll`, `card`, `divider`, `spacer`, `progress`, `logViewer`, and `plot`.

@@ -2,7 +2,7 @@
 
 Native iOS EMWaver application (Swift/SwiftUI + Xcode project).
 
-This app provides mobile UX for EMWaver device control, scripts, optional Agent assistance, optional hosted migration surfaces, and firmware asset integration.
+This app provides mobile UX for EMWaver device control, local scripts, optional Agent assistance, and firmware asset integration.
 
 ---
 
@@ -26,18 +26,15 @@ Key app entry:
 
 `ios/EMWaver/Auth/`:
 - `AuthenticationManager.swift`
-- `FirebaseAuthService.swift`
-- `GoogleOAuthSignInProvider.swift`
 - `KeychainStore.swift`
 - `SignInSheet.swift`
 
 Responsibilities:
-- local Agent API-key persistence for optional Agent replies,
-- secure local persistence for the remaining hosted/session data still present in the app.
+- local Agent API-key persistence for optional Agent replies.
 
 Current guidance:
-- the old web handoff-code sheet has been removed from iOS,
-- the visible key sheet stores a user-provided Agent API key locally,
+- there is no EMWaver account, Google/Firebase sign-in, or hosted session restore path,
+- the visible key sheet stores a user-provided Agent API key locally in Keychain,
 - local scripts and hardware control must not depend on this key.
 
 ## 2.2 Device and transport managers
@@ -46,21 +43,16 @@ Current guidance:
 - `USBManager.swift`
 - `USBManager+ScriptDevice.swift`
 - `UsbMidiSysex.swift`
-- optional hosted host/remote managers (`HostSessionManager`, `RemoteControl*`)
-- cloud config / host directory helpers.
+- `HostSessionManager.swift` (local script-status state only).
 
 Responsibilities:
 - USB device communication,
-- optional hosted host session behavior,
-- optional hosted remote control integration,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
 
 ## 2.3 Views
 
 `ios/EMWaver/Views/`:
-- scripts container,
-- optional remote host control view,
-- cloud/host sheets.
+- scripts container.
 
 ## 3) Bundled firmware assets
 
@@ -85,10 +77,6 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
 The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain. Agent calls require `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`; local device/script use does not.
-
-Release/debug environment still controls the backend and platform base URLs through the generated `EMWaverEnv.plist`. Scheme environment variables override bundled values when present.
-
-Hosted host-session UI/heartbeat and hosted remote-control WebSocket behavior are disabled by default. Set `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1` to expose the hosted host directory/presence surfaces, and `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1` to allow the legacy hosted `/v1/ws` remote-control host path. Local device/script use must not depend on either flag.
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 

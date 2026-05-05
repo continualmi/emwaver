@@ -2,20 +2,20 @@
 set -euo pipefail
 
 # One-command dev runner (npm run dev equivalent) for the daemon CLI.
-# - Builds emwaver-host + emwaver
+# - Builds emwaver
 # - Runs the emwaver CLI with your args
 
 cd "$(dirname "$0")"
 
 # Fast incremental build
-cargo build -q -p emwaver-host -p emwaver
+cargo build -q -p emwaver
 
 # Run CLI
 if [[ $# -eq 0 ]]; then
   echo "Usage: ./daemon/dev <emwaver-args>"
   echo "Examples:"
   echo "  ./daemon/dev devices"
-  echo "  ./daemon/dev daemon start"
+  echo "  ./daemon/dev gateway"
   echo "  ./daemon/dev daemon status"
   exit 0
 fi

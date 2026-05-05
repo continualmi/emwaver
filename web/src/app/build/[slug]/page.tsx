@@ -4,10 +4,15 @@ import { notFound } from "next/navigation";
 import { SiteHeader } from "@/components/SiteHeader";
 import { DeviceGallery } from "@/app/build/[slug]/DeviceGallery";
 import {
+  getHardwareCatalog,
   getHardwareDevice,
   type BuildAsset,
   type HardwareDevice,
 } from "@/lib/hardwareCatalog";
+
+export function generateStaticParams() {
+  return getHardwareCatalog().map((device) => ({ slug: device.slug }));
+}
 
 function ExternalLink({
   href,

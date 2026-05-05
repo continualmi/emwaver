@@ -6,12 +6,11 @@ use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::{info, warn};
+use tracing::info;
 use tungstenite::{connect, stream::MaybeTlsStream, Message};
 use url::Url;
 
@@ -128,32 +127,8 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum DaemonCmd {
-    /// Start the daemon as a background process and write a pidfile.
-    Start {
-        /// Backend base URL (defaults to https://api.emwavers.com)
-        #[arg(long)]
-        backend_url: Option<String>,
-
-        /// ID token (optional for now)
-        #[arg(long)]
-        id_token: Option<String>,
-
-        /// Host session id (optional)
-        #[arg(long)]
-        host_session_id: Option<String>,
-
-        /// Override bootstrap script path (dev)
-        #[arg(long)]
-        bootstrap_path: Option<String>,
-
-        /// MIDI input port id from `emwaver devices`.
-        #[arg(long)]
-        device_id: Option<String>,
-
-        /// Replace any existing pidfile by stopping the previous daemon.
-        #[arg(long)]
-        force: bool,
-    },
+    /// Explain the removed hosted daemon start path.
+    Start,
 
     /// Stop the daemon (best-effort).
     Stop,
@@ -207,76 +182,10 @@ fn daemon_running() -> Result<Option<i32>> {
     }
 }
 
-fn daemon_start(
-    backend_url: Option<String>,
-    id_token: Option<String>,
-    host_session_id: Option<String>,
-    bootstrap_path: Option<String>,
-    device_id: Option<String>,
-    force: bool,
-) -> Result<()> {
-    if let Some(pid) = daemon_running()? {
-        if force {
-            warn!("daemon already running (pid={pid}), stopping due to --force");
-            daemon_stop()?;
-        } else {
-            anyhow::bail!(
-                "daemon already running (pid={pid}). Use `emwaver daemon status` or pass --force"
-            );
-        }
-    }
-
-    let pidfile = pidfile_path()?;
-    let logfile = logfile_path()?;
-
-    let mut log = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&logfile)
-        .with_context(|| format!("failed to open log file at {}", logfile.display()))?;
-
-    writeln!(log, "\n--- emwaver daemon start ---")?;
-
-    let mut cmd = Command::new("emwaver-host");
-    cmd.stdin(Stdio::null());
-
-    // stdout/stderr -> log file
-    let log2 = log.try_clone()?;
-    cmd.stdout(Stdio::from(log));
-    cmd.stderr(Stdio::from(log2));
-
-    if let Some(v) = backend_url {
-        cmd.env("EMWAVER_BACKEND_URL", v);
-    }
-    if let Some(v) = id_token {
-        cmd.env("EMWAVER_ID_TOKEN", v);
-    }
-    if let Some(v) = host_session_id {
-        cmd.env("EMWAVER_HOST_SESSION_ID", v);
-    }
-    if let Some(v) = bootstrap_path {
-        cmd.env("EMWAVER_BOOTSTRAP_PATH", v);
-    }
-    if let Some(v) = device_id {
-        cmd.env("EMWAVER_DEVICE_ID", v);
-    }
-
-    // We are a terminal tool; good defaults.
-    cmd.env(
-        "RUST_LOG",
-        std::env::var("RUST_LOG").unwrap_or_else(|_| "info".to_string()),
+fn daemon_start() -> Result<()> {
+    anyhow::bail!(
+        "`emwaver daemon start` hosted wrapper has been removed. Use `emwaver gateway` for browser control or `emwaver run --direct` for local headless execution."
     );
-
-    let child = cmd.spawn().context("failed to spawn emwaver-host")?;
-    let pid = child.id() as i32;
-
-    fs::write(&pidfile, format!("{pid}\n"))
-        .with_context(|| format!("failed to write pidfile at {}", pidfile.display()))?;
-
-    info!("daemon started (pid={pid})");
-    info!("log: {}", logfile.display());
-
-    Ok(())
 }
 
 fn daemon_stop() -> Result<()> {
@@ -323,8 +232,8 @@ fn autostart_status() -> Result<String> {
 
     #[cfg(target_os = "linux")]
     {
-        let unit1 = PathBuf::from("/etc/systemd/system/emwaver-host.service");
-        let unit2 = PathBuf::from("/lib/systemd/system/emwaver-host.service");
+        let unit1 = PathBuf::from("/etc/systemd/system/emwaver.service");
+        let unit2 = PathBuf::from("/lib/systemd/system/emwaver.service");
         if unit1.exists() || unit2.exists() {
             return Ok("autostart: configured (systemd unit exists)".to_string());
         }
@@ -852,21 +761,7 @@ fn main() -> Result<()> {
 
     match cli.cmd {
         Commands::Daemon { cmd } => match cmd {
-            DaemonCmd::Start {
-                backend_url,
-                id_token,
-                host_session_id,
-                bootstrap_path,
-                device_id,
-                force,
-            } => daemon_start(
-                backend_url,
-                id_token,
-                host_session_id,
-                bootstrap_path,
-                device_id,
-                force,
-            ),
+            DaemonCmd::Start => daemon_start(),
             DaemonCmd::Stop => daemon_stop(),
             DaemonCmd::Status => {
                 match daemon_running()? {
@@ -991,7 +886,7 @@ fn run_tui() -> Result<()> {
                         }
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
-                            let _ = daemon_start(None, None, None, None, None, false);
+                            let _ = daemon_start();
                         }
                         KeyCode::Char('t') => {
                             let _ = daemon_stop();

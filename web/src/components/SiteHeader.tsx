@@ -4,7 +4,6 @@ import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AccountPill } from "@/components/AccountPill";
 import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
@@ -13,8 +12,6 @@ const nav = [
   { href: "/docs", label: "Documentation" },
   { href: "/videos", label: "Videos" },
   { href: societyRouteUrl("/society"), label: "Society" },
-  { href: "/pro", label: "Pro" },
-  { href: "/cloud", label: "Gateway" },
 ];
 
 export function SiteHeader() {
@@ -86,11 +83,9 @@ export function SiteHeader() {
                 </Link>
               );
             })}
-            <AccountPill />
           </nav>
 
           <div className="flex items-center gap-2 md:hidden">
-            <AccountPill label="Account" />
             <button
               type="button"
               className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-2 text-sm font-semibold text-[color:var(--ink)]"

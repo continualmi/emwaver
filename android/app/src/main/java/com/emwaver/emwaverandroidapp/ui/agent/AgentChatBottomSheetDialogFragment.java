@@ -22,6 +22,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.emwaver.emwaverandroidapp.R;
+import com.emwaver.emwaverandroidapp.agent.AgentEndpointApi;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
 
@@ -94,7 +95,7 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
                 String label = "Chats";
                 String cid = viewModel.getConversationId();
                 if (cid != null && list != null) {
-                    for (com.emwaver.emwaverandroidapp.cloud.agent.AgentBackendApi.Conversation c : list) {
+                    for (AgentEndpointApi.Conversation c : list) {
                         if (cid.equals(c.id)) {
                             label = c.displayTitle();
                             break;
@@ -131,7 +132,7 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
     }
 
     private void showConversationsPicker() {
-        List<com.emwaver.emwaverandroidapp.cloud.agent.AgentBackendApi.Conversation> list =
+        List<AgentEndpointApi.Conversation> list =
                 viewModel.getConversations().getValue();
         if (list == null || list.isEmpty()) {
             viewModel.refreshConversations();

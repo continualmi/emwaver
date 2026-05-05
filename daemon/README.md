@@ -1,10 +1,8 @@
 # EMWaver Headless Daemon (`/daemon`)
 
-Rust-based headless host for EMWaver.
+Rust-based local CLI/runtime workspace for EMWaver.
 
-This is the terminal/service runtime that keeps USB ownership local to a machine (Mac/Linux target direction), while exposing remote control through EMWaver cloud protocols.
-
-It is one remote-control path in the platform, not the only remote architecture. Autonomous board classes such as future ESP32 direct-to-cloud targets can bypass the daemon entirely.
+This is the terminal/runtime workspace that keeps USB ownership local to a machine for headless and developer flows. It does not provide an EMWaver-hosted relay, account session, or backend presence loop.
 
 ---
 
@@ -13,7 +11,7 @@ It is one remote-control path in the platform, not the only remote architecture.
 The daemon is the **no-UI host runtime** for host-backed boards:
 - owns USB connection to the EMWaver hardware,
 - runs the script runtime and UI state machine headlessly,
-- forwards snapshots/events over WebSocket (`/v1/ws`) to remote controllers.
+- can send scripts to the localhost gateway or execute scripts directly in-process.
 
 It is intended for always-on hosts (desktop, laptop, Raspberry Pi), not as a replacement for native GUI apps.
 
@@ -26,10 +24,8 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 - `emwaver/` — CLI binary (`emwaver`) for daemon/device/status operations.
 - `emwaver-device/` — reusable MIDI/SysEx device transport and EMWaver superframe protocol helpers.
 - `emwaver-runtime/` — reusable Boa-backed `.emw` runtime and streamed UI tree model.
-- `emwaver-host/` — long-running hosted daemon wrapper.
 - `dev` — convenience build/run wrapper.
 - `install/install.sh` — install helper (Linux-oriented path).
-- `systemd/emwaver-host.service` — sample service unit.
 - `TODO.md` — active daemon backlog.
 - `RUNTIME_EXTRACTION.md` — local-first runtime/device extraction plan for CLI and gateway reuse.
 
@@ -54,7 +50,7 @@ State paths are resolved via `directories::ProjectDirs`:
 - logfile
 - local data dir
 
-CLI can start `emwaver-host` in background, pass env overrides, and provide a minimal status TUI.
+CLI provides local device/status, gateway, direct script execution, and Agent helper commands.
 
 The rebirth/local-first direction adds a development gateway command:
 
@@ -112,18 +108,9 @@ emwaver agent --script scripts/blink.emw --mode debug "explain this error"
 
 `emwaver tui` remains daemon/status-oriented for the rebirth. Script-aware terminal UI is intentionally deferred until local CLI/gateway hardware execution is validated across platforms; the browser gateway is the script-control UI surface for now.
 
-## 3.2 `emwaver-host` daemon
+## 3.2 Removed hosted daemon wrapper
 
-Entry (`emwaver-host/src/main.rs`) does:
-1. load config from env (`EMWAVER_BACKEND_URL`, token, host session id),
-2. read bootstrap script,
-3. connect local MIDI device (`EMWAVER_DEVICE_ID` selects an `emwaver devices` input id; otherwise `device.connect_auto()`),
-4. initialize script engine,
-5. heartbeat host presence (`/v1/hosts/heartbeat`),
-6. connect WS (`/v1/ws`) as `role=host`,
-7. process incoming remote commands and publish UI snapshots.
-
-Reconnect loop is built-in with retry delay.
+The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from the workspace. Local browser control should use `emwaver gateway` plus a native app connected as the runtime owner. Headless script execution should use `emwaver run --direct`.
 
 ## 3.3 Script/UI engine
 
@@ -134,7 +121,7 @@ Reconnect loop is built-in with retry delay.
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable MIDI/SysEx transport used by the hosted wrapper.
+`emwaver-device/src/device.rs` owns the reusable MIDI/SysEx transport used by direct local execution.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 
@@ -188,7 +175,6 @@ From repo root:
 
 ```bash
 ./daemon/dev devices
-./daemon/dev daemon start
 ./daemon/dev daemon status
 ```
 
@@ -199,7 +185,7 @@ Alternative direct cargo usage:
 ```bash
 cd daemon
 cargo run -p emwaver -- daemon status
-cargo run -p emwaver-host
+cargo run -p emwaver -- run ../scripts/example.emw --direct --no-device
 ```
 
 ---
@@ -207,13 +193,11 @@ cargo run -p emwaver-host
 ## 8) Environment variables
 
 Common runtime envs:
-- `EMWAVER_BACKEND_URL`
-- `EMWAVER_ID_TOKEN`
-- `EMWAVER_HOST_SESSION_ID`
 - `EMWAVER_BOOTSTRAP_PATH`
+- `EMWAVER_DEVICE_ID`
+- `EMWAVER_AGENT_API_KEY`
+- `EMWAVER_AGENT_ENDPOINT`
 - `RUST_LOG`
-
-If auth token is missing, behavior may work only in limited/dev scenarios depending on backend auth mode.
 
 ---
 
@@ -221,15 +205,13 @@ If auth token is missing, behavior may work only in limited/dev scenarios depend
 
 1. USB ownership is local to daemon host for host-backed boards.
 2. Daemon is headless by design (no rendered UI surface).
-3. WS protocol compatibility with backend host routing is mandatory.
-4. Keep reconnection and heartbeat robust for unattended service operation.
-5. Avoid coupling daemon update flows with GUI firmware update features.
+3. Keep gateway protocol compatibility with the localhost app-role bridge.
+4. Avoid coupling daemon update flows with GUI firmware update features.
 
 ---
 
 ## 10) Documentation maintenance rule
 
-When changing daemon protocol, runtime loop, or service lifecycle behavior:
+When changing daemon protocol, runtime loop, or local service lifecycle behavior:
 - update `daemon/README.md`,
-- update backend WS/hosts docs if server expectations changed,
 - update any controller-side docs that depend on message contract.

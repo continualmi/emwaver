@@ -6,10 +6,9 @@ set -euo pipefail
 #
 # Responsibilities (future):
 # - Detect arch (x86_64/arm64)
-# - Download emwaver-host binary
-# - Install to /usr/local/bin/emwaver-host
-# - Install systemd unit and enable it
-# - Launch TUI pairing flow to obtain auth for the host
+# - Download or build the emwaver CLI binary
+# - Install to /usr/local/bin/emwaver
+# - Optionally configure a user-owned local service for headless direct mode
 
-echo "emwaver-host installer: not implemented yet"
+echo "emwaver CLI installer: not implemented yet"
 exit 1

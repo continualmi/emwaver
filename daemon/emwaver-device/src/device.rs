@@ -113,11 +113,11 @@ impl Device {
 
     /// Best-effort auto-connect: pick the first matching MIDI port.
     pub fn connect_auto(self: &Arc<Self>) -> Result<()> {
-        let midi_in = MidiInput::new("emwaver-host-in")?;
+        let midi_in = MidiInput::new("emwaver-in")?;
         let mut midi_in = midi_in;
         midi_in.ignore(Ignore::None);
 
-        let midi_out = MidiOutput::new("emwaver-host-out")?;
+        let midi_out = MidiOutput::new("emwaver-out")?;
 
         let in_ports = midi_in.ports();
         let out_ports = midi_out.ports();
@@ -154,11 +154,11 @@ impl Device {
             .parse()
             .with_context(|| format!("invalid MIDI input port id: {id}"))?;
 
-        let midi_in = MidiInput::new("emwaver-host-in")?;
+        let midi_in = MidiInput::new("emwaver-in")?;
         let mut midi_in = midi_in;
         midi_in.ignore(Ignore::None);
 
-        let midi_out = MidiOutput::new("emwaver-host-out")?;
+        let midi_out = MidiOutput::new("emwaver-out")?;
 
         let in_ports = midi_in.ports();
         let out_ports = midi_out.ports();
@@ -202,14 +202,14 @@ impl Device {
         info!("connecting midi in #{in_idx}, out #{out_idx}");
 
         let out_conn = midi_out
-            .connect(&out_ports[out_idx], "emwaver-host-out")
+            .connect(&out_ports[out_idx], "emwaver-out")
             .map_err(|e| anyhow::anyhow!("failed to connect MIDI out: {e}"))?;
 
         let dev = Arc::clone(self);
         let in_conn = midi_in
             .connect(
                 &in_ports[in_idx],
-                "emwaver-host-in",
+                "emwaver-in",
                 move |_stamp, bytes, _| {
                     dev.handle_midi_bytes(bytes);
                 },

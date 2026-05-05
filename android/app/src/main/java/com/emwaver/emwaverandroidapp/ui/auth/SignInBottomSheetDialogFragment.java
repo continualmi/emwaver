@@ -13,7 +13,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.R;
-import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
+import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
 
@@ -60,8 +60,8 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         }
 
         notNow.setOnClickListener(v -> dismiss());
-        CloudAuthManager auth = CloudAuthManager.getInstance();
-        auth.ensureInitialized(requireContext());
+        AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+        keyStore.ensureInitialized(requireContext());
 
         continueButton.setOnClickListener(v -> {
             if (isBusy) return;
@@ -81,7 +81,7 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         isBusy = true;
         applyStateToUi();
 
-        CloudAuthManager.getInstance().saveApiKeyAsync(requireContext(), apiKey, (success, errorMessage) -> {
+        AgentApiKeyStore.getInstance().saveApiKeyAsync(requireContext(), apiKey, (success, errorMessage) -> {
             isBusy = false;
             if (success) {
                 Bundle b = new Bundle();

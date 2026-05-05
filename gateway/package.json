@@ -5,16 +5,23 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
+    "dev": "npm run build:client && tsx watch src/server.ts",
+    "build:client": "vite build",
     "start": "tsx src/server.ts",
-    "typecheck": "tsc --noEmit",
-    "verify": "npm run typecheck && node scripts/verify.mjs"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.client.json",
+    "verify": "npm run build:client && npm run typecheck && node scripts/verify.mjs"
   },
   "dependencies": {
+    "@vitejs/plugin-react": "^5.1.2",
+    "vite": "^7.3.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
     "ws": "^8.18.3"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
     "@types/ws": "^8.18.1",
     "tsx": "^4.20.6",
     "typescript": "^5"

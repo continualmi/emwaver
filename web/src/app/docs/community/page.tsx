@@ -65,7 +65,7 @@ export default function DocsCommunityPage() {
 
       <h2>What to ask there</h2>
       <ul>
-        <li>Install, activation, and account issues.</li>
+        <li>Install, local connection, and board setup issues.</li>
         <li>Questions about scripts, device APIs, or UI widgets.</li>
         <li>Help choosing a supported board or wiring peripherals.</li>
         <li>Bug reports, feature ideas, and workflow feedback.</li>

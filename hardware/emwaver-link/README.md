@@ -133,10 +133,9 @@ Suggested onboarding flow to document here:
 
 1. Get or assemble an EMWaver Link board
 2. Install the EMWaver app on the supported platform
-3. Sign in with a Continual account
-4. Connect EMWaver Link over USB
-5. Let EMWaver handle activation/update flow
-6. Open a script and start using the built-in radio workflow
+3. Connect EMWaver Link over USB
+4. Let EMWaver handle setup/update flow
+5. Open a script and start using the built-in radio workflow
 
 Important product rule: users should not need to manually build or flash firmware as part of the normal EMWaver Link getting-started path.
 

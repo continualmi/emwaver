@@ -15,7 +15,6 @@ struct EMWaverApp: App {
     @StateObject private var bleManager = USBManager()
     @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
-    @StateObject private var remoteControlHost = RemoteControlHostService()
 
     var body: some Scene {
         WindowGroup {
@@ -23,18 +22,6 @@ struct EMWaverApp: App {
                 .environmentObject(bleManager)
                 .environmentObject(auth)
                 .environmentObject(hostSessions)
-                .environmentObject(remoteControlHost)
-                .task {
-                    if CloudConfig.hostedServicesEnabled() || CloudConfig.hostedRemoteControlEnabled() {
-                        // Best-effort hosted presence for explicit development builds only.
-                        hostSessions.start(auth: auth, device: bleManager)
-                    }
-
-                    if CloudConfig.hostedRemoteControlEnabled() {
-                        // Hosted remote control WS is optional; local gateway control is the product default.
-                        remoteControlHost.start(auth: auth, device: bleManager, hostSessions: hostSessions)
-                    }
-                }
         }
     }
 }

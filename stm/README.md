@@ -21,7 +21,7 @@ If you only read one thing first, read:
 - Device metadata endpoints (firmware version, device name, signed identity reads).
 - Building/exporting `.elf` and `.bin` artifacts for app bundling.
 
-This folder does **not** own host/cloud logic; it is strictly MCU-side firmware and build helpers.
+This folder does **not** own host, gateway, or Agent logic; it is strictly MCU-side firmware and build helpers.
 
 ### Board-specific notes (STM32F042 — EMWaver board)
 
@@ -202,7 +202,7 @@ Opcode constants are in `Core/Inc/emw_proto.h`; handling is in `Core/Src/main.c`
 - `EMW_OP_HARDWARE_UID_GET (0x08)`
   - returns the STM32 factory-programmed 96-bit unique device identifier (12 bytes).
   - current implementation reads `HAL_GetUIDw0/1/2()` and returns the three 32-bit words in little-endian byte order.
-  - intended use: app/backend device claiming keyed by immutable per-board hardware UID before or alongside signed EMWaver identity provisioning.
+  - intended use: local diagnostics and board/runtime metadata where needed. It must not be used as an activation, ownership, or device-limit gate for local hardware control.
 - `EMW_OP_BOARD_GET (0x09)`
   - returns the short board slug `stm32f042`.
   - intended use: script/UI code can differentiate supported MCU targets without overloading the signed identity flow.

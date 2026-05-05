@@ -9,7 +9,7 @@ The current daemon host already contains the ingredients needed for a local-firs
 - UI tree capture and callback dispatch,
 - USB MIDI/SysEx device transport,
 - EMWaver superframe protocol helpers,
-- hosted WebSocket host loop.
+- the old hosted WebSocket host loop.
 
 The rebirth direction requires separating reusable runtime/device pieces from the hosted daemon loop for CLI/daemon work. The localhost gateway should not own this runtime; it should bridge browser control to the native EMWaver app, which owns real `.emw` execution and hardware transport.
 
@@ -27,11 +27,11 @@ daemon/emwaver-device/
   src/protocol.rs
 ```
 
-`emwaver-host` now consumes these crates instead of owning the runtime/device modules directly. Verified with:
+The extracted crates are consumed by the local CLI/direct runtime. Verified with:
 
 ```bash
 cd daemon
-cargo build -p emwaver-host -p emwaver
+cargo build -p emwaver
 ```
 
 Remaining extraction work:
@@ -43,19 +43,19 @@ Remaining extraction work:
 Before this extraction, the files were:
 
 ```text
-daemon/emwaver-host/src/engine.rs
+old hosted wrapper engine module
   Boa runtime, UI callback registry, _scriptRender, _scriptSendPacket, script eval, UI event dispatch
 
-daemon/emwaver-host/src/device.rs
+old hosted wrapper device module
   MIDI port discovery, MIDI input/output ownership, SysEx framing, command/response bridge
 
-daemon/emwaver-host/src/protocol.rs
+old hosted wrapper protocol module
   SysEx/superframe protocol helpers
 
-daemon/emwaver-host/src/ui_tree.rs
+old hosted wrapper UI tree module
   streamed UI node model and handler lookup
 
-daemon/emwaver-host/src/main.rs
+old hosted wrapper main module
   hosted backend heartbeat, outbound /v1/ws connection, remote message loop
 ```
 
@@ -74,9 +74,6 @@ daemon/
     src/lib.rs
     src/device.rs
     src/protocol.rs
-
-  emwaver-host/
-    hosted daemon wrapper
 
   emwaver/
     CLI wrapper
@@ -140,21 +137,7 @@ impl Device {
 }
 ```
 
-`emwaver-host` adapts `Device` to `emwaver_runtime::CommandBridge` with a small host-side wrapper. This keeps `emwaver-runtime` independent of `emwaver-device`.
-
-## `emwaver-host`
-
-After extraction, `emwaver-host` should become a thin hosted wrapper:
-
-1. load env/config,
-2. load bootstrap,
-3. connect device,
-4. create runtime engine,
-5. heartbeat hosted backend,
-6. connect outbound `/v1/ws`,
-7. map remote messages to runtime calls.
-
-No runtime internals should live here after extraction.
+The CLI adapts `Device` to `emwaver_runtime::CommandBridge` with a small local wrapper. This keeps `emwaver-runtime` independent of `emwaver-device`.
 
 ## `emwaver` CLI
 
@@ -217,7 +200,7 @@ Hardware tests remain manual until device test rigs exist.
 3. Move `device.rs` into `emwaver-device`.
 4. Create `emwaver-runtime` and move `ui_tree.rs`.
 5. Move `engine.rs` into `emwaver-runtime`.
-6. Update `emwaver-host` to use both crates.
+6. Update CLI/direct runtime paths to use both crates.
 7. Update `emwaver` CLI `devices` to use `emwaver-device`.
 8. Add `emwaver run`.
 9. Replace concrete `Device` dependency with `CommandBridge`.

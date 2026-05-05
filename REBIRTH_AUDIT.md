@@ -33,8 +33,8 @@ The rebirth is complete only when:
 | Agent missing-key behavior | `gateway/scripts/verify.mjs` checks `agent_not_configured` | done |
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
 | Agent CLI | `daemon/emwaver/src/main.rs` adds `emwaver agent` using `EMWAVER_AGENT_API_KEY` and endpoint env | missing-key and configured mock paths passed |
-| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; `emwaver-host` consumes it through a device adapter | done for CLI/daemon reuse |
-| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers; `emwaver-host` consumes it | API/build done; selected-device error paths verified; hardware validation pending |
+| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; the CLI consumes it through direct local execution | done for CLI/daemon reuse |
+| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers | API/build done; selected-device error paths verified; hardware validation pending |
 | Shared device simulator | `SIMULATOR.md`, `simulator/fixtures/basic-board.json`, `simulator/VIRTUAL_TRANSPORT.md`, `emwaver-runtime::SimulatorCommandBridge`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, Android `SimulatorScriptDeviceBridge`, `REBIRTH-045` through `REBIRTH-049` | shared fixture plus Rust, Apple, Windows, and Android adapters added; virtual MIDI/USB evaluated and kept out of the portable baseline |
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
@@ -42,7 +42,7 @@ The rebirth is complete only when:
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
 | Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Local runtime account/activation gate | macOS `ContentView` passes connected USB device to `ScriptsRootView` without claimed-device cache membership; Windows `ScriptsPage` uses `AppServices.Device` directly | macOS build passed; Windows source reviewed, build blocked by missing Windows toolchain |
-| Native remote-control scope | `REBIRTH.md`, `REBIRTH-050`, `LAUNCH_MVP.md`, macOS/Windows/iOS/Android hosted host-control code | same-machine localhost gateway control is now the core posture; native hosted `/v1/ws` fallback is gated behind `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; hosted host-session directory UI/heartbeat are gated behind `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`; macOS Debug build passed, Android Java compile passed, iOS simulator build passed before mobile-build validation was paused for this machine, Windows build blocked by missing `dotnet` |
+| Native remote-control scope | `REBIRTH.md`, `REBIRTH-050`, `LAUNCH_MVP.md`, macOS/Windows/iOS/Android host-control code | same-machine localhost gateway control is now the core posture; native hosted relay/directory code has been removed from the primary app surfaces; macOS Debug build passed, Android Java compile passed, iOS simulator build passed, Windows build blocked by missing `dotnet` |
 | Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
 | Hardware import script | `hardware/import-subtrees.sh` | done |
 | Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
@@ -71,7 +71,7 @@ npm run verify
 
 cd daemon
 cargo test -p emwaver-device -p emwaver-runtime
-cargo build -p emwaver-host -p emwaver
+cargo build -p emwaver
 cargo run -q -p emwaver -- daemon start --help
 cargo run -q -p emwaver -- devices
 cargo run -q -p emwaver -- doctor
@@ -96,7 +96,7 @@ This verifies:
 - Rust daemon workspace build,
 - initial `emwaver-runtime` and `emwaver-device` crate extraction,
 - runtime render, packet bridge, script error, UI callback dispatch, and unknown-handler tests,
-- selected-device daemon startup CLI help,
+- selected-device direct runtime CLI help,
 - `emwaver doctor`,
 - `emwaver run --direct --no-device` through the extracted Rust runtime,
 - direct `emwaver run` script-error reporting,
@@ -136,7 +136,7 @@ Verified build:
 
 ```bash
 cd daemon
-cargo build -p emwaver-host -p emwaver
+cargo build -p emwaver
 ```
 
 Remaining Rust-side work:

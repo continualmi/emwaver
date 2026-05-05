@@ -58,12 +58,12 @@ public final class ScriptsViewModel extends ViewModel {
         return previewActive;
     }
 
-    void updateRemoteSnapshot(@NonNull String id, @NonNull String name, @NonNull String etag, @NonNull String content) {
+    void updateStoredSnapshot(@NonNull String id, @NonNull String name, @NonNull String etag, @NonNull String content) {
         ScriptRecord record = getOrCreate(id);
         record.id = id;
         record.name = name;
-        record.remoteContent = content;
-        record.remoteEtag = etag;
+        record.storedContent = content;
+        record.storedEtag = etag;
         if (!record.dirty) {
             record.draftContent = content;
         }
@@ -81,8 +81,8 @@ public final class ScriptsViewModel extends ViewModel {
     void markClean(@NonNull String id, @NonNull String content, @NonNull String etag) {
         ScriptRecord record = getOrCreate(id);
         record.draftContent = content;
-        record.remoteContent = content;
-        record.remoteEtag = etag;
+        record.storedContent = content;
+        record.storedEtag = etag;
         record.dirty = false;
     }
 
@@ -98,15 +98,15 @@ public final class ScriptsViewModel extends ViewModel {
     }
 
     @Nullable
-    String getRemoteContent(@NonNull String id) {
+    String getStoredContent(@NonNull String id) {
         ScriptRecord record = records.get(id);
-        return record != null ? record.remoteContent : null;
+        return record != null ? record.storedContent : null;
     }
 
     @Nullable
-    String getRemoteEtag(@NonNull String id) {
+    String getStoredEtag(@NonNull String id) {
         ScriptRecord record = records.get(id);
-        return record != null ? record.remoteEtag : null;
+        return record != null ? record.storedEtag : null;
     }
 
     @Nullable
@@ -141,7 +141,7 @@ public final class ScriptsViewModel extends ViewModel {
                 continue;
             }
             String name = record.name != null ? record.name : record.id;
-            String content = record.draftContent != null ? record.draftContent : record.remoteContent;
+            String content = record.draftContent != null ? record.draftContent : record.storedContent;
             if (name == null || content == null) {
                 continue;
             }
@@ -187,8 +187,8 @@ public final class ScriptsViewModel extends ViewModel {
     static final class ScriptRecord {
         String id;
         String name;
-        String remoteContent;
-        String remoteEtag;
+        String storedContent;
+        String storedEtag;
         String draftContent;
         boolean dirty;
     }

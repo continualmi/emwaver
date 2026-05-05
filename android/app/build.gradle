@@ -1,6 +1,5 @@
 plugins {
     id 'com.android.application'
-    id 'com.google.gms.google-services'
 }
 
 def emwaverRepoRootDir = rootProject.projectDir.parentFile
@@ -72,23 +71,9 @@ android {
 
         buildConfigField "String", "EMWAVER_BUNDLED_FW_VERSION", '"' + emwaverBundledFwVersion + '"'
 
-        def cloudBackend = envOr("EMWAVER_BACKEND_URL_CLOUD", "https://emwaver-web.azurewebsites.net")
-        def localBackend = envOr("EMWAVER_BACKEND_URL_LOCAL", "http://127.0.0.1:3920")
-        def cloudFrontend = envOr("EMWAVER_FRONTEND_URL_CLOUD", "https://emwaver-web.azurewebsites.net")
-        def localFrontend = envOr("EMWAVER_FRONTEND_URL_LOCAL", "http://127.0.0.1:3920")
-        def staffOnly = envOr("EMWAVER_STAFF_ONLY", "0")
-        def hostedServicesUi = envOr("EMWAVER_HOSTED_SERVICES_UI_ENABLED", "0")
-        def hostedRemoteControl = envOr("EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", "0")
         def agentEndpoint = envOr("EMWAVER_AGENT_ENDPOINT", "")
         def continualAgentEndpoint = envOr("CONTINUAL_AGENT_ENDPOINT", "")
 
-        buildConfigField "String", "EMWAVER_BACKEND_URL_CLOUD", '"' + cloudBackend + '"'
-        buildConfigField "String", "EMWAVER_BACKEND_URL_LOCAL", '"' + localBackend + '"'
-        buildConfigField "String", "EMWAVER_FRONTEND_URL_CLOUD", '"' + cloudFrontend + '"'
-        buildConfigField "String", "EMWAVER_FRONTEND_URL_LOCAL", '"' + localFrontend + '"'
-        buildConfigField "boolean", "EMWAVER_STAFF_ONLY", (staffOnly == "1" ? "true" : "false")
-        buildConfigField "boolean", "EMWAVER_HOSTED_SERVICES_UI_ENABLED", (hostedServicesUi == "1" ? "true" : "false")
-        buildConfigField "boolean", "EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED", (hostedRemoteControl == "1" ? "true" : "false")
         buildConfigField "String", "EMWAVER_AGENT_ENDPOINT", '"' + agentEndpoint + '"'
         buildConfigField "String", "CONTINUAL_AGENT_ENDPOINT", '"' + continualAgentEndpoint + '"'
 
@@ -174,11 +159,6 @@ preBuild.dependsOn("syncScriptAssets")
 preBuild.dependsOn("syncBundledFirmware")
 
 dependencies {
-
-    // Firebase Auth (Google Sign-In)
-    implementation platform('com.google.firebase:firebase-bom:33.7.0')
-    implementation 'com.google.firebase:firebase-auth'
-    implementation 'com.google.android.gms:play-services-auth:21.3.0'
 
     implementation 'androidx.appcompat:appcompat:1.6.1'
     implementation 'com.google.android.material:material:1.11.0'

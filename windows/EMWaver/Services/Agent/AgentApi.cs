@@ -1,4 +1,3 @@
-using EMWaver.Services.Cloud;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -41,12 +40,12 @@ internal sealed class AgentApi
         [property: JsonPropertyName("warnings")] List<string>? Warnings);
 
     private readonly HttpClient _http;
-    private readonly CloudAuthManager _auth;
+    private readonly AgentApiKeyStore _keys;
 
-    internal AgentApi(HttpClient http, CloudConfig cfg, CloudAuthManager auth)
+    internal AgentApi(HttpClient http, AgentApiKeyStore keys)
     {
         _http = http;
-        _auth = auth;
+        _keys = keys;
     }
 
     internal Task<List<Conversation>> ListConversationsAsync(CancellationToken ct)
@@ -154,7 +153,7 @@ internal sealed class AgentApi
 
     private string RequireAgentKey()
     {
-        var key = (_auth.GetIdToken() ?? "").Trim();
+        var key = (_keys.GetApiKey() ?? "").Trim();
         if (string.IsNullOrWhiteSpace(key))
         {
             throw new InvalidOperationException("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");

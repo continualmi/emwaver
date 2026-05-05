@@ -14,66 +14,19 @@ struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
-    @EnvironmentObject private var remoteControlHost: RemoteControlHostService
-    @State private var showingHosts = false
-
-    @State private var showingRemoteOverlay = false
 
     var body: some View {
         NavigationStack {
-            ZStack {
-                ScriptsRootView(
-                    device: bleManager,
-                    agentCloudProvider: {
-                        auth.agentEndpointConfig
-                    },
-                    hostStatusSink: { running, name in
-                        // Treat preview showing as script running on iOS.
-                        hostSessions.setScriptStatus(running: running, activeScriptName: name)
-                    }
-                )
-
-                if showingRemoteOverlay {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Label("Remote Control", systemImage: "antenna.radiowaves.left.and.right")
-                                .font(.headline)
-
-                            Spacer()
-
-                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
-                                Text(n)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Button("Done") { showingRemoteOverlay = false }
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(.ultraThinMaterial)
-
-                        Divider()
-
-                        if let tree = remoteControlHost.remoteScriptTree {
-                            ScriptRenderView(tree: tree) { token, args in
-                                remoteControlHost.invokeRemoteHandler(token: token, arguments: args)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        } else {
-                            VStack(spacing: 10) {
-                                ProgressView()
-                                Text("Remote control is active, waiting for UI…")
-                                    .foregroundStyle(.secondary)
-                            }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.thinMaterial)
+            ScriptsRootView(
+                device: bleManager,
+                agentEndpointProvider: {
+                    auth.agentEndpointConfig
+                },
+                hostStatusSink: { running, name in
+                    // Treat preview showing as script running on iOS.
+                    hostSessions.setScriptStatus(running: running, activeScriptName: name)
                 }
-            }
+            )
             .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Menu {
@@ -116,23 +69,6 @@ struct ScriptsContainerView: View {
                     }
 
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        if CloudConfig.hostedServicesEnabled() {
-                            Button {
-                                showingHosts = true
-                            } label: {
-                                Image(systemName: "dot.radiowaves.left.and.right")
-                            }
-                        }
-
-                        if remoteControlHost.isRemoteControlled {
-                            Button {
-                                showingRemoteOverlay = true
-                            } label: {
-                                Image(systemName: "antenna.radiowaves.left.and.right")
-                            }
-                            .accessibilityLabel("Remote control active")
-                        }
-
                         Menu {
                             if auth.hasSavedKey {
                                 Text(auth.userLabel)
@@ -159,12 +95,6 @@ struct ScriptsContainerView: View {
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $showingHosts) {
-            HostsSheet()
-                .environmentObject(auth)
-                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
     }

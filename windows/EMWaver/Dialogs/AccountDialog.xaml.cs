@@ -1,5 +1,4 @@
 using EMWaver;
-using EMWaver.Services.Cloud;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
@@ -23,7 +22,7 @@ public sealed partial class AccountDialog : ContentDialog
 
     private void RefreshUi(string? message = null)
     {
-        var signedIn = AppServices.CloudAuth.HasAgentKey;
+        var signedIn = AppServices.AgentKeys.HasAgentKey;
         AuthStatusText.Text = signedIn ? "Key saved" : "No key saved";
         AuthDetailText.Text = message ?? (signedIn
             ? "An Agent key is saved. Paste a replacement any time."
@@ -40,7 +39,7 @@ public sealed partial class AccountDialog : ContentDialog
         {
             var apiKey = (ApiKeyBox.Password ?? string.Empty).Trim();
             var cts = new CancellationTokenSource(TimeSpan.FromMinutes(2));
-            await AppServices.CloudAuth.SaveApiKeyAsync(apiKey, cts.Token);
+            await AppServices.AgentKeys.SaveApiKeyAsync(apiKey, cts.Token);
             ApiKeyBox.Password = string.Empty;
             RefreshUi("Saved the Agent key.");
         }
@@ -52,7 +51,7 @@ public sealed partial class AccountDialog : ContentDialog
 
     private void OnSignOutClick(object sender, RoutedEventArgs e)
     {
-        AppServices.CloudAuth.SignOut();
+        AppServices.AgentKeys.Clear();
         ApiKeyBox.Password = string.Empty;
         RefreshUi("Removed the Agent key.");
     }

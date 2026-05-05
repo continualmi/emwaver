@@ -16,9 +16,9 @@ import androidx.lifecycle.AndroidViewModel;
 import androidx.lifecycle.LiveData;
 import androidx.lifecycle.MutableLiveData;
 
-import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
-import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
-import com.emwaver.emwaverandroidapp.cloud.agent.AgentBackendApi;
+import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
+import com.emwaver.emwaverandroidapp.agent.AgentEndpointApi;
+import com.emwaver.emwaverandroidapp.agent.AgentConfig;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -47,12 +47,12 @@ public class AgentChatViewModel extends AndroidViewModel {
     private static final String KEY_CONVERSATION_ID = "emwaver.agent.conversationId";
 
     private final MutableLiveData<List<Message>> messagesLiveData = new MutableLiveData<>(new ArrayList<>());
-    private final MutableLiveData<List<AgentBackendApi.Conversation>> conversationsLiveData = new MutableLiveData<>(new ArrayList<>());
+    private final MutableLiveData<List<AgentEndpointApi.Conversation>> conversationsLiveData = new MutableLiveData<>(new ArrayList<>());
     private final MutableLiveData<Boolean> isSendingLiveData = new MutableLiveData<>(false);
     private final MutableLiveData<String> lastErrorLiveData = new MutableLiveData<>(null);
 
     private final OkHttpClient http = new OkHttpClient();
-    private final AgentBackendApi api = new AgentBackendApi(http);
+    private final AgentEndpointApi api = new AgentEndpointApi(http);
 
     private String conversationId;
 
@@ -62,7 +62,7 @@ public class AgentChatViewModel extends AndroidViewModel {
     }
 
     public LiveData<List<Message>> getMessages() { return messagesLiveData; }
-    public LiveData<List<AgentBackendApi.Conversation>> getConversations() { return conversationsLiveData; }
+    public LiveData<List<AgentEndpointApi.Conversation>> getConversations() { return conversationsLiveData; }
     public LiveData<Boolean> getIsSending() { return isSendingLiveData; }
     public LiveData<String> getLastError() { return lastErrorLiveData; }
 
@@ -80,17 +80,17 @@ public class AgentChatViewModel extends AndroidViewModel {
         new Thread(() -> {
             try {
                 Context ctx = getApplication();
-                CloudAuthManager auth = CloudAuthManager.getInstance();
-                auth.ensureInitialized(ctx);
+                AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                keyStore.ensureInitialized(ctx);
 
-                String token = auth.getIdTokenBlocking();
+                String token = keyStore.getAgentApiKey();
                 if (token.trim().isEmpty()) {
                     postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     return;
                 }
 
-                String endpoint = CloudConfig.getAgentEndpoint();
-                List<AgentBackendApi.Conversation> list = api.listConversations(endpoint, token);
+                String endpoint = AgentConfig.getAgentEndpoint();
+                List<AgentEndpointApi.Conversation> list = api.listConversations(endpoint, token);
                 conversationsLiveData.postValue(list);
             } catch (Exception e) {
                 postError(e.getMessage() != null ? e.getMessage() : e.toString());
@@ -120,20 +120,20 @@ public class AgentChatViewModel extends AndroidViewModel {
         new Thread(() -> {
             try {
                 Context ctx = getApplication();
-                CloudAuthManager auth = CloudAuthManager.getInstance();
-                auth.ensureInitialized(ctx);
+                AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                keyStore.ensureInitialized(ctx);
 
-                String token = auth.getIdTokenBlocking();
+                String token = keyStore.getAgentApiKey();
                 if (token.trim().isEmpty()) {
                     postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     return;
                 }
 
-                String endpoint = CloudConfig.getAgentEndpoint();
-                List<AgentBackendApi.Message> remote = api.listMessages(endpoint, token, id);
+                String endpoint = AgentConfig.getAgentEndpoint();
+                List<AgentEndpointApi.Message> remote = api.listMessages(endpoint, token, id);
 
                 List<Message> mapped = new ArrayList<>();
-                for (AgentBackendApi.Message m : remote) {
+                for (AgentEndpointApi.Message m : remote) {
                     Role r = "user".equalsIgnoreCase(m.role) ? Role.USER : Role.AGENT;
                     mapped.add(new Message(r, m.content));
                 }
@@ -165,27 +165,27 @@ public class AgentChatViewModel extends AndroidViewModel {
         new Thread(() -> {
             try {
                 Context ctx = getApplication();
-                CloudAuthManager auth = CloudAuthManager.getInstance();
-                auth.ensureInitialized(ctx);
+                AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                keyStore.ensureInitialized(ctx);
 
-                String token = auth.getIdTokenBlocking();
+                String token = keyStore.getAgentApiKey();
                 if (token.trim().isEmpty()) {
                     postError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
                     isSendingLiveData.postValue(false);
                     return;
                 }
 
-                String endpoint = CloudConfig.getAgentEndpoint();
+                String endpoint = AgentConfig.getAgentEndpoint();
 
                 String convoId = conversationId;
                 if (convoId == null || convoId.trim().isEmpty()) {
                     String title = trimmed.split("\\n")[0];
-                    AgentBackendApi.Conversation convo = api.createConversation(endpoint, token, title);
+                    AgentEndpointApi.Conversation convo = api.createConversation(endpoint, token, title);
                     convoId = convo.id;
                     conversationId = convoId;
                     persistConversationId(ctx, convoId);
-                    List<AgentBackendApi.Conversation> current = conversationsLiveData.getValue();
-                    List<AgentBackendApi.Conversation> updatedConversations = new ArrayList<>();
+                    List<AgentEndpointApi.Conversation> current = conversationsLiveData.getValue();
+                    List<AgentEndpointApi.Conversation> updatedConversations = new ArrayList<>();
                     updatedConversations.add(convo);
                     if (current != null) updatedConversations.addAll(current);
                     conversationsLiveData.postValue(updatedConversations);
@@ -194,7 +194,7 @@ public class AgentChatViewModel extends AndroidViewModel {
                 final StringBuilder accum = new StringBuilder();
                 final String finalConvoId = convoId;
 
-                api.chatStream(endpoint, token, finalConvoId, trimmed, new AgentBackendApi.StreamListener() {
+                api.chatStream(endpoint, token, finalConvoId, trimmed, new AgentEndpointApi.StreamListener() {
                     @Override
                     public void onDelta(@NonNull String t) {
                         if (t.isEmpty()) return;
@@ -203,7 +203,7 @@ public class AgentChatViewModel extends AndroidViewModel {
                     }
 
                     @Override
-                    public void onDone(@NonNull AgentBackendApi.Message message, @Nullable String model) {
+                    public void onDone(@NonNull AgentEndpointApi.Message message, @Nullable String model) {
                         updateLastAgentMessage(message.content);
                         isSendingLiveData.postValue(false);
                     }

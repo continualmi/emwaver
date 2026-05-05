@@ -8,6 +8,10 @@ const REDIRECTS: Record<string, string> = {
   "daemon": "/docs",
 };
 
+export function generateStaticParams() {
+  return Object.keys(REDIRECTS).map((key) => ({ slug: key.split("/") }));
+}
+
 export default async function DocPage({
   params,
 }: {

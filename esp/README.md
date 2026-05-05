@@ -14,7 +14,7 @@ Product direction for this folder:
 - ESP32 is a managed EMWaver board class, not a user-built firmware workflow.
 - End users should not be asked to install ESP-IDF, build firmware, or flash devices manually.
 - The platform direction is multi-transport: BLE for direct proximity workflows, Wi-Fi for remote/autonomous control, and USB where appropriate on ESP32-S3 hardware.
-- Apps/backend remain responsible for provisioning, firmware distribution, activation, and update UX.
+- Apps remain responsible for firmware distribution, setup, and update UX.
 
 ## Project Structure
 
@@ -136,7 +136,7 @@ Current reintegration status:
 - Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
-- macOS now allows an ESP32-S3 USB session to stay connected for local use and activation, with claiming keyed by `board_type + hardware_uid`.
+- macOS now allows an ESP32-S3 USB session to stay connected for local use without an activation or claiming gate.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
 
 Planned EMWaver direction for ESP32:
@@ -173,7 +173,7 @@ This also avoids the current restored-state problem where:
 
 This matches the software-first platform direction:
 - users can bring a common ESP32-S3 board,
-- apps stay responsible for activation/provisioning/update UX,
+- apps stay responsible for setup/update UX,
 - the platform can choose the best transport for the situation instead of forcing one hardware topology.
 
 ### Important product distinction
@@ -186,10 +186,10 @@ Instead, split ESP32 into two product modes:
    - device is controlled directly by an app over BLE or USB,
    - best for onboarding, setup, nearby control, recovery, and low-friction exploration.
 
-2. **Autonomous remote mode**
-   - device owns a direct cloud/device session over Wi-Fi,
+2. **Autonomous network mode**
+   - device owns a user-configured network session over Wi-Fi,
    - no Raspberry Pi or desktop host required,
-   - backend/web/app treat this as a device-direct remote session, not as a fake host session.
+   - apps treat this as a device-direct session, not as a fake host session.
 
 BLE and USB mainly serve the first mode. Wi-Fi mainly serves the second.
 
@@ -204,11 +204,11 @@ The protocol contract should remain the same in both:
 Target layering for reintegration:
 
 1. **Core runtime**
-   - board identity (`board_type + hardware_uid`)
-   - activated-device restore/claim state governed by account entitlements and device limits
+   - board metadata (`board_type` and runtime capabilities)
+   - local setup state that does not gate hardware access on account ownership
    - script/runtime execution boundary
    - capability registry
-   - session/auth state
+   - local session state
 
 2. **EMWaver protocol layer**
    - STM32-compatible SysEx packet contract
@@ -219,12 +219,12 @@ Target layering for reintegration:
 3. **Transport adapters**
    - USB transport with STM32-parity behavior first
    - BLE transport that carries the same SysEx packets with chunking/reassembly as needed
-   - Wi-Fi local adapter (provisioning / local network if needed)
-   - Wi-Fi cloud adapter (direct backend/device session carrying the same packet model)
+   - Wi-Fi local adapter (network setup / local network if needed)
+   - Wi-Fi network adapter carrying the same packet model when implemented
 
 4. **Update/provisioning services**
    - BLE-assisted onboarding
-   - Wi-Fi credential/provisioning flow
+   - Wi-Fi credential/setup flow
    - signed firmware update flow
    - recovery/fallback transport behavior
 

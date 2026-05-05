@@ -2,7 +2,6 @@
 members = [
   "emwaver-device",
   "emwaver-runtime",
-  "emwaver-host",
   "emwaver",
 ]
 resolver = "2"

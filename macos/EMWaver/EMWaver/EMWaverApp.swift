@@ -16,10 +16,6 @@ import AppKit
 struct EMWaverApp: App {
     @State private var didActivateApp = false
 
-    private var hostedServicesUiEnabled: Bool {
-        false
-    }
-
     init() {
         EnvBootstrap.loadForDevIfAvailable()
     }
@@ -27,14 +23,13 @@ struct EMWaverApp: App {
     @StateObject private var firmwareUpdater = FirmwareUpdateManager()
     @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
-    @StateObject private var hostDirectory = HostDirectory()
     @StateObject private var remoteControlHost = RemoteControlHostService()
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var appRouter = AppRouter()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, hostDirectory: hostDirectory, remoteControlHost: remoteControlHost, previewManager: previewManager)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, remoteControlHost: remoteControlHost, previewManager: previewManager)
                 .environmentObject(auth)
                 .environmentObject(appRouter)
                 .task {
@@ -169,9 +164,7 @@ private enum EnvBootstrap {
 #endif
         guard let repoRoot = findRepoRoot() else { return }
 
-        // Load .env.prod first (cloud/production defaults), then .env (local overrides).
-        // In local debug builds, repo env should win over any inherited process env.
-        let files = [".env.prod", ".env"]
+        let files = [".env"]
 
         var resolved: [String: String] = [:]
 

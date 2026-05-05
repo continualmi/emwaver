@@ -2,7 +2,7 @@
 
 Native Android EMWaver application (Gradle project, Java/Kotlin-style Android app structure).
 
-This app provides mobile EMWaver device workflows: USB communication, scripting surfaces, settings, Agent client UI, and firmware asset packaging.
+This app provides mobile EMWaver device workflows: USB communication, local scripting surfaces, settings, Agent API-key UI, and firmware asset packaging.
 
 ---
 
@@ -51,9 +51,8 @@ Key components:
 
 Notable UX coverage reflected by resources:
 - script lists/editor dialogs,
-- legacy hosted host sheet/remote host control activity,
 - agent chat dialogs,
-- local Agent API-key dialog plus legacy sync dialogs,
+- local Agent API-key dialog,
 - device update dialogs.
 
 ---
@@ -105,14 +104,9 @@ Current Android board split:
 
 When changing Android transport, connection lifecycle, or firmware update UX behavior, update this README in the same PR.
 
-Android Agent/auth direction:
+Android Agent direction:
 - Keep the Android Agent chat interface/runtime.
 - Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
-- Existing cloud/host/sync dialogs are migration debt unless repurposed for the Agent API-key setup state.
-
-Hosted remote-control posture:
-- Hosted host-session UI/heartbeat and hosted remote-control WebSocket behavior are disabled by default.
-- Set `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1` at build time to expose the hosted host directory/presence surfaces.
-- Set `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1` at build time to allow the legacy hosted `/v1/ws` remote-control host path.
-- Local USB device/script use must not depend on either flag.
+- Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching have been removed from the Android app.
+- Local USB device/script use must not depend on backend configuration.

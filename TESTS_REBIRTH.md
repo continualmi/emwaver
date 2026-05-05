@@ -25,11 +25,11 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Test | Status | Evidence |
 | --- | --- | --- |
 | Rust toolchain preflight | `pass` | `./scripts/check-rust-toolchain.sh` reports Cargo/Rust available after Homebrew Rust install. |
-| Rust CLI build | `pass` | `cd daemon && cargo build -p emwaver-host -p emwaver` completed successfully. |
-| Daemon CI workflow | `pass` | GitHub Actions run `25249058504` passed: Rust preflight, `cargo test -p emwaver-runtime -p emwaver-device`, `cargo build -p emwaver-host -p emwaver`, and a UI-only `emwaver run --direct --no-device` smoke test. |
-| Runtime/device crate extraction | `pass` | `emwaver-runtime` and `emwaver-device` are workspace crates consumed by `emwaver-host`; `cargo build -p emwaver-host -p emwaver` passed. |
+| Rust CLI build | `pass` | `cd daemon && cargo build -p emwaver` completed successfully. |
+| Daemon CI workflow | `pass` | GitHub Actions run `25249058504` passed before the hosted wrapper removal; next run should build `emwaver`, test runtime/device crates, and run UI-only direct smoke. |
+| Runtime/device crate extraction | `pass` | `emwaver-runtime` and `emwaver-device` are workspace crates consumed by the local CLI/direct runtime; `cargo build -p emwaver` passed. |
 | Runtime command bridge | `pass` | `emwaver-runtime` defines `CommandBridge`, no longer depends on `emwaver-device`, and `cargo test -p emwaver-runtime` passed with render, packet bridge, script error, UI callback dispatch, and unknown-handler coverage. |
-| Selected device API | `build pass` | `emwaver-device::Device::connect_by_id()` and `emwaver daemon start --device-id <id>` compile; hardware behavior still needs a connected board. |
+| Selected device API | `build pass` | `emwaver-device::Device::connect_by_id()` and `emwaver run --direct --device <id>` compile; hardware behavior still needs a connected board. |
 | `emwaver tui` rebirth decision | `doc pass` | TUI remains daemon/status-oriented for the rebirth; script-aware terminal UI is deferred until local CLI/gateway hardware execution is validated. |
 | `emwaver doctor` | `pass` | `cargo run -q -p emwaver -- doctor` passed: reports platform, local state paths, autostart status, gateway package, Node/npm, Cargo/Rust availability, and MIDI visibility; no MIDI ports found on this machine. |
 | `emwaver devices` shared layer | `pass` | CLI device listing uses `emwaver_device::list_devices()` and is covered by the Rust CLI build plus `doctor` device visibility check. |
@@ -69,9 +69,9 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 | Platform | Status | Notes |
 | --- | --- | --- |
 | macOS | `build pass` | `xcodebuild -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug -sdk macosx build` succeeded after the ESP helper wrapper fallback was added. Runtime/hardware validation is still pending. |
-| macOS local runtime account gate | `build pass` | `ContentView` now passes the connected `MacUSBManager` into `ScriptsRootView` whenever USB is connected, without requiring `AccountDevicesService.hasOfflineAccess(...)`; Debug macOS build succeeded. |
+| macOS local runtime account gate | `build pass` | `ContentView` passes the connected `MacUSBManager` into `ScriptsRootView` whenever USB is connected, without account-device membership checks; Debug macOS build succeeded. |
 | Rebirth hardware validation helper | `tool pass / hardware skipped` | `scripts/rebirth-hardware-validation.sh` builds the CLI, runs `doctor`, lists devices, and verifies UI-only direct runtime. On this machine it reported no MIDI ports and skipped hardware direct runtime until `EMWAVER_DEVICE_ID` is provided. |
-| Windows local runtime account gate | `source pass / build blocked` | `ScriptsPage` script runtime sends packets through `AppServices.Device` directly and does not consult `AccountDevicesService.HasOfflineAccess(...)`; device-page copy now treats account cache as optional. Build remains blocked here because `dotnet`/Windows toolchain is unavailable. |
+| Windows local runtime account gate | `source pass / build blocked` | `ScriptsPage` script runtime sends packets through `AppServices.Device` directly and the account-device service has been removed. Build remains blocked here because `dotnet`/Windows toolchain is unavailable. |
 | Windows validation runbook | `added / blocked` | `scripts/rebirth-windows-validation.ps1` documents the Windows restore/build, local gateway app-role, and hardware checks. It must be run on a Windows workstation with the required .NET/WinUI SDK and hardware. |
 | Linux validation runbook | `added / blocked` | `scripts/rebirth-linux-validation.sh` records Linux ALSA/USB diagnostics and calls the generic hardware validation helper. It degrades cleanly on macOS but must be rerun on Linux with a visible board. |
 | Hosted Linux/Windows validation workflow | `added / first run failed` | `.github/workflows/rebirth-platform-validation.yml` runs hosted Ubuntu Linux dry-run validation and hosted Windows restore/build plus simulator tests. First run `25249744084` exposed hosted Linux `/dev/snd/seq` absence and Windows `DevicePage` XAML/code-behind mismatches; fixes are in progress. Hardware-in-the-loop jobs are dispatch-only on self-hosted runners labeled `emwaver-hardware`. |
@@ -86,7 +86,7 @@ It complements `TESTS.md`, which remains the manual hardware test suite.
 
 | Test | Status | Evidence |
 | --- | --- | --- |
-| Core native remote control posture | `macOS build pass / Android compile pass / iOS simulator build pass / Windows build blocked` | `REBIRTH-050` states native apps should default away from Continual-hosted remote control. macOS, Windows, iOS, and Android hosted `/v1/ws` host paths only activate with `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; hosted host-session directory UI/heartbeat are hidden unless `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`. macOS Debug build, Android Java compile, and iOS simulator build passed; future mobile build validation is paused on this machine by maintainer direction. Windows build remains blocked because `dotnet` is unavailable here. |
+| Core native remote control posture | `macOS build pass / Android compile pass / iOS simulator build pass / Windows build blocked` | `REBIRTH-050` states native apps should default away from Continual-hosted remote control. Native app hosted relay/directory paths have been removed from the primary local-first surfaces; macOS Debug build, Android Java compile, and iOS simulator build passed. Windows build remains blocked because `dotnet` is unavailable here. |
 
 ## Validation Rules
 

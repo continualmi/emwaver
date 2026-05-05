@@ -5,7 +5,6 @@ set -euo pipefail
 #
 # Usage:
 #   ./emwaver.sh devices
-#   ./emwaver.sh daemon start
 #   ./emwaver.sh daemon status
 #   ./emwaver.sh install
 #   ./emwaver.sh install --prefix ~/.local
@@ -34,7 +33,6 @@ Usage: ./emwaver.sh <command>
 Commands:
   install [--prefix <dir>] [--force]
       Build + install `emwaver` to <prefix>/bin.
-      (`emwaver-host` is installed as an internal runtime dependency.)
       Default prefix: ~/.local
 
   <emwaver args...>
@@ -42,7 +40,6 @@ Commands:
 
 Examples:
   ./emwaver.sh devices
-  ./emwaver.sh daemon start
   ./emwaver.sh daemon status
   ./emwaver.sh install
 USAGE
@@ -84,11 +81,9 @@ HELP
 
   echo "Installing emwaver into: $prefix/bin"
   cargo install --path "$DAEMON_DIR/emwaver" --root "$prefix" $force_flag
-  cargo install --path "$DAEMON_DIR/emwaver-host" --root "$prefix" $force_flag
 
   echo
   echo "✅ Installed: $prefix/bin/emwaver"
-  echo "   (plus internal runtime: $prefix/bin/emwaver-host)"
 
   case ":$PATH:" in
     *":$prefix/bin:"*)
@@ -122,7 +117,7 @@ main() {
     *)
       ensure_cargo
       cd "$DAEMON_DIR"
-      cargo build -q -p emwaver-host -p emwaver
+      cargo build -q -p emwaver
       exec cargo run -q -p emwaver -- "$@"
       ;;
   esac

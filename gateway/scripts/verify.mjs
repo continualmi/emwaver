@@ -98,36 +98,39 @@ async function verifyIndexHtml() {
     throw new Error(`unexpected index status: ${index.status}`);
   }
   const body = String(index.body || "");
+  if (!body.includes("EMWaver Gateway") || !body.includes('id="root"')) {
+    throw new Error("gateway index missing React app shell");
+  }
+  const scriptMatch = body.match(/<script[^>]+src="([^"]+)"[^>]*><\/script>/);
+  if (!scriptMatch) {
+    throw new Error("gateway index missing built client script");
+  }
+  const clientScript = await getText(`${baseUrl}${scriptMatch[1]}`);
+  if (clientScript.status !== 200) {
+    throw new Error(`unexpected client script status: ${clientScript.status}`);
+  }
+  const clientBody = String(clientScript.body || "");
   for (const required of [
     "EMWaver Gateway",
     "openFile",
-    ">Open<",
-    ">Save<",
+    "Open",
+    "Save",
     "Native App",
     "Ask Agent",
     "plot.data",
     "textField",
     "textEditor",
     "logViewer",
-    "ui-grid",
     "No cloud relay required",
   ]) {
-    if (!body.includes(required)) {
+    if (!clientBody.includes(required)) {
       throw new Error(`gateway index missing required local UI marker: ${required}`);
     }
   }
   for (const forbidden of ["/api/auth", "/v1/files", "Cloud Files", "Sign in", "subscription"]) {
-    if (body.includes(forbidden)) {
+    if (body.includes(forbidden) || clientBody.includes(forbidden)) {
       throw new Error(`gateway index contains forbidden hosted/cloud marker: ${forbidden}`);
     }
-  }
-
-  const scripts = [...body.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
-  if (scripts.length === 0) {
-    throw new Error("gateway index contains no browser script");
-  }
-  for (const script of scripts) {
-    new Function(script);
   }
 }
 

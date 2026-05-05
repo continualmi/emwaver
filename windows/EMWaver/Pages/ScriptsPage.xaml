@@ -278,7 +278,7 @@
                                 </StackPanel>
                             </Border>
 
-                            <Border x:Name="AgentProNotice"
+                            <Border x:Name="AgentKeyNotice"
                                     Visibility="Collapsed"
                                     CornerRadius="8"
                                     BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
@@ -291,7 +291,7 @@
                                                TextWrapping="Wrap"
                                                Opacity="0.85"
                                                VerticalAlignment="Center" />
-                                    <Button Content="Configure Agent…" Visibility="Collapsed" Click="OnGetProClick" />
+                                    <Button Content="Configure Agent…" Visibility="Collapsed" Click="OnConfigureAgentKeyClick" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

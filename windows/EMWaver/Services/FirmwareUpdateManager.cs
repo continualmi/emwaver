@@ -1,4 +1,3 @@
-using EMWaver.Services.Cloud;
 using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
@@ -253,16 +252,6 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             UpdateError = ex.Message;
             ProgressMessage = "";
         }
-    }
-
-    internal async Task StartMintAndProvisionAsync(CloudAuthManager auth, WindowsDeviceManager device)
-    {
-        await StartUpdateAsync(device);
-    }
-
-    internal async Task StartEspClaimAndFlashAsync(CloudAuthManager auth, AccountDevicesService accountDevices, WindowsDeviceManager device)
-    {
-        await StartUpdateAsync(device);
     }
 
     private async Task WaitForDfuPresenceAsync()

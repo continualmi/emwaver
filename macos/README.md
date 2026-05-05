@@ -51,14 +51,10 @@ Core files include:
 - `MacUSBManager.swift`
 - `HostSessionManager.swift`
 - `RemoteControlHostService.swift`
-- `RemoteControlClientService.swift`
-- `HostDirectory.swift`
 
 Responsibilities:
 - local USB host operation,
-- remote attach/control pathways,
 - localhost gateway app-role integration,
-- optional hosted host presence/relay integration behind explicit development flags,
 - firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Local-first gateway behavior:
@@ -66,8 +62,6 @@ Local-first gateway behavior:
 - Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
 - Override with `EMWAVER_LOCAL_GATEWAY_URL`.
 - Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
-- Hosted remote-control fallback is outside the core local-first path and only activates when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`.
-- Hosted host-session directory UI and heartbeat are hidden from the local-first core by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
 - In local gateway mode, the macOS app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.
@@ -75,8 +69,6 @@ Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emw
 ## 2.3 UI surfaces
 
 Representative views:
-- `HostsView.swift`
-- `RemoteHostControlView.swift`
 - `SettingsView.swift`
 - firmware/device connection sheets.
 
@@ -156,7 +148,7 @@ As with other app folders, avoid relying on Linux agent environment for native a
 ## 6) Contributor guardrails
 
 1. Keep macOS-specific host UI and settings here; move shared logic to `/apple`.
-2. Keep remote-control protocol compatibility aligned with backend and other clients.
+2. Keep remote-control protocol compatibility aligned with the localhost gateway and other local clients.
 3. Ensure firmware update helper integration remains stable when changing update flow.
 4. Document any new app-level env/config toggles in this README.
 

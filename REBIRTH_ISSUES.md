@@ -100,8 +100,7 @@ Local gateway mode must not require hosted heartbeat, remote session discovery, 
 
 Acceptance criteria:
 
-- Gateway starts without `EMWAVER_BACKEND_URL`.
-- Gateway starts without `EMWAVER_ID_TOKEN`.
+- Gateway starts without backend URL or identity-token configuration.
 - Gateway does not call hosted `/v1/hosts/heartbeat`.
 - Gateway does not require hosted session discovery.
 
@@ -156,7 +155,7 @@ Acceptance criteria:
 - Priority: `P0`
 - Target: daemon/runtime
 
-Extract the script runtime from `daemon/emwaver-host` so CLI, gateway, and daemon can share it.
+Extract the script runtime from the old hosted wrapper shape so CLI, gateway, and daemon work can share it.
 
 Acceptance criteria:
 
@@ -325,7 +324,7 @@ Acceptance criteria:
 - Gateway has parity for script editor, live UI renderer, UI event dispatch, plot support, local file open/save, and Agent context submission.
 - Public site/docs remain in `web/`.
 - `web/` trends toward static public pages/docs/downloads.
-- Auth/cloud dashboard code in `web/` is tracked as migration debt instead of launch-critical local control.
+- Hosted auth/cloud dashboard code has been removed from the current `web/` app route set.
 - Local control UI does not require hosted auth.
 
 ## `REBIRTH-022` Remove Auth Assumptions From Local Control UI
@@ -368,7 +367,7 @@ Acceptance criteria:
 
 - Docs state scripts/local project state live on the user's device by default.
 - `gateway/` supports local file open/save or app-local storage instead of cloud script storage.
-- `web/` cloud file/script storage is treated as migration debt, not launch-critical core behavior.
+- `web/` cloud file/script storage has been removed from the current app route set.
 - No core local runtime path requires account-backed script sync.
 
 ## `REBIRTH-023B` Move Public Web Toward Static Blob Deployment
@@ -379,13 +378,13 @@ Acceptance criteria:
 
 Gradually remove `web/` as a deployable backend/runtime and make the public EMWaver site a static export deployed like `~/continualmi/society`.
 
-Inventory: `web/STATIC_MIGRATION_INVENTORY.md`.
+The static migration inventory was retired after the hosted backend and cloud route set were removed from `web/`.
 
 Acceptance criteria:
 
 - `web/` public landing/docs/download/build/board-manager pages can be statically exported.
 - Static output can be deployed to a blob/static website container origin.
-- The containerized `emwaver-web` deploy path is marked as migration debt rather than the long-term public-site target.
+- Containerized hosted-backend web deployment is not part of the long-term public-site target.
 - Auth, cloud dashboard, hosted relay, and same-origin backend assumptions are removed from the public static route set.
 - Agent/API behavior is routed to a focused Continual MI backend endpoint instead of requiring the public site container.
 - Local hardware control and script rendering remain owned by `gateway/`.
@@ -431,7 +430,7 @@ Acceptance criteria:
 - Local runtime does not require hardware UID reads before script execution.
 - Firmware setup/update flows do not require device minting, claiming, or account registration.
 - Native app docs stop presenting `board_type + hardware_uid` as a product identity model.
-- Web provisioning/minting routes are retired or clearly marked as legacy migration debt.
+- Web provisioning/minting routes are retired.
 - Device limits are not part of the local runtime or UI model.
 
 ## `REBIRTH-026` Keep Hosted Service Code Outside Gateway Path
@@ -878,17 +877,17 @@ Make same-machine localhost gateway control the default native app role and stop
 Acceptance criteria:
 
 - Product docs state native app gateway control is localhost/same-machine by default.
-- macOS/Windows hosted remote-control services are classified as migration debt or optional future hosted-service code, not core launch scope.
-- Mobile hosted host/session surfaces are hidden by default and opt-in only.
+- macOS/Windows hosted remote-control services are removed from the core launch scope.
+- Mobile hosted host/session surfaces are removed from the core launch scope.
 - Gateway docs explain SSH/VPN/Tailscale/port-forwarding as user-owned remote access options.
 - No local gateway/native-app path requires hosted session registration, hosted relay, or account auth.
 
 Progress:
 
-- macOS and Windows native app host sockets now only fall back to hosted `/v1/ws` when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`; localhost gateway remains the default path.
-- macOS and Windows hosted host-session directory UI/heartbeat are hidden by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
-- iOS and Android hosted host-session UI/heartbeat are hidden by default and only activate when `EMWAVER_HOSTED_SERVICES_UI_ENABLED=1`.
-- iOS and Android hosted `/v1/ws` remote-control host behavior is disabled by default and only activates when `EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED=1`.
+- macOS and Windows native app host sockets use localhost gateway app-role control.
+- macOS and Windows hosted host-session directory UI/heartbeat code has been removed from the primary app surfaces.
+- iOS and Android hosted host-session UI/heartbeat code has been removed from the primary app surfaces.
+- iOS and Android hosted `/v1/ws` remote-control host behavior has been removed from the primary app surfaces.
 
 ## First Implementation Slice
 

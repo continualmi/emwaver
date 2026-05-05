@@ -42,12 +42,6 @@
             android:name=".USBService"
             android:exported="false" />
         <activity
-            android:name=".ui.hosts.RemoteHostControlActivity"
-            android:exported="false"
-            android:label="Remote Control"
-            android:parentActivityName=".MainActivity" />
-
-        <activity
             android:name=".SettingsActivity"
             android:label="Settings"
             android:parentActivityName=".MainActivity">

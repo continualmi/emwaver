@@ -11,7 +11,6 @@ final class RemoteControlHostService: ObservableObject {
     @Published private(set) var remoteActiveScriptName: String?
     private let urlSession: URLSession
 
-    private weak var auth: AuthenticationManager?
     private weak var device: MacUSBManager?
     private weak var hostSessions: HostSessionManager?
 
@@ -25,7 +24,6 @@ final class RemoteControlHostService: ObservableObject {
 
     private struct HostSocketConfig {
         let wsURL: URL
-        let role: String
     }
 
     init(urlSession: URLSession = .shared) {
@@ -33,7 +31,6 @@ final class RemoteControlHostService: ObservableObject {
     }
 
     func start(auth: AuthenticationManager, device: MacUSBManager, hostSessions: HostSessionManager, previewManager: ScriptPreviewManager) {
-        self.auth = auth
         self.device = device
         self.hostSessions = hostSessions
         self.previewManager = previewManager
@@ -76,17 +73,7 @@ final class RemoteControlHostService: ObservableObject {
     }
 
     private func hostSocketConfig() -> HostSocketConfig? {
-        if let local = localGatewayWsURL() {
-            return HostSocketConfig(wsURL: local, role: "app")
-        }
-
-        guard hostedRemoteControlEnabled() else { return nil }
-        guard let backend = backendConfig() else { return nil }
-        return HostSocketConfig(wsURL: backend.wsURL, role: "host")
-    }
-
-    private func hostedRemoteControlEnabled() -> Bool {
-        ProcessInfo.processInfo.environment["EMWAVER_HOSTED_REMOTE_CONTROL_ENABLED"] == "1"
+        localGatewayWsURL().map { HostSocketConfig(wsURL: $0) }
     }
 
     private func localGatewayWsURL() -> URL? {
@@ -115,50 +102,6 @@ final class RemoteControlHostService: ObservableObject {
         return comps.url
     }
 
-    private func backendConfig() -> (wsURL: URL, accessToken: String)? {
-        guard let auth else { return nil }
-        guard let hostSessions else { return nil }
-
-        guard var base = BackendUrl.resolve() else { return nil }
-
-        // WebSocket endpoint.
-        base.appendPathComponent("v1/ws")
-
-        // Token: allow anon only in dev.
-        let allowAnonSync = (ProcessInfo.processInfo.environment["EMWAVER_ALLOW_ANON_SYNC"] == "1")
-
-        let tok: String
-        if !auth.accessToken.isEmpty {
-            tok = auth.accessToken
-        } else if allowAnonSync {
-            tok = ""
-        } else {
-            return nil
-        }
-
-        var comps = URLComponents(url: base, resolvingAgainstBaseURL: false)
-        var q = comps?.queryItems ?? []
-        if !tok.isEmpty {
-            q.append(URLQueryItem(name: "token", value: tok))
-        }
-        // Helpful for debugging; backend still learns hostSessionId from hello.
-        q.append(URLQueryItem(name: "hostSessionId", value: hostSessions.hostSessionId))
-        comps?.queryItems = q
-
-        guard let final = comps?.url else { return nil }
-
-        // Convert http(s) -> ws(s)
-        var wsComps = URLComponents(url: final, resolvingAgainstBaseURL: false)
-        if wsComps?.scheme == "https" {
-            wsComps?.scheme = "wss"
-        } else if wsComps?.scheme == "http" {
-            wsComps?.scheme = "ws"
-        }
-        guard let wsURL = wsComps?.url else { return nil }
-
-        return (wsURL: wsURL, accessToken: tok)
-    }
-
     private func reconnectLoop() async {
         while !Task.isCancelled {
             if socket == nil {
@@ -179,7 +122,7 @@ final class RemoteControlHostService: ObservableObject {
         // Hello
         sendJson([
             "type": "hello",
-            "role": cfg.role,
+            "role": "app",
             "protocolVersion": 1,
             "hostSessionId": hostSessions.hostSessionId,
         ])

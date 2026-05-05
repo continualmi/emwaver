@@ -50,7 +50,7 @@ export default function HardwareDocPage() {
       </p>
       <p>
         Users bring their own supported board or module. The app handles
-        firmware and activation for each supported target, so you do not need a
+        firmware setup and updates for each supported target, so you do not need a
         manual firmware toolchain workflow.
       </p>
       <p>

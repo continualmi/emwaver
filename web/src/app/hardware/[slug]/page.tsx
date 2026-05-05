@@ -1,4 +1,9 @@
 import { redirect } from "next/navigation";
+import { getHardwareCatalog } from "@/lib/hardwareCatalog";
+
+export function generateStaticParams() {
+  return getHardwareCatalog().map((device) => ({ slug: device.slug }));
+}
 
 export default async function HardwareDevicePage({
   params,

@@ -22,11 +22,6 @@ internal sealed class AppSettings
         // App appearance selection.
         public string AppTheme { get; set; } = "system";
 
-        // Backend selection
-        public bool UseProductionBackend { get; set; } = true;
-
-        // Frontend selection (used by web-first sign-in and purchase flows).
-        public bool UseProductionFrontend { get; set; } = true;
     }
 
     private static string GetSettingsPath()
@@ -89,48 +84,6 @@ internal sealed class AppSettings
         {
             // Best effort.
             try { File.Move(tmp, path, overwrite: true); } catch { }
-        }
-    }
-
-    public bool UseProductionBackend
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return Load().UseProductionBackend;
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                var m = Load();
-                m.UseProductionBackend = value;
-                Save(m);
-            }
-            Changed?.Invoke();
-        }
-    }
-
-    public bool UseProductionFrontend
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return Load().UseProductionFrontend;
-            }
-        }
-        set
-        {
-            lock (_lock)
-            {
-                var m = Load();
-                m.UseProductionFrontend = value;
-                Save(m);
-            }
-            Changed?.Invoke();
         }
     }
 

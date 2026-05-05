@@ -16,15 +16,11 @@ public sealed partial class DevicePage : Page
 
         AppServices.Device.AttachUiDispatcher(this.DispatcherQueue);
         AppServices.FirmwareUpdater.AttachUiDispatcher(this.DispatcherQueue);
-        AppServices.AccountDevices.AttachUiDispatcher(this.DispatcherQueue);
 
         PortsList.ItemsSource = AppServices.Device.AvailablePorts;
-        DevicesList.ItemsSource = AppServices.AccountDevices.Devices;
 
         AppServices.Device.PropertyChanged += OnStateChanged;
         AppServices.FirmwareUpdater.PropertyChanged += OnStateChanged;
-        AppServices.AccountDevices.PropertyChanged += OnStateChanged;
-        AppServices.CloudAuth.Changed += OnAuthChanged;
 
         Unloaded += OnUnloaded;
         Loaded += OnLoaded;
@@ -35,7 +31,6 @@ public sealed partial class DevicePage : Page
         Loaded -= OnLoaded;
         await AppServices.Device.RefreshPortsAsync();
         await AppServices.FirmwareUpdater.RefreshDfuPresenceAsync();
-        AppServices.AccountDevices.Refresh();
         UpdateUi();
     }
 
@@ -43,14 +38,7 @@ public sealed partial class DevicePage : Page
     {
         AppServices.Device.PropertyChanged -= OnStateChanged;
         AppServices.FirmwareUpdater.PropertyChanged -= OnStateChanged;
-        AppServices.AccountDevices.PropertyChanged -= OnStateChanged;
-        AppServices.CloudAuth.Changed -= OnAuthChanged;
         Unloaded -= OnUnloaded;
-    }
-
-    private void OnAuthChanged()
-    {
-        _ = DispatcherQueue.TryEnqueue(UpdateUi);
     }
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs e)

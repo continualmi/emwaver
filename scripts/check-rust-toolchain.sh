@@ -35,7 +35,7 @@ Rust toolchain is required for:
 Install Rust with rustup or the platform package manager, then rerun:
 
   ./scripts/check-rust-toolchain.sh
-  cd daemon && cargo build -p emwaver-host -p emwaver
+  cd daemon && cargo build -p emwaver
 
 EOF
   exit 1

@@ -17,14 +17,12 @@ struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
-    @ObservedObject var hostDirectory: HostDirectory
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
 
     let previewManager: ScriptPreviewManager
 
-    @State private var showingHosts: Bool = false
     @State private var showingSettings: Bool = false
 
     @State private var autoFirmwarePromptKey: String? = nil
@@ -102,17 +100,13 @@ struct ContentView: View {
         return "\(currentBoardType)-\(suffix)"
     }
 
-    private var hostedServicesUiEnabled: Bool {
-        false
-    }
-
     var body: some View {
         NavigationStack {
             ZStack {
                 ScriptsRootView(
                     previewManager: previewManager,
                     device: scriptDeviceBridge,
-                    agentCloudProvider: {
+                    agentEndpointProvider: {
                         auth.agentEndpointConfig
                     },
                     hostStatusSink: { running, name in
@@ -193,17 +187,6 @@ struct ContentView: View {
                 .help("Device / connection options")
             }
 
-            if hostedServicesUiEnabled {
-                ToolbarItem(placement: .automatic) {
-                    Button {
-                        showingHosts = true
-                    } label: {
-                        Label("Hosted Hosts", systemImage: "dot.radiowaves.left.and.right")
-                    }
-                    .help("View host sessions")
-                }
-            }
-
             ToolbarItem(placement: .automatic) {
                 if remoteControlHost.isRemoteControlled {
                     Button {
@@ -258,21 +241,6 @@ struct ContentView: View {
         .sheet(isPresented: $firmwareUpdater.isPresented) {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
         }
-        .sheet(isPresented: $showingHosts) {
-            NavigationStack {
-                HostsView(
-                    directory: hostDirectory
-                ) {
-                    await hostDirectory.refresh(auth: auth)
-                }
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button("Done") { showingHosts = false }
-                    }
-                }
-            }
-            .frame(minWidth: 560, minHeight: 520)
-        }
         .sheet(isPresented: $showingSettings) {
             SettingsView()
         }
@@ -325,7 +293,6 @@ struct ContentView: View {
         device: MacUSBManager(),
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
-        hostDirectory: HostDirectory(),
         remoteControlHost: RemoteControlHostService(),
         previewManager: ScriptPreviewManager()
     )

@@ -66,11 +66,6 @@ import com.emwaver.emwaverandroidapp.files.RepositoryCallback;
 import com.emwaver.emwaverandroidapp.files.UserFileData;
 import com.emwaver.emwaverandroidapp.files.UserFileMetadata;
 import com.emwaver.emwaverandroidapp.ui.scripts.ScriptMetadata;
-import com.emwaver.emwaverandroidapp.cloud.CloudAuthManager;
-import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
-import com.emwaver.emwaverandroidapp.cloud.CloudFilesApi;
-import com.emwaver.emwaverandroidapp.cloud.CloudSyncEngine;
-import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
 import com.emwaver.emwaverandroidapp.scripts.ScriptEngine;
 import com.emwaver.emwaverandroidapp.scripts.ScriptDeviceConnection;
 import com.emwaver.emwaverandroidapp.scripts.ScriptRenderView;
@@ -88,25 +83,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
-import okhttp3.OkHttpClient;
-
-import org.json.JSONObject;
 
 public class ScriptsFragment extends Fragment {
-
-    private String getHostSessionId() {
-        try {
-            if (!isAdded()) return "";
-            return requireContext().getSharedPreferences("emwaver", Context.MODE_PRIVATE)
-                    .getString("emwaver.hostSessionId", "");
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
 
     private static final String TAG = "ScriptsFragment";
     private static final String SCRIPT_EXTENSION = ".emw";
@@ -114,7 +95,7 @@ public class ScriptsFragment extends Fragment {
     private static final String ASSET_SCRIPT_EXTENSION = ".emw";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
-    // Cloud/user files live in a single flat namespace locally.
+    // User files live in a single flat namespace locally.
     // UI decides what to show based on extension (.emw scripts vs .raw/.txt signals).
     private static final String SIGNALS_DIR_NAME = "scripts";
     private static final String SIGNAL_RAW_EXTENSION = ".raw";
@@ -215,50 +196,6 @@ public class ScriptsFragment extends Fragment {
     @Override
     public void onStart() {
         super.onStart();
-
-        // Attach as delegate for remote control so we can run scripts + dispatch events.
-        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().setDelegate(new com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.Delegate() {
-            @Override
-            public void onRemoteControlActiveChanged(boolean active) {
-                if (!isAdded() || binding == null || binding.remoteControlBanner == null) return;
-                binding.remoteControlBanner.setVisibility(active ? View.VISIBLE : View.GONE);
-            }
-
-            @Override
-            public void runRemoteScript(@NonNull String source, @Nullable String name, @NonNull String scriptInstanceId) {
-                // Show preview surface and run the provided source.
-                currentScriptName = name != null ? name : "Remote Script";
-                currentScriptMetadata = null;
-                renderScript(source);
-            }
-
-            @Override
-            public void dispatchRemoteUiEvent(@NonNull String scriptInstanceId, @NonNull String targetNodeId, @NonNull String eventName, @NonNull JSONObject payload) {
-                if (scriptEngine == null || activeScriptTree == null) return;
-                com.emwaver.emwaverandroidapp.scripts.ScriptEventType ev = com.emwaver.emwaverandroidapp.scripts.ScriptEventType.fromRaw(eventName);
-                if (ev == null) return;
-
-                com.emwaver.emwaverandroidapp.scripts.ScriptNode node = findNodeById(activeScriptTree.getRoot(), targetNodeId);
-                if (node == null || node.getProps() == null) return;
-
-                String token = node.getProps().getHandlerToken(ev);
-                if (token == null || token.trim().isEmpty()) return;
-
-                java.util.List<Object> args = new java.util.ArrayList<>();
-                if (ev == com.emwaver.emwaverandroidapp.scripts.ScriptEventType.CHANGE || ev == com.emwaver.emwaverandroidapp.scripts.ScriptEventType.SUBMIT) {
-                    if (payload.has("value")) {
-                        Object v = payload.opt("value");
-                        args.add(v);
-                    }
-                }
-                scriptEngine.invoke(token, args);
-            }
-
-            @Override
-            public Object getActiveScriptTree() {
-                return activeScriptTree;
-            }
-        });
     }
 
     @Override
@@ -266,19 +203,6 @@ public class ScriptsFragment extends Fragment {
         super.onCreate(savedInstanceState);
         viewModel = new ViewModelProvider(requireActivity()).get(ScriptsViewModel.class);
         fileRepository = FileRepositoryLocal.getInstance(requireContext());
-
-        // Allow SignInBottomSheetDialogFragment to notify us and we can retry sync.
-        getParentFragmentManager().setFragmentResultListener(
-                SignInBottomSheetDialogFragment.FRAGMENT_RESULT_KEY,
-                this,
-                (requestKey, bundle) -> {
-                    boolean ok = bundle != null && bundle.getBoolean("success", false);
-                    if (ok) {
-                        runCloudSyncNow();
-                    }
-                }
-        );
-        
         backPressedCallback = new OnBackPressedCallback(false) {
             @Override
             public void handleOnBackPressed() {
@@ -314,7 +238,7 @@ public class ScriptsFragment extends Fragment {
         updateViewMode();
         updateScriptPlaceholder();
         restoreFromViewModel();
-        loadScriptsFromCloud();
+        loadScripts();
 
         return root;
     }
@@ -322,9 +246,6 @@ public class ScriptsFragment extends Fragment {
 
     @Override
     public void onDestroyView() {
-        // Detach remote control delegate.
-        com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().setDelegate(null);
-
         persistStateToViewModel();
         if (scriptEngine != null) {
             scriptEngine.shutdown();
@@ -394,9 +315,6 @@ public class ScriptsFragment extends Fragment {
                 } else if (itemId == R.id.editor_preview) {
                     previewEditorContent();
                     return true;
-                } else if (itemId == R.id.editor_sync) {
-                    runCloudSyncNow();
-                    return true;
                 } else if (itemId == R.id.editor_rename) {
                     if (currentScriptMetadata != null && currentScriptMetadata.isCustomScript()) {
                         showNameInputDialog(
@@ -429,189 +347,6 @@ public class ScriptsFragment extends Fragment {
             }
         }, getViewLifecycleOwner(), Lifecycle.State.RESUMED);
     }
-
-    private AlertDialog syncDialog;
-    private TextView syncProgressText;
-
-    private void showSyncProgressDialog() {
-        if (!isAdded()) return;
-        if (syncDialog != null && syncDialog.isShowing()) return;
-
-        // Use the standard spinner dialog.
-        View view = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_loading, null);
-        syncProgressText = view.findViewById(R.id.loading_message);
-
-        syncDialog = new AlertDialog.Builder(requireContext())
-            .setView(view)
-            .setCancelable(false)
-            .create();
-        syncDialog.show();
-
-        updateSyncProgress(0, 0, "Preparing…");
-    }
-
-    private void updateSyncProgress(int done, int total, String status) {
-        if (!isAdded()) return;
-        if (syncProgressText != null) {
-            if (total > 0) {
-                syncProgressText.setText((status != null ? status : "Syncing…") + " (" + done + "/" + total + ")");
-            } else {
-                syncProgressText.setText(status != null ? status : "Syncing…");
-            }
-        }
-    }
-
-    private void hideSyncProgressDialog() {
-        if (syncDialog != null) {
-            if (syncDialog.isShowing()) syncDialog.dismiss();
-            syncDialog = null;
-        }
-        syncProgressText = null;
-    }
-
-    private void runCloudSyncApply(
-            String baseUrl,
-            java.io.File filesDir,
-            java.util.Map<String, String> ct,
-            String accessToken,
-            boolean uploadLocalNewer,
-            boolean downloadCloudNewer
-    ) {
-        if (!isAdded()) return;
-
-        showSyncProgressDialog();
-
-        new Thread(() -> {
-            try {
-                OkHttpClient http = new OkHttpClient.Builder().build();
-                CloudFilesApi api = new CloudFilesApi(http);
-                CloudSyncEngine engine = new CloudSyncEngine(api);
-
-                CloudSyncEngine.Summary total = engine.syncFolder(
-                        baseUrl,
-                        accessToken,
-                        filesDir,
-                        new String[]{".emw", ".raw", ".txt"},
-                        ct,
-                        uploadLocalNewer,
-                        downloadCloudNewer,
-                        (done, all, status) -> runOnUiThreadSafe(() -> updateSyncProgress(done, all, status))
-                );
-
-                runOnUiThreadSafe(() -> {
-                    hideSyncProgressDialog();
-                    showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded);
-                    loadScriptsFromCloud();
-                });
-            } catch (Exception e) {
-                android.util.Log.e(TAG, "Sync apply failed", e);
-                String msg = e.getMessage();
-                runOnUiThreadSafe(() -> {
-                    hideSyncProgressDialog();
-                    showToast(msg != null ? msg : "Sync failed");
-                });
-            }
-        }).start();
-    }
-
-    private void runCloudSyncNow() {
-        if (!isAdded()) {
-            return;
-        }
-
-        final String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
-        if (baseUrl == null || baseUrl.trim().isEmpty()) {
-            showToast("Backend URL not configured (EMWAVER_BACKEND_URL)");
-            return;
-        }
-
-        showSyncProgressDialog();
-
-        new Thread(() -> {
-            try {
-                OkHttpClient http = new OkHttpClient.Builder().build();
-                CloudFilesApi api = new CloudFilesApi(http);
-                CloudSyncEngine engine = new CloudSyncEngine(api);
-
-                java.io.File filesDir = new java.io.File(requireContext().getFilesDir(), "scripts");
-
-                java.util.Map<String, String> ct = new java.util.HashMap<>();
-                ct.put(".emw", "text/plain");
-                ct.put(".txt", "text/plain");
-                ct.put(".raw", "application/octet-stream");
-
-                // Require auth for cloud calls.
-                String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
-                if (accessToken == null || accessToken.trim().isEmpty()) {
-                    runOnUiThreadSafe(() -> {
-                        hideSyncProgressDialog();
-                        showToast("Please sign in to sync.");
-                        SignInBottomSheetDialogFragment dialog = new SignInBottomSheetDialogFragment();
-                        dialog.show(getParentFragmentManager(), "SignIn");
-                    });
-                    return;
-                }
-
-                // First pass: sync cloud-only/local-only, but do NOT overwrite when one side is newer.
-                CloudSyncEngine.Summary total = engine.syncFolder(
-                        baseUrl,
-                        accessToken,
-                        filesDir,
-                        new String[]{".emw", ".raw", ".txt"},
-                        ct,
-                        false,
-                        false,
-                        (done, all, status) -> runOnUiThreadSafe(() -> updateSyncProgress(done, all, status))
-                );
-
-                runOnUiThreadSafe(() -> {
-                    hideSyncProgressDialog();
-                    loadScriptsFromCloud();
-
-                    // If there are newer versions on either side, ask once what to overwrite.
-                    if ((total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) || (total.localNewerFiles != null && !total.localNewerFiles.isEmpty())) {
-                        StringBuilder msg = new StringBuilder();
-                        if (total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty()) {
-                            msg.append("Cloud newer (overwrite local?)\n");
-                            for (String n : total.cloudNewerFiles) msg.append("• ").append(n).append("\n");
-                            msg.append("\n");
-                        }
-                        if (total.localNewerFiles != null && !total.localNewerFiles.isEmpty()) {
-                            msg.append("Local newer (overwrite cloud?)\n");
-                            for (String n : total.localNewerFiles) msg.append("• ").append(n).append("\n");
-                        }
-
-                        final boolean hasCloudNewer = total.cloudNewerFiles != null && !total.cloudNewerFiles.isEmpty();
-                        final boolean hasLocalNewer = total.localNewerFiles != null && !total.localNewerFiles.isEmpty();
-
-                        new AlertDialog.Builder(requireContext())
-                            .setTitle("Sync decisions")
-                            .setMessage(msg.toString())
-                            .setNegativeButton("Keep both (no overwrite)", null)
-                            .setNeutralButton(hasLocalNewer ? "Overwrite cloud" : "OK", (d, w) -> {
-                                if (!hasLocalNewer) return;
-                                runCloudSyncApply(baseUrl, filesDir, ct, accessToken, true, false);
-                            })
-                            .setPositiveButton(hasCloudNewer ? "Overwrite local" : "OK", (d, w) -> {
-                                if (!hasCloudNewer) return;
-                                runCloudSyncApply(baseUrl, filesDir, ct, accessToken, false, true);
-                            })
-                            .show();
-                    } else {
-                        showToast("Sync complete. Uploaded: " + total.uploaded + ", Downloaded: " + total.downloaded);
-                    }
-                });
-            } catch (Exception e) {
-                android.util.Log.e(TAG, "Sync failed", e);
-                String msg = e.getMessage();
-                runOnUiThreadSafe(() -> {
-                    hideSyncProgressDialog();
-                    showToast(msg != null ? msg : "Sync failed");
-                });
-            }
-        }).start();
-    }
-
     private void setupFileLaunchers() {
         openFileLauncher = registerForActivityResult(new ActivityResultContracts.OpenDocument(), uri -> {
             if (uri != null) {
@@ -1045,7 +780,7 @@ public class ScriptsFragment extends Fragment {
         }).start();
     }
 
-    private void loadScriptsFromCloud() {
+    private void loadScripts() {
         if (fileRepository == null) {
             return;
         }
@@ -1236,7 +971,7 @@ public class ScriptsFragment extends Fragment {
                 if (viewModel != null) {
                     String draft = viewModel.getDraftContent(updated.getId());
                     boolean dirty = viewModel.isDirty(updated.getId());
-                    String reference = draft != null ? draft : viewModel.getRemoteContent(updated.getId());
+                    String reference = draft != null ? draft : viewModel.getStoredContent(updated.getId());
                     if (reference == null) {
                         reference = "";
                     }
@@ -1420,18 +1155,18 @@ public class ScriptsFragment extends Fragment {
                 hasContent = true;
                 completePendingPreview(scriptId);
             }
-            String cachedEtag = viewModel.getRemoteEtag(scriptId);
-            String cachedRemote = viewModel.getRemoteContent(scriptId);
-            if (!TextUtils.isEmpty(cachedEtag) && cachedRemote != null && TextUtils.equals(cachedEtag, metadata.getEtag())) {
+            String cachedEtag = viewModel.getStoredEtag(scriptId);
+            String cachedStored = viewModel.getStoredContent(scriptId);
+            if (!TextUtils.isEmpty(cachedEtag) && cachedStored != null && TextUtils.equals(cachedEtag, metadata.getEtag())) {
                 needsFetch = false;
                 if (!dirty) {
-                    setEditorText(cachedRemote);
-                    updateDraftState(cachedRemote, false);
+                    setEditorText(cachedStored);
+                    updateDraftState(cachedStored, false);
                 }
                 String contentToUse = getEditorText();
                 if (contentToUse == null || contentToUse.trim().isEmpty()) {
-                    contentToUse = cachedRemote;
-                    setEditorText(cachedRemote);
+                    contentToUse = cachedStored;
+                    setEditorText(cachedStored);
                 }
                 viewModel.updateDraft(scriptId, metadata.getName(), contentToUse, dirty);
                 viewModel.setLastScriptId(scriptId);
@@ -1467,7 +1202,7 @@ public class ScriptsFragment extends Fragment {
                 }
                 String content = data != null && data.hasTextContent() ? data.getTextContent() : "";
                 if (viewModel != null) {
-                    viewModel.updateRemoteSnapshot(scriptId, metadata.getName(), metadata.getEtag(), content);
+                    viewModel.updateStoredSnapshot(scriptId, metadata.getName(), metadata.getEtag(), content);
                     if (!viewModel.isDirty(scriptId)) {
                         viewModel.updateDraft(scriptId, metadata.getName(), content, false);
                     }
@@ -1758,7 +1493,7 @@ public class ScriptsFragment extends Fragment {
             content = viewModel.getDraftContent(scriptId);
             dirty = viewModel.isDirty(scriptId);
             if (content == null) {
-                content = viewModel.getRemoteContent(scriptId);
+                content = viewModel.getStoredContent(scriptId);
             }
         }
         if (content == null) {
@@ -1766,7 +1501,7 @@ public class ScriptsFragment extends Fragment {
         }
 
         // For custom scripts, load from storage if needed
-        if (scriptMetadata != null && scriptMetadata.isCustomScript() && viewModel != null && TextUtils.isEmpty(viewModel.getRemoteEtag(scriptId)) && fileRepository != null) {
+        if (scriptMetadata != null && scriptMetadata.isCustomScript() && viewModel != null && TextUtils.isEmpty(viewModel.getStoredEtag(scriptId)) && fileRepository != null) {
             showLoadingDialog("Loading script...");
             fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
                 @Override
@@ -1775,12 +1510,12 @@ public class ScriptsFragment extends Fragment {
                     if (!isAdded()) {
                         return;
                     }
-                    String remoteContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
-                    viewModel.updateRemoteSnapshot(scriptId, scriptName, metadata.getEtag(), remoteContent);
+                    String storedContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
+                    viewModel.updateStoredSnapshot(scriptId, scriptName, metadata.getEtag(), storedContent);
                     if (!viewModel.isDirty(scriptId)) {
-                        viewModel.updateDraft(scriptId, scriptName, remoteContent, false);
+                        viewModel.updateDraft(scriptId, scriptName, storedContent, false);
                     }
-                    setEditorText(remoteContent);
+                    setEditorText(storedContent);
                     showScriptEditorDialog(scriptMetadata);
                 }
 
@@ -1853,21 +1588,10 @@ public class ScriptsFragment extends Fragment {
         }
         UserFileMetadata metadata = scriptMetadata.getMetadata();
 
-        // Modal with "also delete from cloud" checkbox.
-        final android.widget.CheckBox alsoCloud = new android.widget.CheckBox(requireContext());
-        alsoCloud.setText("Also delete from cloud");
-        boolean signedIn = CloudAuthManager.getInstance().isSignedIn();
-        alsoCloud.setChecked(signedIn); // default ON when signed in
-        alsoCloud.setEnabled(signedIn);
-        if (!signedIn) {
-            alsoCloud.setAlpha(0.6f);
-        }
-
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Script")
             .setMessage("Are you sure you want to delete " + metadata.getName() + "?")
-            .setView(alsoCloud)
-            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptMetadata, alsoCloud.isChecked()))
+            .setPositiveButton("Delete", (dialog, which) -> deleteScript(scriptMetadata))
             .setNegativeButton("Cancel", null)
             .show();
     }
@@ -1877,25 +1601,15 @@ public class ScriptsFragment extends Fragment {
             return;
         }
 
-        final android.widget.CheckBox alsoCloud = new android.widget.CheckBox(requireContext());
-        alsoCloud.setText("Also delete from cloud");
-        boolean signedIn = CloudAuthManager.getInstance().isSignedIn();
-        alsoCloud.setChecked(signedIn); // default ON when signed in
-        alsoCloud.setEnabled(signedIn);
-        if (!signedIn) {
-            alsoCloud.setAlpha(0.6f);
-        }
-
         new AlertDialog.Builder(requireContext())
             .setTitle("Delete Signal")
             .setMessage("Are you sure you want to delete " + signalMetadata.displayName() + "?")
-            .setView(alsoCloud)
-            .setPositiveButton("Delete", (dialog, which) -> deleteSignal(signalMetadata, alsoCloud.isChecked()))
+            .setPositiveButton("Delete", (dialog, which) -> deleteSignal(signalMetadata))
             .setNegativeButton("Cancel", null)
             .show();
     }
 
-    private void deleteSignal(@NonNull SignalMetadata signalMetadata, boolean alsoDeleteFromCloud) {
+    private void deleteSignal(@NonNull SignalMetadata signalMetadata) {
         if (!isAdded() || signalMetadata == null) {
             return;
         }
@@ -1939,27 +1653,6 @@ public class ScriptsFragment extends Fragment {
                 loadSignalFiles();
                 rebuildCombinedScripts();
                 showToast("Signal deleted: " + signalMetadata.displayName());
-
-                if (alsoDeleteFromCloud) {
-                    // Best-effort cloud delete.
-                    new Thread(() -> {
-                        try {
-                            String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
-                            String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
-                            if (baseUrl == null || baseUrl.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
-                                runOnUiThreadSafe(() -> showToast("Cloud delete skipped (not signed in)"));
-                                return;
-                            }
-                            OkHttpClient http = new OkHttpClient.Builder().build();
-                            CloudFilesApi api = new CloudFilesApi(http);
-                            api.deleteViaBackend(baseUrl, accessToken, f.getName());
-                            runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + f.getName()));
-                        } catch (Exception e) {
-                            String em = e != null ? e.getMessage() : null;
-                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + f.getName() + (em != null ? " (" + em + ")" : "")));
-                        }
-                    }).start();
-                }
             });
         }).start();
     }
@@ -2040,10 +1733,6 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void deleteScript(ScriptMetadata scriptMetadata) {
-        deleteScript(scriptMetadata, false);
-    }
-
-    private void deleteScript(ScriptMetadata scriptMetadata, boolean alsoDeleteFromCloud) {
         if (fileRepository == null || scriptMetadata == null) {
             return;
         }
@@ -2080,27 +1769,6 @@ public class ScriptsFragment extends Fragment {
                 }
                 handlePostListLoad();
                 showToast("Script deleted: " + metadata.getName());
-
-                if (alsoDeleteFromCloud) {
-                    // Best-effort cloud delete (local deletion already happened).
-                    new Thread(() -> {
-                        try {
-                            String baseUrl = CloudConfig.getBackendBaseUrl(requireContext());
-                            String accessToken = CloudAuthManager.getInstance().getIdTokenBlocking();
-                            if (baseUrl == null || baseUrl.trim().isEmpty() || accessToken == null || accessToken.trim().isEmpty()) {
-                                runOnUiThreadSafe(() -> showToast("Cloud delete skipped (not signed in)") );
-                                return;
-                            }
-                            OkHttpClient http = new OkHttpClient.Builder().build();
-                            CloudFilesApi api = new CloudFilesApi(http);
-                            api.deleteViaBackend(baseUrl, accessToken, metadata.getName());
-                            runOnUiThreadSafe(() -> showToast("Deleted from cloud: " + metadata.getName()));
-                        } catch (Exception e) {
-                            String em = e != null ? e.getMessage() : null;
-                            runOnUiThreadSafe(() -> showToast("Failed to delete from cloud: " + metadata.getName() + (em != null ? " (" + em + ")" : "")));
-                        }
-                    }).start();
-                }
             }
 
             @Override
@@ -2147,8 +1815,8 @@ public class ScriptsFragment extends Fragment {
                 continue;
             }
             UserFileMetadata metadata = scriptMetadata.getMetadata();
-            String cachedEtag = viewModel.getRemoteEtag(metadata.getId());
-            String cachedContent = viewModel.getRemoteContent(metadata.getId());
+            String cachedEtag = viewModel.getStoredEtag(metadata.getId());
+            String cachedContent = viewModel.getStoredContent(metadata.getId());
             if (TextUtils.isEmpty(cachedEtag) || cachedContent == null || !TextUtils.equals(cachedEtag, metadata.getEtag())) {
                 needsRefresh = true;
                 break;
@@ -2182,10 +1850,10 @@ public class ScriptsFragment extends Fragment {
                         if (TextUtils.isEmpty(scriptId)) {
                             continue;
                         }
-                        String remoteContent = data.hasTextContent() ? data.getTextContent() : "";
-                        viewModel.updateRemoteSnapshot(scriptId, metadata.getName(), metadata.getEtag(), remoteContent);
+                        String storedContent = data.hasTextContent() ? data.getTextContent() : "";
+                        viewModel.updateStoredSnapshot(scriptId, metadata.getName(), metadata.getEtag(), storedContent);
                         if (!viewModel.isDirty(scriptId)) {
-                            viewModel.updateDraft(scriptId, metadata.getName(), remoteContent, false);
+                            viewModel.updateDraft(scriptId, metadata.getName(), storedContent, false);
                         }
                     }
                 }
@@ -2317,19 +1985,7 @@ public class ScriptsFragment extends Fragment {
         }
         activeScriptTree = tree;
         isRenderingScript = false;
-        renderScriptTree(tree);
-
-        // If remote control is active, publish a snapshot for the web UI.
-        try {
-            if (tree != null && tree.getRoot() != null && com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().isRemoteControlled()) {
-                String hostId = getHostSessionId();
-                if (hostId != null && !hostId.trim().isEmpty()) {
-                    com.emwaver.emwaverandroidapp.cloud.RemoteControlHostService.getInstance().publishUiSnapshot(hostId.trim(), tree.getRoot());
-                }
-            }
-        } catch (Exception ignored) {
-        }
-    }
+        renderScriptTree(tree);    }
 
     private void ensureScriptRenderView() {
         if (scriptRenderView != null) {
@@ -2690,485 +2346,6 @@ public class ScriptsFragment extends Fragment {
                 loadingDialog.dismiss();
             }
             loadingDialog = null;
-        }
-    }
-
-    private void startSync() {
-        if (!isAdded() || fileRepository == null) {
-            return;
-        }
-        showToast("Syncing scripts...");
-        fileRepository.listFiles(SCRIPT_EXTENSION, new RepositoryCallback<List<UserFileMetadata>>() {
-            @Override
-            public void onSuccess(List<UserFileMetadata> value) {
-                if (!isAdded()) {
-                    return;
-                }
-                List<UserFileMetadata> list = value != null ? value : Collections.emptyList();
-                collectRemoteData(list);
-            }
-
-            @Override
-            public void onError(String message) {
-                if (!isAdded()) {
-                    return;
-                }
-                showToast(message != null ? message : "Failed to list scripts");
-            }
-        });
-    }
-
-    private void collectRemoteData(List<UserFileMetadata> metadataList) {
-        if (!isAdded()) {
-            return;
-        }
-        final List<UserFileMetadata> list = metadataList != null ? metadataList : Collections.emptyList();
-        final Map<String, UserFileMetadata> metadataMap = new HashMap<>();
-        for (UserFileMetadata metadata : list) {
-            metadataMap.put(metadata.getId(), metadata);
-        }
-        if (list.isEmpty()) {
-            onRemoteDataCollected(metadataMap, Collections.emptyMap());
-            return;
-        }
-        final Map<String, UserFileData> dataMap = new HashMap<>();
-        final AtomicInteger remaining = new AtomicInteger(list.size());
-        final AtomicBoolean failed = new AtomicBoolean(false);
-        for (UserFileMetadata metadata : list) {
-            final String scriptId = metadata.getId();
-            fileRepository.getFile(scriptId, new RepositoryCallback<UserFileData>() {
-                @Override
-                public void onSuccess(UserFileData data) {
-                    if (failed.get()) {
-                        return;
-                    }
-                    synchronized (dataMap) {
-                        dataMap.put(scriptId, data);
-                    }
-                    if (remaining.decrementAndGet() == 0 && !failed.get()) {
-                        Map<String, UserFileData> snapshot;
-                        synchronized (dataMap) {
-                            snapshot = new HashMap<>(dataMap);
-                        }
-                        if (isAdded()) {
-                            requireActivity().runOnUiThread(() -> onRemoteDataCollected(metadataMap, snapshot));
-                        }
-                    }
-                }
-
-                @Override
-                public void onError(String message) {
-                    if (failed.compareAndSet(false, true) && isAdded()) {
-                        showToast(message != null ? message : "Failed to fetch script content");
-                    }
-                }
-            });
-        }
-    }
-
-    private void onRemoteDataCollected(Map<String, UserFileMetadata> metadataMap, Map<String, UserFileData> dataMap) {
-        if (!isAdded() || viewModel == null) {
-            return;
-        }
-        Map<String, ScriptsViewModel.ScriptRecord> snapshot = viewModel.snapshotRecords();
-        List<ScriptChange> changes = new ArrayList<>();
-        for (Map.Entry<String, UserFileMetadata> entry : metadataMap.entrySet()) {
-            String scriptId = entry.getKey();
-            UserFileMetadata metadata = entry.getValue();
-            UserFileData data = dataMap.get(scriptId);
-            String remoteContent = data != null && data.hasTextContent() ? data.getTextContent() : "";
-            ScriptsViewModel.ScriptRecord record = snapshot.get(scriptId);
-            String name = metadata.getName();
-            String previousRemote = record != null && record.remoteContent != null ? record.remoteContent : "";
-            if (record == null || TextUtils.isEmpty(record.remoteEtag)) {
-                changes.add(ScriptChange.remoteAdded(scriptId, name, remoteContent, metadata));
-                continue;
-            }
-            boolean remoteChanged = !TextUtils.equals(record.remoteEtag, metadata.getEtag()) || !TextUtils.equals(previousRemote, remoteContent);
-            boolean localDirty = record.dirty;
-            if (!remoteChanged && !localDirty) {
-                continue;
-            }
-            String resolvedName = record.name != null ? record.name : name;
-            if (localDirty && remoteChanged) {
-                changes.add(ScriptChange.conflict(scriptId, resolvedName, previousRemote, remoteContent, record.draftContent, metadata));
-            } else if (localDirty) {
-                String draftContent = record.draftContent != null ? record.draftContent : previousRemote;
-                changes.add(ScriptChange.localModified(scriptId, resolvedName, previousRemote, draftContent));
-            } else if (remoteChanged) {
-                changes.add(ScriptChange.remoteModified(scriptId, resolvedName, previousRemote, remoteContent, metadata));
-            }
-        }
-
-        for (Map.Entry<String, ScriptsViewModel.ScriptRecord> entry : snapshot.entrySet()) {
-            String scriptId = entry.getKey();
-            if (ScriptsViewModel.UNSAVED_KEY.equals(scriptId)) {
-                continue;
-            }
-            if (!metadataMap.containsKey(scriptId) && !TextUtils.isEmpty(entry.getValue().remoteEtag)) {
-                ScriptsViewModel.ScriptRecord record = entry.getValue();
-                String name = record.name != null ? record.name : (currentScriptName != null ? currentScriptName : "Script");
-                String previousRemote = record.remoteContent != null ? record.remoteContent : "";
-                changes.add(ScriptChange.remoteDeleted(scriptId, name, previousRemote));
-            }
-        }
-
-        ScriptsViewModel.ScriptRecord unsaved = snapshot.get(ScriptsViewModel.UNSAVED_KEY);
-        if (unsaved != null && unsaved.dirty && unsaved.draftContent != null && unsaved.draftContent.trim().length() > 0) {
-            changes.add(ScriptChange.unsavedLocal(unsaved.draftContent));
-        }
-
-        if (changes.isEmpty()) {
-            showToast("Scripts already in sync");
-            return;
-        }
-
-        showSyncDialog(changes, metadataMap, dataMap);
-    }
-
-    private void showSyncDialog(List<ScriptChange> changes, Map<String, UserFileMetadata> metadataMap, Map<String, UserFileData> dataMap) {
-        if (!isAdded()) {
-            return;
-        }
-        View dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_sync_changes, null);
-        TextView summaryView = dialogView.findViewById(R.id.sync_summary);
-        summaryView.setText(buildSyncSummary(changes));
-
-        AlertDialog.Builder builder = new AlertDialog.Builder(requireContext())
-            .setTitle("Script Sync")
-            .setView(dialogView)
-            .setNegativeButton("Cancel", null)
-            .setPositiveButton("Apply", (dialog, which) -> applySyncChanges(changes, dataMap));
-
-        if (!isAdded()) {
-            return;
-        }
-        builder.show();
-    }
-
-    private String buildSyncSummary(List<ScriptChange> changes) {
-        StringBuilder summary = new StringBuilder();
-        for (int i = 0; i < changes.size(); i++) {
-            ScriptChange change = changes.get(i);
-            summary.append(labelForChange(change.type)).append(" — ");
-            String name = change.name != null ? change.name : (change.scriptId != null ? change.scriptId : "Unsaved Script");
-            summary.append(name).append('\n');
-            switch (change.type) {
-                case LOCAL_MODIFIED:
-                    summary.append("Diff (local vs remote):\n");
-                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
-                    break;
-                case REMOTE_MODIFIED:
-                    summary.append("Diff (remote update):\n");
-                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
-                    break;
-                case REMOTE_ADDED:
-                    summary.append("New remote script content:\n");
-                    summary.append(generateUnifiedDiff("", safe(change.after)));
-                    break;
-                case REMOTE_DELETED:
-                    summary.append("Remote script removed. Local snapshot:\n");
-                    summary.append(generateUnifiedDiff(safe(change.before), ""));
-                    break;
-                case CONFLICT:
-                    summary.append("Conflict detected. Remote update:\n");
-                    summary.append(generateUnifiedDiff(safe(change.before), safe(change.after)));
-                    if (change.localDraft != null) {
-                        summary.append("\nLocal draft:\n");
-                        summary.append(generateUnifiedDiff(safe(change.before), safe(change.localDraft)));
-                    }
-                    break;
-                case LOCAL_UNTRACKED:
-                    summary.append("Unsaved local draft must be saved before syncing.\n");
-                    break;
-            }
-            if (i < changes.size() - 1) {
-                summary.append("\n-----------------------------\n");
-            }
-        }
-        return summary.toString();
-    }
-
-    private void applySyncChanges(List<ScriptChange> changes, Map<String, UserFileData> dataMap) {
-        if (!isAdded() || fileRepository == null || viewModel == null) {
-            return;
-        }
-        List<ScriptChange> localChanges = new ArrayList<>();
-        List<ScriptChange> remoteAdds = new ArrayList<>();
-        List<ScriptChange> remoteMods = new ArrayList<>();
-        List<ScriptChange> remoteDeletes = new ArrayList<>();
-        boolean hasConflict = false;
-        boolean hasUnsaved = false;
-
-        for (ScriptChange change : changes) {
-            switch (change.type) {
-                case LOCAL_MODIFIED:
-                    localChanges.add(change);
-                    break;
-                case REMOTE_MODIFIED:
-                    remoteMods.add(change);
-                    break;
-                case REMOTE_ADDED:
-                    remoteAdds.add(change);
-                    break;
-                case REMOTE_DELETED:
-                    remoteDeletes.add(change);
-                    break;
-                case CONFLICT:
-                    hasConflict = true;
-                    break;
-                case LOCAL_UNTRACKED:
-                    hasUnsaved = true;
-                    break;
-            }
-        }
-
-        if (hasConflict) {
-            showToast("Conflicts detected. Resolve manually before syncing.");
-        }
-        if (hasUnsaved) {
-            showToast("Unsaved drafts found. Save them before syncing.");
-        }
-
-        processLocalUpdates(localChanges, 0, () -> {
-            applyRemoteAdditions(remoteAdds, dataMap);
-            applyRemoteModifications(remoteMods, dataMap);
-            applyRemoteDeletions(remoteDeletes);
-            showToast("Sync complete");
-        });
-    }
-
-    private void processLocalUpdates(List<ScriptChange> localChanges, int index, Runnable completion) {
-        if (index >= localChanges.size()) {
-            completion.run();
-            return;
-        }
-        ScriptChange change = localChanges.get(index);
-        if (viewModel == null) {
-            completion.run();
-            return;
-        }
-        String etag = viewModel.getRemoteEtag(change.scriptId);
-        if (TextUtils.isEmpty(etag)) {
-            processLocalUpdates(localChanges, index + 1, completion);
-            return;
-        }
-        fileRepository.updateTextFile(change.scriptId, etag, change.after, new RepositoryCallback<UserFileMetadata>() {
-            @Override
-            public void onSuccess(UserFileMetadata metadata) {
-                if (!isAdded()) {
-                    return;
-                }
-                ScriptMetadata updatedScriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
-                addOrReplaceMetadata(updatedScriptMetadata);
-                viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), change.after);
-                viewModel.markClean(metadata.getId(), change.after, metadata.getEtag());
-                viewModel.updateDraft(metadata.getId(), metadata.getName(), change.after, false);
-                if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
-                    currentScriptMetadata = updatedScriptMetadata;
-                    currentScriptName = metadata.getName();
-                    currentScriptEtag = metadata.getEtag();
-                    setEditorText(change.after);
-                    updateDraftState(change.after, false);
-                }
-                processLocalUpdates(localChanges, index + 1, completion);
-            }
-
-            @Override
-            public void onError(String message) {
-                if (isAdded()) {
-                    showToast(message != null ? message : ("Failed to push changes for " + change.name));
-                }
-                processLocalUpdates(localChanges, index + 1, completion);
-            }
-        });
-    }
-
-    private void applyRemoteAdditions(List<ScriptChange> remoteAdds, Map<String, UserFileData> dataMap) {
-        if (viewModel == null) {
-            return;
-        }
-        for (ScriptChange change : remoteAdds) {
-            UserFileMetadata metadata = change.metadata;
-            if (metadata == null) {
-                continue;
-            }
-            UserFileData data = dataMap.get(metadata.getId());
-            String content = data != null && data.hasTextContent() ? data.getTextContent() : "";
-            ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
-            addOrReplaceMetadata(scriptMetadata);
-            viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
-            viewModel.markClean(metadata.getId(), content, metadata.getEtag());
-        }
-    }
-
-    private void applyRemoteModifications(List<ScriptChange> remoteMods, Map<String, UserFileData> dataMap) {
-        if (viewModel == null) {
-            return;
-        }
-        for (ScriptChange change : remoteMods) {
-            UserFileMetadata metadata = change.metadata;
-            if (metadata == null) {
-                continue;
-            }
-            UserFileData data = dataMap.get(metadata.getId());
-            String content = data != null && data.hasTextContent() ? data.getTextContent() : safe(change.after);
-            ScriptMetadata scriptMetadata = new ScriptMetadata(metadata, ScriptMetadata.SourceType.CUSTOM);
-            addOrReplaceMetadata(scriptMetadata);
-            viewModel.updateRemoteSnapshot(metadata.getId(), metadata.getName(), metadata.getEtag(), content);
-            viewModel.markClean(metadata.getId(), content, metadata.getEtag());
-            if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(metadata.getId())) {
-                currentScriptMetadata = scriptMetadata;
-                currentScriptName = metadata.getName();
-                currentScriptEtag = metadata.getEtag();
-                setEditorText(content);
-                updateDraftState(content, false);
-            }
-        }
-    }
-
-    private void applyRemoteDeletions(List<ScriptChange> remoteDeletes) {
-        if (viewModel == null) {
-            return;
-        }
-        for (ScriptChange change : remoteDeletes) {
-            viewModel.removeRecord(change.scriptId);
-            removeMetadataById(change.scriptId);
-            refreshScriptList();
-            if (currentScriptMetadata != null && currentScriptMetadata.getId().equals(change.scriptId)) {
-                currentScriptMetadata = null;
-                currentScriptName = null;
-                currentScriptEtag = null;
-                setEditorText("");
-                updateDraftState("", false);
-                // Try to load another script if available
-                List<ScriptMetadata> allScripts = new ArrayList<>();
-                allScripts.addAll(assetScripts);
-                allScripts.addAll(customScripts);
-                if (!allScripts.isEmpty()) {
-                    loadScript(allScripts.get(0));
-                }
-            }
-        }
-    }
-
-    private String generateUnifiedDiff(String before, String after) {
-        String[] original = before != null ? before.split("\n", -1) : new String[0];
-        String[] revised = after != null ? after.split("\n", -1) : new String[0];
-        int[][] lcs = new int[original.length + 1][revised.length + 1];
-        for (int i = original.length - 1; i >= 0; i--) {
-            for (int j = revised.length - 1; j >= 0; j--) {
-                if (original[i].equals(revised[j])) {
-                    lcs[i][j] = lcs[i + 1][j + 1] + 1;
-                } else {
-                    lcs[i][j] = Math.max(lcs[i + 1][j], lcs[i][j + 1]);
-                }
-            }
-        }
-        List<String> lines = new ArrayList<>();
-        int i = 0;
-        int j = 0;
-        while (i < original.length && j < revised.length) {
-            if (original[i].equals(revised[j])) {
-                lines.add("  " + original[i]);
-                i++;
-                j++;
-            } else if (lcs[i + 1][j] >= lcs[i][j + 1]) {
-                lines.add("- " + original[i]);
-                i++;
-            } else {
-                lines.add("+ " + revised[j]);
-                j++;
-            }
-        }
-        while (i < original.length) {
-            lines.add("- " + original[i]);
-            i++;
-        }
-        while (j < revised.length) {
-            lines.add("+ " + revised[j]);
-            j++;
-        }
-        StringBuilder builder = new StringBuilder();
-        for (String line : lines) {
-            builder.append(line).append('\n');
-        }
-        return builder.toString();
-    }
-
-    private String labelForChange(SyncChangeType type) {
-        switch (type) {
-            case LOCAL_MODIFIED:
-                return "Local changes";
-            case REMOTE_MODIFIED:
-                return "Remote updates";
-            case REMOTE_ADDED:
-                return "Remote additions";
-            case REMOTE_DELETED:
-                return "Remote deletions";
-            case CONFLICT:
-                return "Conflicts";
-            case LOCAL_UNTRACKED:
-                return "Unsaved drafts";
-            default:
-                return "Changes";
-        }
-    }
-
-    private static String safe(String value) {
-        return value != null ? value : "";
-    }
-
-    private enum SyncChangeType {
-        LOCAL_MODIFIED,
-        REMOTE_MODIFIED,
-        REMOTE_ADDED,
-        REMOTE_DELETED,
-        CONFLICT,
-        LOCAL_UNTRACKED
-    }
-
-    private static final class ScriptChange {
-        final SyncChangeType type;
-        final String scriptId;
-        final String name;
-        final String before;
-        final String after;
-        final String localDraft;
-        final UserFileMetadata metadata;
-
-        private ScriptChange(SyncChangeType type, String scriptId, String name, String before, String after, String localDraft, UserFileMetadata metadata) {
-            this.type = type;
-            this.scriptId = scriptId;
-            this.name = name;
-            this.before = before;
-            this.after = after;
-            this.localDraft = localDraft;
-            this.metadata = metadata;
-        }
-
-        static ScriptChange localModified(String scriptId, String name, String before, String draft) {
-            return new ScriptChange(SyncChangeType.LOCAL_MODIFIED, scriptId, name, before, draft, null, null);
-        }
-
-        static ScriptChange remoteModified(String scriptId, String name, String before, String after, UserFileMetadata metadata) {
-            return new ScriptChange(SyncChangeType.REMOTE_MODIFIED, scriptId, name, before, after, null, metadata);
-        }
-
-        static ScriptChange remoteAdded(String scriptId, String name, String content, UserFileMetadata metadata) {
-            return new ScriptChange(SyncChangeType.REMOTE_ADDED, scriptId, name, "", content, null, metadata);
-        }
-
-        static ScriptChange remoteDeleted(String scriptId, String name, String content) {
-            return new ScriptChange(SyncChangeType.REMOTE_DELETED, scriptId, name, content, "", null, null);
-        }
-
-        static ScriptChange conflict(String scriptId, String name, String before, String remoteAfter, String localDraft, UserFileMetadata metadata) {
-            return new ScriptChange(SyncChangeType.CONFLICT, scriptId, name, before, remoteAfter, localDraft, metadata);
-        }
-
-        static ScriptChange unsavedLocal(String draft) {
-            return new ScriptChange(SyncChangeType.LOCAL_UNTRACKED, null, null, "", draft, draft, null);
         }
     }
 

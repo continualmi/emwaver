@@ -34,21 +34,7 @@
             <Border CornerRadius="12" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                 <StackPanel Spacing="8">
                     <TextBlock Text="Devices" FontSize="16" FontWeight="SemiBold" />
-                    <TextBlock x:Name="DevicesIntroText" Text="Local devices." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
-                    <ListView x:Name="DevicesList" Height="220">
-                        <ListView.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel Spacing="2" Padding="0,4">
-                                    <TextBlock Text="{Binding Label}" FontWeight="SemiBold" />
-                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap">
-                                        <Run Text="{Binding BoardType}" />
-                                        <Run Text="" />
-                                        <Run Text="" />
-                                    </TextBlock>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ListView.ItemTemplate>
-                    </ListView>
+                    <TextBlock x:Name="DevicesIntroText" Text="Connected boards are managed locally from this app." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </StackPanel>

@@ -3,7 +3,6 @@ using EMWaver.Interop;
 using EMWaver.Models;
 using EMWaver.Pages;
 using EMWaver.Services;
-using EMWaver.Services.Cloud;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -39,8 +38,6 @@ public sealed partial class MainWindow : Window
 
         AppServices.Device.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
         AppServices.FirmwareUpdater.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
-        AppServices.AccountDevices.AttachUiDispatcher(DispatcherQueue.GetForCurrentThread());
-
         AppServices.Device.PropertyChanged += OnDevicePropertyChanged;
         AppServices.FirmwareUpdater.PropertyChanged += OnFirmwareUpdaterPropertyChanged;
 
@@ -50,12 +47,8 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
-        HostsButton.Visibility = Visibility.Collapsed;
-
         // Remote control host WS (web can attach + drive scripts/UI).
         AppServices.RemoteControlHost.Start();
-        AppServices.AccountDevices.Start();
-
         // Initial UI state.
         RunOnUi(() =>
         {
@@ -214,16 +207,6 @@ public sealed partial class MainWindow : Window
     {
         ContentFrame.Navigate(typeof(SettingsPage));
         TopBackButton.IsEnabled = ContentFrame.CanGoBack;
-    }
-
-    private async void OnAccountClick(object sender, RoutedEventArgs e)
-    {
-        var dialog = new AccountDialog
-        {
-            XamlRoot = Content.XamlRoot
-        };
-
-        await dialog.ShowAsync();
     }
 
     private void RunOnUi(Action action)
@@ -583,33 +566,10 @@ public sealed partial class MainWindow : Window
         _scriptsPage?.HandleToolbarRefresh();
     }
 
-    private void OnScriptSyncClick(object sender, RoutedEventArgs e)
-    {
-        _scriptsPage?.HandleToolbarSync();
-    }
-
     private void OnScriptAgentToggleClick(object sender, RoutedEventArgs e)
     {
         _scriptsPage?.HandleToolbarAgentToggle(ScriptAgentToggleButton.IsChecked == true);
     }
-
-    private void OnHostsClick(object sender, RoutedEventArgs e)
-    {
-        return;
-    }
-
-    private static bool HostedServicesUiEnabled()
-    {
-        return (Environment.GetEnvironmentVariable("EMWAVER_HOSTED_SERVICES_UI_ENABLED") ?? "") == "1";
-    }
-
-    private void OnCloudSignInClick(object sender, RoutedEventArgs e)
-    {
-        // Keep toolbar buttons as shortcuts; route to Settings.
-        ContentFrame.Navigate(typeof(SettingsPage));
-    }
-
-    // Cloud test UI removed.
 
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {

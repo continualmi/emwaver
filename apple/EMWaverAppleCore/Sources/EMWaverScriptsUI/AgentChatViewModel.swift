@@ -24,17 +24,17 @@ public final class AgentChatViewModel: ObservableObject {
 
     // Endpoint context for API-key Agent execution. The tuple names are kept
     // for source compatibility with existing app callers.
-    private let cloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
+    private let endpointProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
-    public init(cloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
-        self.cloudProvider = cloudProvider
+    public init(endpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
+        self.endpointProvider = endpointProvider
         self.messages = []
         self.conversations = []
         self.selectedConversationId = nil
     }
 
     public var isAgentConfigured: Bool {
-        guard let provider = cloudProvider, let ctx = provider() else { return false }
+        guard let provider = endpointProvider, let ctx = provider() else { return false }
         return !ctx.baseURL.absoluteString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !ctx.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -49,8 +49,8 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     public func newConversation() {
-        guard cloudProvider != nil else {
-            lastError = "Agent API-key backend is not configured yet."
+        guard endpointProvider != nil else {
+            lastError = "Agent API endpoint is not configured yet."
             return
         }
         startLocalConversation()
@@ -67,8 +67,8 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     public func deleteConversation(_ id: UUID) {
-        guard cloudProvider != nil else {
-            lastError = "Agent API-key backend is not configured yet."
+        guard endpointProvider != nil else {
+            lastError = "Agent API endpoint is not configured yet."
             return
         }
         conversations.removeAll { $0.id == id }
@@ -90,8 +90,8 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     private func sendAgent(userText text: String) {
-        guard cloudProvider != nil else {
-            lastError = "Agent API-key backend is not configured yet."
+        guard endpointProvider != nil else {
+            lastError = "Agent API endpoint is not configured yet."
             return
         }
 
@@ -114,7 +114,7 @@ public final class AgentChatViewModel: ObservableObject {
                     self.appendMessage(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
                 }
 
-                let reply = try await self.runCloudManagedToolLoop(userPrompt: text, placeholderId: placeholderId)
+                let reply = try await self.runAgentEndpointRequest(userPrompt: text, placeholderId: placeholderId)
                 await MainActor.run {
                     self.replaceMessage(
                         id: placeholderId,
@@ -139,9 +139,9 @@ public final class AgentChatViewModel: ObservableObject {
 
     // MARK: - API-key Agent endpoint
 
-    private func runCloudManagedToolLoop(userPrompt: String, placeholderId: UUID) async throws -> String {
-        guard let provider = cloudProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            throw AgentBackendError.serverError("Agent API-key backend is not configured yet.")
+    private func runAgentEndpointRequest(userPrompt: String, placeholderId: UUID) async throws -> String {
+        guard let provider = endpointProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
+            throw AgentEndpointError.serverError("Agent API endpoint is not configured yet.")
         }
 
         let response = try await AgentEndpointAPI().send(
@@ -170,7 +170,7 @@ public final class AgentChatViewModel: ObservableObject {
             )
         }
         guard !reply.isEmpty else {
-            throw AgentBackendError.serverError("Agent model produced no text")
+            throw AgentEndpointError.serverError("Agent model produced no text")
         }
         return reply
     }

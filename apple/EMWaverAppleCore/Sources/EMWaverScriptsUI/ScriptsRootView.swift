@@ -20,7 +20,7 @@ public struct ScriptsRootView: View {
     @StateObject private var previewManager: ScriptPreviewManager
     @StateObject private var agentViewModel: AgentChatViewModel
 
-    private let agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)?
+    private let agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
     private let device: (any ScriptDevice)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
@@ -64,7 +64,7 @@ public struct ScriptsRootView: View {
     public init(
         previewManager: ScriptPreviewManager,
         device: (any ScriptDevice)? = nil,
-        agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
@@ -75,17 +75,17 @@ public struct ScriptsRootView: View {
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
-        self.agentCloudProvider = agentCloudProvider
+        self.agentEndpointProvider = agentEndpointProvider
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
-            wrappedValue: AgentChatViewModel(cloudProvider: agentCloudProvider)
+            wrappedValue: AgentChatViewModel(endpointProvider: agentEndpointProvider)
         )
     }
 
     @MainActor
     public init(
         device: (any ScriptDevice)? = nil,
-        agentCloudProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
+        agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil,
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
@@ -94,7 +94,7 @@ public struct ScriptsRootView: View {
         self.init(
             previewManager: ScriptPreviewManager(),
             device: device,
-            agentCloudProvider: agentCloudProvider,
+            agentEndpointProvider: agentEndpointProvider,
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade,

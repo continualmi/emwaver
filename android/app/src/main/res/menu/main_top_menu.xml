@@ -15,13 +15,6 @@
         app:showAsAction="always" />
 
     <item
-        android:id="@+id/action_hosts"
-        android:icon="@drawable/ic_host"
-        android:title="Hosts"
-        android:visible="false"
-        app:showAsAction="always" />
-
-    <item
         android:id="@+id/action_sign_in"
         android:icon="@drawable/ai_account"
         android:title="Agent Key"

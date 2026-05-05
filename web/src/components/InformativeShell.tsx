@@ -10,7 +10,7 @@ const NAV: NavItem[] = [
   { href: "/build", label: "Build" },
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
-  { href: "/device", label: "Device" },
+  { href: "/docs/hardware", label: "Hardware" },
 ];
 
 function NavLinks({ activeHref }: { activeHref: string }) {

@@ -2,7 +2,7 @@
 
 The EMWaver gateway is the localhost browser control surface for local `.emw` hardware control.
 
-Current status: prototype. It serves a minimal page, exposes `/v1/ws`, and can evaluate simple script UI into `ui.snapshot` messages without cloud auth. Real hardware execution depends on the shared runtime/device extraction work.
+Current status: restored local dashboard. It serves a React script-control UI, exposes `/v1/ws`, and can preview simple script UI without cloud auth. Real hardware execution depends on the native app connecting to the gateway as the local runtime owner.
 
 ## Run In Development
 
@@ -85,6 +85,21 @@ GET /v1/examples
 
 This keeps the localhost control surface aligned with the repo's canonical `.emw` examples instead of maintaining a separate gateway-only script list.
 
+## Browser UI
+
+The gateway UI restores the useful parts of the old web script dashboard:
+
+- bundled example list,
+- `.emw` editor,
+- editor/preview switch,
+- Run/Stop controls,
+- live `ui.snapshot` rendering,
+- `ui.event` dispatch,
+- `plot.data` rendering,
+- optional Agent panel.
+
+It intentionally omits EMWaver sign-in, Pro gates, cloud files, hosted host selectors, hosted relay assumptions, and subscription checks.
+
 ## Account-Free Behavior
 
 The gateway must not require:
@@ -111,7 +126,7 @@ Without those variables, `/v1/agent` returns `agent_not_configured` and the rest
 
 ## Current Limitations
 
-- The prototype uses a small TypeScript UI evaluator for `UI.render` shape only.
-- Real hardware command execution is not wired into the gateway yet.
+- Preview mode uses a small browser UI evaluator for `UI.render` shape only.
+- Real hardware command execution requires the native app to connect as the local runtime owner.
 - UI handler dispatch is acknowledged but not executed yet.
 - The production local path should use shared runtime/device code extracted from the current daemon host rather than expanding this TypeScript evaluator into a second runtime.

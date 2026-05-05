@@ -11,10 +11,7 @@ import android.view.MenuItem;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
-import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceFragmentCompat;
-
-import com.emwaver.emwaverandroidapp.cloud.CloudConfig;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -46,16 +43,9 @@ public class SettingsActivity extends AppCompatActivity {
     public static class SettingsFragment extends PreferenceFragmentCompat {
         @Override
         public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
-            // Keep settings + CloudConfig in the same SharedPreferences file.
+            // Keep settings in the app SharedPreferences file.
             getPreferenceManager().setSharedPreferencesName("emwaver");
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
-
-            if (!CloudConfig.isStaffOnlyEnabled()) {
-                PreferenceCategory cat = findPreference("staff_only_category");
-                if (cat != null) {
-                    getPreferenceScreen().removePreference(cat);
-                }
-            }
         }
     }
 } 

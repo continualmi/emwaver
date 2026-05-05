@@ -60,8 +60,8 @@ export default function InstallPage() {
               Install EMWaver on the device you already use.
             </h1>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              Same account, same scripts, same hardware workflow. Install the native app for your
-              platform, sign in, and connect a supported board.
+              Install the native app for your platform, connect a supported board, and run local
+              scripts without an EMWaver account or cloud activation.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
@@ -130,10 +130,10 @@ export default function InstallPage() {
         <section className="mt-10 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
-              Sign in
+              Install locally
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Browser sign-in and native app access both route through your Continual account.
+              Use the official store build for your platform. Core hardware control is local-first.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
@@ -141,7 +141,7 @@ export default function InstallPage() {
               Connect hardware
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Plug in a supported board and let EMWaver handle activation, updates, and script runtime.
+              Plug in a supported board and let EMWaver handle transport, firmware updates, and script runtime.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
@@ -149,7 +149,7 @@ export default function InstallPage() {
               Start exploring
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Move from install to scripts, cloud sync, and Agent-assisted hardware workflows in the same app.
+              Open local scripts, edit examples, and use optional Agent-assisted workflows when an Agent API key is configured.
             </p>
           </div>
         </section>

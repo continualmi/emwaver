@@ -5,24 +5,13 @@
   "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev --webpack -p 3920",
-    "dev:server": "tsx watch server.ts",
     "build": "next build --webpack",
     "build:static": "EMWAVER_STATIC_EXPORT=1 next build --webpack",
-    "start": "tsx server.ts",
-    "lint": "eslint",
-    "migrate:core-state": "tsx --env-file=../.env scripts/migrate-core-state.mts",
-    "shared-pg:inventory": "tsx scripts/shared-postgres-cutover.mts inventory",
-    "shared-pg:migrate": "tsx scripts/shared-postgres-cutover.mts migrate",
-    "shared-pg:verify": "tsx scripts/shared-postgres-cutover.mts verify"
+    "start": "next start -p 3920",
+    "lint": "eslint"
   },
   "dependencies": {
-    "@noble/ed25519": "^2.3.0",
-    "continual-core": "file:../../continual-core",
-    "dotenv": "^16.4.5",
-    "firebase": "^10.14.1",
-    "firebase-admin": "^13.6.0",
     "next": "16.1.6",
-    "pg": "^8.20.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "rehype-autolink-headings": "^7.1.0",
@@ -32,22 +21,17 @@
     "remark-gfm": "^4.0.1",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.1",
-    "stripe": "^18.1.1",
     "unified": "^11.0.5",
-    "ws": "^8.18.3",
     "yaml": "^2.8.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/pg": "^8.20.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@types/ws": "^8.18.1",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "tsx": "^4.20.6",
     "typescript": "^5"
   }
 }

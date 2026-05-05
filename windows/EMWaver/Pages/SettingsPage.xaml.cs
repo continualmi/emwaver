@@ -4,8 +4,6 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using EMWaver.Services;
-using EMWaver.Services.Cloud;
-using Windows.System;
 
 namespace EMWaver.Pages;
 
@@ -23,21 +21,14 @@ public sealed partial class SettingsPage : Page
     {
         Loaded -= OnLoaded;
 
-        var isStaff = string.Equals((Environment.GetEnvironmentVariable("EMWAVER_STAFF_ONLY") ?? "").Trim(), "1", StringComparison.Ordinal);
-        StaffBackendSection.Visibility = isStaff ? Visibility.Visible : Visibility.Collapsed;
-        StaffFrontendSection.Visibility = isStaff ? Visibility.Visible : Visibility.Collapsed;
-
         RefreshUi();
-        _ = RefreshProStatusAsync();
+        _ = RefreshAgentKeyStatusAsync();
     }
 
     private void RefreshUi()
     {
         void Apply()
         {
-            BackendUrlText.Text = AppServices.CloudConfig.BackendBaseUrl;
-            FrontendUrlText.Text = FrontendUrl.Resolve();
-
             _suppressModeSelectionEvents = true;
             try
             {
@@ -52,28 +43,6 @@ public sealed partial class SettingsPage : Page
                     if (item is ComboBoxItem cbi && (cbi.Tag as string) == themeTag)
                     {
                         ThemeModeCombo.SelectedItem = cbi;
-                        break;
-                    }
-                }
-
-                var prod = AppServices.Settings.UseProductionBackend;
-                var desiredTag = prod ? "prod" : "local";
-                foreach (var item in BackendModeCombo.Items)
-                {
-                    if (item is ComboBoxItem cbi && (cbi.Tag as string) == desiredTag)
-                    {
-                        BackendModeCombo.SelectedItem = cbi;
-                        break;
-                    }
-                }
-
-                var frontendProd = AppServices.Settings.UseProductionFrontend;
-                var frontendDesiredTag = frontendProd ? "prod" : "local";
-                foreach (var item in FrontendModeCombo.Items)
-                {
-                    if (item is ComboBoxItem cbi && (cbi.Tag as string) == frontendDesiredTag)
-                    {
-                        FrontendModeCombo.SelectedItem = cbi;
                         break;
                     }
                 }
@@ -93,36 +62,33 @@ public sealed partial class SettingsPage : Page
         _ = DispatcherQueue.TryEnqueue(Apply);
     }
 
-    private async Task RefreshProStatusAsync()
+    private async Task RefreshAgentKeyStatusAsync()
     {
         try
         {
-            var snap = await AppServices.Entitlements.RefreshAsync(force: true, CancellationToken.None);
-            var text = "Agent API-key setup is not available in this panel yet.";
-
-            if (!string.IsNullOrWhiteSpace(snap.LastError))
-            {
-                text = snap.LastError!;
-            }
+            await Task.CompletedTask;
+            var text = AppServices.AgentKeys.HasAgentKey
+                ? "Agent key saved. Local scripts and hardware control remain account-free."
+                : "No Agent key saved. Local scripts and hardware control remain available.";
 
             if (DispatcherQueue.HasThreadAccess)
             {
-                ProStatusText.Text = text;
+                AgentKeyStatusText.Text = text;
             }
             else
             {
-                _ = DispatcherQueue.TryEnqueue(() => ProStatusText.Text = text);
+                _ = DispatcherQueue.TryEnqueue(() => AgentKeyStatusText.Text = text);
             }
         }
         catch (Exception ex)
         {
             if (DispatcherQueue.HasThreadAccess)
             {
-                ProStatusText.Text = ex.Message;
+                AgentKeyStatusText.Text = ex.Message;
             }
             else
             {
-                _ = DispatcherQueue.TryEnqueue(() => ProStatusText.Text = ex.Message);
+                _ = DispatcherQueue.TryEnqueue(() => AgentKeyStatusText.Text = ex.Message);
             }
         }
     }
@@ -155,73 +121,25 @@ public sealed partial class SettingsPage : Page
         RefreshUi();
     }
 
-    private void OnBackendModeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressModeSelectionEvents)
-        {
-            return;
-        }
-
-        if (BackendModeCombo.SelectedItem is not ComboBoxItem item)
-        {
-            return;
-        }
-
-        var tag = (item.Tag as string) ?? "prod";
-        var useProd = tag != "local";
-
-        if (AppServices.Settings.UseProductionBackend == useProd)
-        {
-            return;
-        }
-
-        AppServices.Settings.UseProductionBackend = useProd;
-
-        AppServices.CloudAuth.SignOut();
-        AppServices.ReloadCloud();
-
-        RefreshUi();
-    }
-
-    private void OnFrontendModeChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppressModeSelectionEvents)
-        {
-            return;
-        }
-
-        if (FrontendModeCombo.SelectedItem is not ComboBoxItem item)
-        {
-            return;
-        }
-
-        var tag = (item.Tag as string) ?? "prod";
-        var useProd = tag != "local";
-
-        if (AppServices.Settings.UseProductionFrontend == useProd)
-        {
-            return;
-        }
-
-        AppServices.Settings.UseProductionFrontend = useProd;
-        RefreshUi();
-    }
-
-    private async void OnGetProClick(object sender, RoutedEventArgs e)
+    private async void OnConfigureAgentKeyClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
-            await Launcher.LaunchUriAsync(new Uri(url));
+            var dialog = new EMWaver.Dialogs.AccountDialog
+            {
+                XamlRoot = this.XamlRoot,
+            };
+            await dialog.ShowAsync();
+            await RefreshAgentKeyStatusAsync();
         }
         catch (Exception ex)
         {
-            ProStatusText.Text = ex.Message;
+            AgentKeyStatusText.Text = ex.Message;
         }
     }
 
-    private async void OnRefreshProClick(object sender, RoutedEventArgs e)
+    private async void OnRefreshAgentKeyClick(object sender, RoutedEventArgs e)
     {
-        await RefreshProStatusAsync();
+        await RefreshAgentKeyStatusAsync();
     }
 }

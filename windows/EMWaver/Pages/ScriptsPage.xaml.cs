@@ -2,7 +2,6 @@ using EMWaver.Models;
 using EMWaver.Scripting;
 using EMWaver.Scripting.Render;
 using EMWaver.Services;
-using EMWaver.Services.Cloud;
 using System.IO;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
@@ -23,7 +22,6 @@ using System.Threading.Tasks;
 using System.Runtime.InteropServices;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage;
-using WindowsLauncher = Windows.System.Launcher;
 
 namespace EMWaver.Pages;
 
@@ -143,13 +141,12 @@ public sealed partial class ScriptsPage : Page
     private CancellationTokenSource? _agentStreamCts;
     private bool _agentSignedIn;
     private bool _agentEnabled;
-    private bool _cloudSyncEnabled;
     private bool _isResizingAgentPane;
     private double _agentResizeStartX;
     private double _agentResizeStartWidth;
     private readonly InputCursor _agentResizeCursor = InputSystemCursor.Create(InputSystemCursorShape.SizeWestEast);
 
-    private EMWaver.Services.Agent.AgentApi AgentApi => new(AppServices.Http, AppServices.CloudConfig, AppServices.CloudAuth);
+    private EMWaver.Services.Agent.AgentApi AgentApi => new(AppServices.Http, AppServices.AgentKeys);
 
 
     private ScriptInfo? _current;
@@ -230,7 +227,7 @@ public sealed partial class ScriptsPage : Page
     private async void OnLoaded(object sender, RoutedEventArgs e)
     {
         Loaded -= OnLoaded;
-        await RefreshEntitlementsUiAsync(force: true);
+        await RefreshAgentUiAsync(force: true);
         await RefreshAsync();
         QueueEditorFocus();
     }
@@ -1081,7 +1078,7 @@ public sealed partial class ScriptsPage : Page
     {
         try
         {
-            await RefreshEntitlementsUiAsync(force: true);
+            await RefreshAgentUiAsync(force: true);
             if (!_agentEnabled)
             {
                 SetAgentStatusText("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
@@ -1177,19 +1174,18 @@ public sealed partial class ScriptsPage : Page
         AgentThinkingRow.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private async Task RefreshEntitlementsUiAsync(bool force)
+    private async Task RefreshAgentUiAsync(bool force)
     {
         try
         {
             _ = force;
-            _agentSignedIn = AppServices.CloudAuth.HasAgentKey;
+            _agentSignedIn = AppServices.AgentKeys.HasAgentKey;
             _agentEnabled = _agentSignedIn;
-            _cloudSyncEnabled = false;
 
             await RunOnUiAsync(async () =>
             {
                 AgentSignInNotice.Visibility = _agentEnabled ? Visibility.Collapsed : Visibility.Visible;
-                AgentProNotice.Visibility = Visibility.Collapsed;
+                AgentKeyNotice.Visibility = Visibility.Collapsed;
                 AgentSendButton.IsEnabled = _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
                 AgentInput.IsEnabled = _agentEnabled;
                 await Task.CompletedTask;
@@ -1212,12 +1208,11 @@ public sealed partial class ScriptsPage : Page
         _ = DispatcherQueue.TryEnqueue(() => AgentStatusText.Text = text);
     }
 
-    private async void OnGetProClick(object sender, RoutedEventArgs e)
+    private async void OnConfigureAgentKeyClick(object sender, RoutedEventArgs e)
     {
         try
         {
-            var url = FrontendUrl.Resolve().TrimEnd('/') + "/pro";
-            await WindowsLauncher.LaunchUriAsync(new Uri(url));
+            Frame.Navigate(typeof(SettingsPage));
         }
         catch (Exception ex)
         {
@@ -1302,267 +1297,9 @@ public sealed partial class ScriptsPage : Page
         catch (Exception ex) { SetAgentStatusText(ex.Message); }
     }
 
-    private bool _syncInProgress;
-    private ContentDialog? _syncDialog;
-    private ProgressBar? _syncProgress;
-    private TextBlock? _syncStatus;
-    private TextBlock? _syncCounts;
-    private CancellationTokenSource? _syncCts;
-
-    private sealed record SyncUiProgressState(string Status, int Processed, int Total, int Uploaded, int Downloaded);
-
-    private async Task ShowSyncProgressAsync(string status)
-    {
-        await ShowSyncProgressAsync(new SyncUiProgressState(status, 0, 0, 0, 0));
-    }
-
-    private async Task ShowSyncProgressAsync(SyncUiProgressState state)
-    {
-        await RunOnUiAsync(async () =>
-        {
-            if (_syncDialog == null)
-            {
-                _syncProgress = new ProgressBar
-                {
-                    IsIndeterminate = false,
-                    Height = 6,
-                    MinWidth = 260,
-                    Minimum = 0,
-                    Maximum = 1,
-                    Value = 0,
-                };
-
-                _syncStatus = new TextBlock
-                {
-                    Text = state.Status,
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 10, 0, 0),
-                };
-
-                _syncCounts = new TextBlock
-                {
-                    Text = "Processed 0/0 • Uploads 0 • Downloads 0",
-                    TextWrapping = TextWrapping.Wrap,
-                    Margin = new Thickness(0, 6, 0, 0),
-                    Foreground = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["TextFillColorSecondaryBrush"],
-                };
-
-                var panel = new StackPanel();
-                panel.Children.Add(_syncProgress);
-                panel.Children.Add(_syncStatus);
-                panel.Children.Add(_syncCounts);
-
-                _syncDialog = new ContentDialog
-                {
-                    XamlRoot = XamlRoot,
-                    Title = "Sync",
-                    Content = panel,
-                    PrimaryButtonText = string.Empty,
-                    CloseButtonText = "Cancel",
-                    DefaultButton = ContentDialogButton.None,
-                };
-
-                _syncDialog.CloseButtonClick += (_, __) =>
-                {
-                    try { _syncCts?.Cancel(); }
-                    catch { }
-                };
-
-                // ShowAsync is modeless-ish; we don't await it so sync can run.
-                _ = _syncDialog.ShowAsync();
-            }
-
-            if (_syncStatus != null) _syncStatus.Text = state.Status;
-            if (_syncProgress != null)
-            {
-                if (state.Total > 0)
-                {
-                    _syncProgress.Maximum = state.Total;
-                    _syncProgress.Value = Math.Min(state.Processed, state.Total);
-                }
-                else
-                {
-                    _syncProgress.Maximum = 1;
-                    _syncProgress.Value = 0;
-                }
-            }
-            if (_syncCounts != null)
-            {
-                _syncCounts.Text = $"Processed {state.Processed}/{state.Total} • Uploads {state.Uploaded} • Downloads {state.Downloaded}";
-            }
-
-            await Task.CompletedTask;
-        });
-    }
-
-    private async Task HideSyncProgressAsync()
-    {
-        await RunOnUiAsync(async () =>
-        {
-            try { _syncDialog?.Hide(); }
-            catch { }
-            _syncDialog = null;
-            _syncProgress = null;
-            _syncStatus = null;
-            _syncCounts = null;
-            await Task.CompletedTask;
-        });
-    }
-
-    private static string ProgressActionLabel(CloudSyncProgressAction action)
-    {
-        return action switch
-        {
-            CloudSyncProgressAction.Uploading => "Uploading",
-            CloudSyncProgressAction.Downloading => "Downloading",
-            CloudSyncProgressAction.Skipped => "Skipping",
-            _ => "Scanning",
-        };
-    }
-
     private async Task SyncNowAsync()
     {
-        System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] SyncNowAsync invoked");
-
-        if (_syncInProgress)
-        {
-            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] already in progress");
-            return;
-        }
-
-        _syncInProgress = true;
-        try
-        {
-            await ShowSyncProgressAsync("Preparing sync…");
-            var allowAnonSync = (Environment.GetEnvironmentVariable("EMWAVER_ALLOW_ANON_SYNC") ?? "") == "1";
-
-            await RefreshEntitlementsUiAsync(force: false);
-            if (!_cloudSyncEnabled && !allowAnonSync)
-            {
-                await HideSyncProgressAsync();
-                await ShowInfoAsync("Sync", "Script sync is not available. Use local files or app-local storage.");
-                return;
-            }
-
-            var baseRaw = (AppServices.CloudConfig.BackendBaseUrl ?? "").Trim();
-            if (string.IsNullOrWhiteSpace(baseRaw) || !Uri.TryCreate(baseRaw, UriKind.Absolute, out var baseUrl))
-            {
-                await ShowInfoAsync("Sync", "Backend URL is not configured (Settings → Backend).");
-                return;
-            }
-
-            string accessToken;
-            if (AppServices.CloudAuth.IsSignedIn)
-            {
-                var cts = new CancellationTokenSource(TimeSpan.FromMinutes(3));
-                accessToken = await AppServices.CloudAuth.EnsureSignedInAsync(cts.Token);
-            }
-            else if (allowAnonSync)
-            {
-                accessToken = "";
-            }
-            else
-            {
-                await ShowInfoAsync("Sync", "Script sync is not available.");
-                return;
-            }
-
-            // Scripts live in LocalAppData/EMWaver/Scripts (ScriptRepository)
-            var scriptsDir = AppServices.Scripts.LocalScriptsDir;
-
-            // Signals live in LocalAppData/EMWaver/Signals (parity with Apple signals dir concept).
-            var signalsDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "EMWaver",
-                "Signals"
-            );
-
-            var engine = new CloudSyncEngine(AppServices.CloudFiles);
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromMinutes(10));
-            using var userCts = new CancellationTokenSource();
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, userCts.Token);
-            _syncCts = userCts;
-
-            var aggregateUploaded = 0;
-            var aggregateDownloaded = 0;
-
-            IProgress<CloudSyncProgress> MakePhaseProgress(string phaseLabel)
-            {
-                return new Progress<CloudSyncProgress>(p =>
-                {
-                    var action = ProgressActionLabel(p.Action);
-                    var status = $"{phaseLabel}: {action} {p.Name}";
-                    _ = ShowSyncProgressAsync(new SyncUiProgressState(
-                        status,
-                        p.Processed,
-                        p.Total,
-                        aggregateUploaded + p.Uploaded,
-                        aggregateDownloaded + p.Downloaded));
-                });
-            }
-
-            System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] baseUrl={baseUrl} token={(string.IsNullOrWhiteSpace(accessToken) ? "<empty>" : "<present>")}");
-            System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Sync] scriptsDir={scriptsDir}");
-
-            await ShowSyncProgressAsync("Syncing scripts…");
-            var s1 = await engine.SyncAsync(
-                baseUrl: baseUrl,
-                accessToken: accessToken,
-                storageDir: scriptsDir,
-                kinds: new[]
-                {
-                    new CloudSyncEngine.FileKindSpec(Kind: "script", Ext: ".emw", ContentType: "text/plain"),
-                },
-                policy: CloudSyncPolicy.PreferLocal,
-                ct: linkedCts.Token,
-                progress: MakePhaseProgress("Scripts")
-            );
-            aggregateUploaded += s1.Uploaded;
-            aggregateDownloaded += s1.Downloaded;
-
-            await ShowSyncProgressAsync("Syncing signals…");
-            var s2 = await engine.SyncAsync(
-                baseUrl: baseUrl,
-                accessToken: accessToken,
-                storageDir: signalsDir,
-                kinds: new[]
-                {
-                    new CloudSyncEngine.FileKindSpec(Kind: "signal_raw", Ext: ".raw", ContentType: "application/octet-stream"),
-                    new CloudSyncEngine.FileKindSpec(Kind: "signal_text", Ext: ".txt", ContentType: "text/plain"),
-                },
-                policy: CloudSyncPolicy.PreferLocal,
-                ct: linkedCts.Token,
-                progress: MakePhaseProgress("Signals")
-            );
-
-            var total = s1.Add(s2);
-            await RefreshAsync(selectFullPath: _current?.FullPath);
-
-            await HideSyncProgressAsync();
-            await ShowInfoAsync(
-                "Sync complete",
-                $"Uploaded: {total.Uploaded}, Downloaded: {total.Downloaded}, Conflicts: {total.Conflicts}"
-            );
-        }
-        catch (OperationCanceledException)
-        {
-            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] canceled by user or timeout");
-            await HideSyncProgressAsync();
-            await ShowInfoAsync("Sync", "Sync canceled.");
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine("[EMWaver][Windows][Sync] failed: " + ex);
-            await HideSyncProgressAsync();
-            await ShowInfoAsync("Sync", ex.Message);
-        }
-        finally
-        {
-            try { _syncCts?.Dispose(); } catch { }
-            _syncCts = null;
-            await HideSyncProgressAsync();
-            _syncInProgress = false;
-        }
+        await ShowInfoAsync("Sync", "Script sync has been removed. Scripts and signals stay local.");
     }
 
     private void OnMakeCopyBannerClick(object sender, RoutedEventArgs e)
@@ -1682,14 +1419,14 @@ public sealed partial class ScriptsPage : Page
         if (_currentSignal != null)
         {
             var signalName = _currentSignal.FileName;
-            var deleteSignalChoice = await ConfirmDeleteWithCloudOptionAsync(
+            var confirmed = await ConfirmAsync(
                 title: "Delete signal?",
                 message: $"Delete '{signalName}'?",
                 primaryButtonText: "Delete",
                 closeButtonText: "Cancel"
             );
 
-            if (!deleteSignalChoice.Confirmed)
+            if (!confirmed)
             {
                 return;
             }
@@ -1699,11 +1436,6 @@ public sealed partial class ScriptsPage : Page
                 if (File.Exists(_currentSignal.FullPath))
                 {
                     File.Delete(_currentSignal.FullPath);
-                }
-
-                if (deleteSignalChoice.DeleteFromCloud)
-                {
-                    await DeleteFromCloudBestEffortAsync(signalName);
                 }
 
                 _currentSignal = null;
@@ -1725,14 +1457,14 @@ public sealed partial class ScriptsPage : Page
         }
 
         var scriptName = _current.Name;
-        var deleteScriptChoice = await ConfirmDeleteWithCloudOptionAsync(
+        var confirmed = await ConfirmAsync(
             title: "Delete script?",
             message: $"Delete '{scriptName}'?",
             primaryButtonText: "Delete",
             closeButtonText: "Cancel"
         );
 
-        if (!deleteScriptChoice.Confirmed)
+        if (!confirmed)
         {
             return;
         }
@@ -1740,28 +1472,11 @@ public sealed partial class ScriptsPage : Page
         try
         {
             await AppServices.Scripts.DeleteLocalScriptAsync(_current);
-            if (deleteScriptChoice.DeleteFromCloud)
-            {
-                await DeleteFromCloudBestEffortAsync(scriptName);
-            }
             await RefreshAsync();
         }
         catch (Exception ex)
         {
             await ShowInfoAsync("Delete", ex.Message);
-        }
-    }
-
-    private async Task DeleteFromCloudBestEffortAsync(string name)
-    {
-        try
-        {
-            await AppServices.CloudFiles.DeleteByNameViaBackendAsync(name, accessToken: null, CancellationToken.None);
-            await ShowInfoAsync("Delete", $"Deleted from cloud: {name}");
-        }
-        catch (Exception ex)
-        {
-            await ShowInfoAsync("Delete", "Failed to delete from cloud: " + ex.Message);
         }
     }
 
@@ -1896,44 +1611,6 @@ public sealed partial class ScriptsPage : Page
 
         var result = await dialog.ShowAsync();
         return result == ContentDialogResult.Primary;
-    }
-
-    private sealed record DeleteDialogResult(bool Confirmed, bool DeleteFromCloud);
-
-    private async Task<DeleteDialogResult> ConfirmDeleteWithCloudOptionAsync(string title, string message, string primaryButtonText, string closeButtonText)
-    {
-        var signedIn = AppServices.CloudAuth.IsSignedIn;
-        var deleteFromCloudCheckbox = new CheckBox
-        {
-            Content = "Also delete from cloud",
-            IsChecked = signedIn,
-            IsEnabled = signedIn,
-            Opacity = signedIn ? 1.0 : 0.6,
-            Margin = new Thickness(0, 8, 0, 0),
-        };
-
-        var panel = new StackPanel { Spacing = 6 };
-        panel.Children.Add(new TextBlock
-        {
-            Text = message,
-            TextWrapping = TextWrapping.Wrap,
-        });
-        panel.Children.Add(deleteFromCloudCheckbox);
-
-        var dialog = new ContentDialog
-        {
-            Title = title,
-            Content = panel,
-            PrimaryButtonText = primaryButtonText,
-            CloseButtonText = closeButtonText,
-            XamlRoot = XamlRoot
-        };
-
-        var result = await dialog.ShowAsync();
-        return new DeleteDialogResult(
-            Confirmed: result == ContentDialogResult.Primary,
-            DeleteFromCloud: signedIn && deleteFromCloudCheckbox.IsChecked == true
-        );
     }
 
     private readonly SemaphoreSlim _infoDialogLock = new(1, 1);

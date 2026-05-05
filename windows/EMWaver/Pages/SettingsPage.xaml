@@ -42,66 +42,14 @@
                     Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                 <StackPanel Spacing="10">
                     <TextBlock Text="Agent" FontWeight="SemiBold" />
-                    <TextBlock x:Name="ProStatusText" Text="Checking eligibility…" Opacity="0.75" TextWrapping="Wrap" />
-                    <TextBlock Text="Note: Pro purchase is web-first for now. Eligibility is still enforced by the backend."
+                    <TextBlock x:Name="AgentKeyStatusText" Text="Checking Agent key…" Opacity="0.75" TextWrapping="Wrap" />
+                    <TextBlock Text="Agent replies use a user-provided API key. Local scripts and local hardware control do not require it."
                                Opacity="0.75"
                                TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="10">
-                        <Button Content="Get Pro…" Click="OnGetProClick" />
-                        <Button Content="Refresh" Click="OnRefreshProClick" />
+                        <Button Content="Configure Agent Key…" Click="OnConfigureAgentKeyClick" />
+                        <Button Content="Refresh" Click="OnRefreshAgentKeyClick" />
                     </StackPanel>
-                </StackPanel>
-            </Border>
-
-            <Border x:Name="StaffBackendSection"
-                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Staff Only · Cloud" FontWeight="SemiBold" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Backend:" />
-                        <TextBlock x:Name="BackendUrlText" Text="" />
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Mode:" />
-                        <ComboBox x:Name="BackendModeCombo" SelectionChanged="OnBackendModeChanged" Width="220" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
-                            <ComboBoxItem Content="Azure (prod)" Tag="prod" />
-                            <ComboBoxItem Content="Local" Tag="local" />
-                        </ComboBox>
-                    </StackPanel>
-
-                    <TextBlock Text="Local mode uses hardcoded http://localhost:3201. Changing backend will sign you out and restart cloud services." Opacity="0.75" TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-
-            <Border x:Name="StaffFrontendSection"
-                    BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
-                    BorderThickness="1"
-                    CornerRadius="8"
-                    Padding="12"
-                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                <StackPanel Spacing="10">
-                    <TextBlock Text="Staff Only · Web Frontend" FontWeight="SemiBold" />
-
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Frontend:" />
-                        <TextBlock x:Name="FrontendUrlText" Text="" />
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
-                        <TextBlock Text="Mode:" />
-                        <ComboBox x:Name="FrontendModeCombo" SelectionChanged="OnFrontendModeChanged" Width="220" Foreground="{ThemeResource TextFillColorPrimaryBrush}">
-                            <ComboBoxItem Content="Azure (prod)" Tag="prod" />
-                            <ComboBoxItem Content="Local" Tag="local" />
-                        </ComboBox>
-                    </StackPanel>
-
-                    <TextBlock Text="Local mode uses hardcoded http://localhost:3200." Opacity="0.75" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
 
