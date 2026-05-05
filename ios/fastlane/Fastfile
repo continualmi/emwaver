@@ -20,6 +20,8 @@ platform :ios do
 
   desc "Archive the iOS app without uploading"
   lane :archive do
+    configure_ci_app_store_signing
+
     build_app(
       project: "EMWaver.xcodeproj",
       scheme: "EMWaver",
@@ -36,6 +38,7 @@ platform :ios do
   lane :beta do
     app_store_connect_api_key_from_env
     increment_build_number_if_requested
+    configure_ci_app_store_signing
 
     build_app(
       project: "EMWaver.xcodeproj",
@@ -99,6 +102,24 @@ platform :ios do
     else
       UI.message("Using the build number already configured in Xcode.")
     end
+  end
+
+  private_lane :configure_ci_app_store_signing do
+    profile_name = ENV.fetch("IOS_PROVISIONING_PROFILE_NAME", "").strip
+    if profile_name.empty?
+      UI.message("Using the signing settings already configured in Xcode.")
+      next
+    end
+
+    update_code_signing_settings(
+      path: "EMWaver.xcodeproj",
+      targets: ["EMWaver"],
+      build_configurations: ["Release"],
+      use_automatic_signing: false,
+      team_id: "9VA9KTUXXN",
+      profile_name: profile_name,
+      code_sign_identity: "Apple Distribution"
+    )
   end
 
   def changelog_text

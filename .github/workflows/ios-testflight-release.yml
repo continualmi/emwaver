@@ -35,6 +35,7 @@ jobs:
       FASTLANE_SKIP_UPDATE_CHECK: "1"
       APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}
       APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
+      IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
       EMWAVER_IOS_BUILD_NUMBER: ${{ inputs.build_number }}
       EMWAVER_IOS_CHANGELOG: ${{ inputs.changelog }}
       EMWAVER_IOS_EXPORT_OPTIONS: ci-exportOptions.plist
@@ -86,8 +87,6 @@ jobs:
 
       - name: Write CI export options
         working-directory: ios
-        env:
-          IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
         run: |
           set -euo pipefail
           cat > ci-exportOptions.plist <<PLIST
