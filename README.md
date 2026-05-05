@@ -69,8 +69,13 @@ Public website pages and static EMWaver media live in the sibling Continual MI s
 For end users:
 
 1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
-2. Install the app for your platform from the [install page](https://continualmi.com/emwaver/install).
+2. Install the app for your platform from the [install page](https://continualmi.com/emwaver/install) or use the direct preview downloads:
+   - [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
+   - [macOS DMG](https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg)
+   - [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
 3. Open the [documentation](https://continualmi.com/emwaver/docs) and run local `.emw` scripts.
+
+App Store, Google Play, and Microsoft Store listings are coming soon.
 
 For local development:
 

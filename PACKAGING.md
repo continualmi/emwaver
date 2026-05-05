@@ -8,7 +8,7 @@ The reborn EMWaver should package a local-first CLI and localhost gateway for de
 
 ## Preview app release workflows
 
-GitHub Actions can publish direct-download preview builds for app testing while store distribution remains the primary end-user path.
+GitHub Actions can publish direct-download preview builds for app testing while store distribution is still coming soon.
 
 Current workflows:
 
@@ -18,13 +18,15 @@ Current workflows:
 
 Each workflow can be run manually from GitHub Actions with a release tag, defaulting to `emwaver-preview`, or by pushing a tag matching `emwaver-v*`.
 
-Stable preview URLs:
+Stable public preview URLs:
 
 ```text
-https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.apk
-https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg
-https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip
+https://continualmi.com/emwaver/downloads/EMWaver-android.apk
+https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg
+https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip
 ```
+
+The EMWaver repository is private, so GitHub Release asset URLs are not public install links. Public preview files are mirrored into the Society static site under `public/emwaver/downloads/`.
 
 The macOS DMG is unsigned/notarization-free until Apple signing credentials are wired into CI. The Android APK is unsigned until Play/App signing or a GitHub Actions signing secret path is added. Windows currently ships as a ZIP because a raw WinUI `.exe` is not a complete redistributable package.
 
@@ -32,7 +34,7 @@ The macOS DMG is unsigned/notarization-free until Apple signing credentials are 
 
 Primary user-facing options:
 
-- native macOS app through the App Store,
+- direct preview DMG now; App Store listing coming soon,
 - CLI/gateway package for local development and SSH-style workflows.
 
 Initial CLI packaging candidates:
