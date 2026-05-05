@@ -151,16 +151,16 @@ Use the local README first when working in a folder:
 
 - `README.md` (repo root) — public open-source overview, website links, repo map, and doc index
 - `README.txt` (repo root) — compatibility pointer to `README.md`
-- `REBIRTH.md` (repo root) — local-first/open-source rebirth plan and product pivot
-- `REBIRTH_ISSUES.md` (repo root) — durable issue backlog for the rebirth plan
-- `REBIRTH_AUDIT.md` (repo root) — completion audit and remaining gaps for the active rebirth objective
-- `LAUNCH_MVP.md` (repo root) — minimum launch checklist for the local-first rebirth
-- `AGENT_API.md` (repo root) — paid Agent API-key and endpoint direction
-- `PACKAGING.md` (repo root) — CLI/gateway packaging direction for macOS, Linux, and Windows
-- `TESTS_REBIRTH.md` (repo root) — validation tracker for rebirth implementation work
-- `PLANNING.md` (repo root) — durable working tracker for current priorities, active work, blockers, and next steps
-- `SCHEDULE.md` (repo root) — active weekly planning/scheduling tracker used in ongoing execution updates
-- `TESTS.md` (repo root) — active manual hardware test suite, test codes, and pass/pending tracking
+- `docs/REBIRTH.md` — local-first/open-source rebirth plan and product pivot
+- `docs/REBIRTH_ISSUES.md` — durable issue backlog for the rebirth plan
+- `docs/REBIRTH_AUDIT.md` — completion audit and remaining gaps for the active rebirth objective
+- `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
+- `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
+- `docs/PACKAGING.md` — CLI/gateway packaging direction for macOS, Linux, and Windows
+- `docs/TESTS_REBIRTH.md` — validation tracker for rebirth implementation work
+- `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, and next steps
+- `docs/SCHEDULE.md` — active weekly planning/scheduling tracker used in ongoing execution updates
+- `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes

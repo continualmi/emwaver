@@ -72,7 +72,7 @@ Write-Host "== Hardware validation =="
 Write-Host "1. Connect a supported EMWaver board over USB."
 Write-Host "2. Confirm the Windows app Device page shows the board without requiring account sign-in."
 Write-Host "3. Run $ScriptName from the gateway and verify the board performs the expected hardware action."
-Write-Host "4. Record the result in TESTS_REBIRTH.md under Platform Device Access."
+Write-Host "4. Record the result in docs/TESTS_REBIRTH.md under Platform Device Access."
 
 Write-Host ""
 Write-Host "Windows validation runbook complete. Manual app/gateway/hardware checks remain user-observed."

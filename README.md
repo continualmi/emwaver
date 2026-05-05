@@ -115,13 +115,13 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 
 ## Release Trackers
 
-- [REBIRTH.md](REBIRTH.md) captures the local-first open-source product pivot.
-- [LAUNCH_MVP.md](LAUNCH_MVP.md) defines the minimum launch checklist.
-- [REBIRTH_ISSUES.md](REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
-- [REBIRTH_AUDIT.md](REBIRTH_AUDIT.md) audits completion and remaining gaps.
-- [TESTS_REBIRTH.md](TESTS_REBIRTH.md) tracks validation.
-- [PACKAGING.md](PACKAGING.md) covers CLI and gateway packaging direction.
-- [AGENT_API.md](AGENT_API.md) defines the optional paid Agent API boundary.
+- [REBIRTH.md](docs/REBIRTH.md) captures the local-first open-source product pivot.
+- [LAUNCH_MVP.md](docs/LAUNCH_MVP.md) defines the minimum launch checklist.
+- [REBIRTH_ISSUES.md](docs/REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
+- [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.
+- [TESTS_REBIRTH.md](docs/TESTS_REBIRTH.md) tracks validation.
+- [PACKAGING.md](docs/PACKAGING.md) covers CLI and gateway packaging direction.
+- [AGENT_API.md](docs/AGENT_API.md) defines the optional paid Agent API boundary.
 - [AGENTS.md](AGENTS.md) is the repository-wide source of truth for product vision, platform constraints, and contribution guardrails.
 
 ## Contributing
