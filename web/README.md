@@ -32,7 +32,7 @@ There is no `src/server/`, custom `server.ts`, `/v1/*`, `/api/auth/*`, `/cloud`,
 
 ## Current Public Routes
 
-- `/` - Build catalog landing page
+- `/` - EMWaver landing page
 - `/build` - compatibility route for the Build catalog
 - `/build/[slug]`
 - `/docs`

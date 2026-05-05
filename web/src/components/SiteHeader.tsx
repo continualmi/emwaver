@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation";
 import { societyRouteUrl } from "@/lib/societySite";
 
 const nav = [
-  { href: "/", label: "Build" },
+  { href: "/", label: "EMWaver" },
+  { href: "/build", label: "Build" },
   { href: "/install", label: "Install" },
   { href: "/docs", label: "Documentation" },
   { href: "/videos", label: "Videos" },
@@ -62,7 +63,7 @@ export function SiteHeader() {
               const external = item.href.startsWith("http");
               const active =
                 item.href === "/"
-                  ? pathname === "/" || pathname.startsWith("/build")
+                  ? pathname === "/"
                   : pathname === item.href || pathname.startsWith(`${item.href}/`);
               const navClass =
                 "rounded-lg px-3 py-2 transition " +
@@ -110,7 +111,7 @@ export function SiteHeader() {
                 const external = item.href.startsWith("http");
                 const active =
                   item.href === "/"
-                    ? pathname === "/" || pathname.startsWith("/build")
+                    ? pathname === "/"
                     : pathname === item.href || pathname.startsWith(`${item.href}/`);
                 const navClass =
                   "rounded-xl px-3 py-3 transition " +
