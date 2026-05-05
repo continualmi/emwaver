@@ -1,8 +1,11 @@
 # EMWaver Hardware
 
-This folder is the target home for EMWaver hardware design repositories in the reborn open-source monorepo.
+This folder is the hardware package index for the EMWaver family. Each board
+folder is intended to be usable on its own: the README should explain the board,
+list build assets, document pinouts and connectors, and describe the bring-up
+path without requiring someone to reverse-engineer the schematic first.
 
-Hardware imports should preserve git history where practical and land under stable flat prefixes:
+Current board folders:
 
 ```text
 hardware/
@@ -17,9 +20,66 @@ hardware/
   rfid-waver/
 ```
 
-## Layout
+## Current Board Matrix
 
-Each imported hardware repository keeps its original repo name directly under `hardware/`. Do not add extra `boards/`, `modules/`, or other grouping folders above the imported repos.
+| Folder | MCU / controller | Main feature | Radio / peripheral | Normal app path |
+| --- | --- | --- | --- | --- |
+| `emwaver-air` | ESP32-S3-MINI-1-N8 | all-in-one wireless board | CC1101 433 MHz, IR RX/TX, expansion | Android, iOS, desktop |
+| `emwaver-carrier` | bring-your-own ESP32-S3 DevKit | modular ESP32-S3 carrier | CC1101 module, IR RX/TX, expansion | Android, iOS, desktop |
+| `emwaver-core` | STM32F042G6U6 | compact USB board | IR RX/TX, GPIO blocks | Android, iOS, desktop |
+| `emwaver-link` | STM32F042G6U6 | integrated USB radio board | E07-400M10S / CC1101-class 433 MHz, IR RX/TX | Android, iOS, desktop |
+| `emwaver-shield` | ESP32-S3 DevKit carrier | shield-style ESP32-S3 carrier | RFM69HW 433 MHz, IR RX/TX, 44-pin shield header | Android, iOS, desktop |
+| `gpio-waver` | STM32F042G6U6 | low-cost GPIO prototyping | GPIO/SPI/UART/I2C headers | Android, desktop |
+| `infrared-waver` | STM32F042G6U6 | infrared capture/replay | IR receiver and IR LED driver | Android, desktop |
+| `ism-waver` | STM32F042G6U6 | dual-band sub-GHz work | CC1101, 315 MHz and 433 MHz RF paths | Android, desktop |
+| `rfid-waver` | MFRC522 | RFID add-on module | 13.56 MHz RFID front end | Android, desktop with GPIO Waver |
+
+## Build Asset Convention
+
+Most board folders now include the same JLCPCB-style manufacturing package:
+
+- `Schematic_*.pdf` - schematic export used for review and pinout checks.
+- `PCB_*.pdf` - board-layout PDF export.
+- `Gerber_*.zip` - fabrication archive to upload for PCB ordering.
+- `BOM_*.csv` - assembly bill of materials.
+- `PickAndPlace_*.csv` - CPL / pick-and-place data.
+- `*.stl` - printable case files where available.
+- `catalog/device.json` - website/catalog metadata mirrored into the hardware repo.
+
+If a board README says a pinout needs physical verification, that means the
+schematic identifies the nets but the committed package does not yet include a
+clear annotated connector-orientation drawing. Do not treat those tables as a
+replacement for a production assembly drawing.
+
+## General JLCPCB Flow
+
+1. Open the board README and confirm the exact build assets for that board.
+2. Upload the `Gerber_*.zip` file to JLCPCB.
+3. Select board options that match the Gerber defaults unless the README calls
+   out a board-specific requirement.
+4. For assembly, upload the matching `BOM_*.csv` and `PickAndPlace_*.csv`.
+5. Review part availability, polarity, connector orientation, USB connector
+   placement, antenna keepout, and any substitutions before placing the order.
+6. On arrival, inspect for shorts, verify `VBUS` and `3V3` rails, connect over
+   USB, and then use the EMWaver app-managed firmware/update flow.
+
+## Firmware Rule
+
+EMWaver hardware is local-first. Normal users should not need an account, cloud
+activation, or manual firmware build to control local hardware.
+
+For internal firmware development:
+
+- STM32F042 boards use the workspace under `../stm/`.
+- ESP32-S3 boards use the ESP-IDF workspace under `../esp/`.
+- App-bundled firmware payloads live under `../firmware/` and platform bundle
+  folders.
+
+## Layout Policy
+
+Each imported hardware repository keeps its original repo name directly under
+`hardware/`. Do not add extra `boards/`, `modules/`, or other grouping folders
+above the imported repos.
 
 ## Import Policy
 

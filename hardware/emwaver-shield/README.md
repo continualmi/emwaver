@@ -1,118 +1,124 @@
-# EMWaver Shield Build Guide
+# EMWaver Shield
 
 ![EMWaver Shield](catalog/images/IMG_0067.jpg)
 
-EMWaver Shield is a shield-style carrier board for an ESP32-S3 module in the EMWaver hardware family.
+EMWaver Shield is a shield-style ESP32-S3 carrier in the EMWaver hardware
+family. It adds IR receive/transmit, USB-C, an RFM69HW 433 MHz radio footprint,
+a helical antenna, and a large duplicated 44-pin shield header for prototyping.
 
-This repository is primarily a build guide and hardware package for reproducing the board. It exists to collect the shield's public-facing hardware materials in one place: photos, catalog metadata, build notes, and design references.
+EMWaver apps remain the normal software path. This repo documents hardware
+reproduction and bring-up; it is not the source of truth for app, backend,
+provisioning, or private firmware release workflows.
 
-EMWaver apps remain the normal software path. This repo is not the source of truth for private app, backend, provisioning, or internal firmware source.
+## Build Assets
 
-## Build at a glance
+| File | Purpose |
+| --- | --- |
+| [Schematic_EMWAVER_SHIELD_2026-03-26.pdf](Schematic_EMWAVER_SHIELD_2026-03-26.pdf) | schematic review and net reference |
+| [PCB_PCB_EMWAVER_SHIELD_2026-03-26.pdf](PCB_PCB_EMWAVER_SHIELD_2026-03-26.pdf) | board layout export |
+| [BOM_EMWAVER_SHIELD_2026-03-26.csv](BOM_EMWAVER_SHIELD_2026-03-26.csv) | assembly BOM |
+| [PickAndPlace_PCB_EMWAVER_SHIELD_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_SHIELD_2026-03-26.csv) | CPL / pick-and-place |
+| [catalog/device.json](catalog/device.json) | catalog metadata and source links |
 
-1. Review the required parts and decide whether you are building the full radio-capable configuration.
-2. Open the linked design sources and export the fabrication files you need if local manufacturing assets are not yet committed here.
-3. Order the PCB and parts.
-4. Assemble the board, including the ESP32-S3 DevKit carrier and the optional/target radio hardware.
-5. Use the EMWaver apps for the software side rather than a manual firmware workflow.
+The catalog metadata references `Gerber_EMWAVER_SHIELD_PCB_EMWAVER_SHIELD_2026-03-26.zip`,
+but that Gerber ZIP is not currently committed in this folder. Export from the
+EasyEDA project or add the missing ZIP before treating this as a complete
+self-contained manufacturing package.
 
-## Current board direction
+Catalog estimate: 5 units for about 32 USD.
 
-- Shield carrier for an ESP32-S3 DevKit-class module.
-- IR receiver and IR LED support.
-- USB-C oriented EMWaver workflow.
-- RFM69HW radio module footprint with helical antenna support.
-- Large duplicated GPIO breakout intended for prototyping and expansion.
-- App support listed in the current catalog metadata: Android, iOS, and desktop.
+## Required External Parts
 
-## Required parts
+- ESP32-S3 DevKit-class module.
+- RFM69HW-433S2R module.
+- 433 MHz helical antenna.
+- USB-C cable.
 
-Current minimum parts called out by the mirrored catalog metadata:
+## Major Components
 
-- ESP32-S3 DevKit
-- RFM69HW module
-- Helical antenna
+| Area | Part / note |
+| --- | --- |
+| MCU | user-supplied ESP32-S3 DevKit |
+| Radio | RFM69HW-433S2R |
+| Antenna | VG433SNX39-6W3 helical antenna |
+| IR receiver | Everlight IRM-H638T/TR2 |
+| IR transmit | NTD3535I16 IR LED with AO3400A driver |
+| Expansion | 44-pin shield header plus 22-pin duplicated GPIO header |
+| USB | vertical USB-C connector |
 
-You should also expect to need:
+## Pinout And Signals
 
-- the shield PCB,
-- IR receiver,
-- IR LED,
-- headers / sockets for the carrier layout,
-- standard passives and support components defined by the design files.
+The schematic identifies the following named nets. The 44-pin header pin order
+must be confirmed against the PCB PDF or an annotated board image before making
+daughterboards.
 
-## Suggested tools
+| Signal | Function |
+| --- | --- |
+| `D+`, `D-` | USB data path |
+| `IR_RX` | IR receiver output |
+| `IR_TX` | IR LED driver input |
+| RFM69 SPI nets | SPI bus between ESP32-S3 and RFM69HW module |
+| RFM69 IRQ/control nets | radio interrupt/control lines routed through the shield |
+| `+5V`, `VCC`, `GND` | USB 5 V, 3.3 V logic, ground |
 
-- soldering iron and solder
-- flux
-- tweezers
-- side cutters
-- multimeter
-- USB-C cable
+Current ESP32 firmware defaults:
 
-## Design sources
+| Firmware default | GPIO |
+| --- | --- |
+| SPI `MOSI` | `GPIO11` |
+| SPI `SCK` | `GPIO12` |
+| SPI `MISO` | `GPIO13` |
+| default IR transmit | `GPIO4` |
+| shield-compatible IR transmit | `GPIO37` |
+| IR LED guard | `GPIO5` |
 
-Current external design references:
+Update the firmware mapping only after confirming the selected ESP32-S3 DevKit
+pinout and shield routing.
 
-- EasyEDA: [project `a9ecc255b85443dd9903fbab629f9e0b`](https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b)
+## Manufacturing With JLCPCB
 
-Current local mirrored catalog files:
+1. Export or add the missing Gerber ZIP from the EasyEDA project referenced in
+   `catalog/device.json`.
+2. Upload the Gerber ZIP.
+3. Upload `BOM_EMWAVER_SHIELD_2026-03-26.csv` and
+   `PickAndPlace_PCB_EMWAVER_SHIELD_2026-03-26.csv` if ordering assembly.
+4. Review RFM69HW orientation, antenna placement, 44-pin shield header
+   orientation, ESP32-S3 DevKit header alignment, USB-C connector direction, IR
+   LED polarity, and IR receiver orientation.
+5. Keep antenna clearance and enclosure materials consistent with RF testing.
 
-- [catalog/device.json](catalog/device.json)
-- [catalog/images/IMG_0063.jpg](catalog/images/IMG_0063.jpg)
-- [catalog/images/IMG_0064.jpg](catalog/images/IMG_0064.jpg)
-- [catalog/images/IMG_0065.jpg](catalog/images/IMG_0065.jpg)
-- [catalog/images/IMG_0066.jpg](catalog/images/IMG_0066.jpg)
-- [catalog/images/IMG_0067.jpg](catalog/images/IMG_0067.jpg)
-- [catalog/images/IMG_0096.jpg](catalog/images/IMG_0096.jpg)
-- [catalog/images/IMG_0097.jpg](catalog/images/IMG_0097.jpg)
-- [catalog/images/EMWAVER_SHIELD.png](catalog/images/EMWAVER_SHIELD.png)
+## Assembly Flow
 
-## Fabrication flow
+1. Solder low-profile passives first.
+2. Add USB-C and IR components.
+3. Add the RFM69HW module and helical antenna if building the radio variant.
+4. Add the 44-pin shield header and ESP32-S3 DevKit headers.
+5. Seat the ESP32-S3 DevKit last, after checking rails for shorts.
 
-This repo does not yet include committed local Gerbers, BOM, pick-and-place files, or editable EDA exports for the shield. Right now the practical path is:
+## Bring-Up Checklist
 
-1. Open the design in EasyEDA.
-2. Export the fabrication package you need.
-3. Save fabrication outputs under `hardware/revisions/v1/fabrication/`.
-4. Save editable project/source files under `hardware/revisions/v1/source/`.
-5. Save revision-specific pinout notes or manufacturing caveats under `hardware/revisions/v1/docs/`.
+1. Verify `+5V`, `VCC`, and `GND` before inserting the ESP32-S3 DevKit.
+2. Confirm the ESP32-S3 DevKit powers and enumerates.
+3. Use the EMWaver app-managed setup/update flow for normal use.
+4. Test IR receive and transmit.
+5. Verify RFM69 register access over SPI before transmitting.
+6. Test receive-only at 433 MHz, then low-duty transmit.
+7. Validate shield-header signals needed by your daughterboard.
 
-Once those files are committed here, this README can act as a fully self-contained reproduction guide.
+## Firmware Development
 
-## Assembly flow
+Normal users should not build firmware manually. Internal ESP32-S3 development
+lives in [`../../esp`](../../esp).
 
-Recommended assembly order:
+## Source References
 
-1. Solder low-profile passives and support components first.
-2. Add the IR components.
-3. Add headers and connectors.
-4. Add the RFM69HW radio section if you are building the full radio-capable variant.
-5. Fit the ESP32-S3 DevKit carrier/module last so alignment stays easier.
+- EasyEDA project: `https://easyeda.com/editor#project_id=a9ecc255b85443dd9903fbab629f9e0b`
+- Mirrored catalog images live in `catalog/images/`.
+- Additional design references live under [`docs/`](docs/).
 
-## Bring-up checklist
+## Documentation Gaps To Close
 
-1. Verify power rails and USB-C connection.
-2. Verify the ESP32-S3 DevKit seats correctly.
-3. Verify the RFM69HW module and antenna fitment if installed.
-4. Confirm the board is ready for the EMWaver app workflow.
-
-This repository intentionally does not document a manual firmware-build workflow because that is not the intended EMWaver user path.
-
-## Repo layout
-
-- `catalog/` mirrors the current `EMWAVER_SHIELD` entry from the EMWaver web hardware catalog, including all photos and the device manifest.
-- `hardware/` is where revision-specific source files and manufacturing exports should live as they are brought into the repo.
-- `assets/` is reserved for presentation material that is not part of the mirrored catalog package.
-
-## Build status
-
-The current source material available in-repo is the catalog package plus the remaining external design reference. Manufacturing exports and local revision source files still need to be added here as the hardware package is filled out.
-
-<p align="center">
-  <img src="catalog/images/EMWAVER_SHIELD.png" alt="EMWaver Shield render" width="70%" />
-</p>
-
-## Cost note
-
-The mirrored catalog metadata currently lists a reproduction cost of `32 USD` for `5` units. Treat that as a rough catalog estimate rather than a finalized build quote.
+- Commit the missing Gerber ZIP referenced by catalog metadata.
+- Add a confirmed 44-pin header pin table with physical orientation.
+- Add an annotated board image.
+- Add shield-specific ESP32-S3 DevKit compatibility notes.
