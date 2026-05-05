@@ -1,0 +1,5 @@
+app_identifier("com.emwaver.EMWaver")
+team_id("9VA9KTUXXN")
+
+apple_id(ENV["EMWAVER_APPLE_ID"]) if ENV["EMWAVER_APPLE_ID"]
+itc_team_id(ENV["EMWAVER_ITC_TEAM_ID"]) if ENV["EMWAVER_ITC_TEAM_ID"]

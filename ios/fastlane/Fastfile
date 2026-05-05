@@ -1,0 +1,107 @@
+opt_out_usage
+
+default_platform(:ios)
+
+platform :ios do
+  before_all do
+    ENV["FASTLANE_SKIP_UPDATE_CHECK"] = "1"
+  end
+
+  desc "Run iOS tests on the default simulator"
+  lane :test do
+    scan(
+      project: "EMWaver.xcodeproj",
+      scheme: "EMWaver",
+      configuration: "Debug",
+      device: ENV.fetch("EMWAVER_IOS_TEST_DEVICE", "iPhone 16"),
+      clean: true
+    )
+  end
+
+  desc "Archive the iOS app without uploading"
+  lane :archive do
+    build_app(
+      project: "EMWaver.xcodeproj",
+      scheme: "EMWaver",
+      configuration: "Release",
+      export_options: "exportOptions.plist",
+      output_directory: "../build/ios",
+      output_name: "EMWaver.ipa",
+      clean: true,
+      xcargs: "DEVELOPMENT_TEAM=9VA9KTUXXN"
+    )
+  end
+
+  desc "Upload a build to TestFlight"
+  lane :beta do
+    app_store_connect_api_key_from_env
+    increment_build_number_if_requested
+
+    build_app(
+      project: "EMWaver.xcodeproj",
+      scheme: "EMWaver",
+      configuration: "Release",
+      export_options: "exportOptions.plist",
+      output_directory: "../build/ios",
+      output_name: "EMWaver.ipa",
+      clean: true,
+      xcargs: "DEVELOPMENT_TEAM=9VA9KTUXXN"
+    )
+
+    upload_to_testflight(
+      ipa: "../build/ios/EMWaver.ipa",
+      skip_waiting_for_build_processing: true,
+      distribute_external: false,
+      changelog: changelog_text
+    )
+  end
+
+  desc "Upload App Store metadata and the latest local IPA. Final App Review submission is still confirmed in App Store Connect."
+  lane :release do
+    app_store_connect_api_key_from_env
+
+    deliver(
+      ipa: "../build/ios/EMWaver.ipa",
+      metadata_path: "fastlane/metadata",
+      screenshots_path: "fastlane/screenshots",
+      submit_for_review: false,
+      force: true,
+      skip_binary_upload: !File.exist?("../build/ios/EMWaver.ipa"),
+      skip_screenshots: !Dir.exist?("fastlane/screenshots"),
+      run_precheck_before_submit: false
+    )
+  end
+
+  private_lane :app_store_connect_api_key_from_env do
+    required = %w[
+      APP_STORE_CONNECT_API_KEY_ID
+      APP_STORE_CONNECT_API_ISSUER_ID
+      APP_STORE_CONNECT_API_KEY_PATH
+    ]
+    missing = required.select { |key| ENV[key].to_s.empty? }
+    UI.user_error!("Missing App Store Connect API env vars: #{missing.join(', ')}") unless missing.empty?
+
+    app_store_connect_api_key(
+      key_id: ENV.fetch("APP_STORE_CONNECT_API_KEY_ID"),
+      issuer_id: ENV.fetch("APP_STORE_CONNECT_API_ISSUER_ID"),
+      key_filepath: ENV.fetch("APP_STORE_CONNECT_API_KEY_PATH"),
+      in_house: false
+    )
+  end
+
+  private_lane :increment_build_number_if_requested do
+    next_build = ENV["EMWAVER_IOS_BUILD_NUMBER"].to_s.strip
+    unless next_build.empty?
+      increment_build_number(
+        build_number: next_build,
+        xcodeproj: "EMWaver.xcodeproj"
+      )
+    else
+      UI.message("Using the build number already configured in Xcode.")
+    end
+  end
+
+  def changelog_text
+    ENV.fetch("EMWAVER_IOS_CHANGELOG", "").strip
+  end
+end

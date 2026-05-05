@@ -9,6 +9,9 @@ xcuserdata/
 # SwiftPM
 .build/
 
+# Bundler local install path used by scripts/ios-release.sh
+vendor/bundle/
+
 # Rust XCFramework outputs
 *.xcframework/
 

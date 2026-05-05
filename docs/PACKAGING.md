@@ -15,6 +15,7 @@ Current workflows:
 - `.github/workflows/android-apk-release.yml` builds `EMWaver-android.apk` on Ubuntu with Gradle.
 - `.github/workflows/macos-dmg-release.yml` builds the macOS app on a macOS runner and packages `EMWaver-macos.dmg`.
 - `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app and packages `EMWaver-windows-x64.zip`, containing `EMWaver.exe` and its required runtime files.
+- iOS distribution is automated locally through `scripts/ios-release.sh` and `ios/fastlane/`; Apple review submission remains a manual App Store Connect checkpoint.
 
 Each workflow can be run manually from GitHub Actions with a release tag, defaulting to `emwaver-preview`, or by pushing a tag matching `emwaver-v*`.
 

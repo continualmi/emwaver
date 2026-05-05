@@ -1,0 +1,1 @@
+EMWaver turns supported boards into a local-first electronics lab from your iPhone. Write and run scripts, inspect device signals, update bundled firmware, and use optional Agent assistance with your own API key.

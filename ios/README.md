@@ -80,9 +80,53 @@ The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 
+## 6) App Store automation
+
+The iOS release path uses Fastlane from this folder so App Store uploads can run from a local Mac or be reused later from Xcode Cloud.
+
+One-time setup on the release Mac:
+
+1. Create an App Store Connect API key with access to the EMWaver app.
+2. Store the private `.p8` key outside the repository.
+3. Export these environment variables:
+
+```sh
+export APP_STORE_CONNECT_API_KEY_ID="..."
+export APP_STORE_CONNECT_API_ISSUER_ID="..."
+export APP_STORE_CONNECT_API_KEY_PATH="$HOME/secure/AuthKey_....p8"
+```
+
+Optional release variables:
+
+```sh
+export EMWAVER_IOS_BUILD_NUMBER="101"
+export EMWAVER_IOS_CHANGELOG="Release notes for TestFlight."
+export EMWAVER_APPLE_ID="apple-account@example.com"
+export EMWAVER_ITC_TEAM_ID="170301490951"
+```
+
+Release commands from the repo root:
+
+```sh
+scripts/ios-release.sh test
+scripts/ios-release.sh archive
+scripts/ios-release.sh beta
+scripts/ios-release.sh release
+```
+
+Lanes:
+- `test` runs the `EMWaver` scheme tests on the default simulator.
+- `archive` creates `build/ios/EMWaver.ipa` without uploading.
+- `beta` builds and uploads the IPA to TestFlight.
+- `release` uploads metadata and the latest local IPA when present, but does not submit for App Review.
+
+Apple review remains a manual App Store Connect checkpoint: select the processed build, confirm compliance/review answers, and click the review submission button.
+
+Fastlane metadata lives in `ios/fastlane/metadata/en-US/`. Screenshots can be added under `ios/fastlane/screenshots/en-US/` and will be uploaded by the `release` lane.
+
 ---
 
-## 6) Contributor guardrails
+## 7) Contributor guardrails
 
 1. Keep iOS-specific UI/state logic in `/ios`, move reusable logic to `/apple` package.
 2. Keep transport behavior compatible with firmware protocol contracts.
@@ -91,6 +135,6 @@ Do not assume CI/agent environment can run full iOS builds; validate on proper m
 
 ---
 
-## 7) Documentation maintenance rule
+## 8) Documentation maintenance rule
 
 When changing manager responsibilities, auth flows, or firmware asset paths, update this README in same PR.
