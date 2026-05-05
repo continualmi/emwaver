@@ -1,8 +1,8 @@
 # EMWaver
 
 <p align="center">
-  <a href="https://continualmi.com/emwaver">
-    <img src="https://continualmi.com/emwaver/logo.png" alt="EMWaver logo" width="280">
+  <a href="https://continualmi.com">
+    <img src="https://continualmi.com/continuous-logo.png" alt="Continual MI logo" width="220">
   </a>
 </p>
 
