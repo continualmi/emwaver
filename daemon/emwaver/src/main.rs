@@ -1482,7 +1482,113 @@ fn send_ui_snapshot(
         })
         .to_string(),
     ))?;
+    if let Some(root) = root.as_ref() {
+        send_plot_data_for_tree(ws, engine, script_id, root)?;
+    }
     Ok(())
+}
+
+fn send_plot_data_for_tree(
+    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+    engine: &Engine,
+    script_id: &str,
+    node: &emwaver_runtime::UiNode,
+) -> Result<()> {
+    if node.node_type == "plot" {
+        if let Some(plot) = build_plot_data(engine, node) {
+            ws.send(Message::Text(
+                serde_json::json!({
+                    "type": "plot.data",
+                    "hostSessionId": "local",
+                    "scriptInstanceId": script_id,
+                    "targetNodeId": node.id,
+                    "xMin": plot.x_min,
+                    "xMax": plot.x_max,
+                    "bins": plot.bins,
+                    "dataX": plot.data_x,
+                    "dataY": plot.data_y,
+                })
+                .to_string(),
+            ))?;
+        }
+    }
+
+    for child in &node.children {
+        send_plot_data_for_tree(ws, engine, script_id, child)?;
+    }
+    Ok(())
+}
+
+struct PlotData {
+    x_min: f64,
+    x_max: f64,
+    bins: usize,
+    data_x: Vec<f64>,
+    data_y: Vec<f64>,
+}
+
+fn build_plot_data(engine: &Engine, node: &emwaver_runtime::UiNode) -> Option<PlotData> {
+    let buffer_id = plot_buffer_id(node)?;
+    let buffer = engine.plot_buffer(&buffer_id)?;
+    let total_bits = buffer.len().saturating_mul(8);
+    if total_bits == 0 {
+        return None;
+    }
+
+    let x_min = node
+        .props
+        .get("xMin")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.0);
+    let x_max = node
+        .props
+        .get("xMax")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(total_bits as f64)
+        .max(x_min + 1.0);
+    let bins = node
+        .props
+        .get("bins")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(400)
+        .clamp(1, 12_000) as usize;
+    let points = bins.min(total_bits.max(1));
+    let span = (x_max - x_min).max(1.0);
+    let mut data_x = Vec::with_capacity(points);
+    let mut data_y = Vec::with_capacity(points);
+    for i in 0..points {
+        let t = if points <= 1 {
+            0.0
+        } else {
+            i as f64 / (points - 1) as f64
+        };
+        let x = x_min + span * t;
+        let bit_index = (x.floor().max(0.0) as usize).min(total_bits - 1);
+        let byte = buffer[bit_index >> 3];
+        let bit = (byte >> (bit_index & 7)) & 1;
+        data_x.push(x);
+        data_y.push(if bit == 1 { 255.0 } else { 0.0 });
+    }
+
+    Some(PlotData {
+        x_min,
+        x_max,
+        bins,
+        data_x,
+        data_y,
+    })
+}
+
+fn plot_buffer_id(node: &emwaver_runtime::UiNode) -> Option<String> {
+    match node.props.get("source")? {
+        serde_json::Value::String(id) => Some(id.clone()),
+        serde_json::Value::Object(map) => map
+            .get("id")
+            .and_then(|v| v.as_str())
+            .filter(|id| !id.is_empty())
+            .map(ToString::to_string),
+        _ => None,
+    }
 }
 
 fn dispatch_gateway_ui_event(engine: &Engine, value: &serde_json::Value) -> Result<()> {

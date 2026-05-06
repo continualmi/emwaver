@@ -36,6 +36,7 @@ pub struct Engine {
 
     callbacks: Arc<Mutex<HashMap<String, JsValue>>>,
     timeouts: Arc<Mutex<TimerRegistry>>,
+    plot_buffers: Arc<Mutex<PlotBufferRegistry>>,
 
     pub latest_tree: Arc<Mutex<Option<UiNode>>>,
     pub latest_metadata: Arc<Mutex<JsonValue>>,
@@ -54,12 +55,20 @@ struct TimerEntry {
     callback: JsValue,
 }
 
+#[derive(Default)]
+struct PlotBufferRegistry {
+    next_id: u64,
+    buffers: HashMap<String, Vec<u8>>,
+}
+
 impl Engine {
     pub fn new(bootstrap_source: &str, bridge: Arc<dyn CommandBridge>) -> Result<Self> {
         let mut ctx = BoaContext::default();
 
         let callbacks: Arc<Mutex<HashMap<String, JsValue>>> = Arc::new(Mutex::new(HashMap::new()));
         let timeouts: Arc<Mutex<TimerRegistry>> = Arc::new(Mutex::new(TimerRegistry::default()));
+        let plot_buffers: Arc<Mutex<PlotBufferRegistry>> =
+            Arc::new(Mutex::new(PlotBufferRegistry::default()));
         let latest_tree: Arc<Mutex<Option<UiNode>>> = Arc::new(Mutex::new(None));
         let latest_metadata: Arc<Mutex<JsonValue>> =
             Arc::new(Mutex::new(JsonValue::Object(Default::default())));
@@ -209,6 +218,7 @@ impl Engine {
         register_filesystem_api(&mut ctx)?;
         register_sampler_buffer_api(&mut ctx, bridge.clone())?;
         register_sampler_desktop_api(&mut ctx, bridge.clone())?;
+        register_plot_buffer_api(&mut ctx, plot_buffers.clone())?;
 
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
@@ -271,6 +281,7 @@ impl Engine {
             ctx: Mutex::new(ctx),
             callbacks,
             timeouts,
+            plot_buffers,
             latest_tree,
             latest_metadata,
             _bridge: bridge,
@@ -357,6 +368,13 @@ impl Engine {
             ran += 1;
         }
         Ok(ran)
+    }
+
+    pub fn plot_buffer(&self, id: &str) -> Option<Vec<u8>> {
+        if id == "samplerBits" {
+            return Some(self._bridge.get_buffer());
+        }
+        self.plot_buffers.lock().unwrap().buffers.get(id).cloned()
     }
 }
 
@@ -837,6 +855,35 @@ fn register_sampler_desktop_api(
     )
     .map_err(map_js_err)
     .context("register _scriptBufferBuildSignedRawTimings")?;
+
+    Ok(())
+}
+
+fn register_plot_buffer_api(
+    ctx: &mut BoaContext,
+    registry: Arc<Mutex<PlotBufferRegistry>>,
+) -> Result<()> {
+    let set_plot_buffer = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let bytes =
+                js_value_to_bytes(args.get(0).cloned().unwrap_or(JsValue::undefined()), ctx)?;
+            let mut registry = registry.lock().unwrap();
+            registry.next_id = registry.next_id.saturating_add(1).max(1);
+            let id = format!("buf:{}", registry.next_id);
+            registry.buffers.insert(id.clone(), bytes);
+            Ok(JsValue::from(js_string!(id)))
+        })
+    })
+    .name("_scriptPlotBufferSet")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptPlotBufferSet"),
+        set_plot_buffer,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptPlotBufferSet")?;
 
     Ok(())
 }
@@ -1385,5 +1432,32 @@ mod tests {
             tree.props.get("text").and_then(|v| v.as_str()),
             Some("tx-ok")
         );
+    }
+
+    #[test]
+    fn bootstrap_ui_buffer_registers_plot_buffer() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"var id = UI.buffer([1, 2, 3]);
+                UI.render(UI.plot({ id: "plot", source: { kind: "buffer", id: id } }));"#,
+            )
+            .expect("run plot buffer script");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        let source = tree
+            .props
+            .get("source")
+            .and_then(|v| v.as_object())
+            .expect("source");
+        let id = source
+            .get("id")
+            .and_then(|v| v.as_str())
+            .expect("buffer id");
+        assert_eq!(engine.plot_buffer(id), Some(vec![1, 2, 3]));
     }
 }
