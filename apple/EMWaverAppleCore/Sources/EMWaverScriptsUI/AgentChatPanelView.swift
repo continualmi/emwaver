@@ -15,6 +15,8 @@ import AppKit
 public struct AgentChatPanelView: View {
     @ObservedObject private var viewModel: AgentChatViewModel
 
+    private static let messagesBottomId = "agent-chat-messages-bottom"
+
     private let agentEnabled: Bool
     private let onRequestUpgrade: (() -> Void)?
     private let headerAccessory: AnyView?
@@ -139,10 +141,20 @@ public struct AgentChatPanelView: View {
                             .textSelection(.enabled)
                             .padding(.vertical, 8)
                     }
+
+                    Color.clear
+                        .frame(height: 1)
+                        .id(Self.messagesBottomId)
                 }
                 .padding(12)
             }
             .onChange(of: viewModel.messages) { _ in
+                scrollToBottom(using: proxy)
+            }
+            .onChange(of: viewModel.isSending) { _ in
+                scrollToBottom(using: proxy)
+            }
+            .onChange(of: viewModel.lastError) { _ in
                 scrollToBottom(using: proxy)
             }
             .onAppear {
@@ -152,11 +164,8 @@ public struct AgentChatPanelView: View {
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {
-        guard let last = viewModel.messages.last else { return }
         DispatchQueue.main.async {
-            withAnimation(.easeOut(duration: 0.15)) {
-                proxy.scrollTo(last.id, anchor: .bottom)
-            }
+            proxy.scrollTo(Self.messagesBottomId, anchor: .bottom)
         }
     }
 
