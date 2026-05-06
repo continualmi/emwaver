@@ -131,7 +131,8 @@ struct ContentView: View {
                     },
                     onRequestOpenSettings: {
                         showingSettings = true
-                    }
+                    },
+                    agentLeadingToolbarItem: AnyView(agentKeyToolbarItem)
                 )
                 .id(scriptDeviceAttachmentKey)
 
@@ -217,42 +218,6 @@ struct ContentView: View {
                     .help("This host is being controlled remotely. Click to open the remote script UI.")
                 }
             }
-
-            ToolbarItem(placement: .automatic) {
-                if auth.isSignedIn {
-                    Menu {
-                        Text("Saved locally")
-                            .foregroundStyle(.secondary)
-
-                        Button("Manage Key…") {
-                            auth.isSignInSheetPresented = true
-                        }
-
-                        Button {
-                            openURL(mgptApiURL)
-                        } label: {
-                            Label("Open MGPT API Keys", systemImage: "globe")
-                        }
-
-                        Button {
-                            openURL(accountURL)
-                        } label: {
-                            Label("Open Account & Credits", systemImage: "globe")
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            Task { await auth.removeKey() }
-                        } label: {
-                            Text("Remove Key")
-                        }
-
-                    } label: {
-                        Label("Agent Key", systemImage: "key.fill")
-                    }
-                }
-            }
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
@@ -308,6 +273,43 @@ struct ContentView: View {
 
         autoFirmwarePromptKey = key
         firmwareUpdater.present(boardType: currentBoardType)
+    }
+
+    @ViewBuilder
+    private var agentKeyToolbarItem: some View {
+        if auth.isSignedIn {
+            Menu {
+                Text("Saved locally")
+                    .foregroundStyle(.secondary)
+
+                Button("Manage Key…") {
+                    auth.isSignInSheetPresented = true
+                }
+
+                Button {
+                    openURL(mgptApiURL)
+                } label: {
+                    Label("Open MGPT API Keys", systemImage: "globe")
+                }
+
+                Button {
+                    openURL(accountURL)
+                } label: {
+                    Label("Open Account & Credits", systemImage: "globe")
+                }
+
+                Divider()
+
+                Button(role: .destructive) {
+                    Task { await auth.removeKey() }
+                } label: {
+                    Text("Remove Key")
+                }
+            } label: {
+                Label("Agent Key", systemImage: "key.fill")
+            }
+            .help("Manage Agent API key")
+        }
     }
 }
 

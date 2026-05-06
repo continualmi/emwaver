@@ -30,6 +30,7 @@ public struct ScriptsRootView: View {
     private let agentEnabled: Bool
     private let onRequestAgentUpgrade: (() -> Void)?
     private let onRequestOpenSettings: (() -> Void)?
+    private let agentLeadingToolbarItem: AnyView?
 
     @State private var showingEditor = false
     @State private var showingPreview = false
@@ -69,13 +70,15 @@ public struct ScriptsRootView: View {
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestOpenSettings: (() -> Void)? = nil
+        onRequestOpenSettings: (() -> Void)? = nil,
+        agentLeadingToolbarItem: AnyView? = nil
     ) {
         self.device = device
         self.hostStatusSink = hostStatusSink
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
+        self.agentLeadingToolbarItem = agentLeadingToolbarItem
         self.agentEndpointProvider = agentEndpointProvider
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
@@ -90,7 +93,8 @@ public struct ScriptsRootView: View {
         hostStatusSink: ((Bool, String?) -> Void)? = nil,
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
-        onRequestOpenSettings: (() -> Void)? = nil
+        onRequestOpenSettings: (() -> Void)? = nil,
+        agentLeadingToolbarItem: AnyView? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -99,7 +103,8 @@ public struct ScriptsRootView: View {
             hostStatusSink: hostStatusSink,
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade,
-            onRequestOpenSettings: onRequestOpenSettings
+            onRequestOpenSettings: onRequestOpenSettings,
+            agentLeadingToolbarItem: agentLeadingToolbarItem
         )
     }
 
@@ -1035,6 +1040,12 @@ public struct ScriptsRootView: View {
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
         #if os(macOS)
+        ToolbarItem(placement: .primaryAction) {
+            if let agentLeadingToolbarItem {
+                agentLeadingToolbarItem
+            }
+        }
+
         ToolbarItem(placement: .primaryAction) {
             Button {
                 showingAgentPanel.toggle()
