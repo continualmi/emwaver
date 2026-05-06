@@ -306,14 +306,14 @@ struct ContentView: View {
                     Text("Remove Key")
                 }
             } label: {
-                Label("Agent Key", systemImage: "key.fill")
+                Image(systemName: "key.fill")
             }
             .help("Manage Agent API key")
         } else {
             Button {
                 auth.isSignInSheetPresented = true
             } label: {
-                Image(systemName: "key.fill")
+                Image(systemName: "key.slash")
             }
             .help("Set up Agent API key")
         }
