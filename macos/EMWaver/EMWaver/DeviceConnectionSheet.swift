@@ -22,27 +22,27 @@ struct DeviceConnectionSheet: View {
         return ("Disconnected", "cable.connector.slash")
     }
 
-    private var statusChips: [String] {
-        var items: [String] = []
+    private var deviceMetadata: [(label: String, value: String)] {
+        var items: [(label: String, value: String)] = []
         if let port = device.connectedPortName, !port.isEmpty {
-            items.append(port)
+            items.append((device.connectedTransportKind == "BLE" ? "Device" : "Port", port))
         }
         if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
-            items.append(port)
+            items.append(("Flash port", port))
         }
         if device.isConnected, let version = device.deviceEmwaverVersion, !version.isEmpty {
-            items.append("EMWaver \(version)")
+            items.append(("Firmware", "EMWaver \(version)"))
         }
         if device.isConnected, let transport = device.connectedTransportKind, !transport.isEmpty {
-            items.append(transport)
+            items.append(("Transport", transport))
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
-            items.append("ESP32-S3")
+            items.append(("Board", "ESP32-S3"))
         } else if device.isConnected {
             if needsFirmwareInstall {
-                items.append("Needs firmware")
+                items.append(("Mode", "Needs firmware"))
             } else {
-                items.append("Local")
+                items.append(("Mode", "Local"))
             }
         }
         return items
@@ -87,14 +87,21 @@ struct DeviceConnectionSheet: View {
                 HStack(spacing: 10) {
                     Label(statusLabel.text, systemImage: statusLabel.icon)
                         .font(.subheadline.weight(.medium))
+                }
 
-                    ForEach(statusChips, id: \.self) { chip in
-                        Text(chip)
-                            .font(.caption.weight(.medium))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 5)
-                            .background(Capsule().fill(Color.secondary.opacity(0.12)))
+                if !deviceMetadata.isEmpty {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 14)], alignment: .leading, spacing: 8) {
+                        ForEach(deviceMetadata, id: \.label) { item in
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(item.label)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.secondary)
+                                Text(item.value)
+                                    .font(.caption.weight(.medium))
+                                    .lineLimit(1)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
                 }
             }
