@@ -173,9 +173,19 @@ public final class AgentChatViewModel: ObservableObject {
             )
         )
 
-        if let toolCalls = response.toolCalls, !toolCalls.isEmpty, let toolRuntime {
+        var currentResponse = response
+        var rounds = 0
+        while let toolCalls = currentResponse.toolCalls, !toolCalls.isEmpty {
+            guard let toolRuntime else {
+                throw AgentEndpointError.serverError("Agent requested a tool, but local tools are not available.")
+            }
+            guard rounds < 5 else {
+                throw AgentEndpointError.serverError("Agent tool loop exceeded 5 rounds without producing a reply.")
+            }
+            rounds += 1
+
             let toolResults = await executeToolCalls(toolCalls, runtime: toolRuntime)
-            let followup = try await api.send(
+            currentResponse = try await api.send(
                 endpoint: ctx.baseURL,
                 apiKey: ctx.accessToken,
                 request: AgentEndpointRequest(
@@ -187,10 +197,9 @@ public final class AgentChatViewModel: ObservableObject {
                     toolResults: toolResults
                 )
             )
-            return try await renderResponse(followup, placeholderId: placeholderId)
         }
 
-        return try await renderResponse(response, placeholderId: placeholderId)
+        return try await renderResponse(currentResponse, placeholderId: placeholderId)
     }
 
     private func renderResponse(_ response: AgentEndpointResponse, placeholderId: UUID) async throws -> String {

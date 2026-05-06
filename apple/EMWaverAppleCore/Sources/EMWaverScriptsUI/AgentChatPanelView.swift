@@ -292,10 +292,6 @@ private struct MessageRow: View {
                         Image(systemName: "sparkles")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                    } else if message.role == .user {
-                        Image(systemName: "person.fill")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
                     }
 
                     Text(roleLabel)
