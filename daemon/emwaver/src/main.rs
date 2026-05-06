@@ -389,6 +389,35 @@ fn daemon_start(
     Ok(())
 }
 
+fn start_local_stack(
+    port: Option<u16>,
+    device: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+    bootstrap_path: Option<PathBuf>,
+) -> Result<()> {
+    let had_daemon = daemon_running()?.is_some();
+    daemon_start(
+        port,
+        None,
+        device,
+        ble,
+        no_device,
+        sim_device,
+        bootstrap_path,
+    )?;
+
+    let gateway_result = start_gateway(port);
+    if !had_daemon {
+        if let Err(err) = daemon_stop() {
+            eprintln!("warning: failed to stop daemon started by `emwaver start`: {err:#}");
+        }
+    }
+
+    gateway_result
+}
+
 fn daemon_stop() -> Result<()> {
     let pidfile = pidfile_path()?;
     let Some(pid) = read_pid(&pidfile) else {
@@ -1497,18 +1526,7 @@ fn main() -> Result<()> {
             no_device,
             sim_device,
             bootstrap_path,
-        } => {
-            daemon_start(
-                port,
-                None,
-                device,
-                ble,
-                no_device,
-                sim_device,
-                bootstrap_path,
-            )?;
-            start_gateway(port)
-        }
+        } => start_local_stack(port, device, ble, no_device, sim_device, bootstrap_path),
         Commands::Daemon { cmd } => match cmd {
             DaemonCmd::Start {
                 port,

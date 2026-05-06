@@ -69,7 +69,7 @@ For headless or CLI-first deployments, including macOS development hosts and Lin
 emwaver start
 ```
 
-`emwaver start` starts the Rust daemon host in the background, then starts the localhost gateway in the foreground. The browser connects to the gateway, and the gateway forwards scripts and UI events to the daemon host over `/v1/ws`:
+`emwaver start` starts the Rust daemon host in the background, then starts the localhost gateway in the foreground. If `emwaver start` created the daemon, it stops that daemon when the gateway exits. The browser connects to the gateway, and the gateway forwards scripts and UI events to the daemon host over `/v1/ws`:
 
 ```text
 localhost browser UI
