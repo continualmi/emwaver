@@ -182,6 +182,9 @@ struct ContentView: View {
                     .transition(.opacity)
                 }
             }
+            .overlay(alignment: .top) {
+                Divider()
+            }
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
