@@ -131,6 +131,9 @@ public struct ScriptsRootView: View {
                         onRequestUpgrade: onRequestAgentUpgrade
                     )
                     .frame(width: agentPanelWidth)
+                    .overlay(alignment: .top) {
+                        Divider()
+                    }
                 }
                 .transition(.move(edge: .trailing))
                 .zIndex(1)
@@ -1066,52 +1069,6 @@ public struct ScriptsRootView: View {
                 if let agentLeadingToolbarItem {
                     agentLeadingToolbarItem
                 }
-
-                Menu {
-                    Button {
-                        agentViewModel.newConversation()
-                    } label: {
-                        Label("New Chat", systemImage: "plus.message")
-                    }
-
-                    if !agentViewModel.conversations.isEmpty {
-                        Divider()
-
-                        ForEach(agentViewModel.conversations) { conv in
-                            Button {
-                                agentViewModel.selectConversation(conv.id)
-                            } label: {
-                                HStack {
-                                    Text(conv.title)
-                                    if agentViewModel.selectedConversationId == conv.id {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-
-                        if let selected = agentViewModel.selectedConversationId {
-                            Divider()
-                            Button(role: .destructive) {
-                                agentViewModel.deleteConversation(selected)
-                            } label: {
-                                Label("Delete This Chat", systemImage: "trash")
-                            }
-                        }
-                    }
-
-                    Divider()
-
-                    Button {
-                        agentViewModel.clear()
-                    } label: {
-                        Label("Clear Messages", systemImage: "text.badge.xmark")
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .help("Agent options")
             }
         }
         #endif
@@ -1243,6 +1200,48 @@ public struct ScriptsRootView: View {
                             openSettings()
                         }
                     }
+
+                    #if os(macOS)
+                    if showingAgentPanel {
+                        Divider()
+
+                        Button {
+                            agentViewModel.newConversation()
+                        } label: {
+                            Label("New Agent Chat", systemImage: "plus.message")
+                        }
+
+                        if !agentViewModel.conversations.isEmpty {
+                            ForEach(agentViewModel.conversations) { conv in
+                                Button {
+                                    agentViewModel.selectConversation(conv.id)
+                                } label: {
+                                    HStack {
+                                        Text(conv.title)
+                                        if agentViewModel.selectedConversationId == conv.id {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+
+                            if let selected = agentViewModel.selectedConversationId {
+                                Button(role: .destructive) {
+                                    agentViewModel.deleteConversation(selected)
+                                } label: {
+                                    Label("Delete Agent Chat", systemImage: "trash")
+                                }
+                            }
+                        }
+
+                        Button {
+                            agentViewModel.clear()
+                        } label: {
+                            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
+                        }
+                    }
+                    #endif
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
