@@ -183,15 +183,14 @@ struct ContentView: View {
                 Button {
                     appRouter.isDeviceSheetPresented = true
                 } label: {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         Image(systemName: toolbarDeviceStatus.icon)
                             .imageScale(.medium)
-                            .frame(width: 14, alignment: .center)
+                            .frame(width: 16, alignment: .center)
 
                         Text(toolbarDeviceStatus.text)
                     }
-                    .padding(.leading, 6)
-                    .padding(.trailing, 2)
+                    .padding(.horizontal, 8)
                 }
                 .buttonStyle(.plain)
                 .help("Device / connection options")
