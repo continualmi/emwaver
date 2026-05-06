@@ -8,6 +8,7 @@ use boa_engine::{
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tracing::error;
 
 use crate::ui_tree::UiNode;
@@ -31,7 +32,12 @@ pub struct Engine {
 #[derive(Default)]
 struct TimerRegistry {
     next_id: u64,
-    callbacks: HashMap<u64, JsValue>,
+    timers: HashMap<u64, TimerEntry>,
+}
+
+struct TimerEntry {
+    due_at: Instant,
+    callback: JsValue,
 }
 
 impl Engine {
@@ -118,11 +124,6 @@ impl Engine {
         }
 
         // setTimeout(callback, ms) / clearTimeout(id)
-        //
-        // The native Apple host provides timer execution for every(). The Rust
-        // daemon currently records timers so scripts can install long-running
-        // loops without failing during startup; daemon timer pumping is kept as
-        // a separate runtime concern.
         {
             let timers = timeouts.clone();
             let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
@@ -132,10 +133,22 @@ impl Engine {
                         return Ok(JsValue::new(0));
                     }
 
+                    let delay_ms = args
+                        .get(1)
+                        .and_then(|v| v.as_number())
+                        .unwrap_or(0.0)
+                        .max(0.0);
+
                     let mut timers = timers.lock().unwrap();
                     timers.next_id = timers.next_id.saturating_add(1).max(1);
                     let id = timers.next_id;
-                    timers.callbacks.insert(id, callback);
+                    timers.timers.insert(
+                        id,
+                        TimerEntry {
+                            due_at: Instant::now() + Duration::from_millis(delay_ms.round() as u64),
+                            callback,
+                        },
+                    );
                     Ok(JsValue::new(id as f64))
                 })
             })
@@ -154,7 +167,7 @@ impl Engine {
                 NativeFunction::from_closure(move |_this, args, _ctx| {
                     let id = args.get(0).and_then(|v| v.as_number()).unwrap_or(0.0) as u64;
                     if id != 0 {
-                        timers.lock().unwrap().callbacks.remove(&id);
+                        timers.lock().unwrap().timers.remove(&id);
                     }
                     Ok(JsValue::undefined())
                 })
@@ -271,7 +284,50 @@ impl Engine {
     }
 
     pub fn pending_timeout_count(&self) -> usize {
-        self.timeouts.lock().unwrap().callbacks.len()
+        self.timeouts.lock().unwrap().timers.len()
+    }
+
+    pub fn next_timer_due_in(&self) -> Option<Duration> {
+        let timers = self.timeouts.lock().unwrap();
+        let next_due = timers.timers.values().map(|entry| entry.due_at).min()?;
+        Some(next_due.saturating_duration_since(Instant::now()))
+    }
+
+    pub fn pump_due_timers(&self, max_callbacks: usize) -> Result<usize> {
+        let mut ran = 0usize;
+        for _ in 0..max_callbacks {
+            let due = {
+                let mut timers = self.timeouts.lock().unwrap();
+                let Some((&id, _)) = timers
+                    .timers
+                    .iter()
+                    .filter(|(_, entry)| entry.due_at <= Instant::now())
+                    .min_by_key(|(_, entry)| entry.due_at)
+                else {
+                    break;
+                };
+                timers.timers.remove(&id).map(|entry| entry.callback)
+            };
+
+            let Some(callback) = due else {
+                break;
+            };
+            let Some(fobj) = callback.as_object().cloned() else {
+                continue;
+            };
+
+            let mut ctx = self.ctx.lock().unwrap();
+            let this = JsValue::undefined();
+            fobj.call(&this, &[], &mut ctx)
+                .map_err(map_js_err)
+                .map(|_| ())
+                .map_err(|e| {
+                    error!("timer callback error: {e:#}");
+                    e
+                })?;
+            ran += 1;
+        }
+        Ok(ran)
     }
 }
 
@@ -442,5 +498,54 @@ mod tests {
             .dispatch_ui_event("missing", vec![])
             .expect_err("unknown handler");
         assert_eq!(err.to_string(), "unknown_handler_token");
+    }
+
+    #[test]
+    fn set_timeout_runs_when_pumped() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"setTimeout(function() {
+                    _scriptRender(JSON.stringify({
+                        id: "root",
+                        type: "text",
+                        props: { text: "timer" }
+                    }));
+                }, 0);"#,
+            )
+            .expect("schedule timer");
+
+        assert_eq!(engine.pending_timeout_count(), 1);
+        assert_eq!(engine.pump_due_timers(8).expect("pump timers"), 1);
+        assert_eq!(engine.pending_timeout_count(), 0);
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("timer")
+        );
+    }
+
+    #[test]
+    fn clear_timeout_cancels_timer() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let engine = Engine::new("", command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"var id = setTimeout(function() {
+                    _scriptRender(JSON.stringify({ id: "root", type: "text" }));
+                }, 0);
+                clearTimeout(id);"#,
+            )
+            .expect("schedule and cancel timer");
+
+        assert_eq!(engine.pending_timeout_count(), 0);
+        assert_eq!(engine.pump_due_timers(8).expect("pump timers"), 0);
+        assert!(engine.latest_tree.lock().unwrap().is_none());
     }
 }

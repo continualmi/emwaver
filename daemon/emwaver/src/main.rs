@@ -7,6 +7,7 @@ use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
 use std::fs::OpenOptions;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
@@ -1240,6 +1241,11 @@ fn daemon_serve(
 fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge>) -> Result<()> {
     let (mut ws, _response) =
         connect(url).with_context(|| format!("failed to connect to local gateway at {url}"))?;
+    if let MaybeTlsStream::Plain(stream) = ws.get_mut() {
+        stream
+            .set_read_timeout(Some(Duration::from_millis(20)))
+            .context("failed to set daemon host read timeout")?;
+    }
 
     ws.send(Message::Text(
         serde_json::json!({
@@ -1258,7 +1264,22 @@ fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge
     let mut rev: u64 = 0;
 
     loop {
-        let msg = ws.read().context("failed reading gateway host message")?;
+        let msg = match ws.read() {
+            Ok(msg) => msg,
+            Err(tungstenite::Error::Io(err))
+                if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                if let (Some(engine), Some(script_id)) =
+                    (active_engine.as_ref(), active_script_id.as_deref())
+                {
+                    if pump_engine_timers(&mut ws, engine, script_id, &mut rev)? > 0 {
+                        continue;
+                    }
+                }
+                continue;
+            }
+            Err(err) => return Err(err).context("failed reading gateway host message"),
+        };
         let Message::Text(text) = msg else {
             continue;
         };
@@ -1366,7 +1387,27 @@ fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge
             }
             _ => {}
         }
+
+        if let (Some(engine), Some(script_id)) =
+            (active_engine.as_ref(), active_script_id.as_deref())
+        {
+            pump_engine_timers(&mut ws, engine, script_id, &mut rev)?;
+        }
     }
+}
+
+fn pump_engine_timers(
+    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+    engine: &Engine,
+    script_id: &str,
+    rev: &mut u64,
+) -> Result<usize> {
+    let ran = engine.pump_due_timers(32)?;
+    if ran > 0 {
+        *rev += 1;
+        send_ui_snapshot(ws, engine, script_id, *rev)?;
+    }
+    Ok(ran)
 }
 
 fn send_host_device_status(
