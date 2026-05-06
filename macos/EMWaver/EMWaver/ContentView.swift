@@ -34,8 +34,7 @@ struct ContentView: View {
         if device.isConnected {
             return ("cable.connector", currentBoardDisplayName)
         }
-        if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame,
-           firmwareUpdater.espBootloaderConnected {
+        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
             return ("cpu", "ESP Bootloader")
         }
         if firmwareUpdater.dfuConnected {
@@ -45,7 +44,10 @@ struct ContentView: View {
     }
 
     private var currentBoardType: String {
-        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+            return "esp32s3"
+        }
+        return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
 
     private var currentBoardDisplayName: String {

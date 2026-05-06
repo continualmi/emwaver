@@ -9,7 +9,7 @@ struct DeviceConnectionSheet: View {
         if device.isConnected {
             return ("Connected", "cable.connector")
         }
-        if isEspBoard && firmwareUpdater.espBootloaderConnected {
+        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
             return ("ESP Bootloader", "cpu")
         }
         if firmwareUpdater.dfuConnected {
@@ -23,10 +23,15 @@ struct DeviceConnectionSheet: View {
         if let port = device.connectedPortName, !port.isEmpty {
             items.append(port)
         }
+        if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
+            items.append(port)
+        }
         if device.isConnected, let version = device.deviceEmwaverVersion, !version.isEmpty {
             items.append("EMWaver \(version)")
         }
-        if device.isConnected {
+        if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
+            items.append("ESP32-S3")
+        } else if device.isConnected {
             if needsFirmwareInstall {
                 items.append("Needs firmware")
             } else {
@@ -37,7 +42,10 @@ struct DeviceConnectionSheet: View {
     }
 
     private var currentBoardType: String {
-        device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+            return "esp32s3"
+        }
+        return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
 
     private var isEspBoard: Bool {
@@ -118,6 +126,9 @@ struct DeviceConnectionSheet: View {
     private var deviceStatusText: String {
         if needsFirmwareInstall {
             return "This device can be updated with managed EMWaver firmware for the best local runtime compatibility."
+        }
+        if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
+            return "This ESP32-S3 is in bootloader mode and can be flashed with the latest bundled EMWaver firmware."
         }
         return "This device is ready for local scripts and hardware control."
     }
