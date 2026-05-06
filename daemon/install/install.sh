@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PREFIX="${EMWAVER_INSTALL_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
+SHARE_DIR="$PREFIX/share/emwaver"
+GATEWAY_SHARE_DIR="$SHARE_DIR/gateway"
 INSTALL_SERVICE="${EMWAVER_INSTALL_SERVICE:-0}"
 SERVICE_ARGS="${EMWAVER_SERVICE_ARGS:-}"
 
@@ -46,6 +48,18 @@ else
   (cd "$ROOT/gateway" && npm install)
 fi
 (cd "$ROOT/gateway" && npm run build)
+
+echo
+echo "== Install gateway assets =="
+rm -rf "$GATEWAY_SHARE_DIR"
+mkdir -p "$GATEWAY_SHARE_DIR"
+cp -f "$ROOT/gateway/package.json" "$GATEWAY_SHARE_DIR/package.json"
+if [[ -f "$ROOT/gateway/package-lock.json" ]]; then
+  cp -f "$ROOT/gateway/package-lock.json" "$GATEWAY_SHARE_DIR/package-lock.json"
+fi
+cp -R "$ROOT/gateway/dist" "$GATEWAY_SHARE_DIR/dist"
+(cd "$GATEWAY_SHARE_DIR" && npm install --omit=dev --ignore-scripts)
+echo "installed gateway: $GATEWAY_SHARE_DIR"
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo

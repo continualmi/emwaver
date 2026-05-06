@@ -1288,6 +1288,19 @@ fn repo_root() -> PathBuf {
 }
 
 fn gateway_dir() -> PathBuf {
+    if let Some(dir) = env_trim("EMWAVER_GATEWAY_DIR") {
+        return PathBuf::from(dir);
+    }
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(prefix) = exe.parent().and_then(Path::parent) {
+            let packaged = prefix.join("share").join("emwaver").join("gateway");
+            if packaged.join("dist").join("server.mjs").exists() {
+                return packaged;
+            }
+        }
+    }
+
     repo_root().join("gateway")
 }
 
@@ -1300,12 +1313,18 @@ fn default_bootstrap_path() -> PathBuf {
 
 fn start_gateway(port: Option<u16>) -> Result<()> {
     let dir = gateway_dir();
-    if !dir.join("package.json").exists() {
-        anyhow::bail!("gateway package not found at {}", dir.display());
+    let package_json = dir.join("package.json");
+    let built_server = dir.join("dist").join("server.mjs");
+    let built_client = dir.join("dist").join("client").join("index.html");
+    if !package_json.exists() && (!built_server.exists() || !built_client.exists()) {
+        anyhow::bail!(
+            "gateway package or built assets not found at {}",
+            dir.display()
+        );
     }
 
     let node_modules = dir.join("node_modules");
-    if !node_modules.exists() {
+    if !node_modules.exists() && package_json.exists() {
         println!(
             "gateway dependencies missing; running `npm ci` in {}",
             dir.display()
@@ -1321,9 +1340,10 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
         }
     }
 
-    let built_server = dir.join("dist").join("server.mjs");
-    let built_client = dir.join("dist").join("client").join("index.html");
     if !built_server.exists() || !built_client.exists() {
+        if !package_json.exists() {
+            anyhow::bail!("gateway built assets missing at {}", dir.display());
+        }
         println!(
             "gateway build missing; running `npm run build` in {}",
             dir.display()
