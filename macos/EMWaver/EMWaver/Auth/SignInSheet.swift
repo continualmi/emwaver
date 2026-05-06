@@ -3,7 +3,11 @@ import SwiftUI
 struct SignInSheet: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @State private var apiKey: String = ""
+
+    private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
+    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -15,7 +19,19 @@ struct SignInSheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            SecureField("emw_sk_...", text: $apiKey)
+            HStack(spacing: 10) {
+                Button("Create Key") {
+                    openURL(mgptApiURL)
+                }
+                .buttonStyle(.bordered)
+
+                Button("Buy Credits") {
+                    openURL(accountURL)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            SecureField("cmi_live_...", text: $apiKey)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
 

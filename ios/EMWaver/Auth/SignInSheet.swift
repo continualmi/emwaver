@@ -5,20 +5,36 @@ import UIKit
 
 struct SignInSheet: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @EnvironmentObject private var auth: AuthenticationManager
     @State private var apiKey = ""
 
+    private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
+    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Agent Key")
+            Text("Agent API Key")
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Store an optional Agent API key on this device. Local scripts and hardware control work without it.")
+            Text("Create a Continual API key, add credits if needed, then store the key on this device. Local scripts and hardware control work without it.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 
-            SecureField("Agent API key", text: $apiKey)
+            HStack(spacing: 10) {
+                Button("Create Key") {
+                    openURL(mgptApiURL)
+                }
+                .buttonStyle(.bordered)
+
+                Button("Buy Credits") {
+                    openURL(accountURL)
+                }
+                .buttonStyle(.bordered)
+            }
+
+            SecureField("cmi_live_...", text: $apiKey)
                 .textContentType(.password)
                 .autocorrectionDisabled()
                 .textInputAutocapitalization(.never)

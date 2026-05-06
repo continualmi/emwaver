@@ -61,7 +61,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func newConversation() {
         guard endpointProvider != nil else {
-            lastError = "Agent API endpoint is not configured yet."
+            lastError = "Add a Continual API key to enable Agent replies."
             return
         }
         startLocalConversation()
@@ -79,7 +79,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func deleteConversation(_ id: UUID) {
         guard endpointProvider != nil else {
-            lastError = "Agent API endpoint is not configured yet."
+            lastError = "Add a Continual API key to enable Agent replies."
             return
         }
         conversations.removeAll { $0.id == id }
@@ -102,7 +102,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func sendAgent(userText text: String) {
         guard endpointProvider != nil else {
-            lastError = "Agent API endpoint is not configured yet."
+            lastError = "Add a Continual API key to enable Agent replies."
             return
         }
 
@@ -152,7 +152,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func runAgentEndpointRequest(userPrompt: String, placeholderId: UUID) async throws -> String {
         guard let provider = endpointProvider, let ctx = provider(), !ctx.accessToken.isEmpty else {
-            throw AgentEndpointError.serverError("Agent API endpoint is not configured yet.")
+            throw AgentEndpointError.serverError("Add a Continual API key to enable Agent replies.")
         }
         let api = AgentEndpointAPI()
         let universe = try await ensureUniverseId(api: api, endpoint: ctx.baseURL, apiKey: ctx.accessToken)

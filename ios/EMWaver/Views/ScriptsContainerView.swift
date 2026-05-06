@@ -25,6 +25,10 @@ struct ScriptsContainerView: View {
                 hostStatusSink: { running, name in
                     // Treat preview showing as script running on iOS.
                     hostSessions.setScriptStatus(running: running, activeScriptName: name)
+                },
+                agentEnabled: auth.isSignedIn,
+                onRequestAgentUpgrade: {
+                    auth.isSignInSheetPresented = true
                 }
             )
             .toolbar {

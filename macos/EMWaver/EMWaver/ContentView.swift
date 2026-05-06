@@ -113,8 +113,10 @@ struct ContentView: View {
                         // Treat "preview showing" as "script running" on macOS.
                         hostSessions.setScriptStatus(running: running, activeScriptName: name)
                     },
-                    agentEnabled: true,
-                    onRequestAgentUpgrade: nil,
+                    agentEnabled: auth.isSignedIn,
+                    onRequestAgentUpgrade: {
+                        auth.isSignInSheetPresented = true
+                    },
                     onRequestOpenSettings: {
                         showingSettings = true
                     }
