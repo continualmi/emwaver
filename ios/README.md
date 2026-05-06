@@ -46,8 +46,10 @@ Current guidance:
 - `HostSessionManager.swift` (local script-status state only).
 
 Responsibilities:
-- USB device communication,
+- local device communication over USB MIDI and ESP32 BLE,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
+
+The iOS transport keeps the historical `USBManager` API as the app-facing device facade. USB MIDI remains preferred when a wired CoreMIDI source/destination is available. When no wired device is found, the manager scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same EMWaver SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 
 ## 2.3 Views
 

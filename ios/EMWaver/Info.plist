@@ -4,6 +4,8 @@
 <dict>
 	<key>AgentEndpointURL</key>
 	<string></string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>EMWaver uses Bluetooth to connect to nearby ESP32 boards for local scripts and hardware control.</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

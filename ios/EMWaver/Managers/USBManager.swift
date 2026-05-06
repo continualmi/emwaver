@@ -5,6 +5,7 @@
  */
 
 import Foundation
+import CoreBluetooth
 import CoreMIDI
 import SwiftUI
 import os
@@ -57,7 +58,7 @@ struct SamplerLanePolicy {
 
 /// NOTE: Despite the historical name, this is now a **USB MIDI (CoreMIDI)** transport.
 /// We keep the `USBManager` API surface to minimize churn across the iOS codebase.
-final class USBManager: ObservableObject {
+final class USBManager: NSObject, ObservableObject {
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
@@ -65,7 +66,17 @@ final class USBManager: ObservableObject {
     // Legacy constant alias for code using it (usually referring to the lane/packet size)
     private static let packetSizeBytes: Int = 18
     
-    private static let log = Logger(subsystem: "com.emwaver", category: "usb-midi")
+    private static let log = Logger(subsystem: "com.emwaver", category: "device-transport")
+
+    private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
+    private static let bleCommandCharacteristicUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
+    private static let bleNotifyCharacteristicUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
+
+    private enum ActiveTransport {
+        case none
+        case usbMidi
+        case ble
+    }
 
     private func dbg(_ msg: String) {
         #if DEBUG
@@ -108,6 +119,14 @@ final class USBManager: ObservableObject {
 
     private var virtualDestination: MIDIEndpointRef = 0
 
+    // MARK: - BLE plumbing
+
+    private var centralManager: CBCentralManager?
+    private var activeTransport: ActiveTransport = .none
+    private var connectedPeripheral: CBPeripheral?
+    private var commandCharacteristic: CBCharacteristic?
+    private var notifyCharacteristic: CBCharacteristic?
+
     // SysEx receive accumulator (CoreMIDI may chunk messages)
     private var sysexAccumulator = UsbMidiSysexAccumulator()
     private var isSamplerStreamingActive = false
@@ -119,11 +138,14 @@ final class USBManager: ObservableObject {
 
     // MARK: - Init
 
+    override
     init() {
         bufferQueue.setSpecific(key: bufferQueueKey, value: ())
+        super.init()
         dbg("USBManager init")
         midiQueue.async {
             self.ensureClient()
+            self.ensureBleCentral()
             self.refreshPortsInternal()
         }
     }
@@ -238,19 +260,25 @@ final class USBManager: ObservableObject {
     func startScan() {
         midiQueue.async {
             self.ensureClient()
+            self.ensureBleCentral()
             DispatchQueue.main.async { self.isScanning = true }
 
             self.refreshPortsInternal()
 
             // Auto-connect immediately; `availablePorts` updates on the main queue and may lag.
-            self.connectToFirstPortInternal()
+            if !self.connectToFirstPortInternal() {
+                self.startBleScanInternal()
+            }
 
             DispatchQueue.main.async { self.isScanning = false }
         }
     }
 
     func stopScan() {
-        DispatchQueue.main.async { self.isScanning = false }
+        midiQueue.async {
+            self.centralManager?.stopScan()
+            DispatchQueue.main.async { self.isScanning = false }
+        }
     }
 
     func disconnect() {
@@ -265,7 +293,7 @@ final class USBManager: ObservableObject {
     /// Never touches `lastErrorText`.
     private func sendCommandBestEffort(_ command: Data, timeout: Int) -> Data? {
         // Avoid depending on the @Published `isConnected` flag here; it may lag behind CoreMIDI state.
-        guard connectedDestination != 0 else { return nil }
+        guard activeTransport == .ble || connectedDestination != 0 else { return nil }
 
         // Drop any stale RX packets so next_rx_packet returns this command's response.
         withBufferQueueSync {
@@ -280,7 +308,7 @@ final class USBManager: ObservableObject {
         out.reserveCapacity(Self.packetSizeBytes)
 
         while out.count < Self.packetSizeBytes {
-            if connectedDestination == 0 { return nil }
+            if activeTransport != .ble && connectedDestination == 0 { return nil }
 
             let nextPacket = withBufferQueueSync { NativeBufferRust.nextRxPacket() }
             if let pkt = nextPacket {
@@ -300,11 +328,11 @@ final class USBManager: ObservableObject {
     }
 
     private func sendPacketBestEffortSync(_ data: Data) {
-        guard connectedDestination != 0 else { return }
+        guard activeTransport == .ble || connectedDestination != 0 else { return }
 
         // Ensure we send on the MIDI queue, but synchronously for determinism.
         midiQueue.sync {
-            guard self.connectedDestination != 0 else { return }
+            guard self.activeTransport == .ble || self.connectedDestination != 0 else { return }
             guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else { return }
 
             self.withBufferQueueSync {
@@ -343,22 +371,33 @@ final class USBManager: ObservableObject {
             return
         }
 
-        let st = sendSysex(sysex, to: connectedDestination)
-        if st != noErr {
-            setError("MIDISend failed: \(st)")
+        switch activeTransport {
+        case .usbMidi:
+            let st = sendSysex(sysex, to: connectedDestination)
+            if st != noErr {
+                setError("MIDISend failed: \(st)")
+            }
+        case .ble:
+            sendBleSysex(sysex, reportErrors: true)
+        case .none:
+            setError("Cannot send packet: Not connected")
         }
     }
 
     /// Best-effort send that never updates `lastErrorText`.
     private func sendSuperframeBestEffort(_ superframe: Data) {
-        guard connectedDestination != 0 else { return }
+        guard activeTransport == .ble || connectedDestination != 0 else { return }
         guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else { return }
-        _ = sendSysex(sysex, to: connectedDestination)
+        if activeTransport == .ble {
+            sendBleSysex(sysex, reportErrors: false)
+        } else {
+            _ = sendSysex(sysex, to: connectedDestination)
+        }
     }
 
     @objc func sendPacket(_ data: Data) {
         midiQueue.async {
-            guard self.isConnected, self.connectedDestination != 0 else {
+            guard self.isConnected, self.activeTransport == .ble || self.connectedDestination != 0 else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -749,18 +788,20 @@ final class USBManager: ObservableObject {
         }
     }
 
-    private func connectToFirstPortInternal() {
+    @discardableResult
+    private func connectToFirstPortInternal() -> Bool {
         let candidates = listPortCandidatesInternal()
         let chosen = candidates.first(where: { $0.name.localizedCaseInsensitiveContains("emwaver") })
             ?? candidates.first(where: { !$0.name.localizedCaseInsensitiveContains("network") })
             ?? candidates.first
         guard let chosen else {
             dbg("connect: no port candidates")
-            return
+            return false
         }
         dbg("connect: chosen=\(chosen.name)")
 
         disconnectInternal()
+        centralManager?.stopScan()
 
         connectedSource = chosen.source
         connectedDestination = chosen.destination
@@ -770,22 +811,31 @@ final class USBManager: ObservableObject {
             setError("MIDIPortConnectSource failed: \(st)")
             connectedSource = 0
             connectedDestination = 0
-            return
+            return false
         }
 
+        activeTransport = .usbMidi
         DispatchQueue.main.async {
             self.connectedPortName = chosen.name
             self.isConnected = true
             self.lastErrorText = nil
         }
+        return true
     }
 
     private func disconnectInternal() {
         if connectedSource != 0 {
             _ = MIDIPortDisconnectSource(inPort, connectedSource)
         }
+        if let peripheral = connectedPeripheral {
+            centralManager?.cancelPeripheralConnection(peripheral)
+        }
         connectedSource = 0
         connectedDestination = 0
+        connectedPeripheral = nil
+        commandCharacteristic = nil
+        notifyCharacteristic = nil
+        activeTransport = .none
         isSamplerStreamingActive = false
 
         DispatchQueue.main.async {
@@ -892,6 +942,41 @@ final class USBManager: ObservableObject {
             dbg("sendSysex: MIDISend failed st=\(st)")
         }
         return st
+    }
+
+    private func ensureBleCentral() {
+        guard centralManager == nil else { return }
+        centralManager = CBCentralManager(delegate: self, queue: midiQueue)
+    }
+
+    private func startBleScanInternal() {
+        ensureBleCentral()
+        guard centralManager?.state == .poweredOn else {
+            dbg("BLE scan deferred: central not powered on")
+            return
+        }
+        guard activeTransport != .usbMidi else { return }
+
+        dbg("BLE scan: service=\(Self.bleServiceUUID.uuidString)")
+        centralManager?.scanForPeripherals(withServices: [Self.bleServiceUUID], options: [
+            CBCentralManagerScanOptionAllowDuplicatesKey: false
+        ])
+    }
+
+    private func sendBleSysex(_ sysex: Data, reportErrors: Bool) {
+        guard let peripheral = connectedPeripheral, let characteristic = commandCharacteristic else {
+            if reportErrors { setError("BLE send failed: command characteristic unavailable") }
+            return
+        }
+
+        let maxWriteLength = max(20, peripheral.maximumWriteValueLength(for: .withResponse))
+        var offset = 0
+        while offset < sysex.count {
+            let end = min(offset + maxWriteLength, sysex.count)
+            let chunk = sysex.subdata(in: offset..<end)
+            peripheral.writeValue(chunk, for: characteristic, type: .withResponse)
+            offset = end
+        }
     }
 
     private func handlePacketDatas(_ packets: [Data]) {
@@ -1046,6 +1131,133 @@ final class USBManager: ObservableObject {
 
         mgr.midiQueue.async {
             mgr.handlePacketDatas(packets)
+        }
+    }
+}
+
+extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        midiQueue.async {
+            self.dbg("BLE central state=\(central.state.rawValue)")
+            if central.state == .poweredOn, !self.isConnected {
+                self.startBleScanInternal()
+            }
+        }
+    }
+
+    func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        midiQueue.async {
+            guard self.activeTransport != .usbMidi else { return }
+            let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+            let name = peripheral.name ?? advertisedName ?? "EMWaver BLE"
+            guard name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil else { return }
+
+            self.dbg("BLE discovered: \(name) rssi=\(RSSI)")
+            self.centralManager?.stopScan()
+            self.connectedPeripheral = peripheral
+            self.commandCharacteristic = nil
+            self.notifyCharacteristic = nil
+            peripheral.delegate = self
+            central.connect(peripheral)
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        midiQueue.async {
+            self.dbg("BLE connected: \(peripheral.name ?? peripheral.identifier.uuidString)")
+            peripheral.discoverServices([Self.bleServiceUUID])
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        midiQueue.async {
+            self.dbg("BLE connect failed: \(error?.localizedDescription ?? "unknown error")")
+            if self.activeTransport != .usbMidi {
+                self.startBleScanInternal()
+            }
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        midiQueue.async {
+            guard self.connectedPeripheral?.identifier == peripheral.identifier else { return }
+            self.dbg("BLE disconnected: \(error?.localizedDescription ?? "clean")")
+            self.connectedPeripheral = nil
+            self.commandCharacteristic = nil
+            self.notifyCharacteristic = nil
+            if self.activeTransport == .ble {
+                self.activeTransport = .none
+                self.isSamplerStreamingActive = false
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                }
+                self.startBleScanInternal()
+            }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        midiQueue.async {
+            if let error {
+                self.setError("BLE service discovery failed: \(error.localizedDescription)")
+                return
+            }
+            guard let service = peripheral.services?.first(where: { $0.uuid == Self.bleServiceUUID }) else {
+                self.setError("BLE service discovery failed: EMWaver service missing")
+                return
+            }
+            peripheral.discoverCharacteristics([
+                Self.bleCommandCharacteristicUUID,
+                Self.bleNotifyCharacteristicUUID
+            ], for: service)
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        midiQueue.async {
+            if let error {
+                self.setError("BLE characteristic discovery failed: \(error.localizedDescription)")
+                return
+            }
+
+            for characteristic in service.characteristics ?? [] {
+                if characteristic.uuid == Self.bleCommandCharacteristicUUID {
+                    self.commandCharacteristic = characteristic
+                } else if characteristic.uuid == Self.bleNotifyCharacteristicUUID {
+                    self.notifyCharacteristic = characteristic
+                    peripheral.setNotifyValue(true, for: characteristic)
+                }
+            }
+
+            guard self.commandCharacteristic != nil else {
+                self.setError("BLE characteristic discovery failed: command characteristic missing")
+                return
+            }
+
+            self.activeTransport = .ble
+            DispatchQueue.main.async {
+                self.connectedPortName = peripheral.name ?? "EMWaver BLE"
+                self.isConnected = true
+                self.lastErrorText = nil
+                self.isScanning = false
+            }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        midiQueue.async {
+            if let error {
+                self.dbg("BLE notify failed: \(error.localizedDescription)")
+                return
+            }
+            guard characteristic.uuid == Self.bleNotifyCharacteristicUUID, let data = characteristic.value else { return }
+            self.feedMidiBytes(data)
         }
     }
 }
