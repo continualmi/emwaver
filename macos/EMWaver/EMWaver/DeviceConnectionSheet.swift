@@ -72,6 +72,7 @@ struct DeviceConnectionSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 overviewCard
+                bleCard
             }
             .padding(24)
         }
@@ -132,6 +133,64 @@ struct DeviceConnectionSheet: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var bleCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Bluetooth LE", systemImage: "antenna.radiowaves.left.and.right")
+                    .font(.headline)
+
+                Spacer()
+
+                Text(bleStatusText)
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(device.isBleScanning ? Color.green : .secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Color.secondary.opacity(0.12)))
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Label("Bluetooth: \(device.bluetoothStateText)", systemImage: "dot.radiowaves.left.and.right")
+                Label("Auto connect: \(device.autoConnectEnabled ? "On" : "Off")", systemImage: "arrow.triangle.2.circlepath")
+                Label(device.isBleScanning ? "Scanning for EMWaver BLE advertisements" : "BLE scan is stopped", systemImage: device.isBleScanning ? "wave.3.right" : "pause")
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            HStack(spacing: 10) {
+                Button(device.isBleScanning ? "Stop BLE scan" : "Start BLE scan") {
+                    if device.isBleScanning {
+                        device.stopBleScan()
+                    } else {
+                        device.startBleScan()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(device.isConnected || device.bluetoothStateText != "On")
+
+                Toggle("Auto connect", isOn: $device.autoConnectEnabled)
+                    .toggleStyle(.checkbox)
+                    .disabled(device.isConnected)
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var bleStatusText: String {
+        if device.connectedTransportKind == "BLE" {
+            return "Connected"
+        }
+        if device.isBleScanning {
+            return "Scanning"
+        }
+        if device.bluetoothStateText != "On" {
+            return device.bluetoothStateText
+        }
+        return "Idle"
     }
 
     private var deviceStatusText: String {

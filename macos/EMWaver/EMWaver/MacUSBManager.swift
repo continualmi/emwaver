@@ -39,6 +39,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         didSet {
             if autoConnectEnabled {
                 refreshPorts()
+            } else {
+                stopBleScan()
             }
         }
     }
@@ -47,6 +49,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var lastDetectedBoardType: String? = nil
     @Published var connectedTransportKind: String? = nil
     @Published var isBleScanning: Bool = false
+    @Published var bluetoothStateText: String = "Starting"
 
     private enum ActiveTransport {
         case none
@@ -182,6 +185,22 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     func disconnect() {
         midiQueue.async {
             self.disconnectInternal()
+        }
+    }
+
+    func startBleScan() {
+        midiQueue.async {
+            DispatchQueue.main.async {
+                self.autoConnectEnabled = true
+            }
+            guard !self.isTransportConnectedInternal() else { return }
+            self.startBleScanInternal(allowWhenAutoConnectDisabled: true)
+        }
+    }
+
+    func stopBleScan() {
+        midiQueue.async {
+            self.stopBleScanInternal()
         }
     }
 
@@ -668,8 +687,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
-    private func startBleScanInternal() {
-        guard autoConnectEnabled else { return }
+    private func startBleScanInternal(allowWhenAutoConnectDisabled: Bool = false) {
+        guard allowWhenAutoConnectDisabled || autoConnectEnabled else { return }
         guard bleCentral?.state == .poweredOn else { return }
         guard blePeripheral == nil || blePeripheral?.state == .disconnected else { return }
         bleCentral?.scanForPeripherals(
@@ -855,12 +874,34 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
         midiQueue.async {
+            DispatchQueue.main.async {
+                self.bluetoothStateText = Self.bluetoothStateDescription(central.state)
+            }
             if central.state == .poweredOn {
                 self.autoConnectIfNeededInternal()
             } else if self.activeTransport == .ble {
                 self.disconnectInternal()
                 self.setError("Bluetooth unavailable")
             }
+        }
+    }
+
+    private static func bluetoothStateDescription(_ state: CBManagerState) -> String {
+        switch state {
+        case .poweredOn:
+            return "On"
+        case .poweredOff:
+            return "Off"
+        case .unauthorized:
+            return "Not authorized"
+        case .unsupported:
+            return "Unsupported"
+        case .resetting:
+            return "Resetting"
+        case .unknown:
+            return "Starting"
+        @unknown default:
+            return "Unknown"
         }
     }
 
