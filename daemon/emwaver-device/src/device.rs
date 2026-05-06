@@ -342,13 +342,14 @@ impl Device {
     }
 
     fn handle_midi_bytes(&self, bytes: &[u8]) {
+        let normalized = normalize_incoming_midi_bytes(bytes);
         // Accumulate SysEx frames from the incoming byte stream.
         // Start at 0xF0, end at 0xF7.
         let mut frames: Vec<Vec<u8>> = Vec::new();
 
         {
             let mut st = self.state.lock().unwrap();
-            for &b in bytes {
+            for &b in &normalized {
                 if b == 0xF0 {
                     st.sysex_buf.clear();
                     st.in_sysex = true;
@@ -404,5 +405,70 @@ impl Device {
             st.response_data = Some(lane.to_vec());
             self.cv.notify_all();
         }
+    }
+}
+
+fn normalize_incoming_midi_bytes(bytes: &[u8]) -> Vec<u8> {
+    if bytes.len() < 4 || bytes.len() % 4 != 0 {
+        return bytes.to_vec();
+    }
+
+    let groups = (bytes.len() / 4).min(16);
+    let mut sysex_cin_count = 0usize;
+    let mut has_sysex_byte = false;
+
+    for g in 0..groups {
+        let offset = g * 4;
+        let cin = bytes[offset] & 0x0f;
+        if (0x4..=0x7).contains(&cin) {
+            sysex_cin_count += 1;
+        }
+
+        let b0 = bytes[offset + 1];
+        let b1 = bytes[offset + 2];
+        let b2 = bytes[offset + 3];
+        if b0 == 0xf0 || b0 == 0xf7 || b1 == 0xf0 || b1 == 0xf7 || b2 == 0xf0 || b2 == 0xf7 {
+            has_sysex_byte = true;
+        }
+    }
+
+    if !has_sysex_byte || sysex_cin_count < 2.max(groups / 2) {
+        return bytes.to_vec();
+    }
+
+    let mut out = Vec::with_capacity(bytes.len());
+    for chunk in bytes.chunks_exact(4) {
+        let cin = chunk[0] & 0x0f;
+        match cin {
+            0x4 | 0x7 => out.extend_from_slice(&chunk[1..4]),
+            0x6 => out.extend_from_slice(&chunk[1..3]),
+            0x5 => out.push(chunk[1]),
+            _ => out.extend_from_slice(&chunk[1..4]),
+        }
+    }
+
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_usb_midi_sysex_event_packets() {
+        let raw = [
+            0x04, 0xf0, 0x7d, b'E', 0x04, b'M', b'W', 0x00, 0x05, 0xf7, 0x00, 0x00,
+        ];
+
+        assert_eq!(
+            normalize_incoming_midi_bytes(&raw),
+            vec![0xf0, 0x7d, b'E', b'M', b'W', 0x00, 0xf7]
+        );
+    }
+
+    #[test]
+    fn leaves_plain_midi_bytes_unchanged() {
+        let raw = [0xf0, 0x7d, b'E', b'M', b'W', 0xf7];
+        assert_eq!(normalize_incoming_midi_bytes(&raw), raw);
     }
 }

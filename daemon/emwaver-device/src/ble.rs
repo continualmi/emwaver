@@ -61,9 +61,7 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
     rt.block_on(async move {
         let adapter = first_adapter().await?;
         adapter
-            .start_scan(ScanFilter {
-                services: vec![EMW_BLE_SERVICE_UUID],
-            })
+            .start_scan(ScanFilter::default())
             .await
             .context("failed to start EMWaver BLE scan")?;
         tokio::time::sleep(Duration::from_millis(scan_ms.max(250))).await;
@@ -152,12 +150,17 @@ impl BleDevice {
     fn send_superframe(&self, superframe: &[u8; SUPERFRAME_SIZE]) -> Result<()> {
         let sysex = encode_superframe(superframe);
         self.rt.block_on(async {
+            let write_type = if self
+                .command_characteristic
+                .properties
+                .contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
+            {
+                WriteType::WithoutResponse
+            } else {
+                WriteType::WithResponse
+            };
             self.peripheral
-                .write(
-                    &self.command_characteristic,
-                    &sysex,
-                    WriteType::WithResponse,
-                )
+                .write(&self.command_characteristic, &sysex, write_type)
                 .await
                 .context("BLE command write failed")
         })
@@ -210,9 +213,7 @@ async fn scan_for_emwaver(
     btleplug::api::Characteristic,
 )> {
     adapter
-        .start_scan(ScanFilter {
-            services: vec![EMW_BLE_SERVICE_UUID],
-        })
+        .start_scan(ScanFilter::default())
         .await
         .context("failed to start EMWaver BLE scan")?;
     tokio::time::sleep(Duration::from_millis(scan_ms.max(500))).await;

@@ -1439,7 +1439,29 @@ fn dispatch_gateway_ui_event(engine: &Engine, value: &serde_json::Value) -> Resu
         .with_context(|| format!("ui.event handler not found: {event_name}"))?
         .to_string();
 
-    engine.dispatch_ui_event(&token, vec![payload])
+    engine.dispatch_ui_event(&token, gateway_ui_event_args(event_name, payload))
+}
+
+fn gateway_ui_event_args(event_name: &str, payload: serde_json::Value) -> Vec<serde_json::Value> {
+    if let Some(args) = payload.get("args").and_then(|v| v.as_array()) {
+        return args.clone();
+    }
+
+    if matches!(event_name, "tap" | "close") {
+        return Vec::new();
+    }
+
+    if matches!(event_name, "change" | "submit") {
+        if let Some(value) = payload.get("value") {
+            return vec![value.clone()];
+        }
+    }
+
+    if payload.is_null() {
+        Vec::new()
+    } else {
+        vec![payload]
+    }
 }
 
 fn print_paths() -> Result<()> {
@@ -1935,4 +1957,44 @@ fn run_tui() -> Result<()> {
     terminal.show_cursor()?;
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn gateway_tap_events_match_native_empty_args() {
+        assert!(gateway_ui_event_args("tap", json!({})).is_empty());
+        assert!(gateway_ui_event_args("close", json!({"value": "ignored"})).is_empty());
+    }
+
+    #[test]
+    fn gateway_change_events_match_native_value_arg() {
+        assert_eq!(
+            gateway_ui_event_args("change", json!({"value": "abc"})),
+            vec![json!("abc")]
+        );
+        assert_eq!(
+            gateway_ui_event_args("submit", json!({"value": 42})),
+            vec![json!(42)]
+        );
+    }
+
+    #[test]
+    fn gateway_event_args_can_be_explicit() {
+        assert_eq!(
+            gateway_ui_event_args("custom", json!({"args": ["a", 2, true]})),
+            vec![json!("a"), json!(2), json!(true)]
+        );
+    }
+
+    #[test]
+    fn gateway_custom_events_keep_payload_arg() {
+        assert_eq!(
+            gateway_ui_event_args("viewport", json!({"min": 10, "max": 20})),
+            vec![json!({"min": 10, "max": 20})]
+        );
+    }
 }
