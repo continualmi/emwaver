@@ -77,7 +77,7 @@ struct DeviceConnectionSheet: View {
         }
         .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
         .onAppear {
-            firmwareUpdater.refreshDfuPresence()
+            firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
         }
     }
 

@@ -252,7 +252,7 @@ struct FirmwareUpdateSheet: View {
 
                     HStack(spacing: 10) {
                         Button("Refresh") {
-                            updater.refreshDfuPresence()
+                            updater.refreshDfuPresence(includeEspSerialProbe: true)
                         }
                         .disabled(updater.isFlashing)
 
@@ -309,7 +309,7 @@ struct FirmwareUpdateSheet: View {
         }
         .frame(width: 540, height: 420)
         .onAppear {
-            updater.refreshDfuPresence()
+            updater.refreshDfuPresence(includeEspSerialProbe: true)
         }
     }
 

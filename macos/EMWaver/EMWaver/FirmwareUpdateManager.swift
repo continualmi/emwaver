@@ -196,7 +196,7 @@ final class FirmwareUpdateManager: ObservableObject {
         return "Bundled emwaver.bin"
     }
 
-    func refreshDfuPresence() {
+    func refreshDfuPresence(includeEspSerialProbe: Bool = false) {
         if isFlashing { return }
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
@@ -223,6 +223,8 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.updateError = String(describing: error)
                 }
             }
+
+            guard includeEspSerialProbe else { return }
 
             do {
                 let port = try self.detectEspBootloaderPort()

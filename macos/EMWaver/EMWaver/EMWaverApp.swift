@@ -110,7 +110,7 @@ struct EMWaverApp: App {
                 }
 
                 Button("Refresh Update Mode") {
-                    firmwareUpdater.refreshDfuPresence()
+                    firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
                 }
 
                 if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
