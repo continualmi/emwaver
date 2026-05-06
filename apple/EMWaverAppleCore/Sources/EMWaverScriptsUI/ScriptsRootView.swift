@@ -117,25 +117,19 @@ public struct ScriptsRootView: View {
     public var body: some View {
         ZStack {
             #if os(macOS)
-            primaryContent
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .padding(.trailing, showingAgentPanel ? agentPanelWidth : 0)
+            HStack(spacing: 0) {
+                primaryContent
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-            if showingAgentPanel {
-                HStack(spacing: 0) {
-                    Spacer(minLength: 0)
+                if showingAgentPanel {
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
                         onRequestUpgrade: onRequestAgentUpgrade
                     )
                     .frame(width: agentPanelWidth)
-                    .overlay(alignment: .top) {
-                        Divider()
-                    }
+                    .transition(.move(edge: .trailing))
                 }
-                .transition(.move(edge: .trailing))
-                .zIndex(1)
             }
             #else
             primaryContent
