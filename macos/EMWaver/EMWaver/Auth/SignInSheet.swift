@@ -12,7 +12,6 @@ struct SignInSheet: View {
     @State private var didCopyKey = false
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
-    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -28,14 +27,7 @@ struct SignInSheet: View {
                 Button {
                     openURL(mgptApiURL)
                 } label: {
-                    Label("Open MGPT API Keys", systemImage: "globe")
-                }
-                .buttonStyle(.bordered)
-
-                Button {
-                    openURL(accountURL)
-                } label: {
-                    Label("Open Account & Credits", systemImage: "globe")
+                    Label("MGPT API Platform", systemImage: "globe")
                 }
                 .buttonStyle(.bordered)
             }

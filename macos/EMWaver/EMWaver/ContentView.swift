@@ -29,7 +29,6 @@ struct ContentView: View {
     @State private var autoFirmwarePromptKey: String? = nil
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
-    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -289,13 +288,7 @@ struct ContentView: View {
                 Button {
                     openURL(mgptApiURL)
                 } label: {
-                    Label("Open MGPT API Keys", systemImage: "globe")
-                }
-
-                Button {
-                    openURL(accountURL)
-                } label: {
-                    Label("Open Account & Credits", systemImage: "globe")
+                    Label("MGPT API Platform", systemImage: "globe")
                 }
 
                 Divider()

@@ -7,7 +7,6 @@ struct SettingsView: View {
     @AppStorage(RemoteControlHostService.localGatewayEnabledKey) private var localGatewayEnabled = false
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
-    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
 
     var body: some View {
         NavigationStack {
@@ -17,12 +16,8 @@ struct SettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    Button("Open MGPT API Keys") {
+                    Button("MGPT API Platform") {
                         openURL(mgptApiURL)
-                    }
-
-                    Button("Open Account & Credits") {
-                        openURL(accountURL)
                     }
                 }
 
