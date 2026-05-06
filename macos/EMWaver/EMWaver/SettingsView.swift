@@ -12,7 +12,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Agent") {
-                    Text("Agent replies use the Continual MGPT API. Create a free MGPT account to get 100 free credits and a free API key, then enter the key in EMWaver.")
+                    Text("Add an MGPT API key to enable Agent replies. Local scripts and hardware control work without a key.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
