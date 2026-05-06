@@ -240,8 +240,7 @@ public struct AgentChatPanelView: View {
             "How do I save scripts locally?",
         ]
 
-        // Keep it lightweight: show when draft is empty.
-        if viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if viewModel.messages.isEmpty && viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 8) {
                     ForEach(items, id: \.self) { text in

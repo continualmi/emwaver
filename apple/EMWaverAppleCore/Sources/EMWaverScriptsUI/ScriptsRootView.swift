@@ -254,44 +254,10 @@ public struct ScriptsRootView: View {
             if showingEditor {
                 editorView
             } else {
-                #if os(macOS)
-                VStack(spacing: 0) {
-                    scriptsHeader
-                    mainView
-                }
-                #else
                 mainView
-                #endif
             }
         }
     }
-
-    #if os(macOS)
-    private var scriptsHeader: some View {
-        HStack(spacing: 8) {
-            Spacer()
-
-            if let leadingHeaderItem {
-                leadingHeaderItem
-            }
-
-            Button {
-                showingAgentPanel.toggle()
-            } label: {
-                Image(systemName: "sparkles")
-                    .imageScale(.large)
-                    .frame(width: 34, height: 30)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
-        }
-        .padding(.horizontal, 42)
-        .padding(.top, 14)
-        .padding(.bottom, 8)
-        .background(Self.primaryBackground)
-    }
-    #endif
 
     private var mainView: some View {
         Group {
@@ -1079,6 +1045,23 @@ public struct ScriptsRootView: View {
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
+        #if os(macOS)
+        if !showingEditor {
+            ToolbarItemGroup(placement: .primaryAction) {
+                if let leadingHeaderItem {
+                    leadingHeaderItem
+                }
+
+                Button {
+                    showingAgentPanel.toggle()
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
+            }
+        }
+        #endif
+
         if showingEditor {
             let isScriptEditor = (editorMode == .script)
             let canRun = isScriptEditor
