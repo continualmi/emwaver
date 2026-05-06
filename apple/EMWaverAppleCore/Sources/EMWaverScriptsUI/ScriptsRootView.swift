@@ -61,6 +61,7 @@ public struct ScriptsRootView: View {
 
     #if os(macOS)
     @State private var showingAgentPanel = false
+    private let agentPanelWidth: CGFloat = 380
     #endif
 
     @MainActor
@@ -116,27 +117,24 @@ public struct ScriptsRootView: View {
     public var body: some View {
         ZStack {
             #if os(macOS)
-            if showingAgentPanel {
-                HSplitView {
-                    primaryContent
-                        .frame(minWidth: 520)
+            primaryContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .padding(.trailing, showingAgentPanel ? agentPanelWidth : 0)
 
+            if showingAgentPanel {
+                HStack(spacing: 0) {
+                    Spacer(minLength: 0)
+                    Divider()
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
                         onRequestUpgrade: onRequestAgentUpgrade,
                         headerAccessory: agentLeadingToolbarItem
                     )
-                    .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
-                    .transition(
-                        .asymmetric(
-                            insertion: .move(edge: .trailing),
-                            removal: .move(edge: .trailing)
-                        )
-                    )
+                    .frame(width: agentPanelWidth)
                 }
-            } else {
-                primaryContent
+                .transition(.move(edge: .trailing))
+                .zIndex(1)
             }
             #else
             primaryContent
