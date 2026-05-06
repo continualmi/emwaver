@@ -9,6 +9,7 @@ on:
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/verify-gateway-daemon-render.mjs"
       - "scripts/rebirth-install-smoke.sh"
       - ".github/workflows/daemon-ci.yml"
   push:
@@ -21,6 +22,7 @@ on:
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/verify-gateway-daemon-render.mjs"
       - "scripts/rebirth-install-smoke.sh"
       - ".github/workflows/daemon-ci.yml"
   workflow_dispatch:
