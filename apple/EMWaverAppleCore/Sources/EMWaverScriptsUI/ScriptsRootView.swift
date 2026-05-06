@@ -119,7 +119,8 @@ public struct ScriptsRootView: View {
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
-                        onRequestUpgrade: onRequestAgentUpgrade
+                        onRequestUpgrade: onRequestAgentUpgrade,
+                        headerAccessory: agentLeadingToolbarItem
                     )
                     .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
                 }
@@ -1040,12 +1041,6 @@ public struct ScriptsRootView: View {
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
         #if os(macOS)
-        ToolbarItem(placement: .primaryAction) {
-            if let agentLeadingToolbarItem {
-                agentLeadingToolbarItem
-            }
-        }
-
         ToolbarItem(placement: .primaryAction) {
             Button {
                 showingAgentPanel.toggle()

@@ -17,15 +17,18 @@ public struct AgentChatPanelView: View {
 
     private let agentEnabled: Bool
     private let onRequestUpgrade: (() -> Void)?
+    private let headerAccessory: AnyView?
 
     public init(
         viewModel: AgentChatViewModel,
         agentEnabled: Bool = true,
-        onRequestUpgrade: (() -> Void)? = nil
+        onRequestUpgrade: (() -> Void)? = nil,
+        headerAccessory: AnyView? = nil
     ) {
         self.viewModel = viewModel
         self.agentEnabled = agentEnabled
         self.onRequestUpgrade = onRequestUpgrade
+        self.headerAccessory = headerAccessory
     }
 
     public var body: some View {
@@ -56,6 +59,10 @@ public struct AgentChatPanelView: View {
                 }
 
                 Spacer()
+
+                if let headerAccessory {
+                    headerAccessory
+                }
 
                 Menu {
                     Button("New Chat") {
