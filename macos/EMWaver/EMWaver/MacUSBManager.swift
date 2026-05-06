@@ -673,7 +673,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         guard bleCentral?.state == .poweredOn else { return }
         guard blePeripheral == nil || blePeripheral?.state == .disconnected else { return }
         bleCentral?.scanForPeripherals(
-            withServices: [Self.bleServiceUUID],
+            withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
         DispatchQueue.main.async {
@@ -711,6 +711,25 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectedTransportKind = "BLE"
             self.lastErrorText = nil
         }
+    }
+
+    private func isEmwaverBleAdvertisement(
+        peripheral: CBPeripheral,
+        advertisementData: [String: Any]
+    ) -> Bool {
+        if let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID],
+           serviceUUIDs.contains(Self.bleServiceUUID) {
+            return true
+        }
+
+        if let overflowServiceUUIDs = advertisementData[CBAdvertisementDataOverflowServiceUUIDsKey] as? [CBUUID],
+           overflowServiceUUIDs.contains(Self.bleServiceUUID) {
+            return true
+        }
+
+        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let candidateName = advertisedName ?? peripheral.name
+        return candidateName?.localizedCaseInsensitiveContains("EMWaver") == true
     }
 
     /// Some stacks surface USB-MIDI 4-byte event packets (header + 3 bytes).
@@ -851,10 +870,15 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
+        guard isEmwaverBleAdvertisement(peripheral: peripheral, advertisementData: advertisementData) else {
+            return
+        }
+
         let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let name = localName ?? peripheral.name ?? "EMWaver BLE"
         bleDiscoveredNamesByID[peripheral.identifier] = name
         guard autoConnectEnabled, !isTransportConnectedInternal() else { return }
+        NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
         connectBleInternal(peripheral, name: name)
     }
 
