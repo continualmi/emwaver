@@ -228,12 +228,16 @@ struct ContentView: View {
                             auth.isSignInSheetPresented = true
                         }
 
-                        Button("Open MGPT API Keys") {
+                        Button {
                             openURL(mgptApiURL)
+                        } label: {
+                            Label("Open MGPT API Keys", systemImage: "arrow.up.right.square")
                         }
 
-                        Button("Open Account & Credits") {
+                        Button {
                             openURL(accountURL)
+                        } label: {
+                            Label("Open Account & Credits", systemImage: "arrow.up.right.square")
                         }
 
                         Divider()
