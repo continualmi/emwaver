@@ -26,6 +26,7 @@ public final class AgentChatViewModel: ObservableObject {
     private var assistantPlaceholderId: UUID?
     private var selectedUniverseId: String?
     private var toolRuntime: AgentToolRuntime?
+    private var activeRunTask: Task<Void, Never>?
     private let chatStore: AgentChatStore
 
     // Endpoint context for API-key Agent execution. The tuple names are kept
@@ -115,6 +116,13 @@ public final class AgentChatViewModel: ObservableObject {
         sendAgent(userText: text)
     }
 
+    public func stop() {
+        activeRunTask?.cancel()
+        activeRunTask = nil
+        isSending = false
+        assistantPlaceholderId = nil
+    }
+
     private func sendAgent(userText text: String) {
         guard endpointProvider != nil else {
             lastError = "Add a Continual API key to enable Agent replies."
@@ -128,15 +136,23 @@ public final class AgentChatViewModel: ObservableObject {
 
         isSending = true
 
-        Task {
+        activeRunTask = Task {
             do {
                 let placeholderId = UUID()
                 let reply = try await self.runAgentEndpointRequest(userPrompt: text, placeholderId: placeholderId)
                 await MainActor.run {
+                    guard !Task.isCancelled else { return }
                     self.appendMessage(AgentChatMessage(id: placeholderId, role: .assistant, text: reply))
                     self.isSending = false
                     self.assistantPlaceholderId = nil
+                    self.activeRunTask = nil
                     self.touchSelectedConversation()
+                }
+            } catch is CancellationError {
+                await MainActor.run {
+                    self.isSending = false
+                    self.assistantPlaceholderId = nil
+                    self.activeRunTask = nil
                 }
             } catch {
                 await MainActor.run {
@@ -146,6 +162,7 @@ public final class AgentChatViewModel: ObservableObject {
                     }
                     self.isSending = false
                     self.assistantPlaceholderId = nil
+                    self.activeRunTask = nil
                 }
             }
         }
@@ -174,17 +191,14 @@ public final class AgentChatViewModel: ObservableObject {
         )
 
         var currentResponse = response
-        var rounds = 0
         while let toolCalls = currentResponse.toolCalls, !toolCalls.isEmpty {
+            try Task.checkCancellation()
             guard let toolRuntime else {
                 throw AgentEndpointError.serverError("Agent requested a tool, but local tools are not available.")
             }
-            guard rounds < 5 else {
-                throw AgentEndpointError.serverError("Agent tool loop exceeded 5 rounds without producing a reply.")
-            }
-            rounds += 1
 
             let toolResults = await executeToolCalls(toolCalls, runtime: toolRuntime)
+            try Task.checkCancellation()
             currentResponse = try await api.send(
                 endpoint: ctx.baseURL,
                 apiKey: ctx.accessToken,

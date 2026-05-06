@@ -191,14 +191,24 @@ public struct AgentChatPanelView: View {
                         sendOrUpgrade()
                     }
 
-                Button {
-                    sendOrUpgrade()
-                } label: {
-                    Text("Send")
-                        .frame(minWidth: 64)
+                if viewModel.isSending {
+                    Button(role: .destructive) {
+                        viewModel.stop()
+                    } label: {
+                        Text("Stop")
+                            .frame(minWidth: 64)
+                    }
+                    .buttonStyle(.bordered)
+                } else {
+                    Button {
+                        sendOrUpgrade()
+                    } label: {
+                        Text("Send")
+                            .frame(minWidth: 64)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(viewModel.isSending || viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(12)
