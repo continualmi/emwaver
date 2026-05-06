@@ -65,4 +65,5 @@ done
 
 curl -fsS "http://127.0.0.1:$PORT/health"
 echo
+node "$ROOT/scripts/verify-gateway-daemon-render.mjs" "$PORT" emwaver-daemon
 echo "install smoke passed"

@@ -115,6 +115,7 @@ jobs:
             sleep 0.25
           done
           curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health"
+          node scripts/verify-gateway-daemon-render.mjs "${{ matrix.smoke_port }}" emwaver-daemon
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
