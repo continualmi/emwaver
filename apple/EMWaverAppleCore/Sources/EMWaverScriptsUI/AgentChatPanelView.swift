@@ -197,16 +197,20 @@ public struct AgentChatPanelView: View {
                     } label: {
                         Text("Stop")
                             .frame(minWidth: 64)
+                            .frame(height: 24)
                     }
                     .buttonStyle(.bordered)
+                    .controlSize(.large)
                 } else {
                     Button {
                         sendOrUpgrade()
                     } label: {
                         Text("Send")
                             .frame(minWidth: 64)
+                            .frame(height: 24)
                     }
                     .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
                     .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
