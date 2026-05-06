@@ -46,7 +46,17 @@ public struct AgentChatPanelView: View {
             composer
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.regularMaterial)
+        .background(Self.panelBackground)
+    }
+
+    private static var panelBackground: Color {
+        #if canImport(UIKit)
+        Color(uiColor: .secondarySystemBackground)
+        #elseif canImport(AppKit)
+        Color(nsColor: .controlBackgroundColor)
+        #else
+        Color.gray.opacity(0.08)
+        #endif
     }
 
     private var messages: some View {
