@@ -129,6 +129,7 @@ public struct AgentChatPanelView: View {
                         Text(err)
                             .foregroundStyle(.red)
                             .font(.callout)
+                            .textSelection(.enabled)
                             .padding(.vertical, 8)
                     }
                 }
