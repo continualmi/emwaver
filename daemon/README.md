@@ -181,6 +181,12 @@ It runs `emwaver daemon serve ...` as the current user. The gateway remains a se
 
 macOS can run the same foreground/background daemon commands (`emwaver start`, `emwaver daemon serve`, `emwaver daemon start`) and uses the same Rust runtime plus shared protocol code. It is a good local Unix smoke target for the daemon and BLE path. It does not replace Linux validation for deployment details such as systemd user units, BlueZ behavior, ALSA sequencer availability, or Linux group/device permissions.
 
+The Linux runbook validates unit generation by default. On a real Linux login session with `systemctl --user` available, it can also install the daemon service with simulator transport, start it, render a script through the localhost gateway, and uninstall it:
+
+```bash
+EMWAVER_VALIDATE_SYSTEMD=1 scripts/rebirth-linux-validation.sh
+```
+
 ## 3.4 Script/UI engine
 
 `emwaver-runtime/src/engine.rs`:

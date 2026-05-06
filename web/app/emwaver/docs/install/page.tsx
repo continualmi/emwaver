@@ -2,7 +2,25 @@ import Link from "next/link";
 
 function PreviewDownloads() {
   return (
-    <div className="grid gap-3 md:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-3">
+      <a
+        href="/emwaver/downloads/EMWaver-linux-x64.tar.gz"
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Linux</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">CLI + Gateway</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Primary Linux method for browser rendering and daemon hardware transport.</div>
+      </a>
+
+      <a
+        href="/emwaver/downloads/EMWaver-macos-cli.tar.gz"
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">macOS</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">CLI + Gateway</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Command-line gateway and daemon package.</div>
+      </a>
+
       <a
         href="/emwaver/downloads/EMWaver-android.apk"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
@@ -69,12 +87,14 @@ export default function InstallDocPage() {
     <>
       <h1>Install and run locally</h1>
       <p>
-        Get the EMWaver app, connect your board, and start running scripts.
+        Get the EMWaver app or CLI, connect your board, and start running scripts.
       </p>
 
-      <h2>1. Install the app</h2>
+      <h2>1. Install the app or CLI</h2>
       <p>
-        Download the Android, macOS, or Windows preview build directly. On Windows, use the installer EXE unless you prefer the portable ZIP.
+        Linux is CLI-first: use the CLI/gateway tarball to start the local browser experience and
+        daemon-backed hardware runtime. macOS can use either the native DMG or CLI package. Windows
+        currently uses the installer EXE or portable ZIP, with CLI parity planned.
       </p>
       <PreviewDownloads />
 
@@ -125,12 +145,27 @@ export default function InstallDocPage() {
 
       <h2>5. Use the localhost gateway</h2>
       <p>
-        On desktop, you can also start the browser gateway:
+        On Linux, the CLI is the primary desktop/server method. It starts the localhost browser
+        gateway for rendering the full script UI and connects it to a local daemon that owns
+        USB MIDI/SysEx or ESP32 BLE transport underneath:
       </p>
-      <pre><code>{`emwaver gateway --port 3921`}</code></pre>
+      <pre><code>{`emwaver start
+emwaver start --ble
+emwaver start --device 0`}</code></pre>
       <p>
-        Then open <code>http://127.0.0.1:3921</code>. The gateway controls the local native app on the
-        same machine; the app owns script execution and USB/device transport.
+        Then open <code>http://127.0.0.1:3921</code>. The gateway renders the script UI in the browser;
+        the daemon handles script execution, UI events, and local BLE/USB transport using the shared
+        EMWaver protocol. The same command-line path also works for macOS CLI workflows.
+      </p>
+      <p>
+        Advanced users can split the stack when they want the daemon to run separately from the browser gateway:
+      </p>
+      <pre><code>{`emwaver gateway --daemon-fallback --ble
+emwaver daemon start --ble
+emwaver service install --ble`}</code></pre>
+      <p>
+        A running native desktop app can still connect to the same gateway and take priority as the
+        runtime owner. Otherwise the daemon is the fallback runtime owner for headless Linux and CLI use.
       </p>
 
       <h2>6. Optional Agent key</h2>

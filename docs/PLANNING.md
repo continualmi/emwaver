@@ -24,8 +24,8 @@ Use it to capture:
 | --- | --- | --- | --- |
 | `P0` | Rebirth plan | `in progress` | `REBIRTH.md` captures the product pivot toward local-first open source EMWaver with paid Agent services. |
 | `P0` | Rebirth backlog | `in progress` | `REBIRTH_ISSUES.md` is the durable issue backlog. Start with the first implementation slice listed at the bottom of that file. |
-| `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app WebSocket bridge; macOS and Windows now have source-level local `role=app` wiring and need native validation. |
-| `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, direct UI-only `emwaver run` works, and `doctor` is verified locally. Hardware-backed validation remains. |
+| `P0` | Local gateway | `in progress` | `gateway/` exists as a localhost browser-to-native-app/WebSocket bridge and browser renderer. Linux should present this primarily through the `emwaver` CLI, with macOS CLI support and future Windows CLI parity. |
+| `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, direct UI-only `emwaver run` works, and `emwaver start`/`gateway --daemon-fallback` can connect browser-rendered scripts to the daemon underneath. Hardware-backed Linux validation remains. |
 | `P0` | Device simulator | `done for protocol adapters` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, and Android `SimulatorScriptDeviceBridge` are added; virtual transport was evaluated and kept optional/local-only. |
 | `P0` | Remote control scope | `done for local-first surfaces` | Native apps now use localhost gateway control as the core path; hosted relay/directory code has been removed from the primary local-first app surfaces. |
 | `P0` | Agent interfaces | `mostly migrated` | Repo-shipped production prompt files are removed; gateway/CLI plus Apple iOS/macOS, Windows, and Android Agent paths now use API-key endpoint clients instead of EMWaver account chat routes. Remaining work: enrich runtime/hardware request context. |
@@ -38,12 +38,14 @@ Use it to capture:
 
 ## Next Up
 
-1. Validate Windows local gateway app-role wiring on a machine with the Windows/.NET toolchain.
-2. Validate local gateway script execution on real hardware.
-3. Validate `emwaver run --direct --device <id>` against attached hardware.
-4. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
-5. Inventory `web/public/emwaver` and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
-6. Remove or redirect any remaining stale references to the retired standalone `web/` app.
+1. Validate Linux CLI/gateway/daemon execution on real USB and BLE hardware, including browser rendering through localhost.
+2. Validate Linux `emwaver service install --ble` or `--device <id>` on a real systemd user session.
+3. Validate Windows local gateway app-role wiring on a machine with the Windows/.NET toolchain.
+4. Validate local gateway script execution on real hardware through native apps.
+5. Validate `emwaver run --direct --device <id>` against attached hardware.
+6. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
+7. Inventory `web/public/emwaver` and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
+8. Remove or redirect any remaining stale references to the retired standalone `web/` app.
 
 ## Blockers / Risks
 

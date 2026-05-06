@@ -20,7 +20,7 @@ export const DOCS_NAV: DocsNavGroup[] = [
       },
       {
         href: "/emwaver/docs/install",
-        label: "Install & activate",
+        label: "Install & CLI",
         iconPath: "M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3",
       },
     ],

@@ -19,6 +19,18 @@ const MOBILE_STORES = [
 
 const DIRECT_DOWNLOADS = [
   {
+    platform: "Linux",
+    name: "CLI + Gateway",
+    description: "Primary Linux package for localhost browser rendering and daemon-backed USB/BLE transport.",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-x64.tar.gz`,
+  },
+  {
+    platform: "macOS",
+    name: "CLI + Gateway",
+    description: "Command-line gateway and daemon package for macOS.",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos-cli.tar.gz`,
+  },
+  {
     platform: "Android",
     name: "APK",
     description: "Direct Android preview build.",
@@ -72,12 +84,13 @@ export default function InstallPage() {
               Install EMWaver on the device you already use.
             </h1>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              Install the native app for your platform, connect a supported board, and run local
-              scripts without an EMWaver account or cloud activation.
+              Install the native app or CLI for your platform, connect a supported board, and run
+              local scripts without an EMWaver account or cloud activation. Linux is CLI-first:
+              the command starts a localhost browser gateway and a daemon for BLE/USB transport.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["iPhone + iPad", "macOS", "Android", "Windows"].map((label) => (
+              {["Linux CLI", "macOS", "macOS CLI", "Android", "Windows"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
@@ -100,11 +113,12 @@ export default function InstallPage() {
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              Desktop builds are available directly. Android can use the APK while Google Play is prepared.
+              Desktop builds are available directly. Linux uses the CLI/gateway package as the
+              primary browser-rendered hardware-control path.
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-4">
+          <div className="mt-6 grid gap-4 md:grid-cols-3">
           {DIRECT_DOWNLOADS.map((download) => (
             <a
               key={download.platform}
@@ -178,26 +192,29 @@ export default function InstallPage() {
         <section className="mt-10 grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
-              Install locally
+              Linux CLI-first
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Download the preview build for your platform. Core hardware control is local-first.
+              Use <code>emwaver start</code> to launch the localhost gateway and daemon-backed
+              runtime without needing a Linux desktop app.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-              Connect hardware
+              Browser rendering
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Plug in a supported board and let EMWaver handle transport, firmware updates, and script runtime.
+              The gateway renders script UI at localhost while the daemon owns script execution,
+              UI events, and local BLE/USB transport.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
-              Start exploring
+              Cross-platform goal
             </div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Open local scripts, edit examples, and use optional Agent-assisted workflows when an Agent API key is configured.
+              The CLI/gateway model already targets Linux and macOS packages, with Windows CLI
+              parity planned alongside the native Windows app.
             </p>
           </div>
         </section>

@@ -3,8 +3,10 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DAEMON_DIR="$ROOT/daemon"
+GATEWAY_DIR="$ROOT/gateway"
 GATEWAY_SIM_PORT="${EMWAVER_LINUX_GATEWAY_SIM_PORT:-3944}"
 GATEWAY_HARDWARE_PORT="${EMWAVER_LINUX_GATEWAY_HARDWARE_PORT:-3945}"
+GATEWAY_SERVICE_PORT="${EMWAVER_LINUX_GATEWAY_SERVICE_PORT:-3946}"
 HARDWARE_TRANSPORT="${EMWAVER_HARDWARE_TRANSPORT:-usb}"
 SCRIPT_PATH="${EMWAVER_TEST_SCRIPT:-$ROOT/assets/default-scripts/blink.emw}"
 if [[ "$SCRIPT_PATH" != /* ]]; then
@@ -67,6 +69,70 @@ echo "== Generic rebirth hardware validation =="
 echo
 echo "== Gateway daemon simulator validation =="
 EMWAVER_GATEWAY_PORT="$GATEWAY_SIM_PORT" EMWAVER_GATEWAY_DAEMON_SIM_MODE=fallback "$ROOT/scripts/rebirth-gateway-daemon-sim-validation.sh"
+
+run_systemd_user_service_validation() {
+  local gateway_log
+  gateway_log="$(mktemp /tmp/emwaver-linux-systemd-gateway.XXXXXX.log)"
+  local state_dir
+  state_dir="$(mktemp -d /tmp/emwaver-linux-systemd-state.XXXXXX)"
+  local gateway_pid=""
+  export EMWAVER_STATE_DIR="$state_dir"
+
+  cleanup_systemd_user_service() {
+    set +e
+    (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- service uninstall >/dev/null 2>&1 || true)
+    if [[ -n "$gateway_pid" ]] && kill -0 "$gateway_pid" >/dev/null 2>&1; then
+      kill "$gateway_pid" >/dev/null 2>&1 || true
+      wait "$gateway_pid" >/dev/null 2>&1 || true
+    fi
+    rm -f "$gateway_log"
+    rm -rf "$state_dir"
+    unset EMWAVER_STATE_DIR
+  }
+  trap cleanup_systemd_user_service RETURN
+
+  (cd "$GATEWAY_DIR" && EMWAVER_GATEWAY_PORT="$GATEWAY_SERVICE_PORT" npm run start:built >"$gateway_log" 2>&1) &
+  gateway_pid=$!
+
+  for _ in {1..80}; do
+    if curl -fsS "http://127.0.0.1:$GATEWAY_SERVICE_PORT/health" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+
+  curl -fsS "http://127.0.0.1:$GATEWAY_SERVICE_PORT/health"
+  echo
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- service install --port "$GATEWAY_SERVICE_PORT" --sim-device --now)
+
+  node "$ROOT/scripts/verify-gateway-daemon-render.mjs" "$GATEWAY_SERVICE_PORT" emwaver-daemon
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- service uninstall)
+}
+
+echo
+echo "== Linux systemd user service validation =="
+(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- service print-unit --port "$GATEWAY_SIM_PORT" --sim-device >/tmp/emwaver-daemon.service)
+grep -F "emwaver daemon serve" /tmp/emwaver-daemon.service >/dev/null
+grep -F -- "--sim-device" /tmp/emwaver-daemon.service >/dev/null
+grep -F -- "--port $GATEWAY_SIM_PORT" /tmp/emwaver-daemon.service >/dev/null
+echo "ok: systemd user unit generation includes daemon serve, port, and simulator transport"
+
+if [[ "${EMWAVER_VALIDATE_SYSTEMD:-0}" == "1" ]]; then
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "skipped: EMWAVER_VALIDATE_SYSTEMD=1 requires Linux"
+  elif ! command -v systemctl >/dev/null 2>&1; then
+    echo "skipped: systemctl unavailable"
+  elif ! systemctl --user show-environment >/dev/null 2>&1; then
+    echo "skipped: systemd user manager unavailable; enable linger or run in a login session"
+  else
+    run_systemd_user_service_validation
+  fi
+else
+  cat <<EOF
+skipped: set EMWAVER_VALIDATE_SYSTEMD=1 on a Linux login session to install,
+start, render through, and uninstall the systemd user service on port $GATEWAY_SERVICE_PORT.
+EOF
+fi
 
 run_gateway_hardware_validation() {
   local gateway_log
