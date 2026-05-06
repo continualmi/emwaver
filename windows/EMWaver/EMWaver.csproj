@@ -30,6 +30,7 @@
 
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
     <!-- WebView2 removed (Monaco editor removed on Windows). -->
     <PackageReference Include="Jint" Version="3.1.6" />
     <!-- Ed25519 signature verification (secure connection + secure update gating). -->

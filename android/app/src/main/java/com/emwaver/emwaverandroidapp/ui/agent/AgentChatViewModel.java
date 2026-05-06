@@ -52,12 +52,13 @@ public class AgentChatViewModel extends AndroidViewModel {
     private final MutableLiveData<String> lastErrorLiveData = new MutableLiveData<>(null);
 
     private final OkHttpClient http = new OkHttpClient();
-    private final AgentEndpointApi api = new AgentEndpointApi(http);
+    private final AgentEndpointApi api;
 
     private String conversationId;
 
     public AgentChatViewModel(@NonNull Application application) {
         super(application);
+        api = new AgentEndpointApi(application, http);
         conversationId = loadConversationId(application);
     }
 
@@ -107,8 +108,7 @@ public class AgentChatViewModel extends AndroidViewModel {
     public void selectConversation(@NonNull String id) {
         conversationId = id;
         persistConversationId(getApplication(), id);
-        clear();
-        messagesLiveData.postValue(new ArrayList<>());
+        loadConversation(id);
     }
 
     public void clear() {
@@ -206,6 +206,7 @@ public class AgentChatViewModel extends AndroidViewModel {
                     public void onDone(@NonNull AgentEndpointApi.Message message, @Nullable String model) {
                         updateLastAgentMessage(message.content);
                         isSendingLiveData.postValue(false);
+                        refreshConversations();
                     }
 
                     @Override

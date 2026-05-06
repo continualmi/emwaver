@@ -1086,6 +1086,11 @@ public sealed partial class ScriptsPage : Page
             }
 
             SetAgentStatusText("");
+            await RefreshAgentConversationsAsync();
+            if (!string.IsNullOrWhiteSpace(_agentConversationId))
+            {
+                await LoadAgentConversationAsync(_agentConversationId);
+            }
         }
         catch (Exception ex)
         {
@@ -1095,8 +1100,14 @@ public sealed partial class ScriptsPage : Page
 
     private async Task RefreshAgentConversationsAsync()
     {
+        var conversations = await AgentApi.ListConversationsAsync(CancellationToken.None);
         await RunOnUiAsync(async () =>
         {
+            _agentConversations.Clear();
+            foreach (var conversation in conversations)
+            {
+                _agentConversations.Add(conversation);
+            }
             SetAgentStatusText("");
             await Task.CompletedTask;
         });
@@ -1105,9 +1116,17 @@ public sealed partial class ScriptsPage : Page
     private async Task LoadAgentConversationAsync(string id)
     {
         SetAgentStatusText("");
+        var messages = await AgentApi.ListMessagesAsync(id, CancellationToken.None);
 
         await RunOnUiAsync(async () =>
         {
+            _agentMessages.Clear();
+            foreach (var message in messages)
+            {
+                _agentMessages.Add(new AgentMessageRow(
+                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM",
+                    message.Content));
+            }
             SetAgentStatusText("");
             ScrollAgentMessagesToBottom();
             await Task.CompletedTask;

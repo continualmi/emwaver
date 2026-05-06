@@ -105,6 +105,11 @@ Settings surface includes app-level preferences such as:
 - appearance mode (`System`, `Light`, `Dark`),
 - local Agent API key configuration.
 
+The Agent pane stores local chat conversations and messages in SQLite at
+`%LOCALAPPDATA%/EMWaver/agent-chat.sqlite`. The stored chats are local UI state;
+Agent requests still use the user-provided API key and the configured MGPT
+endpoint, and local scripts/hardware remain usable without that key.
+
 ## 3.6 Current parity status vs macOS
 
 Windows is intended to track the current macOS app in the firmware setup/update and local gateway layers.

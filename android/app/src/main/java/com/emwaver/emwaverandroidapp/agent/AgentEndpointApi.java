@@ -8,6 +8,7 @@ package com.emwaver.emwaverandroidapp.agent;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import android.content.Context;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -67,9 +68,16 @@ public final class AgentEndpointApi {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
 
     private final OkHttpClient http;
+    @Nullable private final AgentChatStore store;
 
     public AgentEndpointApi(@NonNull OkHttpClient http) {
         this.http = http;
+        this.store = null;
+    }
+
+    public AgentEndpointApi(@NonNull Context context, @NonNull OkHttpClient http) {
+        this.http = http;
+        this.store = AgentChatStore.getInstance(context);
     }
 
     @NonNull
@@ -82,31 +90,23 @@ public final class AgentEndpointApi {
 
     @NonNull
     public List<Conversation> listConversations(@NonNull String endpoint, @NonNull String apiKey) {
-        return new ArrayList<>();
+        return store != null ? store.listConversations() : new ArrayList<>();
     }
 
     @NonNull
     public Conversation createConversation(@NonNull String endpoint, @NonNull String apiKey, @Nullable String title) {
+        if (store != null) return store.createConversation(title);
         long now = System.currentTimeMillis();
-        String trimmed = title != null ? title.trim() : "";
-        if (trimmed.length() > 48) {
-            trimmed = trimmed.substring(0, 48).trim();
-        }
-        return new Conversation(
-                UUID.randomUUID().toString(),
-                trimmed.isEmpty() ? "Chat" : trimmed,
-                now,
-                now
-        );
+        return new Conversation(UUID.randomUUID().toString(), "Chat", now, now);
     }
 
     public void deleteConversation(@NonNull String endpoint, @NonNull String apiKey, @NonNull String conversationId) {
-        // Conversations are local UI state in the open-source app.
+        if (store != null) store.archiveConversation(conversationId);
     }
 
     @NonNull
     public List<Message> listMessages(@NonNull String endpoint, @NonNull String apiKey, @NonNull String conversationId) {
-        return new ArrayList<>();
+        return store != null ? store.listMessages(conversationId) : new ArrayList<>();
     }
 
     public void chatStream(
@@ -124,6 +124,9 @@ public final class AgentEndpointApi {
         if (apiKey.trim().isEmpty()) {
             listener.onError("Configure an Agent API key to enable Agent replies. Local scripts continue to run without it.");
             return;
+        }
+        if (store != null) {
+            store.appendMessage(conversationId, "user", message);
         }
 
         JSONObject payload = new JSONObject();
@@ -168,12 +171,10 @@ public final class AgentEndpointApi {
 
                     JSONObject obj = new JSONObject(body);
                     String content = formatResponse(obj);
-                    listener.onDone(new Message(
-                            UUID.randomUUID().toString(),
-                            "assistant",
-                            content,
-                            System.currentTimeMillis()
-                    ), null);
+                    Message done = store != null
+                            ? store.appendMessage(conversationId, "assistant", content)
+                            : new Message(UUID.randomUUID().toString(), "assistant", content, System.currentTimeMillis());
+                    listener.onDone(done, null);
                 } catch (Exception e) {
                     listener.onError(e.toString());
                 } finally {

@@ -8,6 +8,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using EMWaver;
 
 namespace EMWaver.Services.Agent;
 
@@ -38,46 +39,38 @@ internal sealed class AgentApi
 
     private readonly HttpClient _http;
     private readonly AgentApiKeyStore _keys;
+    private readonly AgentChatStore _store;
 
     internal AgentApi(HttpClient http, AgentApiKeyStore keys)
     {
         _http = http;
         _keys = keys;
+        _store = AppServices.AgentChats;
     }
 
     internal Task<List<Conversation>> ListConversationsAsync(CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(new List<Conversation>());
+        return Task.FromResult(_store.ListConversations());
     }
 
     internal Task<Conversation> CreateConversationAsync(string? title, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        var trimmed = (title ?? "").Trim();
-        if (trimmed.Length > 48)
-        {
-            trimmed = trimmed[..48].Trim();
-        }
-
-        return Task.FromResult(new Conversation(
-            Id: Guid.NewGuid().ToString("D"),
-            Title: string.IsNullOrWhiteSpace(trimmed) ? "Chat" : trimmed,
-            CreatedAtMs: now,
-            UpdatedAtMs: now));
+        return Task.FromResult(_store.CreateConversation(title));
     }
 
     internal Task DeleteConversationAsync(string conversationId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
+        _store.ArchiveConversation(conversationId);
         return Task.CompletedTask;
     }
 
     internal Task<List<Message>> ListMessagesAsync(string conversationId, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        return Task.FromResult(new List<Message>());
+        return Task.FromResult(_store.ListMessages(conversationId));
     }
 
     internal Task ChatStreamAsync(string conversationId, string message, Action<StreamEvent> onEvent, CancellationToken ct)
@@ -94,6 +87,7 @@ internal sealed class AgentApi
     {
         var endpoint = ResolveEndpoint();
         var key = RequireAgentKey();
+        _store.AppendMessage(conversationId, "user", message);
 
         using var req = new HttpRequestMessage(HttpMethod.Post, endpoint);
         req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
@@ -120,10 +114,11 @@ internal sealed class AgentApi
             ?? throw new InvalidOperationException("Agent response was empty.");
 
         var content = FormatResponse(response);
+        var doneMessage = _store.AppendMessage(conversationId, "assistant", content);
         onEvent(new StreamEvent(
             StreamEventKind.Done,
             "",
-            new Message(Guid.NewGuid().ToString("D"), "assistant", content, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),
+            doneMessage,
             null));
     }
 

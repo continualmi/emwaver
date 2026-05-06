@@ -112,6 +112,7 @@ When changing Android transport, connection lifecycle, or firmware update UX beh
 Android Agent direction:
 - Keep the Android Agent chat interface/runtime.
 - Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
+- Store Agent chat conversations and messages locally in app-private SQLite (`agent-chat.sqlite`) so the mobile Agent UI can restore the same chat history shape as macOS/iOS and Windows.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
 - Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching have been removed from the Android app.
 - Local USB/BLE device and script use must not depend on backend configuration.
