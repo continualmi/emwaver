@@ -39,7 +39,7 @@ The rebirth is complete only when:
 | `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app/daemon bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; gateway/headless daemon simulator integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
-| `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
+| `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed, builds gateway assets when missing, and starts the built gateway with Node | built gateway smoke verified |
 | `emwaver start` CLI stack | `daemon/emwaver/src/main.rs` starts the daemon host in the background, then starts the gateway in the foreground | build verified; split gateway + `daemon serve --sim-device` WebSocket smoke passed; macOS BLE gateway smoke passed; full foreground stack manually usable, release packaging pending |
 | Linux user service | `daemon/emwaver/src/main.rs` implements `emwaver service install|uninstall|start|stop|status`; `daemon/install/install.sh` can install the service from a development checkout | build/help verified on macOS; shell syntax verified; real Linux systemd user-service validation pending |
 | Daemon as gateway runtime owner | `daemon/emwaver/src/main.rs` implements `daemon serve` as local `role=host`: handles `script.run`, `script.stop`, `ui.event`, emits `device.status`, `script.started`, `script.stopped`, `script.error`, and `ui.snapshot`; supports USB MIDI/SysEx by default and ESP32 BLE with `--ble` | simulator-backed gateway smoke passed, including UI event dispatch and updated snapshot; USB/BLE build passed; macOS BLE hardware gateway smoke passed with ESP32; Linux hardware validation pending |
@@ -56,7 +56,7 @@ The rebirth is complete only when:
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Daemon/runtime CI | `.github/workflows/daemon-ci.yml` | passed on GitHub Actions run `25249058504`: runtime/device tests, host/CLI build, and UI-only direct run; simulator-backed direct smoke is now added for the next run |
+| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, and built gateway-to-daemon simulator render/event flow |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 | Linux validation runbook | `scripts/rebirth-linux-validation.sh` | added; execution on real Linux host with ALSA MIDI and hardware still pending |
@@ -117,6 +117,7 @@ This verifies:
 - local WebSocket UI event forwarding to mock native app.
 - local WebSocket script run to Rust daemon-produced UI snapshot with `--sim-device`.
 - local WebSocket UI event dispatch through Rust daemon and updated UI snapshot with `--sim-device`.
+- `scripts/rebirth-gateway-daemon-sim-validation.sh` starts the built gateway plus daemon `--sim-device`, drives `/v1/ws` as a browser client, renders a script, dispatches a UI event, and receives the updated snapshot.
 - Rust daemon BLE transport builds with the shared `emwaver-device` protocol envelope and `btleplug` scan/connect/notify/write path.
 - Rust daemon BLE scan saw a powered ESP32 as `EMWaver`.
 - `cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble` rendered the Blink UI snapshot through real BLE.

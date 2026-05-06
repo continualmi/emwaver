@@ -6,8 +6,11 @@
   "type": "module",
   "scripts": {
     "dev": "npm run build:client && tsx watch src/server.ts",
+    "build": "npm run build:client && npm run build:server",
     "build:client": "vite build",
+    "build:server": "esbuild src/server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.mjs",
     "start": "tsx src/server.ts",
+    "start:built": "node dist/server.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.client.json",
     "verify": "npm run build:client && npm run typecheck && node scripts/verify.mjs"
   },

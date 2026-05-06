@@ -4,18 +4,22 @@ on:
   pull_request:
     paths:
       - "daemon/**"
+      - "gateway/**"
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
       - ".github/workflows/daemon-ci.yml"
   push:
     branches:
       - main
     paths:
       - "daemon/**"
+      - "gateway/**"
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
       - ".github/workflows/daemon-ci.yml"
   workflow_dispatch:
 
@@ -36,6 +40,13 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: gateway/package-lock.json
+
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
@@ -50,7 +61,7 @@ jobs:
 
       - name: Build host and CLI
         working-directory: daemon
-        run: cargo build -p emwaver-host -p emwaver
+        run: cargo build -p emwaver
 
       - name: Smoke test direct UI-only script run
         working-directory: daemon
@@ -75,3 +86,10 @@ jobs:
             printf 'UI.render(UI.column({ children: [UI.text({ text: board }), UI.text({ text: String(value) })] }));\n'
           } > "$tmp"
           cargo run -q -p emwaver -- run "$tmp" --direct --sim-device
+
+      - name: Smoke test gateway to daemon simulator
+        run: |
+          cd gateway
+          npm ci
+          cd ..
+          scripts/rebirth-gateway-daemon-sim-validation.sh

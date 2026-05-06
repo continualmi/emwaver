@@ -45,6 +45,7 @@ if [[ -f "$ROOT/gateway/package-lock.json" ]]; then
 else
   (cd "$ROOT/gateway" && npm install)
 fi
+(cd "$ROOT/gateway" && npm run build)
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo

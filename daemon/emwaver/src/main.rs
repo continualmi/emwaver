@@ -1304,8 +1304,8 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
         anyhow::bail!("gateway package not found at {}", dir.display());
     }
 
-    let tsx_bin = dir.join("node_modules").join(".bin").join("tsx");
-    if !tsx_bin.exists() {
+    let node_modules = dir.join("node_modules");
+    if !node_modules.exists() {
         println!(
             "gateway dependencies missing; running `npm ci` in {}",
             dir.display()
@@ -1321,17 +1321,34 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
         }
     }
 
+    let built_server = dir.join("dist").join("server.mjs");
+    let built_client = dir.join("dist").join("client").join("index.html");
+    if !built_server.exists() || !built_client.exists() {
+        println!(
+            "gateway build missing; running `npm run build` in {}",
+            dir.display()
+        );
+        let status = Command::new("npm")
+            .arg("run")
+            .arg("build")
+            .current_dir(&dir)
+            .status()
+            .context("failed to build gateway")?;
+        if !status.success() {
+            anyhow::bail!("gateway build exited with status {status}");
+        }
+    }
+
     let port_value = port.unwrap_or(3921);
     println!("starting EMWaver gateway on http://127.0.0.1:{port_value}");
     println!("gateway dir: {}", dir.display());
 
-    let status = Command::new("npm")
-        .arg("run")
-        .arg("start")
+    let status = Command::new("node")
+        .arg("dist/server.mjs")
         .current_dir(&dir)
         .env("EMWAVER_GATEWAY_PORT", port_value.to_string())
         .status()
-        .context("failed to start gateway with npm")?;
+        .context("failed to start built gateway with node")?;
 
     if !status.success() {
         anyhow::bail!("gateway exited with status {status}");
