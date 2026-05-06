@@ -96,6 +96,13 @@ struct DeviceConnectionSheet: View {
                 .foregroundStyle(.secondary)
 
             HStack(spacing: 10) {
+                Button(isEspBoard ? "Flash firmware" : "Update firmware") {
+                    firmwareUpdater.present(boardType: currentBoardType)
+                    dismiss()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !firmwareUpdater.espBootloaderConnected && firmwareUpdater.espBootloaderPort == nil)
+
                 Button("Disconnect") {
                     device.disconnect()
                 }
