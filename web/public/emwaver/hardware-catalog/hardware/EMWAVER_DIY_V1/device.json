@@ -1,0 +1,40 @@
+{
+  "title": "EMWAVER_DIY_V1",
+  "displayTitle": "EMWaver Carrier",
+  "group": "module",
+  "status": "module",
+  "image": "github:catalog/images/EMWAVER_DIY.png",
+  "images": [
+    "github:catalog/images/IMG_0093.jpg",
+    "github:catalog/images/IMG_0084.jpg",
+    "github:catalog/images/IMG_0085.jpg",
+    "github:catalog/images/IMG_0086.jpg",
+    "github:catalog/images/IMG_0087.jpg",
+    "github:catalog/images/IMG_0088.jpg",
+    "github:catalog/images/IMG_0089.jpg",
+    "github:catalog/images/IMG_0090.jpg",
+    "github:catalog/images/IMG_0091.jpg",
+    "github:catalog/images/IMG_0092.jpg",
+    "github:catalog/images/IMG_0094.jpg",
+    "github:catalog/images/IMG_0095.jpg",
+    "github:catalog/images/EMWAVER_DIY.png"
+  ],
+  "casingImage": "github:catalog/images/EMWAVER_DIY_CASING.png",
+  "designDate": "2025-06-23",
+  "description": "EMWaver Carrier is the bring-your-own-MCU EMWaver board. It lets you assemble an EMWaver-compatible device around your own ESP32-S3 module and CC1101 radio module, with IR receiver + IR LEDs and USB-C for power, programming, and USB communication.",
+  "tags": ["DIY", "ESP32-S3", "CC1101", "IR", "USB-C", "module"],
+  "requires": ["ESP32-S3 DevKit", "CC1101"],
+  "appSupport": ["android", "ios", "desktop"],
+  "easyEdaUrl": "https://easyeda.com/editor#project_id=77f23930811d4bbb902d73bc4b0a6764",
+  "githubUrl": "https://github.com/continualmi/emwaver-carrier",
+  "buildAssets": {
+    "bom": "github:BOM_EMWAVER_CARRIER_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv",
+    "gerbers": "github:Gerber_EMWAVER_CARRIER_PCB_EMWAVER_CARRIER_2026-03-26.zip",
+    "schematic": "github:Schematic_EMWAVER_CARRIER_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_EMWAVER_CARRIER_2026-03-26.pdf",
+    "case": "github:EMWAVER_CARRIER_CASE.stl"
+  },
+  "schematicUrl": "",
+  "reproductionCost": { "amount": 38, "currency": "USD", "units": 2 }
+}

@@ -1,0 +1,56 @@
+{
+  "title": "emwaver",
+  "displayTitle": "EMWaver Link",
+  "group": "stm32",
+  "status": "production",
+  "image": "github:catalog/images/IMG_0149.webp",
+  "images": [
+    "github:catalog/images/IMG_0149.webp",
+    "github:catalog/images/IMG_0150.webp",
+    "github:catalog/images/IMG_0153.webp",
+    "github:catalog/images/IMG_0142.webp",
+    "github:catalog/images/IMG_0130.webp",
+    "github:catalog/images/IMG_0143.webp",
+    "github:catalog/images/IMG_0146.webp",
+    "github:catalog/images/IMG_0147.webp",
+    "github:catalog/images/IMG_0148.webp",
+    "github:catalog/images/IMG_0151.webp",
+    "github:catalog/images/IMG_0152.webp",
+    "github:catalog/images/IMG_0154.webp",
+    "github:catalog/images/IMG_0156.webp",
+    "github:catalog/images/IMG_0160.webp",
+    "github:catalog/images/IMG_0162.webp",
+    "github:catalog/images/IMG_0164.webp",
+
+    "github:catalog/images/IMG_0178.webp",
+    "github:catalog/images/IMG_0179.webp",
+    "github:catalog/images/IMG_0180.webp",
+    "github:catalog/images/IMG_0181.webp",
+    "github:catalog/images/IMG_0183.webp",
+    "github:catalog/images/IMG_0184.webp",
+    "github:catalog/images/IMG_0185.webp",
+    "github:catalog/images/IMG_0186.webp",
+
+    "github:catalog/images/emwaver-link-all.png",
+    "github:catalog/images/emwaver-link.png",
+    "github:catalog/images/emwaver-link.png"
+  ],
+  "designDate": "2026-01-06",
+  "description": "EMWaver Link is the STM32-based EMWaver board with built-in CC1101 radio support for the host-backed USB path of the platform.",
+  "tags": ["STM32", "USB"],
+  "appSupport": ["android", "ios", "desktop"],
+  "caseDownloads": [
+    { "label": "STL", "href": "github:EMWAVER_LINK_CASE.stl" }
+  ],
+  "buildAssets": {
+    "bom": "github:BOM_EMWAVER_LINK_2026-03-26.csv",
+    "cpl": "github:PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv",
+    "gerbers": "github:Gerber_EMWAVER_LINK_PCB_EMWAVER_LINK_2026-03-26.zip",
+    "schematic": "github:Schematic_EMWAVER_LINK_2026-03-26.pdf",
+    "pcb": "github:PCB_PCB_EMWAVER_LINK_2026-03-26.pdf",
+    "case": "github:EMWAVER_LINK_CASE.stl"
+  },
+  "oshwLabUrl": "",
+  "githubUrl": "https://github.com/continualmi/emwaver-link",
+  "schematicUrl": ""
+}

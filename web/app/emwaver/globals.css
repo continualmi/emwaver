@@ -1,0 +1,499 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════
+   EMWaver Design Tokens — Dark only
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  color-scheme: dark;
+
+/* ── Base palette ── */
+    --paper:       #070a12;
+    --paper-2:     #0b1020;
+    --ink:         #e9eefc;
+    --ink-dim:     rgba(233, 238, 252, 0.72);
+    --line:        rgba(233, 238, 252, 0.12);
+
+    /* ── Accents ── */
+    --aqua:        #4ee7c7;
+    --sky:         #5bc0ff;
+    --copper:      #f0a66a;
+    --danger:      #ff4d6d;
+
+    /* ── Surfaces ── */
+    --surface:     rgba(255, 255, 255, 0.06);
+    --surface-2:   rgba(255, 255, 255, 0.09);
+    --surface-3:   rgba(255, 255, 255, 0.03);
+    --glass:       rgba(6, 8, 16, 0.7);
+    --glass-heavy: rgba(2, 3, 8, 0.4);
+    --image-well:  rgba(3, 7, 18, 0.55);
+
+    /* ── Shadows / overlays ── */
+    --shadow:          rgba(0, 0, 0, 0.35);
+    --shadow-heavy:    rgba(0, 0, 0, 0.45);
+    --overlay:         rgba(0, 0, 0, 0.55);
+    --scrim:           rgba(0, 0, 0, 0.55);
+
+    /* ── Accent tints ── */
+    --aqua-tint:       rgba(78, 231, 199, 0.08);
+    --aqua-tint-2:     rgba(78, 231, 199, 0.12);
+    --sky-tint:        rgba(91, 192, 255, 0.08);
+    --sky-tint-2:      rgba(91, 192, 255, 0.12);
+    --copper-tint:     rgba(240, 166, 106, 0.10);
+    --copper-tint-2:   rgba(240, 166, 106, 0.12);
+    --danger-tint:     rgba(244, 63, 94, 0.12);
+    --amber-tint:      rgba(245, 158, 11, 0.10);
+    --red-tint:        rgba(239, 68, 68, 0.10);
+
+    /* ── Typography helpers ── */
+    --code-bg:         rgba(255, 255, 255, 0.05);
+    --code-border:     rgba(233, 238, 252, 0.14);
+    --code-text:       rgba(233, 238, 252, 0.92);
+
+    /* ── Prose / docs ── */
+    --link-underline:      rgba(91, 192, 255, 0.35);
+    --link-underline-hover: rgba(91, 192, 255, 0.8);
+    --blockquote-border:   rgba(78, 231, 199, 0.65);
+    --blockquote-bg:       rgba(78, 231, 199, 0.07);
+    --blockquote-text:     rgba(233, 238, 252, 0.78);
+    --table-header-bg:     rgba(255, 255, 255, 0.06);
+    --table-header-text:   rgba(233, 238, 252, 0.88);
+    --table-border:        rgba(233, 238, 252, 0.12);
+    --table-cell-border:   rgba(233, 238, 252, 0.08);
+
+    /* ── Grid pattern ── */
+    --grid-line:      rgba(233, 238, 252, 0.04);
+    --grid-line-2:    rgba(233, 238, 252, 0.03);
+    --grid-opacity:   0.04;
+
+    /* ── Docs nav ── */
+    --nav-heading:        rgba(233, 238, 252, 0.38);
+    --nav-item:           rgba(233, 238, 252, 0.56);
+    --nav-item-hover-bg:  rgba(255, 255, 255, 0.06);
+    --nav-hover-border:   rgba(233, 238, 252, 0.24);
+
+    /* ── Backgrounds ── */
+    --body-gradient: linear-gradient(180deg, #070a12 0%, #050712 60%, #04050c 100%);
+    --body-glow-1:   rgba(91, 192, 255, 0.22);
+    --body-glow-2:   rgba(78, 231, 199, 0.18);
+    --body-glow-3:   rgba(240, 166, 106, 0.14);
+    --docs-overlay-1: rgba(78, 231, 199, 0.08);
+    --docs-overlay-2: rgba(91, 192, 255, 0.06);
+    --docs-overlay-bg: linear-gradient(180deg, rgba(7,10,18,0.46) 0%, rgba(4,5,12,0.58) 100%);
+    --dash-overlay-1: rgba(78, 231, 199, 0.12);
+    --dash-overlay-2: rgba(91, 192, 255, 0.08);
+    --dash-overlay-bg: linear-gradient(to bottom, rgba(2,3,8,0.78), rgba(2,3,8,0.84));
+
+    /* ── Global bg image ── */
+    --bg-image-opacity:      0.30;
+    --bg-docs-image-opacity:  0.26;
+    --bg-dash-image-opacity:  0.20;
+    --bg-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(78,231,199,0.08), transparent 62%),
+      radial-gradient(900px 600px at 85% 20%, rgba(91,192,255,0.06), transparent 64%),
+      linear-gradient(to bottom, rgba(2,3,8,0.52), rgba(2,3,8,0.60));
+    --bg-docs-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(78,231,199,0.09), transparent 62%),
+      radial-gradient(900px 600px at 85% 20%, rgba(91,192,255,0.06), transparent 62%),
+      linear-gradient(to bottom, rgba(2,3,8,0.52), rgba(2,3,8,0.60));
+    --bg-dash-overlay-gradient: radial-gradient(1000px 600px at 20% 0%, rgba(78,231,199,0.12), transparent 60%),
+      radial-gradient(900px 600px at 85% 20%, rgba(91,192,255,0.08), transparent 62%),
+      linear-gradient(to bottom, rgba(2,3,8,0.78), rgba(2,3,8,0.84));
+
+    /* ── Hero card glow ── */
+    --hero-glow-white: rgba(255, 255, 255, 0.10);
+    --hero-glow-aqua:  rgba(78, 231, 199, 0.10);
+    --card-glow-aqua:  rgba(78, 231, 199, 0.18);
+    --card-glow-sky:   rgba(91, 192, 255, 0.14);
+
+    /* ── SVG / plot ── */
+    --plot-stroke:     rgba(255, 255, 255, 0.9);
+    --plot-text:       rgba(255, 255, 255, 0.6);
+
+    /* ── Misc ── */
+    --destructive-text: rgb(251, 113, 133);
+    --mobile-drawer-shadow: rgba(0, 0, 0, 0.5);
+}
+
+@theme inline {
+  --color-background: var(--paper);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-display);
+  --font-mono: var(--font-mono);
+}
+
+body {
+  background:
+    radial-gradient(1200px 700px at 15% 0%, var(--body-glow-1), transparent 55%),
+    radial-gradient(900px 600px at 70% 20%, var(--body-glow-2), transparent 60%),
+    radial-gradient(900px 700px at 40% 100%, var(--body-glow-3), transparent 55%),
+    var(--body-gradient);
+  color: var(--ink);
+  font-family: var(--font-display);
+}
+
+/* Fixed app shell: disable page-level scrolling, keep scrolling inside content/cards. */
+.app-shell-fixed {
+  height: 100dvh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.app-shell-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Docs layout ──────────────────────────────────────── */
+
+.docs-mode {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.docs-mode::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(900px 500px at 20% 0%, var(--docs-overlay-1), transparent 60%),
+    radial-gradient(900px 600px at 85% 15%, var(--docs-overlay-2), transparent 62%),
+    var(--docs-overlay-bg);
+  opacity: 1;
+  z-index: -1;
+}
+
+.docs-mode::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid-line-2) 1px, transparent 1px);
+  background-size: 64px 64px;
+  opacity: var(--grid-opacity);
+  z-index: -1;
+}
+
+/* ── Docs sidebar (fixed left) ────────────────────────── */
+
+.docs-sidebar-desktop {
+  display: none;
+}
+
+.docs-sidebar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+}
+
+.docs-sidebar-groups {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  overflow-y: auto;
+}
+
+.docs-nav-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.docs-nav-heading {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--nav-heading);
+  padding: 0 10px 6px;
+}
+
+.docs-nav-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.docs-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: var(--nav-item);
+  font-size: 14px;
+  font-weight: 500;
+  text-decoration: none;
+  transition: all 0.15s ease;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  width: 100%;
+}
+
+.docs-nav-item:hover {
+  background: var(--nav-item-hover-bg);
+  color: var(--ink);
+}
+
+.docs-nav-item.active {
+  background: var(--sky-tint-2);
+  color: var(--sky);
+}
+
+.docs-nav-item svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  opacity: 0.8;
+}
+
+.docs-nav-item.active svg {
+  opacity: 1;
+}
+
+/* ── Docs content area ────────────────────────────────── */
+
+.docs-content {
+  flex: 1;
+  min-width: 0;
+  padding: 28px 32px 64px;
+  overflow-y: auto;
+  min-height: 100vh;
+}
+
+.docs-article {
+  max-width: 78ch;
+}
+
+/* ── Docs mobile nav ──────────────────────────────────── */
+
+.docs-mobile-bar {
+  margin-bottom: 24px;
+}
+
+.docs-mobile-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+  backdrop-filter: blur(12px);
+}
+
+.docs-mobile-toggle:hover {
+  border-color: var(--nav-hover-border);
+}
+
+.docs-mobile-toggle svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+.docs-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim);
+  z-index: 99;
+}
+
+.docs-mobile-drawer {
+  position: fixed;
+  top: 69px;
+  left: 0;
+  width: 280px;
+  height: calc(100vh - 69px);
+  background: var(--paper);
+  border-right: 1px solid var(--line);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 14px;
+  box-shadow: 20px 0 60px var(--mobile-drawer-shadow);
+}
+
+/* ── Desktop: show fixed sidebar ──────────────────────── */
+
+@media (min-width: 768px) {
+  .docs-sidebar-desktop {
+    display: block;
+    position: fixed;
+    top: 69px;
+    left: 0;
+    width: 250px;
+    height: calc(100vh - 69px);
+    background: color-mix(in srgb, var(--paper) 92%, transparent);
+    border-right: 1px solid var(--line);
+    z-index: 50;
+    backdrop-filter: blur(16px);
+  }
+
+  .docs-content {
+    margin-left: 250px;
+    padding: 36px 40px 64px;
+  }
+
+  .docs-mobile-bar {
+    display: none;
+  }
+}
+
+/* Make docs/news sections reveal more of the global background image. */
+body:has(.docs-mode) .global-bg-image {
+  opacity: var(--bg-docs-image-opacity);
+}
+
+body:has(.docs-mode) .global-bg-overlay {
+  background: var(--bg-docs-overlay-gradient);
+}
+
+/* Dashboard can stay darker for focus/contrast. */
+body:has(.dashboard-mode) .global-bg-image {
+  opacity: var(--bg-dash-image-opacity);
+}
+
+body:has(.dashboard-mode) .global-bg-overlay {
+  background: var(--bg-dash-overlay-gradient);
+}
+
+/* Simple, purpose-built prose styling (no typography plugin). */
+.prose-emw {
+  max-width: 78ch;
+  color: var(--ink-dim);
+}
+
+.prose-emw h1,
+.prose-emw h2,
+.prose-emw h3,
+.prose-emw h4 {
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+
+.prose-emw h1 {
+  font-size: 2.2rem;
+  line-height: 1.1;
+  margin: 0 0 1rem;
+}
+
+.prose-emw h2 {
+  font-size: 1.6rem;
+  line-height: 1.2;
+  margin: 2.2rem 0 0.75rem;
+}
+
+.prose-emw h3 {
+  font-size: 1.25rem;
+  line-height: 1.2;
+  margin: 1.6rem 0 0.6rem;
+}
+
+.prose-emw p {
+  margin: 0.9rem 0;
+}
+
+.prose-emw a {
+  color: var(--sky);
+  text-decoration: none;
+  border-bottom: 1px solid var(--link-underline);
+}
+
+.prose-emw a:hover {
+  border-bottom-color: var(--link-underline-hover);
+}
+
+.prose-emw code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border: 1px solid var(--code-border);
+  background: var(--code-bg);
+  border-radius: 8px;
+  color: var(--code-text);
+}
+
+.prose-emw pre {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: transparent;
+  border: 1px solid var(--table-border);
+  border-radius: 14px;
+  overflow: auto;
+}
+
+.prose-emw pre code {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
+.prose-emw pre code.hljs {
+  background: transparent;
+}
+
+.prose-emw ul,
+.prose-emw ol {
+  padding-left: 1.25rem;
+  margin: 0.8rem 0;
+}
+
+.prose-emw li {
+  margin: 0.3rem 0;
+}
+
+.prose-emw blockquote {
+  margin: 1rem 0;
+  padding: 0.9rem 1rem;
+  border-left: 3px solid var(--blockquote-border);
+  background: var(--blockquote-bg);
+  border-radius: 10px;
+  color: var(--blockquote-text);
+}
+
+.prose-emw table {
+  width: 100%;
+  margin: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  border: 1px solid var(--table-border);
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.prose-emw th,
+.prose-emw td {
+  padding: 0.75rem 0.85rem;
+  border-bottom: 1px solid var(--table-cell-border);
+}
+
+.prose-emw th {
+  background: var(--table-header-bg);
+  color: var(--table-header-text);
+  text-align: left;
+  font-weight: 600;
+}
+
+.prose-emw hr {
+  border: none;
+  border-top: 1px solid var(--table-border);
+  margin: 1.8rem 0;
+}

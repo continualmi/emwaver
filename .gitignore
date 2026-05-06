@@ -129,6 +129,9 @@ assets/branding/logo-explorations/
 
 # Web auth handoff temp state
 web/.data/server/auth-handoff*.json
+web/.next/
+web/out/
+web/out-emwaver/
 
 # Playwright artifacts
 .playwright-cli/

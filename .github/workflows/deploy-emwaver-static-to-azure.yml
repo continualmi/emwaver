@@ -1,0 +1,57 @@
+name: Deploy EMWaver static site to Azure Storage
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache-dependency-path: web/package-lock.json
+          cache: npm
+
+      - name: Install dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Build static exports
+        working-directory: web
+        run: npm run build:static-sites
+
+      - name: Upload EMWaver static files to Azure Storage
+        uses: azure/cli@v2
+        env:
+          AZURE_EMWAVER_STORAGE_CONNECTION_STRING: ${{ secrets.AZURE_EMWAVER_STORAGE_CONNECTION_STRING }}
+        with:
+          inlineScript: |
+            set -euo pipefail
+            if [ -z "${AZURE_EMWAVER_STORAGE_CONNECTION_STRING:-}" ]; then
+              echo "Set AZURE_EMWAVER_STORAGE_CONNECTION_STRING to the emwaver.ai static-site storage account connection string."
+              exit 1
+            fi
+            az storage blob service-properties update \
+              --connection-string "$AZURE_EMWAVER_STORAGE_CONNECTION_STRING" \
+              --static-website \
+              --index-document index.html \
+              --404-document 404.html
+            az storage blob delete-batch \
+              --connection-string "$AZURE_EMWAVER_STORAGE_CONNECTION_STRING" \
+              --source '$web' \
+              --pattern "*" \
+              --only-show-errors
+            az storage blob upload-batch \
+              --connection-string "$AZURE_EMWAVER_STORAGE_CONNECTION_STRING" \
+              --destination '$web' \
+              --source web/out-emwaver \
+              --overwrite true \
+              --only-show-errors
