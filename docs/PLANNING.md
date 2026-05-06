@@ -31,7 +31,7 @@ Use it to capture:
 | `P0` | Agent interfaces | `mostly migrated` | Repo-shipped production prompt files are removed; gateway/CLI plus Apple iOS/macOS, Windows, and Android Agent paths now use API-key endpoint clients instead of EMWaver account chat routes. Remaining work: enrich runtime/hardware request context. |
 | `P0` | Device identity gates | `done for primary native paths` | macOS and Windows local connect/update paths no longer read hardware UIDs or gate flashing on minting/claiming/account state. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
-| `P1` | Static public web | `migrated to EMWaver repo` | Public EMWaver static pages live in `web/`, export to `web/out-emwaver`, and deploy through this repo's Azure Storage static workflow. Society keeps only a lightweight `/emwaver` bridge to `emwaver.ai`. |
+| `P1` | Static public web | `migrated to EMWaver repo` | Public EMWaver static pages live in `web/`, export to `web/out-emwaver`, and are being tested on GitHub Pages for the open-source release. Society keeps only a lightweight `/emwaver` bridge to `emwaver.ai`. |
 | `P1` | Hardware media assets | `planned` | Board/module images, renders, and diagrams should be canonical under `hardware/<repo-name>/` and referenced by docs/static surfaces instead of duplicated. |
 | `P1` | Promo/video work | `paused` | Promo work is superseded by the rebirth direction until the local-first launch story is settled. |
 | `P1` | Hardware validation (`004`, `005`) | `pending` | Still useful, but no longer the top planning focus while architecture pivots. |

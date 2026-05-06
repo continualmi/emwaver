@@ -17,6 +17,8 @@ The static export keeps the route available both at the domain root for `emwaver
 
 ## Deployment
 
-The repository workflow `.github/workflows/deploy-emwaver-static-to-azure.yml` builds this app from `web/` and uploads `web/out-emwaver` to the Azure Storage static website container.
+The repository workflow `.github/workflows/deploy-emwaver-pages.yml` builds this app from `web/` and uploads `web/out-emwaver` to GitHub Pages. This can be tested while the repo remains private when the repository plan supports GitHub Pages for private repositories.
 
-The workflow prefers `AZURE_EMWAVER_STORAGE_CONNECTION_STRING` in GitHub Actions secrets and falls back to the existing `AZURE_STORAGE_CONNECTION_STRING` secret during migration. Secret names are safe to keep in this open-source repository; credential values must stay only in GitHub Secrets or move to Azure OIDC/federated credentials later.
+The legacy Azure Storage workflow is still present during migration so `emwaver.ai` can stay on the existing host until the Pages deployment and custom-domain cutover are verified.
+
+Download buttons point to GitHub Release assets under `releases/latest/download` instead of serving binary installers from the static site.

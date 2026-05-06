@@ -1,5 +1,7 @@
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
+const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
+
 const STORES = [
   {
     platform: "iOS",
@@ -32,19 +34,19 @@ const DIRECT_DOWNLOADS = [
     platform: "Android",
     name: "APK",
     description: "Direct Android preview build.",
-    href: "/emwaver/downloads/EMWaver-android.apk",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
   },
   {
     platform: "macOS",
     name: "DMG",
     description: "Desktop preview build for macOS.",
-    href: "/emwaver/downloads/EMWaver-macos.dmg",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
   },
   {
     platform: "Windows",
     name: "ZIP with EXE",
     description: "Windows x64 preview package containing EMWaver.exe.",
-    href: "/emwaver/downloads/EMWaver-windows-x64.zip",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
   },
 ];
 

@@ -24,11 +24,11 @@ Each workflow can be run manually from GitHub Actions with a release tag, defaul
 Stable public preview URLs:
 
 ```text
-https://continualmi.com/emwaver/downloads/EMWaver-android.apk
-https://continualmi.com/emwaver/downloads/EMWaver-linux-x64.tar.gz
-https://continualmi.com/emwaver/downloads/EMWaver-macos-cli.tar.gz
-https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg
-https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.apk
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-linux-x64.tar.gz
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos-cli.tar.gz
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip
 ```
 
 The EMWaver repository is private, so GitHub Release asset URLs are not public install links. Public preview files are mirrored into the Society static site under `public/emwaver/downloads/`.
