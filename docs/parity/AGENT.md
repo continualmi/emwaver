@@ -1,8 +1,7 @@
-# Agent UI Parity
+# Agent Feature Parity
 
-This tracker defines the minimum Agent UI/runtime contract shared by EMWaver
-native clients. The Agent is optional paid inference and must not gate local
-scripts, local hardware control, firmware setup, or device connection.
+The executable Agent contract now lives in `docs/parity/features/agent.json` and runs as
+part of the broader platform feature parity suite.
 
 ## Required Capabilities
 
@@ -33,10 +32,10 @@ Each platform test suite should cover these behaviors:
 The repo-level static parity check is:
 
 ```bash
-node scripts/verify-agent-ui-parity.mjs
+node scripts/parity/verify-platform-parity.mjs
 ```
 
-This check runs in GitHub Actions through `.github/workflows/agent-ui-parity.yml`
+This check runs in GitHub Actions through `.github/workflows/platform-parity.yml`
 and verifies the cross-platform contract that can be checked without a physical
 device or simulator: local Agent key storage, local SQLite chat storage, shared
 Agent request shape, BLE runtime presence, and absence of Firebase/Google

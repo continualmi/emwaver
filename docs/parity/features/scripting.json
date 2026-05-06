@@ -1,0 +1,54 @@
+{
+  "component": "scripting",
+  "features": [
+    {
+      "id": "scripting.default_scripts_packaged",
+      "description": "Native app builds package the canonical default .emw script assets.",
+      "parity": "all_required",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [{ "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/FileService.swift", "contains": "DefaultScripts|default-scripts|script_bootstrap" }]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [{ "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/FileService.swift", "contains": "DefaultScripts|script_bootstrap" }]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [{ "file": "windows/EMWaver/EMWaver.csproj", "contains": "SyncDefaultScripts|Assets\\\\DefaultScripts" }]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [{ "file": "android/app/build.gradle", "contains": "syncScriptAssets|DefaultScripts|script_bootstrap" }]
+        }
+      }
+    },
+    {
+      "id": "scripting.simulator_contract_tests",
+      "description": "Platform script/runtime tests can run against the shared simulator fixture without physical hardware.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "planned",
+          "reason": "macOS has app tests, but the shared simulator fixture test is not yet wired into the macOS target.",
+          "evidence": [{ "file": "macos/EMWaver/EMWaverTests/EMWaverTests.swift", "contains": "import Testing|@Test" }]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS has transport/runtime tests, but the shared simulator fixture test is not yet wired into the iOS target.",
+          "evidence": [{ "file": "ios/EMWaverTests/EMWaverTests.swift", "contains": "import Testing|@Test" }]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [{ "file": "windows/EMWaver.Tests/SimulatorScriptEngineTests.cs", "contains": ["SimulatorCommandBridge", "basic-board\\.json"] }]
+        },
+        "android": {
+          "status": "planned",
+          "reason": "Android has SimulatorScriptDeviceBridge, but no checked-in JUnit fixture test yet.",
+          "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java", "contains": "basic-board|fixture|Simulator" }]
+        }
+      }
+    }
+  ]
+}

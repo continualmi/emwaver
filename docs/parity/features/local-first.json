@@ -1,0 +1,34 @@
+{
+  "component": "local-first",
+  "features": [
+    {
+      "id": "local_first.no_hosted_account_gate",
+      "description": "Native app source does not keep Firebase/Google sign-in or hosted cloud account gates.",
+      "parity": "all_required",
+      "forbidden": [
+        { "path": "android/app/src/main", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In|sign_in_google", "reason": "Android must not retain hosted account sign-in gates." },
+        { "path": "ios/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "iOS must not retain hosted account sign-in gates." },
+        { "path": "macos/EMWaver/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "macOS must not retain hosted account sign-in gates." },
+        { "path": "windows/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "Windows must not retain hosted account sign-in gates." }
+      ],
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [{ "file": "macos/README.md", "contains": "without account sign-in" }]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [{ "file": "ios/README.md", "contains": "local scripts and hardware control must not depend on this key|local device/script use does not" }]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [{ "file": "windows/README.md", "contains": "without account sign-in" }]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [{ "file": "android/README.md", "contains": "Do not require an EMWaver account" }]
+        }
+      }
+    }
+  ]
+}

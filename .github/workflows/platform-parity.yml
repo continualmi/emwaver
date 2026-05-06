@@ -1,4 +1,4 @@
-name: Agent UI Parity
+name: Platform Feature Parity
 
 on:
   pull_request:
@@ -8,9 +8,9 @@ on:
       - "ios/**"
       - "macos/**"
       - "windows/**"
-      - "docs/AGENT_UI_PARITY.md"
-      - "scripts/verify-agent-ui-parity.mjs"
-      - ".github/workflows/agent-ui-parity.yml"
+      - "docs/parity/**"
+      - "scripts/parity/**"
+      - ".github/workflows/platform-parity.yml"
   push:
     branches:
       - main
@@ -20,9 +20,9 @@ on:
       - "ios/**"
       - "macos/**"
       - "windows/**"
-      - "docs/AGENT_UI_PARITY.md"
-      - "scripts/verify-agent-ui-parity.mjs"
-      - ".github/workflows/agent-ui-parity.yml"
+      - "docs/parity/**"
+      - "scripts/parity/**"
+      - ".github/workflows/platform-parity.yml"
   workflow_dispatch:
 
 permissions:
@@ -43,5 +43,5 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Verify Agent UI parity contract
-        run: node scripts/verify-agent-ui-parity.mjs
+      - name: Verify platform feature parity contract
+        run: node scripts/parity/verify-platform-parity.mjs

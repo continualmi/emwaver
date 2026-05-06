@@ -1,0 +1,54 @@
+{
+  "component": "transport",
+  "features": [
+    {
+      "id": "transport.ble_runtime",
+      "description": "BLE runtime transport exists where native apps own device control.",
+      "parity": "all_required",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [{ "file": "macos/EMWaver/EMWaver/MacUSBManager.swift", "contains": "CoreBluetooth[\\s\\S]*CBCentralManager[\\s\\S]*bleServiceUUID" }]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [{ "file": "ios/EMWaver/Managers/USBManager.swift", "contains": "CoreBluetooth[\\s\\S]*CBCentralManager[\\s\\S]*bleServiceUUID" }]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [{ "file": "windows/EMWaver/Services/WindowsDeviceManager.cs", "contains": "BluetoothLEDevice|Gatt|BLE" }]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java", "contains": "BluetoothLeScanner|BluetoothGatt[\\s\\S]*EMW_BLE_SERVICE_UUID" }]
+        }
+      }
+    },
+    {
+      "id": "transport.usb_midi_runtime",
+      "description": "USB MIDI runtime transport exists on native device-control apps.",
+      "parity": "all_required",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [{ "file": "macos/EMWaver/EMWaver/MacUSBManager.swift", "contains": "CoreMIDI[\\s\\S]*MIDIClient" }]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [{ "file": "ios/EMWaver/Managers/USBManager.swift", "contains": "CoreMIDI[\\s\\S]*MIDIClient" }]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            { "file": "windows/EMWaver/Services/UsbMidiSysex.cs", "contains": "SysEx|Sysex|MIDI" },
+            { "file": "windows/EMWaver/Services/WindowsDeviceManager.cs", "contains": "Midi|MIDI|UsbMidiSysex" }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java", "contains": "MidiDevice|UsbMidiSysex|MIDI" }]
+        }
+      }
+    }
+  ]
+}
