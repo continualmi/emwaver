@@ -301,6 +301,19 @@ function contentType(filePath: string): string {
       return "image/svg+xml";
     case ".json":
       return "application/json";
+    case ".png":
+      return "image/png";
+    case ".jpg":
+    case ".jpeg":
+      return "image/jpeg";
+    case ".webp":
+      return "image/webp";
+    case ".ico":
+      return "image/x-icon";
+    case ".woff":
+      return "font/woff";
+    case ".woff2":
+      return "font/woff2";
     default:
       return "application/octet-stream";
   }
