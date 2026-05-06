@@ -20,7 +20,7 @@ struct SignInSheet: View {
                 .font(.title2)
                 .fontWeight(.semibold)
 
-            Text("Use a Continual MGPT API key to enable Agent replies. Local scripts and local hardware control stay available without a key.")
+            Text("Create a free MGPT account to get 100 free credits and a free API key for Agent replies. Local scripts and local hardware control stay available without a key.")
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
 

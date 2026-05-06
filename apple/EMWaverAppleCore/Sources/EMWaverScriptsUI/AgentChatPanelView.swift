@@ -195,13 +195,13 @@ public struct AgentChatPanelView: View {
                     Image(systemName: "lock.fill")
                         .foregroundStyle(.secondary)
 
-                    Text("Configure an Agent API key to enable Agent replies.")
+                    Text("Create a free MGPT account to get 100 free credits and a free API key for Agent replies.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
 
                     Spacer()
 
-                    Button("Configure Agent…") {
+                    Button("Get Free Key…") {
                         onRequestUpgrade?()
                     }
                     .buttonStyle(.bordered)

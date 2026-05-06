@@ -251,12 +251,6 @@ struct ContentView: View {
                     } label: {
                         Label("Agent Key", systemImage: "key.fill")
                     }
-                } else {
-                    Button {
-                        auth.isSignInSheetPresented = true
-                    } label: {
-                        Label("Enter Key", systemImage: "key.fill")
-                    }
                 }
             }
         }

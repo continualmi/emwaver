@@ -13,7 +13,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section("Agent") {
-                    Text("Agent replies use the Continual MGPT API. Create a key on MDL, buy credits from the same account if needed, then enter the key in EMWaver.")
+                    Text("Agent replies use the Continual MGPT API. Create a free MGPT account to get 100 free credits and a free API key, then enter the key in EMWaver.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
