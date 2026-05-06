@@ -21,6 +21,7 @@ public final class AgentChatViewModel: ObservableObject {
     @Published public private(set) var selectedConversationId: UUID?
     @Published public var draft: String = ""
     @Published public var isSending: Bool = false
+    @Published public private(set) var isLoadingConversation: Bool = false
     @Published public var lastError: String?
 
     private var assistantPlaceholderId: UUID?
@@ -76,7 +77,7 @@ public final class AgentChatViewModel: ObservableObject {
         UserDefaults.standard.set(id.uuidString, forKey: Self.selectedConversationDefaultsKey)
         let selected = conversations.first { $0.id == id }
         selectedUniverseId = selected?.universeId
-        messages = (try? chatStore.messages(conversationId: id)) ?? []
+        loadMessagesForSelectedConversation(id)
     }
 
     public func setModelForSelectedConversation(_ modelId: String) {
@@ -96,7 +97,7 @@ public final class AgentChatViewModel: ObservableObject {
             if let selectedConversationId {
                 UserDefaults.standard.set(selectedConversationId.uuidString, forKey: Self.selectedConversationDefaultsKey)
                 selectedUniverseId = conversations.first { $0.id == selectedConversationId }?.universeId
-                messages = (try? chatStore.messages(conversationId: selectedConversationId)) ?? []
+                loadMessagesForSelectedConversation(selectedConversationId)
             } else {
                 UserDefaults.standard.removeObject(forKey: Self.selectedConversationDefaultsKey)
                 selectedUniverseId = nil
@@ -379,6 +380,7 @@ public final class AgentChatViewModel: ObservableObject {
         let info = ConversationInfo(id: id, universeId: nil, title: defaultConversationTitle, updatedAt: Date())
         conversations = [info] + conversations
         selectedConversationId = id
+        isLoadingConversation = false
         messages = []
         persistConversation(id: id)
     }
@@ -422,8 +424,23 @@ public final class AgentChatViewModel: ObservableObject {
         selectedUniverseId = selected?.universeId
         if let selected {
             UserDefaults.standard.set(selected.id.uuidString, forKey: Self.selectedConversationDefaultsKey)
-            messages = (try? chatStore.messages(conversationId: selected.id)) ?? []
+            messages = loadMessages(conversationId: selected.id)
         }
+    }
+
+    private func loadMessagesForSelectedConversation(_ id: UUID) {
+        isLoadingConversation = true
+        messages = []
+
+        DispatchQueue.main.async {
+            guard self.selectedConversationId == id else { return }
+            self.messages = self.loadMessages(conversationId: id)
+            self.isLoadingConversation = false
+        }
+    }
+
+    private func loadMessages(conversationId: UUID) -> [AgentChatMessage] {
+        (try? chatStore.messages(conversationId: conversationId)) ?? []
     }
 
     private func persistConversation(id: UUID) {

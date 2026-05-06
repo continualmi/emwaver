@@ -128,10 +128,12 @@ public struct ScriptsRootView: View {
                         headerAccessory: agentLeadingToolbarItem
                     )
                     .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
                 .transition(.opacity)
             } else {
                 primaryContent
+                    .transition(.opacity)
             }
             #else
             primaryContent
@@ -1053,7 +1055,9 @@ public struct ScriptsRootView: View {
                 }
 
                 Button {
-                    showingAgentPanel.toggle()
+                    withAnimation(.easeInOut(duration: 0.22)) {
+                        showingAgentPanel.toggle()
+                    }
                 } label: {
                     Image(systemName: "sparkles")
                 }

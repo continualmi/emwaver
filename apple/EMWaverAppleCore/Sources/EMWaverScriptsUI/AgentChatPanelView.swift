@@ -116,38 +116,49 @@ public struct AgentChatPanelView: View {
 
     private var messages: some View {
         ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(viewModel.messages) { msg in
-                        MessageRow(message: msg)
-                            .id(msg.id)
-                    }
-
-                    if viewModel.isSending {
-                        HStack(spacing: 8) {
-                            ProgressView()
-                                .controlSize(.small)
-                            Text("Thinking…")
-                                .foregroundStyle(.secondary)
-                                .font(.callout)
+            ZStack {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(viewModel.messages) { msg in
+                            MessageRow(message: msg)
+                                .id(msg.id)
                         }
-                        .padding(.vertical, 8)
-                    }
 
-                    if let err = viewModel.lastError, !err.isEmpty {
-                        Text(err)
-                            .foregroundStyle(.red)
-                            .font(.callout)
-                            .textSelection(.enabled)
+                        if viewModel.isSending {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("Thinking…")
+                                    .foregroundStyle(.secondary)
+                                    .font(.callout)
+                            }
                             .padding(.vertical, 8)
-                    }
+                        }
 
-                    Color.clear
-                        .frame(height: 1)
-                        .id(Self.messagesBottomId)
+                        if let err = viewModel.lastError, !err.isEmpty {
+                            Text(err)
+                                .foregroundStyle(.red)
+                                .font(.callout)
+                                .textSelection(.enabled)
+                                .padding(.vertical, 8)
+                        }
+
+                        Color.clear
+                            .frame(height: 1)
+                            .id(Self.messagesBottomId)
+                    }
+                    .padding(12)
                 }
-                .padding(12)
+
+                if viewModel.isLoadingConversation {
+                    ProgressView()
+                        .controlSize(.regular)
+                        .padding(16)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .transition(.opacity)
+                }
             }
+            .animation(.easeInOut(duration: 0.16), value: viewModel.isLoadingConversation)
             .onChange(of: viewModel.messages) { _ in
                 scrollToBottom(using: proxy)
             }
