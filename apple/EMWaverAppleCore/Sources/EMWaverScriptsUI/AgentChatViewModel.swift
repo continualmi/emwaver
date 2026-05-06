@@ -13,7 +13,8 @@ public final class AgentChatViewModel: ObservableObject {
 
     public static let defaultModelId = "managed-by-server"
     private static let storedPromptName = "emwaver-prompt"
-    private static let universeDefaultsKey = "emwaver.agent.mgptUniverse"
+    private static let selectedConversationDefaultsKey = "emwaver.agent.selectedConversation"
+    private static let legacyUniverseDefaultsKey = "emwaver.agent.mgptUniverse"
 
     @Published public private(set) var messages: [AgentChatMessage] = []
     @Published public private(set) var conversations: [ConversationInfo] = []
@@ -25,24 +26,21 @@ public final class AgentChatViewModel: ObservableObject {
     private var assistantPlaceholderId: UUID?
     private var selectedUniverseId: String?
     private var toolRuntime: AgentToolRuntime?
+    private let chatStore: AgentChatStore
 
     // Endpoint context for API-key Agent execution. The tuple names are kept
     // for source compatibility with existing app callers.
     private let endpointProvider: (() -> (baseURL: URL, accessToken: String)?)?
 
-    public init(endpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
+    public convenience init(endpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil) {
+        self.init(endpointProvider: endpointProvider, chatStore: .shared)
+    }
+
+    init(endpointProvider: (() -> (baseURL: URL, accessToken: String)?)? = nil, chatStore: AgentChatStore) {
         self.endpointProvider = endpointProvider
+        self.chatStore = chatStore
         self.messages = []
-        let storedUniverse = UserDefaults.standard.string(forKey: Self.universeDefaultsKey)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        self.selectedUniverseId = storedUniverse?.isEmpty == false ? storedUniverse : nil
-        if let selectedUniverseId = self.selectedUniverseId, let id = UUID(uuidString: selectedUniverseId) {
-            self.conversations = [ConversationInfo(id: id, title: "Chat", updatedAt: Date())]
-            self.selectedConversationId = id
-        } else {
-            self.conversations = []
-            self.selectedConversationId = nil
-        }
+        loadStoredConversations()
     }
 
     public var isAgentConfigured: Bool {
@@ -74,7 +72,10 @@ public final class AgentChatViewModel: ObservableObject {
 
     public func selectConversation(_ id: UUID) {
         selectedConversationId = id
-        messages = []
+        UserDefaults.standard.set(id.uuidString, forKey: Self.selectedConversationDefaultsKey)
+        let selected = conversations.first { $0.id == id }
+        selectedUniverseId = selected?.universeId
+        messages = (try? chatStore.messages(conversationId: id)) ?? []
     }
 
     public func setModelForSelectedConversation(_ modelId: String) {
@@ -88,9 +89,18 @@ public final class AgentChatViewModel: ObservableObject {
             return
         }
         conversations.removeAll { $0.id == id }
+        try? chatStore.archiveConversation(id)
         if selectedConversationId == id {
             selectedConversationId = conversations.first?.id
-            messages = []
+            if let selectedConversationId {
+                UserDefaults.standard.set(selectedConversationId.uuidString, forKey: Self.selectedConversationDefaultsKey)
+                selectedUniverseId = conversations.first { $0.id == selectedConversationId }?.universeId
+                messages = (try? chatStore.messages(conversationId: selectedConversationId)) ?? []
+            } else {
+                UserDefaults.standard.removeObject(forKey: Self.selectedConversationDefaultsKey)
+                selectedUniverseId = nil
+                messages = []
+            }
         }
     }
 
@@ -111,18 +121,15 @@ public final class AgentChatViewModel: ObservableObject {
             return
         }
 
+        if selectedConversationId == nil {
+            startLocalConversation()
+        }
         appendMessage(AgentChatMessage(role: .user, text: text))
 
         isSending = true
 
         Task {
             do {
-                if self.selectedConversationId == nil {
-                    await MainActor.run {
-                        self.startLocalConversation()
-                    }
-                }
-
                 // Placeholder assistant message while the managed Agent runs.
                 let placeholderId = UUID()
                 await MainActor.run {
@@ -278,13 +285,15 @@ public final class AgentChatViewModel: ObservableObject {
         }
         await MainActor.run {
             self.selectedUniverseId = universe
-            UserDefaults.standard.set(universe, forKey: Self.universeDefaultsKey)
-            if let id = UUID(uuidString: universe) {
-                self.selectedConversationId = id
-                if !self.conversations.contains(where: { $0.id == id }) {
-                    self.conversations = [ConversationInfo(id: id, title: self.defaultConversationTitle, updatedAt: Date())] + self.conversations
-                }
+            let id = self.selectedConversationId ?? UUID()
+            self.selectedConversationId = id
+            UserDefaults.standard.set(id.uuidString, forKey: Self.selectedConversationDefaultsKey)
+            if let index = self.conversations.firstIndex(where: { $0.id == id }) {
+                self.conversations[index] = ConversationInfo(id: id, universeId: universe, title: self.conversations[index].title, createdAt: self.conversations[index].createdAt, updatedAt: Date())
+            } else {
+                self.conversations = [ConversationInfo(id: id, universeId: universe, title: self.defaultConversationTitle, updatedAt: Date())] + self.conversations
             }
+            self.persistConversation(id: id)
         }
         return universe
     }
@@ -315,6 +324,7 @@ public final class AgentChatViewModel: ObservableObject {
             var updated = messages
             updated.insert(msg, at: idx)
             messages = updated
+            persistMessage(msg)
         } else {
             appendMessage(msg)
         }
@@ -322,6 +332,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func appendMessage(_ message: AgentChatMessage) {
         messages = messages + [message]
+        persistMessage(message)
     }
 
     private func replaceMessage(id: UUID, with message: AgentChatMessage) {
@@ -329,12 +340,23 @@ public final class AgentChatViewModel: ObservableObject {
         var updated = messages
         updated[idx] = message
         messages = updated
+        persistMessage(message)
     }
 
     public struct ConversationInfo: Identifiable, Equatable {
         public let id: UUID
+        public let universeId: String?
         public let title: String
+        public let createdAt: Date
         public let updatedAt: Date
+
+        public init(id: UUID, universeId: String?, title: String, createdAt: Date = Date(), updatedAt: Date) {
+            self.id = id
+            self.universeId = universeId
+            self.title = title
+            self.createdAt = createdAt
+            self.updatedAt = updatedAt
+        }
     }
 
     private var defaultConversationTitle: String {
@@ -344,11 +366,12 @@ public final class AgentChatViewModel: ObservableObject {
     private func startLocalConversation() {
         let id = UUID()
         selectedUniverseId = nil
-        UserDefaults.standard.removeObject(forKey: Self.universeDefaultsKey)
-        let info = ConversationInfo(id: id, title: defaultConversationTitle, updatedAt: Date())
+        UserDefaults.standard.set(id.uuidString, forKey: Self.selectedConversationDefaultsKey)
+        let info = ConversationInfo(id: id, universeId: nil, title: defaultConversationTitle, updatedAt: Date())
         conversations = [info] + conversations
         selectedConversationId = id
         messages = []
+        persistConversation(id: id)
     }
 
     private func touchSelectedConversation() {
@@ -356,9 +379,60 @@ public final class AgentChatViewModel: ObservableObject {
         let now = Date()
         conversations = conversations.map { info in
             info.id == selectedConversationId
-                ? ConversationInfo(id: info.id, title: info.title, updatedAt: now)
+                ? ConversationInfo(id: info.id, universeId: info.universeId, title: info.title, createdAt: info.createdAt, updatedAt: now)
                 : info
         }
+        persistConversation(id: selectedConversationId)
+    }
+
+    private func loadStoredConversations() {
+        let stored = (try? chatStore.conversations()) ?? []
+        conversations = stored.map {
+            ConversationInfo(id: $0.id, universeId: $0.universeId, title: $0.title, createdAt: $0.createdAt, updatedAt: $0.updatedAt)
+        }
+
+        if conversations.isEmpty,
+           let legacyUniverse = UserDefaults.standard.string(forKey: Self.legacyUniverseDefaultsKey)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !legacyUniverse.isEmpty {
+            let id = UUID()
+            let info = ConversationInfo(id: id, universeId: legacyUniverse, title: defaultConversationTitle, updatedAt: Date())
+            conversations = [info]
+            selectedConversationId = id
+            selectedUniverseId = legacyUniverse
+            messages = []
+            persistConversation(id: id)
+            UserDefaults.standard.set(id.uuidString, forKey: Self.selectedConversationDefaultsKey)
+            UserDefaults.standard.removeObject(forKey: Self.legacyUniverseDefaultsKey)
+            return
+        }
+
+        let selectedId = UserDefaults.standard.string(forKey: Self.selectedConversationDefaultsKey)
+            .flatMap(UUID.init(uuidString:))
+        let selected = conversations.first(where: { $0.id == selectedId }) ?? conversations.first
+        selectedConversationId = selected?.id
+        selectedUniverseId = selected?.universeId
+        if let selected {
+            UserDefaults.standard.set(selected.id.uuidString, forKey: Self.selectedConversationDefaultsKey)
+            messages = (try? chatStore.messages(conversationId: selected.id)) ?? []
+        }
+    }
+
+    private func persistConversation(id: UUID) {
+        guard let info = conversations.first(where: { $0.id == id }) else { return }
+        try? chatStore.upsertConversation(
+            StoredAgentConversation(
+                id: info.id,
+                universeId: info.universeId,
+                title: info.title,
+                createdAt: info.createdAt,
+                updatedAt: info.updatedAt
+            )
+        )
+    }
+
+    private func persistMessage(_ message: AgentChatMessage) {
+        guard let selectedConversationId else { return }
+        try? chatStore.upsertMessage(message, conversationId: selectedConversationId)
     }
 }
 
