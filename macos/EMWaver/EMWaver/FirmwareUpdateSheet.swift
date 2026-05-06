@@ -15,6 +15,10 @@ struct FirmwareUpdateSheet: View {
         return boardType.caseInsensitiveCompare("esp32s3") == .orderedSame
     }
 
+    private var canStartEspFlash: Bool {
+        device.isConnected || updater.espBootloaderConnected || updater.espBootloaderPort != nil
+    }
+
     private var needsManagedFirmwareInstall: Bool {
         false
     }
@@ -256,7 +260,7 @@ struct FirmwareUpdateSheet: View {
                             updater.startUpdate(device: device)
                         }
                         .buttonStyle(.borderedProminent)
-                        .disabled(updater.isFlashing || (!updater.espBootloaderConnected && updater.espBootloaderPort == nil))
+                        .disabled(updater.isFlashing || !canStartEspFlash)
                     }
                 }
                 .padding(14)
