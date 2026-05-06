@@ -302,20 +302,22 @@ private struct MessageRow: View {
             }
 
             VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    if message.role == .system && isToolBubble {
-                        Image(systemName: "wrench.and.screwdriver")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    } else if message.role == .assistant {
-                        Image(systemName: "sparkles")
+                if message.role != .user {
+                    HStack(spacing: 6) {
+                        if message.role == .system && isToolBubble {
+                            Image(systemName: "wrench.and.screwdriver")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        } else if message.role == .assistant {
+                            Image(systemName: "sparkles")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Text(roleLabel)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-
-                    Text(roleLabel)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                 }
 
                 if message.role == .assistant {
