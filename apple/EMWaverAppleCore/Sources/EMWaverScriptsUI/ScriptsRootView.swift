@@ -752,7 +752,7 @@ public struct ScriptsRootView: View {
     #if os(macOS)
     private func makeMacAgentToolRuntime() -> AgentToolRuntime {
         AgentToolRuntime(
-            manifest: { macAgentToolManifest },
+            tools: { macAgentTools },
             context: { macAgentToolContext() },
             execute: { name, arguments in
                 await executeMacAgentTool(name: name, arguments: arguments)
@@ -760,19 +760,45 @@ public struct ScriptsRootView: View {
         )
     }
 
-    private var macAgentToolManifest: String {
-        """
-        - get_current_script({}): returns the open or selected script id, name, draft text, read-only flag, and dirty flag.
-        - list_scripts({}): returns bundled and custom .emw scripts.
-        - read_script({ scriptId?: string }): returns script source. Defaults to the current script.
-        - apply_patch_to_script({ scriptId?: string, patch?: string, content?: string }): updates an editable script draft. Asset scripts are read-only.
-        - preview_script({ scriptId?: string }): renders a script in the local preview.
-        - run_script({ scriptId?: string }): alias for preview_script; starts the script runtime.
-        - stop_script({}): stops the current script runtime.
-        - get_device_status({}): returns connected/local device and runtime status known to the macOS app.
-        - get_ui_snapshot({}): returns the latest rendered script UI tree summary.
-        - send_ui_event({ token: string, arguments?: array }): dispatches a UI event handler token into the running script.
-        """
+    private var macAgentTools: [AgentToolDefinition] {
+        let empty = schema([])
+        let scriptId = optionalStringProperty("scriptId", "Script id. Defaults to the current script.")
+        return [
+            AgentToolDefinition(name: "get_current_script", description: "Return the open or selected script id, name, draft text, read-only flag, and dirty flag.", parameters: empty),
+            AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom .emw scripts.", parameters: empty),
+            AgentToolDefinition(name: "read_script", description: "Return script source. Defaults to the current script.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "apply_patch_to_script", description: "Update an editable script draft. Asset scripts are read-only.", parameters: schema([
+                scriptId,
+                optionalStringProperty("patch", "Unified diff patch to apply."),
+                optionalStringProperty("content", "Full replacement script content."),
+            ])),
+            AgentToolDefinition(name: "preview_script", description: "Render a script in the local preview.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "run_script", description: "Alias for preview_script; starts the script runtime.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
+            AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
+            AgentToolDefinition(name: "get_ui_snapshot", description: "Return the latest rendered script UI tree summary.", parameters: empty),
+            AgentToolDefinition(name: "send_ui_event", description: "Dispatch a UI event handler token into the running script.", parameters: schema([
+                ("token", .object(["type": .string("string"), "description": .string("UI event handler token.")])),
+                ("arguments", .object(["type": .string("array"), "description": .string("Optional event argument array."), "items": .object([:])])),
+            ], required: ["token"])),
+        ]
+    }
+
+    private func optionalStringProperty(_ name: String, _ description: String) -> (String, AgentToolJSON) {
+        (name, .object(["type": .string("string"), "description": .string(description)]))
+    }
+
+    private func schema(_ properties: [(String, AgentToolJSON)], required: [String] = []) -> AgentToolJSON {
+        var props: [String: AgentToolJSON] = [:]
+        for (name, value) in properties {
+            props[name] = value
+        }
+        return .object([
+            "type": .string("object"),
+            "properties": .object(props),
+            "required": .array(required.map { .string($0) }),
+            "additionalProperties": .bool(false),
+        ])
     }
 
     private func macAgentToolContext() -> String {

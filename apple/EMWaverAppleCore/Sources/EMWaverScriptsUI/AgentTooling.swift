@@ -61,20 +61,43 @@ public enum AgentToolJSON: Codable, Equatable {
 
 struct AgentToolCall: Codable, Equatable {
     let id: String?
+    let callId: String?
     let name: String
     let arguments: [String: AgentToolJSON]?
 }
 
+public struct AgentToolDefinition: Codable, Equatable {
+    public let type: String
+    public let name: String
+    public let description: String?
+    public let parameters: AgentToolJSON
+    public let strict: Bool?
+
+    public init(name: String, description: String, parameters: AgentToolJSON, strict: Bool = false) {
+        self.type = "function"
+        self.name = name
+        self.description = description
+        self.parameters = parameters
+        self.strict = strict
+    }
+}
+
 public struct AgentToolResult: Codable, Equatable {
     public let id: String?
+    public let callId: String?
     public let name: String
+    public let arguments: [String: AgentToolJSON]?
+    public let output: AgentToolJSON?
     public let ok: Bool
     public let result: AgentToolJSON?
     public let error: String?
 
-    public init(id: String?, name: String, ok: Bool, result: AgentToolJSON? = nil, error: String? = nil) {
+    public init(id: String?, callId: String? = nil, name: String, arguments: [String: AgentToolJSON]? = nil, output: AgentToolJSON? = nil, ok: Bool, result: AgentToolJSON? = nil, error: String? = nil) {
         self.id = id
+        self.callId = callId
         self.name = name
+        self.arguments = arguments
+        self.output = output
         self.ok = ok
         self.result = result
         self.error = error
@@ -83,16 +106,16 @@ public struct AgentToolResult: Codable, Equatable {
 
 @MainActor
 public struct AgentToolRuntime {
-    public let manifest: () -> String
+    let tools: () -> [AgentToolDefinition]
     public let context: () -> String
     public let execute: (_ name: String, _ arguments: [String: AgentToolJSON]) async -> AgentToolResult
 
     public init(
-        manifest: @escaping () -> String,
+        tools: @escaping () -> [AgentToolDefinition],
         context: @escaping () -> String,
         execute: @escaping (_ name: String, _ arguments: [String: AgentToolJSON]) async -> AgentToolResult
     ) {
-        self.manifest = manifest
+        self.tools = tools
         self.context = context
         self.execute = execute
     }

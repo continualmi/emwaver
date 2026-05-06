@@ -26,6 +26,31 @@ struct AgentEndpointRequest: Encodable {
     let model: String
     let universe: String
     let userInput: String
+    let tools: [AgentToolDefinition]?
+    let toolChoice: AgentToolChoice?
+    let toolResults: [AgentToolResult]?
+
+    init(model: String, universe: String, userInput: String, tools: [AgentToolDefinition]? = nil, toolChoice: AgentToolChoice? = nil, toolResults: [AgentToolResult]? = nil) {
+        self.model = model
+        self.universe = universe
+        self.userInput = userInput
+        self.tools = tools
+        self.toolChoice = toolChoice
+        self.toolResults = toolResults
+    }
+}
+
+enum AgentToolChoice: Encodable {
+    case auto
+    case none
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .auto: try container.encode("auto")
+        case .none: try container.encode("none")
+        }
+    }
 }
 
 struct AgentUniverseCreateRequest: Encodable {
