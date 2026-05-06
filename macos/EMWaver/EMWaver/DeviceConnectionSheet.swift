@@ -7,6 +7,9 @@ struct DeviceConnectionSheet: View {
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
+            if device.connectedTransportKind == "BLE" {
+                return ("Connected over BLE", "antenna.radiowaves.left.and.right")
+            }
             return ("Connected", "cable.connector")
         }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
@@ -14,6 +17,9 @@ struct DeviceConnectionSheet: View {
         }
         if firmwareUpdater.dfuConnected {
             return ("Update Mode", "arrow.triangle.2.circlepath")
+        }
+        if device.isBleScanning {
+            return ("Scanning for BLE", "antenna.radiowaves.left.and.right")
         }
         return ("Disconnected", "cable.connector.slash")
     }
@@ -28,6 +34,11 @@ struct DeviceConnectionSheet: View {
         }
         if device.isConnected, let version = device.deviceEmwaverVersion, !version.isEmpty {
             items.append("EMWaver \(version)")
+        }
+        if device.isConnected, let transport = device.connectedTransportKind, !transport.isEmpty {
+            items.append(transport)
+        } else if device.isBleScanning {
+            items.append("BLE scan")
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
             items.append("ESP32-S3")

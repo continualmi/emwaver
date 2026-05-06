@@ -32,6 +32,9 @@ struct ContentView: View {
 
     private var toolbarDeviceStatus: (icon: String, text: String) {
         if device.isConnected {
+            if device.connectedTransportKind == "BLE" {
+                return ("antenna.radiowaves.left.and.right", currentBoardDisplayName)
+            }
             return ("cable.connector", currentBoardDisplayName)
         }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
@@ -39,6 +42,9 @@ struct ContentView: View {
         }
         if firmwareUpdater.dfuConnected {
             return ("arrow.triangle.2.circlepath", "Update Mode")
+        }
+        if device.isBleScanning {
+            return ("antenna.radiowaves.left.and.right", "Scanning")
         }
         return ("cable.connector.slash", "Disconnected")
     }

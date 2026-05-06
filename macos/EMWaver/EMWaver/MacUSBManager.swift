@@ -45,6 +45,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     @Published var connectedBoardType: String? = nil
     @Published var lastDetectedBoardType: String? = nil
+    @Published var connectedTransportKind: String? = nil
+    @Published var isBleScanning: Bool = false
 
     private enum ActiveTransport {
         case none
@@ -437,6 +439,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.main.async {
             self.connectedPortName = displayName ?? candidate.name
             self.isConnected = true
+            self.connectedTransportKind = "USB"
             self.lastErrorText = nil
             self.deviceEmwaverVersion = nil
         }
@@ -479,6 +482,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
             self.connectedBoardType = nil
+            self.connectedTransportKind = nil
         }
     }
 
@@ -672,10 +676,16 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             withServices: [Self.bleServiceUUID],
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
+        DispatchQueue.main.async {
+            self.isBleScanning = true
+        }
     }
 
     private func stopBleScanInternal() {
         bleCentral?.stopScan()
+        DispatchQueue.main.async {
+            self.isBleScanning = false
+        }
     }
 
     private func disconnectMidiOnlyInternal() {
@@ -698,6 +708,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
             self.connectedBoardType = "esp32s3"
             self.lastDetectedBoardType = "esp32s3"
+            self.connectedTransportKind = "BLE"
             self.lastErrorText = nil
         }
     }
@@ -855,6 +866,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
             self.connectedBoardType = "esp32s3"
             self.lastDetectedBoardType = "esp32s3"
+            self.connectedTransportKind = "BLE"
             self.lastErrorText = nil
         }
     }
@@ -880,6 +892,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
             self.connectedBoardType = nil
+            self.connectedTransportKind = nil
         }
         if autoConnectEnabled {
             startBleScanInternal()
@@ -924,6 +937,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                     self.deviceEmwaverVersion = version
                     self.connectedBoardType = "esp32s3"
                     self.lastDetectedBoardType = "esp32s3"
+                    self.connectedTransportKind = "BLE"
                 }
             }
         }
