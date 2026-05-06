@@ -131,7 +131,6 @@ struct ContentView: View {
                     onRequestOpenSettings: {
                         showingSettings = true
                     },
-                    leadingHeaderItem: AnyView(deviceHeaderItem),
                     agentLeadingToolbarItem: AnyView(agentKeyToolbarItem)
                 )
                 .id(scriptDeviceAttachmentKey)
@@ -184,6 +183,23 @@ struct ContentView: View {
             }
         }
         .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button {
+                    appRouter.isDeviceSheetPresented = true
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: toolbarDeviceStatus.icon)
+                            .imageScale(.medium)
+                            .frame(width: 16, alignment: .center)
+
+                        Text(toolbarDeviceStatus.text)
+                    }
+                    .padding(.horizontal, 8)
+                }
+                .buttonStyle(.plain)
+                .help("Device / connection options")
+            }
+
             ToolbarItem(placement: .automatic) {
                 if remoteControlHost.isRemoteControlled {
                     Button {
@@ -256,27 +272,6 @@ struct ContentView: View {
 
         autoFirmwarePromptKey = key
         firmwareUpdater.present(boardType: currentBoardType)
-    }
-
-    @ViewBuilder
-    private var deviceHeaderItem: some View {
-        Button {
-            appRouter.isDeviceSheetPresented = true
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: toolbarDeviceStatus.icon)
-                    .imageScale(.medium)
-                    .frame(width: 16, alignment: .center)
-
-                Text(toolbarDeviceStatus.text)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 10)
-            .frame(height: 30)
-        }
-        .buttonStyle(.bordered)
-        .controlSize(.regular)
-        .help("Device / connection options")
     }
 
     @ViewBuilder

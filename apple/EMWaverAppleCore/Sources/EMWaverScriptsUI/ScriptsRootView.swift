@@ -30,7 +30,6 @@ public struct ScriptsRootView: View {
     private let agentEnabled: Bool
     private let onRequestAgentUpgrade: (() -> Void)?
     private let onRequestOpenSettings: (() -> Void)?
-    private let leadingHeaderItem: AnyView?
     private let agentLeadingToolbarItem: AnyView?
 
     @State private var showingEditor = false
@@ -72,7 +71,6 @@ public struct ScriptsRootView: View {
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
-        leadingHeaderItem: AnyView? = nil,
         agentLeadingToolbarItem: AnyView? = nil
     ) {
         self.device = device
@@ -80,7 +78,6 @@ public struct ScriptsRootView: View {
         self.agentEnabled = agentEnabled
         self.onRequestAgentUpgrade = onRequestAgentUpgrade
         self.onRequestOpenSettings = onRequestOpenSettings
-        self.leadingHeaderItem = leadingHeaderItem
         self.agentLeadingToolbarItem = agentLeadingToolbarItem
         self.agentEndpointProvider = agentEndpointProvider
         self._previewManager = StateObject(wrappedValue: previewManager)
@@ -97,7 +94,6 @@ public struct ScriptsRootView: View {
         agentEnabled: Bool = true,
         onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
-        leadingHeaderItem: AnyView? = nil,
         agentLeadingToolbarItem: AnyView? = nil
     ) {
         self.init(
@@ -108,7 +104,6 @@ public struct ScriptsRootView: View {
             agentEnabled: agentEnabled,
             onRequestAgentUpgrade: onRequestAgentUpgrade,
             onRequestOpenSettings: onRequestOpenSettings,
-            leadingHeaderItem: leadingHeaderItem,
             agentLeadingToolbarItem: agentLeadingToolbarItem
         )
     }
@@ -254,44 +249,10 @@ public struct ScriptsRootView: View {
             if showingEditor {
                 editorView
             } else {
-                #if os(macOS)
-                VStack(spacing: 0) {
-                    scriptsHeader
-                    mainView
-                }
-                #else
                 mainView
-                #endif
             }
         }
     }
-
-    #if os(macOS)
-    private var scriptsHeader: some View {
-        HStack(spacing: 8) {
-            Spacer()
-
-            if let leadingHeaderItem {
-                leadingHeaderItem
-            }
-
-            Button {
-                showingAgentPanel.toggle()
-            } label: {
-                Image(systemName: "sparkles")
-                    .imageScale(.large)
-                    .frame(width: 34, height: 30)
-            }
-            .buttonStyle(.bordered)
-            .controlSize(.regular)
-            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
-        }
-        .padding(.horizontal, 42)
-        .padding(.top, 14)
-        .padding(.bottom, 8)
-        .background(Self.primaryBackground)
-    }
-    #endif
 
     private var mainView: some View {
         Group {
@@ -1079,6 +1040,17 @@ public struct ScriptsRootView: View {
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {
+        #if os(macOS)
+        ToolbarItem(placement: .primaryAction) {
+            Button {
+                showingAgentPanel.toggle()
+            } label: {
+                Image(systemName: "sparkles")
+            }
+            .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
+        }
+        #endif
+
         if showingEditor {
             let isScriptEditor = (editorMode == .script)
             let canRun = isScriptEditor
