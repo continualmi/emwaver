@@ -37,7 +37,9 @@ struct DeviceConnectionSheet: View {
             items.append(("Transport", transport))
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
-            items.append(("Board", "ESP32-S3"))
+            items.append(("MCU", currentBoardDisplayName))
+        } else if device.isConnected {
+            items.append(("MCU", currentBoardDisplayName))
         }
         return items
     }
@@ -51,6 +53,17 @@ struct DeviceConnectionSheet: View {
 
     private var isEspBoard: Bool {
         currentBoardType.caseInsensitiveCompare("esp32s3") == .orderedSame
+    }
+
+    private var currentBoardDisplayName: String {
+        switch currentBoardType.lowercased() {
+        case "esp32s3":
+            return "ESP32-S3"
+        case "stm32f042":
+            return "STM32F042"
+        default:
+            return currentBoardType.uppercased()
+        }
     }
 
     private var needsFirmwareInstall: Bool {
