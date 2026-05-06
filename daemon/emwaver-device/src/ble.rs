@@ -284,7 +284,8 @@ async fn is_emwaver_peripheral(peripheral: &Peripheral) -> bool {
         .unwrap_or(false)
 }
 
-fn handle_ble_sysex(shared: &SharedBleState, sysex: &[u8]) -> Result<()> {
+fn handle_ble_sysex(shared: &SharedBleState, notification: &[u8]) -> Result<()> {
+    let sysex = extract_sysex_frame(notification).context("notification did not contain SysEx")?;
     let sf = decode_sysex_to_superframe(sysex)?;
     let cmd_lane = &sf[0..LANE_SIZE];
     let stream_lane = &sf[LANE_SIZE..LANE_SIZE * 2];
@@ -304,6 +305,15 @@ fn handle_ble_sysex(shared: &SharedBleState, sysex: &[u8]) -> Result<()> {
     Ok(())
 }
 
+fn extract_sysex_frame(bytes: &[u8]) -> Option<&[u8]> {
+    let start = bytes.iter().position(|b| *b == 0xf0)?;
+    let end = bytes[start..]
+        .iter()
+        .position(|b| *b == 0xf7)
+        .map(|offset| start + offset)?;
+    Some(&bytes[start..=end])
+}
+
 fn store_rx_lane(shared: &SharedBleState, lane: &[u8]) {
     let mut st = shared.state.lock().unwrap();
     st.capture_buffer.extend_from_slice(lane);
@@ -312,5 +322,26 @@ fn store_rx_lane(shared: &SharedBleState, lane: &[u8]) {
     if st.waiting_for_response && st.response_data.is_none() {
         st.response_data = Some(lane.to_vec());
         shared.cv.notify_all();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::protocol::{encode_superframe, make_superframe};
+
+    #[test]
+    fn extracts_sysex_from_padded_ble_notification() {
+        let frame = make_superframe(Some(&[0x80, 1, 2, 3]), None);
+        let sysex = encode_superframe(&frame);
+        let mut padded = sysex.clone();
+        padded.resize(64, 0);
+
+        assert_eq!(extract_sysex_frame(&padded), Some(sysex.as_slice()));
+    }
+
+    #[test]
+    fn rejects_notification_without_sysex() {
+        assert_eq!(extract_sysex_frame(&[0x80, 0, 0, 0]), None);
     }
 }

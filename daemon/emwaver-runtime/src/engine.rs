@@ -20,6 +20,7 @@ pub struct Engine {
     ctx: Mutex<BoaContext>,
 
     callbacks: Arc<Mutex<HashMap<String, JsValue>>>,
+    timeouts: Arc<Mutex<TimerRegistry>>,
 
     pub latest_tree: Arc<Mutex<Option<UiNode>>>,
     pub latest_metadata: Arc<Mutex<JsonValue>>,
@@ -27,11 +28,18 @@ pub struct Engine {
     _bridge: Arc<dyn CommandBridge>,
 }
 
+#[derive(Default)]
+struct TimerRegistry {
+    next_id: u64,
+    callbacks: HashMap<u64, JsValue>,
+}
+
 impl Engine {
     pub fn new(bootstrap_source: &str, bridge: Arc<dyn CommandBridge>) -> Result<Self> {
         let mut ctx = BoaContext::default();
 
         let callbacks: Arc<Mutex<HashMap<String, JsValue>>> = Arc::new(Mutex::new(HashMap::new()));
+        let timeouts: Arc<Mutex<TimerRegistry>> = Arc::new(Mutex::new(TimerRegistry::default()));
         let latest_tree: Arc<Mutex<Option<UiNode>>> = Arc::new(Mutex::new(None));
         let latest_metadata: Arc<Mutex<JsonValue>> =
             Arc::new(Mutex::new(JsonValue::Object(Default::default())));
@@ -109,6 +117,57 @@ impl Engine {
                 .context("register _scriptSleep")?;
         }
 
+        // setTimeout(callback, ms) / clearTimeout(id)
+        //
+        // The native Apple host provides timer execution for every(). The Rust
+        // daemon currently records timers so scripts can install long-running
+        // loops without failing during startup; daemon timer pumping is kept as
+        // a separate runtime concern.
+        {
+            let timers = timeouts.clone();
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, _ctx| {
+                    let callback = args.get(0).cloned().unwrap_or(JsValue::undefined());
+                    if callback.as_object().is_none() {
+                        return Ok(JsValue::new(0));
+                    }
+
+                    let mut timers = timers.lock().unwrap();
+                    timers.next_id = timers.next_id.saturating_add(1).max(1);
+                    let id = timers.next_id;
+                    timers.callbacks.insert(id, callback);
+                    Ok(JsValue::new(id as f64))
+                })
+            })
+            .name("setTimeout")
+            .length(2)
+            .build();
+
+            ctx.register_global_property(js_string!("setTimeout"), func, Attribute::all())
+                .map_err(map_js_err)
+                .context("register setTimeout")?;
+        }
+
+        {
+            let timers = timeouts.clone();
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, _ctx| {
+                    let id = args.get(0).and_then(|v| v.as_number()).unwrap_or(0.0) as u64;
+                    if id != 0 {
+                        timers.lock().unwrap().callbacks.remove(&id);
+                    }
+                    Ok(JsValue::undefined())
+                })
+            })
+            .name("clearTimeout")
+            .length(1)
+            .build();
+
+            ctx.register_global_property(js_string!("clearTimeout"), func, Attribute::all())
+                .map_err(map_js_err)
+                .context("register clearTimeout")?;
+        }
+
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
             let command_bridge = bridge.clone();
@@ -169,6 +228,7 @@ impl Engine {
         Ok(Self {
             ctx: Mutex::new(ctx),
             callbacks,
+            timeouts,
             latest_tree,
             latest_metadata,
             _bridge: bridge,
@@ -208,6 +268,10 @@ impl Engine {
                 error!("ui event handler error: {e:#}");
                 e
             })
+    }
+
+    pub fn pending_timeout_count(&self) -> usize {
+        self.timeouts.lock().unwrap().callbacks.len()
     }
 }
 
