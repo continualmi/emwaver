@@ -16,10 +16,15 @@ public struct AgentChatPanelView: View {
     @ObservedObject private var viewModel: AgentChatViewModel
 
     private static let messagesBottomId = "agent-chat-messages-bottom"
+    private static let messagesScrollSpace = "agent-chat-messages-scroll-space"
+    private static let bottomFollowTolerance: CGFloat = 32
 
     private let agentEnabled: Bool
     private let onRequestUpgrade: (() -> Void)?
     private let headerAccessory: AnyView?
+    @State private var messagesBottomY: CGFloat = 0
+    @State private var messagesViewportHeight: CGFloat = 0
+    @State private var isMessagesNearBottom = true
 
     public init(
         viewModel: AgentChatViewModel,
@@ -148,6 +153,47 @@ public struct AgentChatPanelView: View {
                             .id(Self.messagesBottomId)
                     }
                     .padding(12)
+                    .background(
+                        GeometryReader { contentProxy in
+                            Color.clear.preference(
+                                key: MessagesBottomDistancePreferenceKey.self,
+                                value: contentProxy.frame(in: .named(Self.messagesScrollSpace)).maxY
+                            )
+                        }
+                    )
+                }
+                .coordinateSpace(name: Self.messagesScrollSpace)
+                .background(
+                    GeometryReader { viewportProxy in
+                        Color.clear.preference(
+                            key: MessagesViewportHeightPreferenceKey.self,
+                            value: viewportProxy.size.height
+                        )
+                    }
+                )
+
+                if !isMessagesNearBottom && !viewModel.isLoadingConversation {
+                    VStack {
+                        Spacer()
+                        HStack {
+                            Spacer()
+                            Button {
+                                scrollToBottom(using: proxy)
+                            } label: {
+                                Image(systemName: "arrow.down")
+                                    .font(.system(size: 13, weight: .semibold))
+                                    .frame(width: 30, height: 30)
+                            }
+                            .buttonStyle(.plain)
+                            .background(.regularMaterial, in: Circle())
+                            .overlay(Circle().strokeBorder(Color.black.opacity(0.10)))
+                            .shadow(color: .black.opacity(0.16), radius: 8, y: 3)
+                            .help("Scroll to bottom")
+                            .padding(.trailing, 14)
+                            .padding(.bottom, 14)
+                        }
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 }
 
                 if viewModel.isLoadingConversation {
@@ -159,8 +205,23 @@ public struct AgentChatPanelView: View {
                 }
             }
             .animation(.easeInOut(duration: 0.16), value: viewModel.isLoadingConversation)
+            .animation(.easeInOut(duration: 0.16), value: isMessagesNearBottom)
+            .onPreferenceChange(MessagesBottomDistancePreferenceKey.self) { bottomY in
+                updateBottomState(bottomY: bottomY)
+            }
+            .onPreferenceChange(MessagesViewportHeightPreferenceKey.self) { viewportHeight in
+                updateBottomState(viewportHeight: viewportHeight)
+            }
+            .onChange(of: viewModel.selectedConversationId) { _ in
+                scrollToBottom(using: proxy)
+            }
             .onChange(of: viewModel.messages) { _ in
                 scrollToBottom(using: proxy)
+            }
+            .onChange(of: viewModel.isLoadingConversation) { loading in
+                if !loading {
+                    scrollToBottom(using: proxy)
+                }
             }
             .onChange(of: viewModel.isSending) { _ in
                 scrollToBottom(using: proxy)
@@ -172,6 +233,16 @@ public struct AgentChatPanelView: View {
                 scrollToBottom(using: proxy)
             }
         }
+    }
+
+    private func updateBottomState(bottomY: CGFloat? = nil, viewportHeight: CGFloat? = nil) {
+        let nextBottomY = bottomY ?? messagesBottomY
+        let nextViewportHeight = viewportHeight ?? messagesViewportHeight
+        messagesBottomY = nextBottomY
+        messagesViewportHeight = nextViewportHeight
+
+        guard nextViewportHeight > 0 else { return }
+        isMessagesNearBottom = (nextBottomY - nextViewportHeight) <= Self.bottomFollowTolerance
     }
 
     private func scrollToBottom(using proxy: ScrollViewProxy) {
@@ -290,6 +361,22 @@ public struct AgentChatPanelView: View {
                 }
             }
         }
+    }
+}
+
+private struct MessagesBottomDistancePreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct MessagesViewportHeightPreferenceKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
     }
 }
 

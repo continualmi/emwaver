@@ -128,12 +128,15 @@ public struct ScriptsRootView: View {
                         headerAccessory: agentLeadingToolbarItem
                     )
                     .frame(minWidth: 320, idealWidth: 380, maxWidth: 720)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(
+                        .asymmetric(
+                            insertion: .move(edge: .trailing),
+                            removal: .move(edge: .trailing)
+                        )
+                    )
                 }
-                .transition(.opacity)
             } else {
                 primaryContent
-                    .transition(.opacity)
             }
             #else
             primaryContent
@@ -1055,7 +1058,7 @@ public struct ScriptsRootView: View {
                 }
 
                 Button {
-                    withAnimation(.easeInOut(duration: 0.22)) {
+                    withAnimation(.smooth(duration: 0.24)) {
                         showingAgentPanel.toggle()
                     }
                 } label: {
