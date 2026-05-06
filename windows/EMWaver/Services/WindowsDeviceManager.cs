@@ -8,6 +8,9 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
+using Windows.Devices.Bluetooth;
+using Windows.Devices.Bluetooth.Advertisement;
+using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Midi;
 using Windows.Devices.Usb;
@@ -23,10 +26,20 @@ internal enum DeviceMode
     UpdateMode = 2,
 }
 
+internal enum DeviceTransport
+{
+    None = 0,
+    UsbMidi = 1,
+    Ble = 2,
+}
+
 internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 {
     private static readonly int LaneSizeBytes = 18;
     private static readonly int SuperframeSizeBytes = 36;
+    private static readonly Guid BleServiceUuid = Guid.Parse("45C7158E-0C3B-4E90-A847-452A15B14191");
+    private static readonly Guid BleCommandUuid = Guid.Parse("46C7158E-0C3B-4E90-A847-452A15B14191");
+    private static readonly Guid BleNotifyUuid = Guid.Parse("47C7158E-0C3B-4E90-A847-452A15B14191");
 
     private static class EmwOpcode
     {
@@ -52,6 +65,20 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     }
 
     public bool IsConnected => ConnectedPort != null;
+
+    private DeviceTransport _activeTransport = DeviceTransport.None;
+    public DeviceTransport ActiveTransport
+    {
+        get => _activeTransport;
+        private set
+        {
+            if (_activeTransport != value)
+            {
+                _activeTransport = value;
+                OnPropertyChanged();
+            }
+        }
+    }
 
     private string? _deviceEmwaverVersion;
     public string? DeviceEmwaverVersion
@@ -156,6 +183,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private MidiInPort? _inPort;
     private IMidiOutPort? _outPort;
+    private BluetoothLEAdvertisementWatcher? _bleWatcher;
+    private BluetoothLEDevice? _bleDevice;
+    private GattCharacteristic? _bleCommandCharacteristic;
+    private GattCharacteristic? _bleNotifyCharacteristic;
+    private bool _bleConnecting;
 
     private readonly object _rxLock = new();
     private TaskCompletionSource<byte[]?>? _responseTcs;
@@ -259,6 +291,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 {
                     await ConnectAsync(chosen);
                 }
+                else
+                {
+                    StartBleScan();
+                }
             }
         }
         catch (Exception ex)
@@ -291,6 +327,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             _inPort.MessageReceived += OnMidiMessage;
+            ActiveTransport = DeviceTransport.UsbMidi;
             ConnectedPort = port;
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
@@ -340,6 +377,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     internal void Disconnect()
     {
+        StopBleScan();
+
         try
         {
             if (_inPort != null)
@@ -370,6 +409,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             _outPort = null;
         }
 
+        CloseBleDevice();
+
         lock (_rxLock)
         {
             _responseTcs?.TrySetResult(null);
@@ -378,6 +419,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         ConnectedPort = null;
+        ActiveTransport = DeviceTransport.None;
         DeviceEmwaverVersion = null;
         ConnectedBoardType = null;
 
@@ -460,7 +502,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private async Task<byte[]?> SendCommandAsync(byte[] commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)
     {
-        if (_outPort == null || _inPort == null)
+        if (ActiveTransport == DeviceTransport.Ble)
+        {
+            if (_bleCommandCharacteristic == null)
+            {
+                LastErrorText = "Cannot send command: BLE not connected";
+                return null;
+            }
+        }
+        else if (_outPort == null || _inPort == null)
         {
             LastErrorText = "Cannot send command: Not connected";
             return null;
@@ -512,35 +562,40 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
-            Debug.WriteLine($"[EMWaver][MIDI][RX] sysex={bytes.Length}");
-
-            var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
-            if (superframe == null || superframe.Length != SuperframeSizeBytes)
-            {
-                Debug.WriteLine("[EMWaver][MIDI][RX] decode superframe failed");
-                return;
-            }
-
-            Debug.WriteLine($"[EMWaver][MIDI][RX] superframe36 ok cmd0=0x{superframe[0]:X2}");
-
-            var tsMs = NowMs();
-            var cmdLane = superframe.Take(LaneSizeBytes).ToArray();
-            var streamLane = superframe.Skip(LaneSizeBytes).Take(LaneSizeBytes).ToArray();
-
-            if (!IsAllZero(cmdLane))
-            {
-                NativeBufferRust.StoreBulkPkt(cmdLane, tsMs);
-                HandleLane(cmdLane);
-            }
-            if (!IsAllZero(streamLane))
-            {
-                NativeBufferRust.StoreBulkPkt(streamLane, tsMs);
-                HandleLane(streamLane);
-            }
+            ProcessIncomingSysex(bytes, "MIDI");
         }
         catch
         {
             // Ignore RX parse errors; transport should be resilient.
+        }
+    }
+
+    private void ProcessIncomingSysex(byte[] bytes, string transportLabel)
+    {
+        Debug.WriteLine($"[EMWaver][{transportLabel}][RX] sysex={bytes.Length}");
+
+        var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
+        if (superframe == null || superframe.Length != SuperframeSizeBytes)
+        {
+            Debug.WriteLine($"[EMWaver][{transportLabel}][RX] decode superframe failed");
+            return;
+        }
+
+        Debug.WriteLine($"[EMWaver][{transportLabel}][RX] superframe36 ok cmd0=0x{superframe[0]:X2}");
+
+        var tsMs = NowMs();
+        var cmdLane = superframe.Take(LaneSizeBytes).ToArray();
+        var streamLane = superframe.Skip(LaneSizeBytes).Take(LaneSizeBytes).ToArray();
+
+        if (!IsAllZero(cmdLane))
+        {
+            NativeBufferRust.StoreBulkPkt(cmdLane, tsMs);
+            HandleLane(cmdLane);
+        }
+        if (!IsAllZero(streamLane))
+        {
+            NativeBufferRust.StoreBulkPkt(streamLane, tsMs);
+            HandleLane(streamLane);
         }
     }
 
@@ -595,6 +650,12 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void SendSuperframe(byte[] superframe36)
     {
+        if (ActiveTransport == DeviceTransport.Ble)
+        {
+            SendBleSuperframe(superframe36);
+            return;
+        }
+
         if (_outPort == null)
         {
             LastErrorText = "Cannot send: Not connected";
@@ -616,6 +677,229 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         var msg = new MidiSystemExclusiveMessage(BufferFromBytes(sysex));
         _outPort.SendMessage(msg);
+    }
+
+    private void StartBleScan()
+    {
+        if (_bleWatcher != null || _bleConnecting || IsConnected)
+        {
+            return;
+        }
+
+        try
+        {
+            var watcher = new BluetoothLEAdvertisementWatcher
+            {
+                ScanningMode = BluetoothLEScanningMode.Active
+            };
+            watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(BleServiceUuid);
+            watcher.Received += OnBleAdvertisementReceived;
+            _bleWatcher = watcher;
+            watcher.Start();
+            Debug.WriteLine("[EMWaver][BLE] scan started");
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+        }
+    }
+
+    private void StopBleScan()
+    {
+        var watcher = _bleWatcher;
+        if (watcher == null)
+        {
+            return;
+        }
+
+        try
+        {
+            watcher.Received -= OnBleAdvertisementReceived;
+            watcher.Stop();
+        }
+        catch
+        {
+            // Ignore watcher shutdown errors.
+        }
+        finally
+        {
+            _bleWatcher = null;
+        }
+    }
+
+    private void OnBleAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
+    {
+        if (_bleConnecting || IsConnected)
+        {
+            return;
+        }
+
+        var name = args.Advertisement.LocalName ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(name) && !name.Contains("emwaver", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _bleConnecting = true;
+        StopBleScan();
+        _ = ConnectBleAsync(args.BluetoothAddress, string.IsNullOrWhiteSpace(name) ? "EMWaver BLE" : name);
+    }
+
+    private async Task ConnectBleAsync(ulong bluetoothAddress, string displayName)
+    {
+        try
+        {
+            LastErrorText = null;
+            DeviceEmwaverVersion = null;
+            ConnectedBoardType = null;
+            NativeBufferRust.ClearAll();
+
+            CloseBleDevice();
+
+            var device = await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
+            if (device == null)
+            {
+                LastErrorText = "Failed to open BLE device";
+                return;
+            }
+
+            var servicesResult = await device.GetGattServicesForUuidAsync(BleServiceUuid, BluetoothCacheMode.Uncached);
+            if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
+            {
+                device.Dispose();
+                LastErrorText = "BLE EMWaver service not found";
+                return;
+            }
+
+            var service = servicesResult.Services[0];
+            var commandResult = await service.GetCharacteristicsForUuidAsync(BleCommandUuid, BluetoothCacheMode.Uncached);
+            var notifyResult = await service.GetCharacteristicsForUuidAsync(BleNotifyUuid, BluetoothCacheMode.Uncached);
+            if (commandResult.Status != GattCommunicationStatus.Success || commandResult.Characteristics.Count == 0)
+            {
+                device.Dispose();
+                LastErrorText = "BLE command characteristic not found";
+                return;
+            }
+
+            _bleDevice = device;
+            _bleCommandCharacteristic = commandResult.Characteristics[0];
+
+            if (notifyResult.Status == GattCommunicationStatus.Success && notifyResult.Characteristics.Count > 0)
+            {
+                _bleNotifyCharacteristic = notifyResult.Characteristics[0];
+                _bleNotifyCharacteristic.ValueChanged += OnBleValueChanged;
+                await _bleNotifyCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+                    GattClientCharacteristicConfigurationDescriptorValue.Notify);
+            }
+
+            ActiveTransport = DeviceTransport.Ble;
+            ConnectedPort = new DevicePort(displayName, string.Empty, string.Empty);
+
+            var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
+            if (version == null)
+            {
+                await Task.Delay(250);
+                version = await QueryDeviceVersionAsync(timeoutMs: 1500);
+            }
+
+            DeviceEmwaverVersion = version;
+            ConnectedBoardType = "esp32s3";
+            LastDetectedBoardType = ConnectedBoardType;
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+            Disconnect();
+        }
+        finally
+        {
+            _bleConnecting = false;
+        }
+    }
+
+    private async void OnBleValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+    {
+        try
+        {
+            var bytes = BufferFromIbuffer(args.CharacteristicValue);
+            if (bytes != null)
+            {
+                ProcessIncomingSysex(bytes, "BLE");
+            }
+        }
+        catch
+        {
+            // Ignore RX parse errors; transport should be resilient.
+        }
+    }
+
+    private void SendBleSuperframe(byte[] superframe36)
+    {
+        var characteristic = _bleCommandCharacteristic;
+        if (characteristic == null)
+        {
+            LastErrorText = "Cannot send: BLE not connected";
+            return;
+        }
+
+        var sysex = UsbMidiSysex.EncodeSuperframe(superframe36);
+        if (sysex == null)
+        {
+            LastErrorText = "SysEx encode failed";
+            return;
+        }
+
+        NativeBufferRust.AppendTxBytes(superframe36, NowMs());
+        Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
+
+        const int BleWriteChunkBytes = 20;
+        for (int offset = 0; offset < sysex.Length; offset += BleWriteChunkBytes)
+        {
+            var count = Math.Min(BleWriteChunkBytes, sysex.Length - offset);
+            var chunk = new byte[count];
+            System.Buffer.BlockCopy(sysex, offset, chunk, 0, count);
+            var status = characteristic
+                .WriteValueAsync(BufferFromBytes(chunk), GattWriteOption.WriteWithResponse)
+                .AsTask()
+                .GetAwaiter()
+                .GetResult();
+            if (status != GattCommunicationStatus.Success)
+            {
+                LastErrorText = $"BLE write failed: {status}";
+                break;
+            }
+        }
+    }
+
+    private void CloseBleDevice()
+    {
+        try
+        {
+            if (_bleNotifyCharacteristic != null)
+            {
+                _bleNotifyCharacteristic.ValueChanged -= OnBleValueChanged;
+            }
+        }
+        catch
+        {
+            // Ignore dispose errors.
+        }
+
+        try
+        {
+            _bleDevice?.Dispose();
+        }
+        catch
+        {
+            // Ignore dispose errors.
+        }
+        finally
+        {
+            _bleNotifyCharacteristic = null;
+            _bleCommandCharacteristic = null;
+            _bleDevice = null;
+            _bleConnecting = false;
+        }
     }
 
     private static ulong NowMs()

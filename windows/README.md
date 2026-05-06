@@ -9,7 +9,7 @@ Target: Windows 11 only.
 ## 1) Scope
 
 This folder contains the full Windows client:
-- USB transport integration,
+- USB/BLE transport integration,
 - script runtime UI and tooling pages,
 - local gateway/app-host control views,
 - firmware update flow integration,
@@ -37,7 +37,7 @@ UI pages:
 - `Pages/SettingsPage*`
 
 Core service layer:
-- `Services/UsbMidiSysex.cs` (device transport)
+- `Services/UsbMidiSysex.cs` (shared SysEx/superframe transport codec)
 - `Services/WindowsDeviceManager.cs` (device lifecycle)
 - `Services/ScriptRepository.cs` (script storage)
 - `Services/FirmwareUpdateManager.cs` + `Services/Dfu.cs` (firmware/update)
@@ -60,9 +60,9 @@ Auxiliary:
 
 ## 3.1 Device connection and transport
 
-Windows app communicates with EMWaver hardware over USB and hosts device operations from the desktop runtime.
+Windows app communicates with EMWaver hardware over USB MIDI and ESP32 BLE, and hosts device operations from the desktop runtime.
 
-Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services.
+Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services. USB MIDI remains preferred when a wired device is available. When no wired MIDI port is found and auto-connect is enabled, Windows scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 
 ## 3.2 Scripting UX
 
@@ -109,6 +109,7 @@ Windows is intended to track the current macOS app in the firmware setup/update 
 
 What Windows already has:
 - USB run-mode transport,
+- ESP32 BLE run-mode transport,
 - STM32 DFU firmware flashing,
 - local Agent API-key auth for optional Agent replies.
 
@@ -175,7 +176,7 @@ Windows STM32 flow should match the current managed model:
 ### 5.4 ESP32-S3 update flow
 
 Windows ESP flow should match the macOS board-class split:
-- Run Mode remains USB,
+- Run Mode is available over USB MIDI and BLE,
 - flashing uses the board's flash-capable serial USB port,
 - the app bundles and invokes the ESP helper rather than `idf.py`,
 - the app bundles prebuilt ESP firmware artifacts,
@@ -209,6 +210,7 @@ The main remaining work after the parity code changes is validation on a real Wi
 1. Build validation
 - confirm the WinUI project builds cleanly on Windows 11 with the expected SDK/toolchain.
 - confirm `scripts/rebirth-windows-validation.ps1 -Ci` passes on hosted Windows CI, including the simulator-backed script-engine test.
+- confirm ESP32 BLE scan/connect and notification delivery on a Bluetooth-capable Windows 11 machine.
 
 2. STM32 hardware validation
 - verify DFU setup path on a fresh STM32 board,
@@ -250,6 +252,7 @@ scripts/rebirth-windows-validation.ps1 -Ci
 ```
 
 That command restores/builds the Windows solution and runs `EMWaver.Tests`. It does not validate attached USB/MIDI hardware or interactive local gateway control.
+It also does not validate attached ESP32 BLE hardware.
 
 ---
 
