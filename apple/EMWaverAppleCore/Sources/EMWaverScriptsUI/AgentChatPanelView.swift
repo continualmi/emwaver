@@ -173,7 +173,7 @@ public struct AgentChatPanelView: View {
         VStack(alignment: .leading, spacing: 10) {
             suggestions
 
-            HStack(alignment: .bottom, spacing: 10) {
+            HStack(alignment: .center, spacing: 10) {
                 TextField("Message", text: $viewModel.draft, axis: .vertical)
                     .lineLimit(1...6)
                     .textFieldStyle(.plain)
@@ -197,20 +197,16 @@ public struct AgentChatPanelView: View {
                     } label: {
                         Text("Stop")
                             .frame(minWidth: 64)
-                            .frame(height: 24)
                     }
                     .buttonStyle(.bordered)
-                    .controlSize(.large)
                 } else {
                     Button {
                         sendOrUpgrade()
                     } label: {
                         Text("Send")
                             .frame(minWidth: 64)
-                            .frame(height: 24)
                     }
                     .buttonStyle(.borderedProminent)
-                    .controlSize(.large)
                     .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
