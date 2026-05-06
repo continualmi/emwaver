@@ -271,9 +271,11 @@ struct ContentView: View {
                 Text(toolbarDeviceStatus.text)
                     .lineLimit(1)
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.bordered)
+        .controlSize(.regular)
         .help("Device / connection options")
     }
 
