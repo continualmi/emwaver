@@ -24,6 +24,7 @@ public final class AgentChatViewModel: ObservableObject {
 
     private var assistantPlaceholderId: UUID?
     private var selectedUniverseId: String?
+    private var toolRuntime: AgentToolRuntime?
 
     // Endpoint context for API-key Agent execution. The tuple names are kept
     // for source compatibility with existing app callers.
@@ -52,6 +53,10 @@ public final class AgentChatViewModel: ObservableObject {
 
     public var selectedModelId: String {
         Self.defaultModelId
+    }
+
+    public func configureToolRuntime(_ runtime: AgentToolRuntime?) {
+        toolRuntime = runtime
     }
 
     public func clear() {
@@ -163,9 +168,33 @@ public final class AgentChatViewModel: ObservableObject {
             request: AgentEndpointRequest(
                 model: "mdl-1-lite-frozen",
                 universe: universe,
-                userInput: userPrompt
+                userInput: toolAugmentedPrompt(userPrompt)
             )
         )
+
+        let requestedToolCalls = response.toolCalls?.isEmpty == false
+            ? response.toolCalls
+            : extractToolCalls(from: response)
+
+        if let toolCalls = requestedToolCalls, !toolCalls.isEmpty, let toolRuntime {
+            let toolResults = await executeToolCalls(toolCalls, runtime: toolRuntime)
+            let toolResultPrompt = encodeToolResultPrompt(toolResults)
+            let followup = try await api.send(
+                endpoint: ctx.baseURL,
+                apiKey: ctx.accessToken,
+                request: AgentEndpointRequest(
+                    model: "mdl-1-lite-frozen",
+                    universe: universe,
+                    userInput: toolResultPrompt
+                )
+            )
+            return try await renderResponse(followup, placeholderId: placeholderId)
+        }
+
+        return try await renderResponse(response, placeholderId: placeholderId)
+    }
+
+    private func renderResponse(_ response: AgentEndpointResponse, placeholderId: UUID) async throws -> String {
 
         let pieces = [
             response.message,
@@ -185,6 +214,99 @@ public final class AgentChatViewModel: ObservableObject {
             throw AgentEndpointError.serverError("Agent model produced no text")
         }
         return reply
+    }
+
+    private func toolAugmentedPrompt(_ userPrompt: String) -> String {
+        guard let toolRuntime else { return userPrompt }
+        let manifest = toolRuntime.manifest().trimmingCharacters(in: .whitespacesAndNewlines)
+        let context = toolRuntime.context().trimmingCharacters(in: .whitespacesAndNewlines)
+        return """
+        \(userPrompt)
+
+        EMWaver local macOS tool context:
+        \(context)
+
+        Available local tools:
+        \(manifest)
+
+        If you need local state or need to perform an action, respond with JSON containing a top-level toolCalls array. Each tool call must have name and arguments. After tool results are returned, produce the final user-facing answer.
+        """
+    }
+
+    private func executeToolCalls(_ toolCalls: [AgentToolCall], runtime: AgentToolRuntime) async -> [AgentToolResult] {
+        var results: [AgentToolResult] = []
+        for call in toolCalls.prefix(10) {
+            appendSystemToolBubble(name: call.name, args: toolBubbleArgs(call.arguments ?? [:]))
+            let result = await runtime.execute(call.name, call.arguments ?? [:])
+            results.append(result)
+        }
+        return results
+    }
+
+    private func toolBubbleArgs(_ arguments: [String: AgentToolJSON]) -> [String: Any] {
+        var args: [String: Any] = [:]
+        if let detail = arguments["scriptId"]?.stringValue ?? arguments["event"]?.stringValue {
+            args["detail"] = detail
+        }
+        return args
+    }
+
+    private func encodeToolResultPrompt(_ results: [AgentToolResult]) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let data = (try? encoder.encode(results)) ?? Data()
+        let json = String(data: data, encoding: .utf8) ?? "[]"
+        return """
+        EMWaver local tool results:
+        ```json
+        \(json)
+        ```
+
+        Use these results to answer the user's original request. Do not request the same tool again unless the result says it failed because more specific arguments are needed.
+        """
+    }
+
+    private struct EmbeddedToolCallEnvelope: Decodable {
+        let toolCalls: [AgentToolCall]
+    }
+
+    private func extractToolCalls(from response: AgentEndpointResponse) -> [AgentToolCall]? {
+        for text in [response.message, response.assistantRaw].compactMap({ $0 }) {
+            if let calls = decodeToolCalls(from: text), !calls.isEmpty {
+                return calls
+            }
+        }
+        return nil
+    }
+
+    private func decodeToolCalls(from text: String) -> [AgentToolCall]? {
+        let candidates = jsonCandidates(in: text)
+        for candidate in candidates {
+            guard let data = candidate.data(using: .utf8) else { continue }
+            if let envelope = try? JSONDecoder().decode(EmbeddedToolCallEnvelope.self, from: data) {
+                return envelope.toolCalls
+            }
+            if let calls = try? JSONDecoder().decode([AgentToolCall].self, from: data) {
+                return calls
+            }
+        }
+        return nil
+    }
+
+    private func jsonCandidates(in text: String) -> [String] {
+        var candidates = [text.trimmingCharacters(in: .whitespacesAndNewlines)]
+        let pattern = #"```(?:json)?\s*([\s\S]*?)```"#
+        if let regex = try? NSRegularExpression(pattern: pattern, options: []) {
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            for match in regex.matches(in: text, options: [], range: range) {
+                guard match.numberOfRanges > 1,
+                      let swiftRange = Range(match.range(at: 1), in: text) else {
+                    continue
+                }
+                candidates.append(String(text[swiftRange]).trimmingCharacters(in: .whitespacesAndNewlines))
+            }
+        }
+        return candidates
     }
 
     private func ensureUniverseId(api: AgentEndpointAPI, endpoint: URL, apiKey: String) async throws -> String {
@@ -290,7 +412,7 @@ public final class AgentChatViewModel: ObservableObject {
 
 // MARK: - apply_patch (opencode-style)
 
-private enum PatchApplier {
+enum PatchApplier {
     struct ApplyResult {
         let files: [[String: Any]]
     }

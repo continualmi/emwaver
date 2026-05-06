@@ -5,6 +5,7 @@
  */
 
 import SwiftUI
+import EMWaverScriptModel
 import EMWaverScriptRuntime
 import EMWaverScriptStorage
 import EMWaverScriptSwiftUI
@@ -223,6 +224,9 @@ public struct ScriptsRootView: View {
         // Signals open in the same editor view (not a modal sheet).
         .onAppear {
             previewManager.attach(device: device)
+            #if os(macOS)
+            agentViewModel.configureToolRuntime(makeMacAgentToolRuntime())
+            #endif
             loadScripts()
             hostStatusSink?(previewManager.activeScriptName != nil, previewManager.activeScriptName)
         }
@@ -744,6 +748,263 @@ public struct ScriptsRootView: View {
             }
         }
     }
+
+    #if os(macOS)
+    private func makeMacAgentToolRuntime() -> AgentToolRuntime {
+        AgentToolRuntime(
+            manifest: { macAgentToolManifest },
+            context: { macAgentToolContext() },
+            execute: { name, arguments in
+                await executeMacAgentTool(name: name, arguments: arguments)
+            }
+        )
+    }
+
+    private var macAgentToolManifest: String {
+        """
+        - get_current_script({}): returns the open or selected script id, name, draft text, read-only flag, and dirty flag.
+        - list_scripts({}): returns bundled and custom .emw scripts.
+        - read_script({ scriptId?: string }): returns script source. Defaults to the current script.
+        - apply_patch_to_script({ scriptId?: string, patch?: string, content?: string }): updates an editable script draft. Asset scripts are read-only.
+        - preview_script({ scriptId?: string }): renders a script in the local preview.
+        - run_script({ scriptId?: string }): alias for preview_script; starts the script runtime.
+        - stop_script({}): stops the current script runtime.
+        - get_device_status({}): returns connected/local device and runtime status known to the macOS app.
+        - get_ui_snapshot({}): returns the latest rendered script UI tree summary.
+        - send_ui_event({ token: string, arguments?: array }): dispatches a UI event handler token into the running script.
+        """
+    }
+
+    private func macAgentToolContext() -> String {
+        let selected = currentScriptId ?? viewModel.selectedScriptId ?? ""
+        let running = previewManager.activeScriptName ?? ""
+        let hasTree = previewManager.scriptTree != nil
+        let deviceState = device == nil ? "not attached" : "attached"
+        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); hasUISnapshot=\(hasTree)"
+    }
+
+    private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        do {
+            switch name {
+            case "get_current_script":
+                return try await agentToolCurrentScript()
+            case "list_scripts":
+                return agentToolListScripts()
+            case "read_script":
+                return try await agentToolReadScript(scriptId: arguments["scriptId"]?.stringValue)
+            case "apply_patch_to_script":
+                return try await agentToolApplyPatch(scriptId: arguments["scriptId"]?.stringValue, patch: arguments["patch"]?.stringValue, content: arguments["content"]?.stringValue)
+            case "preview_script", "run_script":
+                return try await agentToolPreviewScript(scriptId: arguments["scriptId"]?.stringValue, toolName: name)
+            case "stop_script":
+                previewManager.exitPreview()
+                hostStatusSink?(false, nil)
+                return AgentToolResult(id: nil, name: name, ok: true, result: .object(["stopped": .bool(true)]))
+            case "get_device_status":
+                return agentToolDeviceStatus()
+            case "get_ui_snapshot":
+                return agentToolUISnapshot()
+            case "send_ui_event":
+                return try agentToolSendUIEvent(token: arguments["token"]?.stringValue, arguments: arguments["arguments"])
+            default:
+                return AgentToolResult(id: nil, name: name, ok: false, error: "Unknown EMWaver tool: \(name)")
+            }
+        } catch {
+            return AgentToolResult(id: nil, name: name, ok: false, error: (error as? LocalizedError)?.errorDescription ?? error.localizedDescription)
+        }
+    }
+
+    private enum MacAgentToolError: LocalizedError {
+        case noScriptSelected
+        case scriptNotFound(String)
+        case readOnlyScript(String)
+        case missingArgument(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .noScriptSelected: return "No script is selected."
+            case .scriptNotFound(let id): return "Script not found: \(id)"
+            case .readOnlyScript(let id): return "Script is read-only: \(id)"
+            case .missingArgument(let name): return "Missing required argument: \(name)"
+            }
+        }
+    }
+
+    private func currentAgentScriptId(_ requested: String? = nil) throws -> String {
+        if let requested, !requested.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return requested
+        }
+        if let currentScriptId, editorMode == .script {
+            return currentScriptId
+        }
+        if let selected = viewModel.selectedScriptId {
+            return selected
+        }
+        throw MacAgentToolError.noScriptSelected
+    }
+
+    private func agentToolCurrentScript() async throws -> AgentToolResult {
+        let id = try currentAgentScriptId()
+        await viewModel.ensureContent(for: id)
+        let source = (showingEditor && currentScriptId == id && editorMode == .script) ? editorContent : viewModel.scriptDraft(for: id)
+        return AgentToolResult(id: nil, name: "get_current_script", ok: true, result: .object(scriptObject(id: id, source: source)))
+    }
+
+    private func agentToolListScripts() -> AgentToolResult {
+        func itemObject(_ item: ScriptsViewModel.ScriptListItem) -> AgentToolJSON {
+            .object([
+                "id": .string(item.id),
+                "name": .string(item.name),
+                "isAsset": .bool(item.isAsset),
+                "isDirty": .bool(item.isDirty)
+            ])
+        }
+        let scripts = (viewModel.assetScripts + viewModel.customScripts).map(itemObject)
+        return AgentToolResult(id: nil, name: "list_scripts", ok: true, result: .object(["scripts": .array(scripts)]))
+    }
+
+    private func agentToolReadScript(scriptId: String?) async throws -> AgentToolResult {
+        let id = try currentAgentScriptId(scriptId)
+        await viewModel.ensureContent(for: id)
+        let source = (showingEditor && currentScriptId == id && editorMode == .script) ? editorContent : viewModel.scriptDraft(for: id)
+        if source.isEmpty && !viewModel.isExistingScript(id) {
+            throw MacAgentToolError.scriptNotFound(id)
+        }
+        return AgentToolResult(id: nil, name: "read_script", ok: true, result: .object(scriptObject(id: id, source: source)))
+    }
+
+    private func agentToolApplyPatch(scriptId: String?, patch: String?, content: String?) async throws -> AgentToolResult {
+        let id = try currentAgentScriptId(scriptId)
+        guard !viewModel.isAssetScript(id) else { throw MacAgentToolError.readOnlyScript(id) }
+        await viewModel.ensureContent(for: id)
+
+        let updated: String
+        if let content {
+            updated = content
+        } else if let patch, !patch.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent("emwaver-agent-\(UUID().uuidString)", isDirectory: true)
+            try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: tempDir) }
+            let fileName = viewModel.scriptName(for: id)
+            let fileURL = tempDir.appendingPathComponent(fileName)
+            try viewModel.scriptDraft(for: id).write(to: fileURL, atomically: true, encoding: .utf8)
+            _ = try PatchApplier.apply(patchText: patch, baseDir: tempDir)
+            updated = try String(contentsOf: fileURL, encoding: .utf8)
+        } else {
+            throw MacAgentToolError.missingArgument("patch or content")
+        }
+
+        viewModel.updateDraft(for: id, content: updated)
+        if showingEditor && currentScriptId == id && editorMode == .script {
+            editorContent = updated
+        }
+        return AgentToolResult(id: nil, name: "apply_patch_to_script", ok: true, result: .object([
+            "scriptId": .string(id),
+            "name": .string(viewModel.scriptName(for: id)),
+            "bytes": .number(Double(updated.utf8.count)),
+            "saved": .bool(false)
+        ]))
+    }
+
+    private func agentToolPreviewScript(scriptId: String?, toolName: String) async throws -> AgentToolResult {
+        let id = try currentAgentScriptId(scriptId)
+        if showingEditor, currentScriptId == id, editorMode == .script {
+            viewModel.updateDraft(for: id, content: editorContent)
+        }
+        viewModel.selectScript(id: id)
+        currentScriptId = id
+        await viewModel.ensureContent(for: id)
+        let script = viewModel.scriptDraft(for: id)
+        guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MacAgentToolError.scriptNotFound(id)
+        }
+        previewManager.render(script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
+        showingPreview = true
+        showingEditor = false
+        hostStatusSink?(true, viewModel.scriptName(for: id))
+        return AgentToolResult(id: nil, name: toolName, ok: true, result: .object([
+            "scriptId": .string(id),
+            "name": .string(viewModel.scriptName(for: id)),
+            "running": .bool(true)
+        ]))
+    }
+
+    private func agentToolDeviceStatus() -> AgentToolResult {
+        AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
+            "connected": .bool(device != nil),
+            "runtimeOwner": .string("macos-native-app"),
+            "activeScriptName": .string(previewManager.activeScriptName ?? ""),
+            "activeScriptInstanceId": .string(previewManager.activeScriptInstanceId ?? ""),
+            "isRendering": .bool(previewManager.isRendering),
+            "lastScriptError": .string(previewManager.scriptError ?? "")
+        ]))
+    }
+
+    private func agentToolUISnapshot() -> AgentToolResult {
+        guard let tree = previewManager.scriptTree else {
+            return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object(["available": .bool(false)]))
+        }
+        return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object([
+            "available": .bool(true),
+            "root": scriptNodeObject(tree.root)
+        ]))
+    }
+
+    private func agentToolSendUIEvent(token: String?, arguments: AgentToolJSON?) throws -> AgentToolResult {
+        guard let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw MacAgentToolError.missingArgument("token")
+        }
+        let args: [Any]
+        if case .array(let values) = arguments {
+            args = values.map(agentToolAnyValue)
+        } else {
+            args = []
+        }
+        previewManager.invoke(token: token, arguments: args)
+        return AgentToolResult(id: nil, name: "send_ui_event", ok: true, result: .object([
+            "token": .string(token),
+            "dispatched": .bool(true)
+        ]))
+    }
+
+    private func scriptObject(id: String, source: String) -> [String: AgentToolJSON] {
+        [
+            "id": .string(id),
+            "name": .string(viewModel.scriptName(for: id)),
+            "source": .string(source),
+            "isAsset": .bool(viewModel.isAssetScript(id)),
+            "isDirty": .bool(viewModel.isScriptDirty(id)),
+            "readOnly": .bool(viewModel.isAssetScript(id))
+        ]
+    }
+
+    private func scriptNodeObject(_ node: ScriptNode) -> AgentToolJSON {
+        var props: [String: AgentToolJSON] = [:]
+        if let text = node.props.text { props["text"] = .string(text) }
+        if let label = node.props.label { props["label"] = .string(label) }
+        let handlers = node.props.eventHandlers.map { key, value in
+            "\(key.rawValue):\(value)"
+        }.sorted()
+        return .object([
+            "id": .string(node.id),
+            "type": .string(node.type.rawValue),
+            "props": .object(props),
+            "eventHandlers": .array(handlers.map { AgentToolJSON.string($0) }),
+            "children": .array(node.children.map(scriptNodeObject))
+        ])
+    }
+
+    private func agentToolAnyValue(_ value: AgentToolJSON) -> Any {
+        switch value {
+        case .string(let value): return value
+        case .number(let value): return value
+        case .bool(let value): return value
+        case .object(let value): return value.mapValues(agentToolAnyValue)
+        case .array(let value): return value.map(agentToolAnyValue)
+        case .null: return NSNull()
+        }
+    }
+    #endif
 
     @ToolbarContentBuilder
     private func toolbarContent() -> some ToolbarContent {

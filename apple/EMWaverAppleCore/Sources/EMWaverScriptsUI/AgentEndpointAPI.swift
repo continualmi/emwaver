@@ -44,6 +44,7 @@ struct AgentEndpointResponse: Decodable {
     let code: String?
     let patch: String?
     let warnings: [String]?
+    let toolCalls: [AgentToolCall]?
 }
 
 final class AgentEndpointAPI {
