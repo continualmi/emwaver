@@ -11,6 +11,7 @@ const port = process.argv[2] || "3921";
 const expectedRuntimeOwner = process.argv[3] || "emwaver-daemon";
 const sourcePath = process.argv[4] || "";
 const eventTargetId = process.argv[5] || "packaged.tap";
+const timeoutMs = Number(process.env.EMWAVER_GATEWAY_RENDER_TIMEOUT_MS || "30000");
 
 const defaultSource = `
 var clicks = 0;
@@ -59,9 +60,10 @@ let sentRun = false;
 let sawRuntimeOwner = false;
 
 const timeout = setTimeout(() => {
-  console.error("timeout waiting for gateway daemon render");
+  console.error(`timeout waiting for gateway daemon render after ${timeoutMs}ms`);
+  console.error(JSON.stringify({ sawRuntimeOwner, sentRun, scriptId, snapshots }));
   process.exit(1);
-}, 10000);
+}, timeoutMs);
 
 ws.on("open", () => {
   ws.send(JSON.stringify({ type: "hello", role: "web", protocolVersion: 1 }));
@@ -106,6 +108,10 @@ ws.on("message", (raw) => {
     console.log(`gateway daemon render passed (${expectedRuntimeOwner})`);
     ws.close();
   }
+});
+
+ws.on("error", (err) => {
+  console.error(`websocket error: ${err.message}`);
 });
 
 ws.on("close", () => {

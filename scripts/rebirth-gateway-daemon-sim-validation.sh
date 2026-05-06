@@ -61,4 +61,14 @@ if [[ "$MODE" != "fallback" ]]; then
   DAEMON_PID=$!
 fi
 
-node "$ROOT/scripts/verify-gateway-daemon-render.mjs" "$PORT" emwaver-daemon
+if ! node "$ROOT/scripts/verify-gateway-daemon-render.mjs" "$PORT" emwaver-daemon; then
+  echo
+  echo "== Gateway log =="
+  cat "$GATEWAY_LOG" || true
+  if [[ "$MODE" != "fallback" ]]; then
+    echo
+    echo "== Daemon log =="
+    cat "$DAEMON_LOG" || true
+  fi
+  exit 1
+fi
