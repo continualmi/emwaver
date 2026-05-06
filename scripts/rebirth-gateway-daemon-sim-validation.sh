@@ -34,6 +34,9 @@ echo "mode: $MODE"
 
 echo
 echo "== Build gateway =="
+if [[ ! -d "$ROOT/gateway/node_modules" ]]; then
+  (cd "$ROOT/gateway" && npm ci)
+fi
 (cd "$ROOT/gateway" && npm run build)
 
 echo
