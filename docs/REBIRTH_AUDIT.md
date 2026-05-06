@@ -56,14 +56,14 @@ The rebirth is complete only when:
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, built gateway-to-daemon simulator render/event flow, and CLI `gateway --daemon-fallback --sim-device` render/event flow |
+| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu run `25429739081` validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, built gateway-to-daemon simulator render/event flow, and CLI `gateway --daemon-fallback --sim-device` render/event flow |
 | Install smoke CI | `scripts/rebirth-install-smoke.sh`, `.github/workflows/daemon-ci.yml`, `scripts/verify-gateway-daemon-render.mjs` | hosted Ubuntu validates development install prefix, installed CLI, packaged gateway assets under `share/emwaver/gateway`, default script/bootstrap assets under `share/emwaver/assets/default-scripts`, installed `emwaver gateway`, and installed `emwaver gateway --daemon-fallback --sim-device` rendering a script plus UI event round-trip through the daemon runtime |
 | CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml`, `scripts/verify-gateway-daemon-render.mjs` | matrix builds `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`, each containing `bin/emwaver`, `share/emwaver/gateway`, and `share/emwaver/assets/default-scripts`; workflow smoke-tests packaged gateway health and packaged daemon fallback script rendering plus UI event round-trip |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 | Linux validation runbook | `scripts/rebirth-linux-validation.sh`, `scripts/rebirth-hardware-validation.sh`, `scripts/verify-gateway-daemon-render.mjs` | supports USB via `EMWAVER_DEVICE_ID` and BLE via `EMWAVER_HARDWARE_TRANSPORT=ble`; always runs gateway-daemon simulator fallback; can run hardware-backed `emwaver gateway --daemon-fallback` render/event validation when hardware env is provided; execution on real Linux host with ALSA/BlueZ and hardware still pending |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
-| Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | added hosted Ubuntu dry-run validation, hosted Windows restore/build plus simulator script-engine tests, and dispatch-only self-hosted hardware jobs |
+| Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | run `25429754048` passed hosted Ubuntu Linux validation and hosted Windows restore/build plus simulator script-engine tests; hardware jobs remain dispatch-only on self-hosted runners |
 
 ## Verification Evidence
 
@@ -132,6 +132,8 @@ This verifies:
 - `bash -n daemon/install/install.sh scripts/rebirth-linux-validation.sh` verifies installer/runbook shell syntax.
 - local verifier coverage is also wired into `.github/workflows/gateway-ci.yml`.
 - daemon/runtime verifier coverage is wired into `.github/workflows/daemon-ci.yml`.
+- Daemon CI run `25429739081` passed on hosted Ubuntu after validating the gateway daemon simulator, CLI daemon fallback, and packaged install smoke paths.
+- Rebirth Platform Validation run `25429754048` passed hosted Ubuntu Linux validation plus hosted Windows simulator validation.
 
 It does not verify:
 
