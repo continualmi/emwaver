@@ -38,12 +38,6 @@ struct DeviceConnectionSheet: View {
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
             items.append(("Board", "ESP32-S3"))
-        } else if device.isConnected {
-            if needsFirmwareInstall {
-                items.append(("Mode", "Needs firmware"))
-            } else {
-                items.append(("Mode", "Local"))
-            }
         }
         return items
     }
