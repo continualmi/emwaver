@@ -121,6 +121,8 @@ emwaver start
 This starts the local daemon host and localhost browser gateway as one stack. The browser renders the full gateway UI; the daemon owns script execution, UI event dispatch, and local hardware transport underneath. Advanced users can split the stack for SSH/systemd workflows:
 
 ```bash
+emwaver service install --device 0
+emwaver service install --ble
 emwaver daemon start --device 0
 emwaver daemon start --ble
 emwaver gateway
@@ -128,6 +130,17 @@ emwaver daemon serve --sim-device
 ```
 
 Release packaging must include enough gateway assets for `emwaver start` and `emwaver gateway` to work without users knowing about the internal `gateway/` package directory. Development checkout mode may still use `npm ci` and `npm run start` from `gateway/`. Linux hardware docs must also cover ALSA MIDI permissions for USB MIDI/SysEx and BlueZ/Bluetooth permissions for ESP32 BLE.
+
+Current development installer:
+
+```bash
+./daemon/install/install.sh
+EMWAVER_INSTALL_SERVICE=1 EMWAVER_SERVICE_ARGS="--ble" ./daemon/install/install.sh
+```
+
+This builds and installs the Rust CLI into `$HOME/.local/bin`, prepares gateway npm dependencies, and can install the user-level daemon service. This is not the final public installer because it still requires a source checkout, Rust, Node, and npm.
+
+macOS can exercise the same daemon/gateway/runtime path and should be used as a fast Unix smoke target, especially for BLE. Linux still needs separate validation because the deploy surface is systemd + BlueZ + ALSA/device permissions rather than launchd/CoreBluetooth/CoreMIDI.
 
 ## Windows
 

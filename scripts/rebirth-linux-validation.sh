@@ -38,6 +38,20 @@ else
 fi
 
 echo
+echo "== Bluetooth diagnostics =="
+if command -v bluetoothctl >/dev/null 2>&1; then
+  bluetoothctl show || true
+else
+  echo "missing: bluetoothctl (install bluez for BLE diagnostics)"
+fi
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl is-active bluetooth || true
+else
+  echo "missing: systemctl"
+fi
+
+echo
 echo "== Generic rebirth hardware validation =="
 "$ROOT/scripts/rebirth-hardware-validation.sh"
 
@@ -56,4 +70,18 @@ If the board is visible to `lsusb` but not to `emwaver devices`:
 
 4. Rerun with the selected MIDI device id:
    EMWAVER_DEVICE_ID=0 scripts/rebirth-linux-validation.sh
+
+For BLE:
+
+1. Install BlueZ tools:
+   sudo apt-get install bluez
+
+2. Confirm the Bluetooth service is running:
+   systemctl status bluetooth
+
+3. Confirm EMWaver can scan:
+   cd daemon && cargo run -q -p emwaver -- devices
+
+4. Run through the BLE transport:
+   cd daemon && cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble
 EOF

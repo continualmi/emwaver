@@ -58,6 +58,12 @@ enum Commands {
         cmd: DaemonCmd,
     },
 
+    /// Install/manage the local Linux user service.
+    Service {
+        #[command(subcommand)]
+        cmd: ServiceCmd,
+    },
+
     /// Terminal UI for daemon + device status.
     Tui,
 
@@ -232,6 +238,52 @@ enum DaemonCmd {
     Autostart,
 }
 
+#[derive(Subcommand, Debug)]
+enum ServiceCmd {
+    /// Install a Linux systemd user service for the headless daemon host.
+    Install {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
+
+        /// Enable and start the service after writing the unit.
+        #[arg(long)]
+        now: bool,
+    },
+
+    /// Remove the Linux systemd user service.
+    Uninstall,
+
+    /// Start the installed user service.
+    Start,
+
+    /// Stop the installed user service.
+    Stop,
+
+    /// Show user service status.
+    Status,
+}
+
 fn project_dirs() -> Result<ProjectDirs> {
     ProjectDirs::from("com", "EMWaver", "emwaver")
         .context("failed to resolve per-user data directories")
@@ -381,6 +433,13 @@ fn autostart_status() -> Result<String> {
 
     #[cfg(target_os = "linux")]
     {
+        let user_unit = systemd_user_unit_path();
+        if user_unit.exists() {
+            return Ok(format!(
+                "autostart: configured (systemd user unit exists: {})",
+                user_unit.display()
+            ));
+        }
         let unit1 = PathBuf::from("/etc/systemd/system/emwaver.service");
         let unit2 = PathBuf::from("/lib/systemd/system/emwaver.service");
         if unit1.exists() || unit2.exists() {
@@ -392,6 +451,185 @@ fn autostart_status() -> Result<String> {
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         Ok("autostart: unknown (unsupported OS)".to_string())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn systemd_user_unit_path() -> PathBuf {
+    let base = env_trim("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| env_trim("HOME").map(|home| PathBuf::from(home).join(".config")))
+        .unwrap_or_else(|| PathBuf::from("."));
+    base.join("systemd")
+        .join("user")
+        .join("emwaver-daemon.service")
+}
+
+fn systemctl_user(args: &[&str]) -> Result<()> {
+    let status = Command::new("systemctl")
+        .arg("--user")
+        .args(args)
+        .status()
+        .with_context(|| format!("failed to run systemctl --user {}", args.join(" ")))?;
+    if !status.success() {
+        anyhow::bail!(
+            "systemctl --user {} exited with status {status}",
+            args.join(" ")
+        );
+    }
+    Ok(())
+}
+
+fn service_install(
+    port: Option<u16>,
+    device: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+    bootstrap_path: Option<PathBuf>,
+    now: bool,
+) -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = (
+            port,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+            now,
+        );
+        anyhow::bail!(
+            "`emwaver service install` currently supports Linux systemd user services only"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        if ble && device.is_some() {
+            anyhow::bail!("--device cannot be combined with --ble");
+        }
+        if ble && no_device {
+            anyhow::bail!("--ble cannot be combined with --no-device");
+        }
+        if ble && sim_device {
+            anyhow::bail!("--ble cannot be combined with --sim-device");
+        }
+        if no_device && sim_device {
+            anyhow::bail!("--no-device cannot be combined with --sim-device");
+        }
+        if no_device && device.is_some() {
+            anyhow::bail!("--device cannot be combined with --no-device");
+        }
+        if sim_device && device.is_some() {
+            anyhow::bail!("--device cannot be combined with --sim-device");
+        }
+
+        let exe =
+            std::env::current_exe().context("failed to resolve current emwaver executable")?;
+        let unit_path = systemd_user_unit_path();
+        if let Some(parent) = unit_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create {}", parent.display()))?;
+        }
+
+        let mut exec_args = vec![
+            shell_escape(&exe.display().to_string()),
+            "daemon".to_string(),
+            "serve".to_string(),
+        ];
+        if let Some(port) = port {
+            exec_args.push("--port".to_string());
+            exec_args.push(port.to_string());
+        }
+        if let Some(device) = device {
+            exec_args.push("--device".to_string());
+            exec_args.push(shell_escape(&device));
+        }
+        if ble {
+            exec_args.push("--ble".to_string());
+        }
+        if no_device {
+            exec_args.push("--no-device".to_string());
+        }
+        if sim_device {
+            exec_args.push("--sim-device".to_string());
+        }
+        if let Some(bootstrap_path) = bootstrap_path {
+            exec_args.push("--bootstrap-path".to_string());
+            exec_args.push(shell_escape(&bootstrap_path.display().to_string()));
+        }
+
+        let unit = format!(
+            r#"[Unit]
+Description=EMWaver local daemon host
+After=bluetooth.target sound.target
+
+[Service]
+Type=simple
+ExecStart={}
+Restart=on-failure
+RestartSec=2
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target
+"#,
+            exec_args.join(" ")
+        );
+
+        fs::write(&unit_path, unit)
+            .with_context(|| format!("failed to write {}", unit_path.display()))?;
+        println!("installed systemd user unit: {}", unit_path.display());
+        systemctl_user(&["daemon-reload"])?;
+        systemctl_user(&["enable", "emwaver-daemon.service"])?;
+        if now {
+            systemctl_user(&["restart", "emwaver-daemon.service"])?;
+        }
+        println!("service installed. Start with: systemctl --user start emwaver-daemon.service");
+        println!("gateway still runs separately with: emwaver gateway");
+        Ok(())
+    }
+}
+
+fn service_uninstall() -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!(
+            "`emwaver service uninstall` currently supports Linux systemd user services only"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let _ = systemctl_user(&["disable", "--now", "emwaver-daemon.service"]);
+        let unit_path = systemd_user_unit_path();
+        if unit_path.exists() {
+            fs::remove_file(&unit_path)
+                .with_context(|| format!("failed to remove {}", unit_path.display()))?;
+            println!("removed {}", unit_path.display());
+        } else {
+            println!("service unit not present: {}", unit_path.display());
+        }
+        systemctl_user(&["daemon-reload"])?;
+        Ok(())
+    }
+}
+
+fn service_status() -> Result<()> {
+    systemctl_user(&["status", "emwaver-daemon.service"])
+}
+
+#[cfg(target_os = "linux")]
+fn shell_escape(value: &str) -> String {
+    if value
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || "/._:-".contains(c))
+    {
+        value.to_string()
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
     }
 }
 
@@ -1282,6 +1520,29 @@ fn main() -> Result<()> {
                 println!("{}", autostart_status()?);
                 Ok(())
             }
+        },
+        Commands::Service { cmd } => match cmd {
+            ServiceCmd::Install {
+                port,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+                now,
+            } => service_install(
+                port,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+                now,
+            ),
+            ServiceCmd::Uninstall => service_uninstall(),
+            ServiceCmd::Start => systemctl_user(&["start", "emwaver-daemon.service"]),
+            ServiceCmd::Stop => systemctl_user(&["stop", "emwaver-daemon.service"]),
+            ServiceCmd::Status => service_status(),
         },
         Commands::Tui => run_tui(),
         Commands::Devices => list_devices(),

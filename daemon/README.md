@@ -39,6 +39,7 @@ Main command groups (`emwaver/src/main.rs`):
 - `emwaver start`
 - `emwaver daemon start|stop|status|autostart`
 - `emwaver daemon serve`
+- `emwaver service install|uninstall|start|stop|status`
 - `emwaver devices`
 - `emwaver doctor`
 - `emwaver run <script.emw>`
@@ -62,7 +63,7 @@ emwaver gateway --port 3921
 
 This starts the localhost browser gateway from `gateway/`. It is a bridge toward local script control without Continual cloud auth or hosted relay requirements.
 
-For Linux/headless deployments, the preferred one-command local stack is:
+For headless or CLI-first deployments, including macOS development hosts and Linux boxes, the preferred one-command local stack is:
 
 ```bash
 emwaver start
@@ -79,7 +80,7 @@ localhost browser UI
   <-> board firmware
 ```
 
-The daemon host connects to the gateway as `role=host`, executes `script.run`, streams `ui.snapshot`, handles `ui.event`, and reports local daemon/device status. This is the Linux/no-GUI equivalent of a native app connecting to the gateway as `role=app`.
+The daemon host connects to the gateway as `role=host`, executes `script.run`, streams `ui.snapshot`, handles `ui.event`, and reports local daemon/device status. This is the no-GUI equivalent of a native app connecting to the gateway as `role=app`.
 
 Development and validation flags:
 
@@ -152,7 +153,30 @@ The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from
 
 This daemon does not heartbeat to a hosted backend, register a cloud session, require an account, enforce subscriptions, or expose USB hardware to a remote service.
 
-## 3.3 Script/UI engine
+## 3.3 Linux user service
+
+Linux always-on hosts can install the daemon as a systemd user service:
+
+```bash
+emwaver service install --device 0
+emwaver service install --ble
+emwaver service install --sim-device --now
+emwaver service status
+emwaver service stop
+emwaver service uninstall
+```
+
+The unit is written to:
+
+```text
+~/.config/systemd/user/emwaver-daemon.service
+```
+
+It runs `emwaver daemon serve ...` as the current user. The gateway remains a separate localhost web process started with `emwaver gateway` or `emwaver start`; this keeps the always-on hardware owner small and lets SSH users run or forward the browser UI explicitly.
+
+macOS can run the same foreground/background daemon commands (`emwaver start`, `emwaver daemon serve`, `emwaver daemon start`) and uses the same Rust runtime plus shared protocol code. It is a good local Unix smoke target for the daemon and BLE path. It does not replace Linux validation for deployment details such as systemd user units, BlueZ behavior, ALSA sequencer availability, or Linux group/device permissions.
+
+## 3.4 Script/UI engine
 
 `emwaver-runtime/src/engine.rs`:
 - uses Boa JS runtime,
@@ -221,6 +245,15 @@ From repo root:
 ./daemon/dev devices
 ./daemon/dev daemon status
 ```
+
+Development install:
+
+```bash
+./daemon/install/install.sh
+EMWAVER_INSTALL_SERVICE=1 EMWAVER_SERVICE_ARGS="--ble" ./daemon/install/install.sh
+```
+
+The installer builds the Rust CLI, installs it to `$HOME/.local/bin/emwaver` by default, and prepares gateway npm dependencies. Override the install prefix with `EMWAVER_INSTALL_PREFIX=/path`.
 
 `daemon/dev` compiles both daemon binaries and executes CLI commands (fast iterative workflow).
 

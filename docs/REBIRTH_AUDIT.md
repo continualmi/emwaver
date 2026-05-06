@@ -40,7 +40,8 @@ The rebirth is complete only when:
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
-| `emwaver start` CLI stack | `daemon/emwaver/src/main.rs` starts the daemon host in the background, then starts the gateway in the foreground | build verified; split gateway + `daemon serve --sim-device` WebSocket smoke passed; full foreground stack manually usable, release packaging pending |
+| `emwaver start` CLI stack | `daemon/emwaver/src/main.rs` starts the daemon host in the background, then starts the gateway in the foreground | build verified; split gateway + `daemon serve --sim-device` WebSocket smoke passed; macOS BLE gateway smoke passed; full foreground stack manually usable, release packaging pending |
+| Linux user service | `daemon/emwaver/src/main.rs` implements `emwaver service install|uninstall|start|stop|status`; `daemon/install/install.sh` can install the service from a development checkout | build/help verified on macOS; shell syntax verified; real Linux systemd user-service validation pending |
 | Daemon as gateway runtime owner | `daemon/emwaver/src/main.rs` implements `daemon serve` as local `role=host`: handles `script.run`, `script.stop`, `ui.event`, emits `device.status`, `script.started`, `script.stopped`, `script.error`, and `ui.snapshot`; supports USB MIDI/SysEx by default and ESP32 BLE with `--ble` | simulator-backed gateway smoke passed, including UI event dispatch and updated snapshot; USB/BLE build passed; macOS BLE hardware gateway smoke passed with ESP32; Linux hardware validation pending |
 | Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Local runtime account/activation gate | macOS `ContentView` passes connected USB device to `ScriptsRootView` without claimed-device cache membership; Windows `ScriptsPage` uses `AppServices.Device` directly | macOS build passed; Windows source reviewed, build blocked by missing Windows toolchain |
@@ -120,6 +121,8 @@ This verifies:
 - Rust daemon BLE scan saw a powered ESP32 as `EMWaver`.
 - `cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble` rendered the Blink UI snapshot through real BLE.
 - Gateway + `cargo run -q -p emwaver -- daemon serve --port 3921 --ble` rendered `blink.emw` through the localhost gateway and real BLE transport.
+- `emwaver service install --help` verifies Linux service CLI surface builds.
+- `bash -n daemon/install/install.sh scripts/rebirth-linux-validation.sh` verifies installer/runbook shell syntax.
 - local verifier coverage is also wired into `.github/workflows/gateway-ci.yml`.
 - daemon/runtime verifier coverage is wired into `.github/workflows/daemon-ci.yml`.
 
@@ -129,6 +132,7 @@ It does not verify:
 - native app hardware-backed runtime integration,
 - Linux daemon hardware-backed gateway runtime integration,
 - Linux daemon ESP32 BLE runtime validation against a real board,
+- Linux systemd user-service install/start validation on a real Linux host,
 - Windows app build,
 - selected-device hardware behavior.
 
