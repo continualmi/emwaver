@@ -61,7 +61,7 @@ The rebirth is complete only when:
 | CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml`, `scripts/verify-gateway-daemon-render.mjs` | matrix builds `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`, each containing `bin/emwaver`, `share/emwaver/gateway`, and `share/emwaver/assets/default-scripts`; workflow smoke-tests packaged gateway health and packaged daemon fallback script rendering plus UI event round-trip |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
-| Linux validation runbook | `scripts/rebirth-linux-validation.sh`, `scripts/rebirth-hardware-validation.sh` | supports USB via `EMWAVER_DEVICE_ID` and BLE via `EMWAVER_HARDWARE_TRANSPORT=ble`; execution on real Linux host with ALSA/BlueZ and hardware still pending |
+| Linux validation runbook | `scripts/rebirth-linux-validation.sh`, `scripts/rebirth-hardware-validation.sh`, `scripts/verify-gateway-daemon-render.mjs` | supports USB via `EMWAVER_DEVICE_ID` and BLE via `EMWAVER_HARDWARE_TRANSPORT=ble`; always runs gateway-daemon simulator fallback; can run hardware-backed `emwaver gateway --daemon-fallback` render/event validation when hardware env is provided; execution on real Linux host with ALSA/BlueZ and hardware still pending |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
 | Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | added hosted Ubuntu dry-run validation, hosted Windows restore/build plus simulator script-engine tests, and dispatch-only self-hosted hardware jobs |
 
@@ -123,6 +123,7 @@ This verifies:
 - The same simulator validation runs in fallback mode to cover `emwaver gateway --daemon-fallback --sim-device`.
 - `scripts/rebirth-install-smoke.sh` installs a packaged CLI/gateway layout, starts the installed gateway, then starts installed `emwaver gateway --daemon-fallback --sim-device` and verifies daemon-backed script rendering plus UI event dispatch with `scripts/verify-gateway-daemon-render.mjs`.
 - `.github/workflows/cli-gateway-release.yml` performs the same daemon-backed render check against the packaged Linux and macOS CLI/gateway tarball layouts.
+- `scripts/rebirth-linux-validation.sh` now includes the gateway daemon simulator fallback validation and, when `EMWAVER_DEVICE_ID` or `EMWAVER_HARDWARE_TRANSPORT=ble` is set, starts hardware-backed `emwaver gateway --daemon-fallback` and drives a real `.emw` script through the gateway WebSocket.
 - Rust daemon BLE transport builds with the shared `emwaver-device` protocol envelope and `btleplug` scan/connect/notify/write path.
 - Rust daemon BLE scan saw a powered ESP32 as `EMWaver`.
 - `cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble` rendered the Blink UI snapshot through real BLE.

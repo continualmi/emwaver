@@ -2,6 +2,15 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DAEMON_DIR="$ROOT/daemon"
+GATEWAY_SIM_PORT="${EMWAVER_LINUX_GATEWAY_SIM_PORT:-3944}"
+GATEWAY_HARDWARE_PORT="${EMWAVER_LINUX_GATEWAY_HARDWARE_PORT:-3945}"
+HARDWARE_TRANSPORT="${EMWAVER_HARDWARE_TRANSPORT:-usb}"
+SCRIPT_PATH="${EMWAVER_TEST_SCRIPT:-$ROOT/assets/default-scripts/blink.emw}"
+if [[ "$SCRIPT_PATH" != /* ]]; then
+  SCRIPT_PATH="$ROOT/$SCRIPT_PATH"
+fi
+GATEWAY_EVENT_TARGET_ID="${EMWAVER_GATEWAY_EVENT_TARGET_ID:-blink.toggle}"
 
 echo "== EMWaver rebirth Linux validation =="
 echo "repo: $ROOT"
@@ -54,6 +63,68 @@ fi
 echo
 echo "== Generic rebirth hardware validation =="
 "$ROOT/scripts/rebirth-hardware-validation.sh"
+
+echo
+echo "== Gateway daemon simulator validation =="
+EMWAVER_GATEWAY_PORT="$GATEWAY_SIM_PORT" EMWAVER_GATEWAY_DAEMON_SIM_MODE=fallback "$ROOT/scripts/rebirth-gateway-daemon-sim-validation.sh"
+
+run_gateway_hardware_validation() {
+  local gateway_log
+  gateway_log="$(mktemp /tmp/emwaver-linux-gateway-hardware.XXXXXX.log)"
+  local gateway_pid=""
+  cleanup_gateway_hardware() {
+    if [[ -n "$gateway_pid" ]] && kill -0 "$gateway_pid" >/dev/null 2>&1; then
+      kill "$gateway_pid" >/dev/null 2>&1 || true
+      wait "$gateway_pid" >/dev/null 2>&1 || true
+    fi
+    rm -f "$gateway_log"
+  }
+  trap cleanup_gateway_hardware RETURN
+
+  local args=(gateway --port "$GATEWAY_HARDWARE_PORT" --daemon-fallback)
+  if [[ "$HARDWARE_TRANSPORT" == "ble" ]]; then
+    args+=(--ble)
+  elif [[ "$HARDWARE_TRANSPORT" == "usb" && -n "${EMWAVER_DEVICE_ID:-}" ]]; then
+    args+=(--device "$EMWAVER_DEVICE_ID")
+  else
+    return 1
+  fi
+
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- "${args[@]}" >"$gateway_log" 2>&1) &
+  gateway_pid=$!
+
+  for _ in {1..80}; do
+    if curl -fsS "http://127.0.0.1:$GATEWAY_HARDWARE_PORT/health" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+
+  curl -fsS "http://127.0.0.1:$GATEWAY_HARDWARE_PORT/health"
+  echo
+  node "$ROOT/scripts/verify-gateway-daemon-render.mjs" "$GATEWAY_HARDWARE_PORT" emwaver-daemon "$SCRIPT_PATH" "$GATEWAY_EVENT_TARGET_ID"
+}
+
+if [[ "$HARDWARE_TRANSPORT" == "ble" || -n "${EMWAVER_DEVICE_ID:-}" ]]; then
+  echo
+  echo "== Gateway daemon hardware validation =="
+  echo "script: $SCRIPT_PATH"
+  echo "hardware transport: $HARDWARE_TRANSPORT"
+  run_gateway_hardware_validation
+else
+  cat <<'EOF'
+
+== Gateway daemon hardware validation skipped ==
+Set EMWAVER_DEVICE_ID for USB or EMWAVER_HARDWARE_TRANSPORT=ble for BLE, then rerun:
+
+  EMWAVER_DEVICE_ID=0 scripts/rebirth-linux-validation.sh
+  EMWAVER_HARDWARE_TRANSPORT=ble scripts/rebirth-linux-validation.sh
+
+If EMWAVER_TEST_SCRIPT points at a script other than blink.emw, set
+EMWAVER_GATEWAY_EVENT_TARGET_ID to a UI node id that dispatches an event and
+causes a second UI snapshot.
+EOF
+fi
 
 cat <<'EOF'
 

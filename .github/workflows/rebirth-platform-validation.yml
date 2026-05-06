@@ -71,6 +71,13 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: gateway/package-lock.json
+
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:

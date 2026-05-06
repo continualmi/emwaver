@@ -1,5 +1,6 @@
 import path from "node:path";
 import process from "node:process";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
@@ -8,8 +9,10 @@ const { WebSocket } = require(path.join(repoRoot, "gateway", "node_modules", "ws
 
 const port = process.argv[2] || "3921";
 const expectedRuntimeOwner = process.argv[3] || "emwaver-daemon";
+const sourcePath = process.argv[4] || "";
+const eventTargetId = process.argv[5] || "packaged.tap";
 
-const source = `
+const defaultSource = `
 var clicks = 0;
 pinMode(13, OUTPUT);
 digitalWrite(13, HIGH);
@@ -27,6 +30,27 @@ function render() {
 }
 render();
 `;
+const source = sourcePath ? readFileSync(sourcePath, "utf8") : defaultSource;
+const scriptName = sourcePath ? path.basename(sourcePath) : "packaged-daemon-render.emw";
+
+function findNodeById(node, id) {
+  if (!node || typeof node !== "object") {
+    return null;
+  }
+  if (node.id === id) {
+    return node;
+  }
+  if (!Array.isArray(node.children)) {
+    return null;
+  }
+  for (const child of node.children) {
+    const found = findNodeById(child, id);
+    if (found) {
+      return found;
+    }
+  }
+  return null;
+}
 
 const ws = new WebSocket(`ws://127.0.0.1:${port}/v1/ws`);
 let scriptId = null;
@@ -50,7 +74,7 @@ ws.on("message", (raw) => {
   }
   if (msg.type === "device.status" && msg.connected && !sentRun) {
     sentRun = true;
-    ws.send(JSON.stringify({ type: "script.run", name: "packaged-daemon-render.emw", source }));
+    ws.send(JSON.stringify({ type: "script.run", name: scriptName, source }));
     return;
   }
   if (msg.type === "script.started") {
@@ -64,7 +88,11 @@ ws.on("message", (raw) => {
   if (msg.type === "ui.snapshot" && msg.scriptInstanceId === scriptId) {
     snapshots += 1;
     if (snapshots === 1) {
-      const button = msg.root.children.find((node) => node.id === "packaged.tap");
+      const button = findNodeById(msg.root, eventTargetId);
+      if (!button) {
+        console.error(`missing UI event target: ${eventTargetId}`);
+        process.exit(1);
+      }
       ws.send(JSON.stringify({
         type: "ui.event",
         scriptInstanceId: scriptId,

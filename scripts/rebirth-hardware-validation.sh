@@ -83,8 +83,14 @@ fi
 
 cat <<'EOF'
 
-== Local gateway/native-app hardware validation ==
-Manual validation still required:
+== Local gateway hardware validation ==
+Gateway-backed hardware validation is handled by scripts/rebirth-linux-validation.sh.
+For Linux daemon fallback:
+
+  EMWAVER_DEVICE_ID=0 scripts/rebirth-linux-validation.sh
+  EMWAVER_HARDWARE_TRANSPORT=ble scripts/rebirth-linux-validation.sh
+
+Native app gateway validation is still separate:
 
 1. Start the native macOS or Windows app with the board connected.
 2. In another terminal, run `emwaver gateway --port 3921`.
