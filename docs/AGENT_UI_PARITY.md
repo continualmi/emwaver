@@ -30,6 +30,18 @@ Each platform test suite should cover these behaviors:
 6. Backend requests use the shared Agent boundary: bearer key plus `universe` and
    `userInput`; production prompts and private routing policy stay server-side.
 
+The repo-level static parity check is:
+
+```bash
+node scripts/verify-agent-ui-parity.mjs
+```
+
+This check runs in GitHub Actions through `.github/workflows/agent-ui-parity.yml`
+and verifies the cross-platform contract that can be checked without a physical
+device or simulator: local Agent key storage, local SQLite chat storage, shared
+Agent request shape, BLE runtime presence, and absence of Firebase/Google
+sign-in style hosted account gates in native app source.
+
 ## Current Notes
 
 - macOS and iOS use the shared Apple `AgentChatStore` SQLite implementation.

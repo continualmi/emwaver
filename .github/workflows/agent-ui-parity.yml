@@ -1,0 +1,47 @@
+name: Agent UI Parity
+
+on:
+  pull_request:
+    paths:
+      - "android/**"
+      - "apple/**"
+      - "ios/**"
+      - "macos/**"
+      - "windows/**"
+      - "docs/AGENT_UI_PARITY.md"
+      - "scripts/verify-agent-ui-parity.mjs"
+      - ".github/workflows/agent-ui-parity.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "android/**"
+      - "apple/**"
+      - "ios/**"
+      - "macos/**"
+      - "windows/**"
+      - "docs/AGENT_UI_PARITY.md"
+      - "scripts/verify-agent-ui-parity.mjs"
+      - ".github/workflows/agent-ui-parity.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  parity:
+    name: Static parity contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Verify Agent UI parity contract
+        run: node scripts/verify-agent-ui-parity.mjs

@@ -47,7 +47,7 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         super.onViewCreated(view, savedInstanceState);
 
         MaterialButton notNow = view.findViewById(R.id.sign_in_not_now);
-        continueButton = view.findViewById(R.id.sign_in_google);
+        continueButton = view.findViewById(R.id.sign_in_save_key);
         errorText = view.findViewById(R.id.sign_in_error);
         helperText = view.findViewById(R.id.sign_in_not_configured);
         apiKeyInput = view.findViewById(R.id.sign_in_code_input);
