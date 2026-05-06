@@ -1,14 +1,16 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use emwaver_device::Device;
+use emwaver_device::{list_ble_devices, BleDevice, Device};
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
+use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
+use std::thread;
 use std::time::Duration;
 use tracing::info;
 use tungstenite::{connect, stream::MaybeTlsStream, Message};
@@ -23,6 +25,33 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Start the local Linux-friendly gateway + daemon stack.
+    Start {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// MIDI input port id from `emwaver devices` for daemon hardware mode.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon hardware mode.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start daemon with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start daemon with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path for daemon runtime.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
+    },
+
     /// Manage the headless host daemon.
     Daemon {
         #[command(subcommand)]
@@ -70,6 +99,10 @@ enum Commands {
         /// MIDI input port id from `emwaver devices` for direct mode.
         #[arg(long)]
         device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for direct mode.
+        #[arg(long)]
+        ble: bool,
 
         /// Run direct mode with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
@@ -127,8 +160,67 @@ enum Commands {
 
 #[derive(Subcommand, Debug)]
 enum DaemonCmd {
-    /// Explain the removed hosted daemon start path.
-    Start,
+    /// Start the local headless runtime host in the background.
+    Start {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// Override gateway base or WebSocket URL.
+        #[arg(long)]
+        gateway_url: Option<String>,
+
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
+    },
+
+    /// Run the local headless runtime host in the foreground.
+    Serve {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// Override gateway base or WebSocket URL.
+        #[arg(long)]
+        gateway_url: Option<String>,
+
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Use a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Use the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
+    },
 
     /// Stop the daemon (best-effort).
     Stop,
@@ -182,10 +274,67 @@ fn daemon_running() -> Result<Option<i32>> {
     }
 }
 
-fn daemon_start() -> Result<()> {
-    anyhow::bail!(
-        "`emwaver daemon start` hosted wrapper has been removed. Use `emwaver gateway` for browser control or `emwaver run --direct` for local headless execution."
-    );
+fn daemon_start(
+    port: Option<u16>,
+    gateway_url: Option<String>,
+    device: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+    bootstrap_path: Option<PathBuf>,
+) -> Result<()> {
+    if let Some(pid) = daemon_running()? {
+        println!("daemon: already running (pid={pid})");
+        return Ok(());
+    }
+
+    let exe = std::env::current_exe().context("failed to resolve current emwaver executable")?;
+    let logfile = logfile_path()?;
+    let stdout = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&logfile)
+        .with_context(|| format!("failed to open daemon log at {}", logfile.display()))?;
+    let stderr = stdout
+        .try_clone()
+        .context("failed to clone daemon log handle")?;
+
+    let mut cmd = Command::new(exe);
+    cmd.arg("daemon").arg("serve");
+    if let Some(port) = port {
+        cmd.arg("--port").arg(port.to_string());
+    }
+    if let Some(gateway_url) = gateway_url {
+        cmd.arg("--gateway-url").arg(gateway_url);
+    }
+    if let Some(device) = device {
+        cmd.arg("--device").arg(device);
+    }
+    if ble {
+        cmd.arg("--ble");
+    }
+    if no_device {
+        cmd.arg("--no-device");
+    }
+    if sim_device {
+        cmd.arg("--sim-device");
+    }
+    if let Some(bootstrap_path) = bootstrap_path {
+        cmd.arg("--bootstrap-path").arg(bootstrap_path);
+    }
+
+    let child = cmd
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(stdout))
+        .stderr(Stdio::from(stderr))
+        .spawn()
+        .context("failed to spawn daemon host process")?;
+
+    let pid = child.id();
+    fs::write(pidfile_path()?, pid.to_string())?;
+    println!("daemon: started (pid={pid})");
+    println!("logfile: {}", logfile.display());
+    Ok(())
 }
 
 fn daemon_stop() -> Result<()> {
@@ -248,18 +397,33 @@ fn autostart_status() -> Result<String> {
 
 fn list_devices_lines() -> Result<Vec<String>> {
     let devices = emwaver_device::list_devices()?;
+    let mut out: Vec<String> = Vec::new();
     if devices.is_empty() {
-        return Ok(vec!["No MIDI input ports found.".to_string()]);
+        out.push("No MIDI input ports found.".to_string());
+    } else {
+        out.push("MIDI input ports:".to_string());
+        for device in devices {
+            let hint = if device.likely_emwaver {
+                "  <— likely EMWaver"
+            } else {
+                ""
+            };
+            out.push(format!("  {}: {}{hint}", device.id, device.name));
+        }
     }
 
-    let mut out: Vec<String> = vec!["MIDI input ports:".to_string()];
-    for device in devices {
-        let hint = if device.likely_emwaver {
-            "  <— likely EMWaver"
-        } else {
-            ""
-        };
-        out.push(format!("  {}: {}{hint}", device.id, device.name));
+    match list_ble_devices(1_500) {
+        Ok(devices) if devices.is_empty() => out.push("No EMWaver BLE devices found.".to_string()),
+        Ok(devices) => {
+            out.push("BLE devices:".to_string());
+            for device in devices {
+                out.push(format!(
+                    "  {}: {} ({})",
+                    device.id, device.name, device.address
+                ));
+            }
+        }
+        Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
     }
 
     Ok(out)
@@ -411,6 +575,16 @@ impl CommandBridge for DeviceCommandBridge {
     }
 }
 
+struct BleCommandBridge {
+    device: Arc<BleDevice>,
+}
+
+impl CommandBridge for BleCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
+}
+
 struct NoDeviceCommandBridge;
 
 impl CommandBridge for NoDeviceCommandBridge {
@@ -428,6 +602,7 @@ fn run_script(
     no_wait: bool,
     direct: bool,
     device: Option<String>,
+    ble: bool,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -440,7 +615,15 @@ fn run_script(
 
     let name = script_name(&script, name);
     if direct {
-        return run_script_direct(source, name, device, no_device, sim_device, bootstrap_path);
+        return run_script_direct(
+            source,
+            name,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        );
     }
     if device.is_some() {
         anyhow::bail!("--device is only supported with --direct for now");
@@ -534,6 +717,7 @@ fn run_script_direct(
     source: String,
     name: String,
     device_id: Option<String>,
+    ble: bool,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -552,19 +736,7 @@ fn run_script_direct(
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
 
-    let bridge: Arc<dyn CommandBridge> = if no_device {
-        Arc::new(NoDeviceCommandBridge)
-    } else if sim_device {
-        Arc::new(SimulatorCommandBridge::basic_board()?)
-    } else {
-        let device = Device::new();
-        if let Some(device_id) = device_id {
-            device.connect_by_id(&device_id)?;
-        } else {
-            device.connect_auto()?;
-        }
-        Arc::new(DeviceCommandBridge { device })
-    };
+    let bridge = make_command_bridge(device_id, ble, no_device, sim_device)?;
 
     let engine = Engine::new(&bootstrap, bridge)?;
     engine.run_script(&source)?;
@@ -581,6 +753,285 @@ fn run_script_direct(
     }
 
     Ok(())
+}
+
+fn make_command_bridge(
+    device_id: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+) -> Result<Arc<dyn CommandBridge>> {
+    if no_device && device_id.is_some() {
+        anyhow::bail!("--device cannot be combined with --no-device");
+    }
+    if sim_device && device_id.is_some() {
+        anyhow::bail!("--device cannot be combined with --sim-device");
+    }
+    if sim_device && no_device {
+        anyhow::bail!("--no-device cannot be combined with --sim-device");
+    }
+    if ble && device_id.is_some() {
+        anyhow::bail!("--device cannot be combined with --ble");
+    }
+    if ble && no_device {
+        anyhow::bail!("--ble cannot be combined with --no-device");
+    }
+    if ble && sim_device {
+        anyhow::bail!("--ble cannot be combined with --sim-device");
+    }
+
+    if no_device {
+        Ok(Arc::new(NoDeviceCommandBridge))
+    } else if sim_device {
+        Ok(Arc::new(SimulatorCommandBridge::basic_board()?))
+    } else if ble {
+        Ok(Arc::new(BleCommandBridge {
+            device: BleDevice::connect_auto(5_000)?,
+        }))
+    } else {
+        let device = Device::new();
+        if let Some(device_id) = device_id {
+            device.connect_by_id(&device_id)?;
+        } else {
+            device.connect_auto()?;
+        }
+        Ok(Arc::new(DeviceCommandBridge { device }))
+    }
+}
+
+fn daemon_serve(
+    port: Option<u16>,
+    gateway_url: Option<String>,
+    device_id: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+    bootstrap_path: Option<PathBuf>,
+) -> Result<()> {
+    if let Some(parent) = pidfile_path()?.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(pidfile_path()?, std::process::id().to_string())?;
+
+    let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
+    let bootstrap = fs::read_to_string(&bootstrap_path)
+        .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
+    let bridge = make_command_bridge(device_id, ble, no_device, sim_device)?;
+    let url = gateway_ws_url(port, gateway_url)?;
+
+    println!("daemon host connecting to {url}");
+    loop {
+        match daemon_host_session(url.as_str(), &bootstrap, bridge.clone()) {
+            Ok(()) => println!("gateway session ended; reconnecting"),
+            Err(err) => println!("gateway session failed: {err:#}; reconnecting"),
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+
+fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge>) -> Result<()> {
+    let (mut ws, _response) =
+        connect(url).with_context(|| format!("failed to connect to local gateway at {url}"))?;
+
+    ws.send(Message::Text(
+        serde_json::json!({
+            "type": "hello",
+            "role": "host",
+            "protocolVersion": 1,
+        })
+        .to_string(),
+    ))
+    .context("failed to send daemon host hello")?;
+
+    send_host_device_status(&mut ws, true)?;
+
+    let mut active_engine: Option<Engine> = None;
+    let mut active_script_id: Option<String> = None;
+    let mut rev: u64 = 0;
+
+    loop {
+        let msg = ws.read().context("failed reading gateway host message")?;
+        let Message::Text(text) = msg else {
+            continue;
+        };
+        let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+        let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
+
+        match msg_type {
+            "hello.ack" => {}
+            "script.run" => {
+                let source = value
+                    .get("source")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let name = value
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("script.emw")
+                    .to_string();
+                let script_id = format!("local-{}", std::process::id());
+                active_engine = None;
+                active_script_id = Some(script_id.clone());
+                rev = 0;
+
+                let result = (|| -> Result<Engine> {
+                    if source.trim().is_empty() {
+                        anyhow::bail!("script source is empty");
+                    }
+                    let engine = Engine::new(bootstrap, bridge.clone())?;
+                    engine.run_script(&source)?;
+                    Ok(engine)
+                })();
+
+                match result {
+                    Ok(engine) => {
+                        ws.send(Message::Text(
+                            serde_json::json!({
+                                "type": "script.started",
+                                "hostSessionId": "local",
+                                "scriptInstanceId": script_id,
+                                "name": name,
+                            })
+                            .to_string(),
+                        ))?;
+                        rev += 1;
+                        send_ui_snapshot(
+                            &mut ws,
+                            &engine,
+                            active_script_id.as_deref().unwrap(),
+                            rev,
+                        )?;
+                        active_engine = Some(engine);
+                    }
+                    Err(err) => {
+                        ws.send(Message::Text(
+                            serde_json::json!({
+                                "type": "script.error",
+                                "hostSessionId": "local",
+                                "error": err.to_string(),
+                            })
+                            .to_string(),
+                        ))?;
+                    }
+                }
+            }
+            "script.stop" => {
+                let script_id = active_script_id
+                    .take()
+                    .unwrap_or_else(|| "local".to_string());
+                active_engine = None;
+                ws.send(Message::Text(
+                    serde_json::json!({
+                        "type": "script.stopped",
+                        "hostSessionId": "local",
+                        "scriptInstanceId": script_id,
+                        "reason": "stopped",
+                    })
+                    .to_string(),
+                ))?;
+            }
+            "ui.event" => {
+                let Some(engine) = active_engine.as_ref() else {
+                    continue;
+                };
+                let Some(script_id) = active_script_id.as_deref() else {
+                    continue;
+                };
+                match dispatch_gateway_ui_event(engine, &value) {
+                    Ok(()) => {
+                        rev += 1;
+                        send_ui_snapshot(&mut ws, engine, script_id, rev)?;
+                    }
+                    Err(err) => {
+                        ws.send(Message::Text(
+                            serde_json::json!({
+                                "type": "script.error",
+                                "hostSessionId": "local",
+                                "scriptInstanceId": script_id,
+                                "error": err.to_string(),
+                            })
+                            .to_string(),
+                        ))?;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn send_host_device_status(
+    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+    connected: bool,
+) -> Result<()> {
+    ws.send(Message::Text(
+        serde_json::json!({
+            "type": "device.status",
+            "hostSessionId": "local",
+            "connected": connected,
+            "runtimeOwner": "emwaver-daemon",
+            "devices": [{
+                "id": "local-daemon",
+                "name": "EMWaver daemon",
+                "connected": connected,
+            }],
+        })
+        .to_string(),
+    ))?;
+    Ok(())
+}
+
+fn send_ui_snapshot(
+    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+    engine: &Engine,
+    script_id: &str,
+    rev: u64,
+) -> Result<()> {
+    let root = engine.latest_tree.lock().unwrap().clone();
+    let metadata = engine.latest_metadata.lock().unwrap().clone();
+    ws.send(Message::Text(
+        serde_json::json!({
+            "type": "ui.snapshot",
+            "hostSessionId": "local",
+            "scriptInstanceId": script_id,
+            "rev": rev,
+            "root": root,
+            "metadata": metadata,
+        })
+        .to_string(),
+    ))?;
+    Ok(())
+}
+
+fn dispatch_gateway_ui_event(engine: &Engine, value: &serde_json::Value) -> Result<()> {
+    let target_id = value
+        .get("targetNodeId")
+        .and_then(|v| v.as_str())
+        .context("ui.event missing targetNodeId")?;
+    let event_name = value
+        .get("name")
+        .and_then(|v| v.as_str())
+        .context("ui.event missing name")?;
+    let payload = value
+        .get("payload")
+        .cloned()
+        .unwrap_or(serde_json::Value::Null);
+    let root = engine
+        .latest_tree
+        .lock()
+        .unwrap()
+        .clone()
+        .context("ui.event received before UI snapshot")?;
+    let node = root
+        .find_node(target_id)
+        .with_context(|| format!("ui.event target not found: {target_id}"))?;
+    let token = node
+        .handler_token(event_name)
+        .with_context(|| format!("ui.event handler not found: {event_name}"))?
+        .to_string();
+
+    engine.dispatch_ui_event(&token, vec![payload])
 }
 
 fn print_paths() -> Result<()> {
@@ -705,7 +1156,9 @@ fn run_agent(
     let mut payload = serde_json::json!({
         "userInput": user_input,
     });
-    if let Some(universe) = env_trim("EMWAVER_AGENT_UNIVERSE").or_else(|| env_trim("CONTINUAL_AGENT_UNIVERSE")) {
+    if let Some(universe) =
+        env_trim("EMWAVER_AGENT_UNIVERSE").or_else(|| env_trim("CONTINUAL_AGENT_UNIVERSE"))
+    {
         payload["universe"] = serde_json::json!(universe);
     }
 
@@ -762,8 +1215,60 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.cmd {
+        Commands::Start {
+            port,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        } => {
+            daemon_start(
+                port,
+                None,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            )?;
+            start_gateway(port)
+        }
         Commands::Daemon { cmd } => match cmd {
-            DaemonCmd::Start => daemon_start(),
+            DaemonCmd::Start {
+                port,
+                gateway_url,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            } => daemon_start(
+                port,
+                gateway_url,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            ),
+            DaemonCmd::Serve {
+                port,
+                gateway_url,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            } => daemon_serve(
+                port,
+                gateway_url,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            ),
             DaemonCmd::Stop => daemon_stop(),
             DaemonCmd::Status => {
                 match daemon_running()? {
@@ -790,6 +1295,7 @@ fn main() -> Result<()> {
             no_wait,
             direct,
             device,
+            ble,
             no_device,
             sim_device,
             bootstrap_path,
@@ -802,6 +1308,7 @@ fn main() -> Result<()> {
             no_wait,
             direct,
             device,
+            ble,
             no_device,
             sim_device,
             bootstrap_path,
@@ -888,7 +1395,7 @@ fn run_tui() -> Result<()> {
                         }
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
-                            let _ = daemon_start();
+                            let _ = daemon_start(None, None, None, false, false, false, None);
                         }
                         KeyCode::Char('t') => {
                             let _ = daemon_stop();

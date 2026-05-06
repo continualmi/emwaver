@@ -3,10 +3,7 @@ use boa_engine::{
     js_string,
     object::{builtins::JsArray, FunctionObjectBuilder, ObjectInitializer},
     property::Attribute,
-    Context as BoaContext,
-    JsValue,
-    NativeFunction,
-    Source,
+    Context as BoaContext, JsValue, NativeFunction, Source,
 };
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
@@ -36,14 +33,14 @@ impl Engine {
 
         let callbacks: Arc<Mutex<HashMap<String, JsValue>>> = Arc::new(Mutex::new(HashMap::new()));
         let latest_tree: Arc<Mutex<Option<UiNode>>> = Arc::new(Mutex::new(None));
-        let latest_metadata: Arc<Mutex<JsonValue>> = Arc::new(Mutex::new(JsonValue::Object(Default::default())));
+        let latest_metadata: Arc<Mutex<JsonValue>> =
+            Arc::new(Mutex::new(JsonValue::Object(Default::default())));
 
         // _scriptRegisterCallback(token, fn)
         {
             let cb_map = callbacks.clone();
-            let func = FunctionObjectBuilder::new(
-                ctx.realm(),
-                unsafe { NativeFunction::from_closure(move |_this, args, _ctx| {
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, _ctx| {
                     let token = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let token = token
                         .as_string()
@@ -57,23 +54,26 @@ impl Engine {
 
                     cb_map.lock().unwrap().insert(token, f);
                     Ok(JsValue::undefined())
-                }) },
-            )
+                })
+            })
             .name("_scriptRegisterCallback")
             .length(2)
             .build();
 
-            ctx.register_global_property(js_string!("_scriptRegisterCallback"), func, Attribute::all())
-                .map_err(map_js_err)
-                .context("register _scriptRegisterCallback")?;
+            ctx.register_global_property(
+                js_string!("_scriptRegisterCallback"),
+                func,
+                Attribute::all(),
+            )
+            .map_err(map_js_err)
+            .context("register _scriptRegisterCallback")?;
         }
 
         // _scriptRender(jsonString)
         {
             let tree_store = latest_tree.clone();
-            let func = FunctionObjectBuilder::new(
-                ctx.realm(),
-                unsafe { NativeFunction::from_closure(move |_this, args, _ctx| {
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, _ctx| {
                     let s = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let json_str = s
                         .as_string()
@@ -84,8 +84,8 @@ impl Engine {
                     let parsed: Option<UiNode> = serde_json::from_value(v).ok();
                     *tree_store.lock().unwrap() = parsed;
                     Ok(JsValue::undefined())
-                }) },
-            )
+                })
+            })
             .name("_scriptRender")
             .length(1)
             .build();
@@ -97,10 +97,9 @@ impl Engine {
 
         // _scriptSleep(ms) (optional)
         {
-            let func = FunctionObjectBuilder::new(
-                ctx.realm(),
-                unsafe { NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined())) },
-            )
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined()))
+            })
             .name("_scriptSleep")
             .length(1)
             .build();
@@ -113,9 +112,8 @@ impl Engine {
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
             let command_bridge = bridge.clone();
-            let func = FunctionObjectBuilder::new(
-                ctx.realm(),
-                unsafe { NativeFunction::from_closure(move |_this, args, ctx| {
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, ctx| {
                     let bytes = args.get(0).cloned().unwrap_or(JsValue::undefined());
                     let timeout_ms = args
                         .get(1)
@@ -129,7 +127,8 @@ impl Engine {
                     let obj = bytes.as_object().cloned();
                     let mut cmd: Vec<u8> = vec![];
                     if let Some(o) = obj {
-                        let len = o.get(js_string!("length"), ctx)?.as_number().unwrap_or(0.0) as usize;
+                        let len =
+                            o.get(js_string!("length"), ctx)?.as_number().unwrap_or(0.0) as usize;
                         cmd.reserve(len);
                         for i in 0..len {
                             let v = o.get(i, ctx)?;
@@ -151,8 +150,8 @@ impl Engine {
                         array.set(i, JsValue::new(*b), true, ctx)?;
                     }
                     Ok(array.into())
-                }) },
-            )
+                })
+            })
             .name("_scriptSendPacket")
             .length(2)
             .build();
@@ -275,7 +274,10 @@ mod tests {
 
     impl CommandBridge for RecordingBridge {
         fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
-            self.calls.lock().unwrap().push((cmd_lane.to_vec(), timeout_ms));
+            self.calls
+                .lock()
+                .unwrap()
+                .push((cmd_lane.to_vec(), timeout_ms));
             Ok(self.response.clone())
         }
     }
@@ -299,7 +301,10 @@ mod tests {
         let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
         assert_eq!(tree.id, "root");
         assert_eq!(tree.node_type, "text");
-        assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("hello"));
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("hello")
+        );
     }
 
     #[test]
@@ -324,7 +329,9 @@ mod tests {
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
         let engine = Engine::new("", command_bridge).expect("engine");
 
-        let err = engine.run_script("throw new Error('boom');").expect_err("script error");
+        let err = engine
+            .run_script("throw new Error('boom');")
+            .expect_err("script error");
         assert!(format!("{err:#}").contains("script eval failed"));
     }
 
@@ -347,12 +354,18 @@ mod tests {
             .expect("register callback");
 
         engine
-            .dispatch_ui_event("button-token", vec![JsonValue::String("clicked".to_string())])
+            .dispatch_ui_event(
+                "button-token",
+                vec![JsonValue::String("clicked".to_string())],
+            )
             .expect("dispatch event");
 
         let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
         assert_eq!(tree.id, "root");
-        assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("clicked"));
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("clicked")
+        );
     }
 
     #[test]

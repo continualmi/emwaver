@@ -34,12 +34,14 @@ The rebirth is complete only when:
 | Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
 | Agent CLI | `daemon/emwaver/src/main.rs` adds `emwaver agent` using `EMWAVER_AGENT_API_KEY` and endpoint env | missing-key and configured mock paths passed |
 | Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; the CLI consumes it through direct local execution | done for CLI/daemon reuse |
-| Device transport extraction | `daemon/emwaver-device/` owns MIDI/SysEx `Device`, selected input connection, and protocol helpers | API/build done; selected-device error paths verified; hardware validation pending |
+| Device transport extraction | `daemon/emwaver-device/` owns USB MIDI/SysEx `Device`, ESP32 BLE `BleDevice`, selected input connection, EMWaver BLE service discovery, and protocol helpers | API/build done; selected-device and BLE flag error paths verified by build/help; hardware validation pending |
 | Shared device simulator | `SIMULATOR.md`, `simulator/fixtures/basic-board.json`, `simulator/VIRTUAL_TRANSPORT.md`, `emwaver-runtime::SimulatorCommandBridge`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, Android `SimulatorScriptDeviceBridge`, `REBIRTH-045` through `REBIRTH-049` | shared fixture plus Rust, Apple, Windows, and Android adapters added; virtual MIDI/USB evaluated and kept out of the portable baseline |
-| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
+| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app/daemon bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; gateway/headless daemon simulator integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
 | `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
 | `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
 | `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed and starts localhost gateway | smoke verified |
+| `emwaver start` CLI stack | `daemon/emwaver/src/main.rs` starts the daemon host in the background, then starts the gateway in the foreground | build verified; split gateway + `daemon serve --sim-device` WebSocket smoke passed; full foreground stack manually usable, release packaging pending |
+| Daemon as gateway runtime owner | `daemon/emwaver/src/main.rs` implements `daemon serve` as local `role=host`: handles `script.run`, `script.stop`, `ui.event`, emits `device.status`, `script.started`, `script.stopped`, `script.error`, and `ui.snapshot`; supports USB MIDI/SysEx by default and ESP32 BLE with `--ble` | simulator-backed gateway smoke passed, including UI event dispatch and updated snapshot; USB/BLE build passed; real hardware validation pending |
 | Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
 | Local runtime account/activation gate | macOS `ContentView` passes connected USB device to `ScriptsRootView` without claimed-device cache membership; Windows `ScriptsPage` uses `AppServices.Device` directly | macOS build passed; Windows source reviewed, build blocked by missing Windows toolchain |
 | Native remote-control scope | `REBIRTH.md`, `REBIRTH-050`, `LAUNCH_MVP.md`, macOS/Windows/iOS/Android host-control code | same-machine localhost gateway control is now the core posture; native hosted relay/directory code has been removed from the primary app surfaces; macOS Debug build passed, Android Java compile passed, iOS simulator build passed, Windows build blocked by missing `dotnet` |
@@ -112,6 +114,9 @@ This verifies:
 - CLI Agent missing-key and configured mock behavior,
 - local WebSocket script run to app-produced UI snapshot,
 - local WebSocket UI event forwarding to mock native app.
+- local WebSocket script run to Rust daemon-produced UI snapshot with `--sim-device`.
+- local WebSocket UI event dispatch through Rust daemon and updated UI snapshot with `--sim-device`.
+- Rust daemon BLE transport builds with the shared `emwaver-device` protocol envelope and `btleplug` scan/connect/notify/write path.
 - local verifier coverage is also wired into `.github/workflows/gateway-ci.yml`.
 - daemon/runtime verifier coverage is wired into `.github/workflows/daemon-ci.yml`.
 
@@ -119,6 +124,8 @@ It does not verify:
 
 - real hardware access,
 - native app hardware-backed runtime integration,
+- Linux daemon hardware-backed gateway runtime integration,
+- Linux daemon ESP32 BLE runtime validation against a real board,
 - Windows app build,
 - selected-device hardware behavior.
 
@@ -163,6 +170,8 @@ Completed imports:
 
 - Verify Windows app local gateway WebSocket on a Windows 11 workstation.
 - Validate macOS local gateway script execution on real hardware.
+- Validate Linux `emwaver start --device <id>` gateway/daemon script execution on real hardware.
+- Validate Linux `emwaver start --ble` gateway/daemon script execution on real ESP32 BLE hardware.
 - Validate local hardware script execution on at least one supported board.
 
 Do not mark the active goal complete until those items are implemented and verified.

@@ -4,7 +4,9 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
-use crate::protocol::{decode_sysex_to_superframe, encode_superframe, make_superframe, LANE_SIZE, SUPERFRAME_SIZE};
+use crate::protocol::{
+    decode_sysex_to_superframe, encode_superframe, make_superframe, LANE_SIZE, SUPERFRAME_SIZE,
+};
 
 #[derive(Debug, Clone)]
 pub struct DeviceInfo {
@@ -129,18 +131,30 @@ impl Device {
         let in_names: Vec<(usize, String)> = in_ports
             .iter()
             .enumerate()
-            .map(|(i, p)| (i, midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"))))
+            .map(|(i, p)| {
+                (
+                    i,
+                    midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}")),
+                )
+            })
             .collect();
         let out_names: Vec<(usize, String)> = out_ports
             .iter()
             .enumerate()
-            .map(|(i, p)| (i, midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}"))))
+            .map(|(i, p)| {
+                (
+                    i,
+                    midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}")),
+                )
+            })
             .collect();
 
         let in_idx = pick_likely_port(&in_names);
         let out_idx = pick_likely_port(&out_names);
 
-        self.connect_midi(midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx)
+        self.connect_midi(
+            midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx,
+        )
     }
 
     /// Connect to a MIDI input port listed by `list_devices()`.
@@ -173,17 +187,29 @@ impl Device {
         let in_names: Vec<(usize, String)> = in_ports
             .iter()
             .enumerate()
-            .map(|(i, p)| (i, midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}"))))
+            .map(|(i, p)| {
+                (
+                    i,
+                    midi_in.port_name(p).unwrap_or_else(|_| format!("in#{i}")),
+                )
+            })
             .collect();
         let out_names: Vec<(usize, String)> = out_ports
             .iter()
             .enumerate()
-            .map(|(i, p)| (i, midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}"))))
+            .map(|(i, p)| {
+                (
+                    i,
+                    midi_out.port_name(p).unwrap_or_else(|_| format!("out#{i}")),
+                )
+            })
             .collect();
 
         let out_idx = pick_output_for_input(in_idx, &in_names[in_idx].1, &out_names);
 
-        self.connect_midi(midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx)
+        self.connect_midi(
+            midi_in, midi_out, in_ports, out_ports, in_names, out_names, in_idx, out_idx,
+        )
     }
 
     fn connect_midi(

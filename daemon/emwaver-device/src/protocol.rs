@@ -8,7 +8,10 @@ pub const MAGIC: &[u8; 3] = b"EMW";
 pub const SUPERFRAME_SIZE: usize = 36;
 pub const LANE_SIZE: usize = 18;
 
-pub fn make_superframe(cmd_lane: Option<&[u8]>, stream_lane: Option<&[u8]>) -> [u8; SUPERFRAME_SIZE] {
+pub fn make_superframe(
+    cmd_lane: Option<&[u8]>,
+    stream_lane: Option<&[u8]>,
+) -> [u8; SUPERFRAME_SIZE] {
     let mut sf = [0u8; SUPERFRAME_SIZE];
     if let Some(c) = cmd_lane {
         let len = c.len().min(LANE_SIZE);

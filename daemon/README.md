@@ -36,7 +36,9 @@ Firmware update UX remains in GUI apps; daemon focuses on host/runtime control.
 ## 3.1 `emwaver` CLI
 
 Main command groups (`emwaver/src/main.rs`):
+- `emwaver start`
 - `emwaver daemon start|stop|status|autostart`
+- `emwaver daemon serve`
 - `emwaver devices`
 - `emwaver doctor`
 - `emwaver run <script.emw>`
@@ -60,6 +62,37 @@ emwaver gateway --port 3921
 
 This starts the localhost browser gateway from `gateway/`. It is a bridge toward local script control without Continual cloud auth or hosted relay requirements.
 
+For Linux/headless deployments, the preferred one-command local stack is:
+
+```bash
+emwaver start
+```
+
+`emwaver start` starts the Rust daemon host in the background, then starts the localhost gateway in the foreground. The browser connects to the gateway, and the gateway forwards scripts and UI events to the daemon host over `/v1/ws`:
+
+```text
+localhost browser UI
+  <-> localhost gateway
+  <-> emwaver daemon host
+  <-> emwaver-runtime
+  <-> emwaver-device USB MIDI/SysEx or ESP32 BLE transport
+  <-> board firmware
+```
+
+The daemon host connects to the gateway as `role=host`, executes `script.run`, streams `ui.snapshot`, handles `ui.event`, and reports local daemon/device status. This is the Linux/no-GUI equivalent of a native app connecting to the gateway as `role=app`.
+
+Development and validation flags:
+
+```bash
+emwaver start --sim-device
+emwaver start --no-device
+emwaver start --device 0
+emwaver start --ble
+emwaver daemon serve --port 3921 --sim-device
+emwaver daemon start --port 3921 --device 0
+emwaver daemon start --port 3921 --ble
+```
+
 The local-first direction also adds:
 
 ```bash
@@ -73,11 +106,12 @@ For headless hosts, direct mode runs the extracted Rust runtime in-process:
 ```bash
 emwaver run scripts/blink.emw --direct
 emwaver run scripts/blink.emw --direct --device 0
+emwaver run scripts/blink.emw --direct --ble
 emwaver run scripts/ui-only.emw --direct --no-device
 emwaver run scripts/blink.emw --direct --sim-device
 ```
 
-Direct mode uses `emwaver-device` for MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects an input id from `emwaver devices`.
+Direct mode uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects a USB MIDI input id from `emwaver devices`. `--ble` selects the ESP32 BLE GATT transport and uses the same SysEx/superframe envelope as USB MIDI.
 `--sim-device` uses the shared mock EMWaver device simulator so hardware-touching scripts can be smoke-tested without a connected board.
 
 Useful flags:
@@ -96,7 +130,7 @@ Local setup can be checked with:
 emwaver doctor
 ```
 
-`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, and MIDI device visibility.
+`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility.
 It also reports the current OS/architecture, local state directory, pidfile, logfile, and non-invasive autostart status so local installs can be debugged without a cloud account.
 
 Agent help is optional and paid. It never gates local hardware control:
@@ -108,9 +142,15 @@ emwaver agent --script scripts/blink.emw --mode debug "explain this error"
 
 `emwaver tui` remains daemon/status-oriented for the rebirth. Script-aware terminal UI is intentionally deferred until local CLI/gateway hardware execution is validated across platforms; the browser gateway is the script-control UI surface for now.
 
-## 3.2 Removed hosted daemon wrapper
+## 3.2 Local daemon host
 
-The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from the workspace. Local browser control should use `emwaver gateway` plus a native app connected as the runtime owner. Headless script execution should use `emwaver run --direct`.
+The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from the workspace. It has been replaced by a local-only daemon host.
+
+`emwaver daemon serve` is the foreground host process. It connects to the localhost gateway, owns the `.emw` runtime, and uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--ble`, `--no-device`, or `--sim-device` is selected. The BLE path scans for the EMWaver ESP32 service UUID and writes the same SysEx/superframe payload to the command characteristic while listening on the notify characteristic.
+
+`emwaver daemon start` spawns that same host in the background and writes the pid/log paths under the per-user EMWaver state directory. `emwaver daemon stop` sends SIGTERM to the recorded pid.
+
+This daemon does not heartbeat to a hosted backend, register a cloud session, require an account, enforce subscriptions, or expose USB hardware to a remote service.
 
 ## 3.3 Script/UI engine
 
@@ -121,7 +161,7 @@ The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable MIDI/SysEx transport used by direct local execution.
+`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 
@@ -131,12 +171,15 @@ This is model-1 parity behavior: headless host still owns authoritative UI state
 
 Inbound WS messages handled include:
 - `hello.ack`
-- `host.attach`
 - `script.run`
+- `script.stop`
 - `ui.event`
 
 Outbound host messages include:
+- `hello`
+- `device.status`
 - `script.started`
+- `script.stopped`
 - `ui.snapshot`
 - `script.error` (when appropriate)
 
@@ -146,12 +189,13 @@ Snapshots are sent when tree changes (revision increments).
 
 ## 5) Device/transport ownership
 
-Daemon-side transport is local USB.
+Daemon-side transport is local USB MIDI/SysEx by default, with ESP32 BLE available through `--ble`.
 
-- Device detection/listing uses MIDI port enumeration.
-- `emwaver daemon start --device-id <id>` pins the host to a listed MIDI input id.
-- Device command path routes through local `Device` abstraction and packet send/response semantics.
-- Remote side never directly owns USB — only forwards commands/events through daemon session.
+- Device detection/listing uses MIDI port enumeration and a short EMWaver BLE scan.
+- `emwaver daemon start --device <id>` pins the host to a listed USB MIDI input id.
+- `emwaver daemon start --ble` uses ESP32 BLE service discovery instead of USB MIDI.
+- Device command path routes through the local USB or BLE command bridge and shared packet send/response semantics.
+- Remote side never directly owns USB/BLE — only forwards commands/events through daemon session.
 
 This model applies to host-backed boards. Autonomous Wi-Fi-capable boards are expected to use a different direct session model once implemented.
 

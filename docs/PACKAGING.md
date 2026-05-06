@@ -87,7 +87,10 @@ Initial CLI packaging candidates:
 The CLI should start:
 
 ```bash
+emwaver start
+emwaver start --ble
 emwaver gateway
+emwaver daemon start
 emwaver devices
 emwaver run scripts/blink.emw
 ```
@@ -108,6 +111,23 @@ Initial packaging candidates:
 - development install through repo checkout first.
 
 Linux docs must cover device permissions for USB/MIDI/serial access once the shared transport layer is finalized.
+
+The Linux user-facing contract should be one command-line tool:
+
+```bash
+emwaver start
+```
+
+This starts the local daemon host and localhost browser gateway as one stack. The browser renders the full gateway UI; the daemon owns script execution, UI event dispatch, and local hardware transport underneath. Advanced users can split the stack for SSH/systemd workflows:
+
+```bash
+emwaver daemon start --device 0
+emwaver daemon start --ble
+emwaver gateway
+emwaver daemon serve --sim-device
+```
+
+Release packaging must include enough gateway assets for `emwaver start` and `emwaver gateway` to work without users knowing about the internal `gateway/` package directory. Development checkout mode may still use `npm ci` and `npm run start` from `gateway/`. Linux hardware docs must also cover ALSA MIDI permissions for USB MIDI/SysEx and BlueZ/Bluetooth permissions for ESP32 BLE.
 
 ## Windows
 
@@ -135,6 +155,13 @@ npm run start
 ```
 
 from `gateway/`.
+
+Current development CLI mode can call the gateway package automatically:
+
+```bash
+emwaver gateway
+emwaver start
+```
 
 Release packaging should avoid requiring a full source checkout if possible. Final packaging options can include:
 
