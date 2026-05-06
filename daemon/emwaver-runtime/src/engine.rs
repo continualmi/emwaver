@@ -815,6 +815,29 @@ fn register_sampler_desktop_api(
     .map_err(map_js_err)
     .context("register _scriptDeviceTransmitBufferStart")?;
 
+    let timings_bridge = bridge.clone();
+    let build_timings = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let sample_period_us = args
+                .get(0)
+                .and_then(|v| v.as_number())
+                .unwrap_or(0.0)
+                .max(1.0) as usize;
+            let timings = build_signed_raw_timings(&timings_bridge.get_buffer(), sample_period_us);
+            Ok(JsValue::from(js_string!(timings)))
+        })
+    })
+    .name("_scriptBufferBuildSignedRawTimings")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptBufferBuildSignedRawTimings"),
+        build_timings,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptBufferBuildSignedRawTimings")?;
+
     Ok(())
 }
 
@@ -939,6 +962,50 @@ fn write_file_bytes(path: &str, bytes: &[u8]) -> std::io::Result<()> {
         fs::create_dir_all(parent)?;
     }
     fs::write(path, bytes)
+}
+
+fn build_signed_raw_timings(data: &[u8], sample_period_us: usize) -> String {
+    if data.is_empty() {
+        return String::new();
+    }
+
+    let total_bits = data.len() * 8;
+    let mut components = Vec::with_capacity((total_bits / 8).min(2048));
+    let mut current_state = (data[0] & 1) == 1;
+    let mut count = 0usize;
+
+    for index in 0..total_bits {
+        let byte_index = index >> 3;
+        let bit_index = index & 7;
+        let bit = ((data[byte_index] >> bit_index) & 1) == 1;
+        if bit == current_state {
+            count += 1;
+        } else {
+            push_signed_timing(&mut components, current_state, count, sample_period_us);
+            current_state = bit;
+            count = 1;
+        }
+    }
+
+    push_signed_timing(&mut components, current_state, count, sample_period_us);
+    components.join(" ")
+}
+
+fn push_signed_timing(
+    components: &mut Vec<String>,
+    state: bool,
+    count: usize,
+    sample_period_us: usize,
+) {
+    if count == 0 {
+        return;
+    }
+    let microseconds = count * sample_period_us;
+    if state {
+        components.push(microseconds.to_string());
+    } else {
+        components.push(format!("-{microseconds}"));
+    }
 }
 
 fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
@@ -1300,6 +1367,8 @@ mod tests {
                 var saved = FS.readBytes("{path_js}");
                 if (saved.length !== 3 || saved[1] !== 8) throw new Error("saveBytes mismatch");
                 if (Sampler.transmitBufferStart([1, 2], {{ pin: 4, dutyPercent: 50, tickUs: 9 }}) !== 2) throw new Error("transmit mismatch");
+                Sampler.setBytes([0x03]);
+                if (Sampler.buildSignedRawTimings({{ samplePeriodUs: 10 }}) !== "20 -60") throw new Error("timings mismatch");
                 FS.remove("{base}");
                 UI.render(UI.text({{ text: "tx-ok" }}));"#,
                 base = base.to_string_lossy().replace('\\', "\\\\")
