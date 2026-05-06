@@ -17,6 +17,12 @@ use crate::ui_tree::UiNode;
 
 pub trait CommandBridge: Send + Sync + 'static {
     fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>>;
+
+    fn get_buffer(&self) -> Vec<u8> {
+        Vec::new()
+    }
+
+    fn clear_buffer(&self) {}
 }
 
 pub struct Engine {
@@ -195,6 +201,7 @@ impl Engine {
 
         // Minimal filesystem/path API (matches the Apple host surface used by FS.*).
         register_filesystem_api(&mut ctx)?;
+        register_sampler_buffer_api(&mut ctx, bridge.clone())?;
 
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
@@ -573,6 +580,130 @@ fn register_filesystem_api(ctx: &mut BoaContext) -> Result<()> {
     Ok(())
 }
 
+fn register_sampler_buffer_api(ctx: &mut BoaContext, bridge: Arc<dyn CommandBridge>) -> Result<()> {
+    let packet_count_bridge = bridge.clone();
+    let packet_count = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| {
+            let len = packet_count_bridge.get_buffer().len();
+            let packets = if len == 0 { 0 } else { len.div_ceil(64) };
+            Ok(JsValue::new(packets as i32))
+        })
+    })
+    .name("_scriptSamplerBufferGetPacketCount")
+    .length(0)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptSamplerBufferGetPacketCount"),
+        packet_count,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptSamplerBufferGetPacketCount")?;
+
+    let len_bridge = bridge.clone();
+    let len_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| {
+            Ok(JsValue::new(len_bridge.get_buffer().len() as i32))
+        })
+    })
+    .name("_scriptSamplerBufferGetLenBytes")
+    .length(0)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptSamplerBufferGetLenBytes"),
+        len_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptSamplerBufferGetLenBytes")?;
+
+    let get_bridge = bridge.clone();
+    let get_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, ctx| {
+            bytes_to_js_array(get_bridge.get_buffer(), ctx)
+        })
+    })
+    .name("_scriptSamplerBufferGetBytes")
+    .length(0)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptSamplerBufferGetBytes"),
+        get_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptSamplerBufferGetBytes")?;
+
+    let clear_bridge = bridge.clone();
+    let clear = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| {
+            clear_bridge.clear_buffer();
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptSamplerBufferClear")
+    .length(0)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptSamplerBufferClear"),
+        clear,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptSamplerBufferClear")?;
+
+    let read_bridge = bridge.clone();
+    let read_packets = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let packet_index = args
+                .get(0)
+                .and_then(|v| v.as_number())
+                .unwrap_or(0.0)
+                .max(0.0) as usize;
+            let max_packets = args
+                .get(1)
+                .and_then(|v| v.as_number())
+                .unwrap_or(256.0)
+                .max(1.0) as usize;
+            let data = read_bridge.get_buffer();
+            let total_packets = if data.is_empty() {
+                0
+            } else {
+                data.len().div_ceil(64)
+            };
+            let available_packets = total_packets.saturating_sub(packet_index);
+            let to_read = available_packets.min(max_packets);
+            let start_byte = packet_index.saturating_mul(64);
+            let end_byte = data
+                .len()
+                .min(start_byte.saturating_add(to_read.saturating_mul(64)));
+            let slice = if start_byte < end_byte {
+                data[start_byte..end_byte].to_vec()
+            } else {
+                Vec::new()
+            };
+            sampler_packets_to_js_object(
+                slice,
+                packet_index.saturating_add(to_read),
+                available_packets,
+                ctx,
+            )
+        })
+    })
+    .name("_scriptSamplerBufferReadPacketsSince")
+    .length(2)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptSamplerBufferReadPacketsSince"),
+        read_packets,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptSamplerBufferReadPacketsSince")?;
+
+    Ok(())
+}
+
 fn app_data_dir() -> PathBuf {
     std::env::var_os("EMWAVER_RUNTIME_APP_DATA_DIR")
         .map(PathBuf::from)
@@ -638,6 +769,28 @@ fn bytes_to_js_array(bytes: Vec<u8>, ctx: &mut BoaContext) -> boa_engine::JsResu
         array.set(i, JsValue::new(*byte), true, ctx)?;
     }
     Ok(array.into())
+}
+
+fn sampler_packets_to_js_object(
+    data: Vec<u8>,
+    next_packet_index: usize,
+    available_packets: usize,
+    ctx: &mut BoaContext,
+) -> boa_engine::JsResult<JsValue> {
+    let data = bytes_to_js_array(data, ctx)?;
+    let mut init = ObjectInitializer::new(ctx);
+    init.property(js_string!("data"), data, Attribute::all());
+    init.property(
+        js_string!("nextPacketIndex"),
+        JsValue::new(next_packet_index as i32),
+        Attribute::all(),
+    );
+    init.property(
+        js_string!("availablePackets"),
+        JsValue::new(available_packets as i32),
+        Attribute::all(),
+    );
+    Ok(init.build().into())
 }
 
 fn write_file_text(path: &str, content: &str) -> std::io::Result<()> {
@@ -712,6 +865,7 @@ mod tests {
     struct RecordingBridge {
         calls: Mutex<Vec<(Vec<u8>, u64)>>,
         response: Option<Vec<u8>>,
+        buffer: Mutex<Vec<u8>>,
     }
 
     impl RecordingBridge {
@@ -719,6 +873,7 @@ mod tests {
             Self {
                 calls: Mutex::new(Vec::new()),
                 response,
+                buffer: Mutex::new(Vec::new()),
             }
         }
     }
@@ -730,6 +885,14 @@ mod tests {
                 .unwrap()
                 .push((cmd_lane.to_vec(), timeout_ms));
             Ok(self.response.clone())
+        }
+
+        fn get_buffer(&self) -> Vec<u8> {
+            self.buffer.lock().unwrap().clone()
+        }
+
+        fn clear_buffer(&self) {
+            self.buffer.lock().unwrap().clear();
         }
     }
 
@@ -944,5 +1107,39 @@ mod tests {
             Some("fs-ok")
         );
         assert!(!base.exists());
+    }
+
+    #[test]
+    fn bootstrap_sampler_buffer_api_reads_bridge_buffer() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        bridge
+            .buffer
+            .lock()
+            .unwrap()
+            .extend((0..130).map(|v| (v & 0xff) as u8));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"if (Sampler.lenBytes() !== 130) throw new Error("len mismatch");
+                if (Sampler.packetCount() !== 3) throw new Error("packet count mismatch");
+                var all = Sampler.getBytes();
+                if (all.length !== 130 || all[129] !== 129) throw new Error("getBytes mismatch");
+                var chunk = Sampler.readPacketsSince({ packetIndex: 1, maxPackets: 1 });
+                if (chunk.data.length !== 64 || chunk.data[0] !== 64) throw new Error("chunk mismatch");
+                if (chunk.nextPacketIndex !== 2 || chunk.availablePackets !== 2) throw new Error("packet metadata mismatch");
+                Sampler.clear();
+                if (Sampler.lenBytes() !== 0) throw new Error("clear mismatch");
+                UI.render(UI.text({ text: "sampler-ok" }));"#,
+            )
+            .expect("run sampler buffer script");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("sampler-ok")
+        );
     }
 }

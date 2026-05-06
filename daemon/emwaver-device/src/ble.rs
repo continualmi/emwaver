@@ -147,6 +147,16 @@ impl BleDevice {
         Ok(st.response_data.take())
     }
 
+    pub fn get_buffer(&self) -> Vec<u8> {
+        self.shared.state.lock().unwrap().capture_buffer.clone()
+    }
+
+    pub fn clear_buffer(&self) {
+        let mut st = self.shared.state.lock().unwrap();
+        st.capture_buffer.clear();
+        st.rx_packets.clear();
+    }
+
     fn send_superframe(&self, superframe: &[u8; SUPERFRAME_SIZE]) -> Result<()> {
         let sysex = encode_superframe(superframe);
         self.rt.block_on(async {

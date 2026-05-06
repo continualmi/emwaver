@@ -982,6 +982,14 @@ impl CommandBridge for DeviceCommandBridge {
     fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
         self.device.send_command(cmd_lane, timeout_ms)
     }
+
+    fn get_buffer(&self) -> Vec<u8> {
+        self.device.get_buffer()
+    }
+
+    fn clear_buffer(&self) {
+        self.device.clear_buffer();
+    }
 }
 
 struct BleCommandBridge {
@@ -991,6 +999,14 @@ struct BleCommandBridge {
 impl CommandBridge for BleCommandBridge {
     fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
         self.device.send_command(cmd_lane, timeout_ms)
+    }
+
+    fn get_buffer(&self) -> Vec<u8> {
+        self.device.get_buffer()
+    }
+
+    fn clear_buffer(&self) {
+        self.device.clear_buffer();
     }
 }
 
