@@ -14,7 +14,7 @@ import android.os.IBinder;
 import android.util.Log;
 
 /**
- * Current Android connection manager implementation (USB MIDI today).
+ * Current Android connection manager implementation.
  */
 public class DeviceConnectionManager {
     private static final String TAG = "DeviceConnectionManager";
@@ -67,9 +67,9 @@ public class DeviceConnectionManager {
         return instance;
     }
 
-    /** Initialize and bind to USB service. */
+    /** Initialize and bind to the local device transport service. */
     public void initialize() {
-        Log.d(TAG, "Initializing DeviceConnectionManager (USB MIDI)");
+        Log.d(TAG, "Initializing DeviceConnectionManager");
 
         Intent usbIntent = new Intent(context, USBService.class);
         context.startService(usbIntent);
@@ -91,7 +91,7 @@ public class DeviceConnectionManager {
 
         if (usbService != null && usbService.checkConnection()) {
             newActiveService = usbService;
-            newConnectionType = DeviceConnectionService.ConnectionType.USB;
+            newConnectionType = usbService.getConnectionType();
         }
 
         if (newActiveService != activeService) {

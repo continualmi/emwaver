@@ -2,7 +2,7 @@
 
 Native Android EMWaver application (Gradle project, Java/Kotlin-style Android app structure).
 
-This app provides mobile EMWaver device workflows: USB communication, local scripting surfaces, settings, Agent API-key UI, and firmware asset packaging.
+This app provides mobile EMWaver device workflows: USB/BLE communication, local scripting surfaces, settings, Agent API-key UI, and firmware asset packaging.
 
 ---
 
@@ -29,8 +29,8 @@ Entry/activity files include:
 Located under `android/app/src/main/java/com/emwaver/emwaverandroidapp/`.
 
 Key components:
-- `UsbMidiSysex.java` — USB transport logic.
-- `USBService.java` / `USBManager-like services` — device connection plumbing.
+- `UsbMidiSysex.java` — shared SysEx/superframe transport codec.
+- `USBService.java` / `USBManager-like services` — USB MIDI and ESP32 BLE device connection plumbing.
 - `DeviceConnectionManager.java` / `DeviceConnectionService.java` — connection lifecycle.
 - `CommandSender.java` — command dispatch path.
 - `NativeBuffer.java` — native/buffer integration surface.
@@ -78,7 +78,7 @@ cd android
 
 or run from Android Studio.
 
-Use the appropriate connected device/emulator setup (USB host behavior testing needs real device support).
+Use the appropriate connected device/emulator setup. USB host and BLE behavior testing need real device support.
 
 Release distribution:
 - direct preview APKs are built by `.github/workflows/android-apk-release.yml`.
@@ -89,7 +89,7 @@ Release distribution:
 
 ## 6) Guardrails
 
-1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model).
+1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model). USB MIDI remains preferred when a wired device is available; when no wired device is found, Android scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 2. Keep Android USB discovery aligned with both STM32 and ESP32-S3 EMWaver runtime descriptors; do not hard-code STM32-only identity assumptions in the runtime path.
 3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
 4. Keep app-level dialogs/resources synced with underlying feature availability.
@@ -101,7 +101,7 @@ Simulator testing:
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.
-- ESP32-S3 runtime now shares the same USB connection path, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
+- ESP32-S3 runtime now shares the same USB connection path and can also connect over BLE, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
 
 ---
 
@@ -114,4 +114,4 @@ Android Agent direction:
 - Migrate Agent inference to the future Continual MI/MGPT endpoint with a user-provided Agent API key stored locally/credential-backed.
 - Do not require an EMWaver account, cloud sync, activated devices, hardware-UID registration, or device limits for local scripts/hardware.
 - Hosted cloud files, hosted host-session UI, Firebase sign-in, hosted remote control, and cloud/local backend switching have been removed from the Android app.
-- Local USB device/script use must not depend on backend configuration.
+- Local USB/BLE device and script use must not depend on backend configuration.

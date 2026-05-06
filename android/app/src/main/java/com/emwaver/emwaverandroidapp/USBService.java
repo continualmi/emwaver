@@ -6,12 +6,29 @@
 
 package com.emwaver.emwaverandroidapp;
 
+import android.Manifest;
 import android.app.PendingIntent;
 import android.app.Service;
+import android.annotation.SuppressLint;
+import android.bluetooth.BluetoothAdapter;
+import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
+import android.bluetooth.BluetoothGattService;
+import android.bluetooth.BluetoothManager;
+import android.bluetooth.BluetoothProfile;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
+import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanResult;
+import android.bluetooth.le.ScanSettings;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
@@ -36,8 +53,10 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Locale;
+import java.util.UUID;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -58,6 +77,17 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_SAMPLE_START = 0x00;
     private static final int EMW_SAMPLE_STOP = 0x01;
 
+    private static final UUID EMW_BLE_SERVICE_UUID = UUID.fromString("45C7158E-0C3B-4E90-A847-452A15B14191");
+    private static final UUID EMW_BLE_COMMAND_UUID = UUID.fromString("46C7158E-0C3B-4E90-A847-452A15B14191");
+    private static final UUID EMW_BLE_NOTIFY_UUID = UUID.fromString("47C7158E-0C3B-4E90-A847-452A15B14191");
+    private static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
+
+    private enum ActiveTransport {
+        NONE,
+        USB,
+        BLE
+    }
+
     private final IBinder binder = new LocalBinder();
 
     // DFU/flash (USB control transfers)
@@ -73,6 +103,16 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiOutputPort midiOut;
 
     private final Object midiLock = new Object();
+    private final Object bleLock = new Object();
+
+    // ESP32 BLE transport
+    private BluetoothAdapter bluetoothAdapter;
+    private BluetoothLeScanner bleScanner;
+    private BluetoothGatt bleGatt;
+    private BluetoothGattCharacteristic bleCommandCharacteristic;
+    private volatile boolean bleConnected = false;
+    private volatile boolean bleScanning = false;
+    private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
 
     // Keep all-zero stream lanes while sampler stream mode is active.
     private volatile boolean isSamplerStreamingActive = false;
@@ -156,6 +196,17 @@ public class USBService extends Service implements DeviceConnectionService {
         byte[] sysex = UsbMidiSysex.encodeLanes(cmdLane18, streamLane18);
         if (sysex == null) {
             Log.e(TAG, "writeFrame: failed to encode SysEx");
+            return;
+        }
+
+        if (activeTransport == ActiveTransport.BLE) {
+            writeBleSysex(sysex);
+            if (!isLaneEmpty(cmdLane18)) {
+                logTx(cmdLane18);
+            }
+            if (!isLaneEmpty(streamLane18)) {
+                logTx(streamLane18);
+            }
             return;
         }
 
@@ -267,6 +318,7 @@ public class USBService extends Service implements DeviceConnectionService {
     public void checkForConnectedDevices() {
         UsbDevice dev = findUsbMidiDevice();
         if (dev == null) {
+            startBleScan();
             return;
         }
 
@@ -286,6 +338,9 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     public boolean checkConnection() {
+        if (bleConnected && bleCommandCharacteristic != null) {
+            return true;
+        }
         synchronized (midiLock) {
             return midiDevice != null && midiIn != null && midiOut != null;
         }
@@ -300,8 +355,16 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiReceiver rxReceiver = new MidiReceiver() {
         @Override
         public void onSend(byte[] data, int offset, int count, long timestamp) {
-            // Data can arrive chunked; reconstruct fixed-size SysEx messages.
-            long tsMs = System.currentTimeMillis();
+            feedSysexBytes(data, offset, count);
+        }
+    };
+
+    private void feedSysexBytes(byte[] data, int offset, int count) {
+        if (data == null || count <= 0) {
+            return;
+        }
+        long tsMs = System.currentTimeMillis();
+        synchronized (sysexBuf) {
             for (int i = 0; i < count; i++) {
                 byte b = data[offset + i];
                 if (b == (byte) 0xF0) {
@@ -342,7 +405,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 }
             }
         }
-    };
+    }
 
     private void connectUsbMidi(UsbDevice usbDevice) {
         if (midiManager == null) {
@@ -378,6 +441,7 @@ public class USBService extends Service implements DeviceConnectionService {
             }
             synchronized (midiLock) {
                 closeMidiLocked();
+                closeBleLocked();
                 midiDevice = device;
                 connectedMidiUsbDevice = usbDevice;
                 midiIn = midiDevice.openInputPort(0);
@@ -385,6 +449,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 if (midiOut != null) {
                     midiOut.connect(rxReceiver);
                 }
+                activeTransport = ActiveTransport.USB;
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -419,10 +484,15 @@ public class USBService extends Service implements DeviceConnectionService {
                 int minor = lane[2] & 0xFF;
                 deviceFirmwareVersion = major + "." + minor;
             }
-            connectedBoardType = inferBoardType(connectedMidiUsbDevice, queryBoardTypeHint());
+            String boardTypeHint = queryBoardTypeHint();
+            connectedBoardType = activeTransport == ActiveTransport.BLE && boardTypeHint == null
+                    ? "esp32s3"
+                    : inferBoardType(connectedMidiUsbDevice, boardTypeHint);
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
-            connectedBoardType = inferBoardType(connectedMidiUsbDevice, null);
+            connectedBoardType = activeTransport == ActiveTransport.BLE
+                    ? "esp32s3"
+                    : inferBoardType(connectedMidiUsbDevice, null);
         }
     }
 
@@ -481,10 +551,200 @@ public class USBService extends Service implements DeviceConnectionService {
         midiIn = null;
         midiDevice = null;
         connectedMidiUsbDevice = null;
+        if (activeTransport == ActiveTransport.USB) {
+            activeTransport = ActiveTransport.NONE;
+        }
         connectedBoardType = null;
         deviceFirmwareVersion = null;
         isSamplerStreamingActive = false;
     }
+
+    private boolean hasBlePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+        }
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void ensureBleAdapter() {
+        if (bluetoothAdapter != null) {
+            return;
+        }
+        BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
+        if (manager != null) {
+            bluetoothAdapter = manager.getAdapter();
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void startBleScan() {
+        if (!hasBlePermission()) {
+            Log.d(TAG, "BLE scan skipped: Bluetooth permissions missing");
+            return;
+        }
+        ensureBleAdapter();
+        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
+            Log.d(TAG, "BLE scan skipped: Bluetooth unavailable or disabled");
+            return;
+        }
+        synchronized (midiLock) {
+            if (midiDevice != null && midiIn != null && midiOut != null) {
+                return;
+            }
+        }
+        synchronized (bleLock) {
+            if (bleConnected || bleScanning) {
+                return;
+            }
+            bleScanner = bluetoothAdapter.getBluetoothLeScanner();
+            if (bleScanner == null) {
+                return;
+            }
+            ScanFilter filter = new ScanFilter.Builder()
+                    .setServiceUuid(new android.os.ParcelUuid(EMW_BLE_SERVICE_UUID))
+                    .build();
+            ScanSettings settings = new ScanSettings.Builder()
+                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                    .build();
+            bleScanning = true;
+            bleScanner.startScan(Collections.singletonList(filter), settings, bleScanCallback);
+            Log.d(TAG, "BLE scan started");
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void stopBleScan() {
+        synchronized (bleLock) {
+            if (bleScanner != null && bleScanning && hasBlePermission()) {
+                bleScanner.stopScan(bleScanCallback);
+            }
+            bleScanning = false;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void closeBleLocked() {
+        stopBleScan();
+        if (bleGatt != null) {
+            bleGatt.disconnect();
+            bleGatt.close();
+        }
+        bleGatt = null;
+        bleCommandCharacteristic = null;
+        bleConnected = false;
+        if (activeTransport == ActiveTransport.BLE) {
+            activeTransport = ActiveTransport.NONE;
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private void writeBleSysex(byte[] sysex) {
+        synchronized (bleLock) {
+            if (bleGatt == null || bleCommandCharacteristic == null || !bleConnected) {
+                Toast.makeText(this, "No BLE device connected", Toast.LENGTH_SHORT).show();
+                return;
+            }
+            bleCommandCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+            bleCommandCharacteristic.setValue(sysex);
+            if (!bleGatt.writeCharacteristic(bleCommandCharacteristic)) {
+                Log.e(TAG, "BLE writeCharacteristic returned false");
+            }
+        }
+    }
+
+    private final ScanCallback bleScanCallback = new ScanCallback() {
+        @SuppressLint("MissingPermission")
+        @Override
+        public void onScanResult(int callbackType, ScanResult result) {
+            if (result == null || result.getDevice() == null || !hasBlePermission()) {
+                return;
+            }
+            BluetoothDevice device = result.getDevice();
+            String name = device.getName();
+            if (name == null && result.getScanRecord() != null) {
+                name = result.getScanRecord().getDeviceName();
+            }
+            if (name != null && !name.toLowerCase(Locale.US).contains("emwaver")) {
+                return;
+            }
+            stopBleScan();
+            synchronized (bleLock) {
+                closeBleLocked();
+                bleGatt = device.connectGatt(USBService.this, false, bleGattCallback, BluetoothDevice.TRANSPORT_LE);
+            }
+            Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
+        }
+    };
+
+    private final BluetoothGattCallback bleGattCallback = new BluetoothGattCallback() {
+        @SuppressLint("MissingPermission")
+        @Override
+        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+            if (newState == BluetoothProfile.STATE_CONNECTED) {
+                if (!gatt.requestMtu(64)) {
+                    gatt.discoverServices();
+                }
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                synchronized (bleLock) {
+                    if (bleGatt == gatt) {
+                        closeBleLocked();
+                    }
+                }
+                startBleScan();
+            }
+        }
+
+        @SuppressLint("MissingPermission")
+        @Override
+        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+            gatt.discoverServices();
+        }
+
+        @SuppressLint("MissingPermission")
+        @Override
+        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+            BluetoothGattService service = gatt.getService(EMW_BLE_SERVICE_UUID);
+            if (service == null) {
+                Log.e(TAG, "BLE EMWaver service missing");
+                gatt.disconnect();
+                return;
+            }
+            BluetoothGattCharacteristic command = service.getCharacteristic(EMW_BLE_COMMAND_UUID);
+            BluetoothGattCharacteristic notify = service.getCharacteristic(EMW_BLE_NOTIFY_UUID);
+            if (command == null) {
+                Log.e(TAG, "BLE command characteristic missing");
+                gatt.disconnect();
+                return;
+            }
+            synchronized (bleLock) {
+                bleCommandCharacteristic = command;
+                bleConnected = true;
+                activeTransport = ActiveTransport.BLE;
+            }
+            if (notify != null) {
+                gatt.setCharacteristicNotification(notify, true);
+                BluetoothGattDescriptor cccd = notify.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID);
+                if (cccd != null) {
+                    cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+                    gatt.writeDescriptor(cccd);
+                }
+            }
+            connectedBoardType = "esp32s3";
+            Toast.makeText(USBService.this, "BLE Connected!", Toast.LENGTH_SHORT).show();
+            queryFirmwareVersionAsync();
+        }
+
+        @Override
+        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+            if (characteristic != null && EMW_BLE_NOTIFY_UUID.equals(characteristic.getUuid())) {
+                byte[] value = characteristic.getValue();
+                if (value != null) {
+                    feedSysexBytes(value, 0, value.length);
+                }
+            }
+        }
+    };
 
     @Override
     public void write(byte[] bytes) {
@@ -742,6 +1002,9 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (midiLock) {
             closeMidiLocked();
         }
+        synchronized (bleLock) {
+            closeBleLocked();
+        }
 
         if (midiThread != null) {
             midiThread.quitSafely();
@@ -765,13 +1028,16 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public ConnectionType getConnectionType() {
-        return checkConnection() ? ConnectionType.USB : ConnectionType.NONE;
+        if (!checkConnection()) {
+            return ConnectionType.NONE;
+        }
+        return activeTransport == ActiveTransport.BLE ? ConnectionType.BLE : ConnectionType.USB;
     }
 
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
-            return "Connected (USB)";
+            return activeTransport == ActiveTransport.BLE ? "Connected (BLE)" : "Connected (USB)";
         }
         return "Not connected";
     }
@@ -781,6 +1047,9 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (midiLock) {
             closeMidiLocked();
         }
-        Log.d(TAG, "USB disconnected");
+        synchronized (bleLock) {
+            closeBleLocked();
+        }
+        Log.d(TAG, "Device disconnected");
     }
 }
