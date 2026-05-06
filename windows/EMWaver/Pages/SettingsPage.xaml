@@ -53,6 +53,22 @@
                 </StackPanel>
             </Border>
 
+            <Border BorderBrush="{ThemeResource ControlStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="12"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Local browser control" FontWeight="SemiBold" />
+                    <ToggleSwitch x:Name="LocalGatewayToggle"
+                                  Header="Allow localhost gateway control"
+                                  Toggled="OnLocalGatewayToggled" />
+                    <TextBlock Text="When enabled, this app accepts script and UI control from the local EMWaver gateway on this PC. Leave it off unless you are using the browser control surface."
+                               Opacity="0.75"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
         </StackPanel>
     </ScrollViewer>
 </Page>

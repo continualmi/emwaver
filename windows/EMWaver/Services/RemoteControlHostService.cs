@@ -52,22 +52,49 @@ internal sealed class RemoteControlHostService
 
     private async Task ConnectLoopAsync(CancellationToken ct)
     {
+        var retryDelay = TimeSpan.FromSeconds(1);
+        var maxRetryDelay = TimeSpan.FromSeconds(30);
+
         while (!ct.IsCancellationRequested)
         {
             try
             {
+                if (!IsLocalGatewayEnabled())
+                {
+                    try { _ws?.Abort(); } catch { }
+                    _ws = null;
+                    SetRemoteControlled(false);
+                    retryDelay = TimeSpan.FromSeconds(1);
+                    await Task.Delay(TimeSpan.FromSeconds(1), ct);
+                    continue;
+                }
+
                 if (_ws == null || _ws.State != WebSocketState.Open)
                 {
                     await ConnectOnceAsync(ct);
+                    retryDelay = TimeSpan.FromSeconds(1);
                 }
             }
             catch
             {
-                // ignore
+                retryDelay = TimeSpan.FromSeconds(Math.Min(retryDelay.TotalSeconds * 2, maxRetryDelay.TotalSeconds));
             }
 
-            try { await Task.Delay(2000, ct); } catch { }
+            try { await Task.Delay(retryDelay, ct); } catch { }
         }
+    }
+
+    private static bool IsLocalGatewayEnabled()
+    {
+        if ((Environment.GetEnvironmentVariable("EMWAVER_LOCAL_GATEWAY_DISABLED") ?? "") == "1")
+        {
+            return false;
+        }
+        if ((Environment.GetEnvironmentVariable("EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT") ?? "") == "1")
+        {
+            return true;
+        }
+        return AppServices.Settings.LocalGatewayEnabled;
     }
 
     private async Task ConnectOnceAsync(CancellationToken ct)
@@ -103,7 +130,7 @@ internal sealed class RemoteControlHostService
 
     private static string? ResolveLocalGatewayWsUrl()
     {
-        if ((Environment.GetEnvironmentVariable("EMWAVER_LOCAL_GATEWAY_DISABLED") ?? "") == "1")
+        if (!IsLocalGatewayEnabled())
         {
             return null;
         }

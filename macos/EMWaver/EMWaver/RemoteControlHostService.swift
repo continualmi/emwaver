@@ -6,6 +6,8 @@ import EMWaverScriptModel
 
 @MainActor
 final class RemoteControlHostService: ObservableObject {
+    static let localGatewayEnabledKey = "emwaver.localGateway.enabled"
+
     @Published private(set) var isRemoteControlled: Bool = false
     @Published private(set) var remoteScriptTree: ScriptTree?
     @Published private(set) var remoteActiveScriptName: String?
@@ -76,9 +78,20 @@ final class RemoteControlHostService: ObservableObject {
         localGatewayWsURL().map { HostSocketConfig(wsURL: $0) }
     }
 
-    private func localGatewayWsURL() -> URL? {
+    private func isLocalGatewayEnabled() -> Bool {
         let env = ProcessInfo.processInfo.environment
         if env["EMWAVER_LOCAL_GATEWAY_DISABLED"] == "1" {
+            return false
+        }
+        if env["EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT"] == "1" {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: Self.localGatewayEnabledKey)
+    }
+
+    private func localGatewayWsURL() -> URL? {
+        let env = ProcessInfo.processInfo.environment
+        if !isLocalGatewayEnabled() {
             return nil
         }
 
@@ -103,17 +116,33 @@ final class RemoteControlHostService: ObservableObject {
     }
 
     private func reconnectLoop() async {
+        var retryDelay: UInt64 = 1_000_000_000
+        let maxRetryDelay: UInt64 = 30_000_000_000
+
         while !Task.isCancelled {
-            if socket == nil {
-                await connectOnce()
+            guard isLocalGatewayEnabled() else {
+                if socket != nil {
+                    socket?.cancel(with: .goingAway, reason: nil)
+                    socket = nil
+                    isRemoteControlled = false
+                }
+                retryDelay = 1_000_000_000
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
+                continue
             }
-            try? await Task.sleep(nanoseconds: 2_000_000_000)
+
+            if socket == nil {
+                let receivedMessage = await connectOnce()
+                retryDelay = receivedMessage ? 1_000_000_000 : min(retryDelay * 2, maxRetryDelay)
+            }
+
+            try? await Task.sleep(nanoseconds: retryDelay)
         }
     }
 
-    private func connectOnce() async {
-        guard let cfg = hostSocketConfig() else { return }
-        guard let hostSessions else { return }
+    private func connectOnce() async -> Bool {
+        guard let cfg = hostSocketConfig() else { return false }
+        guard let hostSessions else { return false }
 
         let task = urlSession.webSocketTask(with: cfg.wsURL)
         socket = task
@@ -128,18 +157,22 @@ final class RemoteControlHostService: ObservableObject {
         ])
 
         // Start receive loop.
-        await receiveLoop()
+        let receivedMessage = await receiveLoop()
 
         // If receive loop exits, close and retry.
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         isRemoteControlled = false
+        return receivedMessage
     }
 
-    private func receiveLoop() async {
+    private func receiveLoop() async -> Bool {
+        var receivedMessage = false
+
         while !Task.isCancelled, let socket {
             do {
                 let msg = try await socket.receive()
+                receivedMessage = true
                 switch msg {
                 case .string(let s):
                     handleIncoming(text: s)
@@ -154,6 +187,8 @@ final class RemoteControlHostService: ObservableObject {
                 break
             }
         }
+
+        return receivedMessage
     }
 
     private func handleIncoming(text: String) {

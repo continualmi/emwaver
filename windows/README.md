@@ -79,6 +79,8 @@ The Windows app can expose its local script/device runtime to the localhost gate
 - Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
 - Override with `EMWAVER_LOCAL_GATEWAY_URL`.
 - Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
+- Local gateway app-role control is opt-in from Settings by default; set `EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT=1` for development sessions that should connect automatically.
+- When enabled and the gateway is not running, reconnect attempts use capped exponential backoff instead of fixed polling.
 
 The Windows app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages on the same machine unless the user deliberately tunnels localhost through their own network tooling.
 

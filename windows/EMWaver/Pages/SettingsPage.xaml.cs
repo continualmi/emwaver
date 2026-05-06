@@ -46,6 +46,8 @@ public sealed partial class SettingsPage : Page
                         break;
                     }
                 }
+
+                LocalGatewayToggle.IsOn = AppServices.Settings.LocalGatewayEnabled;
             }
             finally
             {
@@ -118,6 +120,17 @@ public sealed partial class SettingsPage : Page
         }
 
         AppServices.Settings.Theme = selectedTheme;
+        RefreshUi();
+    }
+
+    private void OnLocalGatewayToggled(object sender, RoutedEventArgs e)
+    {
+        if (_suppressModeSelectionEvents)
+        {
+            return;
+        }
+
+        AppServices.Settings.LocalGatewayEnabled = LocalGatewayToggle.IsOn;
         RefreshUi();
     }
 

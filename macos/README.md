@@ -68,6 +68,8 @@ Local-first gateway behavior:
 - Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
 - Override with `EMWAVER_LOCAL_GATEWAY_URL`.
 - Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
+- Local gateway app-role control is opt-in from Settings by default; set `EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT=1` for development sessions that should connect automatically.
+- When enabled and the gateway is not running, reconnect attempts use capped exponential backoff to avoid noisy fixed polling.
 - In local gateway mode, the macOS app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.

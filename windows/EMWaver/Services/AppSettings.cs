@@ -22,6 +22,9 @@ internal sealed class AppSettings
         // App appearance selection.
         public string AppTheme { get; set; } = "system";
 
+        // Opt-in localhost browser gateway control.
+        public bool LocalGatewayEnabled { get; set; } = false;
+
     }
 
     private static string GetSettingsPath()
@@ -102,6 +105,27 @@ internal sealed class AppSettings
             {
                 var m = Load();
                 m.AppTheme = ToStorageValue(value);
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public bool LocalGatewayEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().LocalGatewayEnabled;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.LocalGatewayEnabled = value;
                 Save(m);
             }
             Changed?.Invoke();
