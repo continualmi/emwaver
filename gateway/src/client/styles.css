@@ -177,6 +177,22 @@ h1 {
   padding: 10px;
 }
 
+.daemon-controls {
+  display: grid;
+  gap: 8px;
+  margin: 0 12px 12px;
+}
+
+.daemon-controls button {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.daemon-controls span {
+  color: var(--ink-dim);
+  font-size: 12px;
+}
+
 .local-files {
   display: grid;
   grid-template-columns: 1fr 1fr;

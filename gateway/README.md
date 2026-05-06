@@ -2,7 +2,7 @@
 
 The EMWaver gateway is the local-first browser control surface and WebSocket bridge.
 
-It is intended to run on the same machine as the native EMWaver app. It acts as a localhost host controller for the macOS/Windows app, not as a third-party core service. It serves a browser UI and exposes local HTTP/WebSocket APIs for sending `.emw` scripts to the native app, rendering app-produced UI snapshots in the browser, dispatching UI events back to the app, and reporting local app/device status.
+It is intended to run on the same machine as the local runtime owner: either the native EMWaver macOS/Windows app or the Rust daemon. It serves a browser UI and exposes local HTTP/WebSocket APIs for sending `.emw` scripts to that runtime owner, rendering runtime-produced UI snapshots in the browser, dispatching UI events back to the runtime, and reporting local runtime/device status.
 
 The gateway is not the hosted EMWaver web app.
 
@@ -43,9 +43,10 @@ The gateway owns the local host-controller plane:
 
 - serve the browser control UI,
 - expose a local WebSocket endpoint,
-- forward `script.run` messages to the native app,
-- render `ui.snapshot` messages produced by the native app,
-- forward `ui.event` messages to the native app,
+- start the local daemon on request when no native app/daemon is connected,
+- forward `script.run` messages to the connected runtime owner,
+- render `ui.snapshot` messages produced by the connected runtime owner,
+- forward `ui.event` messages to the connected runtime owner,
 - report local device status,
 - avoid account, cloud activation, subscription, and hosted relay requirements.
 
@@ -72,7 +73,7 @@ Unlike the old hosted path, the local gateway should not require:
 
 An internal local host/session id may still be used if it keeps the protocol compatible, but it should not represent a hosted cloud session.
 
-The gateway should not become a second backend runtime or third-party control service. The native macOS/Windows app owns real `.emw` execution and hardware/device transport; gateway only controls and renders that local app session.
+The gateway should not become a second backend runtime or third-party control service. The native macOS/Windows app or Rust daemon owns real `.emw` execution and hardware/device transport; gateway only starts, controls, and renders that local runtime session.
 
 On Linux and other no-GUI hosts, the Rust daemon fills the same local runtime-owner role:
 
@@ -97,7 +98,7 @@ native app role=app
   then offline
 ```
 
-This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway.
+This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway. The browser UI can also request `POST /v1/daemon/start`, which runs the existing CLI daemon start path for the current gateway port. Set `EMWAVER_CLI_BIN` to point at an installed CLI binary; in repo development it defaults to `daemon/dev`. Additional daemon flags can be supplied through `EMWAVER_GATEWAY_DAEMON_ARGS`, for example `--ble` or `--sim-device`.
 
 ## Security Model
 
@@ -119,6 +120,8 @@ The launch direction is:
 
 Gateway scripts and local project state should stay on the user's device. Browser-local open/save and app-local files are acceptable; cloud script storage, account-backed project libraries, script sync, hardware-UID registration, device minting, and device limits are not part of the core local gateway path.
 
+Agent support follows the macOS API-key architecture. The gateway proxy uses the configured Agent endpoint plus user-provided `EMWAVER_AGENT_API_KEY`, creates a local Agent universe from stored prompt `emwaver-prompt` when no universe id is supplied, and sends `model`, `universe`, and local `userInput` context to the responses endpoint. It does not bundle production Agent prompts or gate local hardware control on Agent configuration.
+
 ## Initial Implementation Targets
 
 The first gateway implementation should:
@@ -127,8 +130,8 @@ The first gateway implementation should:
 2. serve a minimal control UI,
 3. expose a local WebSocket endpoint,
 4. accept `script.run`,
-5. forward scripts to a locally connected native app,
-6. render UI snapshots from that app,
+5. forward scripts to a locally connected native app or daemon,
+6. render UI snapshots from that runtime,
 7. work without account or cloud configuration.
 
 ## Development

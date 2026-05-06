@@ -115,7 +115,8 @@ async function verifyIndexHtml() {
     "openFile",
     "Open",
     "Save",
-    "Native App",
+    "Local Runtime",
+    "Start Daemon",
     "Ask Agent",
     "plot.data",
     "textField",
@@ -289,7 +290,7 @@ function verifyWebSocket() {
 async function withMockAgent(fn) {
   const requests = [];
   const server = http.createServer(async (req, res) => {
-    if (req.method !== "POST" || req.url !== "/agent") {
+    if (req.method !== "POST" || (req.url !== "/agent" && req.url !== "/universes")) {
       res.writeHead(404, { "content-type": "application/json" });
       res.end(JSON.stringify({ error: "not_found" }));
       return;
@@ -299,9 +300,15 @@ async function withMockAgent(fn) {
     for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
     const body = chunks.length ? JSON.parse(Buffer.concat(chunks).toString("utf8")) : {};
     requests.push({
+      url: req.url,
       authorization: String(req.headers.authorization || ""),
       body,
     });
+    if (req.url === "/universes") {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ universe: "created-universe-1" }));
+      return;
+    }
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ message: "mock agent ok", code: "UI.render(UI.text({ text: \"agent\" }));" }));
   });
@@ -325,6 +332,7 @@ const child = spawn(process.execPath, ["--import", "tsx", "src/server.ts"], {
     EMWAVER_GATEWAY_PORT: String(port),
     EMWAVER_AGENT_API_KEY: "",
     EMWAVER_AGENT_ENDPOINT: "",
+    EMWAVER_CLI_BIN: "/bin/echo",
   },
   stdio: ["ignore", "pipe", "pipe"],
 });
@@ -347,6 +355,10 @@ try {
   const agentMissing = await postJson(`${baseUrl}/v1/agent`, { prompt: "hello" });
   if (agentMissing.status !== 501 || agentMissing.body?.error !== "agent_not_configured") {
     throw new Error(`unexpected missing-agent response: ${JSON.stringify(agentMissing)}`);
+  }
+  const daemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {});
+  if (daemonStart.status !== 202 || daemonStart.body?.ok !== true || daemonStart.body?.runtimeOwner !== "emwaver-daemon") {
+    throw new Error(`unexpected daemon-start response: ${JSON.stringify(daemonStart)}`);
   }
   const examples = await getJson(`${baseUrl}/v1/examples`);
   if (
@@ -371,7 +383,8 @@ await withMockAgent(async (requests) => {
       EMWAVER_GATEWAY_PORT: String(configuredGatewayPort),
       EMWAVER_AGENT_API_KEY: "test-agent-key",
       EMWAVER_AGENT_ENDPOINT: agentUrl,
-      EMWAVER_AGENT_UNIVERSE: "test-universe-1",
+      EMWAVER_AGENT_UNIVERSE: "",
+      CONTINUAL_AGENT_UNIVERSE: "",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -399,14 +412,22 @@ await withMockAgent(async (requests) => {
     if (response.status !== 200 || response.body?.message !== "mock agent ok") {
       throw new Error(`unexpected configured-agent response: ${JSON.stringify(response)}`);
     }
-    if (requests.length !== 1 || requests[0].authorization !== "Bearer test-agent-key") {
+    if (requests.length !== 2 || requests.some((request) => request.authorization !== "Bearer test-agent-key")) {
       throw new Error(`unexpected mock agent request: ${JSON.stringify(requests)}`);
     }
-    if (requests[0].body?.universe !== "test-universe-1" || requests[0].body?.userInput !== "debug") {
-      throw new Error(`agent request did not include universe turn fields: ${JSON.stringify(requests[0].body)}`);
+    if (requests[0].url !== "/universes" || requests[0].body?.storedPrompt !== "emwaver-prompt") {
+      throw new Error(`agent request did not create macOS-style universe: ${JSON.stringify(requests)}`);
     }
-    if ("script" in requests[0].body || "hardware" in requests[0].body || "runtime" in requests[0].body || "mode" in requests[0].body || "prompt" in requests[0].body) {
-      throw new Error(`agent request leaked product-specific fields: ${JSON.stringify(requests[0].body)}`);
+    if (
+      requests[1].url !== "/agent" ||
+      requests[1].body?.model !== "mdl-1-lite-frozen" ||
+      requests[1].body?.universe !== "created-universe-1" ||
+      requests[1].body?.userInput !== "debug"
+    ) {
+      throw new Error(`agent request did not include universe turn fields: ${JSON.stringify(requests[1].body)}`);
+    }
+    if ("script" in requests[1].body || "hardware" in requests[1].body || "runtime" in requests[1].body || "mode" in requests[1].body || "prompt" in requests[1].body) {
+      throw new Error(`agent request leaked product-specific fields: ${JSON.stringify(requests[1].body)}`);
     }
     console.log("gateway agent proxy verify passed");
   } finally {

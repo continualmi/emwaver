@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { extname, join, resolve } from "node:path";
+import { spawn } from "node:child_process";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
 
 const DEFAULT_PORT = 3921;
@@ -14,6 +15,7 @@ type LocalRole = "web" | "host" | "app";
 const webs = new Set<WebSocket>();
 const nativeApps = new Set<WebSocket>();
 const daemonHosts = new Set<WebSocket>();
+let agentUniverse: string | null = null;
 
 function numberEnv(name: string, fallback: number): number {
   const raw = String(process.env[name] || "").trim();
@@ -30,7 +32,10 @@ function normalizeAgentPayload(payload: JsonObject): JsonObject {
   const configuredUniverse = stringEnv("EMWAVER_AGENT_UNIVERSE") || stringEnv("CONTINUAL_AGENT_UNIVERSE");
   const universe = typeof payload.universe === "string" && payload.universe.trim()
     ? payload.universe.trim()
-    : configuredUniverse;
+    : configuredUniverse || agentUniverse || "";
+  const model = typeof payload.model === "string" && payload.model.trim()
+    ? payload.model.trim()
+    : stringEnv("EMWAVER_AGENT_MODEL") || "mdl-1-lite-frozen";
   const userInput = typeof payload.userInput === "string" && payload.userInput.trim()
     ? payload.userInput
     : typeof payload.prompt === "string"
@@ -38,8 +43,38 @@ function normalizeAgentPayload(payload: JsonObject): JsonObject {
       : "";
 
   return {
+    model,
     ...(universe ? { universe } : {}),
     userInput,
+    ...(Array.isArray(payload.tools) ? { tools: payload.tools } : {}),
+    ...(payload.toolChoice ? { toolChoice: payload.toolChoice } : {}),
+    ...(Array.isArray(payload.toolResults) ? { toolResults: payload.toolResults } : {}),
+  };
+}
+
+function universeCreateEndpoint(endpoint: string): string {
+  const url = new URL(endpoint);
+  if (url.pathname.endsWith("/responses")) {
+    url.pathname = `${url.pathname.slice(0, -"/responses".length)}/universes`;
+    return url.toString();
+  }
+  url.pathname = `${url.pathname.replace(/\/$/, "").replace(/\/[^/]*$/, "")}/universes`;
+  return url.toString();
+}
+
+function gatewayPort(): number {
+  return numberEnv("EMWAVER_GATEWAY_PORT", DEFAULT_PORT);
+}
+
+function daemonStartCommand(): { command: string; args: string[] } {
+  const command = stringEnv("EMWAVER_CLI_BIN") || resolve(REPO_ROOT, "daemon", "dev");
+  const configuredArgs = stringEnv("EMWAVER_GATEWAY_DAEMON_ARGS")
+    .split(/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return {
+    command,
+    args: ["daemon", "start", "--port", String(gatewayPort()), ...configuredArgs],
   };
 }
 
@@ -79,6 +114,28 @@ async function handleAgentRequest(payload: JsonObject): Promise<{ status: number
     };
   }
 
+  if (!agentUniverse && !stringEnv("EMWAVER_AGENT_UNIVERSE") && !stringEnv("CONTINUAL_AGENT_UNIVERSE")) {
+    const createResponse = await fetch(universeCreateEndpoint(endpoint), {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ storedPrompt: "emwaver-prompt", displayName: "EMWaver Gateway Agent" }),
+    });
+    const body = await createResponse.json().catch(() => ({}));
+    if (!createResponse.ok || typeof body?.universe !== "string" || !body.universe.trim()) {
+      return {
+        status: createResponse.status || 502,
+        body: {
+          error: "agent_universe_create_failed",
+          message: body?.message || body?.error || "Agent universe creation failed.",
+        },
+      };
+    }
+    agentUniverse = body.universe.trim();
+  }
+
   const response = await fetch(endpoint, {
     method: "POST",
     headers: {
@@ -98,6 +155,58 @@ async function handleAgentRequest(payload: JsonObject): Promise<{ status: number
   }
 
   return { status: response.status, body };
+}
+
+async function handleDaemonStartRequest(): Promise<{ status: number; body: JsonObject }> {
+  if (daemonHosts.size > 0) {
+    return { status: 200, body: { ok: true, runtimeOwner: "emwaver-daemon", alreadyRunning: true } };
+  }
+  if (nativeApps.size > 0) {
+    return { status: 200, body: { ok: true, runtimeOwner: "native-app", alreadyRunning: true } };
+  }
+
+  const { command, args } = daemonStartCommand();
+  const result = await new Promise<{ code: number | null; stdout: string; stderr: string; error?: string }>((resolveResult) => {
+    const child = spawn(command, args, {
+      cwd: REPO_ROOT,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error) => resolveResult({ code: null, stdout, stderr, error: error.message }));
+    child.on("close", (code) => resolveResult({ code, stdout, stderr }));
+  });
+
+  if (result.code !== 0) {
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "daemon_start_failed",
+        command,
+        args,
+        message: result.error || result.stderr || result.stdout || `daemon start exited with ${result.code}`,
+      },
+    };
+  }
+
+  return {
+    status: 202,
+    body: {
+      ok: true,
+      runtimeOwner: "emwaver-daemon",
+      command,
+      args,
+      message: result.stdout.trim() || "daemon start requested",
+    },
+  };
 }
 
 function sendJson(ws: WebSocket, payload: JsonObject) {
@@ -223,7 +332,7 @@ function serveClientAsset(pathname: string, res: ServerResponse): boolean {
   return true;
 }
 
-const port = numberEnv("EMWAVER_GATEWAY_PORT", DEFAULT_PORT);
+const port = gatewayPort();
 const server = createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
   if (url.pathname === "/health") {
@@ -246,6 +355,19 @@ const server = createServer((req, res) => {
       } catch (error) {
         res.writeHead(500, { "content-type": "application/json" });
         res.end(JSON.stringify({ error: "agent_request_failed", message: error instanceof Error ? error.message : String(error) }));
+      }
+    })();
+    return;
+  }
+  if (req.method === "POST" && url.pathname === "/v1/daemon/start") {
+    void (async () => {
+      try {
+        const result = await handleDaemonStartRequest();
+        res.writeHead(result.status, { "content-type": "application/json" });
+        res.end(JSON.stringify(result.body));
+      } catch (error) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "daemon_start_failed", message: error instanceof Error ? error.message : String(error) }));
       }
     })();
     return;

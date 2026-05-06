@@ -66,6 +66,8 @@ This starts the localhost browser gateway from `gateway/`. It is a bridge toward
 
 `--daemon-fallback` starts the headless daemon underneath the gateway. If a native app connects to the same gateway as `role=app`, the gateway prefers that native app; otherwise it forwards scripts and UI events to the daemon connected as `role=host`.
 
+The gateway UI can also start the daemon after the browser is already open. Its local `POST /v1/daemon/start` endpoint calls the same `emwaver daemon start --port <gateway-port>` lifecycle through the installed CLI, or through `daemon/dev` in repo development. Use `EMWAVER_GATEWAY_DAEMON_ARGS` to pass transport flags such as `--ble`, `--device 0`, `--no-device`, or `--sim-device`.
+
 For headless or CLI-first deployments, including macOS development hosts and Linux boxes, the preferred one-command local stack is:
 
 ```bash

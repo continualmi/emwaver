@@ -26,7 +26,27 @@ function statusLabel(status: WsStatus, deviceStatus: RemoteDeviceStatus | null) 
   if (status === "connecting") return "connecting";
   if (status === "error") return "connection error";
   if (status === "closed") return "closed";
-  return deviceStatus?.connected ? "native app connected" : "waiting for native app";
+  if (!deviceStatus?.connected) return "waiting for local runtime";
+  if (deviceStatus.runtimeOwner === "native-app") return "native app connected";
+  if (deviceStatus.runtimeOwner === "emwaver-daemon") return "daemon connected";
+  return "runtime connected";
+}
+
+function runtimeLabel(runtimeOwner?: string) {
+  if (runtimeOwner === "native-app") return "Native App";
+  if (runtimeOwner === "emwaver-daemon") return "Daemon";
+  return "Local Runtime";
+}
+
+function summarizeUiNode(node: RemoteUiNode | null, depth = 0): unknown {
+  if (!node || depth > 3) return null;
+  return {
+    id: node.id,
+    type: node.type,
+    props: node.props || {},
+    handlers: node.handlers ? Object.keys(node.handlers) : [],
+    children: (node.children || []).slice(0, 8).map((child) => summarizeUiNode(child, depth + 1)),
+  };
 }
 
 export function GatewayApp() {
@@ -44,6 +64,7 @@ export function GatewayApp() {
   const [log, setLog] = useState<RemoteIncomingMessage[]>([]);
   const [agentPrompt, setAgentPrompt] = useState("");
   const [agentOutput, setAgentOutput] = useState("");
+  const [daemonAction, setDaemonAction] = useState("");
   const wsRef = useRef<WebSocket | null>(null);
   const openFileRef = useRef<HTMLInputElement | null>(null);
 
@@ -169,15 +190,36 @@ export function GatewayApp() {
   async function askAgent() {
     setAgentOutput("Asking...");
     try {
+      const runtimeOwner = runtimeLabel(deviceStatus?.runtimeOwner);
+      const userInput = [
+        agentPrompt,
+        "",
+        "Local EMWaver context:",
+        JSON.stringify(
+          {
+            script: { name: selected || "script.emw", source },
+            runtime: {
+              owner: deviceStatus?.runtimeOwner || "none",
+              label: runtimeOwner,
+              connected,
+              uiRev,
+              scriptInstanceId: scriptInstanceId || null,
+              uiSnapshot: summarizeUiNode(remoteUiRoot),
+            },
+            hardware: {
+              runtimeOwner: deviceStatus?.runtimeOwner || "none",
+              devices: deviceStatus?.devices || [],
+            },
+          },
+          null,
+          2,
+        ),
+      ].join("\n");
       const response = await fetch("/v1/agent", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          mode: "debug",
-          prompt: agentPrompt,
-          script: { name: selected || "script.emw", source },
-          runtime: { uiRev, scriptInstanceId },
-          hardware: { boardType: "unknown-local-app", modules: [] },
+          userInput,
         }),
       });
       const body = await response.json();
@@ -188,6 +230,23 @@ export function GatewayApp() {
       }
     } catch (error) {
       setAgentOutput(formatError(error));
+    }
+  }
+
+  async function startDaemon() {
+    setDaemonAction("Starting daemon...");
+    setUiError(null);
+    try {
+      const response = await fetch("/v1/daemon/start", { method: "POST" });
+      const body = await response.json();
+      if (!response.ok || body?.ok === false) {
+        throw new Error(body?.message || body?.error || "daemon_start_failed");
+      }
+      setDaemonAction(body?.alreadyRunning ? "Runtime already connected." : "Daemon start requested.");
+    } catch (error) {
+      const message = formatError(error);
+      setDaemonAction(message);
+      setUiError(message);
     }
   }
 
@@ -225,20 +284,24 @@ export function GatewayApp() {
           </div>
 
           <div className="device-panel">
-            <div className="panel-title">Native App</div>
+            <div className="panel-title">Local Runtime</div>
             {connected && deviceStatus?.devices?.length ? (
               deviceStatus.devices.map((device) => (
                 <div className="device-card" key={device.id || device.name}>
-                  <strong>{device.name || device.id || "EMWaver native app"}</strong>
-                  <span>{device.connected ? "connected" : "available"} via {deviceStatus.runtimeOwner || "native app"}</span>
+                  <strong>{device.name || device.id || runtimeLabel(deviceStatus.runtimeOwner)}</strong>
+                  <span>{device.connected ? "connected" : "available"} via {runtimeLabel(deviceStatus.runtimeOwner)}</span>
                 </div>
               ))
             ) : (
               <div className="device-card">
-                <strong>Waiting for EMWaver app</strong>
-                <span>Start the native app on this machine to run scripts against hardware.</span>
+                <strong>No runtime connected</strong>
+                <span>Start the local daemon, or open the native app on this machine.</span>
               </div>
             )}
+            <div className="daemon-controls">
+              <button type="button" onClick={startDaemon} disabled={connected}>Start Daemon</button>
+              {daemonAction ? <span>{daemonAction}</span> : <span>Uses the CLI runtime when no native app is connected.</span>}
+            </div>
           </div>
 
           <div className="local-files">
@@ -310,7 +373,7 @@ export function GatewayApp() {
                       });
                     }}
                   />
-                  <div className="subtle footer-note">Live mode: UI and interactions are running on the native app.</div>
+                  <div className="subtle footer-note">Live mode: UI and interactions are running on the {runtimeLabel(deviceStatus?.runtimeOwner).toLowerCase()}.</div>
                 </>
               ) : previewResult?.error ? (
                 <div className="error">{previewResult.error}</div>
