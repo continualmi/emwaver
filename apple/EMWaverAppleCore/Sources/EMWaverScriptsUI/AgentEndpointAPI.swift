@@ -23,6 +23,7 @@ enum AgentEndpointError: Error, LocalizedError {
 }
 
 struct AgentEndpointRequest: Encodable {
+    let model: String
     let universe: String
     let userInput: String
 }

@@ -161,6 +161,7 @@ public final class AgentChatViewModel: ObservableObject {
             endpoint: ctx.baseURL,
             apiKey: ctx.accessToken,
             request: AgentEndpointRequest(
+                model: "mdl-1-lite-frozen",
                 universe: universe,
                 userInput: userPrompt
             )
