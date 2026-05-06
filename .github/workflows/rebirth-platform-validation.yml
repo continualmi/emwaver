@@ -8,8 +8,10 @@ on:
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
       - "scripts/rebirth-hardware-validation.sh"
       - "scripts/rebirth-linux-validation.sh"
+      - "scripts/verify-gateway-daemon-render.mjs"
       - "scripts/rebirth-windows-validation.ps1"
       - ".github/workflows/rebirth-platform-validation.yml"
   push:
@@ -21,8 +23,10 @@ on:
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
       - "scripts/rebirth-hardware-validation.sh"
       - "scripts/rebirth-linux-validation.sh"
+      - "scripts/verify-gateway-daemon-render.mjs"
       - "scripts/rebirth-windows-validation.ps1"
       - ".github/workflows/rebirth-platform-validation.yml"
   workflow_dispatch:
