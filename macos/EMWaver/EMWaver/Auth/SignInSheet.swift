@@ -28,14 +28,14 @@ struct SignInSheet: View {
                 Button {
                     openURL(mgptApiURL)
                 } label: {
-                    Label("Open MGPT API Keys", systemImage: "arrow.up.right.square")
+                    Label("Open MGPT API Keys", systemImage: "globe")
                 }
                 .buttonStyle(.bordered)
 
                 Button {
                     openURL(accountURL)
                 } label: {
-                    Label("Open Account & Credits", systemImage: "arrow.up.right.square")
+                    Label("Open Account & Credits", systemImage: "globe")
                 }
                 .buttonStyle(.bordered)
             }
