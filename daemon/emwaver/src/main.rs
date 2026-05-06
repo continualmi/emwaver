@@ -128,6 +128,30 @@ enum Commands {
         /// Local gateway port (defaults to 3921).
         #[arg(long)]
         port: Option<u16>,
+
+        /// Start the daemon underneath as a fallback runtime owner.
+        #[arg(long)]
+        daemon_fallback: bool,
+
+        /// MIDI input port id from `emwaver devices` for daemon fallback.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon fallback.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start daemon fallback with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path for daemon fallback.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
     },
 
     /// Alias for `gateway`.
@@ -135,6 +159,30 @@ enum Commands {
         /// Local gateway port (defaults to 3921).
         #[arg(long)]
         port: Option<u16>,
+
+        /// Start the daemon underneath as a fallback runtime owner.
+        #[arg(long)]
+        daemon_fallback: bool,
+
+        /// MIDI input port id from `emwaver devices` for daemon fallback.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon fallback.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start daemon fallback with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path for daemon fallback.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
     },
 
     /// Ask the paid EMWaver Agent for script help.
@@ -1709,7 +1757,33 @@ fn main() -> Result<()> {
             sim_device,
             bootstrap_path,
         ),
-        Commands::Gateway { port } | Commands::Web { port } => start_gateway(port),
+        Commands::Gateway {
+            port,
+            daemon_fallback,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        }
+        | Commands::Web {
+            port,
+            daemon_fallback,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        } => {
+            if daemon_fallback {
+                start_local_stack(port, device, ble, no_device, sim_device, bootstrap_path)
+            } else {
+                if device.is_some() || ble || no_device || sim_device || bootstrap_path.is_some() {
+                    anyhow::bail!("daemon transport flags require --daemon-fallback");
+                }
+                start_gateway(port)
+            }
+        }
         Commands::Agent {
             prompt,
             script,

@@ -12,7 +12,8 @@ type JsonObject = Record<string, any>;
 type LocalRole = "web" | "host" | "app";
 
 const webs = new Set<WebSocket>();
-const apps = new Set<WebSocket>();
+const nativeApps = new Set<WebSocket>();
+const daemonHosts = new Set<WebSocket>();
 
 function numberEnv(name: string, fallback: number): number {
   const raw = String(process.env[name] || "").trim();
@@ -119,23 +120,30 @@ function broadcast(targets: Set<WebSocket>, payload: JsonObject) {
 }
 
 function appStatusPayload(): JsonObject {
+  const nativeConnected = nativeApps.size > 0;
+  const daemonConnected = daemonHosts.size > 0;
   return {
     type: "device.status",
     hostSessionId: "local",
-    connected: apps.size > 0,
-    runtimeOwner: "native-app",
-    devices: apps.size > 0 ? [{ id: "local-native-app", name: "EMWaver native app", connected: true }] : [],
+    connected: nativeConnected || daemonConnected,
+    runtimeOwner: nativeConnected ? "native-app" : daemonConnected ? "emwaver-daemon" : "none",
+    devices: [
+      ...(nativeConnected ? [{ id: "local-native-app", name: "EMWaver native app", connected: true }] : []),
+      ...(daemonConnected ? [{ id: "local-daemon", name: "EMWaver daemon", connected: true }] : []),
+    ],
   };
 }
 
 function forwardToApp(source: WebSocket, message: JsonObject) {
-  const [app] = [...apps].filter((ws) => ws.readyState === ws.OPEN);
-  if (!app) {
+  const [nativeApp] = [...nativeApps].filter((ws) => ws.readyState === ws.OPEN);
+  const [daemonHost] = [...daemonHosts].filter((ws) => ws.readyState === ws.OPEN);
+  const runtimeOwner = nativeApp || daemonHost;
+  if (!runtimeOwner) {
     sendJson(source, { type: "host.error", hostSessionId: "local", error: "native_app_offline" });
     return;
   }
 
-  sendJson(app, {
+  sendJson(runtimeOwner, {
     ...message,
     hostSessionId: "local",
   });
@@ -220,7 +228,7 @@ const server = createServer((req, res) => {
   const url = new URL(req.url || "/", `http://${req.headers.host || "127.0.0.1"}`);
   if (url.pathname === "/health") {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ ok: true, service: "emwaver-gateway", runtimeOwner: "native-app" }));
+    res.end(JSON.stringify({ ok: true, service: "emwaver-gateway", runtimeOwner: appStatusPayload().runtimeOwner }));
     return;
   }
   if (req.method === "GET" && url.pathname === "/v1/examples") {
@@ -279,7 +287,8 @@ server.on("upgrade", (req, socket, head) => {
         }
         role = requestedRole as LocalRole;
         if (role === "web") webs.add(ws);
-        else apps.add(ws);
+        else if (role === "app") nativeApps.add(ws);
+        else daemonHosts.add(ws);
       }
 
       handleWsMessage(ws, role, message);
@@ -288,7 +297,8 @@ server.on("upgrade", (req, socket, head) => {
     ws.on("close", () => {
       if (role === "web") webs.delete(ws);
       if (role === "host" || role === "app") {
-        apps.delete(ws);
+        daemonHosts.delete(ws);
+        nativeApps.delete(ws);
         broadcast(webs, appStatusPayload());
       }
     });

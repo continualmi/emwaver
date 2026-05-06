@@ -59,9 +59,12 @@ The rebirth/local-first direction adds a development gateway command:
 
 ```bash
 emwaver gateway --port 3921
+emwaver gateway --daemon-fallback --port 3921
 ```
 
 This starts the localhost browser gateway from `gateway/`. It is a bridge toward local script control without Continual cloud auth or hosted relay requirements.
+
+`--daemon-fallback` starts the headless daemon underneath the gateway. If a native app connects to the same gateway as `role=app`, the gateway prefers that native app; otherwise it forwards scripts and UI events to the daemon connected as `role=host`.
 
 For headless or CLI-first deployments, including macOS development hosts and Linux boxes, the preferred one-command local stack is:
 
@@ -89,6 +92,7 @@ emwaver start --sim-device
 emwaver start --no-device
 emwaver start --device 0
 emwaver start --ble
+emwaver gateway --daemon-fallback --ble
 emwaver daemon serve --port 3921 --sim-device
 emwaver daemon start --port 3921 --device 0
 emwaver daemon start --port 3921 --ble

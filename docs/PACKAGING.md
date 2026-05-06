@@ -93,6 +93,7 @@ The CLI should start:
 emwaver start
 emwaver start --ble
 emwaver gateway
+emwaver gateway --daemon-fallback
 emwaver daemon start
 emwaver devices
 emwaver run scripts/blink.emw

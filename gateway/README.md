@@ -12,6 +12,7 @@ The gateway should make this local flow possible:
 
 ```bash
 emwaver gateway
+emwaver gateway --daemon-fallback
 ```
 
 or:
@@ -86,7 +87,17 @@ emwaver gateway
 emwaver daemon serve --sim-device
 ```
 
-The daemon connects to `/v1/ws` as `role=host`, receives `script.run` and `ui.event`, executes scripts through `emwaver-runtime`, sends hardware commands through `emwaver-device`, and streams `ui.snapshot` back through the gateway. USB MIDI/SysEx is the default daemon transport; `emwaver start --ble` selects the ESP32 BLE GATT transport using the same SysEx/superframe envelope. The gateway remains a localhost bridge and web renderer; it does not own BLE/USB/MIDI hardware directly.
+The daemon connects to `/v1/ws` as `role=host`, receives `script.run` and `ui.event`, executes scripts through `emwaver-runtime`, sends hardware commands through `emwaver-device`, and streams `ui.snapshot` back through the gateway. USB MIDI/SysEx is the default daemon transport; `emwaver gateway --daemon-fallback --ble` selects the ESP32 BLE GATT transport using the same SysEx/superframe envelope. The gateway remains a localhost bridge and web renderer; it does not own BLE/USB/MIDI hardware directly.
+
+Runtime-owner preference is:
+
+```text
+native app role=app
+  then daemon role=host
+  then offline
+```
+
+This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway.
 
 ## Security Model
 
@@ -149,7 +160,7 @@ emwaver gateway --port 3930
 
 If the selected port is already in use, the gateway exits with a specific port-conflict message. Browser auto-open is intentionally deferred until the local control UI is migrated beyond the prototype page.
 
-The current gateway server supports `hello`, `script.run`, `script.stop`, `ui.event`, `plot.viewport`, `script.started`, `script.stopped`, `script.error`, `ui.snapshot`, and `plot.data` over `/v1/ws`. Browser clients connect with role `web`; the native EMWaver app or Rust daemon should connect with role `app` or `host`. Real hardware command execution and UI handler dispatch stay in the connected app/daemon runtime owner.
+The current gateway server supports `hello`, `script.run`, `script.stop`, `ui.event`, `plot.viewport`, `script.started`, `script.stopped`, `script.error`, `ui.snapshot`, and `plot.data` over `/v1/ws`. Browser clients connect with role `web`; the native EMWaver app should connect with role `app`; the Rust daemon should connect with role `host`. Real hardware command execution and UI handler dispatch stay in the connected app/daemon runtime owner.
 
 The gateway browser surface is a React dashboard restored from the old web script control UI, with hosted account, subscription, cloud file, and hosted host-selection behavior removed. It keeps the local script editor, bundled examples, preview/live switch, Run/Stop controls, UI snapshot rendering, UI events, Agent panel, and plot support.
 
