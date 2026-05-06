@@ -133,9 +133,6 @@ public struct ScriptsRootView: View {
                     .overlay(alignment: .top) {
                         Divider()
                     }
-                    .overlay(alignment: .leading) {
-                        Divider()
-                    }
                 }
                 .transition(.move(edge: .trailing))
                 .zIndex(1)
