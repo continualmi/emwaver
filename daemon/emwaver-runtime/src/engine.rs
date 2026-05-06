@@ -7,6 +7,8 @@ use boa_engine::{
 };
 use serde_json::Value as JsonValue;
 use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::error;
@@ -191,6 +193,9 @@ impl Engine {
                 .context("register clearTimeout")?;
         }
 
+        // Minimal filesystem/path API (matches the Apple host surface used by FS.*).
+        register_filesystem_api(&mut ctx)?;
+
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
             let command_bridge = bridge.clone();
@@ -339,6 +344,322 @@ impl Engine {
         }
         Ok(ran)
     }
+}
+
+fn register_filesystem_api(ctx: &mut BoaContext) -> Result<()> {
+    let app_data = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| {
+            Ok(JsValue::from(js_string!(app_data_dir()
+                .to_string_lossy()
+                .to_string())))
+        })
+    })
+    .name("_scriptAppDataDir")
+    .length(0)
+    .build();
+    ctx.register_global_property(js_string!("_scriptAppDataDir"), app_data, Attribute::all())
+        .map_err(map_js_err)
+        .context("register _scriptAppDataDir")?;
+
+    let path_join = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let parts =
+                js_array_to_strings(args.get(0).cloned().unwrap_or(JsValue::undefined()), ctx)?;
+            let mut out = PathBuf::new();
+            for part in parts.into_iter().filter(|s| !s.trim().is_empty()) {
+                out.push(part);
+            }
+            Ok(JsValue::from(js_string!(out.to_string_lossy().to_string())))
+        })
+    })
+    .name("_scriptPathJoin")
+    .length(1)
+    .build();
+    ctx.register_global_property(js_string!("_scriptPathJoin"), path_join, Attribute::all())
+        .map_err(map_js_err)
+        .context("register _scriptPathJoin")?;
+
+    let ensure_dir = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let path = js_arg_string(args, 0);
+            if !path.trim().is_empty() {
+                fs::create_dir_all(path).map_err(|e| {
+                    boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+                })?;
+            }
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptEnsureDir")
+    .length(1)
+    .build();
+    ctx.register_global_property(js_string!("_scriptEnsureDir"), ensure_dir, Attribute::all())
+        .map_err(map_js_err)
+        .context("register _scriptEnsureDir")?;
+
+    let read_dir = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let path = js_arg_string(args, 0);
+            let names = if path.trim().is_empty() {
+                Vec::new()
+            } else {
+                match fs::read_dir(path) {
+                    Ok(entries) => entries
+                        .filter_map(Result::ok)
+                        .filter_map(|entry| entry.file_name().into_string().ok())
+                        .collect::<Vec<_>>(),
+                    Err(_) => Vec::new(),
+                }
+            };
+            strings_to_js_array(names, ctx)
+        })
+    })
+    .name("_scriptReadDir")
+    .length(1)
+    .build();
+    ctx.register_global_property(js_string!("_scriptReadDir"), read_dir, Attribute::all())
+        .map_err(map_js_err)
+        .context("register _scriptReadDir")?;
+
+    let read_text = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let path = js_arg_string(args, 0);
+            let text = if path.trim().is_empty() {
+                String::new()
+            } else {
+                fs::read_to_string(path).unwrap_or_default()
+            };
+            Ok(JsValue::from(js_string!(text)))
+        })
+    })
+    .name("_scriptReadFileText")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptReadFileText"),
+        read_text,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptReadFileText")?;
+
+    let write_text = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let path = js_arg_string(args, 0);
+            let content = js_arg_string(args, 1);
+            write_file_text(&path, &content).map_err(|e| {
+                boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+            })?;
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptWriteFileText")
+    .length(2)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptWriteFileText"),
+        write_text,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptWriteFileText")?;
+
+    let read_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let path = js_arg_string(args, 0);
+            let bytes = if path.trim().is_empty() {
+                Vec::new()
+            } else {
+                fs::read(path).unwrap_or_default()
+            };
+            bytes_to_js_array(bytes, ctx)
+        })
+    })
+    .name("_scriptReadFileBytes")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptReadFileBytes"),
+        read_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptReadFileBytes")?;
+
+    let write_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let path = js_arg_string(args, 0);
+            let bytes =
+                js_value_to_bytes(args.get(1).cloned().unwrap_or(JsValue::undefined()), ctx)?;
+            write_file_bytes(&path, &bytes).map_err(|e| {
+                boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+            })?;
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptWriteFileBytes")
+    .length(2)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptWriteFileBytes"),
+        write_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptWriteFileBytes")?;
+
+    let remove_path = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let path = js_arg_string(args, 0);
+            if !path.trim().is_empty() {
+                let _ = fs::remove_file(&path).or_else(|_| fs::remove_dir_all(&path));
+            }
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptRemovePath")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptRemovePath"),
+        remove_path,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptRemovePath")?;
+
+    let rename_path = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let from = js_arg_string(args, 0);
+            let to = js_arg_string(args, 1);
+            if !from.trim().is_empty() && !to.trim().is_empty() {
+                if let Some(parent) = PathBuf::from(&to).parent() {
+                    fs::create_dir_all(parent).map_err(|e| {
+                        boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+                    })?;
+                }
+                fs::rename(from, to).map_err(|e| {
+                    boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+                })?;
+            }
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptRenamePath")
+    .length(2)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptRenamePath"),
+        rename_path,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptRenamePath")?;
+
+    let reveal = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined()))
+    })
+    .name("_scriptRevealInFinder")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptRevealInFinder"),
+        reveal,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptRevealInFinder")?;
+
+    Ok(())
+}
+
+fn app_data_dir() -> PathBuf {
+    std::env::var_os("EMWAVER_RUNTIME_APP_DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| std::env::temp_dir().join("emwaver-runtime"))
+}
+
+fn js_arg_string(args: &[JsValue], index: usize) -> String {
+    args.get(index)
+        .and_then(|v| v.as_string())
+        .map(|s| s.to_std_string().unwrap_or_default())
+        .unwrap_or_default()
+}
+
+fn js_array_to_strings(value: JsValue, ctx: &mut BoaContext) -> boa_engine::JsResult<Vec<String>> {
+    let Some(obj) = value.as_object().cloned() else {
+        return Ok(Vec::new());
+    };
+    let len = obj
+        .get(js_string!("length"), ctx)?
+        .as_number()
+        .unwrap_or(0.0) as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        let value = obj.get(i, ctx)?;
+        out.push(
+            value
+                .as_string()
+                .map(|s| s.to_std_string().unwrap_or_default())
+                .unwrap_or_default(),
+        );
+    }
+    Ok(out)
+}
+
+fn js_value_to_bytes(value: JsValue, ctx: &mut BoaContext) -> boa_engine::JsResult<Vec<u8>> {
+    let Some(obj) = value.as_object().cloned() else {
+        return Ok(Vec::new());
+    };
+    let len = obj
+        .get(js_string!("length"), ctx)?
+        .as_number()
+        .unwrap_or(0.0) as usize;
+    let mut out = Vec::with_capacity(len);
+    for i in 0..len {
+        let value = obj.get(i, ctx)?;
+        let byte = value.as_number().unwrap_or(0.0) as i32;
+        out.push((byte & 0xff) as u8);
+    }
+    Ok(out)
+}
+
+fn strings_to_js_array(names: Vec<String>, ctx: &mut BoaContext) -> boa_engine::JsResult<JsValue> {
+    let array = JsArray::new(ctx);
+    for (i, name) in names.iter().enumerate() {
+        array.set(i, JsValue::from(js_string!(name.as_str())), true, ctx)?;
+    }
+    Ok(array.into())
+}
+
+fn bytes_to_js_array(bytes: Vec<u8>, ctx: &mut BoaContext) -> boa_engine::JsResult<JsValue> {
+    let array = JsArray::new(ctx);
+    for (i, byte) in bytes.iter().enumerate() {
+        array.set(i, JsValue::new(*byte), true, ctx)?;
+    }
+    Ok(array.into())
+}
+
+fn write_file_text(path: &str, content: &str) -> std::io::Result<()> {
+    if path.trim().is_empty() {
+        return Ok(());
+    }
+    let path = PathBuf::from(path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, content)
+}
+
+fn write_file_bytes(path: &str, bytes: &[u8]) -> std::io::Result<()> {
+    if path.trim().is_empty() {
+        return Ok(());
+    }
+    let path = PathBuf::from(path);
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, bytes)
 }
 
 fn json_to_js(ctx: &mut BoaContext, v: &JsonValue) -> Result<JsValue> {
@@ -585,5 +906,43 @@ mod tests {
 
         let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
         assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("2"));
+    }
+
+    #[test]
+    fn bootstrap_fs_api_reads_writes_and_renames_local_files() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+        let base =
+            std::env::temp_dir().join(format!("emwaver-runtime-fs-test-{}", std::process::id()));
+        let base_js = base.to_string_lossy().replace('\\', "\\\\");
+
+        engine
+            .run_script(&format!(
+                r#"var base = "{base_js}";
+                FS.ensureDir(base);
+                var a = FS.join(base, "a.txt");
+                var b = FS.join(base, "nested", "b.txt");
+                FS.writeText(a, "hello");
+                if (FS.readText(a) !== "hello") throw new Error("readText mismatch");
+                FS.rename(a, b);
+                if (FS.readText(b) !== "hello") throw new Error("rename/read mismatch");
+                FS.writeBytes(FS.join(base, "bytes.bin"), [1, 2, 255]);
+                var bytes = FS.readBytes(FS.join(base, "bytes.bin"));
+                if (bytes.length !== 3 || bytes[0] !== 1 || bytes[2] !== 255) throw new Error("bytes mismatch");
+                var names = FS.readDir(base);
+                if (names.indexOf("nested") < 0 || names.indexOf("bytes.bin") < 0) throw new Error("readDir mismatch");
+                FS.remove(base);
+                UI.render(UI.text({{ text: "fs-ok" }}));"#
+            ))
+            .expect("run fs script");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("fs-ok")
+        );
+        assert!(!base.exists());
     }
 }
