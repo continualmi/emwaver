@@ -58,7 +58,7 @@ The rebirth is complete only when:
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
 | Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, and built gateway-to-daemon simulator render/event flow |
 | Install smoke CI | `scripts/rebirth-install-smoke.sh`, `.github/workflows/daemon-ci.yml` | hosted Ubuntu validates development install prefix, installed CLI, packaged gateway assets under `share/emwaver/gateway`, and installed `emwaver gateway` health endpoint |
-| Linux CLI/gateway preview package | `.github/workflows/linux-cli-gateway-release.yml` | builds `EMWaver-linux-x64.tar.gz` containing `bin/emwaver` plus `share/emwaver/gateway`; workflow smoke-tests the packaged gateway health endpoint |
+| CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml` | matrix builds `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`, each containing `bin/emwaver` plus `share/emwaver/gateway`; workflow smoke-tests the packaged gateway health endpoint |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
 | Linux validation runbook | `scripts/rebirth-linux-validation.sh` | added; execution on real Linux host with ALSA MIDI and hardware still pending |

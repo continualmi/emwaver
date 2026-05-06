@@ -1,4 +1,4 @@
-name: Linux CLI Gateway Release
+name: CLI Gateway Release
 
 on:
   workflow_dispatch:
@@ -16,13 +16,29 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64 CLI
+            os: ubuntu-latest
+            package_name: EMWaver-linux-x64
+            binary_name: emwaver
+            smoke_port: "3936"
+          - label: macOS CLI
+            os: macos-15
+            package_name: EMWaver-macos-cli
+            binary_name: emwaver
+            smoke_port: "3938"
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
       - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
       - name: Set up Rust
@@ -35,7 +51,7 @@ jobs:
           cache: npm
           cache-dependency-path: gateway/package-lock.json
 
-      - name: Build Linux CLI
+      - name: Build CLI
         working-directory: daemon
         run: cargo build -p emwaver --release
 
@@ -45,24 +61,24 @@ jobs:
           npm ci
           npm run build
 
-      - name: Package Linux CLI and gateway
+      - name: Package CLI and gateway
         run: |
           set -euo pipefail
-          package_root="dist/EMWaver-linux-x64"
+          package_root="dist/${{ matrix.package_name }}"
           mkdir -p "$package_root/bin" "$package_root/share/emwaver/gateway"
-          cp daemon/target/release/emwaver "$package_root/bin/emwaver"
+          cp "daemon/target/release/${{ matrix.binary_name }}" "$package_root/bin/${{ matrix.binary_name }}"
           cp gateway/package.json "$package_root/share/emwaver/gateway/package.json"
           cp gateway/package-lock.json "$package_root/share/emwaver/gateway/package-lock.json"
           cp -R gateway/dist "$package_root/share/emwaver/gateway/dist"
           (cd "$package_root/share/emwaver/gateway" && npm install --omit=dev --ignore-scripts)
-          tar -C dist -czf dist/EMWaver-linux-x64.tar.gz EMWaver-linux-x64
+          tar -C dist -czf "dist/${{ matrix.package_name }}.tar.gz" "${{ matrix.package_name }}"
 
       - name: Smoke test packaged gateway
         run: |
           set -euo pipefail
           tmp="$(mktemp -d)"
-          tar -C "$tmp" -xzf dist/EMWaver-linux-x64.tar.gz
-          "$tmp/EMWaver-linux-x64/bin/emwaver" gateway --port 3936 > /tmp/emwaver-linux-package-gateway.log 2>&1 &
+          tar -C "$tmp" -xzf "dist/${{ matrix.package_name }}.tar.gz"
+          "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway --port "${{ matrix.smoke_port }}" > "/tmp/${{ matrix.package_name }}-gateway.log" 2>&1 &
           pid="$!"
           cleanup() {
             kill "$pid" >/dev/null 2>&1 || true
@@ -71,22 +87,22 @@ jobs:
           }
           trap cleanup EXIT
           for _ in $(seq 1 40); do
-            if curl -fsS http://127.0.0.1:3936/health >/dev/null 2>&1; then
+            if curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health" >/dev/null 2>&1; then
               break
             fi
             sleep 0.25
           done
-          curl -fsS http://127.0.0.1:3936/health
+          curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: EMWaver-linux-x64
-          path: dist/EMWaver-linux-x64.tar.gz
+          name: ${{ matrix.package_name }}
+          path: dist/${{ matrix.package_name }}.tar.gz
 
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           prerelease: true
-          files: dist/EMWaver-linux-x64.tar.gz
+          files: dist/${{ matrix.package_name }}.tar.gz
