@@ -2,7 +2,7 @@ import Link from "next/link";
 
 function PreviewDownloads() {
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="grid gap-3 md:grid-cols-4">
       <a
         href="/emwaver/downloads/EMWaver-android.apk"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
@@ -22,25 +22,32 @@ function PreviewDownloads() {
       </a>
 
       <a
+        href="/emwaver/downloads/EMWaverSetup-windows-x64.exe"
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Installer EXE</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Recommended Windows x64 installer.</div>
+      </a>
+
+      <a
         href="/emwaver/downloads/EMWaver-windows-x64.zip"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
         <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">ZIP with EXE</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Windows x64 preview package.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Portable Windows x64 package.</div>
       </a>
     </div>
   );
 }
 
-function StoreBadges() {
+function MobileStoreBadges() {
   return (
-    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid gap-3 md:grid-cols-2">
       {[
         ["iOS", "App Store", "iPhone and iPad coming soon."],
-        ["macOS", "App Store", "Store listing coming soon."],
-        ["Android", "Google Play", "Store listing coming soon."],
-        ["Windows", "Microsoft Store", "Store listing coming soon."],
+        ["Android", "Google Play", "Store listing coming soon. APK is also available."],
       ].map(([platform, store, description]) => (
         <div
           key={platform}
@@ -67,12 +74,12 @@ export default function InstallDocPage() {
 
       <h2>1. Install the app</h2>
       <p>
-        Download the Android, macOS, or Windows preview build directly. Store listings are coming soon.
+        Download the Android, macOS, or Windows preview build directly. On Windows, use the installer EXE unless you prefer the portable ZIP.
       </p>
       <PreviewDownloads />
 
-      <h3>Stores</h3>
-      <StoreBadges />
+      <h3>Mobile stores</h3>
+      <MobileStoreBadges />
 
       <h2>2. Get a supported board</h2>
       <p>

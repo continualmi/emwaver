@@ -17,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      HAS_WINDOWS_CODE_SIGNING_CERT: ${{ secrets.WINDOWS_CODE_SIGNING_CERT_BASE64 != '' }}
 
     steps:
       - name: Check out repository
@@ -35,19 +37,78 @@ jobs:
         working-directory: windows
         run: dotnet publish EMWaver/EMWaver.csproj --configuration Release --runtime win-x64 --self-contained false --output ../dist/windows-x64
 
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+
+      - name: Import code-signing certificate
+        if: ${{ env.HAS_WINDOWS_CODE_SIGNING_CERT == 'true' }}
+        shell: pwsh
+        env:
+          WINDOWS_CODE_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_CERT_BASE64 }}
+          WINDOWS_CODE_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERT_PASSWORD }}
+        run: |
+          $certPath = Join-Path $env:RUNNER_TEMP "emwaver-codesign.pfx"
+          [IO.File]::WriteAllBytes($certPath, [Convert]::FromBase64String($env:WINDOWS_CODE_SIGNING_CERT_BASE64))
+          $password = ConvertTo-SecureString $env:WINDOWS_CODE_SIGNING_CERT_PASSWORD -AsPlainText -Force
+          Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $password | Out-Null
+
+      - name: Sign published Windows binaries
+        if: ${{ env.HAS_WINDOWS_CODE_SIGNING_CERT == 'true' }}
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGNING_TIMESTAMP_URL }}
+        run: |
+          $timestampUrl = if ($env:WINDOWS_SIGNING_TIMESTAMP_URL) { $env:WINDOWS_SIGNING_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe was not found." }
+          Get-ChildItem dist/windows-x64 -Recurse -Include *.exe,*.dll |
+            ForEach-Object {
+              & $signtool.FullName sign /fd SHA256 /tr $timestampUrl /td SHA256 /a $_.FullName
+            }
+
       - name: Package Windows app
         shell: pwsh
         run: Compress-Archive -Path dist/windows-x64/* -DestinationPath dist/EMWaver-windows-x64.zip -Force
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.inputs.tag || github.ref_name }}"
+          $version = $version -replace '^emwaver-v', ''
+          $version = $version -replace '[^0-9A-Za-z\.\-_]', '-'
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" windows/installer/EMWaver.iss "/DAppVersion=$version"
+
+      - name: Sign Windows installer
+        if: ${{ env.HAS_WINDOWS_CODE_SIGNING_CERT == 'true' }}
+        shell: pwsh
+        env:
+          WINDOWS_SIGNING_TIMESTAMP_URL: ${{ secrets.WINDOWS_SIGNING_TIMESTAMP_URL }}
+        run: |
+          $timestampUrl = if ($env:WINDOWS_SIGNING_TIMESTAMP_URL) { $env:WINDOWS_SIGNING_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match "\\x64\\signtool\.exe$" } |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe was not found." }
+          & $signtool.FullName sign /fd SHA256 /tr $timestampUrl /td SHA256 /a dist/EMWaverSetup-windows-x64.exe
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
         with:
           name: EMWaver-windows-x64
-          path: dist/EMWaver-windows-x64.zip
+          path: |
+            dist/EMWaverSetup-windows-x64.exe
+            dist/EMWaver-windows-x64.zip
 
       - name: Publish release asset
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           prerelease: true
-          files: dist/EMWaver-windows-x64.zip
+          files: |
+            dist/EMWaverSetup-windows-x64.exe
+            dist/EMWaver-windows-x64.zip

@@ -16,7 +16,7 @@ Current workflows:
 - `.github/workflows/android-play-release.yml` builds a signed Android App Bundle and uploads it to Google Play through Fastlane, defaulting to the internal testing track and draft release status.
 - `.github/workflows/macos-dmg-release.yml` builds the macOS app on a macOS runner and packages `EMWaver-macos.dmg`.
 - `.github/workflows/cli-gateway-release.yml` builds CLI/gateway tarballs, currently `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`.
-- `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app and packages `EMWaver-windows-x64.zip`, containing `EMWaver.exe` and its required runtime files.
+- `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app, builds `EMWaverSetup-windows-x64.exe` as the recommended installer, and keeps `EMWaver-windows-x64.zip` as a portable alternate package containing `EMWaver.exe` and its required runtime files.
 - iOS distribution is automated locally through `scripts/ios-release.sh` and `ios/fastlane/`, and TestFlight upload can run through `.github/workflows/ios-testflight-release.yml` after the protected `app-store` GitHub Environment secrets are configured. Apple review submission remains a manual App Store Connect checkpoint.
 
 Each workflow can be run manually from GitHub Actions with a release tag, defaulting to `emwaver-preview`, or by pushing a tag matching `emwaver-v*`.
@@ -28,12 +28,13 @@ https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-android.
 https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-linux-x64.tar.gz
 https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos-cli.tar.gz
 https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-macos.dmg
+https://github.com/continualmi/emwaver/releases/latest/download/EMWaverSetup-windows-x64.exe
 https://github.com/continualmi/emwaver/releases/latest/download/EMWaver-windows-x64.zip
 ```
 
 The EMWaver repository is private, so GitHub Release asset URLs are not public install links. Public preview files are mirrored into the Society static site under `public/emwaver/downloads/`.
 
-The macOS DMG is unsigned/notarization-free until Apple signing credentials are wired into CI. The Android APK is unsigned until Play/App signing or a GitHub Actions signing secret path is added. Windows currently ships as a ZIP because a raw WinUI `.exe` is not a complete redistributable package.
+The macOS DMG is unsigned/notarization-free until Apple signing credentials are wired into CI. The Android APK is unsigned until Play/App signing or a GitHub Actions signing secret path is added. The Windows installer can be code-signed in GitHub Actions when `WINDOWS_CODE_SIGNING_CERT_BASE64` and `WINDOWS_CODE_SIGNING_CERT_PASSWORD` are configured; without those secrets the workflow still publishes unsigned installer and ZIP artifacts.
 
 ## Android Play Store
 
@@ -78,7 +79,7 @@ com.emwaver.emwaverandroidapp
 
 Primary user-facing options:
 
-- direct preview DMG now; App Store listing coming soon,
+- direct preview DMG,
 - CLI/gateway package for local development and SSH-style workflows.
 
 Initial CLI packaging candidates:
@@ -168,7 +169,8 @@ Primary direction:
 
 Initial packaging candidates:
 
-- standalone signed executable later,
+- signed installer EXE as the main desktop install path,
+- ZIP with `EMWaver.exe` as an alternate portable path,
 - winget later,
 - development install through repo checkout first.
 

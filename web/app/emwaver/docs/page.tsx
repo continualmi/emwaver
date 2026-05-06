@@ -102,7 +102,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app</strong> through the{" "}
-          <Link href="/emwaver/docs/install">Android APK, macOS DMG, or Windows ZIP preview download</Link>.
+          <Link href="/emwaver/docs/install">Android APK, macOS DMG, or Windows installer preview download</Link>.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
@@ -117,8 +117,8 @@ export default function DocsIndex() {
       <ul>
         <li><strong>Android</strong> direct APK preview download</li>
         <li><strong>macOS</strong> direct DMG preview download</li>
-        <li><strong>Windows</strong> direct ZIP preview package with <code>EMWaver.exe</code></li>
-        <li><strong>App Store, Google Play, and Microsoft Store</strong> coming soon</li>
+        <li><strong>Windows</strong> direct installer preview, with ZIP available as an alternate package</li>
+        <li><strong>App Store and Google Play</strong> mobile listings coming soon</li>
       </ul>
 
       <h2>What to read next</h2>

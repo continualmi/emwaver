@@ -2,7 +2,7 @@ import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
 
-const STORES = [
+const MOBILE_STORES = [
   {
     platform: "iOS",
     name: "App Store",
@@ -10,22 +10,10 @@ const STORES = [
     badge: "/emwaver/badges/app-store.png",
   },
   {
-    platform: "macOS",
-    name: "App Store",
-    description: "Store listing coming soon.",
-    badge: "/emwaver/badges/macos.png",
-  },
-  {
     platform: "Android",
     name: "Google Play",
-    description: "Store listing coming soon.",
+    description: "Store listing coming soon. APK is also available.",
     badge: "/emwaver/badges/google-play.png",
-  },
-  {
-    platform: "Windows",
-    name: "Microsoft Store",
-    description: "Store listing coming soon.",
-    badge: "/emwaver/badges/windows.png",
   },
 ];
 
@@ -44,8 +32,14 @@ const DIRECT_DOWNLOADS = [
   },
   {
     platform: "Windows",
+    name: "Installer EXE",
+    description: "Recommended Windows x64 installer.",
+    href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
+  },
+  {
+    platform: "Windows",
     name: "ZIP with EXE",
-    description: "Windows x64 preview package containing EMWaver.exe.",
+    description: "Portable Windows x64 package containing EMWaver.exe.",
     href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
   },
 ];
@@ -106,11 +100,11 @@ export default function InstallPage() {
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              Preview builds are available directly while store listings are prepared.
+              Desktop builds are available directly. Android can use the APK while Google Play is prepared.
             </p>
           </div>
 
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
+          <div className="mt-6 grid gap-4 md:grid-cols-4">
           {DIRECT_DOWNLOADS.map((download) => (
             <a
               key={download.platform}
@@ -138,19 +132,19 @@ export default function InstallPage() {
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-                Stores
+                Mobile stores
               </div>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
                 Coming soon
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              Platform-native store distribution is planned after the preview build track is ready.
+              iPhone, iPad, and Android store listings are planned after the preview build track is ready.
             </p>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {STORES.map((store) => (
+            {MOBILE_STORES.map((store) => (
               <div
                 key={store.platform}
                 className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"

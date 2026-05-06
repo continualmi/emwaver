@@ -33,7 +33,7 @@ Core direction:
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** Agent-assisted workflows are first-class and are the primary paid product direction. Each app may keep its own Agent interface/runtime, but those runtimes are API clients. The only planned network interface is an optional API key to a future Continual MI/MGPT Agent backend.
 - **Client surfaces:** Android, iOS, macOS, Windows.
-- **Distribution:** official app stores for end-user apps.
+- **Distribution:** direct desktop installers/downloads for macOS and Windows; mobile store distribution for iOS and Android, with Android APK available as an alternate direct install path.
 
 ---
 
@@ -111,8 +111,9 @@ We intentionally give up:
 
 ### Distribution and release posture
 
-- End-user app distribution is store-first (Apple App Store, Google Play, Microsoft Store).
-- GitHub Releases are not the primary end-user app distribution channel.
+- Desktop distribution is direct-download first: macOS DMG and Windows installer EXE, with Windows ZIP kept as an alternate install path.
+- Mobile distribution remains store-oriented: App Store for iPhone/iPad and Google Play for Android, with Android APK kept as an alternate direct install path.
+- GitHub Releases may host preview downloadable artifacts; the public install page should present the user-facing paths clearly.
 
 ### Long-term hardware direction
 
@@ -203,7 +204,7 @@ If a folder has a README, detailed documentation should live there.
 4. **Local hardware access is free/open**: core local `.emw` execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
 5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
 6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
-7. **Store distribution for end-user apps**: no alternative distribution as default product strategy.
+7. **Platform-appropriate distribution**: desktop uses direct installers/downloads; mobile uses app stores, with Android APK available as an alternate path.
 8. **Backend authority is Agent-only**: do not put local core hardware access behind backend policy, device registration, subscription checks, or account state.
 9. **No activation gate**: local board access is not governed by plan entitlements or hosted device ownership.
 10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
