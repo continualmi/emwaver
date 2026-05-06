@@ -208,7 +208,7 @@ public struct AgentChatPanelView: View {
 
                     Spacer()
 
-                    Button("MGPT API Platform") {
+                    Button("Get Free Key…") {
                         onRequestUpgrade?()
                     }
                     .buttonStyle(.bordered)
