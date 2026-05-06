@@ -128,8 +128,7 @@ public struct ScriptsRootView: View {
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
-                        onRequestUpgrade: onRequestAgentUpgrade,
-                        headerAccessory: agentLeadingToolbarItem
+                        onRequestUpgrade: onRequestAgentUpgrade
                     )
                     .frame(width: agentPanelWidth)
                 }
@@ -1063,6 +1062,56 @@ public struct ScriptsRootView: View {
                     Image(systemName: "sparkles")
                 }
                 .help(showingAgentPanel ? "Hide agent panel" : "Show agent panel")
+
+                if let agentLeadingToolbarItem {
+                    agentLeadingToolbarItem
+                }
+
+                Menu {
+                    Button {
+                        agentViewModel.newConversation()
+                    } label: {
+                        Label("New Chat", systemImage: "plus.message")
+                    }
+
+                    if !agentViewModel.conversations.isEmpty {
+                        Divider()
+
+                        ForEach(agentViewModel.conversations) { conv in
+                            Button {
+                                agentViewModel.selectConversation(conv.id)
+                            } label: {
+                                HStack {
+                                    Text(conv.title)
+                                    if agentViewModel.selectedConversationId == conv.id {
+                                        Spacer()
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+
+                        if let selected = agentViewModel.selectedConversationId {
+                            Divider()
+                            Button(role: .destructive) {
+                                agentViewModel.deleteConversation(selected)
+                            } label: {
+                                Label("Delete This Chat", systemImage: "trash")
+                            }
+                        }
+                    }
+
+                    Divider()
+
+                    Button {
+                        agentViewModel.clear()
+                    } label: {
+                        Label("Clear Messages", systemImage: "text.badge.xmark")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .help("Agent options")
             }
         }
         #endif

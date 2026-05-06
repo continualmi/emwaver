@@ -21,7 +21,6 @@ public struct AgentChatPanelView: View {
 
     private let agentEnabled: Bool
     private let onRequestUpgrade: (() -> Void)?
-    private let headerAccessory: AnyView?
     @State private var messagesBottomY: CGFloat = 0
     @State private var messagesViewportHeight: CGFloat = 0
     @State private var isMessagesNearBottom = true
@@ -29,21 +28,15 @@ public struct AgentChatPanelView: View {
     public init(
         viewModel: AgentChatViewModel,
         agentEnabled: Bool = true,
-        onRequestUpgrade: (() -> Void)? = nil,
-        headerAccessory: AnyView? = nil
+        onRequestUpgrade: (() -> Void)? = nil
     ) {
         self.viewModel = viewModel
         self.agentEnabled = agentEnabled
         self.onRequestUpgrade = onRequestUpgrade
-        self.headerAccessory = headerAccessory
     }
 
     public var body: some View {
         VStack(spacing: 0) {
-            header
-
-            Divider()
-
             messages
 
             Divider()
@@ -54,69 +47,6 @@ public struct AgentChatPanelView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.regularMaterial)
-    }
-
-    private var header: some View {
-        VStack(spacing: 10) {
-            HStack(spacing: 8) {
-                HStack(spacing: 6) {
-                    Image(systemName: "sparkles")
-                    Text("Agent")
-                        .font(.headline)
-                }
-
-                Spacer()
-
-                if let headerAccessory {
-                    headerAccessory
-                }
-
-                Menu {
-                    Button("New Chat") {
-                        viewModel.newConversation()
-                    }
-
-                    if !viewModel.conversations.isEmpty {
-                        Divider()
-
-                        ForEach(viewModel.conversations) { conv in
-                            Button {
-                                viewModel.selectConversation(conv.id)
-                            } label: {
-                                HStack {
-                                    Text(conv.title)
-                                    if viewModel.selectedConversationId == conv.id {
-                                        Spacer()
-                                        Image(systemName: "checkmark")
-                                    }
-                                }
-                            }
-                        }
-
-                        if let selected = viewModel.selectedConversationId {
-                            Divider()
-                            Button(role: .destructive) {
-                                viewModel.deleteConversation(selected)
-                            } label: {
-                                Text("Delete This Chat")
-                            }
-                        }
-                    }
-
-                    Divider()
-
-                    Button("Clear Messages") {
-                        viewModel.clear()
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .buttonStyle(.plain)
-                .help("Agent options")
-            }
-
-        }
-        .padding(12)
     }
 
     private var messages: some View {
