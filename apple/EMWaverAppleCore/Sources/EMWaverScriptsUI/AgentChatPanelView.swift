@@ -117,7 +117,7 @@ public struct AgentChatPanelView: View {
     private var messages: some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 10) {
                     ForEach(viewModel.messages) { msg in
                         MessageRow(message: msg)
                             .id(msg.id)
