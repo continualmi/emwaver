@@ -4,6 +4,7 @@ struct DeviceConnectionSheet: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
@@ -159,6 +160,28 @@ struct DeviceConnectionSheet: View {
             .font(.caption)
             .foregroundStyle(.secondary)
 
+            if showsBluetoothUnavailableNotice {
+                HStack(alignment: .center, spacing: 12) {
+                    Label(bluetoothUnavailableText, systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.orange)
+
+                    Spacer(minLength: 0)
+
+                    Button("Open Bluetooth Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
+                            openURL(url)
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                }
+                .padding(12)
+                .background(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(Color.orange.opacity(0.12))
+                )
+            }
+
             HStack(spacing: 10) {
                 Button(device.isBleScanning ? "Stop BLE scan" : "Start BLE scan") {
                     if device.isBleScanning {
@@ -191,6 +214,23 @@ struct DeviceConnectionSheet: View {
             return device.bluetoothStateText
         }
         return "Idle"
+    }
+
+    private var showsBluetoothUnavailableNotice: Bool {
+        !device.isConnected && device.bluetoothStateText != "On" && device.bluetoothStateText != "Starting"
+    }
+
+    private var bluetoothUnavailableText: String {
+        switch device.bluetoothStateText {
+        case "Off":
+            return "Bluetooth is off. Turn it on to discover ESP32 BLE devices."
+        case "Not authorized":
+            return "Bluetooth access is not authorized for EMWaver."
+        case "Unsupported":
+            return "Bluetooth LE is not available on this Mac."
+        default:
+            return "Bluetooth is not ready, so EMWaver cannot scan for BLE devices."
+        }
     }
 
     private var deviceStatusText: String {
