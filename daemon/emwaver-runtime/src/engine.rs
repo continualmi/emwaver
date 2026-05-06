@@ -219,6 +219,7 @@ impl Engine {
         register_sampler_buffer_api(&mut ctx, bridge.clone())?;
         register_sampler_desktop_api(&mut ctx, bridge.clone())?;
         register_plot_buffer_api(&mut ctx, plot_buffers.clone())?;
+        register_signal_api(&mut ctx, callbacks.clone())?;
 
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
@@ -888,6 +889,76 @@ fn register_plot_buffer_api(
     Ok(())
 }
 
+fn register_signal_api(
+    ctx: &mut BoaContext,
+    callbacks: Arc<Mutex<HashMap<String, JsValue>>>,
+) -> Result<()> {
+    let list_signals = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, ctx| bytes_to_js_array(Vec::new(), ctx))
+    })
+    .name("_scriptListSignals")
+    .length(0)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptListSignals"),
+        list_signals,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptListSignals")?;
+
+    let read_signal = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::null()))
+    })
+    .name("_scriptReadSignal")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptReadSignal"),
+        read_signal,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptReadSignal")?;
+
+    let event_callbacks = callbacks.clone();
+    let on_device_event = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let event_name = js_arg_string(args, 0);
+            let callback = args.get(1).cloned().unwrap_or(JsValue::undefined());
+            if callback.as_object().is_none() {
+                return Ok(JsValue::from(js_string!("")));
+            }
+            let token = format!(
+                "__device_event:{}:{}",
+                if event_name.trim().is_empty() {
+                    "event"
+                } else {
+                    event_name.trim()
+                },
+                event_callbacks.lock().unwrap().len() + 1
+            );
+            event_callbacks
+                .lock()
+                .unwrap()
+                .insert(token.clone(), callback);
+            Ok(JsValue::from(js_string!(token)))
+        })
+    })
+    .name("_scriptOnDeviceEvent")
+    .length(2)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptOnDeviceEvent"),
+        on_device_event,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptOnDeviceEvent")?;
+
+    Ok(())
+}
+
 fn app_data_dir() -> PathBuf {
     std::env::var_os("EMWAVER_RUNTIME_APP_DATA_DIR")
         .map(PathBuf::from)
@@ -1459,5 +1530,30 @@ mod tests {
             .and_then(|v| v.as_str())
             .expect("buffer id");
         assert_eq!(engine.plot_buffer(id), Some(vec![1, 2, 3]));
+    }
+
+    #[test]
+    fn bootstrap_signal_and_device_event_surface_is_available() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"var signals = SamplerSignals.listSignals();
+                if (!Array.isArray(signals) || signals.length !== 0) throw new Error("signals mismatch");
+                if (SamplerSignals.readSignal("missing") !== null) throw new Error("readSignal mismatch");
+                var token = Sampler.onDeviceEvent("done", function () {});
+                if (typeof token !== "string" || token.length === 0) throw new Error("event token mismatch");
+                UI.render(UI.text({ text: "signals-ok" }));"#,
+            )
+            .expect("run signal script");
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("signals-ok")
+        );
     }
 }
