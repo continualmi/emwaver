@@ -33,7 +33,12 @@
 typedef struct {
     uint8_t data[256];
     uint16_t length;
+    uint8_t source;
 } command_t;
+
+#define EMW_COMMAND_SOURCE_UNKNOWN 0u
+#define EMW_COMMAND_SOURCE_USB 1u
+#define EMW_COMMAND_SOURCE_BLE 2u
 
 typedef struct {
     const uint8_t *data;

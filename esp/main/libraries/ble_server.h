@@ -35,6 +35,8 @@ void ble_server_advertise(void);
 // Send notification to connected BLE client
 int ble_server_notify(const uint8_t* data, uint16_t len);
 int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t len);
+int ble_server_send_superframe(const uint8_t *frame);
+int ble_server_send_cmd_response(uint8_t status, const uint8_t *payload, uint16_t payload_len);
 
 // BLE transmission mode functions
 void ble_set_transmitter_mode(uint8_t mode);

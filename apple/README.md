@@ -28,10 +28,10 @@ Published internal library targets:
 
 ## 2.1 `EMWaverTransport`
 
-Low-level transport layer abstractions for USB device communication.
+ Low-level transport layer abstractions for EMWaver device communication.
 
 Key file:
-- `Sources/EMWaverTransport/UsbMidiSysex.swift`
+- `Sources/EMWaverTransport/UsbMidiSysex.swift` — shared EMWaver SysEx/superframe codec used by USB MIDI and ESP32 BLE transports.
 
 ## 2.2 `EMWaverScriptModel`
 

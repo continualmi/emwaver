@@ -53,9 +53,15 @@ Core files include:
 - `RemoteControlHostService.swift`
 
 Responsibilities:
-- local USB host operation,
+- local USB and BLE host operation,
 - localhost gateway app-role integration,
 - firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
+
+Transport behavior:
+- `MacUSBManager.swift` owns both CoreMIDI USB and CoreBluetooth BLE runtime sessions.
+- USB MIDI remains the preferred wired path when present.
+- If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
+- BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Local-first gateway behavior:
 - `RemoteControlHostService` can connect directly to the localhost gateway as `role=app`.

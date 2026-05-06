@@ -5,6 +5,7 @@
  */
 
 import Combine
+import CoreBluetooth
 import CoreMIDI
 import Foundation
 
@@ -15,7 +16,7 @@ import EMWaverTransport
 ///
 /// This is intentionally minimal: enough to power Scripts execution.
 /// It implements `ScriptDevice` for the shared Script runtime.
-final class MacUSBManager: ObservableObject, ScriptDevice {
+final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
@@ -45,6 +46,16 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     @Published var connectedBoardType: String? = nil
     @Published var lastDetectedBoardType: String? = nil
 
+    private enum ActiveTransport {
+        case none
+        case usbMidi
+        case ble
+    }
+
+    private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
+    private static let bleCommandUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
+    private static let bleNotifyUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
+
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
     private let commandLock = NSLock()
@@ -57,10 +68,16 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private var connectedSource: MIDIEndpointRef = 0
     private var connectedDestination: MIDIEndpointRef = 0
+    private var activeTransport: ActiveTransport = .none
 
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
 
     private var sysexAccumulator = UsbMidiSysexAccumulator()
+    private var bleCentral: CBCentralManager?
+    private var blePeripheral: CBPeripheral?
+    private var bleCommandCharacteristic: CBCharacteristic?
+    private var bleNotifyCharacteristic: CBCharacteristic?
+    private var bleDiscoveredNamesByID: [UUID: String] = [:]
 
     private var captureBuffer = Data()
     private var rxPackets: [Data] = []
@@ -74,7 +91,8 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     private var responseData: Data? = nil
     private var responsePredicate: ((Data) -> Bool)? = nil
 
-    init() {
+    override init() {
+        super.init()
         midiQueue.setSpecific(key: midiQueueKey, value: ())
 
         // Important: create the CoreMIDI client/ports on the main thread.
@@ -82,6 +100,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         // hot-plug notifications on some macOS setups (no runloop attached).
         // The rest of the I/O work is still serialized on `midiQueue`.
         self.ensureClient()
+        self.bleCentral = CBCentralManager(delegate: self, queue: midiQueue)
 
         midiQueue.async {
             self.refreshPortsInternal()
@@ -99,14 +118,21 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
     private func isTransportConnectedInternal() -> Bool {
         if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
-            return connectedSource != 0 && connectedDestination != 0
+            switch activeTransport {
+            case .usbMidi:
+                return connectedSource != 0 && connectedDestination != 0
+            case .ble:
+                return blePeripheral?.state == .connected && bleCommandCharacteristic != nil
+            case .none:
+                return false
+            }
         }
-        return midiQueue.sync { connectedSource != 0 && connectedDestination != 0 }
+        return midiQueue.sync { isTransportConnectedInternal() }
     }
 
     private func inferBoardType(portName: String?) -> String {
         let name = (portName ?? "").lowercased()
-        if name.contains("esp32") || name.contains("s3") {
+        if name.contains("esp32") || name.contains("s3") || name.contains("ble") {
             return "esp32s3"
         }
         if name.contains("emwaver esp") {
@@ -180,6 +206,9 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         guard autoConnectEnabled else { return }
         guard !isTransportConnectedInternal() else { return }
         connectToFirstPortInternal()
+        if !isTransportConnectedInternal() {
+            startBleScanInternal()
+        }
     }
 
     // MARK: - ScriptDevice (TX/RX)
@@ -236,7 +265,7 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
     }
 
     private func sendPacketNow(_ data: Data) {
-        guard connectedDestination != 0 else {
+        guard activeTransport == .ble || connectedDestination != 0 else {
             setError("Cannot send packet: Not connected")
             return
         }
@@ -394,12 +423,14 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
 
         connectedSource = candidate.source
         connectedDestination = candidate.destination
+        activeTransport = .usbMidi
 
         let st = MIDIPortConnectSource(inPort, candidate.source, nil)
         guard st == noErr else {
             setError("MIDIPortConnectSource failed: \(st)")
             connectedSource = 0
             connectedDestination = 0
+            activeTransport = .none
             return
         }
 
@@ -434,6 +465,14 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
         }
         connectedSource = 0
         connectedDestination = 0
+        activeTransport = .none
+
+        if let peripheral = blePeripheral {
+            bleCentral?.cancelPeripheralConnection(peripheral)
+        }
+        blePeripheral = nil
+        bleCommandCharacteristic = nil
+        bleNotifyCharacteristic = nil
 
         DispatchQueue.main.async {
             self.isConnected = false
@@ -557,6 +596,21 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             setError("SysEx encode failed")
             return
         }
+
+        if activeTransport == .ble {
+            guard let peripheral = blePeripheral,
+                  peripheral.state == .connected,
+                  let characteristic = bleCommandCharacteristic else {
+                setError("BLE write failed: Not connected")
+                return
+            }
+            let writeType: CBCharacteristicWriteType = characteristic.properties.contains(.writeWithoutResponse)
+                ? .withoutResponse
+                : .withResponse
+            peripheral.writeValue(sysex, for: characteristic, type: writeType)
+            return
+        }
+
         let st = sendSysex(sysex, to: connectedDestination)
         if st != noErr {
             setError("MIDISend failed: \(st)")
@@ -607,6 +661,44 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             if !streamEmpty || isSamplerStreamingActive {
                 storeRxLane(streamLane)
             }
+        }
+    }
+
+    private func startBleScanInternal() {
+        guard autoConnectEnabled else { return }
+        guard bleCentral?.state == .poweredOn else { return }
+        guard blePeripheral == nil || blePeripheral?.state == .disconnected else { return }
+        bleCentral?.scanForPeripherals(
+            withServices: [Self.bleServiceUUID],
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+        )
+    }
+
+    private func stopBleScanInternal() {
+        bleCentral?.stopScan()
+    }
+
+    private func disconnectMidiOnlyInternal() {
+        if connectedSource != 0 {
+            _ = MIDIPortDisconnectSource(inPort, connectedSource)
+        }
+        connectedSource = 0
+        connectedDestination = 0
+    }
+
+    private func connectBleInternal(_ peripheral: CBPeripheral, name: String?) {
+        stopBleScanInternal()
+        disconnectMidiOnlyInternal()
+        blePeripheral = peripheral
+        bleCommandCharacteristic = nil
+        bleNotifyCharacteristic = nil
+        peripheral.delegate = self
+        bleCentral?.connect(peripheral, options: nil)
+        DispatchQueue.main.async {
+            self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
+            self.connectedBoardType = "esp32s3"
+            self.lastDetectedBoardType = "esp32s3"
+            self.lastErrorText = nil
         }
     }
 
@@ -726,6 +818,123 @@ final class MacUSBManager: ObservableObject, ScriptDevice {
             for p in packets {
                 mgr.handleMidiBytes(p)
             }
+        }
+    }
+}
+
+extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
+    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        midiQueue.async {
+            if central.state == .poweredOn {
+                self.autoConnectIfNeededInternal()
+            } else if self.activeTransport == .ble {
+                self.disconnectInternal()
+                self.setError("Bluetooth unavailable")
+            }
+        }
+    }
+
+    func centralManager(
+        _ central: CBCentralManager,
+        didDiscover peripheral: CBPeripheral,
+        advertisementData: [String: Any],
+        rssi RSSI: NSNumber
+    ) {
+        let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let name = localName ?? peripheral.name ?? "EMWaver BLE"
+        bleDiscoveredNamesByID[peripheral.identifier] = name
+        guard autoConnectEnabled, !isTransportConnectedInternal() else { return }
+        connectBleInternal(peripheral, name: name)
+    }
+
+    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        guard peripheral == blePeripheral else { return }
+        activeTransport = .ble
+        peripheral.discoverServices([Self.bleServiceUUID])
+        DispatchQueue.main.async {
+            self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
+            self.connectedBoardType = "esp32s3"
+            self.lastDetectedBoardType = "esp32s3"
+            self.lastErrorText = nil
+        }
+    }
+
+    func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
+        guard peripheral == blePeripheral else { return }
+        blePeripheral = nil
+        bleCommandCharacteristic = nil
+        bleNotifyCharacteristic = nil
+        activeTransport = .none
+        setError(error?.localizedDescription ?? "BLE connection failed")
+        autoConnectIfNeededInternal()
+    }
+
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        guard peripheral == blePeripheral else { return }
+        blePeripheral = nil
+        bleCommandCharacteristic = nil
+        bleNotifyCharacteristic = nil
+        activeTransport = .none
+        DispatchQueue.main.async {
+            self.isConnected = false
+            self.connectedPortName = nil
+            self.deviceEmwaverVersion = nil
+            self.connectedBoardType = nil
+        }
+        if autoConnectEnabled {
+            startBleScanInternal()
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        if let error {
+            setError("BLE service discovery failed: \(error.localizedDescription)")
+            return
+        }
+        peripheral.services?
+            .filter { $0.uuid == Self.bleServiceUUID }
+            .forEach {
+                peripheral.discoverCharacteristics(
+                    [Self.bleCommandUUID, Self.bleNotifyUUID],
+                    for: $0
+                )
+            }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        if let error {
+            setError("BLE characteristic discovery failed: \(error.localizedDescription)")
+            return
+        }
+
+        for characteristic in service.characteristics ?? [] {
+            if characteristic.uuid == Self.bleCommandUUID {
+                bleCommandCharacteristic = characteristic
+            } else if characteristic.uuid == Self.bleNotifyUUID {
+                bleNotifyCharacteristic = characteristic
+                peripheral.setNotifyValue(true, for: characteristic)
+            }
+        }
+
+        if bleCommandCharacteristic != nil {
+            DispatchQueue.global(qos: .userInitiated).async {
+                let version = self.queryDeviceVersion(timeoutMs: 2000)
+                DispatchQueue.main.async {
+                    self.isConnected = true
+                    self.deviceEmwaverVersion = version
+                    self.connectedBoardType = "esp32s3"
+                    self.lastDetectedBoardType = "esp32s3"
+                }
+            }
+        }
+    }
+
+    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard error == nil, characteristic.uuid == Self.bleNotifyUUID, let value = characteristic.value else {
+            return
+        }
+        midiQueue.async {
+            self.handleMidiBytes(value)
         }
     }
 }

@@ -130,13 +130,13 @@ Current restored codebase includes historical support for:
 - USB support components
 
 Current reintegration status:
-- USB is now the active first transport for the restored ESP32-S3 target.
+- USB is the active wired transport for the restored ESP32-S3 target.
 - Firmware now enumerates as USB MIDI and accepts STM32-style EMWaver SysEx framing.
-- BLE is intentionally not active in the current bring-up path.
-- Binary opcode support now covers the core USB bring-up surface: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
+- BLE is active as the wireless direct-local transport. It advertises the EMWaver GATT service and accepts the same 36-byte EMWaver superframe encoded inside the same SysEx payload used by USB MIDI.
+- Binary opcode support now covers the core shared bring-up surface over USB and BLE: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
-- macOS now allows an ESP32-S3 USB session to stay connected for local use without an activation or claiming gate.
+- macOS now auto-connects to ESP32-S3 over USB MIDI first when present, then scans for the EMWaver BLE service and uses BLE for local scripts when no wired runtime is connected.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
 
 Planned EMWaver direction for ESP32:
@@ -150,14 +150,13 @@ Planned EMWaver direction for ESP32:
 EMWaver should keep **all three transports** in scope for ESP32-S3, but the firmware and apps should still speak **one EMWaver device protocol**.
 
 Recommended rule:
-- Start with **USB first** on ESP32-S3 because it requires the least host-side change.
-- Mirror the existing STM32 EMWaver request/response behavior on ESP32, including sampling/retransmit superframe semantics.
-- Reuse the same **SysEx packet protocol across transports**, with transport-specific framing/chunking only where required.
+- Keep **USB first** for wired ESP32-S3 sessions because it is deterministic and easy to recover.
+- Mirror the existing STM32 EMWaver request/response behavior on ESP32, including superframe command/response semantics.
+- Reuse the same **SysEx packet protocol across USB and BLE**, with transport-specific GATT/MIDI framing only at the edge.
 - Treat OTA/update paths as a separate concern from the steady-state control/runtime protocol.
 
 This keeps app complexity under control:
-- USB can land first with near-STM32 parity,
-- BLE can later reuse the same codec and runtime behavior,
+- USB and BLE share one codec and runtime behavior,
 - Wi-Fi can later carry the same packet model for remote/autonomous sessions.
 
 This also avoids the current restored-state problem where:

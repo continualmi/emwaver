@@ -26,6 +26,7 @@
 #include "host/ble_att.h"
 #include "ble_server.h"
 #include "command_registry.h"
+#include "emw_proto.h"
 
 #ifndef EMWAVER_ENABLE_OTA
 #define EMWAVER_ENABLE_OTA 1
@@ -60,6 +61,10 @@ static QueueHandle_t cmd_queue_handle = NULL;
 
 // BLE circular buffer for transmission
 #define BLE_RX_BUFFER_SIZE 4096
+#define EMW_BLE_SYSEX_BYTES 48u
+#define EMW_BLE_ENCODED_BYTES 42u
+#define EMW_BLE_FRAME_SIZE 36u
+#define EMW_BLE_LANE_SIZE 18u
 static uint8_t ble_rxBuffer[BLE_RX_BUFFER_SIZE];
 static volatile uint16_t ble_rxBufferHeadPos = 0;
 static volatile uint16_t ble_rxBufferTailPos = 0;
@@ -86,6 +91,88 @@ static bool ble_matches_ascii_command_prefix(const uint8_t *data, uint16_t len, 
 
     const uint8_t next = data[prefix_len];
     return next == 0 || next == '\n' || next == '\r' || next == ' ' || next == '\t';
+}
+
+static bool ble_decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
+{
+    size_t in_pos = 0;
+    size_t out_pos = 0;
+
+    while (in_pos < EMW_BLE_ENCODED_BYTES && out_pos < EMW_BLE_FRAME_SIZE) {
+        uint8_t prefix = in[in_pos++];
+        for (uint8_t j = 0; j < 7u && out_pos < EMW_BLE_FRAME_SIZE; ++j) {
+            if (in_pos >= EMW_BLE_ENCODED_BYTES) {
+                return false;
+            }
+            uint8_t v = (uint8_t)(in[in_pos++] & 0x7Fu);
+            if ((prefix & (uint8_t)(1u << j)) != 0u) {
+                v |= 0x80u;
+            }
+            out[out_pos++] = v;
+        }
+    }
+
+    return out_pos == EMW_BLE_FRAME_SIZE;
+}
+
+static void ble_encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
+{
+    size_t in_pos = 0;
+    size_t out_pos = 0;
+
+    while (in_pos < EMW_BLE_FRAME_SIZE && out_pos < EMW_BLE_ENCODED_BYTES) {
+        uint8_t prefix = 0;
+        uint8_t chunk[7] = {0};
+        uint8_t chunk_len = 0;
+
+        for (uint8_t j = 0; j < 7u && in_pos < EMW_BLE_FRAME_SIZE; ++j) {
+            uint8_t value = in[in_pos++];
+            if ((value & 0x80u) != 0u) {
+                prefix |= (uint8_t)(1u << j);
+            }
+            chunk[j] = (uint8_t)(value & 0x7Fu);
+            chunk_len++;
+        }
+
+        out[out_pos++] = prefix;
+        for (uint8_t j = 0; j < chunk_len; ++j) {
+            out[out_pos++] = chunk[j];
+        }
+    }
+}
+
+static bool ble_enqueue_superframe(const uint8_t *sysex)
+{
+    if (!sysex || cmd_queue_handle == NULL) {
+        return false;
+    }
+    if (sysex[0] != 0xF0 || sysex[1] != 0x7D ||
+        sysex[2] != 'E' || sysex[3] != 'M' || sysex[4] != 'W' ||
+        sysex[EMW_BLE_SYSEX_BYTES - 1u] != 0xF7) {
+        return false;
+    }
+
+    uint8_t decoded[EMW_BLE_FRAME_SIZE];
+    if (!ble_decode_payload_7bit_fixed(&sysex[5], decoded)) {
+        return false;
+    }
+
+    bool cmd_any = false;
+    for (size_t i = 0; i < EMW_BLE_LANE_SIZE; ++i) {
+        if (decoded[i] != 0) {
+            cmd_any = true;
+            break;
+        }
+    }
+    if (!cmd_any) {
+        return true;
+    }
+
+    command_t cmd = {0};
+    cmd.length = EMW_BLE_LANE_SIZE;
+    cmd.source = EMW_COMMAND_SOURCE_BLE;
+    memcpy(cmd.data, decoded, EMW_BLE_LANE_SIZE);
+    return xQueueSendToBack(cmd_queue_handle, &cmd, 0) == pdTRUE;
 }
 
 // Include this declaration after the existing declarations, before ble_gap_event
@@ -191,6 +278,10 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                     rc = ble_hs_mbuf_to_flat(ctxt->om, data, sizeof(data), &len);
                     if (rc != 0) {
                         return BLE_ATT_ERR_UNLIKELY;
+                    }
+
+                    if (len == EMW_BLE_SYSEX_BYTES && data[0] == 0xF0) {
+                        return ble_enqueue_superframe(data) ? 0 : BLE_ATT_ERR_UNLIKELY;
                     }
                     
                     // If in transmitter mode, add data to circular buffer instead of command queue
@@ -523,6 +614,41 @@ int ble_server_notify_attr(uint16_t attr_handle, const uint8_t *data, uint16_t l
     }
 
     return 0;
+}
+
+int ble_server_send_superframe(const uint8_t *frame)
+{
+    if (!frame) {
+        return BLE_ATT_ERR_UNLIKELY;
+    }
+
+    uint8_t encoded[EMW_BLE_ENCODED_BYTES];
+    uint8_t sysex[EMW_BLE_SYSEX_BYTES];
+    ble_encode_payload_7bit_fixed(frame, encoded);
+
+    sysex[0] = 0xF0;
+    sysex[1] = 0x7D;
+    sysex[2] = 'E';
+    sysex[3] = 'M';
+    sysex[4] = 'W';
+    memcpy(&sysex[5], encoded, sizeof(encoded));
+    sysex[EMW_BLE_SYSEX_BYTES - 1u] = 0xF7;
+
+    return ble_server_notify(sysex, sizeof(sysex));
+}
+
+int ble_server_send_cmd_response(uint8_t status, const uint8_t *payload, uint16_t payload_len)
+{
+    if (payload_len > (EMW_BLE_LANE_SIZE - 1u)) {
+        payload_len = EMW_BLE_LANE_SIZE - 1u;
+    }
+
+    uint8_t frame[EMW_BLE_FRAME_SIZE] = {0};
+    frame[0] = status;
+    if (payload && payload_len > 0) {
+        memcpy(&frame[1], payload, payload_len);
+    }
+    return ble_server_send_superframe(frame);
 }
 
 // Set transmission mode

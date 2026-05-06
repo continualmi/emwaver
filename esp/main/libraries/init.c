@@ -40,6 +40,7 @@
 #include "sampler.h"
 #include "spi.h"
 #include "usb.h"
+#include "ble_server.h"
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
@@ -69,6 +70,7 @@ static TaskHandle_t command_task_handle;
 static uint32_t pwm_freq_hz = PWM_DEFAULT_FREQ_HZ;
 static int pwm_active_pin = -1;
 static bool pwm_configured = false;
+static uint8_t active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
 
 static void command_task(void *pv_parameters);
 static bool handle_binary_packet(const command_t *cmd);
@@ -135,6 +137,7 @@ void emwaver_init(void)
     configASSERT(cmd_queue != NULL);
 
     usb_init(cmd_queue);
+    ble_server_init(cmd_queue);
 
     BaseType_t created = xTaskCreatePinnedToCore(command_task,
                                                 "cmd_task",
@@ -170,9 +173,12 @@ static void command_task(void *pv_parameters)
                 continue;
             }
 
+            active_command_source = cmd.source;
             if (handle_binary_packet(&cmd)) {
+                active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
                 continue;
             }
+            active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
 
             // Desktop/clients may send fixed 64-byte packets padded with 0x00.
             // Treat 0x00 as end-of-command, and trim trailing whitespace so the
@@ -277,6 +283,13 @@ static bool handle_binary_packet(const command_t *cmd)
 
 static void send_binary_ok(const uint8_t *payload, size_t len)
 {
+    if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
+        if (ble_server_send_cmd_response(EMW_RESP_STATUS_OK, payload, (uint16_t)len) != 0) {
+            ESP_LOGW(TAG, "Failed to send BLE OK response");
+        }
+        return;
+    }
+
     if (usb_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
         ESP_LOGW(TAG, "Failed to send USB OK response");
     }
@@ -284,6 +297,13 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
 
 static void send_binary_err(void)
 {
+    if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
+        if (ble_server_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != 0) {
+            ESP_LOGW(TAG, "Failed to send BLE ERR response");
+        }
+        return;
+    }
+
     if (usb_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
         ESP_LOGW(TAG, "Failed to send USB ERR response");
     }

@@ -322,6 +322,7 @@ static void process_sysex_frame(const uint8_t *sysex)
 
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;
+    cmd.source = EMW_COMMAND_SOURCE_USB;
     memcpy(cmd.data, decoded, EMW_LANE_SIZE);
     if (xQueueSendToBack(s_cmd_queue, &cmd, 0) != pdTRUE) {
         ESP_LOGW(TAG, "usb rx queue full; dropping frame");
