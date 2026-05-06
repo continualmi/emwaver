@@ -124,7 +124,6 @@ public struct ScriptsRootView: View {
             if showingAgentPanel {
                 HStack(spacing: 0) {
                     Spacer(minLength: 0)
-                    Divider()
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
@@ -132,6 +131,9 @@ public struct ScriptsRootView: View {
                     )
                     .frame(width: agentPanelWidth)
                     .overlay(alignment: .top) {
+                        Divider()
+                    }
+                    .overlay(alignment: .leading) {
                         Divider()
                     }
                 }
