@@ -15,6 +15,7 @@ Current workflows:
 - `.github/workflows/android-apk-release.yml` builds `EMWaver-android.apk` on Ubuntu with Gradle.
 - `.github/workflows/android-play-release.yml` builds a signed Android App Bundle and uploads it to Google Play through Fastlane, defaulting to the internal testing track and draft release status.
 - `.github/workflows/macos-dmg-release.yml` builds the macOS app on a macOS runner and packages `EMWaver-macos.dmg`.
+- `.github/workflows/linux-cli-gateway-release.yml` builds the Linux x64 `emwaver` CLI plus packaged gateway assets and packages `EMWaver-linux-x64.tar.gz`.
 - `.github/workflows/windows-exe-release.yml` publishes the Windows x64 app and packages `EMWaver-windows-x64.zip`, containing `EMWaver.exe` and its required runtime files.
 - iOS distribution is automated locally through `scripts/ios-release.sh` and `ios/fastlane/`, and TestFlight upload can run through `.github/workflows/ios-testflight-release.yml` after the protected `app-store` GitHub Environment secrets are configured. Apple review submission remains a manual App Store Connect checkpoint.
 
@@ -24,6 +25,7 @@ Stable public preview URLs:
 
 ```text
 https://continualmi.com/emwaver/downloads/EMWaver-android.apk
+https://continualmi.com/emwaver/downloads/EMWaver-linux-x64.tar.gz
 https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg
 https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip
 ```
@@ -109,6 +111,16 @@ Initial packaging candidates:
 - Debian package later,
 - systemd unit only for optional daemon mode,
 - development install through repo checkout first.
+
+The current preview tarball is built by `.github/workflows/linux-cli-gateway-release.yml` and contains:
+
+```text
+EMWaver-linux-x64/
+  bin/emwaver
+  share/emwaver/gateway/
+```
+
+This layout matches the CLI's packaged gateway lookup path, so `bin/emwaver gateway` and `bin/emwaver start --sim-device` can run without a source checkout.
 
 Linux docs must cover device permissions for USB/MIDI/serial access once the shared transport layer is finalized.
 

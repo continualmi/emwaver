@@ -1,0 +1,92 @@
+name: Linux CLI Gateway Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: gateway/package-lock.json
+
+      - name: Build Linux CLI
+        working-directory: daemon
+        run: cargo build -p emwaver --release
+
+      - name: Build gateway assets
+        working-directory: gateway
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package Linux CLI and gateway
+        run: |
+          set -euo pipefail
+          package_root="dist/EMWaver-linux-x64"
+          mkdir -p "$package_root/bin" "$package_root/share/emwaver/gateway"
+          cp daemon/target/release/emwaver "$package_root/bin/emwaver"
+          cp gateway/package.json "$package_root/share/emwaver/gateway/package.json"
+          cp gateway/package-lock.json "$package_root/share/emwaver/gateway/package-lock.json"
+          cp -R gateway/dist "$package_root/share/emwaver/gateway/dist"
+          (cd "$package_root/share/emwaver/gateway" && npm install --omit=dev --ignore-scripts)
+          tar -C dist -czf dist/EMWaver-linux-x64.tar.gz EMWaver-linux-x64
+
+      - name: Smoke test packaged gateway
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          tar -C "$tmp" -xzf dist/EMWaver-linux-x64.tar.gz
+          "$tmp/EMWaver-linux-x64/bin/emwaver" gateway --port 3936 > /tmp/emwaver-linux-package-gateway.log 2>&1 &
+          pid="$!"
+          cleanup() {
+            kill "$pid" >/dev/null 2>&1 || true
+            wait "$pid" >/dev/null 2>&1 || true
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 40); do
+            if curl -fsS http://127.0.0.1:3936/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.25
+          done
+          curl -fsS http://127.0.0.1:3936/health
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-linux-x64
+          path: dist/EMWaver-linux-x64.tar.gz
+
+      - name: Publish release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: dist/EMWaver-linux-x64.tar.gz
