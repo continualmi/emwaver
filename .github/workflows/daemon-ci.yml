@@ -106,5 +106,11 @@ jobs:
           cd ..
           scripts/rebirth-gateway-daemon-sim-validation.sh
 
+      - name: Smoke test CLI gateway daemon fallback
+        env:
+          EMWAVER_GATEWAY_PORT: "3923"
+          EMWAVER_GATEWAY_DAEMON_SIM_MODE: fallback
+        run: scripts/rebirth-gateway-daemon-sim-validation.sh
+
       - name: Smoke test development install package
         run: scripts/rebirth-install-smoke.sh

@@ -56,7 +56,7 @@ The rebirth is complete only when:
 | Packaging direction defined | `PACKAGING.md` | done |
 | Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
 | Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, and built gateway-to-daemon simulator render/event flow |
+| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, built gateway-to-daemon simulator render/event flow, and CLI `gateway --daemon-fallback --sim-device` render/event flow |
 | Install smoke CI | `scripts/rebirth-install-smoke.sh`, `.github/workflows/daemon-ci.yml` | hosted Ubuntu validates development install prefix, installed CLI, packaged gateway assets under `share/emwaver/gateway`, and installed `emwaver gateway` health endpoint |
 | CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml` | matrix builds `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`, each containing `bin/emwaver` plus `share/emwaver/gateway`; workflow smoke-tests the packaged gateway health endpoint |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
@@ -120,6 +120,7 @@ This verifies:
 - local WebSocket script run to Rust daemon-produced UI snapshot with `--sim-device`.
 - local WebSocket UI event dispatch through Rust daemon and updated UI snapshot with `--sim-device`.
 - `scripts/rebirth-gateway-daemon-sim-validation.sh` starts the built gateway plus daemon `--sim-device`, drives `/v1/ws` as a browser client, renders a script, dispatches a UI event, and receives the updated snapshot.
+- The same simulator validation runs in fallback mode to cover `emwaver gateway --daemon-fallback --sim-device`.
 - Rust daemon BLE transport builds with the shared `emwaver-device` protocol envelope and `btleplug` scan/connect/notify/write path.
 - Rust daemon BLE scan saw a powered ESP32 as `EMWaver`.
 - `cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble` rendered the Blink UI snapshot through real BLE.

@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PORT="${EMWAVER_GATEWAY_PORT:-3921}"
+MODE="${EMWAVER_GATEWAY_DAEMON_SIM_MODE:-split}"
 GATEWAY_LOG="$(mktemp /tmp/emwaver-gateway-sim.XXXXXX.log)"
 DAEMON_LOG="$(mktemp /tmp/emwaver-daemon-sim.XXXXXX.log)"
 
@@ -23,6 +24,7 @@ trap cleanup EXIT
 echo "== EMWaver gateway + daemon simulator validation =="
 echo "repo: $ROOT"
 echo "port: $PORT"
+echo "mode: $MODE"
 
 echo
 echo "== Build gateway =="
@@ -32,10 +34,17 @@ echo
 echo "== Build daemon CLI =="
 (cd "$ROOT/daemon" && cargo build -p emwaver)
 
-echo
-echo "== Start built gateway =="
-(cd "$ROOT/gateway" && EMWAVER_GATEWAY_PORT="$PORT" npm run start:built >"$GATEWAY_LOG" 2>&1) &
-GATEWAY_PID=$!
+if [[ "$MODE" == "fallback" ]]; then
+  echo
+  echo "== Start CLI gateway with daemon fallback =="
+  (cd "$ROOT/daemon" && cargo run -q -p emwaver -- gateway --port "$PORT" --daemon-fallback --sim-device >"$GATEWAY_LOG" 2>&1) &
+  GATEWAY_PID=$!
+else
+  echo
+  echo "== Start built gateway =="
+  (cd "$ROOT/gateway" && EMWAVER_GATEWAY_PORT="$PORT" npm run start:built >"$GATEWAY_LOG" 2>&1) &
+  GATEWAY_PID=$!
+fi
 
 for _ in $(seq 1 40); do
   if curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
@@ -45,10 +54,12 @@ for _ in $(seq 1 40); do
 done
 curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null
 
-echo
-echo "== Start daemon host with simulator transport =="
-(cd "$ROOT/daemon" && cargo run -q -p emwaver -- daemon serve --port "$PORT" --sim-device >"$DAEMON_LOG" 2>&1) &
-DAEMON_PID=$!
+if [[ "$MODE" != "fallback" ]]; then
+  echo
+  echo "== Start daemon host with simulator transport =="
+  (cd "$ROOT/daemon" && cargo run -q -p emwaver -- daemon serve --port "$PORT" --sim-device >"$DAEMON_LOG" 2>&1) &
+  DAEMON_PID=$!
+fi
 
 node - "$ROOT" "$PORT" <<'NODE'
 const path = require("node:path");
