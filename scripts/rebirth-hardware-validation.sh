@@ -7,10 +7,12 @@ SCRIPT_PATH="${EMWAVER_TEST_SCRIPT:-$ROOT/assets/default-scripts/blink.emw}"
 if [[ "$SCRIPT_PATH" != /* ]]; then
   SCRIPT_PATH="$ROOT/$SCRIPT_PATH"
 fi
+HARDWARE_TRANSPORT="${EMWAVER_HARDWARE_TRANSPORT:-usb}"
 
 echo "== EMWaver rebirth hardware validation =="
 echo "repo: $ROOT"
 echo "script: $SCRIPT_PATH"
+echo "hardware transport: $HARDWARE_TRANSPORT"
 echo
 
 "$ROOT/scripts/check-rust-toolchain.sh"
@@ -52,9 +54,13 @@ echo "== Simulator-backed direct runtime =="
 } > "$sim_tmp"
 (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$sim_tmp" --direct --sim-device)
 
-if [[ -n "${EMWAVER_DEVICE_ID:-}" ]]; then
+if [[ "$HARDWARE_TRANSPORT" == "ble" ]]; then
   echo
-  echo "== Hardware direct runtime =="
+  echo "== Hardware direct runtime (BLE) =="
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$SCRIPT_PATH" --direct --ble)
+elif [[ "$HARDWARE_TRANSPORT" == "usb" && -n "${EMWAVER_DEVICE_ID:-}" ]]; then
+  echo
+  echo "== Hardware direct runtime (USB MIDI/SysEx) =="
   echo "device id: $EMWAVER_DEVICE_ID"
   (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$SCRIPT_PATH" --direct --device "$EMWAVER_DEVICE_ID")
 else
@@ -64,6 +70,10 @@ else
 Set EMWAVER_DEVICE_ID to the id shown by `emwaver devices`, then rerun:
 
   EMWAVER_DEVICE_ID=0 scripts/rebirth-hardware-validation.sh
+
+For BLE:
+
+  EMWAVER_HARDWARE_TRANSPORT=ble scripts/rebirth-hardware-validation.sh
 
 Override the hardware script with:
 

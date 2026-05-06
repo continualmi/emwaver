@@ -61,7 +61,7 @@ The rebirth is complete only when:
 | CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml` | matrix builds `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz`, each containing `bin/emwaver` plus `share/emwaver/gateway`; workflow smoke-tests the packaged gateway health endpoint |
 | Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
 | Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
-| Linux validation runbook | `scripts/rebirth-linux-validation.sh` | added; execution on real Linux host with ALSA MIDI and hardware still pending |
+| Linux validation runbook | `scripts/rebirth-linux-validation.sh`, `scripts/rebirth-hardware-validation.sh` | supports USB via `EMWAVER_DEVICE_ID` and BLE via `EMWAVER_HARDWARE_TRANSPORT=ble`; execution on real Linux host with ALSA/BlueZ and hardware still pending |
 | Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
 | Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | added hosted Ubuntu dry-run validation, hosted Windows restore/build plus simulator script-engine tests, and dispatch-only self-hosted hardware jobs |
 

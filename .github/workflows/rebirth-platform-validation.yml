@@ -39,6 +39,14 @@ on:
         description: "Device id from `emwaver devices` for self-hosted hardware jobs"
         required: false
         default: "0"
+      emwaver_hardware_transport:
+        description: "Hardware transport for self-hosted Linux job"
+        required: false
+        default: "usb"
+        type: choice
+        options:
+          - "usb"
+          - "ble"
       emwaver_test_script:
         description: "Hardware script path for self-hosted hardware jobs"
         required: false
@@ -107,6 +115,7 @@ jobs:
       - name: Run Linux hardware validation
         env:
           EMWAVER_DEVICE_ID: ${{ inputs.emwaver_device_id }}
+          EMWAVER_HARDWARE_TRANSPORT: ${{ inputs.emwaver_hardware_transport }}
           EMWAVER_TEST_SCRIPT: ${{ inputs.emwaver_test_script }}
         run: scripts/rebirth-linux-validation.sh
 

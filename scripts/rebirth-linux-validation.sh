@@ -83,5 +83,5 @@ For BLE:
    cd daemon && cargo run -q -p emwaver -- devices
 
 4. Run through the BLE transport:
-   cd daemon && cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble
+   EMWAVER_HARDWARE_TRANSPORT=ble scripts/rebirth-linux-validation.sh
 EOF
