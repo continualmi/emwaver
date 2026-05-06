@@ -1,0 +1,91 @@
+{
+  "component": "firmware",
+  "features": [
+    {
+      "id": "firmware.stm32_dfu_update",
+      "description": "STM32 boards have a managed local DFU firmware update path where the platform owns flashing.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift", "contains": ["emwaver-dfu-helper", "DFU", "firmwareURL"] },
+            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateSheet.swift", "contains": "Update Mode|DFU|Firmware" }
+          ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS bundles firmware assets but does not yet expose the full STM32 DFU update UI/runtime.",
+          "evidence": [
+            { "file": "ios/README.md", "contains": "bundled firmware assets|firmware" }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            { "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs", "contains": "DFU|Dfu|StartUpdate" },
+            { "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs", "contains": "Update EMWaver|STM32|DFU" }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [
+            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java", "contains": "DFU|flashFirmwareWithDesktopProgress|BUNDLED_FIRMWARE_ASSET_PATH" },
+            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/flash/Dfu.java", "contains": "DFU_DNLOAD|DFU_UPLOAD|DFU_GETSTATUS" }
+          ]
+        },
+        "cli": {
+          "status": "planned",
+          "reason": "The repo has reusable DFU crates, but the user-facing CLI does not yet expose a managed firmware update command.",
+          "evidence": [
+            { "file": "crates/emwaver-dfu/src/lib.rs", "contains": "DFU_DNLOAD|DFU_UPLOAD|flash" },
+            { "file": "daemon/README.md", "contains": "Firmware update UX remains in GUI apps" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "firmware.esp32_serial_update",
+      "description": "ESP32-S3 boards use a serial flashing path rather than the STM32 DFU flow.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift", "contains": ["startEspSerialUpdate", "emwaver-esp-helper", "ESP bootloader"] },
+            { "file": "macos/README.md", "contains": "ESP32-S3 update flow|serial flashing" }
+          ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS has ESP runtime transport and bundled OTA assets, but no ESP serial flashing UX yet.",
+          "evidence": [
+            { "file": "ios/README.md", "contains": "ota/emwaveresp.bin|ESP32" }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            { "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs", "contains": "ESP|EspBootloader|serial" },
+            { "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs", "contains": "Flash ESP32-S3|BOOT/RESET|serial" },
+            { "file": "windows/EMWaver/EMWaver.csproj", "contains": "emwaver-esp-helper.exe|emwaver-esp32s3-app.bin" }
+          ]
+        },
+        "android": {
+          "status": "planned",
+          "reason": "Android explicitly blocks ESP32-S3 firmware flashing until an ESP-native mobile flashing path exists.",
+          "evidence": [
+            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java", "contains": "ESP32-S3 flashing is not available on Android yet|does not support the STM32 DFU flow" }
+          ]
+        },
+        "cli": {
+          "status": "planned",
+          "reason": "CLI supports ESP32 BLE runtime transport, but not end-user ESP serial firmware flashing.",
+          "evidence": [
+            { "file": "daemon/README.md", "contains": "Firmware update UX remains in GUI apps|ESP32 BLE" }
+          ]
+        }
+      }
+    }
+  ]
+}

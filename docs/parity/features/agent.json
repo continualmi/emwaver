@@ -4,7 +4,7 @@
     {
       "id": "agent.api_key.local_storage",
       "description": "Agent API keys are stored locally on every app surface and do not represent an EMWaver account.",
-      "parity": "all_required",
+      "parity": "documented_exceptions",
       "platforms": {
         "macos": {
           "status": "required",
@@ -33,13 +33,21 @@
             { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentApiKeyStore.java", "contains": "SharedPreferences[\\s\\S]*api_key" },
             { "file": "android/app/src/main/res/layout/dialog_sign_in.xml", "contains": "Agent API key" }
           ]
+        },
+        "cli": {
+          "status": "planned",
+          "reason": "CLI Agent currently uses EMWAVER_AGENT_API_KEY/EMWAVER_AGENT_ENDPOINT environment variables instead of persisted local key storage.",
+          "evidence": [
+            { "file": "daemon/emwaver/src/main.rs", "contains": "EMWAVER_AGENT_API_KEY[\\s\\S]*EMWAVER_AGENT_ENDPOINT" },
+            { "file": "docs/AGENT_API.md", "contains": "CLI uses `EMWAVER_AGENT_API_KEY`" }
+          ]
         }
       }
     },
     {
       "id": "agent.chat.local_sqlite",
       "description": "Agent chat conversations and messages are local SQLite-backed state.",
-      "parity": "all_required",
+      "parity": "documented_exceptions",
       "platforms": {
         "macos": {
           "status": "required",
@@ -64,6 +72,13 @@
           "status": "required",
           "evidence": [
             { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentChatStore.java", "contains": "SQLiteOpenHelper[\\s\\S]*agent_conversations[\\s\\S]*agent_messages" }
+          ]
+        },
+        "cli": {
+          "status": "not_applicable",
+          "reason": "CLI Agent is a single-command helper and does not expose a local chat UI or chat history surface.",
+          "evidence": [
+            { "file": "daemon/README.md", "contains": "emwaver agent" }
           ]
         }
       }
@@ -95,6 +110,13 @@
           "status": "required",
           "evidence": [
             { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApi.java", "contains": "Authorization[\\s\\S]*Bearer[\\s\\S]*userInput" }
+          ]
+        },
+        "cli": {
+          "status": "required",
+          "evidence": [
+            { "file": "daemon/emwaver/src/main.rs", "contains": "Authorization[\\s\\S]*Bearer|bearer_auth" },
+            { "file": "daemon/emwaver/src/main.rs", "contains": "userInput|user_input|EMWAVER_AGENT_UNIVERSE" }
           ]
         }
       }

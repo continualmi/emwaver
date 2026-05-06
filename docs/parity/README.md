@@ -17,13 +17,15 @@ CI runs the same command in `.github/workflows/platform-parity.yml`.
 - `features/agent.json` - Agent key, chat, and backend request contract.
 - `features/transport.json` - USB MIDI and BLE runtime transport parity.
 - `features/scripting.json` - script asset and simulator-test parity.
+- `features/firmware.json` - STM32 DFU and ESP32-S3 serial update parity.
+- `features/gateway.json` - localhost gateway bridge and validation parity.
 - `features/local-first.json` - local-first policy and forbidden hosted account gates.
 - `../../scripts/parity/verify-platform-parity.mjs` - the generic runner.
 
 ## Status Model
 
-Every feature must list all four native platforms: `macos`, `ios`, `windows`,
-and `android`.
+Every feature must list all user-facing platforms: `macos`, `ios`, `windows`,
+`android`, and `cli`.
 
 - `required` means the platform must have evidence that the feature exists.
 - `optional`, `planned`, and `not_applicable` are allowed only with a reason.

@@ -1,0 +1,89 @@
+{
+  "component": "gateway",
+  "features": [
+    {
+      "id": "gateway.localhost_runtime_bridge",
+      "description": "Localhost gateway control exists for desktop/CLI runtime ownership and is explicitly not a hosted relay.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            { "file": "macos/EMWaver/EMWaver/RemoteControlHostService.swift", "contains": ["EMWAVER_LOCAL_GATEWAY_URL", "ws://127.0.0.1:3921/v1/ws", "role"] },
+            { "file": "macos/README.md", "contains": "localhost gateway app-role|role=app" }
+          ]
+        },
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iOS is a mobile device-control surface and does not act as the desktop localhost gateway app-role host.",
+          "evidence": [
+            { "file": "ios/README.md", "contains": "local scripts|device control" }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            { "file": "windows/EMWaver/Services/RemoteControlHostService.cs", "contains": ["EMWAVER_LOCAL_GATEWAY_URL", "ws://127.0.0.1:3921/v1/ws", "role"] },
+            { "file": "windows/EMWaver/Pages/ScriptsPage.RemoteControl.cs", "contains": "RemoteControlDelegate|PublishUiSnapshot" }
+          ]
+        },
+        "android": {
+          "status": "not_applicable",
+          "reason": "Android is a mobile device-control surface and does not act as the desktop localhost gateway app-role host.",
+          "evidence": [
+            { "file": "android/README.md", "contains": "mobile EMWaver device workflows|USB/BLE" }
+          ]
+        },
+        "cli": {
+          "status": "required",
+          "evidence": [
+            { "file": "daemon/emwaver/src/main.rs", "contains": ["gateway_ws_url", "ws://127.0.0.1", "/v1/ws", "role"] },
+            { "file": "daemon/README.md", "contains": "emwaver gateway|role=host|localhost gateway" }
+          ]
+        }
+      }
+    },
+    {
+      "id": "gateway.localhost_verify_ci",
+      "description": "The localhost gateway has CI-runnable verification for health, WebSocket protocol, local UI, and Agent proxy behavior.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            { "file": "docs/TESTS_REBIRTH.md", "contains": "macOS local gateway app role" }
+          ]
+        },
+        "ios": {
+          "status": "not_applicable",
+          "reason": "iOS does not host the localhost gateway app-role bridge.",
+          "evidence": [
+            { "file": "ios/README.md", "contains": "Native iOS EMWaver application" }
+          ]
+        },
+        "windows": {
+          "status": "planned",
+          "reason": "Windows local gateway app-role code exists, but validation requires a Windows workstation/toolchain.",
+          "evidence": [
+            { "file": "docs/TESTS_REBIRTH.md", "contains": "Windows local gateway app role|blocked" }
+          ]
+        },
+        "android": {
+          "status": "not_applicable",
+          "reason": "Android does not host the localhost gateway app-role bridge.",
+          "evidence": [
+            { "file": "android/README.md", "contains": "Native Android EMWaver application" }
+          ]
+        },
+        "cli": {
+          "status": "required",
+          "evidence": [
+            { "file": "gateway/scripts/verify.mjs", "contains": ["/health", "/v1/ws", "gateway agent proxy verify passed"] },
+            { "file": ".github/workflows/gateway-ci.yml", "contains": "npm run verify" },
+            { "file": ".github/workflows/daemon-ci.yml", "contains": "rebirth-gateway-daemon-sim-validation|rebirth-install-smoke" }
+          ]
+        }
+      }
+    }
+  ]
+}

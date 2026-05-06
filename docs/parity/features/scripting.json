@@ -21,6 +21,13 @@
         "android": {
           "status": "required",
           "evidence": [{ "file": "android/app/build.gradle", "contains": "syncScriptAssets|DefaultScripts|script_bootstrap" }]
+        },
+        "cli": {
+          "status": "required",
+          "evidence": [
+            { "file": "daemon/emwaver-runtime/src/simulator.rs", "contains": "script_bootstrap\\.emw" },
+            { "file": "daemon/README.md", "contains": "bootstrap-path|script_bootstrap\\.emw" }
+          ]
         }
       }
     },
@@ -47,6 +54,13 @@
           "status": "planned",
           "reason": "Android has SimulatorScriptDeviceBridge, but no checked-in JUnit fixture test yet.",
           "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java", "contains": "basic-board|fixture|Simulator" }]
+        },
+        "cli": {
+          "status": "required",
+          "evidence": [
+            { "file": "daemon/emwaver-runtime/src/simulator.rs", "contains": "SimulatorCommandBridge|basic-board|fixture" },
+            { "file": "scripts/rebirth-linux-validation.sh", "contains": "--sim-device|sim-device" }
+          ]
         }
       }
     }

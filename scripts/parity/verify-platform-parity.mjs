@@ -4,7 +4,7 @@ import path from "node:path";
 
 const root = path.resolve(new URL("../..", import.meta.url).pathname);
 const manifestDir = path.join(root, "docs", "parity", "features");
-const platforms = ["macos", "ios", "windows", "android"];
+const platforms = ["macos", "ios", "windows", "android", "cli"];
 const allowedStatuses = new Set(["required", "optional", "not_applicable", "planned"]);
 const allowedParityModes = new Set(["all_required", "documented_exceptions"]);
 
@@ -24,7 +24,7 @@ function listFiles(target) {
     for (const entry of fs.readdirSync(path.join(root, rel), { withFileTypes: true })) {
       const child = path.join(rel, entry.name);
       if (entry.isDirectory()) {
-        if (!["build", "bin", "obj", ".gradle", ".build", "DerivedData"].includes(entry.name)) {
+        if (!["build", "bin", "obj", "target", ".gradle", ".build", "DerivedData"].includes(entry.name)) {
           stack.push(child);
         }
       } else {
