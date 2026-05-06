@@ -120,6 +120,7 @@ The current preview tarball is built by `.github/workflows/cli-gateway-release.y
 EMWaver-linux-x64/
   bin/emwaver
   share/emwaver/gateway/
+  share/emwaver/assets/default-scripts/
 ```
 
 This layout matches the CLI's packaged gateway lookup path, so `bin/emwaver gateway` and `bin/emwaver start --sim-device` can run without a source checkout.

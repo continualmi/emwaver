@@ -6,6 +6,7 @@ PREFIX="${EMWAVER_INSTALL_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
 SHARE_DIR="$PREFIX/share/emwaver"
 GATEWAY_SHARE_DIR="$SHARE_DIR/gateway"
+ASSETS_SHARE_DIR="$SHARE_DIR/assets/default-scripts"
 INSTALL_SERVICE="${EMWAVER_INSTALL_SERVICE:-0}"
 SERVICE_ARGS="${EMWAVER_SERVICE_ARGS:-}"
 
@@ -60,6 +61,13 @@ fi
 cp -R "$ROOT/gateway/dist" "$GATEWAY_SHARE_DIR/dist"
 (cd "$GATEWAY_SHARE_DIR" && npm install --omit=dev --ignore-scripts)
 echo "installed gateway: $GATEWAY_SHARE_DIR"
+
+echo
+echo "== Install default scripts =="
+rm -rf "$ASSETS_SHARE_DIR"
+mkdir -p "$ASSETS_SHARE_DIR"
+cp -R "$ROOT/assets/default-scripts/." "$ASSETS_SHARE_DIR/"
+echo "installed default scripts: $ASSETS_SHARE_DIR"
 
 if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
   echo

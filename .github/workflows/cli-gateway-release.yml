@@ -65,11 +65,12 @@ jobs:
         run: |
           set -euo pipefail
           package_root="dist/${{ matrix.package_name }}"
-          mkdir -p "$package_root/bin" "$package_root/share/emwaver/gateway"
+          mkdir -p "$package_root/bin" "$package_root/share/emwaver/gateway" "$package_root/share/emwaver/assets/default-scripts"
           cp "daemon/target/release/${{ matrix.binary_name }}" "$package_root/bin/${{ matrix.binary_name }}"
           cp gateway/package.json "$package_root/share/emwaver/gateway/package.json"
           cp gateway/package-lock.json "$package_root/share/emwaver/gateway/package-lock.json"
           cp -R gateway/dist "$package_root/share/emwaver/gateway/dist"
+          cp -R assets/default-scripts/. "$package_root/share/emwaver/assets/default-scripts/"
           (cd "$package_root/share/emwaver/gateway" && npm install --omit=dev --ignore-scripts)
           tar -C dist -czf "dist/${{ matrix.package_name }}.tar.gz" "${{ matrix.package_name }}"
 
@@ -79,6 +80,27 @@ jobs:
           tmp="$(mktemp -d)"
           tar -C "$tmp" -xzf "dist/${{ matrix.package_name }}.tar.gz"
           "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway --port "${{ matrix.smoke_port }}" > "/tmp/${{ matrix.package_name }}-gateway.log" 2>&1 &
+          pid="$!"
+          cleanup() {
+            kill "$pid" >/dev/null 2>&1 || true
+            wait "$pid" >/dev/null 2>&1 || true
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+          for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.25
+          done
+          curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health"
+
+      - name: Smoke test packaged daemon fallback
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          tar -C "$tmp" -xzf "dist/${{ matrix.package_name }}.tar.gz"
+          "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway --port "${{ matrix.smoke_port }}" --daemon-fallback --sim-device > "/tmp/${{ matrix.package_name }}-fallback.log" 2>&1 &
           pid="$!"
           cleanup() {
             kill "$pid" >/dev/null 2>&1 || true

@@ -34,8 +34,26 @@ EMWAVER_INSTALL_PREFIX="$PREFIX" "$ROOT/daemon/install/install.sh"
 test -x "$PREFIX/bin/emwaver"
 test -f "$PREFIX/share/emwaver/gateway/dist/server.mjs"
 test -f "$PREFIX/share/emwaver/gateway/dist/client/index.html"
+test -f "$PREFIX/share/emwaver/assets/default-scripts/script_bootstrap.emw"
 
 "$PREFIX/bin/emwaver" gateway --port "$PORT" >"$LOG_PATH" 2>&1 &
+GATEWAY_PID=$!
+
+for _ in $(seq 1 40); do
+  if curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.25
+done
+
+curl -fsS "http://127.0.0.1:$PORT/health"
+echo
+
+kill "$GATEWAY_PID" >/dev/null 2>&1 || true
+wait "$GATEWAY_PID" >/dev/null 2>&1 || true
+unset GATEWAY_PID
+
+"$PREFIX/bin/emwaver" gateway --port "$PORT" --daemon-fallback --sim-device >"$LOG_PATH" 2>&1 &
 GATEWAY_PID=$!
 
 for _ in $(seq 1 40); do

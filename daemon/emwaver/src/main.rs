@@ -1438,6 +1438,20 @@ fn gateway_dir() -> PathBuf {
 }
 
 fn default_bootstrap_path() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(prefix) = exe.parent().and_then(Path::parent) {
+            let packaged = prefix
+                .join("share")
+                .join("emwaver")
+                .join("assets")
+                .join("default-scripts")
+                .join("script_bootstrap.emw");
+            if packaged.exists() {
+                return packaged;
+            }
+        }
+    }
+
     repo_root()
         .join("assets")
         .join("default-scripts")
