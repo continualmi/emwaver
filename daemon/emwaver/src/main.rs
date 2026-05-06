@@ -387,15 +387,46 @@ fn is_running(pid: i32) -> bool {
     kill(Pid::from_raw(pid), None).is_ok()
 }
 
+fn pid_looks_like_daemon(pid: i32) -> bool {
+    if cfg!(target_os = "linux") {
+        let cmdline = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
+        let parts: Vec<String> = cmdline
+            .split(|byte| *byte == 0)
+            .filter(|part| !part.is_empty())
+            .map(|part| String::from_utf8_lossy(part).to_string())
+            .collect();
+        if !parts.is_empty() {
+            return parts.iter().any(|part| part.contains("emwaver"))
+                && parts.iter().any(|part| part == "daemon")
+                && parts.iter().any(|part| part == "serve");
+        }
+    }
+
+    let output = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("args=")
+        .output();
+    let Ok(output) = output else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let args = String::from_utf8_lossy(&output.stdout);
+    args.contains("emwaver") && args.contains("daemon") && args.contains("serve")
+}
+
 fn daemon_running() -> Result<Option<i32>> {
     let pidfile = pidfile_path()?;
     let Some(pid) = read_pid(&pidfile) else {
         return Ok(None);
     };
-    if is_running(pid) {
+    if is_running(pid) && pid_looks_like_daemon(pid) {
         Ok(Some(pid))
     } else {
-        // stale pidfile
+        // Stale pidfile, or the OS reused the pid for an unrelated process.
         let _ = fs::remove_file(pidfile);
         Ok(None)
     }

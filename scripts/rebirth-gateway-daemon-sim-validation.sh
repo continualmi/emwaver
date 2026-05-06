@@ -33,11 +33,12 @@ echo "== Build gateway =="
 echo
 echo "== Build daemon CLI =="
 (cd "$ROOT/daemon" && cargo build -p emwaver)
+EMWAVER_BIN="$ROOT/daemon/target/debug/emwaver"
 
 if [[ "$MODE" == "fallback" ]]; then
   echo
   echo "== Start CLI gateway with daemon fallback =="
-  (cd "$ROOT/daemon" && cargo run -q -p emwaver -- gateway --port "$PORT" --daemon-fallback --sim-device >"$GATEWAY_LOG" 2>&1) &
+  "$EMWAVER_BIN" gateway --port "$PORT" --daemon-fallback --sim-device >"$GATEWAY_LOG" 2>&1 &
   GATEWAY_PID=$!
 else
   echo
@@ -57,7 +58,7 @@ curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null
 if [[ "$MODE" != "fallback" ]]; then
   echo
   echo "== Start daemon host with simulator transport =="
-  (cd "$ROOT/daemon" && cargo run -q -p emwaver -- daemon serve --port "$PORT" --sim-device >"$DAEMON_LOG" 2>&1) &
+  "$EMWAVER_BIN" daemon serve --port "$PORT" --sim-device >"$DAEMON_LOG" 2>&1 &
   DAEMON_PID=$!
 fi
 
