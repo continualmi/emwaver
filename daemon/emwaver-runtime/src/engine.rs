@@ -112,7 +112,17 @@ impl Engine {
         // _scriptSleep(ms) (optional)
         {
             let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
-                NativeFunction::from_closure(move |_this, _args, _ctx| Ok(JsValue::undefined()))
+                NativeFunction::from_closure(move |_this, args, _ctx| {
+                    let duration_ms = args
+                        .get(0)
+                        .and_then(|v| v.as_number())
+                        .unwrap_or(0.0)
+                        .max(0.0);
+                    if duration_ms > 0.0 {
+                        std::thread::sleep(Duration::from_millis(duration_ms.round() as u64));
+                    }
+                    Ok(JsValue::undefined())
+                })
             })
             .name("_scriptSleep")
             .length(1)
@@ -547,5 +557,33 @@ mod tests {
         assert_eq!(engine.pending_timeout_count(), 0);
         assert_eq!(engine.pump_due_timers(8).expect("pump timers"), 0);
         assert!(engine.latest_tree.lock().unwrap().is_none());
+    }
+
+    #[test]
+    fn bootstrap_every_reschedules_with_timer_pump() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script(
+                r#"var count = 0;
+                every(1, function() {
+                    count += 1;
+                    UI.render(UI.text({ text: String(count) }));
+                });"#,
+            )
+            .expect("schedule every");
+
+        assert_eq!(engine.pending_timeout_count(), 1);
+        std::thread::sleep(Duration::from_millis(2));
+        assert_eq!(engine.pump_due_timers(1).expect("pump first tick"), 1);
+        assert_eq!(engine.pending_timeout_count(), 1);
+        std::thread::sleep(Duration::from_millis(2));
+        assert_eq!(engine.pump_due_timers(1).expect("pump second tick"), 1);
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(tree.props.get("text").and_then(|v| v.as_str()), Some("2"));
     }
 }
