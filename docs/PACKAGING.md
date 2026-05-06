@@ -21,6 +21,8 @@ Current workflows:
 
 Each workflow can be run manually from GitHub Actions with a release tag, defaulting to `emwaver-preview`, or by pushing a tag matching `emwaver-v*`.
 
+Current CLI package status as of 2026-05-06: CLI Gateway Release run `25430201233` passed for both Linux x64 and macOS CLI, smoke-tested packaged gateway health and daemon-fallback script rendering, and published `EMWaver-linux-x64.tar.gz` plus `EMWaver-macos-cli.tar.gz` to the `emwaver-preview` release.
+
 Stable public preview URLs:
 
 ```text
