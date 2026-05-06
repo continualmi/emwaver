@@ -19,4 +19,4 @@ The static export keeps the route available both at the domain root for `emwaver
 
 The repository workflow `.github/workflows/deploy-emwaver-static-to-azure.yml` builds this app from `web/` and uploads `web/out-emwaver` to the Azure Storage static website container.
 
-The workflow expects `AZURE_EMWAVER_STORAGE_CONNECTION_STRING` in GitHub Actions secrets. The secret name is safe to keep in this open-source repository; the credential value must stay only in GitHub Secrets or move to Azure OIDC/federated credentials later.
+The workflow prefers `AZURE_EMWAVER_STORAGE_CONNECTION_STRING` in GitHub Actions secrets and falls back to the existing `AZURE_STORAGE_CONNECTION_STRING` secret during migration. Secret names are safe to keep in this open-source repository; credential values must stay only in GitHub Secrets or move to Azure OIDC/federated credentials later.
