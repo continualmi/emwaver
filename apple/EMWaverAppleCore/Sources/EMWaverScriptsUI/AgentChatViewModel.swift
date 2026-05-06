@@ -130,19 +130,10 @@ public final class AgentChatViewModel: ObservableObject {
 
         Task {
             do {
-                // Placeholder assistant message while the managed Agent runs.
                 let placeholderId = UUID()
-                await MainActor.run {
-                    self.assistantPlaceholderId = placeholderId
-                    self.appendMessage(AgentChatMessage(id: placeholderId, role: .assistant, text: ""))
-                }
-
                 let reply = try await self.runAgentEndpointRequest(userPrompt: text, placeholderId: placeholderId)
                 await MainActor.run {
-                    self.replaceMessage(
-                        id: placeholderId,
-                        with: AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
-                    )
+                    self.appendMessage(AgentChatMessage(id: placeholderId, role: .assistant, text: reply))
                     self.isSending = false
                     self.assistantPlaceholderId = nil
                     self.touchSelectedConversation()
@@ -203,6 +194,7 @@ public final class AgentChatViewModel: ObservableObject {
     }
 
     private func renderResponse(_ response: AgentEndpointResponse, placeholderId: UUID) async throws -> String {
+        _ = placeholderId
 
         let pieces = [
             response.message,
@@ -212,12 +204,6 @@ public final class AgentChatViewModel: ObservableObject {
             response.warnings?.isEmpty == false ? "Warnings:\n" + (response.warnings ?? []).map { "- \($0)" }.joined(separator: "\n") : nil,
         ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         let reply = pieces.joined(separator: "\n\n")
-        await MainActor.run {
-            self.replaceMessage(
-                id: placeholderId,
-                with: AgentChatMessage(id: placeholderId, role: .assistant, text: reply)
-            )
-        }
         guard !reply.isEmpty else {
             throw AgentEndpointError.serverError("Agent model produced no text")
         }
