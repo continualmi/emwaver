@@ -309,6 +309,13 @@ struct ContentView: View {
                 Label("Agent Key", systemImage: "key.fill")
             }
             .help("Manage Agent API key")
+        } else {
+            Button {
+                auth.isSignInSheetPresented = true
+            } label: {
+                Image(systemName: "key.fill")
+            }
+            .help("Set up Agent API key")
         }
     }
 }
