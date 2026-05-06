@@ -20,12 +20,16 @@ struct ContentView: View {
     @ObservedObject var remoteControlHost: RemoteControlHostService
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
+    @Environment(\.openURL) private var openURL
 
     let previewManager: ScriptPreviewManager
 
     @State private var showingSettings: Bool = false
 
     @State private var autoFirmwarePromptKey: String? = nil
+
+    private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
+    private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
 
     // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
     @State private var showingRemoteOverlay: Bool = false
@@ -217,15 +221,27 @@ struct ContentView: View {
             ToolbarItem(placement: .automatic) {
                 if auth.isSignedIn {
                     Menu {
-                        if let email = auth.account?.email, !email.isEmpty {
-                            Text(email)
-                                .foregroundStyle(.secondary)
+                        Text("Saved locally")
+                            .foregroundStyle(.secondary)
+
+                        Button("Manage Key…") {
+                            auth.isSignInSheetPresented = true
+                        }
+
+                        Button("Open MGPT API Keys") {
+                            openURL(mgptApiURL)
+                        }
+
+                        Button("Open Account & Credits") {
+                            openURL(accountURL)
                         }
 
                         Divider()
 
-                        Button("Remove Key") {
+                        Button(role: .destructive) {
                             Task { await auth.removeKey() }
+                        } label: {
+                            Text("Remove Key")
                         }
 
                     } label: {
