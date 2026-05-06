@@ -89,6 +89,16 @@ jobs:
           } > "$tmp"
           cargo run -q -p emwaver -- run "$tmp" --direct --sim-device
 
+      - name: Smoke test systemd user unit generation
+        working-directory: daemon
+        run: |
+          set -euo pipefail
+          cargo run -q -p emwaver -- service print-unit --ble --port 3921 > /tmp/emwaver-daemon.service
+          grep -F "ExecStart=" /tmp/emwaver-daemon.service
+          grep -F "daemon serve" /tmp/emwaver-daemon.service
+          grep -F -- "--ble" /tmp/emwaver-daemon.service
+          grep -F "WantedBy=default.target" /tmp/emwaver-daemon.service
+
       - name: Smoke test gateway to daemon simulator
         run: |
           cd gateway

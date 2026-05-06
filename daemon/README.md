@@ -161,6 +161,7 @@ Linux always-on hosts can install the daemon as a systemd user service:
 emwaver service install --device 0
 emwaver service install --ble
 emwaver service install --sim-device --now
+emwaver service print-unit --ble
 emwaver service status
 emwaver service stop
 emwaver service uninstall

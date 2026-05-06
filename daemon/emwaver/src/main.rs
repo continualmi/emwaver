@@ -274,6 +274,33 @@ enum ServiceCmd {
     /// Remove the Linux systemd user service.
     Uninstall,
 
+    /// Print the systemd user service unit without installing it.
+    PrintUnit {
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
+
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Start with a no-op hardware bridge for UI-only scripts.
+        #[arg(long)]
+        no_device: bool,
+
+        /// Start with the shared mock EMWaver device simulator.
+        #[arg(long)]
+        sim_device: bool,
+
+        /// Override bootstrap script path.
+        #[arg(long)]
+        bootstrap_path: Option<PathBuf>,
+    },
+
     /// Start the installed user service.
     Start,
 
@@ -509,6 +536,90 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
     Ok(())
 }
 
+fn validate_service_transport_flags(
+    device: Option<&str>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+) -> Result<()> {
+    if ble && device.is_some() {
+        anyhow::bail!("--device cannot be combined with --ble");
+    }
+    if ble && no_device {
+        anyhow::bail!("--ble cannot be combined with --no-device");
+    }
+    if ble && sim_device {
+        anyhow::bail!("--ble cannot be combined with --sim-device");
+    }
+    if no_device && sim_device {
+        anyhow::bail!("--no-device cannot be combined with --sim-device");
+    }
+    if no_device && device.is_some() {
+        anyhow::bail!("--device cannot be combined with --no-device");
+    }
+    if sim_device && device.is_some() {
+        anyhow::bail!("--device cannot be combined with --sim-device");
+    }
+    Ok(())
+}
+
+fn service_unit(
+    exe: &Path,
+    port: Option<u16>,
+    device: Option<String>,
+    ble: bool,
+    no_device: bool,
+    sim_device: bool,
+    bootstrap_path: Option<PathBuf>,
+) -> Result<String> {
+    validate_service_transport_flags(device.as_deref(), ble, no_device, sim_device)?;
+
+    let mut exec_args = vec![
+        shell_escape(&exe.display().to_string()),
+        "daemon".to_string(),
+        "serve".to_string(),
+    ];
+    if let Some(port) = port {
+        exec_args.push("--port".to_string());
+        exec_args.push(port.to_string());
+    }
+    if let Some(device) = device {
+        exec_args.push("--device".to_string());
+        exec_args.push(shell_escape(&device));
+    }
+    if ble {
+        exec_args.push("--ble".to_string());
+    }
+    if no_device {
+        exec_args.push("--no-device".to_string());
+    }
+    if sim_device {
+        exec_args.push("--sim-device".to_string());
+    }
+    if let Some(bootstrap_path) = bootstrap_path {
+        exec_args.push("--bootstrap-path".to_string());
+        exec_args.push(shell_escape(&bootstrap_path.display().to_string()));
+    }
+
+    Ok(format!(
+        r#"[Unit]
+Description=EMWaver local daemon host
+After=bluetooth.target sound.target
+
+[Service]
+Type=simple
+ExecStart={}
+Restart=on-failure
+RestartSec=2
+Environment=RUST_LOG=info
+
+[Install]
+WantedBy=default.target
+"#,
+        exec_args.join(" ")
+    ))
+}
+
 fn service_install(
     port: Option<u16>,
     device: Option<String>,
@@ -536,25 +647,6 @@ fn service_install(
 
     #[cfg(target_os = "linux")]
     {
-        if ble && device.is_some() {
-            anyhow::bail!("--device cannot be combined with --ble");
-        }
-        if ble && no_device {
-            anyhow::bail!("--ble cannot be combined with --no-device");
-        }
-        if ble && sim_device {
-            anyhow::bail!("--ble cannot be combined with --sim-device");
-        }
-        if no_device && sim_device {
-            anyhow::bail!("--no-device cannot be combined with --sim-device");
-        }
-        if no_device && device.is_some() {
-            anyhow::bail!("--device cannot be combined with --no-device");
-        }
-        if sim_device && device.is_some() {
-            anyhow::bail!("--device cannot be combined with --sim-device");
-        }
-
         let exe =
             std::env::current_exe().context("failed to resolve current emwaver executable")?;
         let unit_path = systemd_user_unit_path();
@@ -563,50 +655,15 @@ fn service_install(
                 .with_context(|| format!("failed to create {}", parent.display()))?;
         }
 
-        let mut exec_args = vec![
-            shell_escape(&exe.display().to_string()),
-            "daemon".to_string(),
-            "serve".to_string(),
-        ];
-        if let Some(port) = port {
-            exec_args.push("--port".to_string());
-            exec_args.push(port.to_string());
-        }
-        if let Some(device) = device {
-            exec_args.push("--device".to_string());
-            exec_args.push(shell_escape(&device));
-        }
-        if ble {
-            exec_args.push("--ble".to_string());
-        }
-        if no_device {
-            exec_args.push("--no-device".to_string());
-        }
-        if sim_device {
-            exec_args.push("--sim-device".to_string());
-        }
-        if let Some(bootstrap_path) = bootstrap_path {
-            exec_args.push("--bootstrap-path".to_string());
-            exec_args.push(shell_escape(&bootstrap_path.display().to_string()));
-        }
-
-        let unit = format!(
-            r#"[Unit]
-Description=EMWaver local daemon host
-After=bluetooth.target sound.target
-
-[Service]
-Type=simple
-ExecStart={}
-Restart=on-failure
-RestartSec=2
-Environment=RUST_LOG=info
-
-[Install]
-WantedBy=default.target
-"#,
-            exec_args.join(" ")
-        );
+        let unit = service_unit(
+            &exe,
+            port,
+            device,
+            ble,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        )?;
 
         fs::write(&unit_path, unit)
             .with_context(|| format!("failed to write {}", unit_path.display()))?;
@@ -650,7 +707,6 @@ fn service_status() -> Result<()> {
     systemctl_user(&["status", "emwaver-daemon.service"])
 }
 
-#[cfg(target_os = "linux")]
 fn shell_escape(value: &str) -> String {
     if value
         .chars()
@@ -1595,6 +1651,30 @@ fn main() -> Result<()> {
                 now,
             ),
             ServiceCmd::Uninstall => service_uninstall(),
+            ServiceCmd::PrintUnit {
+                port,
+                device,
+                ble,
+                no_device,
+                sim_device,
+                bootstrap_path,
+            } => {
+                let exe = std::env::current_exe()
+                    .context("failed to resolve current emwaver executable")?;
+                print!(
+                    "{}",
+                    service_unit(
+                        &exe,
+                        port,
+                        device,
+                        ble,
+                        no_device,
+                        sim_device,
+                        bootstrap_path
+                    )?
+                );
+                Ok(())
+            }
             ServiceCmd::Start => systemctl_user(&["start", "emwaver-daemon.service"]),
             ServiceCmd::Stop => systemctl_user(&["stop", "emwaver-daemon.service"]),
             ServiceCmd::Status => service_status(),
