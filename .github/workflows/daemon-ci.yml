@@ -9,6 +9,7 @@ on:
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/rebirth-install-smoke.sh"
       - ".github/workflows/daemon-ci.yml"
   push:
     branches:
@@ -20,6 +21,7 @@ on:
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
       - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/rebirth-install-smoke.sh"
       - ".github/workflows/daemon-ci.yml"
   workflow_dispatch:
 
@@ -93,3 +95,6 @@ jobs:
           npm ci
           cd ..
           scripts/rebirth-gateway-daemon-sim-validation.sh
+
+      - name: Smoke test development install package
+        run: scripts/rebirth-install-smoke.sh
