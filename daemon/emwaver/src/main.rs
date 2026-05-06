@@ -365,6 +365,12 @@ fn project_dirs() -> Result<ProjectDirs> {
 }
 
 fn state_dir() -> Result<PathBuf> {
+    if let Some(dir) = env_trim("EMWAVER_STATE_DIR") {
+        let d = PathBuf::from(dir);
+        fs::create_dir_all(&d)?;
+        return Ok(d);
+    }
+
     let d = project_dirs()?.data_local_dir().to_path_buf();
     fs::create_dir_all(&d)?;
     Ok(d)

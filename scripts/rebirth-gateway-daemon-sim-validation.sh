@@ -6,9 +6,14 @@ PORT="${EMWAVER_GATEWAY_PORT:-3921}"
 MODE="${EMWAVER_GATEWAY_DAEMON_SIM_MODE:-split}"
 GATEWAY_LOG="$(mktemp /tmp/emwaver-gateway-sim.XXXXXX.log)"
 DAEMON_LOG="$(mktemp /tmp/emwaver-daemon-sim.XXXXXX.log)"
+STATE_DIR="$(mktemp -d /tmp/emwaver-gateway-sim-state.XXXXXX)"
+export EMWAVER_STATE_DIR="$STATE_DIR"
 
 cleanup() {
   set +e
+  if [[ -n "${EMWAVER_BIN:-}" && -x "$EMWAVER_BIN" ]]; then
+    "$EMWAVER_BIN" daemon stop >/dev/null 2>&1 || true
+  fi
   if [[ -n "${GATEWAY_PID:-}" ]]; then
     kill "$GATEWAY_PID" >/dev/null 2>&1 || true
     wait "$GATEWAY_PID" >/dev/null 2>&1 || true
@@ -18,6 +23,7 @@ cleanup() {
     wait "$DAEMON_PID" >/dev/null 2>&1 || true
   fi
   rm -f "$GATEWAY_LOG" "$DAEMON_LOG"
+  rm -rf "$STATE_DIR"
 }
 trap cleanup EXIT
 
