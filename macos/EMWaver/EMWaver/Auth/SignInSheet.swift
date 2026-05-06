@@ -1,4 +1,7 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#endif
 
 struct SignInSheet: View {
     @EnvironmentObject private var auth: AuthenticationManager
@@ -6,6 +9,7 @@ struct SignInSheet: View {
     @Environment(\.openURL) private var openURL
     @State private var apiKey: String = ""
     @State private var isKeyVisible = false
+    @State private var didCopyKey = false
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
     private let accountURL = URL(string: "https://mdl.continualmi.com/account")!
@@ -51,6 +55,11 @@ struct SignInSheet: View {
                             isKeyVisible.toggle()
                         }
                         .buttonStyle(.bordered)
+
+                        Button(didCopyKey ? "Copied" : "Copy") {
+                            copySavedKey()
+                        }
+                        .buttonStyle(.bordered)
                     }
 
                     Button(role: .destructive) {
@@ -58,6 +67,7 @@ struct SignInSheet: View {
                             await auth.removeKey()
                             apiKey = ""
                             isKeyVisible = false
+                            didCopyKey = false
                         }
                     } label: {
                         Text("Remove Saved Key")
@@ -101,6 +111,7 @@ struct SignInSheet: View {
                         if auth.isSignedIn {
                             apiKey = ""
                             isKeyVisible = false
+                            didCopyKey = false
                             dismiss()
                         }
                     }
@@ -129,5 +140,21 @@ struct SignInSheet: View {
         let prefix = trimmed.prefix(6)
         let suffix = trimmed.suffix(4)
         return "\(prefix)••••••••\(suffix)"
+    }
+
+    private func copySavedKey() {
+        let trimmed = auth.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+
+        #if canImport(AppKit)
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(trimmed, forType: .string)
+        #endif
+
+        didCopyKey = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            didCopyKey = false
+        }
     }
 }
