@@ -689,7 +689,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func startBleScanInternal(allowWhenAutoConnectDisabled: Bool = false) {
         guard allowWhenAutoConnectDisabled || autoConnectEnabled else { return }
-        guard bleCentral?.state == .poweredOn else { return }
+        guard bleCentral?.state == .poweredOn else {
+            stopBleScanInternal()
+            return
+        }
         guard blePeripheral == nil || blePeripheral?.state == .disconnected else { return }
         bleCentral?.scanForPeripherals(
             withServices: nil,
@@ -879,9 +882,12 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             }
             if central.state == .poweredOn {
                 self.autoConnectIfNeededInternal()
-            } else if self.activeTransport == .ble {
-                self.disconnectInternal()
-                self.setError("Bluetooth unavailable")
+            } else {
+                self.stopBleScanInternal()
+                if self.activeTransport == .ble {
+                    self.disconnectInternal()
+                    self.setError("Bluetooth unavailable")
+                }
             }
         }
     }

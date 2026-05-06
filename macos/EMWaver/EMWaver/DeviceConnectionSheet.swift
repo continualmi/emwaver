@@ -19,9 +19,6 @@ struct DeviceConnectionSheet: View {
         if firmwareUpdater.dfuConnected {
             return ("Update Mode", "arrow.triangle.2.circlepath")
         }
-        if device.isBleScanning {
-            return ("Scanning for BLE", "antenna.radiowaves.left.and.right")
-        }
         return ("Disconnected", "cable.connector.slash")
     }
 
@@ -38,8 +35,6 @@ struct DeviceConnectionSheet: View {
         }
         if device.isConnected, let transport = device.connectedTransportKind, !transport.isEmpty {
             items.append(transport)
-        } else if device.isBleScanning {
-            items.append("BLE scan")
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
             items.append("ESP32-S3")
@@ -152,28 +147,11 @@ struct DeviceConnectionSheet: View {
                     .background(Capsule().fill(Color.secondary.opacity(0.12)))
             }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Label("Bluetooth: \(device.bluetoothStateText)", systemImage: "dot.radiowaves.left.and.right")
-                Label("Auto connect: \(device.autoConnectEnabled ? "On" : "Off")", systemImage: "arrow.triangle.2.circlepath")
-                Label(device.isBleScanning ? "Scanning for EMWaver BLE advertisements" : "BLE scan is stopped", systemImage: device.isBleScanning ? "wave.3.right" : "pause")
-            }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-
             if showsBluetoothUnavailableNotice {
                 HStack(alignment: .center, spacing: 12) {
                     Label(bluetoothUnavailableText, systemImage: "exclamationmark.triangle.fill")
                         .font(.caption.weight(.medium))
                         .foregroundStyle(.orange)
-
-                    Spacer(minLength: 0)
-
-                    Button("Open Bluetooth Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
-                            openURL(url)
-                        }
-                    }
-                    .buttonStyle(.bordered)
                 }
                 .padding(12)
                 .background(
@@ -183,15 +161,24 @@ struct DeviceConnectionSheet: View {
             }
 
             HStack(spacing: 10) {
-                Button(device.isBleScanning ? "Stop BLE scan" : "Start BLE scan") {
-                    if device.isBleScanning {
-                        device.stopBleScan()
-                    } else {
-                        device.startBleScan()
+                if device.bluetoothStateText == "On" {
+                    Button(device.isBleScanning ? "Stop scan" : "Start scan") {
+                        if device.isBleScanning {
+                            device.stopBleScan()
+                        } else {
+                            device.startBleScan()
+                        }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(device.isConnected)
+                } else {
+                    Button("Open Bluetooth Settings") {
+                        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
+                            openURL(url)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(device.isConnected || device.bluetoothStateText != "On")
 
                 Toggle("Auto connect", isOn: $device.autoConnectEnabled)
                     .toggleStyle(.checkbox)
@@ -207,11 +194,11 @@ struct DeviceConnectionSheet: View {
         if device.connectedTransportKind == "BLE" {
             return "Connected"
         }
+        if device.bluetoothStateText != "On" {
+            return "Bluetooth \(device.bluetoothStateText.lowercased())"
+        }
         if device.isBleScanning {
             return "Scanning"
-        }
-        if device.bluetoothStateText != "On" {
-            return device.bluetoothStateText
         }
         return "Idle"
     }
