@@ -23,6 +23,12 @@ pub trait CommandBridge: Send + Sync + 'static {
     }
 
     fn clear_buffer(&self) {}
+
+    fn load_buffer(&self, _data: Vec<u8>) {}
+
+    fn transmit_buffer(&self) -> Result<()> {
+        Ok(())
+    }
 }
 
 pub struct Engine {
@@ -202,6 +208,7 @@ impl Engine {
         // Minimal filesystem/path API (matches the Apple host surface used by FS.*).
         register_filesystem_api(&mut ctx)?;
         register_sampler_buffer_api(&mut ctx, bridge.clone())?;
+        register_sampler_desktop_api(&mut ctx, bridge.clone())?;
 
         // _scriptSendPacket(bytes: Uint8Array, timeoutMs: number) -> Uint8Array
         {
@@ -704,6 +711,113 @@ fn register_sampler_buffer_api(ctx: &mut BoaContext, bridge: Arc<dyn CommandBrid
     Ok(())
 }
 
+fn register_sampler_desktop_api(
+    ctx: &mut BoaContext,
+    bridge: Arc<dyn CommandBridge>,
+) -> Result<()> {
+    let set_bridge = bridge.clone();
+    let set_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let bytes =
+                js_value_to_bytes(args.get(0).cloned().unwrap_or(JsValue::undefined()), ctx)?;
+            let len = bytes.len();
+            set_bridge.load_buffer(bytes);
+            Ok(JsValue::new(len as i32))
+        })
+    })
+    .name("_scriptBufferSetBytes")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptBufferSetBytes"),
+        set_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptBufferSetBytes")?;
+
+    let save_bridge = bridge.clone();
+    let save_bytes = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, _ctx| {
+            let path = js_arg_string(args, 0);
+            write_file_bytes(&path, &save_bridge.get_buffer()).map_err(|e| {
+                boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+            })?;
+            Ok(JsValue::undefined())
+        })
+    })
+    .name("_scriptBufferSaveBytesFile")
+    .length(1)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptBufferSaveBytesFile"),
+        save_bytes,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptBufferSaveBytesFile")?;
+
+    let tx_bridge = bridge.clone();
+    let transmit = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+        NativeFunction::from_closure(move |_this, args, ctx| {
+            let bytes =
+                js_value_to_bytes(args.get(0).cloned().unwrap_or(JsValue::undefined()), ctx)?;
+            let opts = args.get(1).cloned().unwrap_or(JsValue::undefined());
+            let pin = js_object_number_property(&opts, "pin", ctx)?
+                .unwrap_or(1.0)
+                .clamp(0.0, 255.0) as u8;
+            let mut duty = js_object_number_property(&opts, "dutyPercent", ctx)?
+                .unwrap_or(100.0)
+                .clamp(0.0, 100.0) as u8;
+            let mut tick_us = js_object_number_property(&opts, "tickUs", ctx)?
+                .unwrap_or(10.0)
+                .clamp(0.0, 255.0) as u8;
+            let freq_hz = js_object_number_property(&opts, "freqHz", ctx)?
+                .unwrap_or(0.0)
+                .max(0.0) as u32;
+            if duty == 0 {
+                duty = 50;
+            }
+            if tick_us < 5 {
+                tick_us = 5;
+            }
+
+            let pkt = vec![
+                0x80,
+                0x00,
+                pin,
+                duty,
+                (freq_hz & 0xff) as u8,
+                ((freq_hz >> 8) & 0xff) as u8,
+                ((freq_hz >> 16) & 0xff) as u8,
+                ((freq_hz >> 24) & 0xff) as u8,
+                tick_us,
+            ];
+            let len = bytes.len();
+            tx_bridge.send_command(&pkt, 2_000).map_err(|e| {
+                boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+            })?;
+            tx_bridge.load_buffer(bytes);
+            tx_bridge.transmit_buffer().map_err(|e| {
+                boa_engine::JsError::from_opaque(JsValue::from(js_string!(e.to_string())))
+            })?;
+            Ok(JsValue::new(len as i32))
+        })
+    })
+    .name("_scriptDeviceTransmitBufferStart")
+    .length(3)
+    .build();
+    ctx.register_global_property(
+        js_string!("_scriptDeviceTransmitBufferStart"),
+        transmit,
+        Attribute::all(),
+    )
+    .map_err(map_js_err)
+    .context("register _scriptDeviceTransmitBufferStart")?;
+
+    Ok(())
+}
+
 fn app_data_dir() -> PathBuf {
     std::env::var_os("EMWAVER_RUNTIME_APP_DATA_DIR")
         .map(PathBuf::from)
@@ -753,6 +867,18 @@ fn js_value_to_bytes(value: JsValue, ctx: &mut BoaContext) -> boa_engine::JsResu
         out.push((byte & 0xff) as u8);
     }
     Ok(out)
+}
+
+fn js_object_number_property(
+    value: &JsValue,
+    name: &str,
+    ctx: &mut BoaContext,
+) -> boa_engine::JsResult<Option<f64>> {
+    let Some(obj) = value.as_object().cloned() else {
+        return Ok(None);
+    };
+    let value = obj.get(js_string!(name), ctx)?;
+    Ok(value.as_number())
 }
 
 fn strings_to_js_array(names: Vec<String>, ctx: &mut BoaContext) -> boa_engine::JsResult<JsValue> {
@@ -866,6 +992,7 @@ mod tests {
         calls: Mutex<Vec<(Vec<u8>, u64)>>,
         response: Option<Vec<u8>>,
         buffer: Mutex<Vec<u8>>,
+        transmit_count: Mutex<usize>,
     }
 
     impl RecordingBridge {
@@ -874,6 +1001,7 @@ mod tests {
                 calls: Mutex::new(Vec::new()),
                 response,
                 buffer: Mutex::new(Vec::new()),
+                transmit_count: Mutex::new(0),
             }
         }
     }
@@ -893,6 +1021,15 @@ mod tests {
 
         fn clear_buffer(&self) {
             self.buffer.lock().unwrap().clear();
+        }
+
+        fn load_buffer(&self, data: Vec<u8>) {
+            *self.buffer.lock().unwrap() = data;
+        }
+
+        fn transmit_buffer(&self) -> Result<()> {
+            *self.transmit_count.lock().unwrap() += 1;
+            Ok(())
         }
     }
 
@@ -1140,6 +1277,44 @@ mod tests {
         assert_eq!(
             tree.props.get("text").and_then(|v| v.as_str()),
             Some("sampler-ok")
+        );
+    }
+
+    #[test]
+    fn bootstrap_sampler_desktop_api_sets_saves_and_transmits_buffer() {
+        let bridge = Arc::new(RecordingBridge::new(Some(vec![0x80])));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+        let base = std::env::temp_dir().join(format!(
+            "emwaver-runtime-sampler-test-{}",
+            std::process::id()
+        ));
+        let path = base.join("buf.bin");
+        let path_js = path.to_string_lossy().replace('\\', "\\\\");
+
+        engine
+            .run_script(&format!(
+                r#"if (Sampler.setBytes([9, 8, 7]) !== 3) throw new Error("setBytes mismatch");
+                Sampler.saveBytesFile("{path_js}");
+                var saved = FS.readBytes("{path_js}");
+                if (saved.length !== 3 || saved[1] !== 8) throw new Error("saveBytes mismatch");
+                if (Sampler.transmitBufferStart([1, 2], {{ pin: 4, dutyPercent: 50, tickUs: 9 }}) !== 2) throw new Error("transmit mismatch");
+                FS.remove("{base}");
+                UI.render(UI.text({{ text: "tx-ok" }}));"#,
+                base = base.to_string_lossy().replace('\\', "\\\\")
+            ))
+            .expect("run sampler desktop script");
+
+        let calls = bridge.calls.lock().unwrap();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].0[..4], [0x80, 0x00, 4, 50]);
+        assert_eq!(*bridge.transmit_count.lock().unwrap(), 1);
+
+        let tree = engine.latest_tree.lock().unwrap().clone().expect("tree");
+        assert_eq!(
+            tree.props.get("text").and_then(|v| v.as_str()),
+            Some("tx-ok")
         );
     }
 }

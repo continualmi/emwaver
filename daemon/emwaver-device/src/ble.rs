@@ -157,6 +157,29 @@ impl BleDevice {
         st.rx_packets.clear();
     }
 
+    pub fn load_buffer(&self, data: Vec<u8>) {
+        self.shared.state.lock().unwrap().capture_buffer = data;
+    }
+
+    pub fn transmit_buffer(&self) -> Result<()> {
+        let data = self.get_buffer();
+        if data.is_empty() {
+            return Ok(());
+        }
+
+        let mut idx = 0usize;
+        while idx < data.len() {
+            let end = (idx + LANE_SIZE).min(data.len());
+            let chunk = &data[idx..end];
+            let sf = make_superframe(None, Some(chunk));
+            self.send_superframe(&sf)?;
+            idx = end;
+            std::thread::sleep(Duration::from_millis(1));
+        }
+
+        Ok(())
+    }
+
     fn send_superframe(&self, superframe: &[u8; SUPERFRAME_SIZE]) -> Result<()> {
         let sysex = encode_superframe(superframe);
         self.rt.block_on(async {

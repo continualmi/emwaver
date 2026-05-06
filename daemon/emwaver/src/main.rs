@@ -990,6 +990,14 @@ impl CommandBridge for DeviceCommandBridge {
     fn clear_buffer(&self) {
         self.device.clear_buffer();
     }
+
+    fn load_buffer(&self, data: Vec<u8>) {
+        self.device.load_buffer(data);
+    }
+
+    fn transmit_buffer(&self) -> Result<()> {
+        self.device.transmit_buffer()
+    }
 }
 
 struct BleCommandBridge {
@@ -1007,6 +1015,14 @@ impl CommandBridge for BleCommandBridge {
 
     fn clear_buffer(&self) {
         self.device.clear_buffer();
+    }
+
+    fn load_buffer(&self, data: Vec<u8>) {
+        self.device.load_buffer(data);
+    }
+
+    fn transmit_buffer(&self) -> Result<()> {
+        self.device.transmit_buffer()
     }
 }
 
