@@ -241,25 +241,25 @@ struct ContentView: View {
                 triggerAutomaticFirmwarePromptIfNeeded()
             }
         }
-        .onChange(of: device.connectedBoardType) { _ in
+        .onChange(of: device.connectedBoardType) {
             triggerAutomaticFirmwarePromptIfNeeded()
         }
-        .onChange(of: device.isConnected) { connected in
+        .onChange(of: device.isConnected) { _, connected in
             if !connected && !firmwareUpdater.dfuConnected {
                 autoFirmwarePromptKey = nil
             }
             triggerAutomaticFirmwarePromptIfNeeded()
         }
-        .onChange(of: device.deviceEmwaverVersion) { _ in
+        .onChange(of: device.deviceEmwaverVersion) {
             triggerAutomaticFirmwarePromptIfNeeded()
         }
-        .onChange(of: firmwareUpdater.dfuConnected) { connected in
+        .onChange(of: firmwareUpdater.dfuConnected) { _, connected in
             if !connected {
                 autoFirmwarePromptKey = nil
             }
             triggerAutomaticFirmwarePromptIfNeeded()
         }
-        .onChange(of: firmwareUpdater.updateDone) { done in
+        .onChange(of: firmwareUpdater.updateDone) { _, done in
             if !done {
                 triggerAutomaticFirmwarePromptIfNeeded()
             }
