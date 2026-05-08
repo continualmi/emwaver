@@ -133,6 +133,7 @@ Current first step:
 - Android USB MIDI device-info matching now lives in `AndroidUsbMidiTransport`, moving another USB connection-selection detail out of `USBService`.
 - Android USB MIDI input/output port opening now lives in `AndroidUsbMidiTransport`, moving another USB setup detail out of `USBService`.
 - Android USB MIDI live handles now sit behind an `AndroidUsbMidiTransport.Connection` object that owns the opened device, ports, session id, display name, send helper, board inference, and close behavior.
+- Android USB MIDI receive attachment now belongs to `AndroidUsbMidiTransport.Connection`, matching the Windows USB MIDI receive-subscription ownership pattern.
 - Android targeted writes, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Android now tracks the live script target as one `ActiveDeviceTarget` descriptor, keeping the active transport and active session id synchronized before the future per-device transport runtime split.
 - Android has an `ActiveDeviceTargetTest` suite covering active-target device-id normalization and transport matching.

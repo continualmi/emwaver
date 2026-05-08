@@ -14,6 +14,7 @@ import android.media.midi.MidiDeviceInfo;
 import android.media.midi.MidiInputPort;
 import android.media.midi.MidiOutputPort;
 import android.media.midi.MidiManager;
+import android.media.midi.MidiReceiver;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -51,7 +52,8 @@ final class AndroidUsbMidiTransport {
                 UsbDevice usbDevice,
                 MidiDevice midiDevice,
                 MidiInputPort input,
-                MidiOutputPort output
+                MidiOutputPort output,
+                @Nullable MidiReceiver receiver
         ) {
             this.usbDevice = usbDevice;
             this.midiDevice = midiDevice;
@@ -60,6 +62,9 @@ final class AndroidUsbMidiTransport {
             this.sessionId = sessionId(usbDevice);
             String name = displayName(usbDevice);
             this.displayName = name != null ? name : "USB MIDI";
+            if (this.output != null && receiver != null) {
+                this.output.connect(receiver);
+            }
         }
 
         boolean isOpen() {
@@ -157,9 +162,9 @@ final class AndroidUsbMidiTransport {
         return new OpenPorts(device.openInputPort(0), device.openOutputPort(0));
     }
 
-    static Connection openConnection(UsbDevice usbDevice, MidiDevice midiDevice) {
+    static Connection openConnection(UsbDevice usbDevice, MidiDevice midiDevice, @Nullable MidiReceiver receiver) {
         OpenPorts ports = openPorts(midiDevice);
-        return new Connection(usbDevice, midiDevice, ports.input, ports.output);
+        return new Connection(usbDevice, midiDevice, ports.input, ports.output, receiver);
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {

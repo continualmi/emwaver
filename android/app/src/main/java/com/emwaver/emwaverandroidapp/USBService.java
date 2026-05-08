@@ -354,10 +354,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
-                usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device);
-                if (usbMidiConnection.output != null) {
-                    usbMidiConnection.output.connect(rxReceiver);
-                }
+                usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver);
                 setActiveDeviceTarget(usbMidiConnection.sessionId, ActiveTransport.USB);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
