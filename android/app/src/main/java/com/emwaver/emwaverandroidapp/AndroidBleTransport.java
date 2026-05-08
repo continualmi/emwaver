@@ -11,6 +11,8 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.BluetoothGattDescriptor;
+import android.bluetooth.BluetoothGattService;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
 import android.os.ParcelUuid;
@@ -61,6 +63,43 @@ final class AndroidBleTransport {
             BluetoothGattCallback callback
     ) {
         return device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
+    }
+
+    static void discoverServices(BluetoothGatt gatt) {
+        if (!gatt.requestMtu(64)) {
+            gatt.discoverServices();
+        }
+    }
+
+    @Nullable
+    static BluetoothGattCharacteristic commandCharacteristic(BluetoothGatt gatt) {
+        BluetoothGattService service = gatt.getService(SERVICE_UUID);
+        if (service == null) {
+            Log.e(TAG, "BLE EMWaver service missing");
+            return null;
+        }
+        BluetoothGattCharacteristic command = service.getCharacteristic(COMMAND_UUID);
+        if (command == null) {
+            Log.e(TAG, "BLE command characteristic missing");
+        }
+        return command;
+    }
+
+    static void enableNotifications(BluetoothGatt gatt) {
+        BluetoothGattService service = gatt.getService(SERVICE_UUID);
+        if (service == null) {
+            return;
+        }
+        BluetoothGattCharacteristic notify = service.getCharacteristic(NOTIFY_UUID);
+        if (notify == null) {
+            return;
+        }
+        gatt.setCharacteristicNotification(notify, true);
+        BluetoothGattDescriptor cccd = notify.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID);
+        if (cccd != null) {
+            cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
+            gatt.writeDescriptor(cccd);
+        }
     }
 
     static boolean writeSysex(

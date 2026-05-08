@@ -15,8 +15,6 @@ import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
-import android.bluetooth.BluetoothGattDescriptor;
-import android.bluetooth.BluetoothGattService;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
@@ -608,9 +606,7 @@ public class USBService extends Service implements DeviceConnectionService {
         @Override
         public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
-                if (!gatt.requestMtu(64)) {
-                    gatt.discoverServices();
-                }
+                AndroidBleTransport.discoverServices(gatt);
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 synchronized (bleLock) {
                     if (bleGatt == gatt) {
@@ -630,16 +626,8 @@ public class USBService extends Service implements DeviceConnectionService {
         @SuppressLint("MissingPermission")
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            BluetoothGattService service = gatt.getService(AndroidBleTransport.SERVICE_UUID);
-            if (service == null) {
-                Log.e(TAG, "BLE EMWaver service missing");
-                gatt.disconnect();
-                return;
-            }
-            BluetoothGattCharacteristic command = service.getCharacteristic(AndroidBleTransport.COMMAND_UUID);
-            BluetoothGattCharacteristic notify = service.getCharacteristic(AndroidBleTransport.NOTIFY_UUID);
+            BluetoothGattCharacteristic command = AndroidBleTransport.commandCharacteristic(gatt);
             if (command == null) {
-                Log.e(TAG, "BLE command characteristic missing");
                 gatt.disconnect();
                 return;
             }
@@ -649,14 +637,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 setActiveBufferSession(AndroidBleTransport.sessionId(gatt.getDevice()));
                 activeTransport = ActiveTransport.BLE;
             }
-            if (notify != null) {
-                gatt.setCharacteristicNotification(notify, true);
-                BluetoothGattDescriptor cccd = notify.getDescriptor(AndroidBleTransport.CLIENT_CHARACTERISTIC_CONFIG_UUID);
-                if (cccd != null) {
-                    cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
-                    gatt.writeDescriptor(cccd);
-                }
-            }
+            AndroidBleTransport.enableNotifications(gatt);
             connectedBoardType = "esp32s3";
             Toast.makeText(USBService.this, "BLE Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
