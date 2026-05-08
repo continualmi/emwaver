@@ -806,8 +806,12 @@ static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_
     if (payload_len != EMW_SYSEX_BYTES || len != (size_t)WIFI_ENVELOPE_HEADER_BYTES + payload_len) {
         return false;
     }
+    const uint16_t frame_sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
+    if (frame_sequence == 0u) {
+        return false;
+    }
     if (sequence) {
-        *sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
+        *sequence = frame_sequence;
     }
     memcpy(out, &data[WIFI_ENVELOPE_HEADER_BYTES], EMW_SYSEX_BYTES);
     return true;

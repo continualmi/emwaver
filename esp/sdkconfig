@@ -596,6 +596,12 @@ CONFIG_PARTITION_TABLE_MD5=y
 # end of Partition Table
 
 #
+# EMWaver firmware
+#
+CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT=y
+# end of EMWaver firmware
+
+#
 # Compiler options
 #
 CONFIG_COMPILER_OPTIMIZATION_DEBUG=y
