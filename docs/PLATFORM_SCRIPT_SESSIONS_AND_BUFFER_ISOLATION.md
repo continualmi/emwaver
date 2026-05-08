@@ -73,13 +73,13 @@ Current first step:
 - Android command response wait cursor/polling now lives on the active `DeviceBufferSession` instead of inline state in `USBService`.
 - Android SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession` instead of singleton fields on `USBService`.
 - Android captures the active device service into `ScriptDeviceConnection` when a local script starts, so script I/O no longer re-resolves whichever service is active later.
+- Android USB/BLE buffering now depends on a `TransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 
 Remaining isolation work:
 
-- replace `USBService`'s process-wide `NativeBuffer` usage with a per-device session store,
 - extend `DeviceConnectionService` / `ScriptDeviceBridge` with target-device routing,
 - keep remaining capture ownership scoped to that target session.
-- split USB, BLE, and future Wi-Fi connection code into transport-specific services that expose the same session contract.
+- split USB, BLE, and future Wi-Fi connection code into transport-specific services that implement the same session contract.
 
 ## iOS direction
 
@@ -124,6 +124,7 @@ Remaining isolation work:
 - [x] Android scopes command response wait state to the active transport buffer session.
 - [x] Android scopes SysEx parser state to the active transport buffer session.
 - [x] Android binds local script runs to the active device service captured at run start.
+- [x] Android has a shared transport device-session contract used by the current USB/BLE service.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS scopes sampler stream state to the active transport buffer session.

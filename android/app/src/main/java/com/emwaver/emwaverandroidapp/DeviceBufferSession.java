@@ -9,7 +9,7 @@ package com.emwaver.emwaverandroidapp;
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 
-final class DeviceBufferSession {
+final class DeviceBufferSession implements TransportDeviceSession {
     private static final int PACKET_SIZE_BYTES = 18;
     private static final int EMW_OP_SAMPLE = 0x60;
     private static final int EMW_SAMPLE_START = 0x00;
@@ -24,7 +24,8 @@ final class DeviceBufferSession {
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
     private boolean inSysex = false;
 
-    synchronized void clearAll() {
+    @Override
+    public synchronized void clearAll() {
         rxBytes = new byte[0];
         rxTsMs = new long[0];
         rxCounter = 0;
@@ -35,22 +36,26 @@ final class DeviceBufferSession {
         inSysex = false;
     }
 
-    synchronized int getBufferLength() {
+    @Override
+    public synchronized int getBufferLength() {
         return rxBytes.length;
     }
 
-    synchronized void loadBuffer(byte[] data) {
+    @Override
+    public synchronized void loadBuffer(byte[] data) {
         rxBytes = data != null ? Arrays.copyOf(data, data.length) : new byte[0];
         rxCounter = 0;
         int packets = rxBytes.length / PACKET_SIZE_BYTES;
         rxTsMs = new long[packets];
     }
 
-    synchronized byte[] getBuffer() {
+    @Override
+    public synchronized byte[] getBuffer() {
         return Arrays.copyOf(rxBytes, rxBytes.length);
     }
 
-    synchronized void storeBulkPkt(byte[] data, long tsMs) {
+    @Override
+    public synchronized void storeBulkPkt(byte[] data, long tsMs) {
         if (data == null || data.length == 0) return;
 
         int prevPackets = rxBytes.length / PACKET_SIZE_BYTES;
@@ -62,7 +67,8 @@ final class DeviceBufferSession {
         }
     }
 
-    synchronized void appendTxBytes(byte[] data, long tsMs) {
+    @Override
+    public synchronized void appendTxBytes(byte[] data, long tsMs) {
         if (data == null || data.length == 0) return;
 
         for (int offset = 0; offset < data.length; offset += PACKET_SIZE_BYTES) {
@@ -74,7 +80,8 @@ final class DeviceBufferSession {
         }
     }
 
-    synchronized void updateSamplerStreamingState(byte[] lane) {
+    @Override
+    public synchronized void updateSamplerStreamingState(byte[] lane) {
         if (lane == null || lane.length < 2) {
             return;
         }
@@ -90,15 +97,18 @@ final class DeviceBufferSession {
         }
     }
 
-    synchronized boolean shouldStoreStreamLane(byte[] streamLane) {
+    @Override
+    public synchronized boolean shouldStoreStreamLane(byte[] streamLane) {
         return !isLaneEmpty(streamLane) || samplerStreamingActive;
     }
 
-    synchronized void resetSamplerStreaming() {
+    @Override
+    public synchronized void resetSamplerStreaming() {
         samplerStreamingActive = false;
     }
 
-    synchronized void feedSysexBytes(byte[] data, int offset, int count, long tsMs) {
+    @Override
+    public synchronized void feedSysexBytes(byte[] data, int offset, int count, long tsMs) {
         if (data == null || count <= 0) {
             return;
         }
@@ -142,11 +152,13 @@ final class DeviceBufferSession {
         }
     }
 
-    synchronized void prepareCommandResponseWait() {
+    @Override
+    public synchronized void prepareCommandResponseWait() {
         rxCounter = rxBytes.length / (long) PACKET_SIZE_BYTES;
     }
 
-    byte[] awaitCommandResponse(int timeoutMs) {
+    @Override
+    public byte[] awaitCommandResponse(int timeoutMs) {
         long startTime = System.currentTimeMillis();
         int safeTimeout = Math.max(1, timeoutMs);
         while (System.currentTimeMillis() - startTime < safeTimeout) {
@@ -167,17 +179,20 @@ final class DeviceBufferSession {
         return null;
     }
 
-    synchronized long getRxPacketCount() {
+    @Override
+    public synchronized long getRxPacketCount() {
         return rxBytes.length / (long) PACKET_SIZE_BYTES;
     }
 
-    synchronized void setRxCounter(long value) {
+    @Override
+    public synchronized void setRxCounter(long value) {
         long packets = rxBytes.length / (long) PACKET_SIZE_BYTES;
         long desired = Math.max(0, value);
         rxCounter = Math.min(desired, packets);
     }
 
-    synchronized Object[] nextRxPacket() {
+    @Override
+    public synchronized Object[] nextRxPacket() {
         byte[] pkt = nextRxPacketDataLocked();
         if (pkt == null) return null;
         long ts = rxCounter > 0 && rxCounter - 1 < rxTsMs.length ? rxTsMs[(int) rxCounter - 1] : 0;
@@ -200,11 +215,13 @@ final class DeviceBufferSession {
         return pkt;
     }
 
-    synchronized Object[] takeRxState() {
+    @Override
+    public synchronized Object[] takeRxState() {
         return new Object[] { Arrays.copyOf(rxBytes, rxBytes.length), Arrays.copyOf(rxTsMs, rxTsMs.length), rxCounter };
     }
 
-    synchronized void restoreRxState(byte[] rxBytesIn, long[] rxTsMsIn, long rxCounterIn) {
+    @Override
+    public synchronized void restoreRxState(byte[] rxBytesIn, long[] rxTsMsIn, long rxCounterIn) {
         rxBytes = rxBytesIn != null ? Arrays.copyOf(rxBytesIn, rxBytesIn.length) : new byte[0];
         rxTsMs = rxTsMsIn != null ? Arrays.copyOf(rxTsMsIn, rxTsMsIn.length) : new long[0];
 
@@ -217,7 +234,8 @@ final class DeviceBufferSession {
         rxCounter = Math.min(desired, (long) packets);
     }
 
-    synchronized Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
+    @Override
+    public synchronized Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
         int totalBits = rxBytes.length * 8;
         if (rxBytes.length == 0 || rangeStart >= rangeEnd || rangeStart >= totalBits || numberBins <= 0) {
             return new Object[] { new float[0], new float[0] };

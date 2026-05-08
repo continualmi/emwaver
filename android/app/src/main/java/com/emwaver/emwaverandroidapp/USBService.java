@@ -100,8 +100,8 @@ public class USBService extends Service implements DeviceConnectionService {
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
     private final Object bufferSessionLock = new Object();
-    private final Map<String, DeviceBufferSession> bufferSessionsByDeviceId = new HashMap<>();
-    private DeviceBufferSession activeBufferSession = new DeviceBufferSession();
+    private final Map<String, TransportDeviceSession> bufferSessionsByDeviceId = new HashMap<>();
+    private TransportDeviceSession activeBufferSession = new DeviceBufferSession();
 
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
@@ -117,7 +117,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile UsbDevice connectedMidiUsbDevice = null;
     private volatile String connectedBleDeviceLabel = null;
 
-    private DeviceBufferSession activeBufferSession() {
+    private TransportDeviceSession activeBufferSession() {
         synchronized (bufferSessionLock) {
             return activeBufferSession;
         }
@@ -126,7 +126,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private void setActiveBufferSession(String deviceId) {
         String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
         synchronized (bufferSessionLock) {
-            DeviceBufferSession session = bufferSessionsByDeviceId.get(key);
+            TransportDeviceSession session = bufferSessionsByDeviceId.get(key);
             if (session == null) {
                 session = new DeviceBufferSession();
                 bufferSessionsByDeviceId.put(key, session);
@@ -749,7 +749,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
         // Swap out sampler RX while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
-        DeviceBufferSession bufferSession = activeBufferSession();
+        TransportDeviceSession bufferSession = activeBufferSession();
         Object[] saved = bufferSession.takeRxState();
         byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
         long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
@@ -817,7 +817,7 @@ public class USBService extends Service implements DeviceConnectionService {
             return null;
         }
 
-        DeviceBufferSession bufferSession = activeBufferSession();
+        TransportDeviceSession bufferSession = activeBufferSession();
         bufferSession.prepareCommandResponseWait();
 
         // This calls write(), which sends on cmd lane.
