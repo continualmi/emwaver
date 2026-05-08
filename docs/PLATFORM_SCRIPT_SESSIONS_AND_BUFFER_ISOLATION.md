@@ -150,6 +150,7 @@ Remaining isolation work:
 - [x] Windows scopes command response wait state to the active transport buffer session.
 - [x] Windows scopes SysEx parser state to the active transport buffer session.
 - [x] Windows binds local script runs to the active transport session id captured at run start.
+- [x] Windows refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
@@ -157,6 +158,7 @@ Remaining isolation work:
 - [x] Android scopes command response wait state to the active transport buffer session.
 - [x] Android scopes SysEx parser state to the active transport buffer session.
 - [x] Android binds local script runs to the active device service captured at run start.
+- [x] Android refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Android has a shared transport device-session contract used by the current USB/BLE service.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
@@ -164,6 +166,7 @@ Remaining isolation work:
 - [x] iOS scopes command response wait state to the active transport buffer session.
 - [x] iOS scopes SysEx parser state to the active transport buffer session.
 - [x] iOS binds local script runs to the active transport session key captured at run start.
+- [x] iOS refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] iOS has a shared transport device-session protocol used by the current USB MIDI/BLE manager.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
