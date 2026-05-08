@@ -7,6 +7,7 @@
 #include "wifi_transport.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -19,6 +20,7 @@
 #include "esp_netif.h"
 #include "esp_random.h"
 #include "esp_wifi.h"
+#include "freertos/task.h"
 #include "mdns.h"
 #include "mbedtls/md.h"
 #include "nvs.h"
@@ -42,6 +44,7 @@
 #define WIFI_FIRMWARE_VERSION "1.0.0"
 #define WIFI_RECONNECT_BASE_MS 1000u
 #define WIFI_RECONNECT_MAX_MS 30000u
+#define WIFI_AUTH_TIMEOUT_MS 8000u
 #define EMW_SYSEX_BYTES 48u
 #define EMW_ENCODED_BYTES 42u
 #define EMW_LANE_SIZE 18u
@@ -59,6 +62,8 @@ static httpd_handle_t s_httpd;
 static int s_active_fd = -1;
 static bool s_authenticated;
 static char s_auth_challenge[33];
+static TickType_t s_auth_deadline_ticks;
+static uint32_t s_auth_generation;
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
@@ -87,6 +92,8 @@ static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
 static bool auth_message_matches(const uint8_t *data, size_t len);
+static bool auth_challenge_expired(void);
+static void auth_timeout_task(void *arg);
 static void generate_auth_challenge(void);
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
@@ -185,6 +192,8 @@ esp_err_t wifi_transport_clear_config(void)
         s_authenticated = false;
         s_station_online = false;
         s_active_fd = -1;
+        s_auth_challenge[0] = '\0';
+        s_auth_generation++;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = false;
@@ -375,6 +384,8 @@ static void start_station(void)
         s_authenticated = false;
         s_station_online = false;
         s_active_fd = -1;
+        s_auth_challenge[0] = '\0';
+        s_auth_generation++;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = true;
@@ -406,6 +417,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_authenticated = false;
         s_station_online = false;
         s_active_fd = -1;
+        s_auth_challenge[0] = '\0';
+        s_auth_generation++;
         stop_server();
         if (s_suppress_next_disconnect_reconnect) {
             s_suppress_next_disconnect_reconnect = false;
@@ -504,6 +517,8 @@ static void close_session(httpd_handle_t hd, int sockfd)
     if (sockfd == s_active_fd) {
         s_active_fd = -1;
         s_authenticated = false;
+        s_auth_challenge[0] = '\0';
+        s_auth_generation++;
     }
     close(sockfd);
 }
@@ -543,6 +558,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         s_active_fd = current_fd;
         s_authenticated = false;
         generate_auth_challenge();
+        (void)xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL);
         char challenge_json[72];
         snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
         httpd_ws_frame_t challenge = {
@@ -583,9 +599,10 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
 
     if (!s_authenticated) {
-        if (auth_message_matches(data, frame.len)) {
+        if (!auth_challenge_expired() && auth_message_matches(data, frame.len)) {
             s_active_fd = current_fd;
             s_authenticated = true;
+            s_auth_challenge[0] = '\0';
             httpd_ws_frame_t reply = {
                 .final = true,
                 .fragmented = false,
@@ -607,6 +624,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             s_active_fd = -1;
             s_authenticated = false;
             s_auth_challenge[0] = '\0';
+            s_auth_generation++;
         }
         return ESP_FAIL;
     }
@@ -653,6 +671,30 @@ static void generate_auth_challenge(void)
         snprintf(&s_auth_challenge[i * 2u], sizeof(s_auth_challenge) - (i * 2u), "%02x", byte);
     }
     s_auth_challenge[32] = '\0';
+    s_auth_deadline_ticks = xTaskGetTickCount() + pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS);
+    s_auth_generation++;
+}
+
+static bool auth_challenge_expired(void)
+{
+    if (s_auth_challenge[0] == '\0') {
+        return true;
+    }
+    return (int32_t)(xTaskGetTickCount() - s_auth_deadline_ticks) >= 0;
+}
+
+static void auth_timeout_task(void *arg)
+{
+    const uint32_t generation = (uint32_t)(uintptr_t)arg;
+    vTaskDelay(pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS));
+    if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
+        const int fd = s_active_fd;
+        s_active_fd = -1;
+        s_auth_challenge[0] = '\0';
+        s_auth_generation++;
+        (void)httpd_sess_trigger_close(s_httpd, fd);
+    }
+    vTaskDelete(NULL);
 }
 
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len)
