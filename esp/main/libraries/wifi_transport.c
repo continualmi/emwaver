@@ -279,6 +279,26 @@ esp_err_t wifi_transport_reset_pairing(const char *secret)
     return ESP_OK;
 }
 
+void wifi_transport_suspend_runtime(void)
+{
+#if EMWAVER_ENABLE_WIFI_TRANSPORT
+    clear_active_session_state();
+    s_station_online = false;
+    s_station_started = false;
+    s_reconnect_attempt = 0;
+    s_reconnect_pending = false;
+    s_suppress_next_disconnect_reconnect = true;
+    s_last_disconnect_reason = 0;
+    s_station_ip[0] = '\0';
+    memset(s_station_ipv4, 0, sizeof(s_station_ipv4));
+    stop_server();
+    if (s_netif_ready) {
+        (void)esp_wifi_disconnect();
+        (void)esp_wifi_stop();
+    }
+#endif
+}
+
 bool wifi_transport_is_provisioned(void)
 {
     return s_has_config;

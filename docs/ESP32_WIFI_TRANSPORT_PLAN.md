@@ -336,7 +336,7 @@ Minimum validation:
 | Wi-Fi drop during script | Runtime reports disconnect and recovers cleanly |
 | USB recovery after bad Wi-Fi config | User can clear/reprovision Wi-Fi |
 | BLE remains available | Nearby direct workflows still work |
-| OTA remains separate | Runtime command port does not become update control by accident |
+| OTA remains separate | Runtime command port does not become update control by accident; current firmware suspends the station-mode WebSocket/mDNS runtime before starting OTA SoftAP |
 
 Hardware validation should include:
 

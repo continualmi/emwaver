@@ -33,6 +33,7 @@
 
 #include "ota_core.h"
 #include "ota_status.h"
+#include "wifi_transport.h"
 
 static const char *TAG = "OTA_WIFI";
 
@@ -208,9 +209,14 @@ esp_err_t ota_wifi_start_softap(void)
         return ESP_OK;
     }
 
+    wifi_transport_suspend_runtime();
+
     if (!g_netif_inited) {
         ESP_ERROR_CHECK(esp_netif_init());
-        ESP_ERROR_CHECK(esp_event_loop_create_default());
+        esp_err_t loop_err = esp_event_loop_create_default();
+        if (loop_err != ESP_OK && loop_err != ESP_ERR_INVALID_STATE) {
+            ESP_ERROR_CHECK(loop_err);
+        }
         g_netif_inited = true;
     }
 
@@ -219,7 +225,10 @@ esp_err_t ota_wifi_start_softap(void)
     }
 
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+    esp_err_t init_err = esp_wifi_init(&cfg);
+    if (init_err != ESP_OK && init_err != ESP_ERR_INVALID_STATE) {
+        ESP_ERROR_CHECK(init_err);
+    }
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
 
