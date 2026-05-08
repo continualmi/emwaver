@@ -53,6 +53,17 @@ public class TransportDeviceSessionRegistryTest {
         assertEquals("ble:test", ble.deviceId());
     }
 
+    @Test
+    public void sessionIdsAreTrimmedAndCaseInsensitive() {
+        TransportDeviceSessionRegistry registry = new TransportDeviceSessionRegistry();
+
+        TransportDeviceSession original = registry.session(" USB:Test ");
+        TransportDeviceSession normalized = registry.session("usb:test");
+
+        assertSame(original, normalized);
+        assertEquals("USB:Test", original.deviceId());
+    }
+
     private static byte[] packet(byte value) {
         byte[] packet = new byte[UsbMidiSysex.LANE_SIZE];
         for (int i = 0; i < packet.length; i++) {

@@ -36,6 +36,15 @@ final class TransportDeviceSessionRegistryTests: XCTestCase {
         XCTAssertFalse(usb === ble)
     }
 
+    func testSessionIdsAreTrimmedAndCaseInsensitive() {
+        let registry = TransportDeviceSessionRegistry()
+
+        let original = registry.session(deviceId: " USB:Test ")
+        let normalized = registry.session(deviceId: "usb:test")
+
+        XCTAssertTrue(original === normalized)
+    }
+
     private func packet(_ value: UInt8) -> Data {
         Data(repeating: value, count: 18)
     }

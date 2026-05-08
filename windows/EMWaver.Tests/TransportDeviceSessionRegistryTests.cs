@@ -48,6 +48,18 @@ public sealed class TransportDeviceSessionRegistryTests
         Assert.Equal("ble:test", ble.DeviceId);
     }
 
+    [Fact]
+    public void SessionIdsAreTrimmedAndCaseInsensitive()
+    {
+        var registry = new TransportDeviceSessionRegistry();
+
+        var original = registry.Session(" USB:Test ");
+        var normalized = registry.Session("usb:test");
+
+        Assert.Same(original, normalized);
+        Assert.Equal("USB:Test", original.DeviceId);
+    }
+
     private static byte[] Packet(byte value)
     {
         var packet = new byte[NativeBufferRust.PacketSizeBytes];
