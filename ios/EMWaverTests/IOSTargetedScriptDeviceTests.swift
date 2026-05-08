@@ -5,7 +5,7 @@ import XCTest
 final class IOSTargetedScriptDeviceTests: XCTestCase {
     func testRoutesScriptIoThroughCapturedDeviceId() {
         let base = FakeTargetedScriptDeviceBase()
-        let device = IOSTargetedScriptDevice(base: base, deviceId: "USB:Board-1")
+        let device = IOSTargetedScriptDevice(base: base, deviceId: " USB:Board-1 ")
         let payload = Data([0x01, 0x02])
 
         device.sendPacket(payload)
@@ -22,6 +22,15 @@ final class IOSTargetedScriptDeviceTests: XCTestCase {
         XCTAssertEqual(base.lastLoadDeviceId, "USB:Board-1")
         XCTAssertEqual(base.lastGetDeviceId, "USB:Board-1")
         XCTAssertEqual(response, Data([0x7F]))
+    }
+
+    func testRoutesBlankCapturedDeviceIdAsActive() {
+        let base = FakeTargetedScriptDeviceBase()
+        let device = IOSTargetedScriptDevice(base: base, deviceId: "   ")
+
+        device.sendPacket(Data([0x01]))
+
+        XCTAssertEqual(base.lastSendPacketDeviceId, "active")
     }
 }
 

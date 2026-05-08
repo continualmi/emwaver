@@ -30,7 +30,7 @@ final class IOSTargetedScriptDevice: @preconcurrency ScriptDevice {
 
     init(base: IOSTargetedScriptDeviceBase, deviceId: String) {
         self.base = base
-        self.deviceId = deviceId
+        self.deviceId = Self.normalizeDeviceId(deviceId)
     }
 
     func getBuffer() -> Data { base?.getBuffer(deviceId: deviceId) ?? Data() }
@@ -39,6 +39,11 @@ final class IOSTargetedScriptDevice: @preconcurrency ScriptDevice {
     func sendPacket(_ data: Data) { base?.sendPacket(data, deviceId: deviceId) }
     func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout, deviceId: deviceId) }
     func transmitBuffer() { base?.transmitBuffer(deviceId: deviceId) }
+
+    private static func normalizeDeviceId(_ value: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "active" : trimmed
+    }
 }
 
 @MainActor
