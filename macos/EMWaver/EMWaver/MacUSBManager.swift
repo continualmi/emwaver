@@ -721,10 +721,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                         let reason = UInt16(response[5]) | (UInt16(response[6]) << 8)
                         let reasonText = Self.wiFiDisconnectReasonText(reason)
                         let ipText = Self.wiFiStatusStationIP(response)
+                        let runtimeText = Self.wiFiStatusRuntimeText(response)
                         if let ipText {
-                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(authText); runtime is \(runtimeText).", isError: false)
                         } else {
-                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText); runtime is \(runtimeText).", isError: false)
                         }
                     } else {
                         self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(authText).", isError: false)
@@ -977,6 +978,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return nil
         }
         return "\(response[8]).\(response[9]).\(response[10]).\(response[11])"
+    }
+
+    static func wiFiStatusRuntimeText(_ response: Data) -> String {
+        guard response.count >= 13 else { return "idle" }
+        return response[12] == 0 ? "idle" : "running"
     }
 
     static func generatedWiFiHostname(randomSuffix: String = UUID().uuidString) -> String {

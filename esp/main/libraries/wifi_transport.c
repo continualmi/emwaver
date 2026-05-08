@@ -25,6 +25,7 @@
 #include "mdns.h"
 #include "mbedtls/md.h"
 #include "nvs.h"
+#include "sampler.h"
 #include "sdkconfig.h"
 #include "usb.h"
 
@@ -404,14 +405,16 @@ static void wifi_status_command(void)
     char status[160];
     const uint16_t reason = s_last_disconnect_reason;
     const char *ip = s_station_ip[0] != '\0' ? s_station_ip : "none";
+    const bool runtime_running = sampler_is_sampling() || sampler_is_transmitting();
     snprintf(
         status,
         sizeof(status),
-        "wifi:%s:%s:%s:%s:host=%s:ip=%s:reason=%u",
+        "wifi:%s:%s:%s:%s:runtime=%s:host=%s:ip=%s:reason=%u",
         s_has_config ? "provisioned" : "unprovisioned",
         s_station_online ? "online" : "offline",
         s_authenticated ? "authenticated" : "idle",
         s_reconnect_pending ? "reconnecting" : "stable",
+        runtime_running ? "running" : "idle",
         s_config.hostname[0] != '\0' ? s_config.hostname : "none",
         ip,
         (unsigned)reason

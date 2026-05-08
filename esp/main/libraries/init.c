@@ -410,6 +410,7 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             const uint16_t reason = wifi_transport_last_disconnect_reason();
             uint8_t station_ip[4] = {0};
             const bool has_station_ip = wifi_transport_station_ipv4(station_ip);
+            const bool runtime_running = sampler_is_sampling() || sampler_is_transmitting();
             uint8_t out[] = {
                 wifi_transport_is_provisioned() ? 1u : 0u,
                 wifi_transport_is_authenticated() ? 1u : 0u,
@@ -422,6 +423,7 @@ static void handle_wifi_config_opcode(const command_t *cmd)
                 station_ip[1],
                 station_ip[2],
                 station_ip[3],
+                runtime_running ? 1u : 0u,
             };
             send_binary_ok(out, sizeof(out));
             return;

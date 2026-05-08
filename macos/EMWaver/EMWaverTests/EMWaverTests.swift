@@ -116,6 +116,12 @@ struct EMWaverTests {
         #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0, 0, 10, 0, 0, 8])) == nil)
     }
 
+    @Test func wifiStatusParsesRuntimeState() {
+        #expect(MacUSBManager.wiFiStatusRuntimeText(Data([0x80, 1, 0, 1, 0, 0, 0, 1, 10, 0, 0, 8])) == "idle")
+        #expect(MacUSBManager.wiFiStatusRuntimeText(Data([0x80, 1, 0, 1, 0, 0, 0, 1, 10, 0, 0, 8, 0])) == "idle")
+        #expect(MacUSBManager.wiFiStatusRuntimeText(Data([0x80, 1, 0, 1, 0, 0, 0, 1, 10, 0, 0, 8, 1])) == "running")
+    }
+
     @Test func wifiBoardMetadataNormalizesEspTargets() {
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")
