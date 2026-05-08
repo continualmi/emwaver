@@ -168,20 +168,31 @@ struct ContentView: View {
                                 set: { id in if let id { remoteControlHost.selectRemoteSession(id) } }
                             )) {
                                 ForEach(remoteControlHost.remoteScriptSessions) { session in
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(session.name)
-                                            .font(.subheadline.weight(.semibold))
-                                            .lineLimit(1)
-                                        if let deviceID = session.deviceID, !deviceID.isEmpty {
-                                            Text(deviceID)
-                                                .font(.caption2.monospaced())
-                                                .foregroundStyle(.secondary)
+                                    HStack(alignment: .top, spacing: 8) {
+                                        VStack(alignment: .leading, spacing: 3) {
+                                            Text(session.name)
+                                                .font(.subheadline.weight(.semibold))
                                                 .lineLimit(1)
-                                        } else {
-                                            Text("Active device")
-                                                .font(.caption2)
-                                                .foregroundStyle(.secondary)
+                                            if let deviceID = session.deviceID, !deviceID.isEmpty {
+                                                Text(deviceID)
+                                                    .font(.caption2.monospaced())
+                                                    .foregroundStyle(.secondary)
+                                                    .lineLimit(1)
+                                            } else {
+                                                Text("Active device")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
                                         }
+                                        Spacer(minLength: 4)
+                                        Button {
+                                            remoteControlHost.stopRemoteSession(session.id)
+                                        } label: {
+                                            Image(systemName: "stop.fill")
+                                        }
+                                        .buttonStyle(.borderless)
+                                        .foregroundStyle(.red)
+                                        .help("Stop this script")
                                     }
                                     .tag(session.id)
                                     .contextMenu {
@@ -222,20 +233,23 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                if remoteControlHost.isRemoteControlled {
+                if remoteControlHost.isRemoteControlled || !remoteControlHost.remoteScriptSessions.isEmpty {
                     Button {
                         showingRemoteOverlay = true
                     } label: {
                         HStack(spacing: 8) {
-                            Label("Sessions", systemImage: "antenna.radiowaves.left.and.right")
-                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
+                            Label("Sessions", systemImage: "square.stack.3d.up")
+                            if !remoteControlHost.remoteScriptSessions.isEmpty {
+                                Text("\(remoteControlHost.remoteScriptSessions.count)")
+                                    .foregroundStyle(.secondary)
+                            } else if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
                                 Text(n)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
                             }
                         }
                     }
-                    .help("Local gateway script sessions are running. Click to view and switch between them.")
+                    .help("Local script sessions are running. Click to view and switch between them.")
                 }
             }
         }
