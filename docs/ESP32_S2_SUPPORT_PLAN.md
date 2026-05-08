@@ -74,8 +74,12 @@ EMWAVER_DEVICE_ID=<DEVICE_ID> \
 EMWAVER_WIFI_SSID=<SSID> \
 EMWAVER_WIFI_PASSWORD=<PASSWORD> \
 EMWAVER_WIFI_SECRET=<SECRET> \
+EMWAVER_ESP32_S3_DEVICE_ID=<S3_DEVICE_ID> \
+EMWAVER_ESP32_S3_MDNS_INSTANCE=<S3_INSTANCE_NAME> \
 scripts/esp32-s2-hardware-validation.sh
 ```
+
+`EMWAVER_ESP32_S3_DEVICE_ID` and `EMWAVER_ESP32_S3_MDNS_INSTANCE` are optional, but should be set when an ESP32-S3 board is attached so the script also checks the physical S3 board identity and mDNS regression.
 
 1. Build and flash the S2 target:
 

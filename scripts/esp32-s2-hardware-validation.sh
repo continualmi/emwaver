@@ -7,13 +7,16 @@ ESP_DIR="$ROOT/esp"
 ESP_DEPENDENCIES_LOCK="$ESP_DIR/dependencies.lock"
 PORT="${EMWAVER_ESP32_S2_PORT:-}"
 DEVICE_ID="${EMWAVER_DEVICE_ID:-}"
+S3_DEVICE_ID="${EMWAVER_ESP32_S3_DEVICE_ID:-}"
 SSID="${EMWAVER_WIFI_SSID:-}"
 PASSWORD="${EMWAVER_WIFI_PASSWORD:-}"
 SECRET="${EMWAVER_WIFI_SECRET:-}"
 HOSTNAME="${EMWAVER_WIFI_HOSTNAME:-emwaver-s2-test}"
 MDNS_INSTANCE="${EMWAVER_MDNS_INSTANCE:-}"
+S3_MDNS_INSTANCE="${EMWAVER_ESP32_S3_MDNS_INSTANCE:-}"
 BOARD_CHECK=""
 WIFI_CHECK=""
+S3_BOARD_CHECK=""
 TEMP_PATHS=()
 
 if [[ -n "${EMWAVER_ESP_BUILD_DIR:-}" ]]; then
@@ -38,7 +41,7 @@ if [[ -f "$ESP_DEPENDENCIES_LOCK" ]]; then
 fi
 
 cleanup() {
-  rm -f "$BOARD_CHECK" "$WIFI_CHECK"
+  rm -f "$BOARD_CHECK" "$WIFI_CHECK" "$S3_BOARD_CHECK"
   if [[ -n "$ESP_DEPENDENCIES_LOCK_BACKUP" && -f "$ESP_DEPENDENCIES_LOCK_BACKUP" ]]; then
     cp "$ESP_DEPENDENCIES_LOCK_BACKUP" "$ESP_DEPENDENCIES_LOCK"
   fi
@@ -125,6 +128,7 @@ fi
 
 BOARD_CHECK="$(mktemp /tmp/emwaver-esp32-s2-board.XXXXXX.emw)"
 WIFI_CHECK="$(mktemp /tmp/emwaver-esp32-s2-wifi.XXXXXX.emw)"
+S3_BOARD_CHECK="$(mktemp /tmp/emwaver-esp32-s3-board.XXXXXX.emw)"
 
 cat >"$BOARD_CHECK" <<'EOF'
 var board = String(device.boardType({ refresh: true, timeout: 2500 }) || '').trim().toLowerCase();
@@ -137,6 +141,28 @@ EOF
 echo
 echo "== Board identity over USB =="
 (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$BOARD_CHECK" --direct --device "$DEVICE_ID")
+
+cat >"$S3_BOARD_CHECK" <<'EOF'
+var board = String(device.boardType({ refresh: true, timeout: 2500 }) || '').trim().toLowerCase();
+if (board !== 'esp32s3') {
+  throw new Error('expected esp32s3 board identity, got ' + board);
+}
+UI.render(UI.text({ text: 'ESP32-S3 board identity OK' }));
+EOF
+
+if [[ -n "$S3_DEVICE_ID" ]]; then
+  echo
+  echo "== ESP32-S3 board identity regression over USB =="
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$S3_BOARD_CHECK" --direct --device "$S3_DEVICE_ID")
+else
+  cat <<'EOF'
+
+== ESP32-S3 board identity regression skipped ==
+Set EMWAVER_ESP32_S3_DEVICE_ID to the ESP32-S3 id shown above to validate the physical S3 regression:
+
+  EMWAVER_ESP32_S3_DEVICE_ID=1 scripts/esp32-s2-hardware-validation.sh
+EOF
+fi
 
 if [[ -n "$SSID" && -n "$SECRET" ]]; then
   ssid_js="$(json_string "$SSID")"
@@ -223,6 +249,21 @@ Set EMWAVER_MDNS_INSTANCE to the instance name shown above to inspect TXT record
   EMWAVER_MDNS_INSTANCE=<name> scripts/esp32-s2-hardware-validation.sh
 
 Expected TXT records: board=esp32s2 and cap=wifi,usb.
+EOF
+  fi
+
+  if [[ -n "$S3_MDNS_INSTANCE" ]]; then
+    echo
+    echo "== ESP32-S3 mDNS TXT regression =="
+    dns-sd -L "$S3_MDNS_INSTANCE" _emwaver._tcp local
+  else
+    cat <<'EOF'
+
+Set EMWAVER_ESP32_S3_MDNS_INSTANCE to the ESP32-S3 instance name to inspect regression TXT records:
+
+  EMWAVER_ESP32_S3_MDNS_INSTANCE=<name> scripts/esp32-s2-hardware-validation.sh
+
+Expected TXT records: board=esp32s3 and cap=wifi,usb,ble.
 EOF
   fi
 else
