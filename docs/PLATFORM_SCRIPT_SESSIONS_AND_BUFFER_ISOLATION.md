@@ -98,6 +98,7 @@ Current first step:
 - Android BLE scan filters/settings and `connectGatt` setup now live in `AndroidBleTransport`, moving more live BLE connection setup out of `USBService`.
 - Android BLE MTU/service discovery, command characteristic lookup, and notification enablement now live in `AndroidBleTransport`, further reducing BLE protocol ownership inside `USBService`.
 - Android BLE live handles now sit behind an `AndroidBleTransport.Connection` object that owns the GATT handle, command characteristic, session id, display name, connected state, write helper, and close behavior.
+- Android BLE pending connection state now sits behind an `AndroidBleTransport.PendingConnection` object that owns the pending GATT handle and display name before service discovery completes.
 - Android USB MIDI device-info matching now lives in `AndroidUsbMidiTransport`, moving another USB connection-selection detail out of `USBService`.
 - Android USB MIDI input/output port opening now lives in `AndroidUsbMidiTransport`, moving another USB setup detail out of `USBService`.
 - Android USB MIDI live handles now sit behind an `AndroidUsbMidiTransport.Connection` object that owns the opened device, ports, session id, display name, send helper, board inference, and close behavior.
@@ -180,6 +181,7 @@ Remaining isolation work:
 - [x] Android has a shared transport device-session contract used by the current USB/BLE service.
 - [x] Android USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE live handles are grouped behind a transport-owned connection object.
+- [x] Android BLE pending connection state is grouped behind a transport-owned pending value.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS scopes sampler stream state to the active transport buffer session.

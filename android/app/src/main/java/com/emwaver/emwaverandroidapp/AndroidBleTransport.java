@@ -35,6 +35,34 @@ final class AndroidBleTransport {
 
     private AndroidBleTransport() {}
 
+    static final class PendingConnection implements AutoCloseable {
+        final BluetoothGatt gatt;
+        final String displayName;
+
+        PendingConnection(BluetoothGatt gatt, @Nullable String displayName) {
+            this.gatt = gatt;
+            String name = displayName != null && !displayName.trim().isEmpty()
+                    ? displayName.trim()
+                    : gatt.getDevice().getAddress();
+            this.displayName = name;
+        }
+
+        boolean owns(BluetoothGatt gatt) {
+            return this.gatt == gatt;
+        }
+
+        @Override
+        public void close() {
+            try {
+                if (gatt != null) {
+                    gatt.disconnect();
+                    gatt.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     static final class Connection implements AutoCloseable {
         final BluetoothGatt gatt;
         final BluetoothGattCharacteristic commandCharacteristic;
@@ -111,6 +139,15 @@ final class AndroidBleTransport {
             BluetoothGattCallback callback
     ) {
         return device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
+    }
+
+    static PendingConnection pendingSession(
+            Context context,
+            BluetoothDevice device,
+            @Nullable String displayName,
+            BluetoothGattCallback callback
+    ) {
+        return new PendingConnection(connect(context, device, callback), displayName);
     }
 
     static Connection connectedSession(

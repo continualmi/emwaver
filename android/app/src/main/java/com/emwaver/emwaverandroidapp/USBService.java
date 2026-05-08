@@ -85,7 +85,7 @@ public class USBService extends Service implements DeviceConnectionService {
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
-    private BluetoothGatt pendingBleGatt;
+    private AndroidBleTransport.PendingConnection pendingBleConnection;
     private volatile AndroidBleTransport.Connection bleConnection;
     private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
@@ -94,7 +94,6 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
-    private volatile String pendingBleDeviceLabel = null;
 
     private TransportDeviceSession activeBufferSession() {
         synchronized (bufferSessionLock) {
@@ -381,7 +380,6 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
-                pendingBleDeviceLabel = null;
                 usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device);
                 if (usbMidiConnection.output != null) {
                     usbMidiConnection.output.connect(rxReceiver);
@@ -477,7 +475,6 @@ public class USBService extends Service implements DeviceConnectionService {
             usbMidiConnection.close();
         }
         usbMidiConnection = null;
-        pendingBleDeviceLabel = null;
         clearActiveDeviceTarget(ActiveTransport.USB);
         connectedBoardType = null;
         deviceFirmwareVersion = null;
@@ -550,16 +547,11 @@ public class USBService extends Service implements DeviceConnectionService {
         if (bleConnection != null) {
             bleConnection.close();
         }
-        if (pendingBleGatt != null) {
-            try {
-                pendingBleGatt.disconnect();
-                pendingBleGatt.close();
-            } catch (Exception ignored) {
-            }
+        if (pendingBleConnection != null) {
+            pendingBleConnection.close();
         }
         bleConnection = null;
-        pendingBleGatt = null;
-        pendingBleDeviceLabel = null;
+        pendingBleConnection = null;
         clearActiveDeviceTarget(ActiveTransport.BLE);
     }
 
@@ -593,10 +585,14 @@ public class USBService extends Service implements DeviceConnectionService {
             stopBleScan();
             synchronized (bleLock) {
                 closeBleLocked();
-                pendingBleDeviceLabel = name != null && !name.trim().isEmpty()
+                String displayName = name != null && !name.trim().isEmpty()
                         ? name.trim()
                         : device.getAddress();
-                pendingBleGatt = AndroidBleTransport.connect(USBService.this, device, bleGattCallback);
+                pendingBleConnection = AndroidBleTransport.pendingSession(
+                        USBService.this,
+                        device,
+                        displayName,
+                        bleGattCallback);
             }
             Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
         }
@@ -611,7 +607,8 @@ public class USBService extends Service implements DeviceConnectionService {
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 synchronized (bleLock) {
                     AndroidBleTransport.Connection connection = bleConnection;
-                    if (pendingBleGatt == gatt || (connection != null && connection.owns(gatt))) {
+                    AndroidBleTransport.PendingConnection pending = pendingBleConnection;
+                    if ((pending != null && pending.owns(gatt)) || (connection != null && connection.owns(gatt))) {
                         closeBleLocked();
                     }
                 }
@@ -634,9 +631,12 @@ public class USBService extends Service implements DeviceConnectionService {
                 return;
             }
             synchronized (bleLock) {
-                bleConnection = AndroidBleTransport.connectedSession(gatt, command, pendingBleDeviceLabel);
-                pendingBleGatt = null;
-                pendingBleDeviceLabel = null;
+                AndroidBleTransport.PendingConnection pending = pendingBleConnection;
+                String displayName = pending != null && pending.owns(gatt)
+                        ? pending.displayName
+                        : null;
+                bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName);
+                pendingBleConnection = null;
                 setActiveDeviceTarget(bleConnection.sessionId, ActiveTransport.BLE);
             }
             AndroidBleTransport.enableNotifications(gatt);
