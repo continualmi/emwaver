@@ -166,7 +166,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 
 ### Phase 1: Foundation
 
-- Add compile-time Wi-Fi transport feature gate. Current firmware progress: `main/Kconfig.projbuild` defines `CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT`, which maps to `EMWAVER_ENABLE_WIFI_TRANSPORT` in the Wi-Fi transport source and defaults on for ESP targets.
+- Add compile-time Wi-Fi transport feature gate. Current firmware progress: `main/Kconfig.projbuild` defines `CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT`, which maps to `EMWAVER_ENABLE_WIFI_TRANSPORT` in the Wi-Fi transport source and defaults on for ESP targets; isolated ESP32-S2 `libmain.a` validation passes with the shared Wi-Fi transport source.
 - Add NVS storage for:
   - Wi-Fi SSID and credential metadata,
   - device hostname,

@@ -67,7 +67,7 @@ idf.py -p /dev/ttyACM0 monitor  # Exit with Ctrl+]
 
 Use `idf.py -p /dev/ttyACM0 flash monitor` to combine flashing and monitoring.
 
-For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`.
+For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`. To validate ESP32-S2 without mutating the repo's tracked ESP32-S3 `sdkconfig`, use an isolated sdkconfig path, for example `idf.py -B /tmp/emwaver-s2-wifi-check -DSDKCONFIG=/tmp/emwaver-s2-wifi-sdkconfig set-target esp32s2 esp-idf/main/libmain.a`.
 
 ## macOS (Intel & Apple Silicon)
 
@@ -105,7 +105,7 @@ idf.py -p /dev/cu.usbmodemXXXX monitor  # Exit with Ctrl+]
 
 `idf.py -p /dev/cu.usbmodemXXXX flash monitor` performs flash and monitor in one command.
 
-For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`.
+For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`. To validate ESP32-S2 without mutating the repo's tracked ESP32-S3 `sdkconfig`, use an isolated sdkconfig path, for example `idf.py -B /tmp/emwaver-s2-wifi-check -DSDKCONFIG=/tmp/emwaver-s2-wifi-sdkconfig set-target esp32s2 esp-idf/main/libmain.a`.
 
 ## Windows (ESP-IDF Tools Installer)
 
