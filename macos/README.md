@@ -79,6 +79,7 @@ Transport behavior:
 - Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
 - Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local timeout are disconnected with a specific authentication-timeout error.
 - Manual Wi-Fi pairing records are rolled back if authentication fails, times out, or disconnects before `auth ok`, so a bad temporary secret does not replace the last good local pairing.
+- Successful Wi-Fi authentication refreshes the local paired-device `lastSeen` timestamp so manual fallback records do not stay stale after real LAN/VPN use.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.
 - Wi-Fi pairing records are stored in local macOS app preferences. They are not account-backed, cloud-synced, or used for hardware ownership/activation.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.

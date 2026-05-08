@@ -387,14 +387,27 @@ final class MacWiFiManager {
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("ok"),
                               let record = self.pendingAuthRecord {
-                        self.authTimeoutWorkItem?.cancel()
-                        self.authTimeoutWorkItem = nil
-                        self.connectedDeviceID = record.id
-                        self.pendingAuthSecret = nil
-                        self.pendingAuthRecord = nil
-                        self.pendingPairingRollback = nil
-                        self.onConnected(record)
-                        self.publishDevices()
+                        self.queue.async {
+                            guard self.socket === socket else { return }
+                            let now = Date()
+                            var connectedRecord = record
+                            connectedRecord.lastSeen = now
+                            if var paired = self.pairedDevicesByID[record.id] {
+                                paired.lastSeen = now
+                                paired.displayName = record.displayName
+                                self.pairedDevicesByID[record.id] = paired
+                                self.savePairedDevices()
+                            }
+                            self.discoveredDevicesByID[record.id] = connectedRecord
+                            self.authTimeoutWorkItem?.cancel()
+                            self.authTimeoutWorkItem = nil
+                            self.connectedDeviceID = record.id
+                            self.pendingAuthSecret = nil
+                            self.pendingAuthRecord = nil
+                            self.pendingPairingRollback = nil
+                            self.onConnected(connectedRecord)
+                            self.publishDevices()
+                        }
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("fail") {
                         self.onError("Wi-Fi pairing secret rejected")
