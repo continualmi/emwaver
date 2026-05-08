@@ -12,10 +12,15 @@ public protocol ScriptDevice: AnyObject {
     func getBuffer() -> Data
     func clearBuffer()
     func loadBuffer(data: Data)
+    func bufferPacketSizeBytes() -> Int
 
     func sendPacket(_ data: Data)
     func sendCommand(_ command: Data, timeout: Int) -> Data?
     func transmitBuffer()
+}
+
+public extension ScriptDevice {
+    func bufferPacketSizeBytes() -> Int { 18 }
 }
 
 @objc public protocol ScriptDeviceJSExport: JSExport {
@@ -45,6 +50,10 @@ public final class ScriptDeviceWrapper: NSObject, ScriptDeviceJSExport {
 
     public func loadBuffer(data: Data) {
         device?.loadBuffer(data: data)
+    }
+
+    public func bufferPacketSizeBytes() -> Int {
+        max(1, device?.bufferPacketSizeBytes() ?? 18)
     }
 
     public func sendPacket(_ data: Data) {

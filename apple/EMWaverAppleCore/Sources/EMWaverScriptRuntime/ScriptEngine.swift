@@ -341,7 +341,8 @@ public final class ScriptEngine {
             guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
             let len = wrapper.getBuffer().count
             if len <= 0 { return 0 }
-            return Int((len + 63) / 64)
+            let packetSize = wrapper.bufferPacketSizeBytes()
+            return Int((len + packetSize - 1) / packetSize)
         }
         context.setObject(samplerPacketCountBlock, forKeyedSubscript: "_scriptSamplerBufferGetPacketCount" as NSString)
 
@@ -372,13 +373,14 @@ public final class ScriptEngine {
                 return JSValue(object: ["data": [], "nextPacketIndex": 0, "availablePackets": 0], in: context)
             }
             let data = wrapper.getBuffer()
-            let totalPackets = Int((data.count + 63) / 64)
+            let packetSize = wrapper.bufferPacketSizeBytes()
+            let totalPackets = Int((data.count + packetSize - 1) / packetSize)
             let startPacket = max(0, packetIndex)
             let availablePackets = max(0, totalPackets - startPacket)
             let toRead = max(0, min(availablePackets, max(1, maxPackets)))
 
-            let startByte = startPacket * 64
-            let endByte = min(data.count, startByte + toRead * 64)
+            let startByte = startPacket * packetSize
+            let endByte = min(data.count, startByte + toRead * packetSize)
             let slice: [UInt8] = startByte < endByte ? Array(data[startByte..<endByte]) : []
 
             return JSValue(

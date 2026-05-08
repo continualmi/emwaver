@@ -80,6 +80,7 @@ iOS already uses the shared SwiftUI scripts surface, so list-level session displ
 Current first step:
 
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
+- the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
 
 Remaining isolation work:
 
