@@ -33,6 +33,9 @@ struct DeviceConnectionSheet: View {
         if device.isConnected, let version = device.deviceEmwaverVersion, !version.isEmpty {
             items.append(("Firmware", "EMWaver \(version)"))
         }
+        if device.isConnected, let uid = device.connectedHardwareUID, !uid.isEmpty {
+            items.append(("Hardware UID", String(uid.suffix(12))))
+        }
         if device.isConnected, let transport = device.connectedTransportKind, !transport.isEmpty {
             items.append(("Transport", transport))
         }

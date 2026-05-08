@@ -64,6 +64,7 @@ Transport behavior:
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the existing single-script runtime. Concurrent per-device script sessions remain a follow-up.
+- The app queries `EMW_OP_HARDWARE_UID_GET` after connection and uses that local hardware UID to merge the same physical device across transports when known. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Local-first gateway behavior:
@@ -102,7 +103,7 @@ Tooling helper path:
 
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
 
-The macOS app bundles the canonical committed firmware image at `firmware/emwaver.bin`. Keep that file updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes.
+The macOS app bundles the canonical committed firmware image at `firmware/emwaver.bin`. Keep that file updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes. Firmware source changes must be built before completion so the relevant `.bin` artifacts are ready for the macOS app flashing flow; for ESP32-S3 changes, run the ESP-IDF build so `esp/build/emwaveresp.bin` and companion bootloader/partition/OTA images are current.
 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,

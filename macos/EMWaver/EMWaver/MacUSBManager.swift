@@ -46,6 +46,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
+        static let hardwareUID: UInt8 = 0x08
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
@@ -58,6 +59,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var discoveredDevices: [LocalDeviceDescriptor] = []
     @Published var lastErrorText: String? = nil
     @Published var deviceEmwaverVersion: String? = nil
+    @Published var connectedHardwareUID: String? = nil
     @Published var autoConnectEnabled: Bool = true {
         didSet {
             if autoConnectEnabled {
@@ -99,6 +101,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var activeTransport: ActiveTransport = .none
 
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
+    private var hardwareUIDByDeviceID: [String: String] = [:]
     private var bleDiscoveredPeripheralsByID: [UUID: CBPeripheral] = [:]
 
     private var sysexAccumulator = UsbMidiSysexAccumulator()
@@ -213,6 +216,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     func connectDevice(id: String) {
         midiQueue.async {
             self.ensureClient()
+            if id.hasPrefix("uid:"), let transportID = self.hardwareUIDByDeviceID.first(where: { $0.value == String(id.dropFirst("uid:".count)) })?.key {
+                self.connectDeviceInternal(transportID: transportID)
+                return
+            }
+            self.connectDeviceInternal(transportID: id)
+        }
+    }
+
+    private func connectDeviceInternal(transportID id: String) {
             if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
                 self.connectInternal(portName: displayName)
                 return
@@ -224,7 +236,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
             self.setError("No matching device: \(id)")
-        }
     }
 
     func disconnect() {
@@ -453,12 +464,33 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func publishDiscoveredDevices(ports: [String]? = nil) {
         let portNames = ports ?? Array(portCandidatesByDisplayName.keys).sorted()
         var devices: [LocalDeviceDescriptor] = []
+        var indexByHardwareUID: [String: Int] = [:]
+
+        func appendOrMerge(_ descriptor: LocalDeviceDescriptor, hardwareUID: String?) {
+            guard let hardwareUID, !hardwareUID.isEmpty else {
+                devices.append(descriptor)
+                return
+            }
+            if let idx = indexByHardwareUID[hardwareUID] {
+                var existing = devices[idx]
+                existing.displayName = mergeDisplayNames(existing.displayName, descriptor.displayName)
+                existing.connectionState = strongestConnectionState(existing.connectionState, descriptor.connectionState)
+                existing.isActive = existing.isActive || descriptor.isActive
+                if existing.transport != descriptor.transport {
+                    existing.transport = .usbMidi
+                }
+                devices[idx] = existing
+            } else {
+                indexByHardwareUID[hardwareUID] = devices.count
+                devices.append(descriptor)
+            }
+        }
 
         for port in portNames.sorted() {
             let id = "midi:\(port)"
             let isActive = activeTransport == .usbMidi && connectedPortName == port && isTransportConnectedInternal()
-            devices.append(LocalDeviceDescriptor(
-                id: id,
+            appendOrMerge(LocalDeviceDescriptor(
+                id: hardwareUIDByDeviceID[id].map { "uid:\($0)" } ?? id,
                 displayName: port,
                 transport: .usbMidi,
                 boardType: inferBoardType(portName: port),
@@ -466,16 +498,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 connectionState: isActive ? .connected : .discovered,
                 lastErrorText: nil,
                 isActive: isActive
-            ))
+            ), hardwareUID: hardwareUIDByDeviceID[id])
         }
 
         for (uuid, peripheral) in bleDiscoveredPeripheralsByID.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            let id = "ble:\(uuid.uuidString)"
             let name = bleDiscoveredNamesByID[uuid] ?? peripheral.name ?? "EMWaver BLE"
             let isActive = activeTransport == .ble && blePeripheral?.identifier == uuid && isTransportConnectedInternal()
             let isConnected = peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
             let isConnecting = peripheral.state == .connecting
-            devices.append(LocalDeviceDescriptor(
-                id: "ble:\(uuid.uuidString)",
+            appendOrMerge(LocalDeviceDescriptor(
+                id: hardwareUIDByDeviceID[id].map { "uid:\($0)" } ?? id,
                 displayName: name,
                 transport: .ble,
                 boardType: "esp32s3",
@@ -483,12 +516,25 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: nil,
                 isActive: isActive
-            ))
+            ), hardwareUID: hardwareUIDByDeviceID[id])
         }
 
         DispatchQueue.main.async {
             self.discoveredDevices = devices
         }
+    }
+
+    private func mergeDisplayNames(_ a: String, _ b: String) -> String {
+        if a == b { return a }
+        if a.contains(b) { return a }
+        if b.contains(a) { return b }
+        return "\(a) / \(b)"
+    }
+
+    private func strongestConnectionState(_ a: LocalDeviceDescriptor.ConnectionState, _ b: LocalDeviceDescriptor.ConnectionState) -> LocalDeviceDescriptor.ConnectionState {
+        if a == .connected || b == .connected { return .connected }
+        if a == .connecting || b == .connecting { return .connecting }
+        return .discovered
     }
 
     private func displayNameFromDeviceID(_ id: String) -> String? {
@@ -562,13 +608,19 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 Thread.sleep(forTimeInterval: 0.25)
                 v = self.queryDeviceVersion(timeoutMs: 1500)
             }
-
+            let uid = self.queryHardwareUID(timeoutMs: 1500)
             let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
+            let deviceID = "midi:\(displayName ?? candidate.name)"
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
+                self.connectedHardwareUID = uid
                 self.connectedBoardType = boardType
                 self.lastDetectedBoardType = boardType
+            }
+            self.midiQueue.async {
+                if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
+                self.publishDiscoveredDevices()
             }
         }
     }
@@ -595,10 +647,28 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.isConnected = false
             self.connectedPortName = nil
             self.deviceEmwaverVersion = nil
+            self.connectedHardwareUID = nil
             self.connectedBoardType = nil
             self.connectedTransportKind = nil
         }
         publishDiscoveredDevices()
+    }
+
+    private func queryHardwareUID(timeoutMs: Int) -> String? {
+        let resp = sendCommandInternal(
+            Data([EmwOpcode.hardwareUID]),
+            timeout: timeoutMs,
+            responsePredicate: { lane64 in
+                guard lane64.count >= 7 else { return false }
+                guard lane64[0] == 0x80 else { return false }
+                return lane64.dropFirst(1).contains(where: { $0 != 0 })
+            }
+        )
+        guard let resp, resp.count >= 7, resp[0] == 0x80 else { return nil }
+        let payload = resp.dropFirst(1)
+        let significantLength = payload.lastIndex(where: { $0 != 0 }).map { payload.distance(from: payload.startIndex, to: $0) + 1 } ?? 0
+        guard significantLength > 0 else { return nil }
+        return payload.prefix(significantLength).map { String(format: "%02x", $0) }.joined()
     }
 
     private func queryDeviceVersion(timeoutMs: Int) -> String? {
@@ -1078,6 +1148,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.isConnected = false
                 self.connectedPortName = nil
                 self.deviceEmwaverVersion = nil
+                self.connectedHardwareUID = nil
                 self.connectedBoardType = nil
                 self.connectedTransportKind = nil
             }
@@ -1123,14 +1194,20 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         if bleCommandCharacteristicsByID[peripheral.identifier] != nil {
             DispatchQueue.global(qos: .userInitiated).async {
                 let version = self.queryDeviceVersion(timeoutMs: 2000)
+                let uid = self.queryHardwareUID(timeoutMs: 2000)
+                let deviceID = "ble:\(peripheral.identifier.uuidString)"
                 DispatchQueue.main.async {
                     self.isConnected = true
                     self.deviceEmwaverVersion = version
+                    self.connectedHardwareUID = uid
                     self.connectedBoardType = "esp32s3"
                     self.lastDetectedBoardType = "esp32s3"
                     self.connectedTransportKind = "BLE"
                 }
-                self.publishDiscoveredDevices()
+                self.midiQueue.async {
+                    if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
+                    self.publishDiscoveredDevices()
+                }
             }
         }
     }
