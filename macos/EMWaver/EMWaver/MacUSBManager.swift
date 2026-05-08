@@ -402,6 +402,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    private func activeTransportAllowsWiFiSetup() -> Bool {
+        switch activeTransport {
+        case .usbMidi, .ble:
+            return true
+        case .none, .wifi:
+            return false
+        }
+    }
+
     // MARK: - ScriptDevice (buffer)
 
     func getBuffer() -> Data {
@@ -493,9 +502,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let canProvision = self.midiQueue.sync {
-                self.activeTransport == .usbMidi || self.activeTransport == .ble
-            }
+            let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
                 self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before provisioning Wi-Fi.", isError: true)
                 return
@@ -567,9 +574,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let canProvision = self.midiQueue.sync {
-                self.activeTransport == .usbMidi || self.activeTransport == .ble
-            }
+            let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
                 self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before clearing Wi-Fi setup.", isError: true)
                 return
@@ -617,9 +622,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let canProvision = self.midiQueue.sync {
-                self.activeTransport == .usbMidi || self.activeTransport == .ble
-            }
+            let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
                 self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before resetting Wi-Fi pairing.", isError: true)
                 return
@@ -672,9 +675,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         DispatchQueue.global(qos: .userInitiated).async {
-            let canQuery = self.midiQueue.sync {
-                self.activeTransport == .usbMidi || self.activeTransport == .ble
-            }
+            let canQuery = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canQuery else {
                 self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before checking Wi-Fi status.", isError: true)
                 return
