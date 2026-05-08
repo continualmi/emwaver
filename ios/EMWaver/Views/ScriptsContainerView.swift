@@ -41,7 +41,7 @@ final class IOSTargetedScriptDevice: @preconcurrency ScriptDevice {
 }
 
 @MainActor
-private final class IOSScriptSessionManager: ObservableObject {
+final class IOSScriptSessionManager: ObservableObject {
     @Published private(set) var sessionStatuses: [ScriptsRootView.ScriptSessionStatus] = []
 
     private var selectedSessionId: String?
