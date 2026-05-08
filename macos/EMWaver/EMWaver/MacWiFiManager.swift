@@ -325,6 +325,7 @@ final class MacWiFiManager {
         if waitResult == .timedOut {
             queue.async {
                 self.pendingResponses.removeValue(forKey: sequence)
+                self.onError("Wi-Fi command timed out")
             }
             return nil
         }
