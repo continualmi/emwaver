@@ -59,8 +59,8 @@ final class DeviceBufferSessionTests: XCTestCase {
 
         XCTAssertEqual(usb.getTxPacketCount(), 1)
         XCTAssertEqual(ble.getTxPacketCount(), 1)
-        XCTAssertEqual(usbTx.bytes, usbPacket)
-        XCTAssertEqual(bleTx.bytes, blePacket)
+        XCTAssertEqual(usbTx.data, Array(usbPacket))
+        XCTAssertEqual(bleTx.data, Array(blePacket))
     }
 
     private func packet(_ value: UInt8) -> Data {

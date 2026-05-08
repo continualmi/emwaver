@@ -105,9 +105,10 @@ final class USBManager: NSObject, ObservableObject {
     private let midiQueue = DispatchQueue(label: "com.emwaver.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
     private let bufferQueueKey = DispatchSpecificKey<Void>()
-    private var activeBufferSession: TransportDeviceSession = DeviceBufferSession()
-    private var bufferSessionsByDeviceId: [String: TransportDeviceSession] = [:]
-    private var activeBufferSessionKey = "active"
+    private var bufferSessions = TransportDeviceSessionRegistry()
+    private var activeBufferSession: TransportDeviceSession {
+        bufferSessions.active
+    }
 
     private var client: MIDIClientRef = 0
     private var inPort: MIDIPortRef = 0
@@ -152,26 +153,13 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func setActiveBufferSession(deviceId: String, resetSession: Bool) {
-        let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
         withBufferQueueSync {
-            let sessionKey = key.isEmpty ? "active" : key
-            let session = bufferSessionsByDeviceId[sessionKey] ?? DeviceBufferSession()
-            bufferSessionsByDeviceId[sessionKey] = session
-            activeBufferSession = session
-            activeBufferSessionKey = sessionKey
-            if resetSession {
-                activeBufferSession.clearAll()
-            }
+            bufferSessions.select(deviceId: deviceId, resetSession: resetSession)
         }
     }
 
     func currentScriptDeviceId() -> String {
         activeDeviceTarget.deviceId
-    }
-
-    private func normalizedDeviceSessionKey(_ deviceId: String) -> String {
-        let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        return key.isEmpty ? "active" : key
     }
 
     private func isActiveDeviceSession(deviceId: String) -> Bool {
@@ -188,13 +176,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func bufferSession(deviceId: String) -> TransportDeviceSession {
-        let sessionKey = normalizedDeviceSessionKey(deviceId)
-        if let session = bufferSessionsByDeviceId[sessionKey] {
-            return session
-        }
-        let session = DeviceBufferSession()
-        bufferSessionsByDeviceId[sessionKey] = session
-        return session
+        bufferSessions.session(deviceId: deviceId)
     }
 
     private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) {
