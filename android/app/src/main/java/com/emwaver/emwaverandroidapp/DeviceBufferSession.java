@@ -6,6 +6,7 @@
 
 package com.emwaver.emwaverandroidapp;
 
+import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
 
 final class DeviceBufferSession {
@@ -20,6 +21,8 @@ final class DeviceBufferSession {
     private byte[] txBytes = new byte[0];
     private long[] txTsMs = new long[0];
     private boolean samplerStreamingActive = false;
+    private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
+    private boolean inSysex = false;
 
     synchronized void clearAll() {
         rxBytes = new byte[0];
@@ -28,6 +31,8 @@ final class DeviceBufferSession {
         txBytes = new byte[0];
         txTsMs = new long[0];
         samplerStreamingActive = false;
+        sysexBuf.reset();
+        inSysex = false;
     }
 
     synchronized int getBufferLength() {
@@ -91,6 +96,50 @@ final class DeviceBufferSession {
 
     synchronized void resetSamplerStreaming() {
         samplerStreamingActive = false;
+    }
+
+    synchronized void feedSysexBytes(byte[] data, int offset, int count, long tsMs) {
+        if (data == null || count <= 0) {
+            return;
+        }
+
+        int end = Math.min(data.length, offset + count);
+        for (int i = Math.max(0, offset); i < end; i++) {
+            byte b = data[i];
+            if (b == (byte) 0xF0) {
+                sysexBuf.reset();
+                inSysex = true;
+            }
+            if (!inSysex) {
+                continue;
+            }
+            sysexBuf.write(b);
+            if (sysexBuf.size() > 128) {
+                sysexBuf.reset();
+                inSysex = false;
+                continue;
+            }
+            if (b == (byte) 0xF7) {
+                inSysex = false;
+                byte[] sysex = sysexBuf.toByteArray();
+                sysexBuf.reset();
+
+                byte[] frame = UsbMidiSysex.decodeSysexToFrame(sysex);
+                if (frame == null || frame.length != UsbMidiSysex.FRAME_SIZE) {
+                    continue;
+                }
+
+                byte[] cmdLane = Arrays.copyOfRange(frame, 0, UsbMidiSysex.LANE_SIZE);
+                byte[] streamLane = Arrays.copyOfRange(frame, UsbMidiSysex.LANE_SIZE, UsbMidiSysex.FRAME_SIZE);
+
+                if (!isLaneEmpty(cmdLane)) {
+                    storeBulkPkt(cmdLane, tsMs);
+                }
+                if (shouldStoreStreamLane(streamLane)) {
+                    storeBulkPkt(streamLane, tsMs);
+                }
+            }
+        }
     }
 
     synchronized void prepareCommandResponseWait() {
