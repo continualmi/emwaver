@@ -69,6 +69,7 @@ Current first step:
 - Windows USB MIDI SysEx message sending now lives in `WindowsUsbMidiTransport`, and BLE chunked GATT writes now live in `WindowsBleTransport`, reducing transport protocol code inside `WindowsDeviceManager`.
 - Windows BLE watcher creation, device opening, service/characteristic lookup, and notification descriptor setup now live in `WindowsBleTransport`, further reducing BLE protocol ownership inside `WindowsDeviceManager`.
 - Windows BLE scan watcher state now sits behind a `WindowsBleTransport.ScanSession` object that owns the advertisement watcher subscription and shutdown behavior.
+- Windows BLE composite shutdown now routes through `WindowsBleTransport.CloseHandles(...)`, so `WindowsDeviceManager` clears active app state while the BLE transport owns scan/connection disposal.
 - Windows command TX logging now follows the command's target transport session instead of always appending to the mutable active buffer session.
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows USB MIDI live handles now sit behind a `WindowsUsbMidiTransport.Connection` object that owns the opened port pair, session id, display name, send helper, and close behavior.

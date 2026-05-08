@@ -632,24 +632,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void StopBleScan()
     {
-        var scanSession = _bleScanSession;
-        if (scanSession == null)
-        {
-            return;
-        }
-
-        try
-        {
-            scanSession.Dispose();
-        }
-        catch
-        {
-            // Ignore watcher shutdown errors.
-        }
-        finally
-        {
-            _bleScanSession = null;
-        }
+        WindowsBleTransport.CloseHandles(_bleScanSession);
+        _bleScanSession = null;
     }
 
     private void OnBleAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
@@ -749,11 +733,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void CloseBleDevice()
     {
-        if (_bleConnection != null)
-        {
-            _bleConnection.Dispose();
-            _bleConnection = null;
-        }
+        WindowsBleTransport.CloseHandles(_bleConnection);
+        _bleConnection = null;
         _bleConnecting = false;
     }
 

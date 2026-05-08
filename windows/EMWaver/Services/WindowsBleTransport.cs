@@ -117,6 +117,26 @@ internal static class WindowsBleTransport
         return new ScanSession(receivedHandler);
     }
 
+    internal static void CloseHandles(params IDisposable?[] handles)
+    {
+        foreach (var handle in handles)
+        {
+            if (handle == null)
+            {
+                continue;
+            }
+
+            try
+            {
+                handle.Dispose();
+            }
+            catch
+            {
+                // Ignore transport shutdown errors.
+            }
+        }
+    }
+
     internal static string SessionId(ulong bluetoothAddress) => $"ble:{bluetoothAddress:X}";
 
     internal static BluetoothLEAdvertisementWatcher CreateWatcher(
