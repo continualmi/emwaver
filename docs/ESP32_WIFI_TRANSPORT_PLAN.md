@@ -359,7 +359,7 @@ Resolved v1 decisions:
 2. Add ESP32 station-mode connection manager behind a feature gate.
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add authenticated Wi-Fi server carrying EMWaver frames.
-5. Add Rust daemon Wi-Fi transport adapter.
+5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI flag wiring is still pending.
 6. Add `emwaver devices` and `emwaver run --direct --wifi`.
 7. Add gateway device selection/manual IP path.
 8. Add native app discovery/manual connect surfaces.
