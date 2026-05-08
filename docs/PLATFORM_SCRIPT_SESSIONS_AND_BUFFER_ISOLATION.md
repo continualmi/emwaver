@@ -60,7 +60,7 @@ Remaining isolation work:
 
 ## iOS direction
 
-iOS already uses the shared SwiftUI scripts surface, so list-level session display can use the same `ScriptsRootView.ScriptSessionStatus` hook as macOS.
+iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. Because iOS still has one singleton transport buffer, the current native path keeps one active visible local session and replaces that runtime without a stop-and-run prompt. Multi-device concurrency stays gated on target-scoped buffer state.
 
 Remaining isolation work:
 
@@ -78,6 +78,8 @@ Remaining isolation work:
 - [x] Windows has a row-level stop control for the active run.
 - [x] Android shows active run status in the script list.
 - [x] Android has a row-level stop control for the active run.
+- [x] iOS shows active run status in the shared scripts list.
+- [x] iOS has a row-level stop control for the active run through the shared scripts row.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

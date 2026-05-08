@@ -10,10 +10,95 @@ import EMWaverScriptRuntime
 import EMWaverScriptSwiftUI
 import EMWaverScriptModel
 
+@MainActor
+private final class IOSTargetedScriptDevice: ScriptDevice {
+    private weak var base: USBManager?
+
+    init(base: USBManager) {
+        self.base = base
+    }
+
+    func getBuffer() -> Data { base?.getBuffer() ?? Data() }
+    func clearBuffer() { base?.clearBuffer() }
+    func loadBuffer(data: Data) { base?.loadBuffer(data: data) }
+    func sendPacket(_ data: Data) { base?.sendPacket(data) }
+    func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout) }
+    func transmitBuffer() { base?.transmitBuffer() }
+}
+
+@MainActor
+private final class IOSScriptSessionManager: ObservableObject {
+    @Published private(set) var sessionStatuses: [ScriptsRootView.ScriptSessionStatus] = []
+
+    private var activeManager: ScriptPreviewManager?
+    private var activeScriptId: String?
+    private var activeScriptName: String?
+    private var activeScriptInstanceId: String?
+    private var activeDeviceLabel: String = "active device"
+
+    var activePreviewManager: ScriptPreviewManager? {
+        activeManager
+    }
+
+    func run(_ request: ScriptsRootView.ScriptRunRequest, device: USBManager, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
+        activeManager?.exitPreview()
+
+        let manager = ScriptPreviewManager()
+        manager.attach(device: IOSTargetedScriptDevice(base: device))
+        manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
+
+        let instanceId = manager.activeScriptInstanceId ?? UUID().uuidString
+        activeManager = manager
+        activeScriptId = request.scriptId
+        activeScriptName = request.name
+        activeScriptInstanceId = instanceId
+        activeDeviceLabel = deviceLabel.isEmpty ? "active device" : deviceLabel
+        refreshStatuses()
+
+        return ScriptsRootView.ScriptRunResult(scriptInstanceId: instanceId, name: request.name, running: true)
+    }
+
+    func selectSession(_ id: String) {
+        guard id == activeScriptInstanceId else { return }
+        refreshStatuses()
+    }
+
+    func stopSession(_ id: String) {
+        guard id == activeScriptInstanceId else { return }
+        stopActiveSession()
+    }
+
+    func stopActiveSession() {
+        activeManager?.exitPreview()
+        activeManager = nil
+        activeScriptId = nil
+        activeScriptName = nil
+        activeScriptInstanceId = nil
+        refreshStatuses()
+    }
+
+    private func refreshStatuses() {
+        guard let id = activeScriptInstanceId, let scriptId = activeScriptId else {
+            sessionStatuses = []
+            return
+        }
+
+        sessionStatuses = [
+            ScriptsRootView.ScriptSessionStatus(
+                id: id,
+                scriptId: scriptId,
+                deviceLabel: activeDeviceLabel,
+                stateText: activeManager?.activeScriptName == nil ? "stopped" : "running"
+            )
+        ]
+    }
+}
+
 struct ScriptsContainerView: View {
     @EnvironmentObject var bleManager: USBManager
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
+    @StateObject private var scriptSessions = IOSScriptSessionManager()
 
     var body: some View {
         NavigationStack {
@@ -29,6 +114,26 @@ struct ScriptsContainerView: View {
                 agentEnabled: auth.isSignedIn,
                 onRequestAgentUpgrade: {
                     auth.isSignInSheetPresented = true
+                },
+                onRunScript: { request in
+                    let result = scriptSessions.run(request, device: bleManager, deviceLabel: selectedDeviceLabel)
+                    hostSessions.setScriptStatus(running: result?.running == true, activeScriptName: result?.name)
+                    return result
+                },
+                activePreviewManagerProvider: {
+                    scriptSessions.activePreviewManager
+                },
+                onStopActiveScript: {
+                    scriptSessions.stopActiveSession()
+                    hostSessions.setScriptStatus(running: false, activeScriptName: nil)
+                },
+                externalScriptSessions: scriptSessions.sessionStatuses,
+                onSelectExternalScriptSession: { id in
+                    scriptSessions.selectSession(id)
+                },
+                onStopExternalScriptSession: { id in
+                    scriptSessions.stopSession(id)
+                    hostSessions.setScriptStatus(running: false, activeScriptName: nil)
                 }
             )
             .toolbar {
@@ -113,5 +218,12 @@ struct ScriptsContainerView: View {
         if bleManager.isScanning { return .orange }
         if bleManager.isConnected { return .green }
         return .red
+    }
+
+    private var selectedDeviceLabel: String {
+        if let port = bleManager.connectedPortName?.trimmingCharacters(in: .whitespacesAndNewlines), !port.isEmpty {
+            return port
+        }
+        return bleManager.isConnected ? "Connected device" : "active device"
     }
 }
