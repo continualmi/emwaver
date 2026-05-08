@@ -209,7 +209,7 @@ EMWAVER_VALIDATE_SYSTEMD=1 scripts/rebirth-linux-validation.sh
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the reusable ESP32 Wi-Fi path: it performs best-effort `_emwaver._tcp` mDNS discovery for device listing, runs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, and keeps received stream lanes in the local buffer.
+`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the reusable ESP32 Wi-Fi path: it performs best-effort `_emwaver._tcp` mDNS discovery for device listing, runs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, keeps received stream lanes in the local buffer, and filters sequence-`0` `BS` pacing frames out of script capture data.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 

@@ -231,25 +231,36 @@ impl WiFiDevice {
     fn handle_binary_frame(&self, data: &[u8]) -> Result<()> {
         let (sequence, sysex) = unwrap_envelope(data).context("invalid Wi-Fi envelope")?;
         let sf = decode_sysex_to_superframe(sysex)?;
-        let cmd_lane = &sf[0..LANE_SIZE];
-        let stream_lane = &sf[LANE_SIZE..LANE_SIZE * 2];
-
-        let cmd_empty = cmd_lane.iter().all(|&b| b == 0);
-        let stream_empty = stream_lane.iter().all(|&b| b == 0);
-
         let mut st = self.state.lock().unwrap();
-        if !cmd_empty {
-            if let Some(pending) = st.pending.get_mut(&sequence) {
-                pending.response_data = Some(cmd_lane.to_vec());
-            } else {
-                st.capture_buffer.extend_from_slice(cmd_lane);
-            }
-        }
-        if !stream_empty {
-            st.capture_buffer.extend_from_slice(stream_lane);
-        }
+        apply_received_superframe(&mut st, sequence, &sf);
         Ok(())
     }
+}
+
+fn apply_received_superframe(st: &mut WiFiState, sequence: u16, sf: &[u8; SUPERFRAME_SIZE]) {
+    let cmd_lane = &sf[0..LANE_SIZE];
+    let stream_lane = &sf[LANE_SIZE..LANE_SIZE * 2];
+
+    let cmd_empty = cmd_lane.iter().all(|&b| b == 0);
+    let stream_empty = stream_lane.iter().all(|&b| b == 0);
+
+    if !cmd_empty {
+        if let Some(pending) = st.pending.get_mut(&sequence) {
+            pending.response_data = Some(cmd_lane.to_vec());
+        } else {
+            st.capture_buffer.extend_from_slice(cmd_lane);
+        }
+    }
+    if !stream_empty && !is_sequence_zero_buffer_status(sequence, stream_lane) {
+        st.capture_buffer.extend_from_slice(stream_lane);
+    }
+}
+
+fn is_sequence_zero_buffer_status(sequence: u16, stream_lane: &[u8]) -> bool {
+    sequence == 0
+        && stream_lane.len() == LANE_SIZE
+        && stream_lane.starts_with(b"BS")
+        && stream_lane[4..].iter().all(|&byte| byte == 0)
 }
 
 fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Duration>) {
@@ -600,6 +611,52 @@ mod tests {
 
         assert_eq!(sequence, 0x1234);
         assert_eq!(decoded, payload);
+    }
+
+    #[test]
+    fn wifi_superframe_routes_matching_command_response_to_pending_request() {
+        let mut state = WiFiState::default();
+        state.pending.insert(7, PendingResponse::default());
+        let response = b"OK";
+        let sf = make_superframe(Some(response), Some(b"sample"));
+
+        apply_received_superframe(&mut state, 7, &sf);
+
+        assert_eq!(
+            state.pending.get(&7).and_then(|p| p.response_data.as_deref()),
+            Some(&sf[0..LANE_SIZE])
+        );
+        assert_eq!(&state.capture_buffer[..6], b"sample");
+    }
+
+    #[test]
+    fn wifi_superframe_keeps_uncorrelated_stream_data_in_capture_buffer() {
+        let mut state = WiFiState::default();
+        let sf = make_superframe(None, Some(b"sample"));
+
+        apply_received_superframe(&mut state, 0, &sf);
+
+        assert_eq!(&state.capture_buffer[..6], b"sample");
+    }
+
+    #[test]
+    fn wifi_superframe_ignores_sequence_zero_buffer_status_frame() {
+        let mut state = WiFiState::default();
+        let sf = make_superframe(None, Some(&[b'B', b'S', 0x12, 0x34]));
+
+        apply_received_superframe(&mut state, 0, &sf);
+
+        assert!(state.capture_buffer.is_empty());
+    }
+
+    #[test]
+    fn wifi_superframe_keeps_sequence_zero_stream_data_that_starts_with_bs() {
+        let mut state = WiFiState::default();
+        let sf = make_superframe(None, Some(b"BSdata"));
+
+        apply_received_superframe(&mut state, 0, &sf);
+
+        assert_eq!(&state.capture_buffer[..6], b"BSdata");
     }
 
     #[test]
