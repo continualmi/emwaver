@@ -25,6 +25,10 @@ public interface DeviceConnectionService {
      * @param bytes Data to write
      */
     void write(byte[] bytes);
+
+    default void write(byte[] bytes, String deviceId) {
+        write(bytes);
+    }
     
     /**
      * Send a command and wait for response
@@ -54,6 +58,10 @@ public interface DeviceConnectionService {
      * Transmit the buffer to the device
      */
     void transmitBuffer();
+
+    default void transmitBuffer(String deviceId) {
+        transmitBuffer();
+    }
     
     /**
      * Clear the receive buffer

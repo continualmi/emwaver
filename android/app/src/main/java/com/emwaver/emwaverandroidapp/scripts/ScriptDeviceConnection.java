@@ -106,6 +106,10 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         if (service == null) {
             return;
         }
+        if (targetService != null && targetDeviceId != null) {
+            service.write(bytes, targetDeviceId);
+            return;
+        }
         service.write(bytes);
     }
 
@@ -113,6 +117,10 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
     public void transmitBuffer() {
         DeviceConnectionService service = activeService();
         if (service == null) {
+            return;
+        }
+        if (targetService != null && targetDeviceId != null) {
+            service.transmitBuffer(targetDeviceId);
             return;
         }
         service.transmitBuffer();

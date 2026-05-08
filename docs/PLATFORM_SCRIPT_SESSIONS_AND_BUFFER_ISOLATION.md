@@ -85,7 +85,7 @@ Current first step:
 - Android now has an `AndroidWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
 - Android has a local `DeviceBufferSessionTest` covering RX/counter and sampler-stream state isolation across separate transport sessions.
 - Android USB MIDI and BLE receive callbacks now resolve the buffer session from the source device id before feeding SysEx data, removing one active-session contamination path in the live service.
-- Android `ScriptDeviceConnection` now captures the active device-session id when a script starts and routes script buffer reads/writes plus command waits through that captured session.
+- Android `ScriptDeviceConnection` now captures the active device-session id when a script starts and routes script buffer reads/writes, transmit-buffer calls, raw writes, and command waits through that captured session.
 
 Remaining isolation work:
 

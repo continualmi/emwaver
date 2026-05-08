@@ -188,8 +188,12 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private void logTx(byte[] data) {
+        logTx(data, activeBufferSession());
+    }
+
+    private void logTx(byte[] data, TransportDeviceSession bufferSession) {
         if (data == null || data.length == 0) return;
-        activeBufferSession().appendTxBytes(data, System.currentTimeMillis());
+        bufferSession.appendTxBytes(data, System.currentTimeMillis());
     }
 
     private static byte[] makeLanePacket(byte[] data) {
@@ -210,10 +214,18 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private void updateSamplerStreamingState(byte[] lane) {
-        activeBufferSession().updateSamplerStreamingState(lane);
+        updateSamplerStreamingState(lane, activeBufferSession());
+    }
+
+    private void updateSamplerStreamingState(byte[] lane, TransportDeviceSession bufferSession) {
+        bufferSession.updateSamplerStreamingState(lane);
     }
 
     private void writeFrame(byte[] cmdLane18, byte[] streamLane18) {
+        writeFrame(cmdLane18, streamLane18, activeBufferSession());
+    }
+
+    private void writeFrame(byte[] cmdLane18, byte[] streamLane18, TransportDeviceSession bufferSession) {
         byte[] sysex = UsbMidiSysex.encodeLanes(cmdLane18, streamLane18);
         if (sysex == null) {
             Log.e(TAG, "writeFrame: failed to encode SysEx");
@@ -223,10 +235,10 @@ public class USBService extends Service implements DeviceConnectionService {
         if (activeTransport == ActiveTransport.BLE) {
             writeBleSysex(sysex);
             if (!isLaneEmpty(cmdLane18)) {
-                logTx(cmdLane18);
+                logTx(cmdLane18, bufferSession);
             }
             if (!isLaneEmpty(streamLane18)) {
-                logTx(streamLane18);
+                logTx(streamLane18, bufferSession);
             }
             return;
         }
@@ -241,10 +253,10 @@ public class USBService extends Service implements DeviceConnectionService {
 
                 // Log non-empty lanes (buffer uses 18B packet size)
                 if (!isLaneEmpty(cmdLane18)) {
-                    logTx(cmdLane18);
+                    logTx(cmdLane18, bufferSession);
                 }
                 if (!isLaneEmpty(streamLane18)) {
-                    logTx(streamLane18);
+                    logTx(streamLane18, bufferSession);
                 }
             } catch (IOException e) {
                 Log.e(TAG, "Error writing USB packet", e);
@@ -680,11 +692,17 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public void write(byte[] bytes) {
+        write(bytes, activeBufferSession().deviceId());
+    }
+
+    @Override
+    public void write(byte[] bytes, String deviceId) {
         if (bytes == null) {
             return;
         }
 
-        updateSamplerStreamingState(bytes);
+        TransportDeviceSession bufferSession = bufferSession(deviceId);
+        updateSamplerStreamingState(bytes, bufferSession);
 
         // Treat generic write as a cmd-lane injection.
         byte[] cmdLane = bytes.length == UsbMidiSysex.LANE_SIZE ? bytes : makeLanePacket(bytes);
@@ -693,19 +711,24 @@ public class USBService extends Service implements DeviceConnectionService {
             return;
         }
         byte[] streamLane = new byte[UsbMidiSysex.LANE_SIZE];
-        writeFrame(cmdLane, streamLane);
+        writeFrame(cmdLane, streamLane, bufferSession);
     }
 
     @Override
     public void transmitBuffer() {
-        byte[] samplerBytes = getBuffer();
+        transmitBuffer(activeBufferSession().deviceId());
+    }
+
+    @Override
+    public void transmitBuffer(String deviceId) {
+        TransportDeviceSession bufferSession = bufferSession(deviceId);
+        byte[] samplerBytes = bufferSession.getBuffer();
         if (samplerBytes == null || samplerBytes.length == 0) {
             return;
         }
 
         // Swap out sampler RX while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
-        TransportDeviceSession bufferSession = activeBufferSession();
         Object[] saved = bufferSession.takeRxState();
         byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
         long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
@@ -747,7 +770,7 @@ public class USBService extends Service implements DeviceConnectionService {
             if (streamLane != null && streamLane.length == UsbMidiSysex.LANE_SIZE) {
                 // Send as stream lane (cmd lane empty)
                 byte[] cmdLane = new byte[UsbMidiSysex.LANE_SIZE];
-                writeFrame(cmdLane, streamLane);
+                writeFrame(cmdLane, streamLane, bufferSession);
             }
 
             startTime = NativeBuffer.txUsbAdjustDeadlineNs(startTime, lastStatus);
@@ -788,7 +811,7 @@ public class USBService extends Service implements DeviceConnectionService {
             return null;
         }
 
-        write(packet);
+        write(packet, deviceId);
 
         return bufferSession.awaitCommandResponse(timeout);
     }
