@@ -123,8 +123,7 @@ final class USBManager: NSObject, ObservableObject {
     private var centralManager: CBCentralManager?
     private var bleScanSession: BLETransport.ScanSession?
     private var activeTransport: ActiveTransport = .none
-    private var activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
-    private var activeTransportConnection: TransportDeviceConnection?
+    private var activeConnectionState = TransportDeviceConnectionState(noneTransport: ActiveTransport.none)
     private var pendingBleConnection: BLETransport.PendingConnection?
     private var bleConnection: BLETransport.Connection?
 
@@ -161,11 +160,11 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     func currentScriptDeviceId() -> String {
-        activeTransportConnection?.sessionKey ?? activeDeviceTarget.deviceId
+        activeConnectionState.currentScriptDeviceId
     }
 
     private func isActiveDeviceSession(deviceId: String) -> Bool {
-        activeDeviceTarget.matchesDeviceId(deviceId)
+        activeConnectionState.matchesDeviceId(deviceId)
     }
 
     private func requireActiveDeviceSession(deviceId: String, operation: String) -> Bool {
@@ -182,21 +181,19 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) -> TransportDeviceSession {
-        let target = ActiveDeviceTarget(deviceId: deviceId, transport: transport)
+        let target = activeConnectionState.setTarget(deviceId: deviceId, transport: transport)
         let session = setActiveBufferSession(deviceId: target.deviceId, resetSession: true)
-        activeDeviceTarget = target
         activeTransport = target.transport
         return session
     }
 
     private func clearActiveDeviceTarget() {
-        activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
+        activeConnectionState.clear()
         activeTransport = .none
-        activeTransportConnection = nil
     }
 
     private func activeDeviceSessionKey(for transport: ActiveTransport) -> String? {
-        activeDeviceTarget.matchesTransport(transport) ? activeDeviceTarget.deviceId : nil
+        activeConnectionState.matchesTransport(transport) ? activeConnectionState.currentScriptDeviceId : nil
     }
 
     private var isUsbMidiConnected: Bool {
@@ -886,7 +883,7 @@ final class USBManager: NSObject, ObservableObject {
         )
         let connection = USBMidiTransport.Connection(candidate: chosen, session: session)
         usbMidiConnection = connection
-        activeTransportConnection = connection
+        activeConnectionState.setConnection(connection)
 
         let st = connection.connect(inPort: inPort)
         guard st == noErr else {
@@ -1205,7 +1202,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 session: session
             )
             self.bleConnection = connection
-            self.activeTransportConnection = connection
+            self.activeConnectionState.setConnection(connection)
             self.pendingBleConnection = nil
             DispatchQueue.main.async {
                 self.connectedPortName = connection.displayName
