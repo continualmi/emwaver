@@ -182,6 +182,7 @@ Current first step:
 - iOS BLE composite shutdown now routes through `BLETransport.closeHandles(...)`, so `USBManager` clears app state while the BLE transport owns scan stop and pending/connected cancellation.
 - iOS CoreMIDI source connection/disconnection now lives in `USBMidiTransport`, moving another USB MIDI setup detail out of `USBManager`.
 - iOS USB MIDI endpoint handles now sit behind a `USBMidiTransport.Connection` value that owns the endpoint pair, session key, display name, connect/disconnect behavior, and send helper.
+- iOS CoreMIDI packet-list byte extraction now lives in `USBMidiTransport`, leaving `USBManager` to route copied packet data to the active transport session.
 - iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - iOS now tracks the live script target as one `ActiveDeviceTarget` descriptor, so CoreMIDI receive routing and targeted script APIs share the same active transport/session identity.
 - iOS has an `ActiveDeviceTargetTests` suite covering active-target device-id normalization and transport matching.

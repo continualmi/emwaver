@@ -1068,25 +1068,8 @@ final class USBManager: NSObject, ObservableObject {
 
         // IMPORTANT: `pktList` is only valid for the duration of this callback.
         // Copy packet bytes synchronously, then hand off to our queue.
-        let packetCount = Int(pktList.pointee.numPackets)
-        mgr.dbg("readProc: numPackets=\(packetCount)")
-        var packets: [Data] = []
-        packets.reserveCapacity(packetCount)
-
-        // NOTE: Avoid taking the address of `pktList.pointee.packet` directly (can produce a temporary).
-        let pktListMut = UnsafeMutablePointer(mutating: pktList)
-        var packetPtr: UnsafePointer<MIDIPacket> = withUnsafePointer(to: &pktListMut.pointee.packet) { ptr in
-            UnsafePointer(ptr)
-        }
-
-        for _ in 0..<packetCount {
-            let len = Int(packetPtr.pointee.length)
-            let data = withUnsafeBytes(of: packetPtr.pointee.data) { raw in
-                Data(raw.prefix(min(len, raw.count)))
-            }
-            packets.append(data)
-            packetPtr = UnsafePointer(MIDIPacketNext(packetPtr))
-        }
+        let packets = USBMidiTransport.copyPacketData(from: pktList)
+        mgr.dbg("readProc: numPackets=\(packets.count)")
 
         mgr.midiQueue.async {
             mgr.handlePacketDatas(packets, deviceId: mgr.activeDeviceSessionKey(for: .usbMidi))

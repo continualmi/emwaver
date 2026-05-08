@@ -113,6 +113,28 @@ enum USBMidiTransport {
         return MIDISend(outPort, destination, pktList)
     }
 
+    static func copyPacketData(from packetList: UnsafePointer<MIDIPacketList>) -> [Data] {
+        let packetCount = Int(packetList.pointee.numPackets)
+        var packets: [Data] = []
+        packets.reserveCapacity(packetCount)
+
+        let mutablePacketList = UnsafeMutablePointer(mutating: packetList)
+        var packetPtr: UnsafePointer<MIDIPacket> = withUnsafePointer(to: &mutablePacketList.pointee.packet) { ptr in
+            UnsafePointer(ptr)
+        }
+
+        for _ in 0..<packetCount {
+            let len = Int(packetPtr.pointee.length)
+            let data = withUnsafeBytes(of: packetPtr.pointee.data) { raw in
+                Data(raw.prefix(min(len, raw.count)))
+            }
+            packets.append(data)
+            packetPtr = UnsafePointer(MIDIPacketNext(packetPtr))
+        }
+
+        return packets
+    }
+
     private static func allSources() -> [(name: String, endpoint: MIDIEndpointRef)] {
         var out: [(String, MIDIEndpointRef)] = []
         let n = MIDIGetNumberOfSources()
