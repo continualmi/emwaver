@@ -142,6 +142,7 @@ iOS already uses the shared SwiftUI scripts surface, so list-level session displ
 Current first step:
 
 - iOS shows the current run target in the scripts toolbar before a script starts, using the same selected device label captured into the session row after Run.
+- the shared Apple `ScriptSessionStatus` now carries `deviceId`, so macOS and iOS visible session rows can retain target identity separately from display labels.
 - iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
 - iOS local script sessions now retain the captured transport device-session id alongside the visible status row data.
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.

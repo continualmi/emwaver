@@ -121,6 +121,7 @@ final class IOSScriptSessionManager: ObservableObject {
             .map { id, session in
                 ScriptsRootView.ScriptSessionStatus(
                     id: id,
+                    deviceId: session.deviceId,
                     scriptId: session.scriptId,
                     deviceLabel: session.deviceLabel,
                     stateText: session.manager.activeScriptName == nil ? "stopped" : "running"

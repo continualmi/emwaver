@@ -72,6 +72,7 @@ final class MacScriptSessionManager: ObservableObject {
         sessions.map {
             ScriptsRootView.ScriptSessionStatus(
                 id: $0.id,
+                deviceId: $0.deviceID ?? "active",
                 scriptId: $0.scriptId,
                 deviceLabel: $0.deviceLabel,
                 stateText: $0.stateText

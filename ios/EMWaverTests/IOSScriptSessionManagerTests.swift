@@ -24,6 +24,7 @@ final class IOSScriptSessionManagerTests: XCTestCase {
         XCTAssertEqual(manager.sessionStatuses.count, 2)
         XCTAssertEqual(Set(manager.sessionStatuses.map(\.scriptId)), ["script-a", "script-b"])
         XCTAssertEqual(Set(manager.sessionStatuses.map(\.deviceLabel)), ["USB A", "USB B"])
+        XCTAssertEqual(Set(manager.sessionStatuses.map(\.deviceId)), ["active"])
         XCTAssertEqual(manager.sessionDeviceId(first!.scriptInstanceId), "active")
         XCTAssertEqual(manager.sessionDeviceId(second!.scriptInstanceId), "active")
 

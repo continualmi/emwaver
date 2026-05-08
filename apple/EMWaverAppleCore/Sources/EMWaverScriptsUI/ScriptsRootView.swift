@@ -45,12 +45,14 @@ public struct ScriptsRootView: View {
 
     public struct ScriptSessionStatus: Identifiable, Equatable {
         public let id: String
+        public let deviceId: String
         public let scriptId: String
         public let deviceLabel: String
         public let stateText: String
 
-        public init(id: String, scriptId: String, deviceLabel: String, stateText: String) {
+        public init(id: String, deviceId: String = "active", scriptId: String, deviceLabel: String, stateText: String) {
             self.id = id
+            self.deviceId = deviceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "active" : deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
             self.scriptId = scriptId
             self.deviceLabel = deviceLabel
             self.stateText = stateText
