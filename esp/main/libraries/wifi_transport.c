@@ -9,6 +9,7 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "command_registry.h"
 #include "esp_event.h"
@@ -77,6 +78,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 static void wifi_reconnect_task(void *arg);
 static void start_server(void);
 static void stop_server(void);
+static void close_session(httpd_handle_t hd, int sockfd);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
@@ -399,6 +401,7 @@ static void start_server(void)
     config.server_port = WIFI_CONTROL_PORT;
     config.ctrl_port = WIFI_CONTROL_PORT + 1;
     config.lru_purge_enable = true;
+    config.close_fn = close_session;
 
     if (httpd_start(&s_httpd, &config) != ESP_OK) {
         ESP_LOGE(TAG, "failed to start Wi-Fi WebSocket server");
@@ -424,6 +427,16 @@ static void stop_server(void)
         s_httpd = NULL;
     }
     mdns_free();
+}
+
+static void close_session(httpd_handle_t hd, int sockfd)
+{
+    (void)hd;
+    if (sockfd == s_active_fd) {
+        s_active_fd = -1;
+        s_authenticated = false;
+    }
+    close(sockfd);
 }
 
 static void build_mdns_instance_name(char *out, size_t out_len)
