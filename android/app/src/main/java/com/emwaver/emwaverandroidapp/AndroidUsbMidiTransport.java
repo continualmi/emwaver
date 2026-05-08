@@ -37,6 +37,49 @@ final class AndroidUsbMidiTransport {
         }
     }
 
+    static final class Connection implements AutoCloseable {
+        final UsbDevice usbDevice;
+        final MidiDevice midiDevice;
+        final MidiInputPort input;
+        final MidiOutputPort output;
+        final String sessionId;
+        final String displayName;
+
+        private Connection(
+                UsbDevice usbDevice,
+                MidiDevice midiDevice,
+                MidiInputPort input,
+                MidiOutputPort output
+        ) {
+            this.usbDevice = usbDevice;
+            this.midiDevice = midiDevice;
+            this.input = input;
+            this.output = output;
+            this.sessionId = sessionId(usbDevice);
+            String name = displayName(usbDevice);
+            this.displayName = name != null ? name : "USB MIDI";
+        }
+
+        boolean isOpen() {
+            return midiDevice != null && input != null && output != null;
+        }
+
+        boolean sendSysex(byte[] sysex) {
+            return AndroidUsbMidiTransport.sendSysex(input, sysex);
+        }
+
+        String inferBoardType(@Nullable String boardTypeHint) {
+            return AndroidUsbMidiTransport.inferBoardType(usbDevice, boardTypeHint);
+        }
+
+        @Override
+        public void close() {
+            closeQuietly(output);
+            closeQuietly(input);
+            closeQuietly(midiDevice);
+        }
+    }
+
     static String sessionId(@Nullable UsbDevice device) {
         if (device == null) return "usb:active";
         return "usb:" + device.getVendorId() + ":" + device.getProductId() + ":" + device.getDeviceName();
@@ -98,6 +141,11 @@ final class AndroidUsbMidiTransport {
         return new OpenPorts(device.openInputPort(0), device.openOutputPort(0));
     }
 
+    static Connection openConnection(UsbDevice usbDevice, MidiDevice midiDevice) {
+        OpenPorts ports = openPorts(midiDevice);
+        return new Connection(usbDevice, midiDevice, ports.input, ports.output);
+    }
+
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
         String hint = lower(boardTypeHint);
         if (!hint.isEmpty()) {
@@ -143,5 +191,14 @@ final class AndroidUsbMidiTransport {
 
     private static String lower(@Nullable String value) {
         return value == null ? "" : value.trim().toLowerCase(Locale.US);
+    }
+
+    private static void closeQuietly(@Nullable AutoCloseable closeable) {
+        try {
+            if (closeable != null) {
+                closeable.close();
+            }
+        } catch (Exception ignored) {
+        }
     }
 }

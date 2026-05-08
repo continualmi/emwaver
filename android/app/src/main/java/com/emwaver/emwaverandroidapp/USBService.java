@@ -28,11 +28,8 @@ import android.content.pm.PackageManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
-import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
-import android.media.midi.MidiInputPort;
 import android.media.midi.MidiManager;
-import android.media.midi.MidiOutputPort;
 import android.media.midi.MidiReceiver;
 import android.os.Binder;
 import android.os.Build;
@@ -46,7 +43,6 @@ import androidx.annotation.Nullable;
 
 import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -78,9 +74,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private HandlerThread midiThread;
     private Handler midiHandler;
 
-    private MidiDevice midiDevice;
-    private MidiInputPort midiIn;
-    private MidiOutputPort midiOut;
+    private AndroidUsbMidiTransport.Connection usbMidiConnection;
 
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
@@ -101,7 +95,6 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
-    private volatile UsbDevice connectedMidiUsbDevice = null;
     private volatile String connectedBleDeviceLabel = null;
 
     private TransportDeviceSession activeBufferSession() {
@@ -267,11 +260,12 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         synchronized (midiLock) {
-            if (midiIn == null) {
+            AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+            if (connection == null || !connection.isOpen()) {
                 Toast.makeText(this, "No USB device connected", Toast.LENGTH_SHORT).show();
                 return;
             }
-            if (AndroidUsbMidiTransport.sendSysex(midiIn, sysex)) {
+            if (connection.sendSysex(sysex)) {
                 // Log non-empty lanes (buffer uses 18B packet size)
                 if (!isLaneEmpty(cmdLane18)) {
                     logTx(cmdLane18, bufferSession);
@@ -333,7 +327,8 @@ public class USBService extends Service implements DeviceConnectionService {
             return true;
         }
         synchronized (midiLock) {
-            return midiDevice != null && midiIn != null && midiOut != null;
+            AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+            return connection != null && connection.isOpen();
         }
     }
 
@@ -346,8 +341,9 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiReceiver rxReceiver = new MidiReceiver() {
         @Override
         public void onSend(byte[] data, int offset, int count, long timestamp) {
-            UsbDevice usbDevice = connectedMidiUsbDevice;
-            feedSysexBytes(data, offset, count, bufferSession(AndroidUsbMidiTransport.sessionId(usbDevice)));
+            AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+            String deviceId = connection != null ? connection.sessionId : "usb:active";
+            feedSysexBytes(data, offset, count, bufferSession(deviceId));
         }
     };
 
@@ -385,16 +381,12 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
-                midiDevice = device;
-                connectedMidiUsbDevice = usbDevice;
                 connectedBleDeviceLabel = null;
-                AndroidUsbMidiTransport.OpenPorts ports = AndroidUsbMidiTransport.openPorts(midiDevice);
-                midiIn = ports.input;
-                midiOut = ports.output;
-                if (midiOut != null) {
-                    midiOut.connect(rxReceiver);
+                usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device);
+                if (usbMidiConnection.output != null) {
+                    usbMidiConnection.output.connect(rxReceiver);
                 }
-                setActiveDeviceTarget(AndroidUsbMidiTransport.sessionId(usbDevice), ActiveTransport.USB);
+                setActiveDeviceTarget(usbMidiConnection.sessionId, ActiveTransport.USB);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -432,13 +424,20 @@ public class USBService extends Service implements DeviceConnectionService {
             String boardTypeHint = queryBoardTypeHint();
             connectedBoardType = activeTransport == ActiveTransport.BLE && boardTypeHint == null
                     ? "esp32s3"
-                    : AndroidUsbMidiTransport.inferBoardType(connectedMidiUsbDevice, boardTypeHint);
+                    : inferConnectedUsbBoardType(boardTypeHint);
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
             connectedBoardType = activeTransport == ActiveTransport.BLE
                     ? "esp32s3"
-                    : AndroidUsbMidiTransport.inferBoardType(connectedMidiUsbDevice, null);
+                    : inferConnectedUsbBoardType(null);
         }
+    }
+
+    private String inferConnectedUsbBoardType(@Nullable String boardTypeHint) {
+        AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+        return connection != null
+                ? connection.inferBoardType(boardTypeHint)
+                : AndroidUsbMidiTransport.inferBoardType(null, boardTypeHint);
     }
 
     @Nullable
@@ -474,28 +473,10 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private void closeMidiLocked() {
-        try {
-            if (midiOut != null) {
-                midiOut.close();
-            }
-        } catch (IOException ignored) {
+        if (usbMidiConnection != null) {
+            usbMidiConnection.close();
         }
-        try {
-            if (midiIn != null) {
-                midiIn.close();
-            }
-        } catch (IOException ignored) {
-        }
-        try {
-            if (midiDevice != null) {
-                midiDevice.close();
-            }
-        } catch (IOException ignored) {
-        }
-        midiOut = null;
-        midiIn = null;
-        midiDevice = null;
-        connectedMidiUsbDevice = null;
+        usbMidiConnection = null;
         connectedBleDeviceLabel = null;
         clearActiveDeviceTarget(ActiveTransport.USB);
         connectedBoardType = null;
@@ -533,7 +514,8 @@ public class USBService extends Service implements DeviceConnectionService {
             return;
         }
         synchronized (midiLock) {
-            if (midiDevice != null && midiIn != null && midiOut != null) {
+            AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+            if (connection != null && connection.isOpen()) {
                 return;
             }
         }
@@ -967,7 +949,8 @@ public class USBService extends Service implements DeviceConnectionService {
                         ? "Connected (BLE)"
                         : "Connected (BLE: " + label.trim() + ")";
             }
-            String label = AndroidUsbMidiTransport.displayName(connectedMidiUsbDevice);
+            AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
+            String label = connection != null ? connection.displayName : null;
             return label == null || label.trim().isEmpty()
                     ? "Connected (USB)"
                     : "Connected (USB: " + label.trim() + ")";
