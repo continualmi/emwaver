@@ -891,24 +891,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func sendSysex(_ sysex: Data, to destination: MIDIEndpointRef) -> OSStatus {
-        let capacity = 1024
-        let raw = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: MemoryLayout<MIDIPacketList>.alignment)
-        defer { raw.deallocate() }
-
-        let pktList = raw.assumingMemoryBound(to: MIDIPacketList.self)
-        let packet = MIDIPacketListInit(pktList)
-
-        let ok: Bool = sysex.withUnsafeBytes { bytes in
-            guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else { return false }
-            _ = MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base)
-            return true
-        }
-
-        guard ok else {
-            dbg("sendSysex: MIDIPacketListAdd failed")
-            return -1
-        }
-        let st = MIDISend(outPort, destination, pktList)
+        let st = USBMidiTransport.sendSysex(sysex, outPort: outPort, destination: destination)
         if st != noErr {
             dbg("sendSysex: MIDISend failed st=\(st)")
         }
@@ -940,14 +923,7 @@ final class USBManager: NSObject, ObservableObject {
             return
         }
 
-        let maxWriteLength = max(20, peripheral.maximumWriteValueLength(for: .withResponse))
-        var offset = 0
-        while offset < sysex.count {
-            let end = min(offset + maxWriteLength, sysex.count)
-            let chunk = sysex.subdata(in: offset..<end)
-            peripheral.writeValue(chunk, for: characteristic, type: .withResponse)
-            offset = end
-        }
+        BLETransport.writeSysex(sysex, peripheral: peripheral, characteristic: characteristic)
     }
 
     private func handlePacketDatas(_ packets: [Data], deviceId: String?) {

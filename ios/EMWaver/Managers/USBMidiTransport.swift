@@ -49,6 +49,28 @@ enum USBMidiTransport {
         return out
     }
 
+    static func sendSysex(
+        _ sysex: Data,
+        outPort: MIDIPortRef,
+        destination: MIDIEndpointRef
+    ) -> OSStatus {
+        let capacity = 1024
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: MemoryLayout<MIDIPacketList>.alignment)
+        defer { raw.deallocate() }
+
+        let pktList = raw.assumingMemoryBound(to: MIDIPacketList.self)
+        let packet = MIDIPacketListInit(pktList)
+
+        let ok: Bool = sysex.withUnsafeBytes { bytes in
+            guard let base = bytes.bindMemory(to: UInt8.self).baseAddress else { return false }
+            _ = MIDIPacketListAdd(pktList, capacity, packet, 0, sysex.count, base)
+            return true
+        }
+
+        guard ok else { return -1 }
+        return MIDISend(outPort, destination, pktList)
+    }
+
     private static func allSources() -> [(name: String, endpoint: MIDIEndpointRef)] {
         var out: [(String, MIDIEndpointRef)] = []
         let n = MIDIGetNumberOfSources()

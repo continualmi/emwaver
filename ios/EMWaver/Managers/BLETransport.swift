@@ -32,4 +32,19 @@ enum BLETransport {
         let name = peripheral.name ?? advertisedName ?? ""
         return name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil
     }
+
+    static func writeSysex(
+        _ sysex: Data,
+        peripheral: CBPeripheral,
+        characteristic: CBCharacteristic
+    ) {
+        let maxWriteLength = max(20, peripheral.maximumWriteValueLength(for: .withResponse))
+        var offset = 0
+        while offset < sysex.count {
+            let end = min(offset + maxWriteLength, sysex.count)
+            let chunk = sysex.subdata(in: offset..<end)
+            peripheral.writeValue(chunk, for: characteristic, type: .withResponse)
+            offset = end
+        }
+    }
 }
