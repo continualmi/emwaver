@@ -7,6 +7,7 @@
 import Foundation
 import Network
 import CryptoKit
+import Darwin
 
 struct MacWiFiDeviceRecord: Identifiable, Equatable {
     let id: String
@@ -254,7 +255,7 @@ final class MacWiFiManager {
                 self.onError("Firmware does not advertise Wi-Fi transport support")
                 return
             }
-            guard let url = URL(string: "ws://\(record.host):\(record.port)/v1/ws") else {
+            guard let url = Self.webSocketURL(host: record.host, port: record.port) else {
                 self.onError("Invalid Wi-Fi device address")
                 return
             }
@@ -631,22 +632,36 @@ final class MacWiFiManager {
         UserDefaults.standard.set(data, forKey: Self.pairingStoreKey)
     }
 
-    private static func deviceID(host: String, port: Int) -> String {
+    static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
     }
 
-    private static func isValidPort(_ port: Int) -> Bool {
+    static func isValidPort(_ port: Int) -> Bool {
         (1...65535).contains(port)
     }
 
-    private static func isValidManualHost(_ host: String) -> Bool {
+    static func isValidManualHost(_ host: String) -> Bool {
         guard !host.isEmpty,
               host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
               host.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@")) == nil,
               !host.contains("://") else {
             return false
         }
-        return !host.contains(":")
+        if host.contains(":") {
+            return isValidIPv6Literal(host)
+        }
+        return true
+    }
+
+    static func webSocketURL(host: String, port: Int) -> URL? {
+        guard isValidManualHost(host), isValidPort(port) else { return nil }
+        let urlHost = host.contains(":") ? "[\(host)]" : host
+        return URL(string: "ws://\(urlHost):\(port)/v1/ws")
+    }
+
+    private static func isValidIPv6Literal(_ host: String) -> Bool {
+        var addr = in6_addr()
+        return host.withCString { inet_pton(AF_INET6, $0, &addr) == 1 }
     }
 
     private static func bonjourMetadata(from metadata: NWBrowser.Result.Metadata) -> BonjourMetadata {

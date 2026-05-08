@@ -75,6 +75,7 @@ Transport behavior:
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - Manual Wi-Fi connection rejects ports outside the valid TCP range before storing a pairing record or opening the WebSocket.
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
+- Manual Wi-Fi connection supports bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
 - The device sheet seeds a local hostname for Wi-Fi provisioning so the app can immediately store the matching `<hostname>.local` pairing record after setup, while still allowing manual override.
 - Manual Wi-Fi hostnames are validated before provisioning so macOS does not store a local pairing record for a name the ESP32 firmware cannot advertise through mDNS.
 - The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision a Wi-Fi-capable ESP32 board without inventing their own secret, while still allowing manual override.

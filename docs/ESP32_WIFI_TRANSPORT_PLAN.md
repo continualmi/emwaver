@@ -273,7 +273,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
 ### Native Apps
 
 - Add Wi-Fi device discovery and manual connection surfaces.
-- Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3.
+- Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3. Manual macOS host/IP entry accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
 - Current macOS auto-connect progress: paired Wi-Fi endpoints are attempted automatically when no wired runtime is active, so a provisioned same-LAN board can reconnect without re-entering the pairing secret.
 - Reuse existing script/device runtime paths.
 - Add Wi-Fi provisioning from BLE/USB where platform APIs allow it.
