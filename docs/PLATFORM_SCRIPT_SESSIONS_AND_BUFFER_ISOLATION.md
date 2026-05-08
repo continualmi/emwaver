@@ -78,6 +78,7 @@ Current first step:
 - Android captures the active device service into `ScriptDeviceConnection` when a local script starts, so script I/O no longer re-resolves whichever service is active later.
 - Android USB/BLE buffering now depends on a `TransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - Android BLE transport constants, advertisement matching, and device-session identity helpers now live in `AndroidBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
+- Android USB MIDI descriptor matching, board inference, display names, and session identity helpers now live in `AndroidUsbMidiTransport`, so the current Android service has separate USB and BLE transport helper files.
 
 Remaining isolation work:
 

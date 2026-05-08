@@ -55,7 +55,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Locale;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -64,9 +63,6 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private static final String TAG = "USBService";
 
-    // STM32 firmware descriptors (stm/emwaver-firmware/USB_DEVICE/App/usbd_desc.c)
-    private static final int EMW_USB_VENDOR_ID = 1155;   // 0x0483
-    private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
     private static final int EMW_OP_VERSION = 0x01;
     private static final int EMW_OP_ENTER_DFU = 0x06;
     private static final int EMW_OP_BOARD_GET = 0x09;
@@ -128,11 +124,6 @@ public class USBService extends Service implements DeviceConnectionService {
             activeBufferSession = session;
             activeBufferSession.clearAll();
         }
-    }
-
-    private static String usbDeviceSessionId(UsbDevice device) {
-        if (device == null) return "usb:active";
-        return "usb:" + device.getVendorId() + ":" + device.getProductId() + ":" + device.getDeviceName();
     }
 
     // Buffer bridge methods
@@ -245,72 +236,11 @@ public class USBService extends Service implements DeviceConnectionService {
         UsbManager manager = getUsbManager();
         HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
         for (UsbDevice device : deviceList.values()) {
-            if (isSupportedEmwaverRuntimeDevice(device)) {
+            if (AndroidUsbMidiTransport.isSupportedRuntimeDevice(device)) {
                 return device;
             }
         }
         return null;
-    }
-
-    private boolean isSupportedEmwaverRuntimeDevice(@Nullable UsbDevice device) {
-        if (device == null) {
-            return false;
-        }
-        if (device.getVendorId() == EMW_USB_VENDOR_ID && device.getProductId() == EMW_USB_PRODUCT_ID) {
-            return true;
-        }
-
-        String manufacturer = lower(device.getManufacturerName());
-        String product = lower(device.getProductName());
-
-        if (product.contains("emwaver")) {
-            return true;
-        }
-        if (manufacturer.contains("emwaver")) {
-            return true;
-        }
-        if ((manufacturer.contains("espressif") || product.contains("esp32") || product.contains("esp32-s3") || product.contains("s3"))
-                && usbDeviceLooksLikeMidi(device)) {
-            return true;
-        }
-        return false;
-    }
-
-    private boolean usbDeviceLooksLikeMidi(@Nullable UsbDevice device) {
-        if (device == null) {
-            return false;
-        }
-        for (int i = 0; i < device.getInterfaceCount(); i++) {
-            android.hardware.usb.UsbInterface iface = device.getInterface(i);
-            if (iface == null) {
-                continue;
-            }
-            if (iface.getInterfaceClass() == 1 && iface.getInterfaceSubclass() == 3) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private String lower(@Nullable String value) {
-        return value == null ? "" : value.trim().toLowerCase(Locale.US);
-    }
-
-    private String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
-        String hint = lower(boardTypeHint);
-        if (!hint.isEmpty()) {
-            return hint;
-        }
-
-        String product = lower(device != null ? device.getProductName() : null);
-        String manufacturer = lower(device != null ? device.getManufacturerName() : null);
-        if (product.contains("esp32") || product.contains("esp32-s3") || product.contains("s3")) {
-            return "esp32s3";
-        }
-        if (manufacturer.contains("espressif")) {
-            return "esp32s3";
-        }
-        return "stm32f042";
     }
 
     public void checkForConnectedDevices() {
@@ -407,7 +337,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 if (midiOut != null) {
                     midiOut.connect(rxReceiver);
                 }
-                setActiveBufferSession(usbDeviceSessionId(usbDevice));
+                setActiveBufferSession(AndroidUsbMidiTransport.sessionId(usbDevice));
                 activeTransport = ActiveTransport.USB;
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
@@ -446,12 +376,12 @@ public class USBService extends Service implements DeviceConnectionService {
             String boardTypeHint = queryBoardTypeHint();
             connectedBoardType = activeTransport == ActiveTransport.BLE && boardTypeHint == null
                     ? "esp32s3"
-                    : inferBoardType(connectedMidiUsbDevice, boardTypeHint);
+                    : AndroidUsbMidiTransport.inferBoardType(connectedMidiUsbDevice, boardTypeHint);
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
             connectedBoardType = activeTransport == ActiveTransport.BLE
                     ? "esp32s3"
-                    : inferBoardType(connectedMidiUsbDevice, null);
+                    : AndroidUsbMidiTransport.inferBoardType(connectedMidiUsbDevice, null);
         }
     }
 
@@ -988,25 +918,12 @@ public class USBService extends Service implements DeviceConnectionService {
                         ? "Connected (BLE)"
                         : "Connected (BLE: " + label.trim() + ")";
             }
-            String label = usbDeviceDisplayName(connectedMidiUsbDevice);
+            String label = AndroidUsbMidiTransport.displayName(connectedMidiUsbDevice);
             return label == null || label.trim().isEmpty()
                     ? "Connected (USB)"
                     : "Connected (USB: " + label.trim() + ")";
         }
         return "Not connected";
-    }
-
-    private static String usbDeviceDisplayName(@Nullable UsbDevice device) {
-        if (device == null) return null;
-        String product = device.getProductName();
-        if (product != null && !product.trim().isEmpty()) {
-            return product.trim();
-        }
-        String name = device.getDeviceName();
-        if (name != null && !name.trim().isEmpty()) {
-            return name.trim();
-        }
-        return "USB " + device.getVendorId() + ":" + device.getProductId();
     }
 
     @Override
