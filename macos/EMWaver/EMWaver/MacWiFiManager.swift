@@ -133,6 +133,10 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi host is required")
                 return
             }
+            guard Self.isValidManualHost(trimmedHost) else {
+                self.onError("Wi-Fi host must be a hostname or IP address without a scheme, path, or port")
+                return
+            }
             guard !trimmedSecret.isEmpty else {
                 self.onError("Wi-Fi pairing secret is required")
                 return
@@ -502,6 +506,16 @@ final class MacWiFiManager {
 
     private static func isValidPort(_ port: Int) -> Bool {
         (1...65535).contains(port)
+    }
+
+    private static func isValidManualHost(_ host: String) -> Bool {
+        guard !host.isEmpty,
+              host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil,
+              host.rangeOfCharacter(from: CharacterSet(charactersIn: "/?#@")) == nil,
+              !host.contains("://") else {
+            return false
+        }
+        return !host.contains(":")
     }
 
     private static func bonjourMetadata(from metadata: NWBrowser.Result.Metadata) -> BonjourMetadata {
