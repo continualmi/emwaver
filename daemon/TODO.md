@@ -15,6 +15,8 @@
 - [x] ESP32 BLE transport path for Linux/headless daemon.
 - [ ] Hardware-validate Linux USB MIDI/SysEx transport.
 - [ ] Hardware-validate Linux ESP32 BLE transport.
+- [ ] Add agent-loop CLI helpers: run custom script from caller cwd, wait for start, print/save latest `ui.snapshot`, send `ui.event`, stop/reset, and report status.
+- [ ] Design and implement multi-device bench support: stable ids/names, concurrent BLE/USB connections, per-device command routing, per-device status/snapshot attribution, and coordinated two-board tests.
 
 ## Packaging
 

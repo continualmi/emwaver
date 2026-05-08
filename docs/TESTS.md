@@ -4,6 +4,10 @@ This document tracks only the active manual tests.
 
 Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for fully passed test codes.
 
+## Automation Bench Goal
+
+The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI, localhost gateway, and either the native app or daemon, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/logs, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
+
 ## Test Code Index
 
 | Code | Status | Systems | Passed Date |
@@ -13,6 +17,8 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 | `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | macOS, iOS | |
 | `004_MFRC522_READ_WRITE_RFID_CARD` | `[ ]` |  | |
 | `005_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
+| `006_AGENT_CLI_GATEWAY_SCRIPT_LOOP` | `[ ]` | macOS, Linux | |
+| `007_MULTI_DEVICE_AGENT_BENCH` | `[ ]` | macOS, Linux | |
 
 ## Remote Case Matrix
 
@@ -116,3 +122,23 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 - Steps: run the same servo PWM flow through remote host control across the full remote case matrix.
 - Expected: matches local `005` in all cases.
+
+## `006_AGENT_CLI_GATEWAY_SCRIPT_LOOP`
+
+### Local
+
+- Script target: custom `.emw` file created outside `assets/default-scripts`.
+- Setup: run localhost gateway and connect either the native app (`role=app`) or daemon (`role=host`) to a real board.
+- Steps: from the terminal/agent, create or edit a local `.emw` script; run it with `emw run`; wait for `script.started`; capture the latest `ui.snapshot`; send at least one `ui.event`; verify a changed snapshot or hardware effect; stop the script; confirm no stale active script remains.
+- Tests: terminal-first agent workflow, gateway forwarding, custom local script loading, UI snapshot inspection, UI event dispatch, stop/reset behavior, and hardware command execution.
+- Expected: the agent can iterate on a custom script without using the app UI manually, and the hardware ends in a known safe state after stop/reset.
+
+## `007_MULTI_DEVICE_AGENT_BENCH`
+
+### Local
+
+- Script target: multi-device diagnostic `.emw` scripts or equivalent CLI-driven test scripts.
+- Setup: connect at least two EMWaver boards simultaneously, initially either two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32 device. Attach representative modules such as CC1101, RFID, PWM servo, ADC/GPIO loopback, I2C, SPI, or UART fixtures.
+- Steps: discover both devices; connect to both at the same time; assign stable names/ids; run per-device commands; run a coordinated test where one board generates or transmits and another board observes or samples; collect snapshots/logs/status for each device; stop/reset both devices.
+- Tests: multi-device discovery, stable selection, concurrent BLE/USB ownership, command routing by device, per-device UI/status attribution, and agent-driven validation of hardware loops across boards.
+- Expected: one local agent session can control the bench as a hardware validation box and repeatedly probe EMWaver capabilities without manual reconnect/reconfigure steps.

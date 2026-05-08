@@ -55,6 +55,8 @@ State paths are resolved via `directories::ProjectDirs`:
 
 CLI provides local device/status, gateway, direct script execution, and Agent helper commands.
 
+Agent-driven development goal: the CLI/gateway/native-app or daemon loop should be good enough for a coding agent to create arbitrary local `.emw` scripts, run them, inspect `ui.snapshot` output/logs, send `ui.event` interactions, stop/reset scripts, and quickly validate real hardware without relying on manual app UI work. The long-term validation bench should support at least two simultaneous boards, initially two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32 board, with stable per-device ids and command routing.
+
 The rebirth/local-first direction adds a development gateway command:
 
 ```bash
@@ -233,6 +235,8 @@ Daemon-side transport is local USB MIDI/SysEx by default, with ESP32 BLE availab
 - `emwaver daemon start --ble` uses ESP32 BLE service discovery instead of USB MIDI.
 - Device command path routes through the local USB or BLE command bridge and shared packet send/response semantics.
 - Remote side never directly owns USB/BLE — only forwards commands/events through daemon session.
+
+Current daemon/runtime ownership is single-device-oriented. The planned automation-bench direction is multi-device: discover multiple BLE/USB boards, connect to more than one at the same time, assign stable names/ids, route script commands to a selected board, and report per-device status/snapshots/logs so an agent can validate connected modules and cross-device loops.
 
 This model applies to host-backed boards. Autonomous Wi-Fi-capable boards are expected to use a different direct session model once implemented.
 
