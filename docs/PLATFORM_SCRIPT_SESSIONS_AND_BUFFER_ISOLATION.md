@@ -106,7 +106,7 @@ Current first step:
 - Android command response wait cursor/polling now lives on the active `DeviceBufferSession` instead of inline state in `USBService`.
 - Android SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession` instead of singleton fields on `USBService`.
 - Android captures the active device service into `ScriptDeviceConnection` when a local script starts, so script I/O no longer re-resolves whichever service is active later.
-- Android `ScriptDeviceConnection` normalizes the captured device-session id before script I/O routing, matching the Windows target adapter behavior and avoiding whitespace-sensitive session keys.
+- Android `ScriptDeviceConnection` normalizes the captured device-session id before script I/O routing, matching the Windows target adapter behavior and avoiding whitespace-sensitive or blank session keys.
 - Android USB/BLE buffering now depends on a `TransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - Android active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
 - Android buffer session lookup/selection now lives in `TransportDeviceSessionRegistry` instead of inline map ownership inside `USBService`.

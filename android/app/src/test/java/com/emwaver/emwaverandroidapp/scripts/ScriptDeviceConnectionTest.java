@@ -53,6 +53,18 @@ public class ScriptDeviceConnectionTest {
         assertEquals("USB:Board-1", service.lastWriteDeviceId);
     }
 
+    @Test
+    public void capturedConnectionRoutesBlankDeviceIdAsActive() {
+        FakeDeviceConnectionService service = new FakeDeviceConnectionService("   ");
+        ScriptDeviceConnection connection = new ScriptDeviceConnection(service, "Active Device");
+        byte[] payload = new byte[] { 0x01, 0x02 };
+
+        connection.write(payload);
+
+        assertEquals("active", connection.capturedDeviceId());
+        assertEquals("active", service.lastWriteDeviceId);
+    }
+
     private static final class FakeDeviceConnectionService implements DeviceConnectionService {
         private final String deviceId;
         private String lastWriteDeviceId;
