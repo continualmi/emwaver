@@ -157,6 +157,7 @@ Required mDNS advertisement:
 - Service type: `_emwaver._tcp`.
 - Port: `3922`.
 - Instance name: user-visible EMWaver device name, for example `EMWaver ESP32-S3 A1B2`.
+- Current firmware uses target-aware instance names from the ESP-IDF target, for example `EMWaver ESP32-S3 A1B2` or `EMWaver ESP32-S2 A1B2`.
 - TXT records should include protocol version, board type, firmware version, transport capabilities, and a non-authoritative local identifier suffix for display/deduplication.
 
 Manual IP/hostname entry remains required as a fallback for networks where mDNS is blocked or does not cross routed VPN/subnet boundaries. Manual entry should not be the default same-Wi-Fi path.

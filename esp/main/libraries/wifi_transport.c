@@ -585,7 +585,7 @@ static void build_mdns_instance_name(char *out, size_t out_len)
 {
     char suffix[8];
     build_local_id_suffix(suffix, sizeof(suffix));
-    snprintf(out, out_len, "EMWaver ESP32-S3 %s", suffix);
+    snprintf(out, out_len, "EMWaver %s %s", EMW_TARGET_DEVICE_NAME_PREFIX, suffix);
 }
 
 static void build_local_id_suffix(char *out, size_t out_len)
