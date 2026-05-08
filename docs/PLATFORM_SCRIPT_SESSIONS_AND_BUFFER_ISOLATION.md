@@ -55,7 +55,7 @@ Current first step:
 - Windows USB MIDI/BLE buffering now depends on an `ITransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - Windows active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
 - Windows buffer session lookup/selection now lives in `TransportDeviceSessionRegistry` instead of inline map ownership inside `WindowsDeviceManager`.
-- Windows BLE transport constants and device-session identity helpers now live in `WindowsBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
+- Windows BLE transport constants, display names, and device-session identity helpers now live in `WindowsBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Windows USB MIDI port pairing, target selection, and session identity helpers now live in `WindowsUsbMidiTransport`, so the current Windows manager has separate USB and BLE transport helper files.
 - Windows now has a `WindowsWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
 - Windows has a local `DeviceBufferSessionTests` suite covering RX/counter and SysEx parser state isolation across separate transport sessions.

@@ -681,7 +681,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         _bleConnecting = true;
         StopBleScan();
-        _ = ConnectBleAsync(args.BluetoothAddress, string.IsNullOrWhiteSpace(name) ? "EMWaver BLE" : name);
+        _ = ConnectBleAsync(args.BluetoothAddress, WindowsBleTransport.DisplayName(args));
     }
 
     private async Task ConnectBleAsync(ulong bluetoothAddress, string displayName)

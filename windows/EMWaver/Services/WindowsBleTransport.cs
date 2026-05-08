@@ -137,6 +137,12 @@ internal static class WindowsBleTransport
                name.Contains("emwaver", StringComparison.OrdinalIgnoreCase);
     }
 
+    internal static string DisplayName(BluetoothLEAdvertisementReceivedEventArgs args)
+    {
+        var name = args.Advertisement.LocalName;
+        return string.IsNullOrWhiteSpace(name) ? "EMWaver BLE" : name;
+    }
+
     internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(ulong bluetoothAddress)
     {
         return await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
