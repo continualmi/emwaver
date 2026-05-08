@@ -223,6 +223,11 @@ bool wifi_transport_is_station_online(void)
     return s_station_online;
 }
 
+bool wifi_transport_is_reconnecting(void)
+{
+    return s_reconnect_pending;
+}
+
 static void wifi_register_commands(void)
 {
     (void)register_command(

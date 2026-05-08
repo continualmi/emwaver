@@ -25,6 +25,7 @@ esp_err_t wifi_transport_clear_config(void);
 bool wifi_transport_is_provisioned(void);
 bool wifi_transport_is_authenticated(void);
 bool wifi_transport_is_station_online(void);
+bool wifi_transport_is_reconnecting(void);
 
 #ifdef __cplusplus
 }
