@@ -263,13 +263,14 @@ final class MacWiFiManager {
         }
     }
 
-    func send(_ data: Data) {
+    func send(_ data: Data, sequence: UInt16? = nil) {
         queue.async {
             guard let socket = self.socket, self.connectedDeviceID != nil else {
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
-            guard let frame = Self.makeEnvelope(kind: 1, sequence: self.nextSequence(), payload: data) else {
+            let envelopeSequence = sequence ?? self.nextSequence()
+            guard let frame = Self.makeEnvelope(kind: 1, sequence: envelopeSequence, payload: data) else {
                 self.onError("Wi-Fi write failed: Payload too large")
                 return
             }

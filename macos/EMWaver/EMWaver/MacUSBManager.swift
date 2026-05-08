@@ -219,6 +219,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return lane.dropFirst(4).allSatisfy { $0 == 0 }
     }
 
+    static func wiFiSequenceForOutgoingSuperframe(_ superframe: Data) -> UInt16? {
+        guard superframe.count >= superframeSizeBytes else { return nil }
+        let cmdLane = superframe.subdata(in: 0..<laneSizeBytes)
+        let streamLane = superframe.subdata(in: laneSizeBytes..<superframeSizeBytes)
+        let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
+        let streamEmpty = streamLane.allSatisfy { $0 == 0 }
+        return cmdEmpty && !streamEmpty ? 0 : nil
+    }
+
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
@@ -1503,7 +1512,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 setError("Wi-Fi write failed: Not connected")
                 return
             }
-            wifiManager?.send(sysex)
+            wifiManager?.send(sysex, sequence: Self.wiFiSequenceForOutgoingSuperframe(superframe))
             return
         }
 

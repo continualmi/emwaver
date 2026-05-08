@@ -79,6 +79,22 @@ struct EMWaverTests {
         #expect(!MacUSBManager.isBufferStatusLane(streamData))
     }
 
+    @Test func wifiOutgoingSequenceZeroIsReservedForStreamOnlySuperframes() {
+        var streamOnly = Data(repeating: 0, count: 36)
+        streamOnly[18] = 0x01
+        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(streamOnly) == 0)
+
+        var commandOnly = Data(repeating: 0, count: 36)
+        commandOnly[0] = 0x01
+        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(commandOnly) == nil)
+
+        var mixed = commandOnly
+        mixed[18] = 0x02
+        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(mixed) == nil)
+
+        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(Data(repeating: 0, count: 36)) == nil)
+    }
+
     @Test func wifiBoardMetadataNormalizesEspTargets() {
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")
