@@ -307,36 +307,17 @@ final class USBManager: NSObject, ObservableObject {
         // Avoid depending on the @Published `isConnected` flag here; it may lag behind CoreMIDI state.
         guard activeTransport == .ble || connectedDestination != 0 else { return nil }
 
-        // Drop any stale RX packets so next_rx_packet returns this command's response.
-        withBufferQueueSync {
-            activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount())
+        let session = withBufferQueueSync {
+            activeBufferSession.prepareCommandResponseWait()
+            return activeBufferSession
         }
 
         // Send synchronously to avoid racing the RX wait-loop.
         sendPacketBestEffortSync(command)
 
-        let startTime = Date().timeIntervalSince1970
-        var out = Data()
-        out.reserveCapacity(Self.packetSizeBytes)
-
-        while out.count < Self.packetSizeBytes {
-            if activeTransport != .ble && connectedDestination == 0 { return nil }
-
-            let nextPacket = withBufferQueueSync { activeBufferSession.nextRxPacket() }
-            if let pkt = nextPacket {
-                out.append(pkt.packet64)
-                break
-            }
-
-            let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
-            if elapsedMs >= Double(max(1, timeout)) {
-                return nil
-            }
-
-            Thread.sleep(forTimeInterval: 0.01)
+        return session.awaitCommandResponse(timeout: timeout) {
+            activeTransport == .ble || connectedDestination != 0
         }
-
-        return out
     }
 
     private func sendPacketBestEffortSync(_ data: Data) {
@@ -671,35 +652,16 @@ final class USBManager: NSObject, ObservableObject {
             return nil
         }
 
-        // Drop any stale RX packets so next_rx_packet returns this command's response.
-        withBufferQueueSync {
-            activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount())
+        let session = withBufferQueueSync {
+            activeBufferSession.prepareCommandResponseWait()
+            return activeBufferSession
         }
 
         sendPacket(command)
 
-        let startTime = Date().timeIntervalSince1970
-        var out = Data()
-        out.reserveCapacity(Self.packetSizeBytes)
-
-        while out.count < Self.packetSizeBytes {
-            if !isConnected { return nil }
-
-            let nextPacket = withBufferQueueSync { activeBufferSession.nextRxPacket() }
-            if let pkt = nextPacket {
-                out.append(pkt.packet64)
-                break
-            }
-
-            let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
-            if elapsedMs >= Double(max(1, timeout)) {
-                return nil
-            }
-
-            Thread.sleep(forTimeInterval: 0.01)
+        return session.awaitCommandResponse(timeout: timeout) {
+            isConnected
         }
-
-        return out
     }
 
     // MARK: - Self-test (no adapter)

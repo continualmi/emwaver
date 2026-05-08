@@ -107,6 +107,31 @@ final class DeviceBufferSession {
         samplerStreamingActive = false
     }
 
+    func prepareCommandResponseWait() {
+        lock.lock()
+        defer { lock.unlock() }
+        rxCounter = UInt64(rxBytes.count / Self.packetSizeBytes)
+    }
+
+    func awaitCommandResponse(timeout: Int, shouldContinue: () -> Bool) -> Data? {
+        let startTime = Date().timeIntervalSince1970
+        let safeTimeout = Double(max(1, timeout))
+
+        while true {
+            if !shouldContinue() { return nil }
+            if let pkt = nextRxPacket() {
+                return pkt.packet64
+            }
+
+            let elapsedMs = (Date().timeIntervalSince1970 - startTime) * 1000
+            if elapsedMs >= safeTimeout {
+                return nil
+            }
+
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+    }
+
     func loadBuffer(_ data: Data) {
         lock.lock()
         defer { lock.unlock() }
