@@ -841,7 +841,7 @@ public sealed partial class ScriptsPage : Page
 
     private static string ActiveDeviceLabel()
     {
-        var portName = AppServices.Device.ConnectedPort?.Name;
+        var portName = AppServices.Device.ConnectedPort?.DisplayName;
         if (!string.IsNullOrWhiteSpace(portName))
         {
             return portName;

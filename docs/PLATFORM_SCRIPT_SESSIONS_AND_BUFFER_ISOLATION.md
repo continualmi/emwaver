@@ -41,6 +41,7 @@ Current first step:
 
 - scripts list shows the active run as a session row,
 - the session row shows the active device label when available,
+- the Windows session row now reads the connected port's `DisplayName`, so USB MIDI rows show the actual target label instead of falling back to transport text.
 - the session row has a stop button,
 - running a different script no longer shows the old "Stop and Run" switch prompt.
 - the Windows session-row and toolbar stop controls now stop the active script directly, matching the simplified macOS row-control behavior.
