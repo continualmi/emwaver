@@ -113,7 +113,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
     }
 
-    private void setActiveBufferSession(String deviceId) {
+    private TransportDeviceSession bufferSession(String deviceId) {
         String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
         synchronized (bufferSessionLock) {
             TransportDeviceSession session = bufferSessionsByDeviceId.get(key);
@@ -121,6 +121,13 @@ public class USBService extends Service implements DeviceConnectionService {
                 session = new DeviceBufferSession();
                 bufferSessionsByDeviceId.put(key, session);
             }
+            return session;
+        }
+    }
+
+    private void setActiveBufferSession(String deviceId) {
+        TransportDeviceSession session = bufferSession(deviceId);
+        synchronized (bufferSessionLock) {
             activeBufferSession = session;
             activeBufferSession.clearAll();
         }
@@ -283,15 +290,20 @@ public class USBService extends Service implements DeviceConnectionService {
     private MidiReceiver rxReceiver = new MidiReceiver() {
         @Override
         public void onSend(byte[] data, int offset, int count, long timestamp) {
-            feedSysexBytes(data, offset, count);
+            UsbDevice usbDevice = connectedMidiUsbDevice;
+            feedSysexBytes(data, offset, count, bufferSession(AndroidUsbMidiTransport.sessionId(usbDevice)));
         }
     };
 
     private void feedSysexBytes(byte[] data, int offset, int count) {
+        feedSysexBytes(data, offset, count, activeBufferSession());
+    }
+
+    private void feedSysexBytes(byte[] data, int offset, int count, TransportDeviceSession bufferSession) {
         if (data == null || count <= 0) {
             return;
         }
-        activeBufferSession().feedSysexBytes(data, offset, count, System.currentTimeMillis());
+        bufferSession.feedSysexBytes(data, offset, count, System.currentTimeMillis());
     }
 
     private void connectUsbMidi(UsbDevice usbDevice) {
@@ -635,7 +647,7 @@ public class USBService extends Service implements DeviceConnectionService {
             if (characteristic != null && AndroidBleTransport.NOTIFY_UUID.equals(characteristic.getUuid())) {
                 byte[] value = characteristic.getValue();
                 if (value != null) {
-                    feedSysexBytes(value, 0, value.length);
+                    feedSysexBytes(value, 0, value.length, bufferSession(AndroidBleTransport.sessionId(gatt.getDevice())));
                 }
             }
         }
