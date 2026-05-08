@@ -41,6 +41,7 @@
 #include "spi.h"
 #include "usb.h"
 #include "ble_server.h"
+#include "wifi_transport.h"
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
@@ -138,6 +139,7 @@ void emwaver_init(void)
 
     usb_init(cmd_queue);
     ble_server_init(cmd_queue);
+    wifi_transport_init(cmd_queue);
 
     BaseType_t created = xTaskCreatePinnedToCore(command_task,
                                                 "cmd_task",
@@ -290,6 +292,13 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
         return;
     }
 
+    if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to send Wi-Fi OK response");
+        }
+        return;
+    }
+
     if (usb_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
         ESP_LOGW(TAG, "Failed to send USB OK response");
     }
@@ -300,6 +309,13 @@ static void send_binary_err(void)
     if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
         if (ble_server_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != 0) {
             ESP_LOGW(TAG, "Failed to send BLE ERR response");
+        }
+        return;
+    }
+
+    if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to send Wi-Fi ERR response");
         }
         return;
     }

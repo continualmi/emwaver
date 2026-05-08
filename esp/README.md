@@ -135,6 +135,8 @@ Current reintegration status:
 - BLE is active as the wireless direct-local transport. It advertises the EMWaver GATT service and accepts the same 36-byte EMWaver superframe encoded inside the same SysEx payload used by USB MIDI.
 - Binary opcode support now covers the core shared bring-up surface over USB and BLE: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
+- Wi-Fi transport foundation is active behind `EMWAVER_ENABLE_WIFI_TRANSPORT`: provisioned ESP32-S3 boards join station-mode Wi-Fi from NVS, advertise `_emwaver._tcp` on port `3922`, and expose an authenticated WebSocket at `/v1/ws` carrying the same EMWaver SysEx/superframe bytes as USB MIDI and BLE.
+- Initial Wi-Fi provisioning is available through the local command path with `wifi provision --ssid=<ssid> --password=<password> --secret=<local-secret> [--hostname=<emwaver-name>]`, plus `wifi status` and `wifi clear` for diagnostics/recovery. This is a developer bring-up slice until native app provisioning UI is added.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
 - macOS now auto-connects to ESP32-S3 over USB MIDI first when present, then scans for the EMWaver BLE service and uses BLE for local scripts when no wired runtime is connected.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
@@ -157,11 +159,11 @@ Recommended rule:
 
 This keeps app complexity under control:
 - USB and BLE share one codec and runtime behavior,
-- Wi-Fi can later carry the same packet model for remote/autonomous sessions.
+- Wi-Fi carries the same packet model for the first station-mode runtime slice.
 
 This also avoids the current restored-state problem where:
 - BLE is closest to an EMWaver command transport,
-- Wi-Fi is currently mostly OTA SoftAP logic,
+- OTA SoftAP remains separate from the station-mode Wi-Fi runtime socket,
 - USB is currently HID/BadUSB-oriented rather than an EMWaver device runtime transport.
 
 ### Why all transports still make sense
@@ -219,7 +221,7 @@ Target layering for reintegration:
    - USB transport with STM32-parity behavior first
    - BLE transport that carries the same SysEx packets with chunking/reassembly as needed
    - Wi-Fi local adapter (network setup / local network if needed)
-   - Wi-Fi network adapter carrying the same packet model when implemented
+   - Wi-Fi network adapter carrying the same packet model
 
 4. **Update/provisioning services**
    - BLE-assisted onboarding

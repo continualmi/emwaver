@@ -3,6 +3,8 @@ dependencies:
   ## Required IDF version
   idf: "^5.0"
   espressif/esp_tinyusb: "^1.1"
+  espressif/tinyusb: "0.18.0~2"
+  espressif/mdns: "^1.8"
   # # Put list of dependencies here
   # # For components maintained by Espressif:
   # component: "~1.0.0"

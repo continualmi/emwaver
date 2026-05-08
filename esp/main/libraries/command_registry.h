@@ -39,6 +39,7 @@ typedef struct {
 #define EMW_COMMAND_SOURCE_UNKNOWN 0u
 #define EMW_COMMAND_SOURCE_USB 1u
 #define EMW_COMMAND_SOURCE_BLE 2u
+#define EMW_COMMAND_SOURCE_WIFI 3u
 
 typedef struct {
     const uint8_t *data;
