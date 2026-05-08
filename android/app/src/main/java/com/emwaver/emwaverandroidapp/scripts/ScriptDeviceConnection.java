@@ -38,7 +38,7 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         this.targetService = targetService;
         this.targetConnectionType = targetService != null ? targetService.getConnectionType() : DeviceConnectionService.ConnectionType.NONE;
         this.targetLabel = targetLabel;
-        this.targetDeviceId = targetService != null ? targetService.currentScriptDeviceId() : null;
+        this.targetDeviceId = normalizeDeviceId(targetService != null ? targetService.currentScriptDeviceId() : null);
     }
 
     ScriptDeviceConnection(DeviceConnectionService targetService, String targetLabel) {
@@ -46,7 +46,7 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         this.targetService = targetService;
         this.targetConnectionType = targetService != null ? targetService.getConnectionType() : DeviceConnectionService.ConnectionType.NONE;
         this.targetLabel = targetLabel;
-        this.targetDeviceId = targetService != null ? targetService.currentScriptDeviceId() : null;
+        this.targetDeviceId = normalizeDeviceId(targetService != null ? targetService.currentScriptDeviceId() : null);
     }
 
     public static ScriptDeviceConnection captureActive(Context context, String targetLabel) {
@@ -86,7 +86,15 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
     }
 
     public String capturedDeviceId() {
-        return targetDeviceId != null && !targetDeviceId.trim().isEmpty() ? targetDeviceId : "active";
+        return targetDeviceId != null ? targetDeviceId : "active";
+    }
+
+    private static String normalizeDeviceId(String deviceId) {
+        if (deviceId == null) {
+            return null;
+        }
+        String trimmed = deviceId.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 
     @Nullable
