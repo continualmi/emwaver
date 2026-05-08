@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
+using System.Threading.Tasks;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Midi;
 using Windows.Storage.Streams;
@@ -14,6 +15,29 @@ internal static class WindowsUsbMidiTransport
     internal static readonly string[] ContainerProperties = ["System.Devices.ContainerId"];
 
     internal static string SessionId(DevicePort port) => port.InDeviceId;
+
+    internal static async Task<IReadOnlyList<DevicePort>> ListPortsAsync()
+    {
+        var inDevsTask = DeviceInformation.FindAllAsync(
+            MidiInPort.GetDeviceSelector(),
+            ContainerProperties
+        ).AsTask();
+        var outDevsTask = DeviceInformation.FindAllAsync(
+            MidiOutPort.GetDeviceSelector(),
+            ContainerProperties
+        ).AsTask();
+
+        await Task.WhenAll(inDevsTask, outDevsTask);
+        return PairPorts(inDevsTask.Result, outDevsTask.Result);
+    }
+
+    internal static async Task<(MidiInPort? InPort, IMidiOutPort? OutPort)> OpenPortsAsync(DevicePort port)
+    {
+        var inPortTask = MidiInPort.FromIdAsync(port.InDeviceId).AsTask();
+        var outPortTask = MidiOutPort.FromIdAsync(port.OutDeviceId).AsTask();
+        await Task.WhenAll(inPortTask, outPortTask);
+        return (inPortTask.Result, outPortTask.Result);
+    }
 
     internal static IReadOnlyList<DevicePort> PairPorts(
         IReadOnlyList<DeviceInformation> inDevices,

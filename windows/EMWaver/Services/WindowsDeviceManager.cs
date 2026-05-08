@@ -256,19 +256,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             LastErrorText = null;
 
-            var inDevsTask = DeviceInformation.FindAllAsync(
-                MidiInPort.GetDeviceSelector(),
-                WindowsUsbMidiTransport.ContainerProperties
-            ).AsTask();
-            var outDevsTask = DeviceInformation.FindAllAsync(
-                MidiOutPort.GetDeviceSelector(),
-                WindowsUsbMidiTransport.ContainerProperties
-            ).AsTask();
+            var portsTask = WindowsUsbMidiTransport.ListPortsAsync();
             var dfuTask = IsDfuPresentAsync();
 
-            await Task.WhenAll(inDevsTask, outDevsTask, dfuTask);
-
-            var pairs = WindowsUsbMidiTransport.PairPorts(inDevsTask.Result, outDevsTask.Result);
+            await Task.WhenAll(portsTask, dfuTask);
+            var pairs = portsTask.Result;
 
             RunOnUi(() =>
             {
@@ -312,8 +304,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             _connectedBleSessionId = null;
             SetActiveBufferSession(_connectedUsbSessionId);
 
-            _inPort = await MidiInPort.FromIdAsync(port.InDeviceId);
-            _outPort = await MidiOutPort.FromIdAsync(port.OutDeviceId);
+            var ports = await WindowsUsbMidiTransport.OpenPortsAsync(port);
+            _inPort = ports.InPort;
+            _outPort = ports.OutPort;
 
             if (_inPort == null || _outPort == null)
             {
