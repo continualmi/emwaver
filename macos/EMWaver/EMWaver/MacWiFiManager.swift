@@ -15,6 +15,8 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var port: Int
     var boardType: String?
     var firmwareVersion: String?
+    var protocolVersion: String?
+    var capabilities: [String]
     var isPaired: Bool
     var lastSeen: Date
 }
@@ -47,6 +49,8 @@ final class MacWiFiManager {
     private struct BonjourMetadata {
         var boardType: String?
         var firmwareVersion: String?
+        var protocolVersion: String?
+        var capabilities: [String] = []
     }
 
     private static let pairingStoreKey = "com.emwaver.macos.pairedWifiDevices.v1"
@@ -141,6 +145,8 @@ final class MacWiFiManager {
                 port: safePort,
                 boardType: "esp32s3",
                 firmwareVersion: nil,
+                protocolVersion: "1",
+                capabilities: ["wifi"],
                 isPaired: true,
                 lastSeen: Date()
             )
@@ -182,6 +188,8 @@ final class MacWiFiManager {
                 port: safePort,
                 boardType: "esp32s3",
                 firmwareVersion: nil,
+                protocolVersion: "1",
+                capabilities: ["wifi"],
                 isPaired: true,
                 lastSeen: Date()
             )
@@ -211,6 +219,14 @@ final class MacWiFiManager {
         queue.async {
             guard let paired = self.pairedDevicesByID[record.id], !paired.secret.isEmpty else {
                 self.onError("Pair this Wi-Fi device locally before connecting")
+                return
+            }
+            if let protocolVersion = record.protocolVersion, protocolVersion != "1" {
+                self.onError("Firmware does not support this Wi-Fi transport protocol")
+                return
+            }
+            if !record.capabilities.isEmpty && !record.capabilities.contains("wifi") {
+                self.onError("Firmware does not advertise Wi-Fi transport support")
                 return
             }
             guard let url = URL(string: "ws://\(record.host):\(record.port)/v1/ws") else {
@@ -281,6 +297,8 @@ final class MacWiFiManager {
                 port: Self.defaultPort,
                 boardType: metadata.boardType ?? "esp32s3",
                 firmwareVersion: metadata.firmwareVersion,
+                protocolVersion: metadata.protocolVersion,
+                capabilities: metadata.capabilities,
                 isPaired: pairedDevicesByID[id] != nil,
                 lastSeen: Date()
             )
@@ -294,6 +312,8 @@ final class MacWiFiManager {
                 port: paired.port,
                 boardType: "esp32s3",
                 firmwareVersion: nil,
+                protocolVersion: "1",
+                capabilities: ["wifi"],
                 isPaired: true,
                 lastSeen: paired.lastSeen
             )
@@ -384,6 +404,8 @@ final class MacWiFiManager {
                 port: record.port,
                 boardType: "esp32s3",
                 firmwareVersion: nil,
+                protocolVersion: "1",
+                capabilities: ["wifi"],
                 isPaired: true,
                 lastSeen: record.lastSeen
             )
@@ -406,7 +428,9 @@ final class MacWiFiManager {
         let dictionary = txtRecord.dictionary
         return BonjourMetadata(
             boardType: normalizedBoardType(dictionary["board"]),
-            firmwareVersion: nonEmpty(dictionary["fw"])
+            firmwareVersion: nonEmpty(dictionary["fw"]),
+            protocolVersion: nonEmpty(dictionary["proto"]),
+            capabilities: capabilities(dictionary["cap"])
         )
     }
 
@@ -426,6 +450,14 @@ final class MacWiFiManager {
             return nil
         }
         return trimmed
+    }
+
+    private static func capabilities(_ value: String?) -> [String] {
+        guard let value = nonEmpty(value) else { return [] }
+        return value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
     }
 
     private static func hmacHex(secret: String, message: String) -> String {
