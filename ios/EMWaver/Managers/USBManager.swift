@@ -74,19 +74,6 @@ final class USBManager: NSObject, ObservableObject {
         case ble
     }
 
-    private struct ActiveDeviceTarget {
-        static let none = ActiveDeviceTarget(deviceId: "active", transport: .none)
-
-        let deviceId: String
-        let transport: ActiveTransport
-
-        init(deviceId: String, transport: ActiveTransport) {
-            let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-            self.deviceId = key.isEmpty ? "active" : key
-            self.transport = transport
-        }
-    }
-
     private func dbg(_ msg: String) {
         #if DEBUG
         // Both: `print` always shows in Xcode debug console; Logger integrates with Console.app.
@@ -135,7 +122,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private var centralManager: CBCentralManager?
     private var activeTransport: ActiveTransport = .none
-    private var activeDeviceTarget = ActiveDeviceTarget.none
+    private var activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
     private var connectedPeripheral: CBPeripheral?
     private var commandCharacteristic: CBCharacteristic?
     private var notifyCharacteristic: CBCharacteristic?
@@ -188,8 +175,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func isActiveDeviceSession(deviceId: String) -> Bool {
-        let requested = normalizedDeviceSessionKey(deviceId)
-        return requested == activeDeviceTarget.deviceId
+        activeDeviceTarget.matchesDeviceId(deviceId)
     }
 
     private func requireActiveDeviceSession(deviceId: String, operation: String) -> Bool {
@@ -219,12 +205,12 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func clearActiveDeviceTarget() {
-        activeDeviceTarget = .none
+        activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
         activeTransport = .none
     }
 
     private func activeDeviceSessionKey(for transport: ActiveTransport) -> String? {
-        activeDeviceTarget.transport == transport ? activeDeviceTarget.deviceId : nil
+        activeDeviceTarget.matchesTransport(transport) ? activeDeviceTarget.deviceId : nil
     }
 
     // MARK: - Common helpers (used across the iOS codebase)

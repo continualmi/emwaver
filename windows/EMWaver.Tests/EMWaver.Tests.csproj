@@ -25,6 +25,8 @@
 
   <ItemGroup>
     <Compile Include="..\EMWaver\Interop\NativeBufferRust.cs" Link="EMWaver\Interop\NativeBufferRust.cs" />
+    <Compile Include="..\EMWaver\Services\ActiveDeviceTarget.cs" Link="EMWaver\Services\ActiveDeviceTarget.cs" />
+    <Compile Include="..\EMWaver\Services\DeviceTransport.cs" Link="EMWaver\Services\DeviceTransport.cs" />
     <Compile Include="..\EMWaver\Services\DeviceBufferSession.cs" Link="EMWaver\Services\DeviceBufferSession.cs" />
     <Compile Include="..\EMWaver\Services\ITransportDeviceSession.cs" Link="EMWaver\Services\ITransportDeviceSession.cs" />
     <Compile Include="..\EMWaver\Services\UsbMidiSysex.cs" Link="EMWaver\Services\UsbMidiSysex.cs" />

@@ -25,27 +25,6 @@ internal enum DeviceMode
     UpdateMode = 2,
 }
 
-internal enum DeviceTransport
-{
-    None = 0,
-    UsbMidi = 1,
-    Ble = 2,
-}
-
-internal sealed class ActiveDeviceTarget
-{
-    internal static readonly ActiveDeviceTarget None = new("active", DeviceTransport.None);
-
-    internal ActiveDeviceTarget(string deviceId, DeviceTransport transport)
-    {
-        DeviceId = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
-        Transport = transport;
-    }
-
-    internal string DeviceId { get; }
-    internal DeviceTransport Transport { get; }
-}
-
 internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 {
     private static readonly int LaneSizeBytes = 18;
@@ -249,8 +228,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private bool IsActiveDeviceSession(string deviceId)
     {
-        var requested = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
-        return string.Equals(requested, _activeDeviceTarget.DeviceId, StringComparison.OrdinalIgnoreCase);
+        return _activeDeviceTarget.MatchesDeviceId(deviceId);
     }
 
     private bool RequireActiveDeviceSession(string deviceId, string operation)
@@ -281,7 +259,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private string? ActiveDeviceSessionId(DeviceTransport transport)
     {
-        return _activeDeviceTarget.Transport == transport ? _activeDeviceTarget.DeviceId : null;
+        return _activeDeviceTarget.MatchesTransport(transport) ? _activeDeviceTarget.DeviceId : null;
     }
 
     internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)

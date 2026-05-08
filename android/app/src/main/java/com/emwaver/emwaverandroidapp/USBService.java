@@ -68,19 +68,6 @@ public class USBService extends Service implements DeviceConnectionService {
         BLE
     }
 
-    private static final class ActiveDeviceTarget {
-        static final ActiveDeviceTarget NONE = new ActiveDeviceTarget("active", ActiveTransport.NONE);
-
-        final String deviceId;
-        final ActiveTransport transport;
-
-        ActiveDeviceTarget(String deviceId, ActiveTransport transport) {
-            String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
-            this.deviceId = key;
-            this.transport = transport;
-        }
-    }
-
     private final IBinder binder = new LocalBinder();
 
     // DFU/flash (USB control transfers)
@@ -109,7 +96,8 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile boolean bleConnected = false;
     private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
-    private volatile ActiveDeviceTarget activeDeviceTarget = ActiveDeviceTarget.NONE;
+    private volatile ActiveDeviceTarget<ActiveTransport> activeDeviceTarget =
+            new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
@@ -143,8 +131,7 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private boolean isActiveDeviceSession(String deviceId) {
-        String requested = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
-        return requested.equals(activeDeviceTarget.deviceId);
+        return activeDeviceTarget.matchesDeviceId(deviceId);
     }
 
     private boolean requireActiveDeviceSession(String deviceId, String operation) {
@@ -174,15 +161,15 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private void setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
-        ActiveDeviceTarget target = new ActiveDeviceTarget(deviceId, transport);
+        ActiveDeviceTarget<ActiveTransport> target = new ActiveDeviceTarget<>(deviceId, transport);
         setActiveBufferSession(target.deviceId);
         activeDeviceTarget = target;
         activeTransport = target.transport;
     }
 
     private void clearActiveDeviceTarget(ActiveTransport transport) {
-        if (activeDeviceTarget.transport == transport) {
-            activeDeviceTarget = ActiveDeviceTarget.NONE;
+        if (activeDeviceTarget.matchesTransport(transport)) {
+            activeDeviceTarget = new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
             activeTransport = ActiveTransport.NONE;
         }
     }

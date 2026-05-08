@@ -62,6 +62,7 @@ Current first step:
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows targeted script packet sends now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Windows now tracks the live script target as one `ActiveDeviceTarget` descriptor instead of parallel USB/BLE session fields, so send guards and receive routing resolve against one explicit active transport/session identity.
+- Windows has an `ActiveDeviceTargetTests` suite for active-target device-id normalization and transport matching; local execution still depends on a machine with `dotnet` installed.
 
 Remaining isolation work:
 
@@ -98,6 +99,7 @@ Current first step:
 - Android USB MIDI input/output port opening now lives in `AndroidUsbMidiTransport`, moving another USB setup detail out of `USBService`.
 - Android targeted writes, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Android now tracks the live script target as one `ActiveDeviceTarget` descriptor, keeping the active transport and active session id synchronized before the future per-device transport runtime split.
+- Android has an `ActiveDeviceTargetTest` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
 
@@ -129,6 +131,7 @@ Current first step:
 - iOS CoreMIDI source connection/disconnection now lives in `USBMidiTransport`, moving another USB MIDI setup detail out of `USBManager`.
 - iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - iOS now tracks the live script target as one `ActiveDeviceTarget` descriptor, so CoreMIDI receive routing and targeted script APIs share the same active transport/session identity.
+- iOS has an `ActiveDeviceTargetTests` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
 
@@ -155,6 +158,7 @@ Remaining isolation work:
 - [x] Windows binds local script runs to the active transport session id captured at run start.
 - [x] Windows refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Windows keeps active transport and active script session identity synchronized through one active target descriptor.
+- [x] Windows has focused active-target normalization/matching tests in the local test project.
 - [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
@@ -164,6 +168,7 @@ Remaining isolation work:
 - [x] Android binds local script runs to the active device service captured at run start.
 - [x] Android refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Android keeps active transport and active script session identity synchronized through one active target descriptor.
+- [x] Android has focused active-target normalization/matching tests.
 - [x] Android has a shared transport device-session contract used by the current USB/BLE service.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
@@ -173,6 +178,7 @@ Remaining isolation work:
 - [x] iOS binds local script runs to the active transport session key captured at run start.
 - [x] iOS refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] iOS keeps active transport and active script session identity synchronized through one active target descriptor.
+- [x] iOS has focused active-target normalization/matching tests.
 - [x] iOS has a shared transport device-session protocol used by the current USB MIDI/BLE manager.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
