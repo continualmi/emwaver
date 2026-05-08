@@ -6,11 +6,11 @@ export type RemoteDeviceStatus = {
   hostSessionId?: string;
   connected: boolean;
   runtimeOwner?: string;
-  devices?: Array<{ id?: string; name?: string; connected?: boolean }>;
+  devices?: Array<{ id?: string; name?: string; transport?: string; boardType?: string; connected?: boolean; isActive?: boolean }>;
 };
 
-export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null };
-export type RemoteScriptStopped = { type: "script.stopped"; hostSessionId: string; scriptInstanceId: string; reason?: string | null };
+export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null; deviceId?: string | null };
+export type RemoteScriptStopped = { type: "script.stopped"; hostSessionId: string; scriptInstanceId: string; deviceId?: string | null; reason?: string | null };
 export type RemoteScriptError = { type: "script.error"; hostSessionId: string; error: string; requestId?: string };
 
 export type RemoteUiSnapshot = {
@@ -20,6 +20,7 @@ export type RemoteUiSnapshot = {
   rev: number;
   root: RemoteUiNode | null;
   metadata?: unknown;
+  deviceId?: string | null;
 };
 
 export type RemoteUiNode = {

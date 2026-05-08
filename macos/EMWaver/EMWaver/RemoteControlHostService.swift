@@ -60,6 +60,7 @@ final class RemoteControlHostService: ObservableObject {
 
     private var previewManager: ScriptPreviewManager?
     private var treeCancellable: AnyCancellable?
+    private var deviceStatusCancellable: AnyCancellable?
     private var remoteSessionsByScriptId: [String: RemoteScriptSession] = [:]
 
     private var uiRev: Int = 0
@@ -98,6 +99,12 @@ final class RemoteControlHostService: ObservableObject {
                 ])
             }
 
+        deviceStatusCancellable = device.$discoveredDevices
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.sendDeviceStatus()
+            }
+
         reconnectTask?.cancel()
         reconnectTask = Task { [weak self] in
             guard let self else { return }
@@ -110,6 +117,8 @@ final class RemoteControlHostService: ObservableObject {
         reconnectTask = nil
         treeCancellable?.cancel()
         treeCancellable = nil
+        deviceStatusCancellable?.cancel()
+        deviceStatusCancellable = nil
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         for session in remoteSessionsByScriptId.values {
@@ -118,6 +127,26 @@ final class RemoteControlHostService: ObservableObject {
         }
         remoteSessionsByScriptId.removeAll()
         refreshRemoteSessionSummaries()
+    }
+
+    private func sendDeviceStatus() {
+        guard let device else { return }
+        sendJson([
+            "type": "device.status",
+            "hostSessionId": hostSessions?.hostSessionId ?? "local",
+            "connected": device.isConnected,
+            "runtimeOwner": "native-app",
+            "devices": device.discoveredDevices.map { d in
+                [
+                    "id": d.id,
+                    "name": d.displayName,
+                    "transport": d.transport.rawValue,
+                    "boardType": d.boardType ?? "",
+                    "connected": d.connectionState == .connected,
+                    "isActive": d.isActive,
+                ] as [String: Any]
+            },
+        ])
     }
 
     private func hostSocketConfig() -> HostSocketConfig? {
@@ -201,6 +230,7 @@ final class RemoteControlHostService: ObservableObject {
             "protocolVersion": 1,
             "hostSessionId": hostSessions.hostSessionId,
         ])
+        sendDeviceStatus()
 
         // Start receive loop.
         let receivedMessage = await receiveLoop()

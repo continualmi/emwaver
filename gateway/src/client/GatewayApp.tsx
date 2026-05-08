@@ -65,6 +65,7 @@ function timeOfDay(d = new Date()) {
 }
 
 type LogEntry = { type: string; at: string; raw: RemoteIncomingMessage };
+type LiveSession = { id: string; name: string; deviceId: string; root: RemoteUiNode | null; rev: number; plotDataByNodeId: Record<string, RemotePlotData> };
 
 export function GatewayApp() {
   const [examples, setExamples] = useState<ExampleScript[]>([]);
@@ -74,6 +75,8 @@ export function GatewayApp() {
   const [wsStatus, setWsStatus] = useState<WsStatus>("connecting");
   const [deviceStatus, setDeviceStatus] = useState<RemoteDeviceStatus | null>(null);
   const [scriptInstanceId, setScriptInstanceId] = useState("");
+  const [sessions, setSessions] = useState<Record<string, LiveSession>>({});
+  const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [uiRev, setUiRev] = useState(0);
   const [remoteUiRoot, setRemoteUiRoot] = useState<RemoteUiNode | null>(null);
   const [plotDataByNodeId, setPlotDataByNodeId] = useState<Record<string, RemotePlotData>>({});
@@ -88,8 +91,13 @@ export function GatewayApp() {
   const [unreadAgent, setUnreadAgent] = useState(false);
   const [unreadLog, setUnreadLog] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
+  const activeSessionRef = useRef("");
   const openFileRef = useRef<HTMLInputElement | null>(null);
   const activityRef = useRef<ActivityId | null>("library");
+
+  useEffect(() => {
+    activeSessionRef.current = scriptInstanceId;
+  }, [scriptInstanceId]);
 
   const previewResult = useMemo(() => {
     if (!selected || !isEmw(selected) || mode !== "preview" || remoteUiRoot) return null;
@@ -132,28 +140,58 @@ export function GatewayApp() {
       setLog((items) => [entry, ...items].slice(0, 80));
       setUnreadLog((n) => (activityRef.current === "log" ? 0 : Math.min(n + 1, 99)));
 
-      if (msg.type === "device.status") setDeviceStatus(msg as RemoteDeviceStatus);
+      if (msg.type === "device.status") {
+        const status = msg as RemoteDeviceStatus;
+        setDeviceStatus(status);
+        setSelectedDeviceId((current) => current || status.devices?.find((d) => d.connected)?.id || status.devices?.[0]?.id || "");
+      }
       if (msg.type === "script.started") {
-        setScriptInstanceId(String(msg.scriptInstanceId || ""));
+        const id = String(msg.scriptInstanceId || "");
+        const deviceId = String(msg.deviceId || selectedDeviceId || "");
+        setScriptInstanceId(id);
+        setSessions((items) => ({ ...items, [id]: { id, name: String(msg.name || selected || "script.emw"), deviceId, root: null, rev: 0, plotDataByNodeId: {} } }));
         setRemoteUiRoot(null);
         setPlotDataByNodeId({});
         setMode("preview");
         setUiError(null);
       }
       if (msg.type === "script.stopped") {
-        setScriptInstanceId("");
-        setRemoteUiRoot(null);
+        const stoppedId = String(msg.scriptInstanceId || "");
+        setSessions((items) => {
+          const next = { ...items };
+          delete next[stoppedId];
+          return next;
+        });
+        if (stoppedId === scriptInstanceId) {
+          setScriptInstanceId("");
+          setRemoteUiRoot(null);
+        }
       }
       if (msg.type === "ui.snapshot") {
-        setUiRev(Number(msg.rev || 0));
-        setScriptInstanceId(String(msg.scriptInstanceId || ""));
-        setRemoteUiRoot((msg.root as RemoteUiNode | null) || null);
+        const id = String(msg.scriptInstanceId || "");
+        const root = (msg.root as RemoteUiNode | null) || null;
+        const rev = Number(msg.rev || 0);
+        setSessions((items) => ({
+          ...items,
+          [id]: { ...(items[id] || { id, name: "script.emw", deviceId: String(msg.deviceId || ""), plotDataByNodeId: {} }), root, rev },
+        }));
+        if (!activeSessionRef.current || activeSessionRef.current === id) {
+          setUiRev(rev);
+          setScriptInstanceId(id);
+          setRemoteUiRoot(root);
+        }
         setMode("preview");
       }
       if (msg.type === "plot.data") {
         const plot = msg as RemotePlotData;
         if (plot.targetNodeId) {
           setPlotDataByNodeId((items) => ({ ...items, [plot.targetNodeId]: plot }));
+          setSessions((items) => {
+            const id = String(plot.scriptInstanceId || "");
+            const session = items[id];
+            if (!session) return items;
+            return { ...items, [id]: { ...session, plotDataByNodeId: { ...session.plotDataByNodeId, [plot.targetNodeId]: plot } } };
+          });
         }
       }
       if (msg.type === "script.error" || msg.type === "host.error") {
@@ -194,7 +232,7 @@ export function GatewayApp() {
     setLog([]);
     setUnreadLog(0);
     setUiError(null);
-    wsSend(ws, { type: "script.run", name: selected || "script.emw", source });
+    wsSend(ws, { type: "script.run", name: selected || "script.emw", source, deviceId: selectedDeviceId || undefined });
   }
 
   function stopScript() {
@@ -298,6 +336,17 @@ export function GatewayApp() {
   const connected = !!deviceStatus?.connected;
   const tone = statusTone(wsStatus, deviceStatus);
   const liveScript = !!scriptInstanceId;
+  const liveSessions = Object.values(sessions);
+
+  function selectLiveSession(id: string) {
+    const session = sessions[id];
+    if (!session) return;
+    setScriptInstanceId(id);
+    setRemoteUiRoot(session.root);
+    setUiRev(session.rev);
+    setPlotDataByNodeId(session.plotDataByNodeId);
+    setMode("preview");
+  }
 
   return (
     <div className="flex h-dvh min-h-dvh flex-col overflow-hidden">
@@ -353,7 +402,7 @@ export function GatewayApp() {
           filename={selected || "Untitled"}
           subtitle={
             connected
-              ? `Live on ${runtimeLabel(deviceStatus?.runtimeOwner).toLowerCase()} — scripts and devices stay on this machine.`
+              ? `Local runtime connected — choose a device, run a script, and switch between running sessions below.`
               : "Local-first. No cloud relay required."
           }
           canPreview={canPreview}
@@ -362,6 +411,12 @@ export function GatewayApp() {
           onRun={runScript}
           onStop={stopScript}
           canStop={liveScript}
+          devices={deviceStatus?.devices || []}
+          selectedDeviceId={selectedDeviceId}
+          setSelectedDeviceId={setSelectedDeviceId}
+          sessions={liveSessions}
+          activeSessionId={scriptInstanceId}
+          onSelectSession={selectLiveSession}
           uiError={uiError}
           source={source}
           onSourceChange={(value) => {
@@ -840,6 +895,12 @@ function Workspace(props: {
   onRun: () => void;
   onStop: () => void;
   canStop: boolean;
+  devices: RemoteDeviceStatus["devices"];
+  selectedDeviceId: string;
+  setSelectedDeviceId: (id: string) => void;
+  sessions: LiveSession[];
+  activeSessionId: string;
+  onSelectSession: (id: string) => void;
   uiError: string | null;
   source: string;
   onSourceChange: (v: string) => void;
@@ -859,6 +920,12 @@ function Workspace(props: {
     onRun,
     onStop,
     canStop,
+    devices,
+    selectedDeviceId,
+    setSelectedDeviceId,
+    sessions,
+    activeSessionId,
+    onSelectSession,
     uiError,
     source,
     onSourceChange,
@@ -908,13 +975,26 @@ function Workspace(props: {
             </div>
           ) : null}
 
+          <select
+            value={selectedDeviceId}
+            onChange={(event) => setSelectedDeviceId(event.target.value)}
+            className="h-9 max-w-[260px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
+            title="Device to run the next script on"
+          >
+            <option value="">Active device</option>
+            {(devices || []).map((device) => (
+              <option key={device.id || device.name} value={device.id || ""}>
+                {(device.name || device.id || "Device") + (device.connected ? " · connected" : "")}
+              </option>
+            ))}
+          </select>
           <button
             type="button"
             onClick={onRun}
             className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-3 text-[13px] font-semibold text-[color:var(--aqua)] transition hover:bg-[color:var(--aqua-tint-2)]"
           >
             <RunIcon />
-            Run
+            Run on device
           </button>
           <button
             type="button"
@@ -931,6 +1011,28 @@ function Workspace(props: {
       {uiError ? (
         <div className="mx-5 mt-3 rounded-xl border border-[color:var(--danger-tint-2)] bg-[color:var(--danger-tint)] px-3 py-2 text-[12px] leading-5 text-[color:var(--danger)] whitespace-pre-wrap">
           {uiError}
+        </div>
+      ) : null}
+
+      {sessions.length ? (
+        <div className="mx-5 mt-3 flex flex-wrap gap-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-2">
+          {sessions.map((session) => (
+            <button
+              key={session.id}
+              type="button"
+              onClick={() => onSelectSession(session.id)}
+              className={`rounded-xl border px-3 py-2 text-left text-[12px] transition ${
+                activeSessionId === session.id
+                  ? "border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] text-[color:var(--aqua)]"
+                  : "border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink)] hover:border-[color:var(--sky-tint-2)]"
+              }`}
+            >
+              <div className="font-semibold">{session.name}</div>
+              <div className="mt-0.5 max-w-[260px] truncate font-mono text-[10px] opacity-70">
+                {session.deviceId || "active device"}
+              </div>
+            </button>
+          ))}
         </div>
       ) : null}
 
