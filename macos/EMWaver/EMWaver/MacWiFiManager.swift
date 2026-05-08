@@ -30,12 +30,17 @@ final class MacWiFiManager {
         var lastSeen: Date
     }
 
-    private struct WiFiHello: Codable {
+    private struct WiFiAuth: Codable {
         var type: String
         var client: String
         var protocolVersion: Int
-        var nonce: String
+        var challenge: String
         var response: String
+    }
+
+    private struct WiFiChallenge: Codable {
+        var type: String
+        var challenge: String
     }
 
     private static let pairingStoreKey = "com.emwaver.macos.pairedWifiDevices.v1"
@@ -52,6 +57,8 @@ final class MacWiFiManager {
     private var pairedDevicesByID: [String: PairedWiFiDevice] = [:]
     private var socket: URLSessionWebSocketTask?
     private var connectedDeviceID: String?
+    private var pendingAuthSecret: String?
+    private var pendingAuthRecord: MacWiFiDeviceRecord?
 
     init(
         onDevicesChanged: @escaping ([MacWiFiDeviceRecord]) -> Void,
@@ -159,12 +166,12 @@ final class MacWiFiManager {
 
             let socket = URLSession.shared.webSocketTask(with: url)
             self.socket = socket
-            self.connectedDeviceID = record.id
+            self.connectedDeviceID = nil
+            self.pendingAuthSecret = paired.secret
+            self.pendingAuthRecord = record
 
             socket.resume()
-            self.sendHello(socket: socket, secret: paired.secret)
             self.receiveLoop(socket: socket)
-            self.onConnected(record)
             self.publishDevices()
         }
     }
@@ -194,6 +201,8 @@ final class MacWiFiManager {
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
+        pendingAuthSecret = nil
+        pendingAuthRecord = nil
         if notify {
             onDisconnected(oldID)
         }
@@ -234,10 +243,9 @@ final class MacWiFiManager {
         publishDevices()
     }
 
-    private func sendHello(socket: URLSessionWebSocketTask, secret: String) {
-        let nonce = Self.randomHex(byteCount: 16)
-        let response = Self.hmacHex(secret: secret, message: nonce)
-        let hello = WiFiHello(type: "auth", client: "emwaver-macos", protocolVersion: 1, nonce: nonce, response: response)
+    private func sendHello(socket: URLSessionWebSocketTask, secret: String, challenge: String) {
+        let response = Self.hmacHex(secret: secret, message: challenge)
+        let hello = WiFiAuth(type: "auth", client: "emwaver-macos", protocolVersion: 1, challenge: challenge, response: response)
         guard let data = try? JSONEncoder().encode(hello) else { return }
         socket.send(.data(data)) { [weak self] error in
             if let error {
@@ -255,9 +263,27 @@ final class MacWiFiManager {
                 case .data(let data):
                     self.onData(data, self.connectedDeviceID)
                 case .string(let text):
-                    if text.localizedCaseInsensitiveContains("auth") &&
-                        text.localizedCaseInsensitiveContains("fail") {
+                    if let data = text.data(using: .utf8),
+                       let challenge = try? JSONDecoder().decode(WiFiChallenge.self, from: data),
+                       challenge.type == "challenge",
+                       let secret = self.pendingAuthSecret {
+                        self.sendHello(socket: socket, secret: secret, challenge: challenge.challenge)
+                    } else if text.localizedCaseInsensitiveContains("auth") &&
+                                text.localizedCaseInsensitiveContains("ok"),
+                              let record = self.pendingAuthRecord {
+                        self.connectedDeviceID = record.id
+                        self.pendingAuthSecret = nil
+                        self.pendingAuthRecord = nil
+                        self.onConnected(record)
+                        self.publishDevices()
+                    } else if text.localizedCaseInsensitiveContains("auth") &&
+                                text.localizedCaseInsensitiveContains("fail") {
                         self.onError("Wi-Fi pairing secret rejected")
+                        self.queue.async {
+                            if self.socket === socket {
+                                self.disconnect(notify: true)
+                            }
+                        }
                     }
                 @unknown default:
                     break
@@ -304,12 +330,6 @@ final class MacWiFiManager {
 
     private static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
-    }
-
-    private static func randomHex(byteCount: Int) -> String {
-        var bytes = [UInt8](repeating: 0, count: max(1, byteCount))
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
-        return bytes.map { String(format: "%02x", $0) }.joined()
     }
 
     private static func hmacHex(secret: String, message: String) -> String {

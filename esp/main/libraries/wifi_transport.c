@@ -16,6 +16,7 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
+#include "esp_random.h"
 #include "esp_wifi.h"
 #include "mdns.h"
 #include "mbedtls/md.h"
@@ -53,6 +54,7 @@ static QueueHandle_t s_cmd_queue;
 static httpd_handle_t s_httpd;
 static int s_active_fd = -1;
 static bool s_authenticated;
+static char s_auth_challenge[33];
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
@@ -69,6 +71,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 static void start_server(void);
 static esp_err_t ws_handler(httpd_req_t *req);
 static bool auth_message_matches(const uint8_t *data, size_t len);
+static void generate_auth_challenge(void);
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
 static bool enqueue_sysex(const uint8_t *sysex);
@@ -351,6 +354,17 @@ static esp_err_t ws_handler(httpd_req_t *req)
     if (req->method == HTTP_GET) {
         s_active_fd = httpd_req_to_sockfd(req);
         s_authenticated = false;
+        generate_auth_challenge();
+        char challenge_json[72];
+        snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
+        httpd_ws_frame_t challenge = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)challenge_json,
+            .len = strlen(challenge_json),
+        };
+        (void)httpd_ws_send_frame(req, &challenge);
         return ESP_OK;
     }
 
@@ -411,16 +425,26 @@ static bool auth_message_matches(const uint8_t *data, size_t len)
     }
     memcpy(json, data, copy_len);
 
-    char nonce[65] = {0};
+    char challenge[65] = {0};
     char response[65] = {0};
     char expected[65] = {0};
-    if (!extract_json_string(json, "nonce", nonce, sizeof(nonce)) ||
+    if (!extract_json_string(json, "challenge", challenge, sizeof(challenge)) ||
+        strcmp(challenge, s_auth_challenge) != 0 ||
         !extract_json_string(json, "response", response, sizeof(response)) ||
-        !hmac_sha256_hex(s_config.secret, nonce, expected, sizeof(expected))) {
+        !hmac_sha256_hex(s_config.secret, challenge, expected, sizeof(expected))) {
         return false;
     }
 
     return strlen(response) == strlen(expected) && memcmp(response, expected, strlen(expected)) == 0;
+}
+
+static void generate_auth_challenge(void)
+{
+    for (size_t i = 0; i < 16u; ++i) {
+        uint8_t byte = (uint8_t)(esp_random() & 0xFFu);
+        snprintf(&s_auth_challenge[i * 2u], sizeof(s_auth_challenge) - (i * 2u), "%02x", byte);
+    }
+    s_auth_challenge[32] = '\0';
 }
 
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len)
