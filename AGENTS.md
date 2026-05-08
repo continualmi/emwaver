@@ -158,6 +158,7 @@ Use the local README first when working in a folder:
 - `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/PACKAGING.md` — CLI/gateway packaging direction for macOS, Linux, and Windows
+- `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
 - `docs/TESTS_REBIRTH.md` — validation tracker for rebirth implementation work
 - `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, and next steps
 - `docs/SCHEDULE.md` — active weekly planning/scheduling tracker used in ongoing execution updates

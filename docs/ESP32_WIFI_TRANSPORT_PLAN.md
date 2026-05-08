@@ -369,7 +369,7 @@ Resolved v1 decisions:
 8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and paired Wi-Fi auto-connect are wired.
 9. Validate LAN script execution on real ESP32-S3 hardware.
 10. Validate VPN-by-IP execution.
-11. Add docs for user-owned VPN remote access.
+11. Add docs for user-owned VPN remote access. Current docs progress: `docs/ESP32_WIFI_REMOTE_ACCESS.md` covers same-LAN, VPN-by-IP, SSH/port-forwarding, pairing-secret rotation, CLI examples, and troubleshooting without introducing an EMWaver-hosted relay.
 
 ## Non-Negotiables
 

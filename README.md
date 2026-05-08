@@ -121,6 +121,7 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 - [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.
 - [TESTS_REBIRTH.md](docs/TESTS_REBIRTH.md) tracks validation.
 - [PACKAGING.md](docs/PACKAGING.md) covers CLI and gateway packaging direction.
+- [ESP32_WIFI_REMOTE_ACCESS.md](docs/ESP32_WIFI_REMOTE_ACCESS.md) documents user-owned LAN/VPN access for ESP32 Wi-Fi transport.
 - [AGENT_API.md](docs/AGENT_API.md) defines the optional paid Agent API boundary.
 - [AGENTS.md](AGENTS.md) is the repository-wide source of truth for product vision, platform constraints, and contribution guardrails.
 
