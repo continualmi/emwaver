@@ -11,9 +11,11 @@ Add a first-class ESP32 Wi-Fi transport that can run the same `.emw` hardware-co
 Target user flow:
 
 ```text
-User provisions ESP32 onto home Wi-Fi
-  -> ESP32 appears as an EMWaver network device on the LAN
-  -> EMWaver desktop/mobile/daemon connects over Wi-Fi
+User connects once over USB or BLE
+  -> EMWaver sends Wi-Fi credentials and a local pairing secret
+  -> ESP32 stores the setup in NVS and joins the same Wi-Fi
+  -> ESP32 advertises itself as an EMWaver network device on the LAN
+  -> EMWaver desktop/mobile/daemon discovers and connects over Wi-Fi
   -> user runs .emw scripts without USB or BLE range limits
 ```
 
@@ -77,11 +79,30 @@ Protocol rule:
 
 The first implementation should assume the ESP32 is a Wi-Fi station on the user's LAN.
 
+Default v1 network contract:
+
+- Control port: `3922`.
+- Service type: `_emwaver._tcp`.
+- WebSocket path: `/v1/ws`.
+- Connection URL: `ws://<hostname-or-ip>:3922/v1/ws`.
+- Hardware command payloads: binary WebSocket frames carrying the existing EMWaver SysEx/superframe payload.
+
 Preferred connection options:
 
 1. mDNS hostname, for example `emwaver-xxxx.local`.
 2. DHCP-reserved LAN IP.
 3. Manual IP entry in app/CLI/gateway.
+
+Multiple ESP32 boards should use the same control port. The host distinguishes boards by mDNS service instance, hostname/IP endpoint, local paired-device record, and known local hardware UID when available. A bench with several boards should look like:
+
+```text
+emwaver-a1b2.local:3922
+emwaver-c3d4.local:3922
+192.168.1.41:3922
+192.168.1.42:3922
+```
+
+The host opens one WebSocket session per selected device. No dynamic port allocation is needed for normal physical ESP32 boards because each board owns its own network address.
 
 VPN behavior:
 
@@ -112,6 +133,31 @@ Preferred first security slice:
 
 TLS is desirable later, but authenticated sessions are the first hard requirement. Do not ship an unauthenticated Wi-Fi command socket.
 
+## Same-Wi-Fi Setup Flow
+
+The preferred first-run user experience is "connect once, then it appears automatically" when the host and ESP32 are on the same Wi-Fi.
+
+Setup flow:
+
+1. User connects the ESP32 to EMWaver over USB or BLE.
+2. App asks for local Wi-Fi SSID/password.
+3. App generates or confirms a per-device pairing secret.
+4. App sends Wi-Fi credentials, device hostname, and pairing setup to firmware over USB/BLE.
+5. ESP32 stores the setup in NVS flash.
+6. ESP32 joins the Wi-Fi as a station.
+7. ESP32 starts the authenticated WebSocket server on port `3922`.
+8. ESP32 advertises `_emwaver._tcp` with mDNS.
+9. App discovers the device and connects to `ws://<device>.local:3922/v1/ws`.
+
+Required mDNS advertisement:
+
+- Service type: `_emwaver._tcp`.
+- Port: `3922`.
+- Instance name: user-visible EMWaver device name, for example `EMWaver ESP32-S3 A1B2`.
+- TXT records should include protocol version, board type, firmware version, transport capabilities, and a non-authoritative local identifier suffix for display/deduplication.
+
+Manual IP/hostname entry remains required as a fallback for networks where mDNS is blocked or does not cross routed VPN/subnet boundaries. Manual entry should not be the default same-Wi-Fi path.
+
 ## Firmware Work
 
 ### Phase 1: Foundation
@@ -130,12 +176,15 @@ TLS is desirable later, but authenticated sessions are the first hard requiremen
 
 - Add BLE provisioning flow for Wi-Fi credentials.
 - Keep USB provisioning available for desktop recovery and development.
+- Store provisioned Wi-Fi credentials and pairing state in ESP32 NVS flash.
+- Generate or accept a stable local hostname used for mDNS advertisement.
+- After successful provisioning, attempt station-mode Wi-Fi connection and report status over the provisioning transport.
 - Support clearing Wi-Fi credentials from a local command.
 - Support pairing reset through a local-only path.
 
 ### Phase 3: Runtime Transport
 
-- Add TCP or WebSocket server on the ESP32.
+- Add WebSocket server on the ESP32 at `/v1/ws` on fixed port `3922`.
 - Define a small transport envelope:
   - protocol version,
   - frame length,
@@ -149,7 +198,8 @@ TLS is desirable later, but authenticated sessions are the first hard requiremen
 ### Phase 4: Discovery
 
 - Advertise via mDNS when connected:
-  - service type, for example `_emwaver._tcp`,
+  - service type `_emwaver._tcp`,
+  - fixed port `3922`,
   - board type,
   - firmware version,
   - transport capabilities,
@@ -173,12 +223,14 @@ TLS is desirable later, but authenticated sessions are the first hard requiremen
   - stable id,
   - hostname,
   - IP address,
+  - fixed control port,
   - board type,
   - firmware version,
   - paired/unpaired state,
   - last seen time.
 - Add manual connect by IP/port.
 - Add paired-device storage in local app/daemon state.
+- Support multiple Wi-Fi devices by keeping one network session per selected endpoint/device record.
 
 ### CLI/Daemon
 
@@ -225,9 +277,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
 
 ## Protocol Decision
 
-Use TCP or WebSocket for the first version.
-
-Recommended default: WebSocket.
+Use WebSocket for the first version.
 
 Reasons:
 
@@ -236,13 +286,15 @@ Reasons:
 - debuggable with standard tools,
 - friendly to future local dashboard surfaces.
 
-Keep the payload binary-safe. If WebSocket is used, prefer binary frames for command packets rather than JSON command payloads. JSON can remain useful for hello/capability messages, but hardware command frames should not be text-reencoded unless there is a clear reason.
+Keep the payload binary-safe. Hardware command packets should use binary WebSocket frames rather than JSON command payloads. JSON can remain useful for hello/capability/auth messages, but hardware command frames should not be text-reencoded unless there is a clear reason.
 
 ## UX Requirements
 
 - User never needs to build or flash firmware manually.
 - Local USB/BLE setup and recovery remain available.
 - Wi-Fi setup should feel like "put this board on my network", not "configure a server".
+- Same-Wi-Fi devices should appear automatically after one successful USB/BLE provisioning.
+- Users should not need to understand or choose ports for normal multi-device use.
 - Direct IP entry must exist because VPN mDNS is unreliable.
 - Error messages should distinguish:
   - device not reachable,
@@ -257,8 +309,11 @@ Minimum validation:
 
 | Case | Expected result |
 | --- | --- |
+| USB provisioning | ESP32 stores Wi-Fi credentials in NVS and reconnects after reboot |
+| BLE provisioning | ESP32 stores Wi-Fi credentials in NVS and reconnects after reboot |
 | Same LAN by IP | CLI/app can run blink script |
 | Same LAN by mDNS | CLI/app can discover and run script |
+| Multiple same-LAN boards | CLI/app can discover multiple ESP32 boards using port `3922` and connect independently |
 | VPN by IP | CLI/app can run blink script through routed home subnet |
 | VPN without mDNS | Manual IP still works |
 | Wrong pairing secret | Commands are rejected |
@@ -279,13 +334,17 @@ Hardware validation should include:
 
 ## Open Decisions
 
-- Exact port number and service name.
-- TCP vs WebSocket final binding.
 - Pairing protocol details.
-- Whether first provisioning is BLE-only or USB and BLE.
-- Whether one Wi-Fi client at a time is required for first release.
 - How active script ownership is represented when multiple apps can see the same LAN device.
 - Whether device-to-host outbound mode is useful later for stricter firewall environments.
+
+Resolved v1 decisions:
+
+- Use fixed control port `3922`.
+- Advertise service type `_emwaver._tcp`.
+- Use WebSocket at `/v1/ws`.
+- Use USB and BLE provisioning where platform APIs allow it.
+- Support multiple ESP32 boards on the same LAN by opening one WebSocket per selected endpoint; no per-device port allocation.
 
 ## Implementation Order
 
