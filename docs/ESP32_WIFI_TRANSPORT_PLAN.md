@@ -1,0 +1,312 @@
+# ESP32 Wi-Fi Transport Plan
+
+This plan defines the Wi-Fi transport path for ESP32-S3 class EMWaver boards.
+
+The goal is to let an ESP32 board be controlled over a trusted local network, including through a user-owned VPN into that network, while preserving EMWaver's local-first product direction.
+
+## Product Goal
+
+Add a first-class ESP32 Wi-Fi transport that can run the same `.emw` hardware-control protocol used by USB and BLE.
+
+Target user flow:
+
+```text
+User provisions ESP32 onto home Wi-Fi
+  -> ESP32 appears as an EMWaver network device on the LAN
+  -> EMWaver desktop/mobile/daemon connects over Wi-Fi
+  -> user runs .emw scripts without USB or BLE range limits
+```
+
+Remote power-user flow:
+
+```text
+User is away from home
+  -> user connects to home VPN
+  -> EMWaver reaches the ESP32 LAN IP or hostname
+  -> scripts run over the Wi-Fi transport
+```
+
+This is not a Continual-hosted remote-control feature. No EMWaver account, cloud relay, cloud activation, device ownership check, or subscription check is required for local hardware access.
+
+## Scope
+
+In scope:
+
+- ESP32 station-mode Wi-Fi transport.
+- Wi-Fi provisioning through BLE or USB.
+- LAN device discovery.
+- Manual connect by IP or hostname.
+- Same protocol semantics as USB/BLE.
+- VPN-friendly remote access when the VPN exposes the ESP32's LAN subnet.
+- Local pairing/authentication for the Wi-Fi control port.
+- App/daemon/gateway UI changes needed to select and connect Wi-Fi devices.
+
+Out of scope for the first version:
+
+- Continual-hosted relay.
+- EMWaver cloud device registry.
+- Account-backed device ownership.
+- Cloud script sync.
+- Fleet dashboard behavior.
+- Public-internet ESP32 exposure as a supported default.
+- Firmware customization by end users.
+
+## Architecture
+
+Wi-Fi should be a transport adapter, not a new device protocol.
+
+```text
+.emw runtime
+  -> EMWaver command bridge
+  -> shared packet codec
+  -> Wi-Fi transport adapter
+  -> TCP/WebSocket session
+  -> ESP32 Wi-Fi server
+  -> ESP32 EMWaver protocol layer
+  -> ESP32 runtime/peripheral handlers
+```
+
+Protocol rule:
+
+- Keep one EMWaver command model across USB, BLE, and Wi-Fi.
+- Reuse the existing superframe/SysEx payload contract where practical.
+- Put transport-specific framing only at the transport edge.
+- Keep OTA/update behavior separate from steady-state runtime control.
+
+## Recommended Network Shape
+
+The first implementation should assume the ESP32 is a Wi-Fi station on the user's LAN.
+
+Preferred connection options:
+
+1. mDNS hostname, for example `emwaver-xxxx.local`.
+2. DHCP-reserved LAN IP.
+3. Manual IP entry in app/CLI/gateway.
+
+VPN behavior:
+
+- If the user connects to a VPN that routes the home LAN subnet, EMWaver can connect to the ESP32 by LAN IP.
+- mDNS may not cross VPN boundaries, so direct IP must be supported.
+- Tailscale, WireGuard, OpenVPN, router VPN, SSH tunnels, and similar user-owned paths are acceptable.
+- EMWaver should document that VPN routing and firewall behavior are user/network responsibilities.
+
+## Security Model
+
+Being on the LAN or VPN is useful but should not be the only control boundary.
+
+Minimum Wi-Fi transport security:
+
+- Require local pairing before accepting hardware-control commands.
+- Store a per-device control secret in ESP32 NVS.
+- Use session tokens or challenge-response to avoid accepting raw unauthenticated commands.
+- Allow users to rotate/reset pairing from a physical/local recovery path.
+- Bind privileged operations, such as credential reset or update mode, to a stronger local confirmation path where practical.
+
+Preferred first security slice:
+
+1. BLE or USB provisioning establishes a random device secret.
+2. App/daemon stores the paired device record locally.
+3. Wi-Fi session starts with a nonce challenge.
+4. Client proves knowledge of the paired secret.
+5. Firmware accepts command frames only after authentication.
+
+TLS is desirable later, but authenticated sessions are the first hard requirement. Do not ship an unauthenticated Wi-Fi command socket.
+
+## Firmware Work
+
+### Phase 1: Foundation
+
+- Add compile-time Wi-Fi transport feature gate.
+- Add NVS storage for:
+  - Wi-Fi SSID and credential metadata,
+  - device hostname,
+  - pairing secret,
+  - pairing/reset state.
+- Add station-mode connection manager.
+- Add reconnect/backoff behavior.
+- Add visible connection status over USB/BLE diagnostics.
+
+### Phase 2: Provisioning
+
+- Add BLE provisioning flow for Wi-Fi credentials.
+- Keep USB provisioning available for desktop recovery and development.
+- Support clearing Wi-Fi credentials from a local command.
+- Support pairing reset through a local-only path.
+
+### Phase 3: Runtime Transport
+
+- Add TCP or WebSocket server on the ESP32.
+- Define a small transport envelope:
+  - protocol version,
+  - frame length,
+  - frame kind,
+  - sequence id,
+  - payload bytes.
+- Carry the existing EMWaver command payload inside the envelope.
+- Add request/response correlation and timeout handling.
+- Add streaming support for sampler/retransmit status without blocking command responses.
+
+### Phase 4: Discovery
+
+- Advertise via mDNS when connected:
+  - service type, for example `_emwaver._tcp`,
+  - board type,
+  - firmware version,
+  - transport capabilities,
+  - user-visible device name.
+- Keep manual IP connection as the fallback.
+
+### Phase 5: Validation
+
+- Validate LAN control with blink, GPIO, ADC, SPI, PWM, and sampler flows.
+- Validate disconnect/reconnect during idle and active sessions.
+- Validate VPN access by direct LAN IP.
+- Validate that unauthenticated clients cannot run commands.
+- Validate recovery when Wi-Fi credentials are wrong.
+
+## Host/App Work
+
+### Shared Device Layer
+
+- Add `wifi` as a transport kind beside USB MIDI/SysEx and BLE.
+- Add network device records:
+  - stable id,
+  - hostname,
+  - IP address,
+  - board type,
+  - firmware version,
+  - paired/unpaired state,
+  - last seen time.
+- Add manual connect by IP/port.
+- Add paired-device storage in local app/daemon state.
+
+### CLI/Daemon
+
+- Add Wi-Fi discovery command output to `emwaver devices`.
+- Add direct run support, for example:
+
+```bash
+emwaver run script.emw --direct --wifi 192.168.1.44
+```
+
+- Add gateway daemon fallback support, for example:
+
+```bash
+emwaver gateway --daemon-fallback --wifi 192.168.1.44
+```
+
+- Add doctor checks for:
+  - missing route to device,
+  - connection refused,
+  - authentication failure,
+  - mDNS unavailable,
+  - paired secret mismatch.
+
+### Gateway
+
+- Display Wi-Fi devices in the local device list.
+- Allow manual IP entry for VPN users.
+- Show transport as `Wi-Fi` with LAN/VPN-neutral language.
+- Keep gateway bound to localhost by default.
+- Do not turn the gateway into a hosted relay.
+
+### Native Apps
+
+- Add Wi-Fi device discovery and manual connection surfaces.
+- Reuse existing script/device runtime paths.
+- Add Wi-Fi provisioning from BLE/USB where platform APIs allow it.
+- Show clear connection state:
+  - not provisioned,
+  - connecting,
+  - online,
+  - authenticated,
+  - running,
+  - disconnected.
+
+## Protocol Decision
+
+Use TCP or WebSocket for the first version.
+
+Recommended default: WebSocket.
+
+Reasons:
+
+- easy integration with gateway and browser-adjacent tooling,
+- full-duplex command/status stream,
+- debuggable with standard tools,
+- friendly to future local dashboard surfaces.
+
+Keep the payload binary-safe. If WebSocket is used, prefer binary frames for command packets rather than JSON command payloads. JSON can remain useful for hello/capability messages, but hardware command frames should not be text-reencoded unless there is a clear reason.
+
+## UX Requirements
+
+- User never needs to build or flash firmware manually.
+- Local USB/BLE setup and recovery remain available.
+- Wi-Fi setup should feel like "put this board on my network", not "configure a server".
+- Direct IP entry must exist because VPN mDNS is unreliable.
+- Error messages should distinguish:
+  - device not reachable,
+  - device reachable but not paired,
+  - paired secret rejected,
+  - firmware does not support Wi-Fi transport,
+  - device is busy with another session.
+
+## Testing Matrix
+
+Minimum validation:
+
+| Case | Expected result |
+| --- | --- |
+| Same LAN by IP | CLI/app can run blink script |
+| Same LAN by mDNS | CLI/app can discover and run script |
+| VPN by IP | CLI/app can run blink script through routed home subnet |
+| VPN without mDNS | Manual IP still works |
+| Wrong pairing secret | Commands are rejected |
+| No pairing | Commands are rejected |
+| Wi-Fi drop during script | Runtime reports disconnect and recovers cleanly |
+| USB recovery after bad Wi-Fi config | User can clear/reprovision Wi-Fi |
+| BLE remains available | Nearby direct workflows still work |
+| OTA remains separate | Runtime command port does not become update control by accident |
+
+Hardware validation should include:
+
+- GPIO blink.
+- ADC read.
+- SPI module readback.
+- PWM/servo output.
+- Sampler start/stop.
+- Retransmit flow-control status.
+
+## Open Decisions
+
+- Exact port number and service name.
+- TCP vs WebSocket final binding.
+- Pairing protocol details.
+- Whether first provisioning is BLE-only or USB and BLE.
+- Whether one Wi-Fi client at a time is required for first release.
+- How active script ownership is represented when multiple apps can see the same LAN device.
+- Whether device-to-host outbound mode is useful later for stricter firewall environments.
+
+## Implementation Order
+
+1. Document protocol envelope and security handshake.
+2. Add ESP32 station-mode connection manager behind a feature gate.
+3. Add local Wi-Fi credential provisioning over BLE or USB.
+4. Add authenticated Wi-Fi server carrying EMWaver frames.
+5. Add Rust daemon Wi-Fi transport adapter.
+6. Add `emwaver devices` and `emwaver run --direct --wifi`.
+7. Add gateway device selection/manual IP path.
+8. Add native app discovery/manual connect surfaces.
+9. Validate LAN script execution on real ESP32-S3 hardware.
+10. Validate VPN-by-IP execution.
+11. Add docs for user-owned VPN remote access.
+
+## Non-Negotiables
+
+- No account gate for Wi-Fi hardware control.
+- No cloud relay in the core path.
+- No unauthenticated Wi-Fi command socket.
+- No second ESP32-specific app protocol.
+- No required user firmware build/flash loop.
+- Keep USB/BLE recovery paths.
+- Keep local scripts local by default.
