@@ -290,9 +290,9 @@ Remaining isolation work:
 - [x] Windows has keyed per-device host buffer/session state.
 - [x] Android has keyed per-device host buffer/session state.
 - [x] iOS has keyed per-device host buffer/session state.
-- [ ] Windows USB/BLE/Wi-Fi transport code is split behind a shared session contract.
-- [ ] Android USB/BLE/Wi-Fi transport code is split behind a shared session contract.
-- [ ] iOS USB/BLE/Wi-Fi transport code is split behind a shared session contract.
+- [x] Windows USB/BLE/Wi-Fi transport code is split behind a shared session contract.
+- [x] Android USB/BLE/Wi-Fi transport code is split behind a shared session contract.
+- [x] iOS USB/BLE/Wi-Fi transport code is split behind a shared session contract.
 - [ ] Windows can safely run two hardware scripts against two devices without shared buffer contamination.
 - [ ] Android can safely run two hardware scripts against two devices without shared buffer contamination.
 - [ ] iOS can safely run two hardware scripts against two devices without shared buffer contamination.
