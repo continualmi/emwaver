@@ -24,6 +24,7 @@ private final class LocalTargetedScriptDevice: ScriptDevice {
 
 struct MacScriptSessionSummary: Identifiable, Equatable {
     let id: String
+    let scriptId: String
     let scriptName: String
     let deviceID: String?
     let deviceLabel: String
@@ -33,13 +34,15 @@ struct MacScriptSessionSummary: Identifiable, Equatable {
 @MainActor
 private final class MacScriptSession {
     let manager: ScriptPreviewManager
+    let scriptId: String
     let scriptName: String
     let deviceID: String?
     let deviceLabel: String
     var cancellable: AnyCancellable?
 
-    init(manager: ScriptPreviewManager, scriptName: String, deviceID: String?, deviceLabel: String) {
+    init(manager: ScriptPreviewManager, scriptId: String, scriptName: String, deviceID: String?, deviceLabel: String) {
         self.manager = manager
+        self.scriptId = scriptId
         self.scriptName = scriptName
         self.deviceID = deviceID
         self.deviceLabel = deviceLabel
@@ -63,6 +66,17 @@ final class MacScriptSessionManager: ObservableObject {
 
     var sessionCount: Int {
         sessions.count
+    }
+
+    var scriptSessionStatuses: [ScriptsRootView.ScriptSessionStatus] {
+        sessions.map {
+            ScriptsRootView.ScriptSessionStatus(
+                id: $0.id,
+                scriptId: $0.scriptId,
+                deviceLabel: $0.deviceLabel,
+                stateText: $0.stateText
+            )
+        }
     }
 
     func attach(device: MacUSBManager) {
@@ -91,6 +105,7 @@ final class MacScriptSessionManager: ObservableObject {
 
         let session = MacScriptSession(
             manager: manager,
+            scriptId: request.scriptId,
             scriptName: request.name,
             deviceID: targetID,
             deviceLabel: label(for: targetID)
@@ -121,6 +136,11 @@ final class MacScriptSessionManager: ObservableObject {
         refreshSummaries()
     }
 
+    func selectFirstSession() {
+        guard let id = sessions.first?.id else { return }
+        selectSession(id)
+    }
+
     func stopSelectedSession() {
         guard let selectedSessionID else { return }
         stopSession(selectedSessionID)
@@ -141,6 +161,7 @@ final class MacScriptSessionManager: ObservableObject {
             .map { id, session in
                 MacScriptSessionSummary(
                     id: id,
+                    scriptId: session.scriptId,
                     scriptName: session.manager.activeScriptName ?? session.scriptName,
                     deviceID: session.deviceID,
                     deviceLabel: session.deviceLabel,
@@ -156,21 +177,6 @@ final class MacScriptSessionManager: ObservableObject {
             return "Active device"
         }
 
-        let board = displayBoardType(descriptor.boardType)
-        if let module = descriptor.moduleLabel, !module.isEmpty {
-            return "\(board) / \(module)"
-        }
-        return descriptor.displayName.isEmpty ? board : "\(board) / \(descriptor.displayName)"
-    }
-
-    private func displayBoardType(_ boardType: String?) -> String {
-        switch (boardType ?? "").lowercased() {
-        case "esp32s3":
-            return "ESP32-S3"
-        case "stm32f042":
-            return "STM32F042"
-        default:
-            return boardType?.isEmpty == false ? boardType! : "Device"
-        }
+        return LocalDeviceLabelFormatter.label(for: descriptor)
     }
 }

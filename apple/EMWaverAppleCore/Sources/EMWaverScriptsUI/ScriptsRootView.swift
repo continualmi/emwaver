@@ -43,6 +43,20 @@ public struct ScriptsRootView: View {
         }
     }
 
+    public struct ScriptSessionStatus: Identifiable, Equatable {
+        public let id: String
+        public let scriptId: String
+        public let deviceLabel: String
+        public let stateText: String
+
+        public init(id: String, scriptId: String, deviceLabel: String, stateText: String) {
+            self.id = id
+            self.scriptId = scriptId
+            self.deviceLabel = deviceLabel
+            self.stateText = stateText
+        }
+    }
+
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager: ScriptPreviewManager
     @StateObject private var agentViewModel: AgentChatViewModel
@@ -51,6 +65,8 @@ public struct ScriptsRootView: View {
     private let onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)?
     private let activePreviewManagerProvider: (() -> ScriptPreviewManager?)?
     private let onStopActiveScript: (() -> Void)?
+    private let externalScriptSessions: [ScriptSessionStatus]
+    private let onSelectExternalScriptSession: ((String) -> Void)?
 
     private let device: (any ScriptDevice)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
@@ -106,7 +122,9 @@ public struct ScriptsRootView: View {
         agentLeadingToolbarItem: AnyView? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
-        onStopActiveScript: (() -> Void)? = nil
+        onStopActiveScript: (() -> Void)? = nil,
+        externalScriptSessions: [ScriptSessionStatus] = [],
+        onSelectExternalScriptSession: ((String) -> Void)? = nil
     ) {
         self.device = device
         self.hostStatusSink = hostStatusSink
@@ -119,6 +137,8 @@ public struct ScriptsRootView: View {
         self.onRunScript = onRunScript
         self.activePreviewManagerProvider = activePreviewManagerProvider
         self.onStopActiveScript = onStopActiveScript
+        self.externalScriptSessions = externalScriptSessions
+        self.onSelectExternalScriptSession = onSelectExternalScriptSession
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
             wrappedValue: AgentChatViewModel(endpointProvider: agentEndpointProvider)
@@ -137,7 +157,9 @@ public struct ScriptsRootView: View {
         agentLeadingToolbarItem: AnyView? = nil,
         onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
-        onStopActiveScript: (() -> Void)? = nil
+        onStopActiveScript: (() -> Void)? = nil,
+        externalScriptSessions: [ScriptSessionStatus] = [],
+        onSelectExternalScriptSession: ((String) -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -151,7 +173,9 @@ public struct ScriptsRootView: View {
             agentLeadingToolbarItem: agentLeadingToolbarItem,
             onRunScript: onRunScript,
             activePreviewManagerProvider: activePreviewManagerProvider,
-            onStopActiveScript: onStopActiveScript
+            onStopActiveScript: onStopActiveScript,
+            externalScriptSessions: externalScriptSessions,
+            onSelectExternalScriptSession: onSelectExternalScriptSession
         )
     }
 
@@ -342,7 +366,8 @@ public struct ScriptsRootView: View {
                                 ScriptRow(
                                     script: script,
                                     isSelected: script.id == viewModel.selectedScriptId,
-                                    onTap: { previewScript(script.id) },
+                                    sessionStatuses: sessionStatuses(for: script.id),
+                                    onTap: { openOrRestoreScript(script.id) },
                                     onEdit: { openEditor(for: script.id) }
                                 )
                                 .listRowSeparator(.hidden)
@@ -356,7 +381,8 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: script,
                                         isSelected: script.id == viewModel.selectedScriptId,
-                                        onTap: { previewScript(script.id) },
+                                        sessionStatuses: sessionStatuses(for: script.id),
+                                        onTap: { openOrRestoreScript(script.id) },
                                         onEdit: { openEditor(for: script.id) }
                                     )
                                     .listRowSeparator(.hidden)
@@ -371,6 +397,7 @@ public struct ScriptsRootView: View {
                                     ScriptRow(
                                         script: item,
                                         isSelected: false,
+                                        sessionStatuses: [],
                                         onTap: { openSignalEditor(item) },
                                         onEdit: { openSignalEditor(item) }
                                     )
@@ -486,6 +513,22 @@ public struct ScriptsRootView: View {
             return
         }
         startPreviewScript(id)
+    }
+
+    private func openOrRestoreScript(_ id: String) {
+        if let session = sessionStatuses(for: id).first {
+            onSelectExternalScriptSession?(session.id)
+            viewModel.selectScript(id: id)
+            currentScriptId = id
+            showingEditor = false
+            showingPreview = true
+            return
+        }
+        previewScript(id)
+    }
+
+    private func sessionStatuses(for scriptId: String) -> [ScriptSessionStatus] {
+        externalScriptSessions.filter { $0.scriptId == scriptId }
     }
 
     private func startPendingScriptPreview() {
@@ -1406,6 +1449,7 @@ private struct EmwFileBadgeIcon: View {
 private struct ScriptRow: View {
     let script: ScriptsViewModel.ScriptListItem
     let isSelected: Bool
+    let sessionStatuses: [ScriptsRootView.ScriptSessionStatus]
     let onTap: () -> Void
     let onEdit: () -> Void
 
@@ -1434,6 +1478,23 @@ private struct ScriptRow: View {
                         Text("Unsaved changes")
                             .font(.caption)
                             .foregroundColor(.orange)
+                    }
+                }
+
+                if !sessionStatuses.isEmpty {
+                    HStack(spacing: 6) {
+                        ForEach(sessionStatuses.prefix(3)) { session in
+                            Label(session.deviceLabel, systemImage: session.stateText == "running" ? "play.fill" : "stop.fill")
+                                .font(.caption2)
+                                .foregroundStyle(session.stateText == "running" ? .green : .secondary)
+                                .lineLimit(1)
+                        }
+
+                        if sessionStatuses.count > 3 {
+                            Text("+\(sessionStatuses.count - 3)")
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
             }

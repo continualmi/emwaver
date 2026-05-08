@@ -26,8 +26,6 @@ struct ContentView: View {
     let previewManager: ScriptPreviewManager
 
     @State private var showingSettings: Bool = false
-    @State private var showingLocalSessions: Bool = false
-
     @State private var autoFirmwarePromptKey: String? = nil
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
@@ -122,11 +120,7 @@ struct ContentView: View {
         guard let selectedLocalDevice else {
             return device.isConnected ? currentBoardDisplayName : "No Device"
         }
-        let board = boardDisplayName(selectedLocalDevice.boardType)
-        if let module = selectedLocalDevice.moduleLabel, !module.isEmpty {
-            return "\(board) / \(module)"
-        }
-        return selectedLocalDevice.displayName.isEmpty ? board : "\(board) / \(selectedLocalDevice.displayName)"
+        return LocalDeviceLabelFormatter.label(for: selectedLocalDevice)
     }
 
     var body: some View {
@@ -159,6 +153,10 @@ struct ContentView: View {
                     },
                     onStopActiveScript: {
                         scriptSessions.stopSelectedSession()
+                    },
+                    externalScriptSessions: scriptSessions.scriptSessionStatuses,
+                    onSelectExternalScriptSession: { id in
+                        scriptSessions.selectSession(id)
                     }
                 )
                 .id(scriptDeviceAttachmentKey)
@@ -253,11 +251,6 @@ struct ContentView: View {
                     .background(.thinMaterial)
                     .transition(.opacity)
                 }
-
-                if showingLocalSessions {
-                    localSessionsOverlay
-                        .transition(.opacity)
-                }
             }
             .overlay(alignment: .top) {
                 Divider()
@@ -275,7 +268,7 @@ struct ContentView: View {
                 .help("Press Run in a script or editor to start a new local session on the selected device.")
 
                 Button {
-                    showingLocalSessions = true
+                    scriptSessions.selectFirstSession()
                 } label: {
                     Label("Sessions: \(scriptSessions.sessionCount)", systemImage: "square.stack.3d.up")
                 }
@@ -397,9 +390,9 @@ struct ContentView: View {
                         }
                     } label: {
                         if item.id == scriptSessions.selectedDeviceID {
-                            Label(localDeviceLabel(item), systemImage: "checkmark")
+                            Label(LocalDeviceLabelFormatter.label(for: item), systemImage: "checkmark")
                         } else {
-                            Text(localDeviceLabel(item))
+                            Text(LocalDeviceLabelFormatter.label(for: item))
                         }
                     }
                 }
@@ -415,102 +408,6 @@ struct ContentView: View {
                 .labelStyle(.titleAndIcon)
         }
         .help("Select the local device used by the next script session")
-    }
-
-    private var localSessionsOverlay: some View {
-        VStack(spacing: 0) {
-            HStack {
-                Label("Local Sessions", systemImage: "square.stack.3d.up")
-                    .font(.headline)
-
-                Spacer()
-
-                Button("Done") {
-                    showingLocalSessions = false
-                }
-                .keyboardShortcut(.escape, modifiers: [])
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .background(.ultraThinMaterial)
-
-            Divider()
-
-            HStack(spacing: 0) {
-                List(selection: Binding(
-                    get: { scriptSessions.selectedSessionID },
-                    set: { id in if let id { scriptSessions.selectSession(id) } }
-                )) {
-                    ForEach(scriptSessions.sessions) { session in
-                        HStack(alignment: .top, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(session.scriptName)
-                                    .font(.subheadline.weight(.semibold))
-                                    .lineLimit(1)
-                                Text(session.deviceLabel)
-                                    .font(.caption2)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                                Text(session.stateText)
-                                    .font(.caption2)
-                                    .foregroundStyle(session.stateText == "running" ? .green : .secondary)
-                            }
-                            Spacer(minLength: 4)
-                            Button {
-                                scriptSessions.stopSession(session.id)
-                            } label: {
-                                Image(systemName: "stop.fill")
-                            }
-                            .buttonStyle(.borderless)
-                            .foregroundStyle(.red)
-                            .help("Stop this session")
-                        }
-                        .tag(session.id)
-                    }
-                }
-                .frame(width: 300)
-
-                Divider()
-
-                if let manager = scriptSessions.activePreviewManager, let tree = manager.scriptTree {
-                    ScriptRenderView(tree: tree) { token, args in
-                        manager.invoke(token: token, arguments: args)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                    .background(Color.black.opacity(0.12))
-                } else {
-                    VStack(spacing: 10) {
-                        Image(systemName: "square.stack.3d.up.slash")
-                            .font(.largeTitle)
-                            .foregroundStyle(.secondary)
-                        Text("No local session selected")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(.thinMaterial)
-    }
-
-    private func localDeviceLabel(_ item: LocalDeviceDescriptor) -> String {
-        let board = boardDisplayName(item.boardType)
-        if let module = item.moduleLabel, !module.isEmpty {
-            return "\(board) / \(module)"
-        }
-        return item.displayName.isEmpty ? board : "\(board) / \(item.displayName)"
-    }
-
-    private func boardDisplayName(_ boardType: String?) -> String {
-        switch (boardType ?? "").lowercased() {
-        case "esp32s3":
-            return "ESP32-S3"
-        case "stm32f042":
-            return "STM32F042"
-        default:
-            return boardType?.isEmpty == false ? boardType! : "Device"
-        }
     }
 
     @ViewBuilder
