@@ -140,6 +140,8 @@ public class ScriptsFragment extends Fragment {
     private boolean isRenderingScript;
     private boolean showingPreview;
     private boolean showingEditor;
+    private String runningScriptId;
+    private String runningScriptName;
     
     public boolean isShowingPreview() {
         return showingPreview;
@@ -600,8 +602,12 @@ public class ScriptsFragment extends Fragment {
                 View v = convertView;
                 if (v == null) v = LayoutInflater.from(getContext()).inflate(R.layout.item_script_entry, parent, false);
                 TextView nameView = v.findViewById(R.id.script_name);
+                TextView statusView = v.findViewById(R.id.script_status);
+                ImageButton stopButton = v.findViewById(R.id.script_stop_button);
                 ImageButton editButton = v.findViewById(R.id.script_edit_button);
                 nameView.setText("-");
+                statusView.setVisibility(View.GONE);
+                stopButton.setVisibility(View.GONE);
                 editButton.setVisibility(View.GONE);
                 return v;
             }
@@ -621,11 +627,27 @@ public class ScriptsFragment extends Fragment {
                 view = LayoutInflater.from(getContext()).inflate(R.layout.item_script_entry, parent, false);
             }
             TextView nameView = view.findViewById(R.id.script_name);
+            TextView statusView = view.findViewById(R.id.script_status);
+            ImageButton stopButton = view.findViewById(R.id.script_stop_button);
             ImageButton editButton = view.findViewById(R.id.script_edit_button);
+            statusView.setVisibility(View.GONE);
+            stopButton.setVisibility(View.GONE);
 
             if (entry.type == ListEntry.Type.SCRIPT) {
                 ScriptMetadata scriptMetadata = entry.script;
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
+                boolean isRunning = TextUtils.equals(runningScriptId, scriptMetadata.getId());
+                if (isRunning) {
+                    statusView.setText("Running on active device");
+                    statusView.setVisibility(View.VISIBLE);
+                    stopButton.setVisibility(View.VISIBLE);
+                    stopButton.setEnabled(true);
+                    stopButton.setAlpha(1.0f);
+                    stopButton.setOnClickListener(v -> {
+                        v.setPressed(false);
+                        stopRunningScript();
+                    });
+                }
                 if (scriptMetadata.isAssetScript()) {
                     editButton.setVisibility(View.VISIBLE);
                     editButton.setEnabled(true);
@@ -653,6 +675,8 @@ public class ScriptsFragment extends Fragment {
             // SIGNAL
             SignalMetadata sig = entry.signal;
             nameView.setText(sig.displayName());
+            statusView.setVisibility(View.GONE);
+            stopButton.setVisibility(View.GONE);
             editButton.setVisibility(View.VISIBLE);
             editButton.setEnabled(true);
             editButton.setAlpha(1.0f);
@@ -1894,10 +1918,13 @@ public class ScriptsFragment extends Fragment {
             viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
             viewModel.setPreviewActive(true);
         }
+        runningScriptId = currentScriptMetadata != null ? currentScriptMetadata.getId() : null;
+        runningScriptName = currentScriptName;
         isRenderingScript = true;
         activeScriptTree = null;
         showingPreview = true;
         updateViewMode();
+        refreshScriptList();
         ensureScriptRenderView();
         if (scriptRenderView != null) {
             scriptRenderView.clear();
@@ -2022,6 +2049,17 @@ public class ScriptsFragment extends Fragment {
             scriptRenderView.clear();
         }
         updateViewMode();
+    }
+
+    private void stopRunningScript() {
+        if (scriptEngine != null) {
+            scriptEngine.shutdown();
+            scriptEngine = null;
+        }
+        runningScriptId = null;
+        runningScriptName = null;
+        exitPreview();
+        refreshScriptList();
     }
 
     private void updateViewMode() {

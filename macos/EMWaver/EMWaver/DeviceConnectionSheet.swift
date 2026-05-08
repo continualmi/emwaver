@@ -5,11 +5,17 @@ struct DeviceConnectionSheet: View {
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @State private var wifiHost: String = ""
+    @State private var wifiPort: String = "3922"
+    @State private var wifiPairingSecret: String = ""
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
             if device.connectedTransportKind == "BLE" {
                 return ("Connected over BLE", "antenna.radiowaves.left.and.right")
+            }
+            if device.connectedTransportKind == "Wi-Fi" {
+                return ("Connected over Wi-Fi", "wifi")
             }
             return ("Connected", "cable.connector")
         }
@@ -79,6 +85,7 @@ struct DeviceConnectionSheet: View {
                 header
                 overviewCard
                 deviceListCard
+                wifiCard
                 bleCard
             }
             .padding(24)
@@ -167,14 +174,14 @@ struct DeviceConnectionSheet: View {
             }
 
             if device.discoveredDevices.isEmpty {
-                Text("No EMWaver devices discovered yet. Start BLE scan or connect a USB MIDI board.")
+                Text("No EMWaver devices discovered yet. Enter a Wi-Fi address, start BLE scan, or connect a USB MIDI board.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
                     ForEach(device.discoveredDevices) { item in
                         HStack(spacing: 12) {
-                            Image(systemName: item.transport == .ble ? "antenna.radiowaves.left.and.right" : "cable.connector")
+                            Image(systemName: transportIcon(for: item.transport))
                                 .foregroundStyle(item.isActive ? Color.green : .secondary)
                                 .frame(width: 20)
 
@@ -192,7 +199,7 @@ struct DeviceConnectionSheet: View {
                                             .background(Capsule().fill(Color.green.opacity(0.12)))
                                     }
                                 }
-                                Text("\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)")
+                                Text(deviceDetailText(for: item))
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -204,12 +211,68 @@ struct DeviceConnectionSheet: View {
                                 device.connectDevice(id: item.id)
                             }
                             .buttonStyle(.bordered)
-                            .disabled(item.isActive || item.connectionState == .connecting)
+                            .disabled(item.isActive || item.connectionState == .connecting || item.lastErrorText == "Pairing required")
                         }
                         .padding(10)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.06)))
                     }
                 }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var wifiCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Wi-Fi", systemImage: "wifi")
+                    .font(.headline)
+
+                Spacer()
+
+                Text(device.connectedTransportKind == "Wi-Fi" ? "Connected" : "LAN or VPN")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(device.connectedTransportKind == "Wi-Fi" ? Color.green : .secondary)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Capsule().fill(Color.secondary.opacity(0.12)))
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    TextField("Host or IP", text: $wifiHost)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 250)
+
+                    TextField("Port", text: $wifiPort)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 82)
+                }
+
+                GridRow {
+                    SecureField("Pairing secret", text: $wifiPairingSecret)
+                        .textFieldStyle(.roundedBorder)
+                        .gridCellColumns(2)
+                }
+            }
+
+            HStack(spacing: 10) {
+                Button("Connect Wi-Fi") {
+                    device.connectWiFi(
+                        host: wifiHost,
+                        port: Int(wifiPort) ?? 3922,
+                        pairingSecret: wifiPairingSecret
+                    )
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(wifiHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                Text("Manual IP works when mDNS does not cross a user-owned VPN.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .padding(18)
@@ -276,9 +339,26 @@ struct DeviceConnectionSheet: View {
 
     private func deviceActionTitle(for item: LocalDeviceDescriptor) -> String {
         if item.isActive { return "Active" }
+        if item.lastErrorText == "Pairing required" { return "Pair" }
         if item.connectionState == .connected { return "Select" }
         if item.connectionState == .connecting { return "Connecting" }
         return "Connect"
+    }
+
+    private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {
+        switch transport {
+        case .ble:
+            return "antenna.radiowaves.left.and.right"
+        case .usbMidi:
+            return "cable.connector"
+        case .wifi:
+            return "wifi"
+        }
+    }
+
+    private func deviceDetailText(for item: LocalDeviceDescriptor) -> String {
+        let pairingText = item.lastErrorText == "Pairing required" ? " · pairing required" : ""
+        return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(pairingText)"
     }
 
     private var bleStatusText: String {

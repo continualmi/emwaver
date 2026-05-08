@@ -311,6 +311,8 @@ public sealed partial class ScriptsPage : Page
                         sigSection.Items.Add(sig);
                     }
 
+                    RefreshRunningSessionRow();
+
                     // Force ListView to notice refresh
                     ScriptsList.UpdateLayout();
 
@@ -383,7 +385,18 @@ public sealed partial class ScriptsPage : Page
             }
         }
 
-        if (ScriptsList.SelectedItem is ScriptInfo script)
+        if (ScriptsList.SelectedItem is Models.ScriptSessionInfo session)
+        {
+            if (_lastRenderedTree != null)
+            {
+                SetPreviewMode(true);
+            }
+            else
+            {
+                ScriptsList.SelectedItem = _current;
+            }
+        }
+        else if (ScriptsList.SelectedItem is ScriptInfo script)
         {
             _currentSignal = null;
             await OpenScriptAsync(script);
@@ -692,6 +705,7 @@ public sealed partial class ScriptsPage : Page
     private int _activeRenderGeneration;
     private bool _hasActiveRunningScript;
     private string? _activeRunningScriptName;
+    private Models.ScriptSessionInfo? _runningSessionItem;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
 
@@ -776,6 +790,7 @@ public sealed partial class ScriptsPage : Page
     {
         var showIndicator = _hasActiveRunningScript;
         RunningScriptStatusChanged?.Invoke(showIndicator, _activeRunningScriptName);
+        RefreshRunningSessionRow();
     }
 
     private void SetRunningScriptState(bool isRunning, string? scriptName)
@@ -783,6 +798,53 @@ public sealed partial class ScriptsPage : Page
         _hasActiveRunningScript = isRunning;
         _activeRunningScriptName = isRunning ? scriptName : null;
         NotifyRunningScriptStatusChanged();
+    }
+
+    private void RefreshRunningSessionRow()
+    {
+        if (!DispatcherQueue.HasThreadAccess)
+        {
+            _ = DispatcherQueue.TryEnqueue(RefreshRunningSessionRow);
+            return;
+        }
+
+        var examples = _sections.FirstOrDefault(s => s.Title == "Examples");
+        if (examples is null)
+        {
+            return;
+        }
+
+        foreach (var section in _sections)
+        {
+            if (_runningSessionItem != null && section.Items.Contains(_runningSessionItem))
+            {
+                section.Items.Remove(_runningSessionItem);
+            }
+        }
+
+        if (!_hasActiveRunningScript || string.IsNullOrWhiteSpace(_activeRunningScriptName))
+        {
+            return;
+        }
+
+        _runningSessionItem = new Models.ScriptSessionInfo(
+            ScriptName: _activeRunningScriptName,
+            DeviceLabel: ActiveDeviceLabel(),
+            StateText: "running"
+        );
+        examples.Items.Insert(0, _runningSessionItem);
+    }
+
+    private static string ActiveDeviceLabel()
+    {
+        var portName = AppServices.Device.ConnectedPort?.Name;
+        if (!string.IsNullOrWhiteSpace(portName))
+        {
+            return portName;
+        }
+
+        var transport = AppServices.Device.ActiveTransport;
+        return transport == DeviceTransport.None ? "active device" : transport.ToString();
     }
 
     private void SetPreviewMode(bool preview)
@@ -877,6 +939,11 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
     internal Task HandleToolbarStopRunningAsync() => StopRunningScriptWithConfirmationAsync();
+
+    private async void OnSessionStopClick(object sender, RoutedEventArgs e)
+    {
+        await StopRunningScriptWithConfirmationAsync();
+    }
 
     private void SetAgentPaneVisibility(bool show)
     {
@@ -1545,26 +1612,7 @@ public sealed partial class ScriptsPage : Page
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
 
         var nextScriptName = _current.Name;
-        if (_hasActiveRunningScript &&
-            !string.IsNullOrWhiteSpace(_activeRunningScriptName) &&
-            !string.Equals(_activeRunningScriptName, nextScriptName, StringComparison.Ordinal))
-        {
-            var stopOk = await ConfirmAsync(
-                title: "Stop running script?",
-                message: $"'{_activeRunningScriptName}' is currently running. Stop it and run '{nextScriptName}'?",
-                primaryButtonText: "Stop and Run",
-                closeButtonText: "Cancel"
-            );
-
-            if (!stopOk)
-            {
-                SetPreviewMode(false);
-                return;
-            }
-
-            _scriptEngine.Stop();
-            SetRunningScriptState(false, null);
-        }
+        _scriptEngine.Stop();
 
         // Switch to preview mode on Run.
         SetPreviewMode(true);

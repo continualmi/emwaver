@@ -30,6 +30,9 @@ enum LocalDeviceLabelFormatter {
         if id.hasPrefix("ble:") {
             return tail(String(id.dropFirst("ble:".count)).replacingOccurrences(of: "-", with: ""))
         }
+        if id.hasPrefix("wifi:") {
+            return String(id.dropFirst("wifi:".count))
+        }
         return nil
     }
 

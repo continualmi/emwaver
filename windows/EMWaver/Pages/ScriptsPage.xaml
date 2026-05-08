@@ -76,12 +76,41 @@
                                 <TextBlock Grid.Column="1" Text="signal" Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                             </Grid>
                         </DataTemplate>
+
+                        <DataTemplate x:Key="ScriptSessionTemplate">
+                            <Grid ColumnSpacing="8" Padding="0,2">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+
+                                <StackPanel Grid.Column="0" Spacing="2">
+                                    <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE768;" FontSize="11" Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
+                                        <TextBlock Text="{Binding StatusLabel}" FontSize="12" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                    </StackPanel>
+                                </StackPanel>
+
+                                <Button
+                                    Grid.Column="1"
+                                    MinWidth="32"
+                                    Width="32"
+                                    Height="32"
+                                    Padding="0"
+                                    Click="OnSessionStopClick"
+                                    ToolTipService.ToolTip="Stop script">
+                                    <FontIcon Glyph="&#xE71A;" FontSize="12" />
+                                </Button>
+                            </Grid>
+                        </DataTemplate>
                     </ListView.Resources>
 
                     <ListView.ItemTemplateSelector>
                         <conv:ScriptListItemTemplateSelector
                             ScriptTemplate="{StaticResource ScriptItemTemplate}"
-                            SignalTemplate="{StaticResource SignalItemTemplate}" />
+                            SignalTemplate="{StaticResource SignalItemTemplate}"
+                            SessionTemplate="{StaticResource ScriptSessionTemplate}" />
                     </ListView.ItemTemplateSelector>
 
                     <ListView.GroupStyle>

@@ -14,12 +14,12 @@ private final class TargetedScriptDevice: ScriptDevice {
         self.deviceID = deviceID
     }
 
-    func getBuffer() -> Data { base?.getBuffer() ?? Data() }
-    func clearBuffer() { base?.clearBuffer() }
-    func loadBuffer(data: Data) { base?.loadBuffer(data: data) }
+    func getBuffer() -> Data { base?.getBuffer(deviceID: deviceID) ?? Data() }
+    func clearBuffer() { base?.clearBuffer(deviceID: deviceID) }
+    func loadBuffer(data: Data) { base?.loadBuffer(data: data, deviceID: deviceID) }
     func sendPacket(_ data: Data) { base?.sendPacket(data, deviceID: deviceID) }
     func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout, deviceID: deviceID) }
-    func transmitBuffer() { base?.transmitBuffer() }
+    func transmitBuffer() { base?.transmitBuffer(deviceID: deviceID) }
 }
 
 @MainActor

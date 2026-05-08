@@ -38,6 +38,9 @@ struct ContentView: View {
             if device.connectedTransportKind == "BLE" {
                 return ("antenna.radiowaves.left.and.right", currentBoardDisplayName)
             }
+            if device.connectedTransportKind == "Wi-Fi" {
+                return ("wifi", currentBoardDisplayName)
+            }
             return ("cable.connector", currentBoardDisplayName)
         }
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
@@ -392,6 +395,8 @@ struct ContentView: View {
             return "antenna.radiowaves.left.and.right"
         case .usbMidi:
             return "cable.connector"
+        case .wifi:
+            return "wifi"
         }
     }
 

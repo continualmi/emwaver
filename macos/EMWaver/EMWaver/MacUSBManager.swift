@@ -34,6 +34,137 @@ struct LocalDeviceDescriptor: Identifiable, Equatable {
     var isActive: Bool
 }
 
+private final class MacTransportDeviceSession {
+    private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.device-session.buffer")
+    private let commandLock = NSLock()
+
+    private var sysexAccumulator = UsbMidiSysexAccumulator()
+    private var captureBuffer = Data()
+    private var rxPackets: [Data] = []
+    private var isSamplerStreamingActive = false
+    private var waitingForResponse = false
+    private var responseSemaphore: DispatchSemaphore?
+    private var responseData: Data?
+    private var responsePredicate: ((Data) -> Bool)?
+
+    func getBuffer() -> Data {
+        bufferQueue.sync { captureBuffer }
+    }
+
+    func clearBuffer() {
+        bufferQueue.sync {
+            captureBuffer.removeAll(keepingCapacity: true)
+            rxPackets.removeAll(keepingCapacity: true)
+        }
+    }
+
+    func loadBuffer(data: Data) {
+        bufferQueue.sync {
+            captureBuffer = data
+        }
+    }
+
+    func resetParserAndBuffers() {
+        bufferQueue.sync {
+            captureBuffer.removeAll(keepingCapacity: true)
+            rxPackets.removeAll(keepingCapacity: true)
+            sysexAccumulator = UsbMidiSysexAccumulator()
+            isSamplerStreamingActive = false
+            waitingForResponse = false
+            responseSemaphore = nil
+            responseData = nil
+            responsePredicate = nil
+        }
+    }
+
+    func performCommand(
+        timeout: Int,
+        responsePredicate: ((Data) -> Bool)?,
+        send: () -> Void
+    ) -> Data? {
+        commandLock.lock()
+        defer { commandLock.unlock() }
+
+        bufferQueue.sync {
+            rxPackets.removeAll(keepingCapacity: true)
+        }
+
+        let sem = DispatchSemaphore(value: 0)
+        bufferQueue.sync {
+            waitingForResponse = true
+            responseSemaphore = sem
+            responseData = nil
+            self.responsePredicate = responsePredicate
+        }
+
+        send()
+
+        let ms = max(1, timeout)
+        let waitResult = sem.wait(timeout: .now() + .milliseconds(ms))
+
+        bufferQueue.sync {
+            waitingForResponse = false
+            responseSemaphore = nil
+            self.responsePredicate = nil
+        }
+
+        if waitResult == .timedOut {
+            return nil
+        }
+
+        return bufferQueue.sync { responseData }
+    }
+
+    func trackCommand(_ data: Data, sampleOpcode: UInt8, sampleStart: UInt8, sampleStop: UInt8) {
+        guard data.count >= 2 else { return }
+        let opcode = data[data.startIndex]
+        guard opcode == sampleOpcode else { return }
+        let sub = data[data.startIndex.advanced(by: 1)]
+        bufferQueue.sync {
+            if sub == sampleStart {
+                isSamplerStreamingActive = true
+            } else if sub == sampleStop {
+                isSamplerStreamingActive = false
+            }
+        }
+    }
+
+    func handleMidiBytes(_ data: Data, laneSizeBytes: Int, superframeSizeBytes: Int) {
+        for sysex in sysexAccumulator.feed(data) {
+            guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex) else { continue }
+            guard superframe.count >= superframeSizeBytes else { continue }
+
+            let cmdLane = superframe.subdata(in: 0..<laneSizeBytes)
+            let streamLane = superframe.subdata(in: laneSizeBytes..<superframeSizeBytes)
+
+            let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
+            let streamEmpty = streamLane.allSatisfy { $0 == 0 }
+
+            if !cmdEmpty { storeRxLane(cmdLane) }
+
+            let keepEmptyStream = bufferQueue.sync { isSamplerStreamingActive }
+            if !streamEmpty || keepEmptyStream {
+                storeRxLane(streamLane)
+            }
+        }
+    }
+
+    private func storeRxLane(_ lane: Data) {
+        bufferQueue.sync {
+            captureBuffer.append(lane)
+            rxPackets.append(lane)
+
+            if waitingForResponse, responseData == nil {
+                if let predicate = responsePredicate, !predicate(lane) {
+                    return
+                }
+                responseData = lane
+                responseSemaphore?.signal()
+            }
+        }
+    }
+}
+
 /// macOS USB MIDI (CoreMIDI) transport.
 ///
 /// This is intentionally minimal: enough to power Scripts execution.
@@ -87,8 +218,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private static let bleNotifyUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
-    private let bufferQueue = DispatchQueue(label: "com.emwaver.macos.buffer")
-    private let commandLock = NSLock()
 
     private let midiQueueKey = DispatchSpecificKey<Void>()
 
@@ -103,8 +232,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
     private var hardwareUIDByDeviceID: [String: String] = [:]
     private var bleDiscoveredPeripheralsByID: [UUID: CBPeripheral] = [:]
+    private var deviceSessionsByID: [String: MacTransportDeviceSession] = [:]
+    private var activeDeviceID: String?
 
-    private var sysexAccumulator = UsbMidiSysexAccumulator()
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
     private var bleCommandCharacteristic: CBCharacteristic?
@@ -113,18 +243,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var bleCommandCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleNotifyCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleDiscoveredNamesByID: [UUID: String] = [:]
-
-    private var captureBuffer = Data()
-    private var rxPackets: [Data] = []
-
-    // When sampling is active, we must keep *all* stream lanes, including all-zero lanes.
-    // Otherwise the buffer appears to "stall" until an actual signal produces nonzero bytes.
-    private var isSamplerStreamingActive = false
-
-    private var waitingForResponse = false
-    private var responseSemaphore: DispatchSemaphore? = nil
-    private var responseData: Data? = nil
-    private var responsePredicate: ((Data) -> Bool)? = nil
 
     override init() {
         super.init()
@@ -136,7 +254,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         // The rest of the I/O work is still serialized on `midiQueue`.
         self.ensureClient()
         self.bleCentral = CBCentralManager(delegate: self, queue: midiQueue)
-
         midiQueue.async {
             self.refreshPortsInternal()
             self.autoConnectIfNeededInternal()
@@ -180,20 +297,31 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     // MARK: - ScriptDevice (buffer)
 
     func getBuffer() -> Data {
-        bufferQueue.sync { captureBuffer }
+        getBuffer(deviceID: nil)
+    }
+
+    func getBuffer(deviceID: String?) -> Data {
+        deviceSession(for: deviceID)?.getBuffer() ?? Data()
     }
 
     func clearBuffer() {
-        bufferQueue.sync {
-            captureBuffer.removeAll(keepingCapacity: true)
-            rxPackets.removeAll(keepingCapacity: true)
-        }
+        clearBuffer(deviceID: nil)
+    }
+
+    func clearBuffer(deviceID: String?) {
+        deviceSession(for: deviceID)?.clearBuffer()
     }
 
     func loadBuffer(data: Data) {
-        bufferQueue.sync {
-            captureBuffer = data
+        loadBuffer(data: data, deviceID: nil)
+    }
+
+    func loadBuffer(data: Data, deviceID: String?) {
+        guard let session = deviceSession(for: deviceID) else {
+            setError("Cannot load buffer: Not connected")
+            return
         }
+        session.loadBuffer(data: data)
     }
 
     // MARK: - Connection
@@ -320,39 +448,16 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return nil
         }
 
-        commandLock.lock()
-        defer { commandLock.unlock() }
-
-        bufferQueue.sync {
-            rxPackets.removeAll(keepingCapacity: true)
-        }
-
-        let sem = DispatchSemaphore(value: 0)
-        bufferQueue.sync {
-            waitingForResponse = true
-            responseSemaphore = sem
-            responseData = nil
-            self.responsePredicate = responsePredicate
-        }
-
-        withMidiQueueSync {
-            self.sendPacketNow(command, deviceID: deviceID)
-        }
-
-        let ms = max(1, timeout)
-        let waitResult = sem.wait(timeout: .now() + .milliseconds(ms))
-
-        bufferQueue.sync {
-            waitingForResponse = false
-            responseSemaphore = nil
-            self.responsePredicate = nil
-        }
-
-        if waitResult == .timedOut {
+        guard let session = deviceSession(for: deviceID) else {
+            setError("Cannot send command: No matching device session")
             return nil
         }
 
-        return bufferQueue.sync { responseData }
+        return session.performCommand(timeout: timeout, responsePredicate: responsePredicate) {
+            self.withMidiQueueSync {
+                self.sendPacketNow(command, deviceID: deviceID)
+            }
+        }
     }
 
     private func sendPacketNow(_ data: Data) {
@@ -360,7 +465,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendPacketNow(_ data: Data, deviceID: String?) {
-        guard deviceID != nil || activeTransport == .ble || connectedDestination != 0 else {
+        guard let session = deviceSession(for: deviceID) else {
             setError("Cannot send packet: Not connected")
             return
         }
@@ -370,30 +475,28 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return
         }
 
-        // Track sampler mode so we don't drop all-zero stream lanes while sampling.
-        if data.count >= 2 {
-            let opcode = data[data.startIndex]
-            if opcode == EmwOpcode.sample {
-                let sub = data[data.startIndex.advanced(by: 1)]
-                if sub == EmwOpcode.sampleStart {
-                    isSamplerStreamingActive = true
-                } else if sub == EmwOpcode.sampleStop {
-                    isSamplerStreamingActive = false
-                }
-            }
-        }
+        session.trackCommand(
+            data,
+            sampleOpcode: EmwOpcode.sample,
+            sampleStart: EmwOpcode.sampleStart,
+            sampleStop: EmwOpcode.sampleStop
+        )
 
         let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
         sendSuperframe(sf, deviceID: deviceID)
     }
 
     func transmitBuffer() {
+        transmitBuffer(deviceID: nil)
+    }
+
+    func transmitBuffer(deviceID: String?) {
         guard isTransportConnectedInternal() else {
             setError("Cannot transmit buffer: Not connected")
             return
         }
 
-        let data = getBuffer()
+        let data = getBuffer(deviceID: deviceID)
         guard !data.isEmpty else { return }
 
         // Very simple sender: chunk into fixed 64B stream-lane packets.
@@ -404,7 +507,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let chunk = data.subdata(in: idx..<end)
             guard let packet = Self.makePacket(chunk) else { break }
             let sf = Self.makeSuperframe(cmdLane: nil, streamLane: packet)
-            withMidiQueueSync { self.sendSuperframe(sf) }
+            withMidiQueueSync { self.sendSuperframe(sf, deviceID: deviceID) }
             idx = end
             Thread.sleep(forTimeInterval: 0.001)
         }
@@ -569,6 +672,29 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return deviceID
     }
 
+    private func deviceSession(for deviceID: String?) -> MacTransportDeviceSession? {
+        if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
+            return deviceSessionInternal(for: deviceID)
+        }
+        return midiQueue.sync { deviceSessionInternal(for: deviceID) }
+    }
+
+    private func deviceSessionInternal(for deviceID: String?) -> MacTransportDeviceSession? {
+        let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID
+        guard let targetID else { return nil }
+        return deviceSessionsByID[targetID]
+    }
+
+    @discardableResult
+    private func ensureDeviceSessionInternal(deviceID: String) -> MacTransportDeviceSession {
+        if let session = deviceSessionsByID[deviceID] {
+            return session
+        }
+        let session = MacTransportDeviceSession()
+        deviceSessionsByID[deviceID] = session
+        return session
+    }
+
     private func connectToFirstPortInternal() {
         let candidates = listPortCandidatesInternal()
         let chosen = candidates.first(where: { $0.name.localizedCaseInsensitiveContains("emwaver") })
@@ -601,15 +727,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func connectInternal(candidate: PortCandidate, displayName: String?) {
         disconnectInternal()
 
-        bufferQueue.sync {
-            self.captureBuffer.removeAll(keepingCapacity: true)
-            self.rxPackets.removeAll(keepingCapacity: true)
-            self.sysexAccumulator = UsbMidiSysexAccumulator()
-        }
-
         connectedSource = candidate.source
         connectedDestination = candidate.destination
         activeTransport = .usbMidi
+        let deviceID = "midi:\(displayName ?? candidate.name)"
+        activeDeviceID = deviceID
+        ensureDeviceSessionInternal(deviceID: deviceID).resetParserAndBuffers()
 
         let st = MIDIPortConnectSource(inPort, candidate.source, nil)
         guard st == noErr else {
@@ -617,6 +740,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             connectedSource = 0
             connectedDestination = 0
             activeTransport = .none
+            activeDeviceID = nil
             return
         }
 
@@ -637,7 +761,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             let uid = self.queryHardwareUID(timeoutMs: 1500)
             let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
-            let deviceID = "midi:\(displayName ?? candidate.name)"
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
@@ -659,6 +782,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         connectedSource = 0
         connectedDestination = 0
         activeTransport = .none
+        activeDeviceID = nil
 
         for peripheral in bleConnectedPeripheralsByID.values {
             bleCentral?.cancelPeripheralConnection(peripheral)
@@ -869,26 +993,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return out
     }
 
-    private func handleMidiBytes(_ data: Data) {
+    private func handleMidiBytes(_ data: Data, deviceID: String?) {
+        guard let session = deviceSession(for: deviceID) else { return }
         let normalized = normalizeIncomingMidiBytes(data)
-
-        for sysex in sysexAccumulator.feed(normalized) {
-            guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex) else { continue }
-
-            let cmdLane = superframe.subdata(in: 0..<Self.laneSizeBytes)
-            let streamLane = superframe.subdata(in: Self.laneSizeBytes..<Self.superframeSizeBytes)
-
-            let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
-            let streamEmpty = streamLane.allSatisfy { $0 == 0 }
-
-            if !cmdEmpty { storeRxLane(cmdLane) }
-
-            // In sampler streaming mode, stream lanes can legitimately be all zeros (idle-low).
-            // Dropping them makes the capture look like it "stalls" until a real signal arrives.
-            if !streamEmpty || isSamplerStreamingActive {
-                storeRxLane(streamLane)
-            }
-        }
+        session.handleMidiBytes(
+            normalized,
+            laneSizeBytes: Self.laneSizeBytes,
+            superframeSizeBytes: Self.superframeSizeBytes
+        )
     }
 
     private func startBleScanInternal(allowWhenAutoConnectDisabled: Bool = false) {
@@ -913,6 +1025,183 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    // MARK: - Wi-Fi transport
+
+    private func startWiFiDiscovery() {
+        let browser = NWBrowser(
+            for: .bonjour(type: Self.wifiServiceType, domain: nil),
+            using: .tcp
+        )
+        browser.browseResultsChangedHandler = { [weak self] results, _ in
+            self?.handleWiFiBrowseResults(results)
+        }
+        browser.stateUpdateHandler = { [weak self] state in
+            if case .failed(let error) = state {
+                self?.setError("Wi-Fi discovery failed: \(error.localizedDescription)")
+            }
+        }
+        wifiBrowser = browser
+        browser.start(queue: wifiQueue)
+    }
+
+    private func handleWiFiBrowseResults(_ results: Set<NWBrowser.Result>) {
+        var records: [String: WiFiDeviceRecord] = [:]
+        for result in results {
+            guard case let .service(name, type, domain, _) = result.endpoint,
+                  type == Self.wifiServiceType else { continue }
+            let host = "\(name).\(domain)"
+                .replacingOccurrences(of: "..", with: ".")
+                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let id = wifiDeviceID(host: host, port: Self.wifiDefaultPort)
+            records[id] = WiFiDeviceRecord(
+                id: id,
+                displayName: name.isEmpty ? host : name,
+                host: host,
+                port: Self.wifiDefaultPort,
+                boardType: "esp32s3",
+                isPaired: wifiPairedDevicesByID[id] != nil,
+                lastSeen: Date()
+            )
+        }
+
+        midiQueue.async {
+            for (id, record) in records {
+                self.wifiDiscoveredDevicesByID[id] = record
+            }
+            for (id, paired) in self.wifiPairedDevicesByID where self.wifiDiscoveredDevicesByID[id] == nil {
+                self.wifiDiscoveredDevicesByID[id] = WiFiDeviceRecord(
+                    id: id,
+                    displayName: paired.displayName,
+                    host: paired.host,
+                    port: paired.port,
+                    boardType: "esp32s3",
+                    isPaired: true,
+                    lastSeen: paired.lastSeen
+                )
+            }
+            self.publishDiscoveredDevices()
+        }
+    }
+
+    private func connectWiFiInternal(record: WiFiDeviceRecord) {
+        guard let paired = wifiPairedDevicesByID[record.id], !paired.secret.isEmpty else {
+            setError("Pair this Wi-Fi device locally before connecting")
+            return
+        }
+        disconnectInternal()
+
+        guard let url = URL(string: "ws://\(record.host):\(record.port)/v1/ws") else {
+            setError("Invalid Wi-Fi device address")
+            return
+        }
+
+        let socket = URLSession.shared.webSocketTask(with: url)
+        wifiSocket = socket
+        wifiConnectedDeviceID = record.id
+        activeTransport = .wifi
+        activeDeviceID = record.id
+        ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
+
+        DispatchQueue.main.async {
+            self.connectedPortName = "\(record.host):\(record.port)"
+            self.connectedBoardType = record.boardType ?? "esp32s3"
+            self.lastDetectedBoardType = record.boardType ?? "esp32s3"
+            self.connectedTransportKind = "Wi-Fi"
+            self.lastErrorText = nil
+            self.deviceEmwaverVersion = nil
+            self.connectedHardwareUID = nil
+        }
+
+        socket.resume()
+        sendWiFiHello(socket: socket, secret: paired.secret)
+        receiveWiFiLoop(socket: socket)
+
+        DispatchQueue.main.async {
+            self.isConnected = true
+        }
+        publishDiscoveredDevices()
+    }
+
+    private func sendWiFiHello(socket: URLSessionWebSocketTask, secret: String) {
+        let hello = WiFiHello(type: "auth", client: "emwaver-macos", protocolVersion: 1, pairingSecret: secret)
+        guard let data = try? JSONEncoder().encode(hello) else { return }
+        socket.send(.data(data)) { [weak self] error in
+            if let error {
+                self?.setError("Wi-Fi authentication failed: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func receiveWiFiLoop(socket: URLSessionWebSocketTask) {
+        socket.receive { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let message):
+                switch message {
+                case .data(let data):
+                    self.midiQueue.async {
+                        self.handleMidiBytes(data, deviceID: self.wifiConnectedDeviceID)
+                    }
+                case .string(let text):
+                    if text.localizedCaseInsensitiveContains("auth") &&
+                        text.localizedCaseInsensitiveContains("fail") {
+                        self.setError("Wi-Fi pairing secret rejected")
+                    }
+                @unknown default:
+                    break
+                }
+                self.receiveWiFiLoop(socket: socket)
+            case .failure(let error):
+                self.setError("Wi-Fi disconnected: \(error.localizedDescription)")
+                self.midiQueue.async {
+                    if self.wifiSocket === socket {
+                        self.wifiSocket = nil
+                        self.wifiConnectedDeviceID = nil
+                        self.activeDeviceID = nil
+                        if self.activeTransport == .wifi {
+                            self.activeTransport = .none
+                            DispatchQueue.main.async {
+                                self.isConnected = false
+                                self.connectedPortName = nil
+                                self.connectedTransportKind = nil
+                                self.connectedBoardType = nil
+                            }
+                        }
+                        self.publishDiscoveredDevices()
+                    }
+                }
+            }
+        }
+    }
+
+    private func wifiDeviceID(host: String, port: Int) -> String {
+        "wifi:\(host.lowercased()):\(port)"
+    }
+
+    private func loadPairedWiFiDevices() {
+        guard let data = UserDefaults.standard.data(forKey: Self.wifiPairingStoreKey),
+              let records = try? JSONDecoder().decode([String: PairedWiFiDevice].self, from: data) else {
+            return
+        }
+        wifiPairedDevicesByID = records
+        for (id, record) in records {
+            wifiDiscoveredDevicesByID[id] = WiFiDeviceRecord(
+                id: id,
+                displayName: record.displayName,
+                host: record.host,
+                port: record.port,
+                boardType: "esp32s3",
+                isPaired: true,
+                lastSeen: record.lastSeen
+            )
+        }
+    }
+
+    private func savePairedWiFiDevices() {
+        guard let data = try? JSONEncoder().encode(wifiPairedDevicesByID) else { return }
+        UserDefaults.standard.set(data, forKey: Self.wifiPairingStoreKey)
+    }
+
     private func disconnectMidiOnlyInternal() {
         if connectedSource != 0 {
             _ = MIDIPortDisconnectSource(inPort, connectedSource)
@@ -926,6 +1215,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         blePeripheral = peripheral
         bleCommandCharacteristic = bleCommandCharacteristicsByID[peripheral.identifier]
         bleNotifyCharacteristic = bleNotifyCharacteristicsByID[peripheral.identifier]
+        let deviceID = "ble:\(peripheral.identifier.uuidString)"
+        activeDeviceID = deviceID
+        ensureDeviceSessionInternal(deviceID: deviceID)
         peripheral.delegate = self
         if peripheral.state == .connected {
             activeTransport = .ble
@@ -1016,21 +1308,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return out
     }
 
-    private func storeRxLane(_ lane: Data) {
-        bufferQueue.sync {
-            captureBuffer.append(lane)
-            rxPackets.append(lane)
-
-            if waitingForResponse, responseData == nil {
-                if let predicate = responsePredicate, !predicate(lane) {
-                    return
-                }
-                responseData = lane
-                responseSemaphore?.signal()
-            }
-        }
-    }
-
     private func setError(_ msg: String) {
         DispatchQueue.main.async {
             self.lastErrorText = msg
@@ -1078,7 +1355,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         mgr.midiQueue.async {
             for p in packets {
-                mgr.handleMidiBytes(p)
+                mgr.handleMidiBytes(p, deviceID: mgr.activeDeviceID)
             }
         }
     }
@@ -1143,9 +1420,12 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         bleConnectedPeripheralsByID[peripheral.identifier] = peripheral
+        let deviceID = "ble:\(peripheral.identifier.uuidString)"
+        ensureDeviceSessionInternal(deviceID: deviceID)
         if blePeripheral == nil || blePeripheral == peripheral {
             blePeripheral = peripheral
             activeTransport = .ble
+            activeDeviceID = deviceID
         }
         peripheral.discoverServices([Self.bleServiceUUID])
         DispatchQueue.main.async {
@@ -1164,6 +1444,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             bleCommandCharacteristic = nil
             bleNotifyCharacteristic = nil
             activeTransport = .none
+            activeDeviceID = nil
         }
         bleConnectedPeripheralsByID.removeValue(forKey: peripheral.identifier)
         bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
@@ -1182,6 +1463,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             bleCommandCharacteristic = nil
             bleNotifyCharacteristic = nil
             activeTransport = .none
+            activeDeviceID = nil
             DispatchQueue.main.async {
                 self.isConnected = false
                 self.connectedPortName = nil
@@ -1255,7 +1537,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             return
         }
         midiQueue.async {
-            self.handleMidiBytes(value)
+            self.handleMidiBytes(value, deviceID: "ble:\(peripheral.identifier.uuidString)")
         }
     }
 }
