@@ -48,23 +48,26 @@ enum BLETransport {
         }
     }
 
-    struct Connection {
+    struct Connection: TransportDeviceConnection {
         let peripheral: CBPeripheral
         let commandCharacteristic: CBCharacteristic
         let notifyCharacteristic: CBCharacteristic?
         let sessionKey: String
         let displayName: String
+        let session: TransportDeviceSession
 
         init(
             pending: PendingConnection,
             commandCharacteristic: CBCharacteristic,
-            notifyCharacteristic: CBCharacteristic?
+            notifyCharacteristic: CBCharacteristic?,
+            session: TransportDeviceSession? = nil
         ) {
             self.peripheral = pending.peripheral
             self.commandCharacteristic = commandCharacteristic
             self.notifyCharacteristic = notifyCharacteristic
             self.sessionKey = pending.sessionKey
             self.displayName = pending.displayName
+            self.session = session ?? DeviceBufferSession()
         }
 
         func matches(_ peripheral: CBPeripheral) -> Bool {

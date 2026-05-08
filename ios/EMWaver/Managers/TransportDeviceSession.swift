@@ -28,3 +28,9 @@ protocol TransportDeviceSession: AnyObject {
     func takeRxState() -> (rxBytes: Data, rxTsMs: [UInt64], rxCounter: UInt64)
     func restoreRxState(rxBytes: Data, rxTsMs: [UInt64], rxCounter: UInt64)
 }
+
+protocol TransportDeviceConnection {
+    var sessionKey: String { get }
+    var displayName: String { get }
+    var session: TransportDeviceSession { get }
+}

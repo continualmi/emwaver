@@ -14,17 +14,23 @@ enum USBMidiTransport {
         let destination: MIDIEndpointRef
     }
 
-    struct Connection {
+    struct Connection: TransportDeviceConnection {
         let name: String
         let source: MIDIEndpointRef
         let destination: MIDIEndpointRef
         let sessionKey: String
+        let session: TransportDeviceSession
 
-        init(candidate: PortCandidate) {
+        init(candidate: PortCandidate, session: TransportDeviceSession? = nil) {
             self.name = candidate.name
             self.source = candidate.source
             self.destination = candidate.destination
             self.sessionKey = USBMidiTransport.sessionKey(for: candidate)
+            self.session = session ?? DeviceBufferSession()
+        }
+
+        var displayName: String {
+            name
         }
 
         var isConnected: Bool {

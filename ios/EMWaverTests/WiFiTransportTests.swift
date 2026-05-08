@@ -17,12 +17,21 @@ final class WiFiTransportTests: XCTestCase {
         let first = WiFiTransport.Connection(hostOrDeviceId: " 192.168.4.2 ")
         let second = WiFiTransport.Connection(hostOrDeviceId: " 192.168.4.3 ")
 
-        first.session.appendTxBytes(Data([0x01]), tsMs: 1)
-
         XCTAssertEqual(first.hostOrDeviceId, "192.168.4.2")
-        XCTAssertEqual(first.sessionKey, "wifi:192.168.4.2")
-        XCTAssertEqual(first.displayName, "Wi-Fi: 192.168.4.2")
-        XCTAssertEqual(first.session.getTxPacketCount(), 1)
-        XCTAssertEqual(second.session.getTxPacketCount(), 0)
+        assertConnectionOwnsIsolatedSession(first, expectedSessionKey: "wifi:192.168.4.2", expectedDisplayName: "Wi-Fi: 192.168.4.2", isolatedFrom: second)
+    }
+
+    private func assertConnectionOwnsIsolatedSession(
+        _ connection: TransportDeviceConnection,
+        expectedSessionKey: String,
+        expectedDisplayName: String,
+        isolatedFrom other: TransportDeviceConnection
+    ) {
+        connection.session.appendTxBytes(Data([0x01]), tsMs: 1)
+
+        XCTAssertEqual(connection.sessionKey, expectedSessionKey)
+        XCTAssertEqual(connection.displayName, expectedDisplayName)
+        XCTAssertEqual(connection.session.getTxPacketCount(), 1)
+        XCTAssertEqual(other.session.getTxPacketCount(), 0)
     }
 }

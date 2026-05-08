@@ -16,7 +16,23 @@ final class USBMidiTransportTests: XCTestCase {
         XCTAssertEqual(connection.source, MIDIEndpointRef(101))
         XCTAssertEqual(connection.destination, MIDIEndpointRef(202))
         XCTAssertEqual(connection.sessionKey, "usbmidi:101:202:Board")
+        XCTAssertEqual(connection.displayName, "Board")
         XCTAssertTrue(connection.isConnected)
+    }
+
+    func testConnectionOwnsTransportDeviceSession() {
+        let first = USBMidiTransport.Connection(candidate: USBMidiTransport.PortCandidate(
+            name: "Board A",
+            source: MIDIEndpointRef(101),
+            destination: MIDIEndpointRef(202)
+        ))
+        let second = USBMidiTransport.Connection(candidate: USBMidiTransport.PortCandidate(
+            name: "Board B",
+            source: MIDIEndpointRef(303),
+            destination: MIDIEndpointRef(404)
+        ))
+
+        assertConnectionOwnsIsolatedSession(first, expectedSessionKey: "usbmidi:101:202:Board A", expectedDisplayName: "Board A", isolatedFrom: second)
     }
 
     func testConnectionReportsDisconnectedWhenEndpointPairIsIncomplete() {
@@ -51,5 +67,19 @@ final class USBMidiTransportTests: XCTestCase {
         }
 
         XCTAssertEqual(USBMidiTransport.copyPacketData(from: packetList), [first, second])
+    }
+
+    private func assertConnectionOwnsIsolatedSession(
+        _ connection: TransportDeviceConnection,
+        expectedSessionKey: String,
+        expectedDisplayName: String,
+        isolatedFrom other: TransportDeviceConnection
+    ) {
+        connection.session.appendTxBytes(Data([0x01]), tsMs: 1)
+
+        XCTAssertEqual(connection.sessionKey, expectedSessionKey)
+        XCTAssertEqual(connection.displayName, expectedDisplayName)
+        XCTAssertEqual(connection.session.getTxPacketCount(), 1)
+        XCTAssertEqual(other.session.getTxPacketCount(), 0)
     }
 }

@@ -9,7 +9,7 @@ import Foundation
 enum WiFiTransport {
     static let transportName = "Wi-Fi"
 
-    final class Connection {
+    final class Connection: TransportDeviceConnection {
         let hostOrDeviceId: String
         let sessionKey: String
         let displayName: String

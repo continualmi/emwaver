@@ -262,6 +262,7 @@ Remaining isolation work:
 - [x] iOS keeps active transport and active script session identity synchronized through one active target descriptor.
 - [x] iOS has focused active-target normalization/matching tests.
 - [x] iOS has a shared transport device-session protocol used by the current USB MIDI/BLE manager.
+- [x] iOS USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `TransportDeviceConnection` protocol that exposes session identity, display name, and a transport-owned `TransportDeviceSession`.
 - [x] iOS USB MIDI live endpoint handles are grouped behind a transport-owned connection value.
 - [x] iOS BLE live handles are grouped behind transport-owned pending/connected values.
 - [x] iOS BLE scan state is grouped behind a transport-owned scan session.
