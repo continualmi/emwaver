@@ -37,10 +37,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 {
     private static readonly int LaneSizeBytes = 18;
     private static readonly int SuperframeSizeBytes = 36;
-    private static readonly Guid BleServiceUuid = Guid.Parse("45C7158E-0C3B-4E90-A847-452A15B14191");
-    private static readonly Guid BleCommandUuid = Guid.Parse("46C7158E-0C3B-4E90-A847-452A15B14191");
-    private static readonly Guid BleNotifyUuid = Guid.Parse("47C7158E-0C3B-4E90-A847-452A15B14191");
-
     private static class EmwOpcode
     {
         internal const byte Version = 0x01;
@@ -712,7 +708,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             {
                 ScanningMode = BluetoothLEScanningMode.Active
             };
-            watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(BleServiceUuid);
+            watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(WindowsBleTransport.ServiceUuid);
             watcher.Received += OnBleAdvertisementReceived;
             _bleWatcher = watcher;
             watcher.Start();
@@ -755,7 +751,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         var name = args.Advertisement.LocalName ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(name) && !name.Contains("emwaver", StringComparison.OrdinalIgnoreCase))
+        if (!WindowsBleTransport.MatchesAdvertisementName(name))
         {
             return;
         }
@@ -772,7 +768,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = null;
             DeviceEmwaverVersion = null;
             ConnectedBoardType = null;
-            SetActiveBufferSession($"ble:{bluetoothAddress:X}");
+            SetActiveBufferSession(WindowsBleTransport.SessionId(bluetoothAddress));
 
             CloseBleDevice();
 
@@ -783,7 +779,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
-            var servicesResult = await device.GetGattServicesForUuidAsync(BleServiceUuid, BluetoothCacheMode.Uncached);
+            var servicesResult = await device.GetGattServicesForUuidAsync(WindowsBleTransport.ServiceUuid, BluetoothCacheMode.Uncached);
             if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
             {
                 device.Dispose();
@@ -792,8 +788,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             var service = servicesResult.Services[0];
-            var commandResult = await service.GetCharacteristicsForUuidAsync(BleCommandUuid, BluetoothCacheMode.Uncached);
-            var notifyResult = await service.GetCharacteristicsForUuidAsync(BleNotifyUuid, BluetoothCacheMode.Uncached);
+            var commandResult = await service.GetCharacteristicsForUuidAsync(WindowsBleTransport.CommandUuid, BluetoothCacheMode.Uncached);
+            var notifyResult = await service.GetCharacteristicsForUuidAsync(WindowsBleTransport.NotifyUuid, BluetoothCacheMode.Uncached);
             if (commandResult.Status != GattCommunicationStatus.Success || commandResult.Characteristics.Count == 0)
             {
                 device.Dispose();
@@ -872,10 +868,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
         Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
 
-        const int BleWriteChunkBytes = 20;
-        for (int offset = 0; offset < sysex.Length; offset += BleWriteChunkBytes)
+        for (int offset = 0; offset < sysex.Length; offset += WindowsBleTransport.WriteChunkBytes)
         {
-            var count = Math.Min(BleWriteChunkBytes, sysex.Length - offset);
+            var count = Math.Min(WindowsBleTransport.WriteChunkBytes, sysex.Length - offset);
             var chunk = new byte[count];
             System.Buffer.BlockCopy(sysex, offset, chunk, 0, count);
             var status = characteristic
