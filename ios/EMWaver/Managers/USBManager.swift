@@ -635,17 +635,22 @@ final class USBManager: NSObject, ObservableObject {
     /// Transmits the current buffer content to the connected device.
     /// For USB MIDI we always send fixed 18B lane packets (SysEx-tunneled mini-frames).
     @objc func transmitBuffer() {
+        transmitBuffer(deviceId: currentScriptDeviceId())
+    }
+
+    func transmitBuffer(deviceId: String) {
         guard isConnected else {
             setError("Cannot transmit buffer: Not connected")
             return
         }
 
-        let bufferToSend = getBuffer()
+        let bufferToSend = getBuffer(deviceId: deviceId)
         guard !bufferToSend.isEmpty else { return }
 
         let saved = withBufferQueueSync {
-            let saved = activeBufferSession.takeRxState()
-            activeBufferSession.setRxCounter(0)
+            let session = bufferSession(deviceId: deviceId)
+            let saved = session.takeRxState()
+            session.setRxCounter(0)
             return saved
         }
         DispatchQueue.main.async { self.bufferVersion += 1 }
@@ -659,7 +664,7 @@ final class USBManager: NSObject, ObservableObject {
 
         var bytesSent = 0
         while bytesSent < totalBytesToSend {
-            while let next = withBufferQueueSync({ activeBufferSession.nextRxPacket() }) {
+            while let next = withBufferQueueSync({ bufferSession(deviceId: deviceId).nextRxPacket() }) {
                 let status = withBufferQueueSync { NativeBufferRust.parseBsStatus(next.packet64) }
                 if status >= 0 { lastStatus = status }
             }
@@ -679,7 +684,7 @@ final class USBManager: NSObject, ObservableObject {
                 
                 // Log stream lane transmission
                 self.withBufferQueueSync {
-                    self.activeBufferSession.appendTxBytes(packet64, tsMs: Self.nowMs())
+                    self.bufferSession(deviceId: deviceId).appendTxBytes(packet64, tsMs: Self.nowMs())
                 }
                 
                 let sf = self.makeSuperframe(cmdLane: nil, streamLane: packet64)
@@ -693,7 +698,7 @@ final class USBManager: NSObject, ObservableObject {
         Thread.sleep(forTimeInterval: 0.1)
 
         withBufferQueueSync {
-            activeBufferSession.restoreRxState(rxBytes: saved.rxBytes, rxTsMs: saved.rxTsMs, rxCounter: saved.rxCounter)
+            bufferSession(deviceId: deviceId).restoreRxState(rxBytes: saved.rxBytes, rxTsMs: saved.rxTsMs, rxCounter: saved.rxCounter)
         }
         DispatchQueue.main.async { self.bufferVersion += 1 }
     }

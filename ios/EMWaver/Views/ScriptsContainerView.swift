@@ -25,7 +25,7 @@ private final class IOSTargetedScriptDevice: ScriptDevice {
     func loadBuffer(data: Data) { base?.loadBuffer(data: data, deviceId: deviceId) }
     func sendPacket(_ data: Data) { base?.sendPacket(data, deviceId: deviceId) }
     func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout, deviceId: deviceId) }
-    func transmitBuffer() { base?.transmitBuffer() }
+    func transmitBuffer() { base?.transmitBuffer(deviceId: deviceId) }
 }
 
 @MainActor
