@@ -60,6 +60,7 @@ Current first step:
 - Windows USB MIDI SysEx message sending now lives in `WindowsUsbMidiTransport`, and BLE chunked GATT writes now live in `WindowsBleTransport`, reducing transport protocol code inside `WindowsDeviceManager`.
 - Windows BLE watcher creation, device opening, service/characteristic lookup, and notification descriptor setup now live in `WindowsBleTransport`, further reducing BLE protocol ownership inside `WindowsDeviceManager`.
 - Windows BLE scan watcher state now sits behind a `WindowsBleTransport.ScanSession` object that owns the advertisement watcher subscription and shutdown behavior.
+- Windows command TX logging now follows the command's target transport session instead of always appending to the mutable active buffer session.
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows USB MIDI live handles now sit behind a `WindowsUsbMidiTransport.Connection` object that owns the opened port pair, session id, display name, send helper, and close behavior.
 - Windows BLE live handles now sit behind a `WindowsBleTransport.Connection` object that owns the BLE device, command/notify characteristics, session id, display name, notification subscription, send helper, and dispose behavior.
@@ -164,6 +165,7 @@ Remaining isolation work:
 - [x] Windows selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] Windows scopes command response wait state to the active transport buffer session.
 - [x] Windows scopes SysEx parser state to the active transport buffer session.
+- [x] Windows scopes command TX logging to the command target transport session.
 - [x] Windows binds local script runs to the active transport session id captured at run start.
 - [x] Windows refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Windows keeps active transport and active script session identity synchronized through one active target descriptor.

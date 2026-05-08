@@ -526,7 +526,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             var pkt = MakeLanePacket(commandLane);
             var sf = MakeSuperframe(cmdLane: pkt, streamLane: null);
-            SendSuperframe(sf);
+            SendSuperframe(sf, session);
             return await tcs.Task;
         }
         finally
@@ -631,9 +631,14 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void SendSuperframe(byte[] superframe36)
     {
+        SendSuperframe(superframe36, ActiveBufferSession);
+    }
+
+    private void SendSuperframe(byte[] superframe36, ITransportDeviceSession session)
+    {
         if (ActiveTransport == DeviceTransport.Ble)
         {
-            SendBleSuperframe(superframe36);
+            SendBleSuperframe(superframe36, session);
             return;
         }
 
@@ -645,7 +650,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
-        ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
+        session.AppendTxBytes(superframe36, NowMs());
 
         LastErrorText = connection.SendSuperframe(superframe36, BufferFromBytes);
     }
@@ -771,6 +776,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void SendBleSuperframe(byte[] superframe36)
     {
+        SendBleSuperframe(superframe36, ActiveBufferSession);
+    }
+
+    private void SendBleSuperframe(byte[] superframe36, ITransportDeviceSession session)
+    {
         var connection = _bleConnection;
         if (connection == null || !connection.IsOpen)
         {
@@ -778,7 +788,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
-        ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
+        session.AppendTxBytes(superframe36, NowMs());
         LastErrorText = connection.SendSuperframe(superframe36, BufferFromBytes);
     }
 
