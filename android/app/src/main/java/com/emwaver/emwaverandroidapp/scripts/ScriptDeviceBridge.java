@@ -9,6 +9,8 @@ package com.emwaver.emwaverandroidapp.scripts;
 import androidx.annotation.Nullable;
 
 public interface ScriptDeviceBridge {
+    int DEFAULT_PACKET_SIZE_BYTES = 18;
+
     boolean isConnected();
 
     @Nullable
@@ -24,4 +26,8 @@ public interface ScriptDeviceBridge {
     byte[] getBuffer();
 
     void loadBuffer(byte[] data);
+
+    default int getBufferPacketSizeBytes() {
+        return DEFAULT_PACKET_SIZE_BYTES;
+    }
 }

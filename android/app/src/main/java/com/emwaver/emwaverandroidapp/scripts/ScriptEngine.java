@@ -389,7 +389,8 @@ public final class ScriptEngine {
                 if (data.length <= 0) {
                     return 0;
                 }
-                return (data.length + 63) / 64;
+                int packetSize = getSamplerPacketSizeBytes();
+                return (data.length + packetSize - 1) / packetSize;
             }
         });
 
@@ -432,13 +433,14 @@ public final class ScriptEngine {
                 }
 
                 byte[] data = readSamplerBytesSnapshot();
-                int totalPackets = (data.length + 63) / 64;
+                int packetSize = getSamplerPacketSizeBytes();
+                int totalPackets = (data.length + packetSize - 1) / packetSize;
                 int startPacket = Math.min(packetIndex, totalPackets);
                 int availablePackets = Math.max(0, totalPackets - startPacket);
                 int toRead = Math.max(0, Math.min(availablePackets, maxPackets));
 
-                int startByte = startPacket * 64;
-                int endByte = Math.min(data.length, startByte + toRead * 64);
+                int startByte = startPacket * packetSize;
+                int endByte = Math.min(data.length, startByte + toRead * packetSize);
                 byte[] slice = endByte > startByte ? java.util.Arrays.copyOfRange(data, startByte, endByte) : new byte[0];
 
                 Scriptable out = cx.newObject(scope);
@@ -988,6 +990,14 @@ public final class ScriptEngine {
         }
         byte[] data = connection.getBuffer();
         return data != null ? data : new byte[0];
+    }
+
+    private int getSamplerPacketSizeBytes() {
+        ScriptDeviceBridge connection = deviceConnection;
+        if (connection == null) {
+            return ScriptDeviceBridge.DEFAULT_PACKET_SIZE_BYTES;
+        }
+        return Math.max(1, connection.getBufferPacketSizeBytes());
     }
 
     private void invokeRegisteredCallback(Context cx, String token) {

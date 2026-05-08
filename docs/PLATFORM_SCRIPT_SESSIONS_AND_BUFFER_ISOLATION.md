@@ -63,6 +63,7 @@ Current first step:
 - leaving preview can keep the run visible in the list rather than making the list look idle.
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
 - Android USB and BLE connections now select keyed buffer sessions, matching the Windows/macOS direction even though only one transport session is active at a time today.
+- Android script sampler packet APIs now use the active bridge packet size instead of assuming 64-byte packets.
 
 Remaining isolation work:
 
