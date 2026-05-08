@@ -34,10 +34,7 @@ platform :android do
       track: ENV.fetch("GOOGLE_PLAY_TRACK", "internal"),
       release_status: ENV.fetch("GOOGLE_PLAY_RELEASE_STATUS", "draft"),
       skip_upload_metadata: true,
-      skip_upload_changelogs: changelog_text.empty?,
-      changelogs: changelog_text.empty? ? nil : {
-        "en-US" => changelog_text
-      }
+      skip_upload_changelogs: true
     )
   end
 
@@ -58,7 +55,4 @@ platform :android do
     UI.user_error!("Android keystore does not exist at #{ENV.fetch('ANDROID_KEYSTORE_PATH')}") unless File.exist?(ENV.fetch("ANDROID_KEYSTORE_PATH"))
   end
 
-  def changelog_text
-    ENV.fetch("EMWAVER_ANDROID_CHANGELOG", "").strip
-  end
 end
