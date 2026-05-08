@@ -324,6 +324,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_authenticated = false;
         s_active_fd = -1;
+        stop_server();
         if (s_has_config && !s_reconnect_pending) {
             s_reconnect_pending = true;
             (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
