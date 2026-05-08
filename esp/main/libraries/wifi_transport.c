@@ -116,7 +116,7 @@ static bool extract_json_string(const char *json, const char *key, char *out, si
 static bool extract_json_int(const char *json, const char *key, int *out);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
 static bool constant_time_equal(const char *a, const char *b, size_t len);
-static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence);
+static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence);
@@ -792,13 +792,15 @@ static esp_err_t ws_handler(httpd_req_t *req)
 
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
     uint16_t sequence = 0;
+    bool enveloped = false;
     bool has_sysex = !s_use_envelope && frame.type == HTTPD_WS_TYPE_BINARY && frame.len == EMW_SYSEX_BYTES;
     if (has_sysex) {
         memcpy(sysex, data, sizeof(sysex));
     } else if (frame.type == HTTPD_WS_TYPE_BINARY) {
         has_sysex = unwrap_envelope(data, frame.len, sysex, sizeof(sysex), &sequence);
+        enveloped = has_sysex;
     }
-    if (!has_sysex || !enqueue_sysex(sysex, sequence)) {
+    if (!has_sysex || !enqueue_sysex(sysex, sequence, enveloped)) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -856,12 +858,8 @@ static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_
     if (payload_len != EMW_SYSEX_BYTES || len != (size_t)WIFI_ENVELOPE_HEADER_BYTES + payload_len) {
         return false;
     }
-    const uint16_t frame_sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
-    if (frame_sequence == 0u) {
-        return false;
-    }
     if (sequence) {
-        *sequence = frame_sequence;
+        *sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
     }
     memcpy(out, &data[WIFI_ENVELOPE_HEADER_BYTES], EMW_SYSEX_BYTES);
     return true;
@@ -1030,7 +1028,7 @@ static bool constant_time_equal(const char *a, const char *b, size_t len)
     return diff == 0;
 }
 
-static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence)
+static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped)
 {
     if (!sysex || !s_cmd_queue) {
         return false;
@@ -1052,6 +1050,10 @@ static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence)
             cmd_any = true;
             break;
         }
+    }
+
+    if (enveloped && sequence == 0u && cmd_any) {
+        return false;
     }
 
     const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
