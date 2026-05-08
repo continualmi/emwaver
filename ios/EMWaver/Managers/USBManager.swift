@@ -153,8 +153,8 @@ final class USBManager: NSObject, ObservableObject {
         return bufferQueue.sync(execute: block)
     }
 
-    private func setActiveBufferSession(deviceId: String, resetSession: Bool) {
-        _ = withBufferQueueSync {
+    private func setActiveBufferSession(deviceId: String, resetSession: Bool) -> TransportDeviceSession {
+        withBufferQueueSync {
             bufferSessions.select(deviceId: deviceId, resetSession: resetSession)
         }
     }
@@ -180,11 +180,12 @@ final class USBManager: NSObject, ObservableObject {
         bufferSessions.session(deviceId: deviceId)
     }
 
-    private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) {
+    private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) -> TransportDeviceSession {
         let target = ActiveDeviceTarget(deviceId: deviceId, transport: transport)
-        setActiveBufferSession(deviceId: target.deviceId, resetSession: true)
+        let session = setActiveBufferSession(deviceId: target.deviceId, resetSession: true)
         activeDeviceTarget = target
         activeTransport = target.transport
+        return session
     }
 
     private func clearActiveDeviceTarget() {
@@ -877,9 +878,12 @@ final class USBManager: NSObject, ObservableObject {
         bleScanSession?.stop()
         bleScanSession = nil
 
-        let connection = USBMidiTransport.Connection(candidate: chosen)
+        let session = setActiveDeviceTarget(
+            deviceId: USBMidiTransport.sessionKey(for: chosen),
+            transport: .usbMidi
+        )
+        let connection = USBMidiTransport.Connection(candidate: chosen, session: session)
         usbMidiConnection = connection
-        setActiveDeviceTarget(deviceId: connection.sessionKey, transport: .usbMidi)
 
         let st = connection.connect(inPort: inPort)
         guard st == noErr else {
@@ -1041,6 +1045,13 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
+    private func feedMidiBytes(_ data: Data, session: TransportDeviceSession) {
+        let normalized = normalizeIncomingMidiBytes(data)
+        withBufferQueueSync {
+            session.feedMidiBytes(normalized, tsMs: Self.nowMs())
+        }
+    }
+
     private func setError(_ msg: String) {
         dbg("ERROR: \(msg)")
         DispatchQueue.main.async {
@@ -1180,14 +1191,18 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
+            let session = self.setActiveDeviceTarget(
+                deviceId: pending.sessionKey,
+                transport: .ble
+            )
             let connection = BLETransport.Connection(
                 pending: pending,
                 commandCharacteristic: command,
-                notifyCharacteristic: characteristics.notify
+                notifyCharacteristic: characteristics.notify,
+                session: session
             )
             self.bleConnection = connection
             self.pendingBleConnection = nil
-            self.setActiveDeviceTarget(deviceId: connection.sessionKey, transport: .ble)
             DispatchQueue.main.async {
                 self.connectedPortName = connection.displayName
                 self.isConnected = true
@@ -1204,10 +1219,11 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
             guard characteristic.uuid == BLETransport.notifyCharacteristicUUID, let data = characteristic.value else { return }
-            let deviceId = self.bleConnection?.matches(peripheral) == true
-                ? self.bleConnection?.sessionKey
-                : BLETransport.sessionKey(for: peripheral)
-            self.feedMidiBytes(data, deviceId: deviceId)
+            if let connection = self.bleConnection, connection.matches(peripheral) {
+                self.feedMidiBytes(data, session: connection.session)
+            } else {
+                self.feedMidiBytes(data, deviceId: BLETransport.sessionKey(for: peripheral))
+            }
         }
     }
 }
