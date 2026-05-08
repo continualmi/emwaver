@@ -198,13 +198,13 @@ public sealed partial class ScriptsPage : Page
                     HandleScriptTreeRender(tree, gen);
                 });
             },
-            sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs, _activeRunningDeviceSessionId),
+            sendPacket: (bytes, timeoutMs) => _activeScriptDevice.SendPacket(bytes, timeoutMs),
             errorHandler: message =>
             {
                 _ = DispatcherQueue.TryEnqueue(async () => await ShowScriptErrorAsync(message));
             },
-            getSamplerBytes: () => AppServices.Device.GetRxSnapshot(_activeRunningDeviceSessionId),
-            clearSamplerBuffer: () => AppServices.Device.ClearBuffer(_activeRunningDeviceSessionId),
+            getSamplerBytes: () => _activeScriptDevice.GetSamplerBytes(),
+            clearSamplerBuffer: () => _activeScriptDevice.ClearSamplerBuffer(),
             samplerPacketSizeBytes: NativeBufferRust.PacketSizeBytes
         );
 
@@ -709,10 +709,20 @@ public sealed partial class ScriptsPage : Page
     private int _activeRenderGeneration;
     private bool _hasActiveRunningScript;
     private string? _activeRunningScriptName;
-    private string _activeRunningDeviceSessionId = "active";
+    private TargetedScriptDeviceConnection _activeScriptDevice = CreateActiveScriptDevice("active");
     private Models.ScriptSessionInfo? _runningSessionItem;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
+
+    private static TargetedScriptDeviceConnection CreateActiveScriptDevice(string deviceId)
+    {
+        return new TargetedScriptDeviceConnection(
+            deviceId,
+            (bytes, timeoutMs, targetDeviceId) => AppServices.Device.SendPacket(bytes, timeoutMs, targetDeviceId),
+            targetDeviceId => AppServices.Device.GetRxSnapshot(targetDeviceId),
+            targetDeviceId => AppServices.Device.ClearBuffer(targetDeviceId)
+        );
+    }
 
     private void QueueEditorFocus()
     {
@@ -802,7 +812,7 @@ public sealed partial class ScriptsPage : Page
     {
         _hasActiveRunningScript = isRunning;
         _activeRunningScriptName = isRunning ? scriptName : null;
-        _activeRunningDeviceSessionId = isRunning ? AppServices.Device.ActiveBufferSessionId : "active";
+        _activeScriptDevice = CreateActiveScriptDevice(isRunning ? AppServices.Device.ActiveBufferSessionId : "active");
         NotifyRunningScriptStatusChanged();
     }
 

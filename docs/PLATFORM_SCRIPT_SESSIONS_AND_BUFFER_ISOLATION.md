@@ -72,6 +72,8 @@ Current first step:
 - Windows targeted script packet sends now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Windows now tracks the live script target as one `ActiveDeviceTarget` descriptor instead of parallel USB/BLE session fields, so send guards and receive routing resolve against one explicit active transport/session identity.
 - Windows has an `ActiveDeviceTargetTests` suite for active-target device-id normalization and transport matching; local execution still depends on a machine with `dotnet` installed.
+- Windows local script I/O now goes through a `TargetedScriptDeviceConnection` adapter, matching the target-scoped bridge direction on Apple/Android instead of leaving packet, sampler, and clear callbacks as loose page-level lambdas.
+- Windows has a focused `TargetedScriptDeviceConnectionTests` case covering captured-device routing for packet sends, sampler reads, and sampler clears; local execution still depends on a machine with `dotnet` installed.
 
 Remaining isolation work:
 
@@ -185,6 +187,7 @@ Remaining isolation work:
 - [x] Windows has focused TX buffer isolation coverage for separate transport sessions.
 - [x] Windows has focused session registry coverage for select-without-reset and select-with-reset behavior.
 - [x] Windows binds local script runs to the active transport session id captured at run start.
+- [x] Windows local script I/O uses a target-scoped adapter for packet sends, sampler reads, and sampler clears.
 - [x] Windows refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Windows keeps active transport and active script session identity synchronized through one active target descriptor.
 - [x] Windows has focused active-target normalization/matching tests in the local test project.

@@ -34,6 +34,7 @@
     <Compile Include="..\EMWaver\Scripting\ScriptEngine.cs" Link="EMWaver\Scripting\ScriptEngine.cs" />
     <Compile Include="..\EMWaver\Scripting\ScriptModel.cs" Link="EMWaver\Scripting\ScriptModel.cs" />
     <Compile Include="..\EMWaver\Scripting\SimulatorCommandBridge.cs" Link="EMWaver\Scripting\SimulatorCommandBridge.cs" />
+    <Compile Include="..\EMWaver\Scripting\TargetedScriptDeviceConnection.cs" Link="EMWaver\Scripting\TargetedScriptDeviceConnection.cs" />
   </ItemGroup>
 
   <ItemGroup>
