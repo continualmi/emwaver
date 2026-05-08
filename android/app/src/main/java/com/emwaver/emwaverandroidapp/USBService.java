@@ -519,13 +519,8 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @SuppressLint("MissingPermission")
     private void closeBleLocked() {
-        stopBleScan();
-        if (bleConnection != null) {
-            bleConnection.close();
-        }
-        if (pendingBleConnection != null) {
-            pendingBleConnection.close();
-        }
+        AndroidBleTransport.closeHandles(bleScanSession, bleConnection, pendingBleConnection);
+        bleScanSession = null;
         bleConnection = null;
         pendingBleConnection = null;
         clearActiveDeviceTarget(ActiveTransport.BLE);

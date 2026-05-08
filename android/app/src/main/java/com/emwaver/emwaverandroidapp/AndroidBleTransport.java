@@ -223,6 +223,26 @@ final class AndroidBleTransport {
         return new Connection(gatt, command, displayName, true);
     }
 
+    static void closeHandles(
+            @Nullable AutoCloseable scanSession,
+            @Nullable AutoCloseable connection,
+            @Nullable AutoCloseable pendingConnection
+    ) {
+        closeQuietly(scanSession);
+        closeQuietly(connection);
+        closeQuietly(pendingConnection);
+    }
+
+    private static void closeQuietly(@Nullable AutoCloseable closeable) {
+        if (closeable == null) {
+            return;
+        }
+        try {
+            closeable.close();
+        } catch (Exception ignored) {
+        }
+    }
+
     static void discoverServices(BluetoothGatt gatt) {
         if (!gatt.requestMtu(64)) {
             gatt.discoverServices();
