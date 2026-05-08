@@ -8,6 +8,7 @@ package com.emwaver.emwaverandroidapp;
 
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
+import android.hardware.usb.UsbManager;
 import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
 import android.media.midi.MidiInputPort;
@@ -18,6 +19,7 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Locale;
 
 final class AndroidUsbMidiTransport {
@@ -118,6 +120,20 @@ final class AndroidUsbMidiTransport {
                 product.contains("esp32-s3") ||
                 product.contains("s3")) &&
                 looksLikeMidi(device);
+    }
+
+    @Nullable
+    static UsbDevice findSupportedRuntimeDevice(@Nullable UsbManager usbManager) {
+        if (usbManager == null) {
+            return null;
+        }
+        HashMap<String, UsbDevice> deviceList = usbManager.getDeviceList();
+        for (UsbDevice device : deviceList.values()) {
+            if (isSupportedRuntimeDevice(device)) {
+                return device;
+            }
+        }
+        return null;
     }
 
     @Nullable

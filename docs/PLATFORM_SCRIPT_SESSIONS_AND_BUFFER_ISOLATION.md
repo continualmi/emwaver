@@ -110,6 +110,7 @@ Current first step:
 - Android BLE live handles now sit behind an `AndroidBleTransport.Connection` object that owns the GATT handle, command characteristic, session id, display name, connected state, write helper, and close behavior.
 - Android BLE pending connection state now sits behind an `AndroidBleTransport.PendingConnection` object that owns the pending GATT handle and display name before service discovery completes.
 - Android BLE scan state now sits behind an `AndroidBleTransport.ScanSession` object that owns scanner start/stop state.
+- Android USB MIDI runtime device discovery now lives in `AndroidUsbMidiTransport`, keeping supported-device matching and selection together.
 - Android USB MIDI device-info matching now lives in `AndroidUsbMidiTransport`, moving another USB connection-selection detail out of `USBService`.
 - Android USB MIDI input/output port opening now lives in `AndroidUsbMidiTransport`, moving another USB setup detail out of `USBService`.
 - Android USB MIDI live handles now sit behind an `AndroidUsbMidiTransport.Connection` object that owns the opened device, ports, session id, display name, send helper, board inference, and close behavior.

@@ -269,14 +269,7 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private UsbDevice findUsbMidiDevice() {
-        UsbManager manager = getUsbManager();
-        HashMap<String, UsbDevice> deviceList = manager.getDeviceList();
-        for (UsbDevice device : deviceList.values()) {
-            if (AndroidUsbMidiTransport.isSupportedRuntimeDevice(device)) {
-                return device;
-            }
-        }
-        return null;
+        return AndroidUsbMidiTransport.findSupportedRuntimeDevice(getUsbManager());
     }
 
     public void checkForConnectedDevices() {
