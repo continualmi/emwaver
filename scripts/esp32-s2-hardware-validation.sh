@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 DAEMON_DIR="$ROOT/daemon"
 ESP_DIR="$ROOT/esp"
+ESP_DEPENDENCIES_LOCK="$ESP_DIR/dependencies.lock"
 PORT="${EMWAVER_ESP32_S2_PORT:-}"
 DEVICE_ID="${EMWAVER_DEVICE_ID:-}"
 SSID="${EMWAVER_WIFI_SSID:-}"
@@ -11,6 +12,41 @@ PASSWORD="${EMWAVER_WIFI_PASSWORD:-}"
 SECRET="${EMWAVER_WIFI_SECRET:-}"
 HOSTNAME="${EMWAVER_WIFI_HOSTNAME:-emwaver-s2-test}"
 MDNS_INSTANCE="${EMWAVER_MDNS_INSTANCE:-}"
+BOARD_CHECK=""
+WIFI_CHECK=""
+TEMP_PATHS=()
+
+if [[ -n "${EMWAVER_ESP_BUILD_DIR:-}" ]]; then
+  ESP_BUILD_DIR="$EMWAVER_ESP_BUILD_DIR"
+else
+  ESP_BUILD_DIR="$(mktemp -d /tmp/emwaver-esp32-s2-build.XXXXXX)"
+  TEMP_PATHS+=("$ESP_BUILD_DIR")
+fi
+
+if [[ -n "${EMWAVER_ESP_SDKCONFIG:-}" ]]; then
+  ESP_SDKCONFIG="$EMWAVER_ESP_SDKCONFIG"
+else
+  ESP_SDKCONFIG="$(mktemp /tmp/emwaver-esp32-s2-sdkconfig.XXXXXX)"
+  TEMP_PATHS+=("$ESP_SDKCONFIG")
+fi
+
+ESP_DEPENDENCIES_LOCK_BACKUP=""
+if [[ -f "$ESP_DEPENDENCIES_LOCK" ]]; then
+  ESP_DEPENDENCIES_LOCK_BACKUP="$(mktemp /tmp/emwaver-esp-dependencies.XXXXXX.lock)"
+  cp "$ESP_DEPENDENCIES_LOCK" "$ESP_DEPENDENCIES_LOCK_BACKUP"
+  TEMP_PATHS+=("$ESP_DEPENDENCIES_LOCK_BACKUP")
+fi
+
+cleanup() {
+  rm -f "$BOARD_CHECK" "$WIFI_CHECK"
+  if [[ -n "$ESP_DEPENDENCIES_LOCK_BACKUP" && -f "$ESP_DEPENDENCIES_LOCK_BACKUP" ]]; then
+    cp "$ESP_DEPENDENCIES_LOCK_BACKUP" "$ESP_DEPENDENCIES_LOCK"
+  fi
+  for path in "${TEMP_PATHS[@]}"; do
+    rm -rf "$path"
+  done
+}
+trap cleanup EXIT
 
 json_string() {
   if command -v python3 >/dev/null 2>&1; then
@@ -31,12 +67,13 @@ echo
 
 echo
 echo "== Build ESP32-S2 firmware =="
+echo "build dir: $ESP_BUILD_DIR"
 (
   cd "$ESP_DIR"
   # shellcheck source=/dev/null
   source setup.sh
-  idf.py set-target esp32s2
-  idf.py build
+  idf.py -B "$ESP_BUILD_DIR" -DSDKCONFIG="$ESP_SDKCONFIG" set-target esp32s2
+  idf.py -B "$ESP_BUILD_DIR" -DSDKCONFIG="$ESP_SDKCONFIG" build
 )
 
 if [[ -n "$PORT" ]]; then
@@ -46,7 +83,7 @@ if [[ -n "$PORT" ]]; then
     cd "$ESP_DIR"
     # shellcheck source=/dev/null
     source setup.sh
-    idf.py -p "$PORT" flash
+    idf.py -B "$ESP_BUILD_DIR" -DSDKCONFIG="$ESP_SDKCONFIG" -p "$PORT" flash
   )
 else
   cat <<'EOF'
@@ -86,14 +123,10 @@ EOF
   exit 0
 fi
 
-board_check="$(mktemp /tmp/emwaver-esp32-s2-board.XXXXXX.emw)"
-wifi_check="$(mktemp /tmp/emwaver-esp32-s2-wifi.XXXXXX.emw)"
-cleanup() {
-  rm -f "$board_check" "$wifi_check"
-}
-trap cleanup EXIT
+BOARD_CHECK="$(mktemp /tmp/emwaver-esp32-s2-board.XXXXXX.emw)"
+WIFI_CHECK="$(mktemp /tmp/emwaver-esp32-s2-wifi.XXXXXX.emw)"
 
-cat >"$board_check" <<'EOF'
+cat >"$BOARD_CHECK" <<'EOF'
 var board = String(device.boardType({ refresh: true, timeout: 2500 }) || '').trim().toLowerCase();
 if (board !== 'esp32s2') {
   throw new Error('expected esp32s2 board identity, got ' + board);
@@ -103,7 +136,7 @@ EOF
 
 echo
 echo "== Board identity over USB =="
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$board_check" --direct --device "$DEVICE_ID")
+(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$BOARD_CHECK" --direct --device "$DEVICE_ID")
 
 if [[ -n "$SSID" && -n "$SECRET" ]]; then
   ssid_js="$(json_string "$SSID")"
@@ -111,7 +144,7 @@ if [[ -n "$SSID" && -n "$SECRET" ]]; then
   secret_js="$(json_string "$SECRET")"
   hostname_js="$(json_string "$HOSTNAME")"
 
-  cat >"$wifi_check" <<EOF
+  cat >"$WIFI_CHECK" <<EOF
 var EMW_OP_WIFI_CONFIG = 0x0a;
 var EMW_WIFI_CFG_BEGIN = 0x00;
 var EMW_WIFI_CFG_FIELD = 0x01;
@@ -158,7 +191,7 @@ EOF
 
   echo
   echo "== Wi-Fi provisioning over USB =="
-  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$wifi_check" --direct --device "$DEVICE_ID")
+  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$WIFI_CHECK" --direct --device "$DEVICE_ID")
 else
   cat <<'EOF'
 
