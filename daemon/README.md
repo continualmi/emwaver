@@ -146,7 +146,7 @@ Local setup can be checked with:
 emwaver doctor
 ```
 
-`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility. `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` also performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, and paired-secret failures.
+`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility. `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` also performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, paired-secret, and device-busy failures.
 It also reports the current OS/architecture, local state directory, pidfile, logfile, and non-invasive autostart status so local installs can be debugged without a cloud account.
 
 Agent help is optional and paid. It never gates local hardware control:

@@ -259,7 +259,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
   - mDNS unavailable,
   - paired secret mismatch.
 - Current daemon progress: `emwaver devices` now performs best-effort `_emwaver._tcp` mDNS discovery and prints discovered ESP32 Wi-Fi endpoints with TXT board/firmware metadata; `emwaver devices --json` exposes the same inventory to the gateway. `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can still manually probe a paired endpoint.
-- Current daemon progress: `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, authentication, and paired-secret failures.
+- Current daemon progress: `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, authentication, paired-secret, and device-busy failures.
 
 ### Gateway
 

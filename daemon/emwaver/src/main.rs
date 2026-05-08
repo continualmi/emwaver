@@ -1109,7 +1109,9 @@ fn wifi_probe_lines(
 fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
     let text = format!("{err:#}");
     let lower = text.to_ascii_lowercase();
-    if lower.contains("auth") || lower.contains("secret") {
+    if lower.contains("busy") {
+        format!("device is busy with another session ({text})")
+    } else if lower.contains("auth") || lower.contains("secret") {
         format!("authentication failure or paired secret mismatch ({text})")
     } else if lower.contains("connection refused") || lower.contains("refused") {
         format!(
@@ -2806,5 +2808,18 @@ mod tests {
             gateway_ui_event_args("viewport", json!({"min": 10, "max": 20})),
             vec![json!({"min": 10, "max": 20})]
         );
+    }
+
+    #[test]
+    fn wifi_probe_error_classifies_busy_device() {
+        let err = anyhow::anyhow!("expected Wi-Fi auth challenge, got Text(\"busy\")");
+        assert!(classify_wifi_probe_error(&err).contains("device is busy with another session"));
+    }
+
+    #[test]
+    fn wifi_probe_error_classifies_pairing_secret_mismatch() {
+        let err = anyhow::anyhow!("Wi-Fi authentication failed: auth fail");
+        assert!(classify_wifi_probe_error(&err)
+            .contains("authentication failure or paired secret mismatch"));
     }
 }
