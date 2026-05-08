@@ -560,7 +560,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 let stationText = response[3] == 0 ? "offline" : "online"
                 if response.count >= 5 {
                     let retryText = response[4] == 0 ? "idle" : "retrying"
-                    self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(authText).", isError: false)
+                    if response.count >= 7 {
+                        let reason = UInt16(response[5]) | (UInt16(response[6]) << 8)
+                        let reasonText = Self.wiFiDisconnectReasonText(reason)
+                        self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                    } else {
+                        self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(authText).", isError: false)
+                    }
                 } else {
                     self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText); socket is \(authText).", isError: false)
                 }
@@ -737,6 +743,29 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.main.async {
             self.isWiFiProvisioning = false
             self.wifiProvisioningStatus = message
+        }
+    }
+
+    private static func wiFiDisconnectReasonText(_ reason: UInt16) -> String {
+        switch reason {
+        case 0:
+            return "no disconnect reason"
+        case 2:
+            return "auth expired"
+        case 15:
+            return "4-way handshake timeout"
+        case 201:
+            return "no access point"
+        case 202:
+            return "auth failed"
+        case 203:
+            return "association failed"
+        case 204:
+            return "handshake timeout"
+        case 205:
+            return "connection failed"
+        default:
+            return "reason \(reason)"
         }
     }
 

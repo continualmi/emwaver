@@ -26,6 +26,7 @@ bool wifi_transport_is_provisioned(void);
 bool wifi_transport_is_authenticated(void);
 bool wifi_transport_is_station_online(void);
 bool wifi_transport_is_reconnecting(void);
+uint16_t wifi_transport_last_disconnect_reason(void);
 
 #ifdef __cplusplus
 }

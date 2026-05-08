@@ -72,6 +72,7 @@ static bool s_station_online;
 static uint8_t s_reconnect_attempt;
 static bool s_reconnect_pending;
 static bool s_suppress_next_disconnect_reconnect;
+static uint16_t s_last_disconnect_reason;
 
 static void wifi_register_commands(void);
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
@@ -198,6 +199,7 @@ esp_err_t wifi_transport_clear_config(void)
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = false;
+        s_last_disconnect_reason = 0;
 #if EMWAVER_ENABLE_WIFI_TRANSPORT
         stop_server();
         (void)esp_wifi_disconnect();
@@ -226,6 +228,11 @@ bool wifi_transport_is_station_online(void)
 bool wifi_transport_is_reconnecting(void)
 {
     return s_reconnect_pending;
+}
+
+uint16_t wifi_transport_last_disconnect_reason(void)
+{
+    return s_last_disconnect_reason;
 }
 
 static void wifi_register_commands(void)
@@ -395,6 +402,7 @@ static void start_station(void)
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = true;
+        s_last_disconnect_reason = 0;
         stop_server();
         (void)esp_wifi_disconnect();
     }
@@ -415,11 +423,12 @@ static void start_station(void)
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
     (void)arg;
-    (void)event_data;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         s_station_started = true;
         (void)esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        const wifi_event_sta_disconnected_t *disconnected = (const wifi_event_sta_disconnected_t *)event_data;
+        s_last_disconnect_reason = disconnected ? (uint16_t)disconnected->reason : 0u;
         s_authenticated = false;
         s_station_online = false;
         s_active_fd = -1;
@@ -438,6 +447,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_station_online = true;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
+        s_last_disconnect_reason = 0;
         start_server();
     }
 }
