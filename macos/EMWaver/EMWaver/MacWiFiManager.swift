@@ -296,6 +296,7 @@ final class MacWiFiManager {
     }
 
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        var advertisedIDs = Set<String>()
         for result in results {
             guard case let .service(name, type, domain, _) = result.endpoint,
                   type == Self.serviceType else { continue }
@@ -303,6 +304,7 @@ final class MacWiFiManager {
                 .replacingOccurrences(of: "..", with: ".")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             let id = Self.deviceID(host: host, port: Self.defaultPort)
+            advertisedIDs.insert(id)
             let metadata = Self.bonjourMetadata(from: result.metadata)
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
@@ -316,6 +318,10 @@ final class MacWiFiManager {
                 isPaired: pairedDevicesByID[id] != nil,
                 lastSeen: Date()
             )
+        }
+
+        for id in discoveredDevicesByID.keys where !advertisedIDs.contains(id) && pairedDevicesByID[id] == nil {
+            discoveredDevicesByID.removeValue(forKey: id)
         }
 
         for (id, paired) in pairedDevicesByID where discoveredDevicesByID[id] == nil {
