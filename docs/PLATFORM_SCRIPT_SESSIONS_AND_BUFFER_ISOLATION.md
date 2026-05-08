@@ -140,6 +140,7 @@ Current first step:
 - Android USB MIDI receive attachment now belongs to `AndroidUsbMidiTransport.Connection`, matching the Windows USB MIDI receive-subscription ownership pattern.
 - Android targeted writes, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Android now tracks the live script target as one `ActiveDeviceTarget` descriptor, keeping the active transport and active session id synchronized before the future per-device transport runtime split.
+- Android USB MIDI and BLE connection objects now receive the same registry-owned `TransportDeviceSession` selected for the active target, so the shared connection contract owns the live script-facing session instead of a parallel session object.
 - Android has an `ActiveDeviceTargetTest` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
@@ -248,6 +249,7 @@ Remaining isolation work:
 - [x] Android has focused active-target normalization/matching tests.
 - [x] Android has a shared transport device-session contract used by the current USB/BLE service.
 - [x] Android USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `TransportDeviceConnection` contract that exposes session identity, display name, and a transport-owned `TransportDeviceSession`.
+- [x] Android USB MIDI and BLE connection values are wired to the registry-owned `TransportDeviceSession` selected for the active script target.
 - [x] Android USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE pending connection state is grouped behind a transport-owned pending value.

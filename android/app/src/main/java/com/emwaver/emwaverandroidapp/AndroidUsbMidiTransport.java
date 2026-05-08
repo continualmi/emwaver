@@ -181,8 +181,17 @@ final class AndroidUsbMidiTransport {
     }
 
     static Connection openConnection(UsbDevice usbDevice, MidiDevice midiDevice, @Nullable MidiReceiver receiver) {
+        return openConnection(usbDevice, midiDevice, receiver, null);
+    }
+
+    static Connection openConnection(
+            UsbDevice usbDevice,
+            MidiDevice midiDevice,
+            @Nullable MidiReceiver receiver,
+            @Nullable TransportDeviceSession session
+    ) {
         OpenPorts ports = openPorts(midiDevice);
-        return new Connection(usbDevice, midiDevice, ports.input, ports.output, receiver, null);
+        return new Connection(usbDevice, midiDevice, ports.input, ports.output, receiver, session);
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {

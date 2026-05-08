@@ -238,7 +238,16 @@ final class AndroidBleTransport {
             BluetoothGattCharacteristic command,
             @Nullable String displayName
     ) {
-        return new Connection(gatt, command, displayName, true, null);
+        return connectedSession(gatt, command, displayName, null);
+    }
+
+    static Connection connectedSession(
+            BluetoothGatt gatt,
+            BluetoothGattCharacteristic command,
+            @Nullable String displayName,
+            @Nullable TransportDeviceSession session
+    ) {
+        return new Connection(gatt, command, displayName, true, session);
     }
 
     static void closeHandles(

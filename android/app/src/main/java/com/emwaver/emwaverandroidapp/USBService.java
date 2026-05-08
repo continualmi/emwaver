@@ -132,11 +132,12 @@ public class USBService extends Service implements DeviceConnectionService {
         return activeDeviceTarget.deviceId;
     }
 
-    private void setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
+    private TransportDeviceSession setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
         ActiveDeviceTarget<ActiveTransport> target = new ActiveDeviceTarget<>(deviceId, transport);
-        setActiveBufferSession(target.deviceId, true);
+        TransportDeviceSession session = bufferSessions.select(target.deviceId, true);
         activeDeviceTarget = target;
         activeTransport = target.transport;
+        return session;
     }
 
     private void clearActiveDeviceTarget(ActiveTransport transport) {
@@ -354,8 +355,10 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
-                usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver);
-                setActiveDeviceTarget(usbMidiConnection.sessionId, ActiveTransport.USB);
+                TransportDeviceSession session = setActiveDeviceTarget(
+                        AndroidUsbMidiTransport.sessionId(usbDevice),
+                        ActiveTransport.USB);
+                usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver, session);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -597,9 +600,11 @@ public class USBService extends Service implements DeviceConnectionService {
                 String displayName = pending != null && pending.owns(gatt)
                         ? pending.displayName
                         : null;
-                bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName);
+                TransportDeviceSession session = setActiveDeviceTarget(
+                        AndroidBleTransport.sessionId(gatt.getDevice()),
+                        ActiveTransport.BLE);
+                bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName, session);
                 pendingBleConnection = null;
-                setActiveDeviceTarget(bleConnection.sessionId, ActiveTransport.BLE);
             }
             AndroidBleTransport.enableNotifications(gatt);
             connectedBoardType = AndroidBleTransport.boardType();
@@ -612,7 +617,11 @@ public class USBService extends Service implements DeviceConnectionService {
             if (characteristic != null && AndroidBleTransport.NOTIFY_UUID.equals(characteristic.getUuid())) {
                 byte[] value = characteristic.getValue();
                 if (value != null) {
-                    feedSysexBytes(value, 0, value.length, bufferSession(AndroidBleTransport.sessionId(gatt.getDevice())));
+                    AndroidBleTransport.Connection connection = bleConnection;
+                    TransportDeviceSession session = connection != null && connection.owns(gatt)
+                            ? connection.session()
+                            : bufferSession(AndroidBleTransport.sessionId(gatt.getDevice()));
+                    feedSysexBytes(value, 0, value.length, session);
                 }
             }
         }
