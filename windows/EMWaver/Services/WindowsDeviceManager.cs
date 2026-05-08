@@ -169,8 +169,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private DispatcherQueue? _ui;
 
-    private MidiInPort? _inPort;
-    private IMidiOutPort? _outPort;
+    private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private BluetoothLEAdvertisementWatcher? _bleWatcher;
     private BluetoothLEDevice? _bleDevice;
     private GattCharacteristic? _bleCommandCharacteristic;
@@ -328,20 +327,18 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            SetActiveDeviceTarget(WindowsUsbMidiTransport.SessionId(port), DeviceTransport.UsbMidi);
+            var connection = await WindowsUsbMidiTransport.OpenConnectionAsync(port);
+            _usbMidiConnection = connection;
+            SetActiveDeviceTarget(connection.SessionId, DeviceTransport.UsbMidi);
 
-            var ports = await WindowsUsbMidiTransport.OpenPortsAsync(port);
-            _inPort = ports.InPort;
-            _outPort = ports.OutPort;
-
-            if (_inPort == null || _outPort == null)
+            if (!connection.IsOpen)
             {
                 Disconnect();
                 LastErrorText = "Failed to open MIDI ports";
                 return;
             }
 
-            _inPort.MessageReceived += OnMidiMessage;
+            connection.InPort!.MessageReceived += OnMidiMessage;
             ConnectedPort = port;
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
@@ -393,34 +390,23 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         StopBleScan();
 
-        try
+        var usbMidiConnection = _usbMidiConnection;
+        if (usbMidiConnection != null)
         {
-            if (_inPort != null)
+            try
             {
-                _inPort.MessageReceived -= OnMidiMessage;
-                _inPort.Dispose();
+                if (usbMidiConnection.InPort != null)
+                {
+                    usbMidiConnection.InPort.MessageReceived -= OnMidiMessage;
+                }
             }
-        }
-        catch
-        {
-            // Ignore dispose errors.
-        }
-        finally
-        {
-            _inPort = null;
-        }
+            catch
+            {
+                // Ignore detach errors.
+            }
 
-        try
-        {
-            _outPort?.Dispose();
-        }
-        catch
-        {
-            // Ignore dispose errors.
-        }
-        finally
-        {
-            _outPort = null;
+            usbMidiConnection.Dispose();
+            _usbMidiConnection = null;
         }
 
         CloseBleDevice();
@@ -441,7 +427,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         // Fire-and-forget: device will reboot into STM32 ROM DFU (0483:DF11).
         try
         {
-            if (_outPort == null)
+            if (_usbMidiConnection?.OutPort == null)
             {
                 LastErrorText = "Cannot enter Update Mode: Not connected";
                 return;
@@ -528,7 +514,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return null;
             }
         }
-        else if (_outPort == null || _inPort == null)
+        else if (_usbMidiConnection?.IsOpen != true)
         {
             LastErrorText = "Cannot send command: Not connected";
             return null;
@@ -653,7 +639,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
-        if (_outPort == null)
+        var connection = _usbMidiConnection;
+        if (connection == null || !connection.IsOpen)
         {
             LastErrorText = "Cannot send: Not connected";
             return;
@@ -662,7 +649,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
         ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
 
-        LastErrorText = WindowsUsbMidiTransport.SendSuperframe(_outPort, superframe36, BufferFromBytes);
+        LastErrorText = connection.SendSuperframe(superframe36, BufferFromBytes);
     }
 
     private void StartBleScan()

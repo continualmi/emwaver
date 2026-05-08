@@ -14,6 +14,53 @@ internal static class WindowsUsbMidiTransport
 {
     internal static readonly string[] ContainerProperties = ["System.Devices.ContainerId"];
 
+    internal sealed class Connection : IDisposable
+    {
+        internal Connection(DevicePort port, MidiInPort? inPort, IMidiOutPort? outPort)
+        {
+            Port = port;
+            InPort = inPort;
+            OutPort = outPort;
+            SessionId = WindowsUsbMidiTransport.SessionId(port);
+            DisplayName = string.IsNullOrWhiteSpace(port.DisplayName) ? "USB MIDI" : port.DisplayName;
+        }
+
+        internal DevicePort Port { get; }
+        internal MidiInPort? InPort { get; }
+        internal IMidiOutPort? OutPort { get; }
+        internal string SessionId { get; }
+        internal string DisplayName { get; }
+        internal bool IsOpen => InPort != null && OutPort != null;
+
+        internal string? SendSuperframe(byte[] superframe36, Func<byte[], IBuffer> bufferFromBytes)
+        {
+            return OutPort == null
+                ? "Cannot send: Not connected"
+                : WindowsUsbMidiTransport.SendSuperframe(OutPort, superframe36, bufferFromBytes);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                InPort?.Dispose();
+            }
+            catch
+            {
+                // Ignore dispose errors.
+            }
+
+            try
+            {
+                OutPort?.Dispose();
+            }
+            catch
+            {
+                // Ignore dispose errors.
+            }
+        }
+    }
+
     internal static string SessionId(DevicePort port) => port.InDeviceId;
 
     internal static async Task<IReadOnlyList<DevicePort>> ListPortsAsync()
@@ -37,6 +84,12 @@ internal static class WindowsUsbMidiTransport
         var outPortTask = MidiOutPort.FromIdAsync(port.OutDeviceId).AsTask();
         await Task.WhenAll(inPortTask, outPortTask);
         return (inPortTask.Result, outPortTask.Result);
+    }
+
+    internal static async Task<Connection> OpenConnectionAsync(DevicePort port)
+    {
+        var ports = await OpenPortsAsync(port);
+        return new Connection(port, ports.InPort, ports.OutPort);
     }
 
     internal static IReadOnlyList<DevicePort> PairPorts(
