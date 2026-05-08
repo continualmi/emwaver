@@ -60,6 +60,7 @@ Current first step:
 - Windows BLE transport constants, display names, board type, and device-session identity helpers now live in `WindowsBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Windows USB MIDI port pairing, target selection, board inference, and session identity helpers now live in `WindowsUsbMidiTransport`, so the current Windows manager has separate USB and BLE transport helper files.
 - Windows now has a `WindowsWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
+- Windows has focused `WindowsWiFiTransportTests` coverage for Wi-Fi session/display identity; local execution still depends on a machine with `dotnet` installed.
 - Windows has a local `DeviceBufferSessionTests` suite covering RX/counter and SysEx parser state isolation across separate transport sessions.
 - Windows `DeviceBufferSessionTests` now also cover TX buffer isolation across separate transport sessions.
 - Windows USB MIDI and BLE receive callbacks now feed SysEx data into the connected transport session instead of always using the mutable active session.
@@ -107,6 +108,7 @@ Current first step:
 - Android BLE transport constants, advertisement matching, display names, board type, and device-session identity helpers now live in `AndroidBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Android USB MIDI descriptor matching, board inference, display names, and session identity helpers now live in `AndroidUsbMidiTransport`, so the current Android service has separate USB and BLE transport helper files.
 - Android now has an `AndroidWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
+- Android has focused `AndroidWiFiTransportTest` coverage for Wi-Fi session/display identity.
 - Android has a local `DeviceBufferSessionTest` covering RX/counter and sampler-stream state isolation across separate transport sessions.
 - Android `DeviceBufferSessionTest` now also covers TX buffer isolation across separate transport sessions.
 - Android USB MIDI and BLE receive callbacks now resolve the buffer session from the source device id before feeding SysEx data, removing one active-session contamination path in the live service.
@@ -151,6 +153,7 @@ Current first step:
 - iOS BLE transport constants, advertisement matching, display names, and device-session identity helpers now live in `BLETransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - iOS USB MIDI endpoint pairing, target selection, display names, and session identity helpers now live in `USBMidiTransport`, so the current iOS manager has separate USB MIDI and BLE transport helper files.
 - iOS now has a `WiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
+- iOS has focused `WiFiTransportTests` coverage for Wi-Fi session/display identity.
 - iOS has a local `DeviceBufferSessionTests` suite covering RX/counter and sampler-stream state isolation across separate transport sessions.
 - iOS `DeviceBufferSessionTests` now also cover TX buffer isolation across separate transport sessions.
 - iOS CoreMIDI and BLE receive callbacks now feed MIDI/SysEx bytes into the source transport session instead of always using the mutable active session.
