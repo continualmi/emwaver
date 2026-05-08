@@ -654,12 +654,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         try
         {
-            var watcher = new BluetoothLEAdvertisementWatcher
-            {
-                ScanningMode = BluetoothLEScanningMode.Active
-            };
-            watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(WindowsBleTransport.ServiceUuid);
-            watcher.Received += OnBleAdvertisementReceived;
+            var watcher = WindowsBleTransport.CreateWatcher(OnBleAdvertisementReceived);
             _bleWatcher = watcher;
             watcher.Start();
             Debug.WriteLine("[EMWaver][BLE] scan started");
@@ -724,25 +719,23 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
             CloseBleDevice();
 
-            var device = await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
+            var device = await WindowsBleTransport.OpenDeviceAsync(bluetoothAddress);
             if (device == null)
             {
                 LastErrorText = "Failed to open BLE device";
                 return;
             }
 
-            var servicesResult = await device.GetGattServicesForUuidAsync(WindowsBleTransport.ServiceUuid, BluetoothCacheMode.Uncached);
-            if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
+            var service = await WindowsBleTransport.FindServiceAsync(device);
+            if (service == null)
             {
                 device.Dispose();
                 LastErrorText = "BLE EMWaver service not found";
                 return;
             }
 
-            var service = servicesResult.Services[0];
-            var commandResult = await service.GetCharacteristicsForUuidAsync(WindowsBleTransport.CommandUuid, BluetoothCacheMode.Uncached);
-            var notifyResult = await service.GetCharacteristicsForUuidAsync(WindowsBleTransport.NotifyUuid, BluetoothCacheMode.Uncached);
-            if (commandResult.Status != GattCommunicationStatus.Success || commandResult.Characteristics.Count == 0)
+            var commandCharacteristic = await WindowsBleTransport.FindCommandCharacteristicAsync(service);
+            if (commandCharacteristic == null)
             {
                 device.Dispose();
                 LastErrorText = "BLE command characteristic not found";
@@ -750,14 +743,14 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             _bleDevice = device;
-            _bleCommandCharacteristic = commandResult.Characteristics[0];
+            _bleCommandCharacteristic = commandCharacteristic;
 
-            if (notifyResult.Status == GattCommunicationStatus.Success && notifyResult.Characteristics.Count > 0)
+            var notifyCharacteristic = await WindowsBleTransport.FindNotifyCharacteristicAsync(service);
+            if (notifyCharacteristic != null)
             {
-                _bleNotifyCharacteristic = notifyResult.Characteristics[0];
+                _bleNotifyCharacteristic = notifyCharacteristic;
                 _bleNotifyCharacteristic.ValueChanged += OnBleValueChanged;
-                await _bleNotifyCharacteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
-                    GattClientCharacteristicConfigurationDescriptorValue.Notify);
+                await WindowsBleTransport.EnableNotificationsAsync(_bleNotifyCharacteristic);
             }
 
             ActiveTransport = DeviceTransport.Ble;

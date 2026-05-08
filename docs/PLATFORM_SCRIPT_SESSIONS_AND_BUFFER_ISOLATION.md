@@ -58,6 +58,7 @@ Current first step:
 - Windows has a local `DeviceBufferSessionTests` suite covering RX/counter and SysEx parser state isolation across separate transport sessions.
 - Windows USB MIDI and BLE receive callbacks now feed SysEx data into the connected transport session instead of always using the mutable active session.
 - Windows USB MIDI SysEx message sending now lives in `WindowsUsbMidiTransport`, and BLE chunked GATT writes now live in `WindowsBleTransport`, reducing transport protocol code inside `WindowsDeviceManager`.
+- Windows BLE watcher creation, device opening, service/characteristic lookup, and notification descriptor setup now live in `WindowsBleTransport`, further reducing BLE protocol ownership inside `WindowsDeviceManager`.
 
 Remaining isolation work:
 

@@ -1,6 +1,10 @@
 using System;
 using System.Diagnostics;
+using System.Threading.Tasks;
+using Windows.Devices.Bluetooth;
+using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.Foundation;
 using Windows.Storage.Streams;
 
 namespace EMWaver.Services;
@@ -15,10 +19,67 @@ internal static class WindowsBleTransport
 
     internal static string SessionId(ulong bluetoothAddress) => $"ble:{bluetoothAddress:X}";
 
+    internal static BluetoothLEAdvertisementWatcher CreateWatcher(
+        TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs> receivedHandler)
+    {
+        var watcher = new BluetoothLEAdvertisementWatcher
+        {
+            ScanningMode = BluetoothLEScanningMode.Active
+        };
+        watcher.AdvertisementFilter.Advertisement.ServiceUuids.Add(ServiceUuid);
+        watcher.Received += receivedHandler;
+        return watcher;
+    }
+
     internal static bool MatchesAdvertisementName(string name)
     {
         return string.IsNullOrWhiteSpace(name) ||
                name.Contains("emwaver", StringComparison.OrdinalIgnoreCase);
+    }
+
+    internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(ulong bluetoothAddress)
+    {
+        return await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
+    }
+
+    internal static async Task<GattDeviceService?> FindServiceAsync(BluetoothLEDevice device)
+    {
+        var servicesResult = await device.GetGattServicesForUuidAsync(ServiceUuid, BluetoothCacheMode.Uncached);
+        if (servicesResult.Status != GattCommunicationStatus.Success || servicesResult.Services.Count == 0)
+        {
+            return null;
+        }
+        return servicesResult.Services[0];
+    }
+
+    internal static async Task<GattCharacteristic?> FindCommandCharacteristicAsync(GattDeviceService service)
+    {
+        var commandResult = await service.GetCharacteristicsForUuidAsync(CommandUuid, BluetoothCacheMode.Uncached);
+        if (commandResult.Status != GattCommunicationStatus.Success || commandResult.Characteristics.Count == 0)
+        {
+            return null;
+        }
+        return commandResult.Characteristics[0];
+    }
+
+    internal static async Task<GattCharacteristic?> FindNotifyCharacteristicAsync(GattDeviceService service)
+    {
+        var notifyResult = await service.GetCharacteristicsForUuidAsync(NotifyUuid, BluetoothCacheMode.Uncached);
+        if (notifyResult.Status != GattCommunicationStatus.Success || notifyResult.Characteristics.Count == 0)
+        {
+            return null;
+        }
+        return notifyResult.Characteristics[0];
+    }
+
+    internal static async Task EnableNotificationsAsync(GattCharacteristic? characteristic)
+    {
+        if (characteristic == null)
+        {
+            return;
+        }
+        await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(
+            GattClientCharacteristicConfigurationDescriptorValue.Notify);
     }
 
     internal static string? SendSuperframe(
