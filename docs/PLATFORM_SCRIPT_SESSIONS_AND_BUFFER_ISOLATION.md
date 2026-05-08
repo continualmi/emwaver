@@ -83,6 +83,7 @@ Current first step:
 - Windows has an `ActiveDeviceTargetTests` suite for active-target device-id normalization and transport matching; local execution still depends on a machine with `dotnet` installed.
 - Windows local script I/O now goes through a `TargetedScriptDeviceConnection` adapter, matching the target-scoped bridge direction on Apple/Android instead of leaving packet, sampler, and clear callbacks as loose page-level lambdas.
 - Windows USB MIDI and BLE connection values now receive the same registry-owned `ITransportDeviceSession` selected for the active target, so the shared connection contract owns the live script-facing session instead of a parallel session object.
+- Windows now keeps the active connection behind the shared `ITransportDeviceConnection` contract for script target identity, reducing manager dependence on concrete USB/BLE connection fields.
 - Windows `TargetedScriptDeviceConnection` has focused coverage for blank captured device ids routing as `active`, matching the other host adapters.
 - Windows has a focused `TargetedScriptDeviceConnectionTests` case covering captured-device routing for packet sends, sampler reads, and sampler clears; local execution still depends on a machine with `dotnet` installed.
 
@@ -237,6 +238,7 @@ Remaining isolation work:
 - [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
 - [x] Windows USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `ITransportDeviceConnection` contract that exposes session identity, display name, and a transport-owned `ITransportDeviceSession`.
 - [x] Windows USB MIDI and BLE connection values are wired to the registry-owned `ITransportDeviceSession` selected for the active script target.
+- [x] Windows active script target identity is read through the shared `ITransportDeviceConnection` contract.
 - [x] Windows USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE scan watcher state is grouped behind a transport-owned scan session.

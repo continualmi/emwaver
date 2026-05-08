@@ -170,6 +170,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private WindowsBleTransport.ScanSession? _bleScanSession;
     private WindowsBleTransport.Connection? _bleConnection;
+    private ITransportDeviceConnection? _activeTransportConnection;
     private bool _bleConnecting;
     private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
     private readonly TransportDeviceSessionRegistry _bufferSessions = new();
@@ -180,7 +181,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal void ClearActiveBuffer() => ActiveBufferSession.ClearAll();
     internal ulong GetActiveRxPacketCount() => ActiveBufferSession.GetRxPacketCount();
     internal ulong GetActiveTxPacketCount() => ActiveBufferSession.GetTxPacketCount();
-    internal string ActiveBufferSessionId => ActiveBufferSession.DeviceId;
+    internal string ActiveBufferSessionId => _activeTransportConnection?.SessionId ?? ActiveBufferSession.DeviceId;
 
     internal byte[] GetRxSnapshot(string deviceId) => BufferSession(deviceId).GetRxSnapshot();
     internal void ClearBuffer(string deviceId) => BufferSession(deviceId).ClearAll();
@@ -222,6 +223,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         _activeDeviceTarget = ActiveDeviceTarget.None;
         ActiveTransport = DeviceTransport.None;
+        _activeTransportConnection = null;
     }
 
     private string? ActiveDeviceSessionId(DeviceTransport transport)
@@ -298,6 +300,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var session = SetActiveDeviceTarget(WindowsUsbMidiTransport.SessionId(port), DeviceTransport.UsbMidi);
             var connection = await WindowsUsbMidiTransport.OpenConnectionAsync(port, OnMidiMessage, session);
             _usbMidiConnection = connection;
+            _activeTransportConnection = connection;
 
             if (!connection.IsOpen)
             {
@@ -676,6 +679,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             _bleConnection = opened.Connection;
+            _activeTransportConnection = _bleConnection;
             ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
