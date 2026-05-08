@@ -49,6 +49,10 @@ enum USBMidiTransport {
         return out
     }
 
+    static func connectSource(_ candidate: PortCandidate, inPort: MIDIPortRef) -> OSStatus {
+        MIDIPortConnectSource(inPort, candidate.source, nil)
+    }
+
     static func sendSysex(
         _ sysex: Data,
         outPort: MIDIPortRef,

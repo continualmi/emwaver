@@ -851,7 +851,7 @@ final class USBManager: NSObject, ObservableObject {
         connectedUsbSessionKey = usbSessionKey
         setActiveBufferSession(deviceId: usbSessionKey)
 
-        let st = MIDIPortConnectSource(inPort, chosen.source, nil)
+        let st = USBMidiTransport.connectSource(chosen, inPort: inPort)
         guard st == noErr else {
             setError("MIDIPortConnectSource failed: \(st)")
             connectedSource = 0
