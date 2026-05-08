@@ -110,6 +110,12 @@ struct EMWaverTests {
         #expect(!MacUSBManager.isValidWiFiHostname("emwaver local"))
     }
 
+    @Test func wifiStatusParsesOptionalStationIP() {
+        #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0])) == nil)
+        #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0, 1, 10, 0, 0, 8])) == "10.0.0.8")
+        #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0, 0, 10, 0, 0, 8])) == nil)
+    }
+
     @Test func wifiBoardMetadataNormalizesEspTargets() {
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")

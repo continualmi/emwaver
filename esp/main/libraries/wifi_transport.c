@@ -83,6 +83,8 @@ static uint8_t s_reconnect_attempt;
 static bool s_reconnect_pending;
 static bool s_suppress_next_disconnect_reconnect;
 static uint16_t s_last_disconnect_reason;
+static char s_station_ip[16];
+static uint8_t s_station_ipv4[4];
 
 static void wifi_register_commands(void);
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
@@ -243,6 +245,8 @@ esp_err_t wifi_transport_clear_config(void)
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = false;
         s_last_disconnect_reason = 0;
+        s_station_ip[0] = '\0';
+        memset(s_station_ipv4, 0, sizeof(s_station_ipv4));
 #if EMWAVER_ENABLE_WIFI_TRANSPORT
         stop_server();
         (void)esp_wifi_disconnect();
@@ -300,6 +304,15 @@ uint16_t wifi_transport_last_disconnect_reason(void)
     return s_last_disconnect_reason;
 }
 
+bool wifi_transport_station_ipv4(uint8_t out[4])
+{
+    if (!out || !s_station_online || s_station_ip[0] == '\0') {
+        return false;
+    }
+    memcpy(out, s_station_ipv4, sizeof(s_station_ipv4));
+    return true;
+}
+
 static void wifi_register_commands(void)
 {
     (void)register_command(
@@ -354,15 +367,17 @@ static void wifi_status_command(void)
 {
     char status[160];
     const uint16_t reason = s_last_disconnect_reason;
+    const char *ip = s_station_ip[0] != '\0' ? s_station_ip : "none";
     snprintf(
         status,
         sizeof(status),
-        "wifi:%s:%s:%s:%s:host=%s:reason=%u",
+        "wifi:%s:%s:%s:%s:host=%s:ip=%s:reason=%u",
         s_has_config ? "provisioned" : "unprovisioned",
         s_station_online ? "online" : "offline",
         s_authenticated ? "authenticated" : "idle",
         s_reconnect_pending ? "reconnecting" : "stable",
         s_config.hostname[0] != '\0' ? s_config.hostname : "none",
+        ip,
         (unsigned)reason
     );
     command_send_ok((const uint8_t *)status, strlen(status));
@@ -485,6 +500,8 @@ static void start_station(void)
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = true;
         s_last_disconnect_reason = 0;
+        s_station_ip[0] = '\0';
+        memset(s_station_ipv4, 0, sizeof(s_station_ipv4));
         stop_server();
         (void)esp_wifi_disconnect();
     }
@@ -513,6 +530,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_last_disconnect_reason = disconnected ? (uint16_t)disconnected->reason : 0u;
         clear_active_session_state();
         s_station_online = false;
+        s_station_ip[0] = '\0';
+        memset(s_station_ipv4, 0, sizeof(s_station_ipv4));
         stop_server();
         if (s_suppress_next_disconnect_reconnect) {
             s_last_disconnect_reason = 0;
@@ -528,6 +547,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             }
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        const ip_event_got_ip_t *got_ip = (const ip_event_got_ip_t *)event_data;
+        if (got_ip) {
+            snprintf(s_station_ip, sizeof(s_station_ip), IPSTR, IP2STR(&got_ip->ip_info.ip));
+            s_station_ipv4[0] = esp_ip4_addr1_16(&got_ip->ip_info.ip);
+            s_station_ipv4[1] = esp_ip4_addr2_16(&got_ip->ip_info.ip);
+            s_station_ipv4[2] = esp_ip4_addr3_16(&got_ip->ip_info.ip);
+            s_station_ipv4[3] = esp_ip4_addr4_16(&got_ip->ip_info.ip);
+        } else {
+            s_station_ip[0] = '\0';
+            memset(s_station_ipv4, 0, sizeof(s_station_ipv4));
+        }
         s_station_online = true;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;

@@ -719,7 +719,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                     if response.count >= 7 {
                         let reason = UInt16(response[5]) | (UInt16(response[6]) << 8)
                         let reasonText = Self.wiFiDisconnectReasonText(reason)
-                        self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                        let ipText = Self.wiFiStatusStationIP(response)
+                        if let ipText {
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                        } else {
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText).", isError: false)
+                        }
                     } else {
                         self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(authText).", isError: false)
                     }
@@ -964,6 +969,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         default:
             return "reason \(reason)"
         }
+    }
+
+    static func wiFiStatusStationIP(_ response: Data) -> String? {
+        guard response.count >= 12, response[7] != 0 else {
+            return nil
+        }
+        return "\(response[8]).\(response[9]).\(response[10]).\(response[11])"
     }
 
     static func generatedWiFiHostname(randomSuffix: String = UUID().uuidString) -> String {

@@ -408,13 +408,20 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             return;
         case EMW_WIFI_CFG_STATUS: {
             const uint16_t reason = wifi_transport_last_disconnect_reason();
-            const uint8_t out[] = {
+            uint8_t station_ip[4] = {0};
+            const bool has_station_ip = wifi_transport_station_ipv4(station_ip);
+            uint8_t out[] = {
                 wifi_transport_is_provisioned() ? 1u : 0u,
                 wifi_transport_is_authenticated() ? 1u : 0u,
                 wifi_transport_is_station_online() ? 1u : 0u,
                 wifi_transport_is_reconnecting() ? 1u : 0u,
                 (uint8_t)(reason & 0xffu),
                 (uint8_t)((reason >> 8u) & 0xffu),
+                has_station_ip ? 1u : 0u,
+                station_ip[0],
+                station_ip[1],
+                station_ip[2],
+                station_ip[3],
             };
             send_binary_ok(out, sizeof(out));
             return;
