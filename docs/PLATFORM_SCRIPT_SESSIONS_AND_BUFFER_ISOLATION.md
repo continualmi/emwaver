@@ -53,6 +53,7 @@ Current first step:
 - Windows captures the active transport session id when a local script starts and routes script buffer/command APIs through that keyed session.
 - Windows USB MIDI/BLE buffering now depends on an `ITransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - Windows BLE transport constants and device-session identity helpers now live in `WindowsBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
+- Windows USB MIDI port pairing, target selection, and session identity helpers now live in `WindowsUsbMidiTransport`, so the current Windows manager has separate USB and BLE transport helper files.
 
 Remaining isolation work:
 

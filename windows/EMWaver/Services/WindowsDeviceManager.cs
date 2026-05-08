@@ -4,7 +4,6 @@ using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
@@ -255,64 +254,19 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             LastErrorText = null;
 
-            // Pair MIDI IN/OUT by container id (same physical USB device) rather than
-            // relying on exact Name matches, which are not stable across drivers.
-            var props = new[] { "System.Devices.ContainerId" };
-
-            var inDevsTask = DeviceInformation.FindAllAsync(MidiInPort.GetDeviceSelector(), props).AsTask();
-            var outDevsTask = DeviceInformation.FindAllAsync(MidiOutPort.GetDeviceSelector(), props).AsTask();
+            var inDevsTask = DeviceInformation.FindAllAsync(
+                MidiInPort.GetDeviceSelector(),
+                WindowsUsbMidiTransport.ContainerProperties
+            ).AsTask();
+            var outDevsTask = DeviceInformation.FindAllAsync(
+                MidiOutPort.GetDeviceSelector(),
+                WindowsUsbMidiTransport.ContainerProperties
+            ).AsTask();
             var dfuTask = IsDfuPresentAsync();
 
             await Task.WhenAll(inDevsTask, outDevsTask, dfuTask);
 
-            var inDevs = inDevsTask.Result;
-            var outDevs = outDevsTask.Result;
-
-            static string? ContainerIdOf(DeviceInformation d)
-            {
-                if (d.Properties == null) return null;
-                if (!d.Properties.TryGetValue("System.Devices.ContainerId", out var v)) return null;
-                return v?.ToString();
-            }
-
-            var outByContainerId = outDevs
-                .Select(d => new { Dev = d, Cid = ContainerIdOf(d) })
-                .Where(x => !string.IsNullOrWhiteSpace(x.Cid))
-                .GroupBy(x => x.Cid!, StringComparer.OrdinalIgnoreCase)
-                .ToDictionary(g => g.Key, g => g.First().Dev, StringComparer.OrdinalIgnoreCase);
-
-            var pairs = inDevs
-                .Select(i =>
-                {
-                    var cid = ContainerIdOf(i);
-                    if (!string.IsNullOrWhiteSpace(cid) && outByContainerId.TryGetValue(cid!, out var o))
-                    {
-                        return new { In = i, Out = o };
-                    }
-
-                    // Fallback: best-effort match by name.
-                    var byName = outDevs.FirstOrDefault(o => o.Name == i.Name);
-                    if (byName != null)
-                    {
-                        return new { In = i, Out = byName };
-                    }
-
-                    // Last fallback: case-insensitive contains match (helps when IN/OUT
-                    // ports include suffixes like "(MIDI In)" / "(MIDI Out)").
-                    var byContains = outDevs.FirstOrDefault(o =>
-                        o.Name.Contains(i.Name, StringComparison.OrdinalIgnoreCase)
-                        || i.Name.Contains(o.Name, StringComparison.OrdinalIgnoreCase));
-
-                    return byContains == null ? null : new { In = i, Out = byContains };
-                })
-                .Where(p => p != null)
-                .Select(p => new DevicePort(
-                    DisplayName: p!.In.Name,
-                    InDeviceId: p.In.Id,
-                    OutDeviceId: p.Out.Id
-                ))
-                .OrderBy(p => p.DisplayName, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var pairs = WindowsUsbMidiTransport.PairPorts(inDevsTask.Result, outDevsTask.Result);
 
             RunOnUi(() =>
             {
@@ -324,9 +278,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
             if (AutoConnectEnabled && !IsConnected)
             {
-                var chosen = pairs.FirstOrDefault(p => p.DisplayName.Contains("emwaver", StringComparison.OrdinalIgnoreCase))
-                    ?? pairs.FirstOrDefault(p => !p.DisplayName.Contains("network", StringComparison.OrdinalIgnoreCase))
-                    ?? pairs.FirstOrDefault();
+                var chosen = WindowsUsbMidiTransport.ChoosePreferred(pairs);
                 if (chosen != null)
                 {
                     await ConnectAsync(chosen);
@@ -354,7 +306,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            SetActiveBufferSession(port.InDeviceId);
+            SetActiveBufferSession(WindowsUsbMidiTransport.SessionId(port));
 
             _inPort = await MidiInPort.FromIdAsync(port.InDeviceId);
             _outPort = await MidiOutPort.FromIdAsync(port.OutDeviceId);
