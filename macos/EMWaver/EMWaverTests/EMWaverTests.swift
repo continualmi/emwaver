@@ -60,4 +60,19 @@ struct EMWaverTests {
         #expect(MacWiFiManager.unwrapEnvelope(frame) == nil)
     }
 
+    @Test func wifiBoardMetadataNormalizesEspTargets() {
+        #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
+        #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")
+        #expect(MacWiFiManager.normalizedBoardType("esp32") == "esp32")
+        #expect(MacWiFiManager.normalizedBoardType("custom-board") == "custom-board")
+        #expect(MacWiFiManager.normalizedBoardType("   ") == nil)
+    }
+
+    @Test func wifiCapabilitiesParseAdvertisedTxtList() {
+        #expect(MacWiFiManager.capabilities("wifi,usb,ble") == ["wifi", "usb", "ble"])
+        #expect(MacWiFiManager.capabilities(" WiFi, USB ") == ["wifi", "usb"])
+        #expect(MacWiFiManager.capabilities("wifi,,ble") == ["wifi", "ble"])
+        #expect(MacWiFiManager.capabilities(nil).isEmpty)
+    }
+
 }

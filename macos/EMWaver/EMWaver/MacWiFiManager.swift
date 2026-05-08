@@ -693,7 +693,7 @@ final class MacWiFiManager {
         )
     }
 
-    private static func normalizedBoardType(_ value: String?) -> String? {
+    static func normalizedBoardType(_ value: String?) -> String? {
         guard let value = nonEmpty(value) else { return nil }
         switch value.lowercased() {
         case "esp32s3", "esp32-s3":
@@ -715,7 +715,7 @@ final class MacWiFiManager {
         return trimmed
     }
 
-    private static func capabilities(_ value: String?) -> [String] {
+    static func capabilities(_ value: String?) -> [String] {
         guard let value = nonEmpty(value) else { return [] }
         return value
             .split(separator: ",")
