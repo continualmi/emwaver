@@ -870,7 +870,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private func disconnectInternal() {
         if connectedSource != 0 {
-            _ = MIDIPortDisconnectSource(inPort, connectedSource)
+            _ = USBMidiTransport.disconnectSource(connectedSource, inPort: inPort)
         }
         if let peripheral = connectedPeripheral {
             centralManager?.cancelPeripheralConnection(peripheral)
