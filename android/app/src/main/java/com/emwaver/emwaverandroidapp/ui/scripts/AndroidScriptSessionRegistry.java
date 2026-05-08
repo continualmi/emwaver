@@ -52,6 +52,20 @@ final class AndroidScriptSessionRegistry {
         stop(selectedSessionId);
     }
 
+    void stopSelectedRuntime() {
+        stopRuntime(selectedSessionId);
+    }
+
+    void stopRuntime(@Nullable String instanceId) {
+        if (instanceId == null) {
+            return;
+        }
+        AndroidScriptSession session = sessionsById.get(instanceId);
+        if (session != null) {
+            session.stopRuntime();
+        }
+    }
+
     void clear() {
         for (AndroidScriptSession session : sessionsById.values()) {
             session.stop();

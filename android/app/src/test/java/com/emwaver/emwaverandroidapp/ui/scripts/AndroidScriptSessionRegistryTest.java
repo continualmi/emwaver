@@ -76,6 +76,28 @@ public class AndroidScriptSessionRegistryTest {
         assertFalse(registry.hasSessions());
     }
 
+    @Test
+    public void stopSelectedRuntimeKeepsStoppedSessionVisible() {
+        AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
+        AtomicInteger stops = new AtomicInteger();
+
+        AndroidScriptSession first = registry.start(stops::incrementAndGet, "script-a", "Alpha", "USB A", "usb:a");
+
+        registry.stopSelectedRuntime();
+        AndroidScriptSession second = registry.start(stops::incrementAndGet, "script-b", "Beta", "USB B", "usb:b");
+
+        assertEquals(1, stops.get());
+        assertEquals(second.instanceId, registry.selectedSession().instanceId);
+        assertEquals(Arrays.asList(first.instanceId, second.instanceId), sessionIds(registry.sessions()));
+        assertEquals("Stopped on USB A", registry.sessions().get(0).statusLabel());
+        assertEquals("Running on USB B", registry.sessions().get(1).statusLabel());
+
+        registry.stop(first.instanceId);
+
+        assertEquals(1, stops.get());
+        assertEquals(1, registry.sessions().size());
+    }
+
     private static List<String> sessionIds(List<AndroidScriptSession> sessions) {
         java.util.ArrayList<String> ids = new java.util.ArrayList<>();
         for (AndroidScriptSession session : sessions) {

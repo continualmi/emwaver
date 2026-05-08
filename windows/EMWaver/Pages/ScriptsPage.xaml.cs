@@ -810,9 +810,9 @@ public sealed partial class ScriptsPage : Page
 
     private void SetRunningScriptState(bool isRunning, string? scriptName)
     {
-        _scriptSessions.Clear();
         if (isRunning && !string.IsNullOrWhiteSpace(scriptName))
         {
+            _scriptSessions.StopSelectedRuntime();
             _scriptSessions.Start(
                 scriptName,
                 ActiveDeviceLabel(),
@@ -828,8 +828,8 @@ public sealed partial class ScriptsPage : Page
     private void SyncRunningScriptStateFromSessions()
     {
         var selected = _scriptSessions.SelectedSession;
-        _hasActiveRunningScript = selected != null;
-        _activeRunningScriptName = selected?.ScriptName;
+        _hasActiveRunningScript = selected?.StateText == "running";
+        _activeRunningScriptName = _hasActiveRunningScript ? selected?.ScriptName : null;
     }
 
     private void RefreshRunningSessionRow()
@@ -1599,7 +1599,7 @@ public sealed partial class ScriptsPage : Page
 
     private async Task StopRunningScriptAsync(string? sessionId = null)
     {
-        if (!_hasActiveRunningScript)
+        if (!_scriptSessions.HasSessions)
         {
             return;
         }
@@ -1642,7 +1642,6 @@ public sealed partial class ScriptsPage : Page
         System.Diagnostics.Debug.WriteLine($"[EMWaver][Windows][Scripts] Run clicked script={_current.Name} bundled={_current.IsBundled}");
 
         var nextScriptName = _current.Name;
-        _scriptEngine.Stop();
 
         // Switch to preview mode on Run.
         SetPreviewMode(true);

@@ -41,7 +41,7 @@ Current first step:
 
 - Windows shows the current script target in the top device button before Run, using the connected port display name when available.
 - scripts list shows the active run as a session row,
-- Windows now represents running scripts through an explicit `ScriptSessionRegistry` and a dedicated "Running" list section instead of inserting one transient item into Examples; the current runtime still owns one active engine and clears prior Windows sessions on Run.
+- Windows now represents running scripts through an explicit `ScriptSessionRegistry` and a dedicated "Running" list section instead of inserting one transient item into Examples; the current runtime still owns one active engine, and replacement runs stop the previously selected runtime while keeping that prior session row visible as `stopped`.
 - Windows script sessions now own a runtime stop callback, so row-level stop/clear shuts down the session-owned runtime path instead of depending on a separate page-global pre-stop.
 - Windows script session rows now retain the captured transport device-session id separately from the display label, so future row-level routing does not have to recover identity from UI text.
 - the session row shows the active device label when available,
@@ -95,7 +95,7 @@ Remaining isolation work:
 Current first step:
 
 - script rows show "Running on active device" for the current run,
-- Android now represents running scripts as explicit `AndroidScriptSession` entries in a "Running" list section instead of only decorating the source script row, matching the macOS/iOS session-row direction while the runtime still owns one active engine today.
+- Android now represents running scripts as explicit `AndroidScriptSession` entries in a "Running" list section instead of only decorating the source script row, matching the macOS/iOS session-row direction while the runtime still owns one active engine; replacement runs stop the previously selected runtime while keeping that prior session row visible as `Stopped`.
 - Android script sessions now own a runtime stop callback, so row-level stop/clear shuts down the session-owned runtime path instead of depending on a separate pre-stop fragment global.
 - Android script session rows now retain the captured device-session id from `ScriptDeviceConnection`, so future row-level routing does not have to recover identity from UI text.
 - Android shows the current run target above the scripts list before a script starts, so the visible Run target no longer only appears after the session row is running.

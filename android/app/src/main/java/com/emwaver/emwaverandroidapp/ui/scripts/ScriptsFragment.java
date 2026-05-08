@@ -662,7 +662,9 @@ public class ScriptsFragment extends Fragment {
                 ScriptMetadata scriptMetadata = entry.script;
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
                 AndroidScriptSession selectedSession = scriptSessions.selectedSession();
-                boolean isRunning = selectedSession != null && TextUtils.equals(selectedSession.scriptId, scriptMetadata.getId());
+                boolean isRunning = selectedSession != null
+                        && selectedSession.isRunning()
+                        && TextUtils.equals(selectedSession.scriptId, scriptMetadata.getId());
                 if (isRunning) {
                     statusView.setText(selectedSession.statusLabel());
                     statusView.setVisibility(View.VISIBLE);
@@ -1949,7 +1951,7 @@ public class ScriptsFragment extends Fragment {
         if (isAdded()) {
             String deviceLabel = currentDeviceLabel();
             scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), deviceLabel);
-            scriptSessions.clear();
+            scriptSessions.stopSelectedRuntime();
             scriptSessions.start(
                     () -> {
                         if (scriptEngine != null) {
@@ -1962,9 +1964,11 @@ public class ScriptsFragment extends Fragment {
                     runningSessionLabel(deviceLabel),
                     scriptDeviceConnection.capturedDeviceId()
             );
-            scriptEngine.setDeviceConnection(scriptDeviceConnection);
+            if (scriptEngine != null) {
+                scriptEngine.setDeviceConnection(scriptDeviceConnection);
+            }
         } else {
-            scriptSessions.clear();
+            scriptSessions.stopSelectedRuntime();
             scriptSessions.start(
                     () -> {
                         if (scriptEngine != null) {

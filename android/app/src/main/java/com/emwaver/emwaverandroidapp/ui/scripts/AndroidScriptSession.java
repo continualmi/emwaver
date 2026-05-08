@@ -16,6 +16,7 @@ final class AndroidScriptSession {
     final String scriptId;
     final String scriptName;
     final String deviceLabel;
+    private boolean running = true;
 
     AndroidScriptSession(
             @NonNull String instanceId,
@@ -40,10 +41,22 @@ final class AndroidScriptSession {
     }
 
     String statusLabel() {
-        return "Running on " + deviceLabel;
+        return (running ? "Running on " : "Stopped on ") + deviceLabel;
+    }
+
+    boolean isRunning() {
+        return running;
     }
 
     void stop() {
+        stopRuntime();
+    }
+
+    void stopRuntime() {
+        if (!running) {
+            return;
+        }
         stopAction.run();
+        running = false;
     }
 }

@@ -48,6 +48,32 @@ public sealed class ScriptSessionRegistry
 
     public void StopSelected() => Stop(_selectedSessionId);
 
+    public void StopSelectedRuntime()
+    {
+        StopRuntime(_selectedSessionId);
+    }
+
+    public void StopRuntime(string? instanceId)
+    {
+        if (string.IsNullOrWhiteSpace(instanceId))
+        {
+            return;
+        }
+
+        var id = instanceId.Trim();
+        if (!_sessionsById.TryGetValue(id, out var session))
+        {
+            return;
+        }
+
+        session.Stop();
+        _sessionsById[id] = session with
+        {
+            StateText = "stopped",
+            StopAction = () => { }
+        };
+    }
+
     public void Clear()
     {
         foreach (var session in _sessionsById.Values)

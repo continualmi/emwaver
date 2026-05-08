@@ -67,4 +67,27 @@ public sealed class ScriptSessionRegistryTests
         Assert.Equal(2, stops);
         Assert.False(registry.HasSessions);
     }
+
+    [Fact]
+    public void StopSelectedRuntimeKeepsStoppedSessionVisible()
+    {
+        var registry = new ScriptSessionRegistry();
+        var stops = 0;
+
+        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a", () => stops++);
+
+        registry.StopSelectedRuntime();
+        var second = registry.Start("Beta", "USB B", "usb:b", "session-b", () => stops++);
+
+        Assert.Equal(1, stops);
+        Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
+        Assert.Equal(new[] { first.InstanceId, second.InstanceId }, registry.Sessions.Select(s => s.InstanceId));
+        Assert.Equal("stopped on USB A", registry.Sessions[0].StatusLabel);
+        Assert.Equal("running on USB B", registry.Sessions[1].StatusLabel);
+
+        registry.Stop(first.InstanceId);
+
+        Assert.Equal(1, stops);
+        Assert.Single(registry.Sessions);
+    }
 }
