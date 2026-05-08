@@ -593,9 +593,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
-    func resetWiFiPairing(pairingSecret: String, hostname: String) {
+    func resetWiFiPairing(pairingSecret: String, hostname: String, pairingHost: String = "") {
         let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedPairingHost = pairingHost.trimmingCharacters(in: .whitespacesAndNewlines)
 
         guard !trimmedSecret.isEmpty else {
             setError("Wi-Fi pairing secret is required")
@@ -603,6 +604,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         guard trimmedSecret.utf8.count <= 64 else {
             setError("Wi-Fi pairing secret is too long.")
+            return
+        }
+        guard trimmedPairingHost.isEmpty || MacWiFiManager.isValidManualHost(trimmedPairingHost) else {
+            setError("Wi-Fi host must be a hostname or IP address without a scheme, path, or port.")
             return
         }
 
@@ -646,11 +651,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.finishWiFiProvisioning(message: "Wi-Fi pairing reset was rejected by the device.", isError: true)
                 return
             }
-            if !trimmedHostname.isEmpty {
-                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
+            if !trimmedHostname.isEmpty || !trimmedPairingHost.isEmpty {
+                let hostnameRecord = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
+                let recordHost = trimmedHostname.isEmpty ? trimmedPairingHost : hostnameRecord
+                let displayName = trimmedHostname.isEmpty ? trimmedPairingHost : trimmedHostname
                 self.wifiManager?.storePairing(
-                    host: host,
-                    displayName: trimmedHostname,
+                    host: recordHost,
+                    displayName: displayName,
                     pairingSecret: trimmedSecret
                 )
             }

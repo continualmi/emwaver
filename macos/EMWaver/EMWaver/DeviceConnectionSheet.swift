@@ -325,7 +325,11 @@ struct DeviceConnectionSheet: View {
                                   device.connectedTransportKind == "Wi-Fi")
 
                         Button("Reset Pairing") {
-                            device.resetWiFiPairing(pairingSecret: wifiPairingSecret, hostname: wifiHostname)
+                            device.resetWiFiPairing(
+                                pairingSecret: wifiPairingSecret,
+                                hostname: wifiHostname,
+                                pairingHost: wifiHost
+                            )
                         }
                         .buttonStyle(.bordered)
                         .disabled(device.isWiFiProvisioning ||
