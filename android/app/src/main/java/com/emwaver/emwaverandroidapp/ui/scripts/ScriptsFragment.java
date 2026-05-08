@@ -136,12 +136,10 @@ public class ScriptsFragment extends Fragment {
     private ScriptEngine scriptEngine;
     private ScriptRenderView scriptRenderView;
     private ScriptTree activeScriptTree;
+    private final AndroidScriptSessionRegistry scriptSessions = new AndroidScriptSessionRegistry();
     private boolean isRenderingScript;
     private boolean showingPreview;
     private boolean showingEditor;
-    private String runningScriptId;
-    private String runningScriptName;
-    private String runningDeviceLabel;
     
     public boolean isShowingPreview() {
         return showingPreview;
@@ -253,6 +251,7 @@ public class ScriptsFragment extends Fragment {
             scriptEngine.shutdown();
             scriptEngine = null;
         }
+        scriptSessions.clear();
         scriptRenderView = null;
         showingPreview = false;
         hideLoadingDialog();
@@ -373,6 +372,11 @@ public class ScriptsFragment extends Fragment {
             }
             if (entry.type == ListEntry.Type.SCRIPT) {
                 previewScript(entry.script);
+            } else if (entry.type == ListEntry.Type.SESSION) {
+                if (activeScriptTree != null) {
+                    showingPreview = true;
+                    updateViewMode();
+                }
             } else if (entry.type == ListEntry.Type.SIGNAL) {
                 openSignal(entry.signal);
             }
@@ -554,22 +558,25 @@ public class ScriptsFragment extends Fragment {
     }
 
     private static final class ListEntry {
-        enum Type { HEADER, SCRIPT, SIGNAL }
+        enum Type { HEADER, SESSION, SCRIPT, SIGNAL }
         final Type type;
         final String headerTitle;
+        final AndroidScriptSession session;
         final ScriptMetadata script;
         final SignalMetadata signal;
 
-        private ListEntry(Type type, String headerTitle, ScriptMetadata script, SignalMetadata signal) {
+        private ListEntry(Type type, String headerTitle, AndroidScriptSession session, ScriptMetadata script, SignalMetadata signal) {
             this.type = type;
             this.headerTitle = headerTitle;
+            this.session = session;
             this.script = script;
             this.signal = signal;
         }
 
-        static ListEntry header(String title) { return new ListEntry(Type.HEADER, title, null, null); }
-        static ListEntry script(ScriptMetadata s) { return new ListEntry(Type.SCRIPT, null, s, null); }
-        static ListEntry signal(SignalMetadata s) { return new ListEntry(Type.SIGNAL, null, null, s); }
+        static ListEntry header(String title) { return new ListEntry(Type.HEADER, title, null, null, null); }
+        static ListEntry session(AndroidScriptSession s) { return new ListEntry(Type.SESSION, null, s, null, null); }
+        static ListEntry script(ScriptMetadata s) { return new ListEntry(Type.SCRIPT, null, null, s, null); }
+        static ListEntry signal(SignalMetadata s) { return new ListEntry(Type.SIGNAL, null, null, null, s); }
     }
 
     private class ScriptListAdapter extends ArrayAdapter<ListEntry> {
@@ -635,19 +642,36 @@ public class ScriptsFragment extends Fragment {
             statusView.setVisibility(View.GONE);
             stopButton.setVisibility(View.GONE);
 
+            if (entry.type == ListEntry.Type.SESSION) {
+                AndroidScriptSession session = entry.session;
+                nameView.setText(session != null ? session.fileName() : "-");
+                statusView.setText(session != null ? session.statusLabel() : "Running");
+                statusView.setVisibility(View.VISIBLE);
+                stopButton.setVisibility(View.VISIBLE);
+                stopButton.setEnabled(true);
+                stopButton.setAlpha(1.0f);
+                stopButton.setOnClickListener(v -> {
+                    v.setPressed(false);
+                    stopRunningScript(session != null ? session.instanceId : null);
+                });
+                editButton.setVisibility(View.GONE);
+                return view;
+            }
+
             if (entry.type == ListEntry.Type.SCRIPT) {
                 ScriptMetadata scriptMetadata = entry.script;
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
-                boolean isRunning = TextUtils.equals(runningScriptId, scriptMetadata.getId());
+                AndroidScriptSession selectedSession = scriptSessions.selectedSession();
+                boolean isRunning = selectedSession != null && TextUtils.equals(selectedSession.scriptId, scriptMetadata.getId());
                 if (isRunning) {
-                    statusView.setText(runningStatusLabel());
+                    statusView.setText(selectedSession.statusLabel());
                     statusView.setVisibility(View.VISIBLE);
                     stopButton.setVisibility(View.VISIBLE);
                     stopButton.setEnabled(true);
                     stopButton.setAlpha(1.0f);
                     stopButton.setOnClickListener(v -> {
                         v.setPressed(false);
-                        stopRunningScript();
+                        stopRunningScript(selectedSession.instanceId);
                     });
                 }
                 if (scriptMetadata.isAssetScript()) {
@@ -869,6 +893,14 @@ public class ScriptsFragment extends Fragment {
 
     private void rebuildCombinedScripts() {
         scripts.clear();
+
+        List<AndroidScriptSession> sessions = scriptSessions.sessions();
+        if (!sessions.isEmpty()) {
+            scripts.add(ListEntry.header("Running"));
+            for (AndroidScriptSession session : sessions) {
+                scripts.add(ListEntry.session(session));
+            }
+        }
 
         if (!assetScripts.isEmpty()) {
             scripts.add(ListEntry.header("Examples"));
@@ -1920,18 +1952,21 @@ public class ScriptsFragment extends Fragment {
             viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
             viewModel.setPreviewActive(true);
         }
-        runningScriptId = currentScriptMetadata != null ? currentScriptMetadata.getId() : null;
-        runningScriptName = currentScriptName;
-        runningDeviceLabel = currentDeviceLabel();
+        scriptSessions.clear();
+        AndroidScriptSession runningSession = scriptSessions.start(
+                currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
+                currentScriptName,
+                currentDeviceLabel()
+        );
         if (isAdded()) {
-            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), runningDeviceLabel);
+            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), runningSession.deviceLabel);
             scriptEngine.setDeviceConnection(scriptDeviceConnection);
         }
         isRenderingScript = true;
         activeScriptTree = null;
         showingPreview = true;
         updateViewMode();
-        refreshScriptList();
+        rebuildCombinedScripts();
         ensureScriptRenderView();
         if (scriptRenderView != null) {
             scriptRenderView.clear();
@@ -2058,23 +2093,18 @@ public class ScriptsFragment extends Fragment {
         updateViewMode();
     }
 
-    private void stopRunningScript() {
+    private void stopRunningScript(@Nullable String sessionId) {
         if (scriptEngine != null) {
             scriptEngine.shutdown();
             scriptEngine = null;
         }
-        runningScriptId = null;
-        runningScriptName = null;
-        runningDeviceLabel = null;
-        exitPreview();
-        refreshScriptList();
-    }
-
-    private String runningStatusLabel() {
-        if (!TextUtils.isEmpty(runningDeviceLabel)) {
-            return "Running on " + runningDeviceLabel;
+        if (sessionId == null) {
+            scriptSessions.stopSelected();
+        } else {
+            scriptSessions.stop(sessionId);
         }
-        return "Running on active device";
+        exitPreview();
+        rebuildCombinedScripts();
     }
 
     private String currentDeviceLabel() {
