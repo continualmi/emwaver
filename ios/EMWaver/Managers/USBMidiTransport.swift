@@ -14,6 +14,36 @@ enum USBMidiTransport {
         let destination: MIDIEndpointRef
     }
 
+    struct Connection {
+        let name: String
+        let source: MIDIEndpointRef
+        let destination: MIDIEndpointRef
+        let sessionKey: String
+
+        init(candidate: PortCandidate) {
+            self.name = candidate.name
+            self.source = candidate.source
+            self.destination = candidate.destination
+            self.sessionKey = USBMidiTransport.sessionKey(for: candidate)
+        }
+
+        var isConnected: Bool {
+            source != 0 && destination != 0
+        }
+
+        func connect(inPort: MIDIPortRef) -> OSStatus {
+            USBMidiTransport.connectSource(source, inPort: inPort)
+        }
+
+        func disconnect(inPort: MIDIPortRef) -> OSStatus {
+            USBMidiTransport.disconnectSource(source, inPort: inPort)
+        }
+
+        func sendSysex(_ sysex: Data, outPort: MIDIPortRef) -> OSStatus {
+            USBMidiTransport.sendSysex(sysex, outPort: outPort, destination: destination)
+        }
+    }
+
     static func sessionKey(for candidate: PortCandidate) -> String {
         "usbmidi:\(candidate.source):\(candidate.destination):\(candidate.name)"
     }
@@ -50,7 +80,11 @@ enum USBMidiTransport {
     }
 
     static func connectSource(_ candidate: PortCandidate, inPort: MIDIPortRef) -> OSStatus {
-        MIDIPortConnectSource(inPort, candidate.source, nil)
+        connectSource(candidate.source, inPort: inPort)
+    }
+
+    static func connectSource(_ source: MIDIEndpointRef, inPort: MIDIPortRef) -> OSStatus {
+        MIDIPortConnectSource(inPort, source, nil)
     }
 
     static func disconnectSource(_ source: MIDIEndpointRef, inPort: MIDIPortRef) -> OSStatus {

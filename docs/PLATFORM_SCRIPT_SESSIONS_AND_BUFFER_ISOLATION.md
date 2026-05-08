@@ -130,6 +130,7 @@ Current first step:
 - iOS CoreMIDI SysEx send mechanics now live in `USBMidiTransport`, and BLE chunked characteristic writes now live in `BLETransport`, reducing transport protocol code inside `USBManager`.
 - iOS BLE service discovery, characteristic lookup, and notify enablement now live in `BLETransport`, further reducing BLE protocol ownership inside `USBManager`.
 - iOS CoreMIDI source connection/disconnection now lives in `USBMidiTransport`, moving another USB MIDI setup detail out of `USBManager`.
+- iOS USB MIDI endpoint handles now sit behind a `USBMidiTransport.Connection` value that owns the endpoint pair, session key, display name, connect/disconnect behavior, and send helper.
 - iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - iOS now tracks the live script target as one `ActiveDeviceTarget` descriptor, so CoreMIDI receive routing and targeted script APIs share the same active transport/session identity.
 - iOS has an `ActiveDeviceTargetTests` suite covering active-target device-id normalization and transport matching.
@@ -182,6 +183,7 @@ Remaining isolation work:
 - [x] iOS keeps active transport and active script session identity synchronized through one active target descriptor.
 - [x] iOS has focused active-target normalization/matching tests.
 - [x] iOS has a shared transport device-session protocol used by the current USB MIDI/BLE manager.
+- [x] iOS USB MIDI live endpoint handles are grouped behind a transport-owned connection value.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

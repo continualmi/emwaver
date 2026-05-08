@@ -113,8 +113,7 @@ final class USBManager: NSObject, ObservableObject {
     private var inPort: MIDIPortRef = 0
     private var outPort: MIDIPortRef = 0
 
-    private var connectedSource: MIDIEndpointRef = 0
-    private var connectedDestination: MIDIEndpointRef = 0
+    private var usbMidiConnection: USBMidiTransport.Connection?
 
     private var virtualDestination: MIDIEndpointRef = 0
 
@@ -211,6 +210,10 @@ final class USBManager: NSObject, ObservableObject {
 
     private func activeDeviceSessionKey(for transport: ActiveTransport) -> String? {
         activeDeviceTarget.matchesTransport(transport) ? activeDeviceTarget.deviceId : nil
+    }
+
+    private var isUsbMidiConnected: Bool {
+        usbMidiConnection?.isConnected == true
     }
 
     // MARK: - Common helpers (used across the iOS codebase)
@@ -349,7 +352,7 @@ final class USBManager: NSObject, ObservableObject {
     /// Never touches `lastErrorText`.
     private func sendCommandBestEffort(_ command: Data, timeout: Int) -> Data? {
         // Avoid depending on the @Published `isConnected` flag here; it may lag behind CoreMIDI state.
-        guard activeTransport == .ble || connectedDestination != 0 else { return nil }
+        guard activeTransport == .ble || isUsbMidiConnected else { return nil }
 
         let session = withBufferQueueSync {
             activeBufferSession.prepareCommandResponseWait()
@@ -360,16 +363,16 @@ final class USBManager: NSObject, ObservableObject {
         sendPacketBestEffortSync(command)
 
         return session.awaitCommandResponse(timeout: timeout) {
-            activeTransport == .ble || connectedDestination != 0
+            activeTransport == .ble || isUsbMidiConnected
         }
     }
 
     private func sendPacketBestEffortSync(_ data: Data) {
-        guard activeTransport == .ble || connectedDestination != 0 else { return }
+        guard activeTransport == .ble || isUsbMidiConnected else { return }
 
         // Ensure we send on the MIDI queue, but synchronously for determinism.
         midiQueue.sync {
-            guard self.activeTransport == .ble || self.connectedDestination != 0 else { return }
+            guard self.activeTransport == .ble || self.isUsbMidiConnected else { return }
             guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else { return }
 
             self.withBufferQueueSync {
@@ -410,7 +413,7 @@ final class USBManager: NSObject, ObservableObject {
 
         switch activeTransport {
         case .usbMidi:
-            let st = sendSysex(sysex, to: connectedDestination)
+            let st = sendUsbMidiSysex(sysex)
             if st != noErr {
                 setError("MIDISend failed: \(st)")
             }
@@ -423,18 +426,18 @@ final class USBManager: NSObject, ObservableObject {
 
     /// Best-effort send that never updates `lastErrorText`.
     private func sendSuperframeBestEffort(_ superframe: Data) {
-        guard activeTransport == .ble || connectedDestination != 0 else { return }
+        guard activeTransport == .ble || isUsbMidiConnected else { return }
         guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else { return }
         if activeTransport == .ble {
             sendBleSysex(sysex, reportErrors: false)
         } else {
-            _ = sendSysex(sysex, to: connectedDestination)
+            _ = sendUsbMidiSysex(sysex)
         }
     }
 
     @objc func sendPacket(_ data: Data) {
         midiQueue.async {
-            guard self.isConnected, self.activeTransport == .ble || self.connectedDestination != 0 else {
+            guard self.isConnected, self.activeTransport == .ble || self.isUsbMidiConnected else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -460,7 +463,7 @@ final class USBManager: NSObject, ObservableObject {
 
     func sendPacket(_ data: Data, deviceId: String) {
         midiQueue.async {
-            guard self.isConnected, self.activeTransport == .ble || self.connectedDestination != 0 else {
+            guard self.isConnected, self.activeTransport == .ble || self.isUsbMidiConnected else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -815,7 +818,7 @@ final class USBManager: NSObject, ObservableObject {
                 return
             }
 
-            let st = self.sendSysex(sysex, to: self.virtualDestination)
+            let st = USBMidiTransport.sendSysex(sysex, outPort: self.outPort, destination: self.virtualDestination)
             if st != noErr {
                 self.setError("Self-test: MIDISend failed: \(st)")
                 return
@@ -888,21 +891,19 @@ final class USBManager: NSObject, ObservableObject {
         disconnectInternal()
         centralManager?.stopScan()
 
-        connectedSource = chosen.source
-        connectedDestination = chosen.destination
-        let usbSessionKey = USBMidiTransport.sessionKey(for: chosen)
-        setActiveDeviceTarget(deviceId: usbSessionKey, transport: .usbMidi)
+        let connection = USBMidiTransport.Connection(candidate: chosen)
+        usbMidiConnection = connection
+        setActiveDeviceTarget(deviceId: connection.sessionKey, transport: .usbMidi)
 
-        let st = USBMidiTransport.connectSource(chosen, inPort: inPort)
+        let st = connection.connect(inPort: inPort)
         guard st == noErr else {
             setError("MIDIPortConnectSource failed: \(st)")
-            connectedSource = 0
-            connectedDestination = 0
+            usbMidiConnection = nil
             return false
         }
 
         DispatchQueue.main.async {
-            self.connectedPortName = chosen.name
+            self.connectedPortName = connection.name
             self.isConnected = true
             self.lastErrorText = nil
         }
@@ -910,14 +911,13 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func disconnectInternal() {
-        if connectedSource != 0 {
-            _ = USBMidiTransport.disconnectSource(connectedSource, inPort: inPort)
+        if let connection = usbMidiConnection {
+            _ = connection.disconnect(inPort: inPort)
         }
         if let peripheral = connectedPeripheral {
             centralManager?.cancelPeripheralConnection(peripheral)
         }
-        connectedSource = 0
-        connectedDestination = 0
+        usbMidiConnection = nil
         connectedPeripheral = nil
         commandCharacteristic = nil
         notifyCharacteristic = nil
@@ -930,8 +930,9 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
-    private func sendSysex(_ sysex: Data, to destination: MIDIEndpointRef) -> OSStatus {
-        let st = USBMidiTransport.sendSysex(sysex, outPort: outPort, destination: destination)
+    private func sendUsbMidiSysex(_ sysex: Data) -> OSStatus {
+        guard let connection = usbMidiConnection else { return -1 }
+        let st = connection.sendSysex(sysex, outPort: outPort)
         if st != noErr {
             dbg("sendSysex: MIDISend failed st=\(st)")
         }
