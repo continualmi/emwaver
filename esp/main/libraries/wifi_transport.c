@@ -96,6 +96,7 @@ static bool auth_challenge_expired(void);
 static void auth_timeout_task(void *arg);
 static void generate_auth_challenge(void);
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
+static bool extract_json_int(const char *json, const char *key, int *out);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
 static bool constant_time_equal(const char *a, const char *b, size_t len);
 static bool enqueue_sysex(const uint8_t *sysex);
@@ -652,8 +653,11 @@ static bool auth_message_matches(const uint8_t *data, size_t len)
     char challenge[65] = {0};
     char response[65] = {0};
     char expected[65] = {0};
+    int protocol_version = 0;
     if (!extract_json_string(json, "type", type, sizeof(type)) ||
         strcmp(type, "auth") != 0 ||
+        !extract_json_int(json, "protocolVersion", &protocol_version) ||
+        protocol_version != 1 ||
         !extract_json_string(json, "challenge", challenge, sizeof(challenge)) ||
         strcmp(challenge, s_auth_challenge) != 0 ||
         !extract_json_string(json, "response", response, sizeof(response)) ||
@@ -728,6 +732,39 @@ static bool extract_json_string(const char *json, const char *key, char *out, si
     }
     out[written] = '\0';
     return *pos == '"' && written > 0;
+}
+
+static bool extract_json_int(const char *json, const char *key, int *out)
+{
+    if (!json || !key || !out) {
+        return false;
+    }
+
+    char pattern[40];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char *pos = strstr(json, pattern);
+    if (!pos) {
+        return false;
+    }
+    pos = strchr(pos + strlen(pattern), ':');
+    if (!pos) {
+        return false;
+    }
+    pos++;
+    while (*pos == ' ' || *pos == '\t') {
+        pos++;
+    }
+    if (*pos < '0' || *pos > '9') {
+        return false;
+    }
+
+    int value = 0;
+    while (*pos >= '0' && *pos <= '9') {
+        value = (value * 10) + (*pos - '0');
+        pos++;
+    }
+    *out = value;
+    return true;
 }
 
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len)
