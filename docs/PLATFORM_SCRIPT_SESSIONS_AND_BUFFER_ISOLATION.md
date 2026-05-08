@@ -59,6 +59,7 @@ Current first step:
 - Windows USB MIDI and BLE receive callbacks now feed SysEx data into the connected transport session instead of always using the mutable active session.
 - Windows USB MIDI SysEx message sending now lives in `WindowsUsbMidiTransport`, and BLE chunked GATT writes now live in `WindowsBleTransport`, reducing transport protocol code inside `WindowsDeviceManager`.
 - Windows BLE watcher creation, device opening, service/characteristic lookup, and notification descriptor setup now live in `WindowsBleTransport`, further reducing BLE protocol ownership inside `WindowsDeviceManager`.
+- Windows BLE scan watcher state now sits behind a `WindowsBleTransport.ScanSession` object that owns the advertisement watcher subscription and shutdown behavior.
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows USB MIDI live handles now sit behind a `WindowsUsbMidiTransport.Connection` object that owns the opened port pair, session id, display name, send helper, and close behavior.
 - Windows BLE live handles now sit behind a `WindowsBleTransport.Connection` object that owns the BLE device, command/notify characteristics, session id, display name, notification subscription, send helper, and dispose behavior.
@@ -169,6 +170,7 @@ Remaining isolation work:
 - [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
 - [x] Windows USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE live handles are grouped behind a transport-owned connection object.
+- [x] Windows BLE scan watcher state is grouped behind a transport-owned scan session.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] Android scopes sampler stream state to the active transport buffer session.

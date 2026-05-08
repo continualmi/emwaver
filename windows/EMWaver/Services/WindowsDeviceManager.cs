@@ -170,7 +170,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private DispatcherQueue? _ui;
 
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
-    private BluetoothLEAdvertisementWatcher? _bleWatcher;
+    private WindowsBleTransport.ScanSession? _bleScanSession;
     private WindowsBleTransport.Connection? _bleConnection;
     private bool _bleConnecting;
     private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
@@ -652,16 +652,16 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void StartBleScan()
     {
-        if (_bleWatcher != null || _bleConnecting || IsConnected)
+        if (_bleScanSession != null || _bleConnecting || IsConnected)
         {
             return;
         }
 
         try
         {
-            var watcher = WindowsBleTransport.CreateWatcher(OnBleAdvertisementReceived);
-            _bleWatcher = watcher;
-            watcher.Start();
+            var scanSession = WindowsBleTransport.OpenScanSession(OnBleAdvertisementReceived);
+            _bleScanSession = scanSession;
+            scanSession.Start();
             Debug.WriteLine("[EMWaver][BLE] scan started");
         }
         catch (Exception ex)
@@ -672,16 +672,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void StopBleScan()
     {
-        var watcher = _bleWatcher;
-        if (watcher == null)
+        var scanSession = _bleScanSession;
+        if (scanSession == null)
         {
             return;
         }
 
         try
         {
-            watcher.Received -= OnBleAdvertisementReceived;
-            watcher.Stop();
+            scanSession.Dispose();
         }
         catch
         {
@@ -689,7 +688,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
         finally
         {
-            _bleWatcher = null;
+            _bleScanSession = null;
         }
     }
 

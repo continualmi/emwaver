@@ -17,6 +17,36 @@ internal static class WindowsBleTransport
 
     internal const int WriteChunkBytes = 20;
 
+    internal sealed class ScanSession : IDisposable
+    {
+        private readonly BluetoothLEAdvertisementWatcher _watcher;
+        private readonly TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs> _receivedHandler;
+
+        internal ScanSession(TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs> receivedHandler)
+        {
+            _receivedHandler = receivedHandler;
+            _watcher = CreateWatcher(receivedHandler);
+        }
+
+        internal void Start()
+        {
+            _watcher.Start();
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                _watcher.Received -= _receivedHandler;
+                _watcher.Stop();
+            }
+            catch
+            {
+                // Ignore watcher shutdown errors.
+            }
+        }
+    }
+
     internal sealed class Connection : IDisposable
     {
         private readonly TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? _notifyHandler;
@@ -79,6 +109,12 @@ internal static class WindowsBleTransport
                 // Ignore dispose errors.
             }
         }
+    }
+
+    internal static ScanSession OpenScanSession(
+        TypedEventHandler<BluetoothLEAdvertisementWatcher, BluetoothLEAdvertisementReceivedEventArgs> receivedHandler)
+    {
+        return new ScanSession(receivedHandler);
     }
 
     internal static string SessionId(ulong bluetoothAddress) => $"ble:{bluetoothAddress:X}";
