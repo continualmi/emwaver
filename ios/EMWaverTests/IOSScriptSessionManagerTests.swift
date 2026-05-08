@@ -31,6 +31,7 @@ final class IOSScriptSessionManagerTests: XCTestCase {
         manager.stopSession(first!.scriptInstanceId)
 
         XCTAssertEqual(manager.sessionStatuses.count, 1)
+        XCTAssertEqual(manager.sessionDeviceId(first!.scriptInstanceId), nil)
         XCTAssertEqual(manager.sessionStatuses.first?.scriptId, "script-b")
         XCTAssertTrue(manager.hasRunningSessions)
         XCTAssertEqual(manager.activeScriptName, "Beta")

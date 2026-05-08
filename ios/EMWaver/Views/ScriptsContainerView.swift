@@ -99,7 +99,7 @@ final class IOSScriptSessionManager: ObservableObject {
 
     func stopSession(_ id: String) {
         guard let session = sessionsById[id] else { return }
-        session.manager.exitPreview()
+        session.stop()
         sessionsById.removeValue(forKey: id)
         if selectedSessionId == id {
             selectedSessionId = sessionsById.keys.sorted().first
@@ -152,6 +152,10 @@ private final class IOSScriptSession {
         self.scriptId = scriptId
         self.scriptName = scriptName
         self.deviceLabel = deviceLabel
+    }
+
+    func stop() {
+        manager.exitPreview()
     }
 }
 

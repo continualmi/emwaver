@@ -146,6 +146,7 @@ Current first step:
 - iOS shows the current run target in the scripts toolbar before a script starts, using the same selected device label captured into the session row after Run.
 - the shared Apple `ScriptSessionStatus` now carries `deviceId`, so macOS and iOS visible session rows can retain target identity separately from display labels.
 - iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
+- iOS script sessions now own their stop path explicitly, so row-level stop shuts down the session-owned preview manager instead of reaching through manager internals.
 - iOS local script sessions now retain the captured transport device-session id alongside the visible status row data.
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
 - iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
