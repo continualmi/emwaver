@@ -274,6 +274,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
 
 - Add Wi-Fi device discovery and manual connection surfaces.
 - Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3.
+- Current macOS auto-connect progress: paired Wi-Fi endpoints are attempted automatically when no wired runtime is active, so a provisioned same-LAN board can reconnect without re-entering the pairing secret.
 - Reuse existing script/device runtime paths.
 - Add Wi-Fi provisioning from BLE/USB where platform APIs allow it.
 - Show clear connection state:
@@ -365,7 +366,7 @@ Resolved v1 decisions:
 5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip> --wifi-secret <local-secret>`.
 6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint.
 7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel; automatic device-list discovery and selection remain pending.
-8. Add native app discovery/manual connect surfaces.
+8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and paired Wi-Fi auto-connect are wired.
 9. Validate LAN script execution on real ESP32-S3 hardware.
 10. Validate VPN-by-IP execution.
 11. Add docs for user-owned VPN remote access.

@@ -89,7 +89,7 @@ Transport behavior:
 - Successful Wi-Fi authentication refreshes the local paired-device `lastSeen` timestamp so manual fallback records do not stay stale after real LAN/VPN use.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.
 - Wi-Fi pairing records are stored in local macOS app preferences. They are not account-backed, cloud-synced, or used for hardware ownership/activation.
-- If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
+- If auto-connect is enabled and no wired EMWaver runtime is connected, macOS first tries the most recently seen paired Wi-Fi endpoint from local pairing records, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
 - Gateway-controlled runs can now include a `deviceId`; the macOS app creates a separate remote script runtime per `script.run` request and routes `Device.sendPacket` / `Device.sendCommand` through a targeted device bridge. This enables the initial automation-bench shape of one connected device = one remote script session. Shared capture buffers and mixed USB/BLE concurrent ownership still need hardening before treating every script API as fully isolated.

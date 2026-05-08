@@ -246,6 +246,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var autoConnectEnabled: Bool = true {
         didSet {
             if autoConnectEnabled {
+                midiQueue.async {
+                    self.suppressedAutoConnectWiFiIDs.removeAll()
+                }
                 refreshPorts()
             } else {
                 stopBleScan()
@@ -291,6 +294,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var activeDeviceID: String?
     private var wifiDevices: [MacWiFiDeviceRecord] = []
     private var wifiManager: MacWiFiManager?
+    private var pendingAutoConnectWiFiID: String?
+    private var suppressedAutoConnectWiFiIDs: Set<String> = []
 
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
@@ -316,6 +321,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self?.midiQueue.async {
                     self?.wifiDevices = records
                     self?.publishDiscoveredDevices()
+                    self?.autoConnectIfNeededInternal()
                 }
             },
             onData: { [weak self] data, deviceID in
@@ -324,7 +330,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 }
             },
             onError: { [weak self] message in
-                self?.setError(message)
+                self?.midiQueue.async {
+                    self?.suppressPendingAutoConnectWiFiIfNeeded(errorMessage: message)
+                    self?.setError(message)
+                }
             },
             onConnected: { [weak self] record in
                 self?.midiQueue.async {
@@ -426,6 +435,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     func refreshPorts() {
         midiQueue.async {
+            self.suppressedAutoConnectWiFiIDs.removeAll()
             self.ensureClient()
             self.refreshPortsInternal()
             self.autoConnectIfNeededInternal()
@@ -442,6 +452,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     func connectDevice(id: String) {
         midiQueue.async {
             self.ensureClient()
+            self.pendingAutoConnectWiFiID = nil
             if id.hasPrefix("uid:"), let transportID = self.hardwareUIDByDeviceID.first(where: { $0.value == String(id.dropFirst("uid:".count)) })?.key {
                 self.connectDeviceInternal(transportID: transportID)
                 return
@@ -451,6 +462,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     func connectWiFi(host: String, port: Int = MacWiFiManager.defaultPort, pairingSecret: String) {
+        midiQueue.async {
+            self.pendingAutoConnectWiFiID = nil
+        }
         wifiManager?.connect(host: host, port: port, pairingSecret: pairingSecret)
     }
 
@@ -690,6 +704,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         guard autoConnectEnabled else { return }
         guard !isTransportConnectedInternal() else { return }
         connectToFirstPortInternal()
+        if connectToFirstPairedWiFiInternal() {
+            return
+        }
         if !isTransportConnectedInternal() {
             startBleScanInternal()
         }
@@ -1122,6 +1139,31 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         connectInternal(candidate: chosen, displayName: display)
     }
 
+    private func connectToFirstPairedWiFiInternal() -> Bool {
+        guard activeTransport == .none else { return false }
+        if wifiManager?.connectingDeviceID != nil {
+            return true
+        }
+        guard let record = wifiDevices
+            .filter({ $0.isPaired && !suppressedAutoConnectWiFiIDs.contains($0.id) })
+            .sorted(by: { $0.lastSeen > $1.lastSeen })
+            .first else {
+            return false
+        }
+        pendingAutoConnectWiFiID = record.id
+        wifiManager?.connect(record: record)
+        return true
+    }
+
+    private func suppressPendingAutoConnectWiFiIfNeeded(errorMessage: String) {
+        guard let id = pendingAutoConnectWiFiID,
+              errorMessage.localizedCaseInsensitiveContains("Wi-Fi") else {
+            return
+        }
+        suppressedAutoConnectWiFiIDs.insert(id)
+        pendingAutoConnectWiFiID = nil
+    }
+
     private func connectInternal(portName: String) {
         if let chosen = portCandidatesByDisplayName[portName] {
             connectInternal(candidate: chosen, displayName: portName)
@@ -1453,6 +1495,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         disconnectMidiOnlyInternal()
         activeTransport = .wifi
         activeDeviceID = record.id
+        pendingAutoConnectWiFiID = nil
+        suppressedAutoConnectWiFiIDs.remove(record.id)
         ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
 
         DispatchQueue.main.async {
