@@ -28,6 +28,7 @@ public sealed class ScriptSessionRegistryTests
         Assert.Equal("usb:b", registry.SelectedSession?.DeviceId);
         Assert.Equal("Beta.emw", registry.SelectedSession?.FileName);
         Assert.Equal("running on USB B", registry.SelectedSession?.StatusLabel);
+        Assert.True(registry.SelectedSession?.IsRunning);
     }
 
     [Fact]
@@ -84,6 +85,8 @@ public sealed class ScriptSessionRegistryTests
         Assert.Equal(new[] { first.InstanceId, second.InstanceId }, registry.Sessions.Select(s => s.InstanceId));
         Assert.Equal("stopped on USB A", registry.Sessions[0].StatusLabel);
         Assert.Equal("running on USB B", registry.Sessions[1].StatusLabel);
+        Assert.False(registry.Sessions[0].IsRunning);
+        Assert.True(registry.Sessions[1].IsRunning);
 
         registry.Stop(first.InstanceId);
 

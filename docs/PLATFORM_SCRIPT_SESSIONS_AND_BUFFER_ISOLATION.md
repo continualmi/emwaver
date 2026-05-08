@@ -47,6 +47,7 @@ Current first step:
 - the session row shows the active device label when available,
 - the Windows session row now reads the connected port's `DisplayName`, so USB MIDI rows show the actual target label instead of falling back to transport text.
 - the session row has a stop button,
+- stopped Windows session rows remain visible without an active stop button, so replacement-run history does not look like a still-controllable runtime.
 - running a different script no longer shows the old "Stop and Run" switch prompt.
 - the Windows session-row and toolbar stop controls now stop the active script directly, matching the simplified macOS row-control behavior.
 - the Windows session-row and toolbar stop controls now use the existing error/destructive brush instead of the normal command tint.
@@ -101,6 +102,7 @@ Current first step:
 - Android shows the current run target above the scripts list before a script starts, so the visible Run target no longer only appears after the session row is running.
 - Android now captures the active USB/BLE connection label when a script starts and shows that label in the running script row when available.
 - the running row has a stop button,
+- stopped Android session rows remain visible without an active stop button, so replacement-run history does not look like a still-controllable runtime.
 - the running row stop button now uses a destructive action color instead of the normal edit/action tint, matching the simplified row-control treatment on the other hosts.
 - leaving preview can keep the run visible in the list rather than making the list look idle.
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.

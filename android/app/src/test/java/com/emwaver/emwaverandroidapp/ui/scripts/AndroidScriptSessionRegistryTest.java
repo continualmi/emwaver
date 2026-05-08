@@ -91,6 +91,8 @@ public class AndroidScriptSessionRegistryTest {
         assertEquals(Arrays.asList(first.instanceId, second.instanceId), sessionIds(registry.sessions()));
         assertEquals("Stopped on USB A", registry.sessions().get(0).statusLabel());
         assertEquals("Running on USB B", registry.sessions().get(1).statusLabel());
+        assertFalse(registry.sessions().get(0).isRunning());
+        assertTrue(registry.sessions().get(1).isRunning());
 
         registry.stop(first.instanceId);
 

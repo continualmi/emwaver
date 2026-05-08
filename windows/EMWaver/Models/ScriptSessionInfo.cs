@@ -15,5 +15,7 @@ public sealed record ScriptSessionInfo(
 
     public string StatusLabel => $"{StateText} on {DeviceLabel}";
 
+    public bool IsRunning => string.Equals(StateText, "running", System.StringComparison.OrdinalIgnoreCase);
+
     public void Stop() => StopAction();
 }

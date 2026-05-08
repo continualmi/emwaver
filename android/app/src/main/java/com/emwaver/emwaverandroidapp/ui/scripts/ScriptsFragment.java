@@ -647,13 +647,16 @@ public class ScriptsFragment extends Fragment {
                 nameView.setText(session != null ? session.fileName() : "-");
                 statusView.setText(session != null ? session.statusLabel() : "Running");
                 statusView.setVisibility(View.VISIBLE);
-                stopButton.setVisibility(View.VISIBLE);
-                stopButton.setEnabled(true);
-                stopButton.setAlpha(1.0f);
-                stopButton.setOnClickListener(v -> {
-                    v.setPressed(false);
-                    stopRunningScript(session != null ? session.instanceId : null);
-                });
+                boolean isRunningSession = session != null && session.isRunning();
+                stopButton.setVisibility(isRunningSession ? View.VISIBLE : View.GONE);
+                stopButton.setEnabled(isRunningSession);
+                stopButton.setAlpha(isRunningSession ? 1.0f : 0.0f);
+                stopButton.setOnClickListener(isRunningSession
+                        ? v -> {
+                            v.setPressed(false);
+                            stopRunningScript(session.instanceId);
+                        }
+                        : null);
                 editButton.setVisibility(View.GONE);
                 return view;
             }

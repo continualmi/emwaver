@@ -99,6 +99,7 @@
                                     Height="32"
                                     Padding="0"
                                     Foreground="{ThemeResource AppErrorTextBrush}"
+                                    Visibility="{Binding IsRunning, Converter={StaticResource BoolToVisibility}}"
                                     Click="OnSessionStopClick"
                                     ToolTipService.ToolTip="Stop script">
                                     <FontIcon Glyph="&#xE71A;" FontSize="12" />
