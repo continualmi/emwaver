@@ -63,7 +63,7 @@ public struct AgentChatPanelView: View {
         ScrollViewReader { proxy in
             ZStack {
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 12) {
                         ForEach(viewModel.messages) { msg in
                             MessageRow(message: msg)
                                 .id(msg.id)
@@ -77,7 +77,14 @@ public struct AgentChatPanelView: View {
                                     .foregroundStyle(.secondary)
                                     .font(.callout)
                             }
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 12)
+                            .background(messageCardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(messageCardBorder)
+                            )
+                            .shadow(color: messageCardShadow, radius: 10, y: 4)
                         }
 
                         if let err = viewModel.lastError, !err.isEmpty {
@@ -85,7 +92,13 @@ public struct AgentChatPanelView: View {
                                 .foregroundStyle(.red)
                                 .font(.callout)
                                 .textSelection(.enabled)
-                                .padding(.vertical, 8)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 12)
+                                .background(Color.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                        .strokeBorder(Color.red.opacity(0.18))
+                                )
                         }
 
                         Color.clear
@@ -369,13 +382,15 @@ private struct MessageRow: View {
                         .foregroundStyle(isToolBubble ? .secondary : .primary)
                 }
             }
-            .padding(isToolBubble ? 8 : 10)
-            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .padding(.horizontal, isToolBubble ? 10 : 14)
+            .padding(.vertical, isToolBubble ? 9 : 12)
+            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
             .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(.black.opacity(0.08))
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(bubbleBorder)
             )
-            .frame(maxWidth: 520, alignment: message.role == .user ? .trailing : .leading)
+            .shadow(color: messageCardShadow, radius: 10, y: 4)
+            .frame(maxWidth: 560, alignment: message.role == .user ? .trailing : .leading)
 
             if message.role != .user {
                 Spacer(minLength: 24)
@@ -434,16 +449,45 @@ private struct MessageRow: View {
     private var bubbleBackground: some ShapeStyle {
         switch message.role {
         case .user:
-            return AnyShapeStyle(Color.accentColor.opacity(0.14))
+            return AnyShapeStyle(Color.accentColor.opacity(0.18))
         case .assistant:
-            return AnyShapeStyle(Color.gray.opacity(0.10))
+            return AnyShapeStyle(messageCardBackground)
         case .system:
             if isToolBubble {
-                return AnyShapeStyle(Color.secondary.opacity(0.10))
+                return AnyShapeStyle(Color.secondary.opacity(0.11))
             }
             return AnyShapeStyle(Color.orange.opacity(0.10))
         }
     }
+
+    private var bubbleBorder: Color {
+        switch message.role {
+        case .user:
+            return Color.accentColor.opacity(0.20)
+        case .assistant:
+            return messageCardBorder
+        case .system:
+            return isToolBubble ? Color.secondary.opacity(0.16) : Color.orange.opacity(0.18)
+        }
+    }
+}
+
+private var messageCardBackground: Color {
+    #if canImport(UIKit)
+    Color(uiColor: .systemBackground)
+    #elseif canImport(AppKit)
+    Color(nsColor: .textBackgroundColor)
+    #else
+    Color.white.opacity(0.96)
+    #endif
+}
+
+private var messageCardBorder: Color {
+    Color.black.opacity(0.10)
+}
+
+private var messageCardShadow: Color {
+    Color.black.opacity(0.08)
 }
 
 private struct ChatMarkdownView: View {
