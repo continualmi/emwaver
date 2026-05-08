@@ -46,6 +46,7 @@ void usb_init(QueueHandle_t cmd_queue);
 bool usb_is_ready(void);
 esp_err_t usb_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len);
 esp_err_t usb_send_stream_lane(const uint8_t *stream_lane, bool nonblocking);
+bool usb_ingest_stream_lane(const uint8_t *stream_lane, uint16_t *bytes_available);
 void usb_queue_status_packet(uint16_t status);
 void usb_poll_tx(void);
 void usb_set_buffer_type(emw_buffer_type_t buffer_type);

@@ -162,6 +162,21 @@ esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonbl
     return send_superframe(frame, 0);
 }
 
+esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking)
+{
+    (void)nonblocking;
+    if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
+    frame[EMW_LANE_SIZE + 0u] = 'B';
+    frame[EMW_LANE_SIZE + 1u] = 'S';
+    frame[EMW_LANE_SIZE + 2u] = (uint8_t)(status >> 8u);
+    frame[EMW_LANE_SIZE + 3u] = (uint8_t)(status & 0xffu);
+    return send_superframe(frame, 0);
+}
+
 esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
 {
     if (!config_field_fits(ssid, WIFI_MAX_SSID) ||
@@ -936,6 +951,22 @@ static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence)
             break;
         }
     }
+
+    const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
+    bool stream_any = false;
+    for (size_t i = 0; i < EMW_LANE_SIZE; ++i) {
+        if (stream_lane[i] != 0) {
+            stream_any = true;
+            break;
+        }
+    }
+    if (stream_any || !cmd_any) {
+        uint16_t bytes_available = 0;
+        if (usb_ingest_stream_lane(stream_lane, &bytes_available)) {
+            (void)wifi_transport_send_buffer_status(bytes_available, true);
+        }
+    }
+
     if (!cmd_any) {
         return true;
     }

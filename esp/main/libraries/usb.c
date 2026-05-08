@@ -169,6 +169,29 @@ esp_err_t usb_send_stream_lane(const uint8_t *stream_lane, bool nonblocking)
     return send_frame(frame, nonblocking);
 }
 
+bool usb_ingest_stream_lane(const uint8_t *stream_lane, uint16_t *bytes_available)
+{
+    if (!stream_lane || s_buffer_type != EMW_BUFFER_CIRCULAR) {
+        return false;
+    }
+
+    uint16_t next_head = s_rx_head;
+    for (size_t i = 0; i < EMW_LANE_SIZE; ++i) {
+        s_rx_buffer[next_head] = stream_lane[i];
+        next_head = (uint16_t)((next_head + 1u) % EMW_RX_BUFFER_SIZE);
+        if (next_head == s_rx_tail) {
+            return false;
+        }
+    }
+    s_rx_head = next_head;
+
+    uint16_t available = usb_get_rx_buffer_bytes_available();
+    if (bytes_available) {
+        *bytes_available = available;
+    }
+    return true;
+}
+
 void usb_queue_status_packet(uint16_t status)
 {
     s_pending_bs_status = status;
@@ -296,16 +319,10 @@ static void process_sysex_frame(const uint8_t *sysex)
 
     const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
     if (s_buffer_type == EMW_BUFFER_CIRCULAR) {
-        uint16_t next_head = s_rx_head;
-        for (size_t i = 0; i < EMW_LANE_SIZE; ++i) {
-            s_rx_buffer[next_head] = stream_lane[i];
-            next_head = (uint16_t)((next_head + 1u) % EMW_RX_BUFFER_SIZE);
-            if (next_head == s_rx_tail) {
-                return;
-            }
+        uint16_t bytes_available = 0;
+        if (usb_ingest_stream_lane(stream_lane, &bytes_available)) {
+            usb_queue_status_packet(bytes_available);
         }
-        s_rx_head = next_head;
-        usb_queue_status_packet(usb_get_rx_buffer_bytes_available());
     }
 
     bool cmd_any = false;
