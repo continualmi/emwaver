@@ -16,11 +16,11 @@ final class ActiveDeviceTargetTests: XCTestCase {
         XCTAssertTrue(target.matchesDeviceId(""))
     }
 
-    func testMatchesExactTrimmedDeviceIdAndTransport() {
-        let target = ActiveDeviceTarget(deviceId: " usb:board-1 ", transport: Transport.usb)
+    func testMatchesTrimmedDeviceIdCaseInsensitivelyAndTransport() {
+        let target = ActiveDeviceTarget(deviceId: " usb:Board-1 ", transport: Transport.usb)
 
-        XCTAssertEqual(target.deviceId, "usb:board-1")
-        XCTAssertTrue(target.matchesDeviceId("usb:board-1"))
+        XCTAssertEqual(target.deviceId, "usb:Board-1")
+        XCTAssertTrue(target.matchesDeviceId("USB:board-1"))
         XCTAssertFalse(target.matchesDeviceId("ble:board-1"))
         XCTAssertTrue(target.matchesTransport(.usb))
         XCTAssertFalse(target.matchesTransport(.ble))

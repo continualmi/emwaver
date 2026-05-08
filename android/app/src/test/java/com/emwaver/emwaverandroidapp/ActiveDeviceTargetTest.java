@@ -29,11 +29,11 @@ public class ActiveDeviceTargetTest {
     }
 
     @Test
-    public void matchesExactTrimmedDeviceIdAndTransport() {
-        ActiveDeviceTarget<Transport> target = new ActiveDeviceTarget<>(" usb:board-1 ", Transport.USB);
+    public void matchesTrimmedDeviceIdCaseInsensitivelyAndTransport() {
+        ActiveDeviceTarget<Transport> target = new ActiveDeviceTarget<>(" usb:Board-1 ", Transport.USB);
 
-        assertEquals("usb:board-1", target.deviceId);
-        assertTrue(target.matchesDeviceId("usb:board-1"));
+        assertEquals("usb:Board-1", target.deviceId);
+        assertTrue(target.matchesDeviceId("USB:board-1"));
         assertFalse(target.matchesDeviceId("ble:board-1"));
         assertTrue(target.matchesTransport(Transport.USB));
         assertFalse(target.matchesTransport(Transport.BLE));

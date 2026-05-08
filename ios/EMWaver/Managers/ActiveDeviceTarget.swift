@@ -19,7 +19,7 @@ struct ActiveDeviceTarget<Transport: Equatable> {
     func matchesDeviceId(_ deviceId: String?) -> Bool {
         let key = deviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let requested = key.isEmpty ? "active" : key
-        return requested == self.deviceId
+        return requested.caseInsensitiveCompare(self.deviceId) == .orderedSame
     }
 
     func matchesTransport(_ transport: Transport) -> Bool {

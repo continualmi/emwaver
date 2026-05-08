@@ -6,6 +6,8 @@
 
 package com.emwaver.emwaverandroidapp;
 
+import java.util.Locale;
+
 final class ActiveDeviceTarget<T> {
     final String deviceId;
     final T transport;
@@ -18,7 +20,7 @@ final class ActiveDeviceTarget<T> {
 
     boolean matchesDeviceId(String deviceId) {
         String requested = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
-        return this.deviceId.equals(requested);
+        return this.deviceId.toLowerCase(Locale.US).equals(requested.toLowerCase(Locale.US));
     }
 
     boolean matchesTransport(T transport) {
