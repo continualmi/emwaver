@@ -10,8 +10,8 @@ public sealed class ScriptSessionRegistryTests
     {
         var registry = new ScriptSessionRegistry();
 
-        var first = registry.Start("Alpha", "USB A", "session-a");
-        var second = registry.Start("Beta", "USB B", "session-b");
+        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a");
+        var second = registry.Start("Beta", "USB B", "usb:b", "session-b");
 
         Assert.True(registry.HasSessions);
         Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
@@ -21,6 +21,7 @@ public sealed class ScriptSessionRegistryTests
 
         Assert.Single(registry.Sessions);
         Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
+        Assert.Equal("usb:b", registry.SelectedSession?.DeviceId);
         Assert.Equal("Beta.emw", registry.SelectedSession?.FileName);
         Assert.Equal("running on USB B", registry.SelectedSession?.StatusLabel);
     }
@@ -30,8 +31,8 @@ public sealed class ScriptSessionRegistryTests
     {
         var registry = new ScriptSessionRegistry();
 
-        var first = registry.Start("Alpha", "USB A", "session-a");
-        var second = registry.Start("Beta", "USB B", "session-b");
+        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a");
+        var second = registry.Start("Beta", "USB B", "usb:b", "session-b");
 
         registry.Stop(second.InstanceId);
 

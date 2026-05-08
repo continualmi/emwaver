@@ -85,6 +85,10 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         return connectionManager.getActiveConnectionType().name();
     }
 
+    public String capturedDeviceId() {
+        return targetDeviceId != null && !targetDeviceId.trim().isEmpty() ? targetDeviceId : "active";
+    }
+
     @Nullable
     public byte[] sendCommand(byte[] command, int timeoutMs) {
         DeviceConnectionService service = activeService();

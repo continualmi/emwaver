@@ -2,6 +2,7 @@ namespace EMWaver.Models;
 
 public sealed record ScriptSessionInfo(
     string InstanceId,
+    string DeviceId,
     string ScriptName,
     string DeviceLabel,
     string StateText

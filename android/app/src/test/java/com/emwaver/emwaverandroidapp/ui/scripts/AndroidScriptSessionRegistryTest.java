@@ -20,8 +20,8 @@ public class AndroidScriptSessionRegistryTest {
     public void keepsMultipleVisibleSessionsAndStopsOne() {
         AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
 
-        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A");
-        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B");
+        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A", "usb:a");
+        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B", "usb:b");
 
         assertTrue(registry.hasSessions());
         assertEquals(second.instanceId, registry.selectedSession().instanceId);
@@ -31,6 +31,7 @@ public class AndroidScriptSessionRegistryTest {
 
         assertEquals(1, registry.sessions().size());
         assertEquals(second.instanceId, registry.selectedSession().instanceId);
+        assertEquals("usb:b", registry.selectedSession().deviceId);
         assertEquals("Beta.emw", registry.selectedSession().fileName());
         assertEquals("Running on USB B", registry.selectedSession().statusLabel());
     }
@@ -39,8 +40,8 @@ public class AndroidScriptSessionRegistryTest {
     public void selectedFallsBackToPreviousSessionAfterStop() {
         AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
 
-        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A");
-        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B");
+        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A", "usb:a");
+        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B", "usb:b");
 
         registry.stop(second.instanceId);
 

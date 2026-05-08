@@ -1952,15 +1952,25 @@ public class ScriptsFragment extends Fragment {
             viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
             viewModel.setPreviewActive(true);
         }
-        scriptSessions.clear();
-        AndroidScriptSession runningSession = scriptSessions.start(
-                currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
-                currentScriptName,
-                currentDeviceLabel()
-        );
         if (isAdded()) {
-            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), runningSession.deviceLabel);
+            String deviceLabel = currentDeviceLabel();
+            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), deviceLabel);
+            scriptSessions.clear();
+            scriptSessions.start(
+                    currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
+                    currentScriptName,
+                    runningSessionLabel(deviceLabel),
+                    scriptDeviceConnection.capturedDeviceId()
+            );
             scriptEngine.setDeviceConnection(scriptDeviceConnection);
+        } else {
+            scriptSessions.clear();
+            scriptSessions.start(
+                    currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
+                    currentScriptName,
+                    "active device",
+                    "active"
+            );
         }
         isRenderingScript = true;
         activeScriptTree = null;
@@ -2115,6 +2125,10 @@ public class ScriptsFragment extends Fragment {
             }
         }
         return "active device";
+    }
+
+    private static String runningSessionLabel(String label) {
+        return TextUtils.isEmpty(label) ? "active device" : label;
     }
 
     private void updateTargetDeviceStatus() {

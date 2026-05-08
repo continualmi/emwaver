@@ -42,6 +42,7 @@ Current first step:
 - Windows shows the current script target in the top device button before Run, using the connected port display name when available.
 - scripts list shows the active run as a session row,
 - Windows now represents running scripts through an explicit `ScriptSessionRegistry` and a dedicated "Running" list section instead of inserting one transient item into Examples; the current runtime still owns one active engine and clears prior Windows sessions on Run.
+- Windows script session rows now retain the captured transport device-session id separately from the display label, so future row-level routing does not have to recover identity from UI text.
 - the session row shows the active device label when available,
 - the Windows session row now reads the connected port's `DisplayName`, so USB MIDI rows show the actual target label instead of falling back to transport text.
 - the session row has a stop button,
@@ -90,6 +91,7 @@ Current first step:
 
 - script rows show "Running on active device" for the current run,
 - Android now represents running scripts as explicit `AndroidScriptSession` entries in a "Running" list section instead of only decorating the source script row, matching the macOS/iOS session-row direction while the runtime still owns one active engine today.
+- Android script session rows now retain the captured device-session id from `ScriptDeviceConnection`, so future row-level routing does not have to recover identity from UI text.
 - Android shows the current run target above the scripts list before a script starts, so the visible Run target no longer only appears after the session row is running.
 - Android now captures the active USB/BLE connection label when a script starts and shows that label in the running script row when available.
 - the running row has a stop button,
@@ -140,6 +142,7 @@ Current first step:
 
 - iOS shows the current run target in the scripts toolbar before a script starts, using the same selected device label captured into the session row after Run.
 - iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
+- iOS local script sessions now retain the captured transport device-session id alongside the visible status row data.
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
 - iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.

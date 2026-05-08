@@ -70,6 +70,7 @@ final class IOSScriptSessionManager: ObservableObject {
 
         let session = IOSScriptSession(
             manager: manager,
+            deviceId: deviceId,
             scriptId: request.scriptId,
             scriptName: request.name,
             deviceLabel: deviceLabel.isEmpty ? "active device" : deviceLabel
@@ -111,6 +112,10 @@ final class IOSScriptSessionManager: ObservableObject {
         stopSession(selectedSessionId)
     }
 
+    func sessionDeviceId(_ id: String) -> String? {
+        sessionsById[id]?.deviceId
+    }
+
     private func refreshStatuses() {
         sessionStatuses = sessionsById
             .map { id, session in
@@ -134,13 +139,15 @@ final class IOSScriptSessionManager: ObservableObject {
 @MainActor
 private final class IOSScriptSession {
     let manager: ScriptPreviewManager
+    let deviceId: String
     let scriptId: String
     let scriptName: String
     let deviceLabel: String
     var cancellable: AnyCancellable?
 
-    init(manager: ScriptPreviewManager, scriptId: String, scriptName: String, deviceLabel: String) {
+    init(manager: ScriptPreviewManager, deviceId: String, scriptId: String, scriptName: String, deviceLabel: String) {
         self.manager = manager
+        self.deviceId = deviceId
         self.scriptId = scriptId
         self.scriptName = scriptName
         self.deviceLabel = deviceLabel

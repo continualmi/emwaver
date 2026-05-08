@@ -22,10 +22,11 @@ final class AndroidScriptSessionRegistry {
     AndroidScriptSession start(
             @Nullable String scriptId,
             @NonNull String scriptName,
-            @NonNull String deviceLabel
+            @NonNull String deviceLabel,
+            @NonNull String deviceId
     ) {
         String instanceId = UUID.randomUUID().toString();
-        AndroidScriptSession session = new AndroidScriptSession(instanceId, scriptId, scriptName, deviceLabel);
+        AndroidScriptSession session = new AndroidScriptSession(instanceId, deviceId, scriptId, scriptName, deviceLabel);
         sessionsById.put(instanceId, session);
         selectedSessionId = instanceId;
         return session;

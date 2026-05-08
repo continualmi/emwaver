@@ -11,17 +11,20 @@ import androidx.annotation.Nullable;
 
 final class AndroidScriptSession {
     final String instanceId;
+    final String deviceId;
     final String scriptId;
     final String scriptName;
     final String deviceLabel;
 
     AndroidScriptSession(
             @NonNull String instanceId,
+            @NonNull String deviceId,
             @Nullable String scriptId,
             @NonNull String scriptName,
             @NonNull String deviceLabel
     ) {
         this.instanceId = instanceId;
+        this.deviceId = deviceId.trim().isEmpty() ? "active" : deviceId.trim();
         this.scriptId = scriptId == null ? "" : scriptId;
         this.scriptName = scriptName;
         this.deviceLabel = deviceLabel;
