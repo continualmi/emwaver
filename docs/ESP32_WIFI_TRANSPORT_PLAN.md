@@ -132,7 +132,7 @@ Preferred first security slice:
 5. Firmware accepts command frames only after authentication.
 
 Current implementation note:
-- The first firmware/macOS slice uses a firmware-issued challenge plus HMAC-SHA256 over the local pairing secret. The raw pairing secret is not sent on the WebSocket, and firmware accepts command frames only after an `auth ok` state. Firmware closes pending unauthenticated sockets on failed challenge send, auth timeout, or auth failure so rejected clients cannot hold the active session slot.
+- The first firmware/macOS slice uses a firmware-issued challenge plus HMAC-SHA256 over the local pairing secret. The raw pairing secret is not sent on the WebSocket, and firmware accepts command frames only after an `auth ok` state. Firmware closes pending unauthenticated sockets on auth-timeout task creation failure, failed challenge send, auth timeout, or auth failure so rejected clients cannot hold the active session slot.
 
 TLS is desirable later, but authenticated sessions are the first hard requirement. Do not ship an unauthenticated Wi-Fi command socket.
 
@@ -173,7 +173,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - pairing secret,
   - pairing/reset state.
 - Add station-mode connection manager.
-- Add reconnect/backoff behavior.
+- Add reconnect/backoff behavior. Current firmware progress: reconnect scheduling now falls back to an immediate reconnect attempt if the reconnect task cannot be created, so the status flag does not remain stuck in a pending state.
 - Add visible connection status over USB/BLE diagnostics. Current firmware progress: binary Wi-Fi status and text `wifi status` both expose provisioned/authenticated/station state, reconnecting state, and the last ESP-IDF station disconnect reason; text `wifi status` also includes the advertised hostname for local setup debugging.
 
 ### Phase 2: Provisioning

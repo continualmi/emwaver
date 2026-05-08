@@ -100,6 +100,8 @@ static void wifi_reconnect_task(void *arg);
 static void start_server(void);
 static void stop_server(void);
 static void close_session(httpd_handle_t hd, int sockfd);
+static void clear_active_session_state(void);
+static void close_active_session(int sockfd);
 static bool publish_mdns(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
@@ -235,12 +237,8 @@ esp_err_t wifi_transport_clear_config(void)
     if (err == ESP_OK) {
         memset(&s_config, 0, sizeof(s_config));
         s_has_config = false;
-        s_authenticated = false;
+        clear_active_session_state();
         s_station_online = false;
-        s_active_fd = -1;
-        s_use_envelope = false;
-        s_auth_challenge[0] = '\0';
-        s_auth_generation++;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = false;
@@ -270,12 +268,8 @@ esp_err_t wifi_transport_reset_pairing(const char *secret)
     s_config = next;
 
     const int fd = s_active_fd;
-    s_authenticated = false;
-    s_use_envelope = false;
-    s_auth_challenge[0] = '\0';
-    s_auth_generation++;
+    clear_active_session_state();
     if (s_httpd && fd >= 0) {
-        s_active_fd = -1;
         (void)httpd_sess_trigger_close(s_httpd, fd);
     }
     return ESP_OK;
@@ -485,12 +479,8 @@ static void start_station(void)
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
     if (s_station_started) {
-        s_authenticated = false;
+        clear_active_session_state();
         s_station_online = false;
-        s_active_fd = -1;
-        s_use_envelope = false;
-        s_auth_challenge[0] = '\0';
-        s_auth_generation++;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         s_suppress_next_disconnect_reconnect = true;
@@ -521,12 +511,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         const wifi_event_sta_disconnected_t *disconnected = (const wifi_event_sta_disconnected_t *)event_data;
         s_last_disconnect_reason = disconnected ? (uint16_t)disconnected->reason : 0u;
-        s_authenticated = false;
+        clear_active_session_state();
         s_station_online = false;
-        s_active_fd = -1;
-        s_use_envelope = false;
-        s_auth_challenge[0] = '\0';
-        s_auth_generation++;
         stop_server();
         if (s_suppress_next_disconnect_reconnect) {
             s_last_disconnect_reason = 0;
@@ -535,7 +521,11 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         }
         if (s_has_config && !s_reconnect_pending) {
             s_reconnect_pending = true;
-            (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
+            if (xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL) != pdPASS) {
+                ESP_LOGW(TAG, "failed to start Wi-Fi reconnect task; reconnecting immediately");
+                s_reconnect_pending = false;
+                (void)esp_wifi_connect();
+            }
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
         s_station_online = true;
@@ -620,13 +610,28 @@ static void close_session(httpd_handle_t hd, int sockfd)
 {
     (void)hd;
     if (sockfd == s_active_fd) {
-        s_active_fd = -1;
-        s_authenticated = false;
-        s_use_envelope = false;
-        s_auth_challenge[0] = '\0';
-        s_auth_generation++;
+        clear_active_session_state();
     }
     close(sockfd);
+}
+
+static void clear_active_session_state(void)
+{
+    s_active_fd = -1;
+    s_authenticated = false;
+    s_use_envelope = false;
+    s_auth_challenge[0] = '\0';
+    s_auth_generation++;
+}
+
+static void close_active_session(int sockfd)
+{
+    if (sockfd == s_active_fd) {
+        clear_active_session_state();
+    }
+    if (s_httpd) {
+        (void)httpd_sess_trigger_close(s_httpd, sockfd);
+    }
 }
 
 static bool publish_mdns(void)
@@ -711,7 +716,11 @@ static esp_err_t ws_handler(httpd_req_t *req)
         s_authenticated = false;
         s_use_envelope = false;
         generate_auth_challenge();
-        (void)xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL);
+        if (xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL) != pdPASS) {
+            ESP_LOGW(TAG, "failed to start Wi-Fi auth timeout task");
+            close_active_session(current_fd);
+            return ESP_ERR_NO_MEM;
+        }
         char challenge_json[72];
         snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
         httpd_ws_frame_t challenge = {
@@ -723,16 +732,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         };
         esp_err_t err = httpd_ws_send_frame(req, &challenge);
         if (err != ESP_OK) {
-            if (current_fd == s_active_fd) {
-                s_active_fd = -1;
-                s_authenticated = false;
-                s_use_envelope = false;
-                s_auth_challenge[0] = '\0';
-                s_auth_generation++;
-            }
-            if (s_httpd) {
-                (void)httpd_sess_trigger_close(s_httpd, current_fd);
-            }
+            close_active_session(current_fd);
             return err;
         }
         return ESP_OK;
@@ -786,16 +786,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             .len = strlen("auth fail"),
         };
         (void)httpd_ws_send_frame(req, &reply);
-        if (current_fd == s_active_fd) {
-            s_active_fd = -1;
-            s_authenticated = false;
-            s_use_envelope = false;
-            s_auth_challenge[0] = '\0';
-            s_auth_generation++;
-        }
-        if (s_httpd) {
-            (void)httpd_sess_trigger_close(s_httpd, current_fd);
-        }
+        close_active_session(current_fd);
         return ESP_FAIL;
     }
 
@@ -928,10 +919,7 @@ static void auth_timeout_task(void *arg)
             .len = strlen("auth timeout"),
         };
         (void)httpd_ws_send_data(s_httpd, fd, &reply);
-        s_active_fd = -1;
-        s_use_envelope = false;
-        s_auth_challenge[0] = '\0';
-        s_auth_generation++;
+        clear_active_session_state();
         (void)httpd_sess_trigger_close(s_httpd, fd);
     }
     vTaskDelete(NULL);
