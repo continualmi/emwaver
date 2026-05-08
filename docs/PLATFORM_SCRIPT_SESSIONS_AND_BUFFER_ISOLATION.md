@@ -196,6 +196,7 @@ Current first step:
 - iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - iOS now tracks the live script target as one `ActiveDeviceTarget` descriptor, so CoreMIDI receive routing and targeted script APIs share the same active transport/session identity.
 - iOS USB MIDI and BLE connection values now receive the same registry-owned `TransportDeviceSession` selected for the active target, so the shared connection protocol owns the live script-facing session instead of a parallel session object.
+- iOS now keeps the active connection behind the shared `TransportDeviceConnection` protocol for script target identity, reducing manager dependence on concrete USB MIDI/BLE connection values.
 - iOS has an `ActiveDeviceTargetTests` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
@@ -275,6 +276,7 @@ Remaining isolation work:
 - [x] iOS has a shared transport device-session protocol used by the current USB MIDI/BLE manager.
 - [x] iOS USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `TransportDeviceConnection` protocol that exposes session identity, display name, and a transport-owned `TransportDeviceSession`.
 - [x] iOS USB MIDI and BLE connection values are wired to the registry-owned `TransportDeviceSession` selected for the active script target.
+- [x] iOS active script target identity is read through the shared `TransportDeviceConnection` protocol.
 - [x] iOS USB MIDI live endpoint handles are grouped behind a transport-owned connection value.
 - [x] iOS BLE live handles are grouped behind transport-owned pending/connected values.
 - [x] iOS BLE scan state is grouped behind a transport-owned scan session.
