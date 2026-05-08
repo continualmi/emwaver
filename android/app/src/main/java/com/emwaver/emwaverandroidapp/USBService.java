@@ -124,6 +124,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
     private volatile UsbDevice connectedMidiUsbDevice = null;
+    private volatile String connectedBleDeviceLabel = null;
 
     // SysEx receive accumulator (raw MIDI bytes)
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
@@ -477,6 +478,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 closeBleLocked();
                 midiDevice = device;
                 connectedMidiUsbDevice = usbDevice;
+                connectedBleDeviceLabel = null;
                 midiIn = midiDevice.openInputPort(0);
                 midiOut = midiDevice.openOutputPort(0);
                 if (midiOut != null) {
@@ -585,6 +587,7 @@ public class USBService extends Service implements DeviceConnectionService {
         midiIn = null;
         midiDevice = null;
         connectedMidiUsbDevice = null;
+        connectedBleDeviceLabel = null;
         if (activeTransport == ActiveTransport.USB) {
             activeTransport = ActiveTransport.NONE;
         }
@@ -667,6 +670,7 @@ public class USBService extends Service implements DeviceConnectionService {
         bleGatt = null;
         bleCommandCharacteristic = null;
         bleConnected = false;
+        connectedBleDeviceLabel = null;
         if (activeTransport == ActiveTransport.BLE) {
             activeTransport = ActiveTransport.NONE;
         }
@@ -705,6 +709,9 @@ public class USBService extends Service implements DeviceConnectionService {
             stopBleScan();
             synchronized (bleLock) {
                 closeBleLocked();
+                connectedBleDeviceLabel = name != null && !name.trim().isEmpty()
+                        ? name.trim()
+                        : device.getAddress();
                 bleGatt = device.connectGatt(USBService.this, false, bleGattCallback, BluetoothDevice.TRANSPORT_LE);
             }
             Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
@@ -1074,9 +1081,31 @@ public class USBService extends Service implements DeviceConnectionService {
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
-            return activeTransport == ActiveTransport.BLE ? "Connected (BLE)" : "Connected (USB)";
+            if (activeTransport == ActiveTransport.BLE) {
+                String label = connectedBleDeviceLabel;
+                return label == null || label.trim().isEmpty()
+                        ? "Connected (BLE)"
+                        : "Connected (BLE: " + label.trim() + ")";
+            }
+            String label = usbDeviceDisplayName(connectedMidiUsbDevice);
+            return label == null || label.trim().isEmpty()
+                    ? "Connected (USB)"
+                    : "Connected (USB: " + label.trim() + ")";
         }
         return "Not connected";
+    }
+
+    private static String usbDeviceDisplayName(@Nullable UsbDevice device) {
+        if (device == null) return null;
+        String product = device.getProductName();
+        if (product != null && !product.trim().isEmpty()) {
+            return product.trim();
+        }
+        String name = device.getDeviceName();
+        if (name != null && !name.trim().isEmpty()) {
+            return name.trim();
+        }
+        return "USB " + device.getVendorId() + ":" + device.getProductId();
     }
 
     @Override

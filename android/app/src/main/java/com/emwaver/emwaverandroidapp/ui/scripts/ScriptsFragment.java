@@ -142,6 +142,7 @@ public class ScriptsFragment extends Fragment {
     private boolean showingEditor;
     private String runningScriptId;
     private String runningScriptName;
+    private String runningDeviceLabel;
     
     public boolean isShowingPreview() {
         return showingPreview;
@@ -638,7 +639,7 @@ public class ScriptsFragment extends Fragment {
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
                 boolean isRunning = TextUtils.equals(runningScriptId, scriptMetadata.getId());
                 if (isRunning) {
-                    statusView.setText("Running on active device");
+                    statusView.setText(runningStatusLabel());
                     statusView.setVisibility(View.VISIBLE);
                     stopButton.setVisibility(View.VISIBLE);
                     stopButton.setEnabled(true);
@@ -1920,6 +1921,7 @@ public class ScriptsFragment extends Fragment {
         }
         runningScriptId = currentScriptMetadata != null ? currentScriptMetadata.getId() : null;
         runningScriptName = currentScriptName;
+        runningDeviceLabel = currentDeviceLabel();
         isRenderingScript = true;
         activeScriptTree = null;
         showingPreview = true;
@@ -2058,8 +2060,26 @@ public class ScriptsFragment extends Fragment {
         }
         runningScriptId = null;
         runningScriptName = null;
+        runningDeviceLabel = null;
         exitPreview();
         refreshScriptList();
+    }
+
+    private String runningStatusLabel() {
+        if (!TextUtils.isEmpty(runningDeviceLabel)) {
+            return "Running on " + runningDeviceLabel;
+        }
+        return "Running on active device";
+    }
+
+    private String currentDeviceLabel() {
+        if (scriptDeviceConnection != null) {
+            String status = scriptDeviceConnection.connectionStatus();
+            if (!TextUtils.isEmpty(status) && !"Not connected".equalsIgnoreCase(status)) {
+                return status;
+            }
+        }
+        return "active device";
     }
 
     private void updateViewMode() {

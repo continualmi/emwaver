@@ -60,6 +60,7 @@ Remaining isolation work:
 Current first step:
 
 - script rows show "Running on active device" for the current run,
+- Android now captures the active USB/BLE connection label when a script starts and shows that label in the running script row when available.
 - the running row has a stop button,
 - leaving preview can keep the run visible in the list rather than making the list look idle.
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
