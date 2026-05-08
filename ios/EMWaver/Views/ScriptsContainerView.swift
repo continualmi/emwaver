@@ -22,7 +22,7 @@ protocol IOSTargetedScriptDeviceBase: AnyObject {
 extension USBManager: IOSTargetedScriptDeviceBase {}
 
 @MainActor
-final class IOSTargetedScriptDevice: ScriptDevice {
+final class IOSTargetedScriptDevice: @preconcurrency ScriptDevice {
     private weak var base: IOSTargetedScriptDeviceBase?
     private let deviceId: String
 
