@@ -78,7 +78,7 @@ Transport behavior:
 - The setup surface can query the ESP32-S3 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, and authenticated state for local diagnostics.
 - When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.
 - Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
-- Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local timeout are disconnected with a specific authentication-timeout error.
+- Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local or firmware timeout are disconnected with a specific authentication-timeout error.
 - Manual Wi-Fi pairing records are rolled back if authentication fails, times out, or disconnects before `auth ok`, so a bad temporary secret does not replace the last good local pairing.
 - Successful Wi-Fi authentication refreshes the local paired-device `lastSeen` timestamp so manual fallback records do not stay stale after real LAN/VPN use.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.

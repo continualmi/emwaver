@@ -421,6 +421,15 @@ final class MacWiFiManager {
                                 self.disconnect(notify: true)
                             }
                         }
+                    } else if text.localizedCaseInsensitiveContains("auth") &&
+                                text.localizedCaseInsensitiveContains("timeout") {
+                        self.onError("Wi-Fi authentication timed out")
+                        self.queue.async {
+                            if self.socket === socket {
+                                self.rollbackPendingPairing()
+                                self.disconnect(notify: true)
+                            }
+                        }
                     } else if text.localizedCaseInsensitiveContains("busy") {
                         self.onError("Wi-Fi device is busy with another session")
                         self.queue.async {

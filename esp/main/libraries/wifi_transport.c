@@ -693,6 +693,14 @@ static void auth_timeout_task(void *arg)
     vTaskDelay(pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS));
     if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
         const int fd = s_active_fd;
+        httpd_ws_frame_t reply = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)"auth timeout",
+            .len = strlen("auth timeout"),
+        };
+        (void)httpd_ws_send_data(s_httpd, fd, &reply);
         s_active_fd = -1;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
