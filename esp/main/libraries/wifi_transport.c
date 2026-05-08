@@ -86,6 +86,7 @@ static bool auth_message_matches(const uint8_t *data, size_t len);
 static void generate_auth_challenge(void);
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
+static bool constant_time_equal(const char *a, const char *b, size_t len);
 static bool enqueue_sysex(const uint8_t *sysex);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
@@ -556,17 +557,20 @@ static bool auth_message_matches(const uint8_t *data, size_t len)
     }
     memcpy(json, data, copy_len);
 
+    char type[16] = {0};
     char challenge[65] = {0};
     char response[65] = {0};
     char expected[65] = {0};
-    if (!extract_json_string(json, "challenge", challenge, sizeof(challenge)) ||
+    if (!extract_json_string(json, "type", type, sizeof(type)) ||
+        strcmp(type, "auth") != 0 ||
+        !extract_json_string(json, "challenge", challenge, sizeof(challenge)) ||
         strcmp(challenge, s_auth_challenge) != 0 ||
         !extract_json_string(json, "response", response, sizeof(response)) ||
         !hmac_sha256_hex(s_config.secret, challenge, expected, sizeof(expected))) {
         return false;
     }
 
-    return strlen(response) == strlen(expected) && memcmp(response, expected, strlen(expected)) == 0;
+    return strlen(response) == strlen(expected) && constant_time_equal(response, expected, strlen(expected));
 }
 
 static void generate_auth_challenge(void)
@@ -636,6 +640,18 @@ static bool hmac_sha256_hex(const char *secret, const char *message, char *out, 
     }
     out[64] = '\0';
     return true;
+}
+
+static bool constant_time_equal(const char *a, const char *b, size_t len)
+{
+    if (!a || !b) {
+        return false;
+    }
+    uint8_t diff = 0;
+    for (size_t i = 0; i < len; ++i) {
+        diff |= (uint8_t)(a[i] ^ b[i]);
+    }
+    return diff == 0;
 }
 
 static bool enqueue_sysex(const uint8_t *sysex)
