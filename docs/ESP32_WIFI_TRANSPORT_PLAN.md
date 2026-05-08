@@ -194,9 +194,9 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - frame kind,
   - sequence id,
   - payload bytes.
-- Current firmware/macOS v1 shape: binary frames start with `EMW`, envelope version `1`, frame kind, little-endian sequence id, one reserved byte, little-endian payload length, then payload bytes. Frame kind `1` carries the existing 48-byte EMWaver SysEx packet. Enveloped command responses echo the request sequence id for basic request/response correlation.
+- Current firmware/macOS v1 shape: binary frames start with `EMW`, envelope version `1`, frame kind, little-endian sequence id, one reserved byte, little-endian payload length, then payload bytes. Frame kind `1` carries the existing 48-byte EMWaver SysEx packet. Enveloped command responses echo the request sequence id, and the macOS Wi-Fi command path waits for the matching response sequence before completing a synchronous command.
 - Carry the existing EMWaver command payload inside the envelope.
-- Add request/response correlation and timeout handling.
+- Add request/response correlation and timeout handling. The first macOS slice correlates synchronous command responses by echoed envelope sequence id.
 - Add streaming support for sampler/retransmit status without blocking command responses.
 
 ### Phase 4: Discovery
@@ -347,7 +347,7 @@ Resolved v1 decisions:
 - Use fixed control port `3922`.
 - Advertise service type `_emwaver._tcp`.
 - Use WebSocket at `/v1/ws`.
-- Use authenticated binary envelope version `1` for new clients while keeping raw 48-byte SysEx binary frames as a compatibility path during the transition; echo request sequence ids on command responses.
+- Use authenticated binary envelope version `1` for new clients while keeping raw 48-byte SysEx binary frames as a compatibility path during the transition; echo request sequence ids on command responses and match them in the macOS command path.
 - Use USB and BLE provisioning where platform APIs allow it.
 - Support multiple ESP32 boards on the same LAN by opening one WebSocket per selected endpoint; no per-device port allocation.
 

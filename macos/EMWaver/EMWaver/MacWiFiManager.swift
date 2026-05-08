@@ -72,7 +72,13 @@ final class MacWiFiManager {
     private var pendingAuthRecord: MacWiFiDeviceRecord?
     private var authTimeoutWorkItem: DispatchWorkItem?
     private var pendingPairingRollback: (id: String, previous: PairedWiFiDevice?)?
+    private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var txSequence: UInt16 = 0
+
+    private final class PendingResponse {
+        let semaphore = DispatchSemaphore(value: 0)
+        var payload: Data?
+    }
 
     init(
         onDevicesChanged: @escaping ([MacWiFiDeviceRecord]) -> Void,
@@ -274,13 +280,55 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
-            let frame = self.makeEnvelope(kind: 1, payload: data)
+            let frame = self.makeEnvelope(kind: 1, sequence: self.nextSequence(), payload: data)
             socket.send(.data(frame)) { [weak self] error in
                 if let error {
                     self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
                 }
             }
         }
+    }
+
+    func sendCommand(_ data: Data, timeout: Int) -> Data? {
+        guard isConnected else {
+            onError("Wi-Fi write failed: Not connected")
+            return nil
+        }
+
+        let pending = PendingResponse()
+        let sequence = queue.sync {
+            let sequence = self.nextSequence()
+            self.pendingResponses[sequence] = pending
+            return sequence
+        }
+
+        queue.async {
+            guard let socket = self.socket else {
+                self.pendingResponses.removeValue(forKey: sequence)
+                self.onError("Wi-Fi write failed: Not connected")
+                pending.semaphore.signal()
+                return
+            }
+            let frame = self.makeEnvelope(kind: 1, sequence: sequence, payload: data)
+            socket.send(.data(frame)) { [weak self] error in
+                if let error {
+                    self?.queue.async {
+                        self?.pendingResponses.removeValue(forKey: sequence)
+                        self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
+                        pending.semaphore.signal()
+                    }
+                }
+            }
+        }
+
+        let waitResult = pending.semaphore.wait(timeout: .now() + .milliseconds(max(1, timeout)))
+        if waitResult == .timedOut {
+            queue.async {
+                self.pendingResponses.removeValue(forKey: sequence)
+            }
+            return nil
+        }
+        return pending.payload
     }
 
     func disconnect() {
@@ -300,6 +348,7 @@ final class MacWiFiManager {
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
+        failPendingResponses()
         txSequence = 0
         pendingAuthSecret = nil
         pendingAuthRecord = nil
@@ -392,6 +441,9 @@ final class MacWiFiManager {
                 switch message {
                 case .data(let data):
                     if let envelope = Self.unwrapEnvelope(data) {
+                        if self.completePendingResponse(sequence: envelope.sequence, payload: envelope.payload) {
+                            break
+                        }
                         self.onData(envelope.payload, self.connectedDeviceID)
                     } else {
                         self.onData(data, self.connectedDeviceID)
@@ -471,6 +523,25 @@ final class MacWiFiManager {
         }
     }
 
+    private func completePendingResponse(sequence: UInt16, payload: Data) -> Bool {
+        var pending: PendingResponse?
+        queue.sync {
+            pending = pendingResponses.removeValue(forKey: sequence)
+        }
+        guard let pending else { return false }
+        pending.payload = payload
+        pending.semaphore.signal()
+        return true
+    }
+
+    private func failPendingResponses() {
+        let pending = pendingResponses.values
+        pendingResponses.removeAll()
+        for response in pending {
+            response.semaphore.signal()
+        }
+    }
+
     private func rollbackPendingPairing() {
         guard let rollback = pendingPairingRollback else { return }
         if let previous = rollback.previous {
@@ -496,17 +567,22 @@ final class MacWiFiManager {
         onDevicesChanged(Array(discoveredDevicesByID.values).sorted { $0.displayName < $1.displayName })
     }
 
-    private func makeEnvelope(kind: UInt8, payload: Data) -> Data {
+    private func nextSequence() -> UInt16 {
+        let sequence = txSequence
+        txSequence &+= 1
+        return sequence
+    }
+
+    private func makeEnvelope(kind: UInt8, sequence: UInt16, payload: Data) -> Data {
         var frame = Data()
         frame.reserveCapacity(10 + payload.count)
         frame.append(contentsOf: [0x45, 0x4d, 0x57, 0x01, kind])
-        frame.append(UInt8(txSequence & 0xff))
-        frame.append(UInt8((txSequence >> 8) & 0xff))
+        frame.append(UInt8(sequence & 0xff))
+        frame.append(UInt8((sequence >> 8) & 0xff))
         frame.append(0)
         frame.append(UInt8(payload.count & 0xff))
         frame.append(UInt8((payload.count >> 8) & 0xff))
         frame.append(payload)
-        txSequence &+= 1
         return frame
     }
 

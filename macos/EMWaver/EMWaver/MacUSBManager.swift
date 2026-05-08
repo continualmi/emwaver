@@ -681,6 +681,44 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return nil
         }
 
+        let targetID = resolvedTransportID(for: deviceID)
+        if targetID?.hasPrefix("wifi:") == true || (targetID == nil && activeTransport == .wifi) {
+            guard wifiManager?.isConnected == true else {
+                setError("Wi-Fi write failed: Not connected")
+                return nil
+            }
+            guard let packet = Self.makePacket(command) else {
+                setError("Cannot send command: too large (\(command.count) bytes, max \(Self.laneSizeBytes))")
+                return nil
+            }
+
+            session.trackCommand(
+                command,
+                sampleOpcode: EmwOpcode.sample,
+                sampleStart: EmwOpcode.sampleStart,
+                sampleStop: EmwOpcode.sampleStop
+            )
+
+            let superframe = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
+            guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else {
+                setError("SysEx encode failed")
+                return nil
+            }
+            guard let responseSysex = wifiManager?.sendCommand(sysex, timeout: timeout) else {
+                return nil
+            }
+            session.handleMidiBytes(responseSysex, laneSizeBytes: Self.laneSizeBytes, superframeSizeBytes: Self.superframeSizeBytes)
+            guard let responseSuperframe = UsbMidiSysex.decodeSysexToSuperframe(responseSysex),
+                  responseSuperframe.count >= Self.laneSizeBytes else {
+                return nil
+            }
+            let responseLane = responseSuperframe.subdata(in: 0..<Self.laneSizeBytes)
+            if let responsePredicate, !responsePredicate(responseLane) {
+                return nil
+            }
+            return responseLane
+        }
+
         return session.performCommand(timeout: timeout, responsePredicate: responsePredicate) {
             self.withMidiQueueSync {
                 self.sendPacketNow(command, deviceID: deviceID)
