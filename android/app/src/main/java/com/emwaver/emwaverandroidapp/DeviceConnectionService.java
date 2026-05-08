@@ -33,6 +33,10 @@ public interface DeviceConnectionService {
      * @return Response bytes, or null if timeout or error
      */
     byte[] sendCommand(byte[] command, int timeout);
+
+    default byte[] sendCommand(byte[] command, int timeout, String deviceId) {
+        return sendCommand(command, timeout);
+    }
     
     /**
      * Send a packet to the device (fire and forget)
@@ -55,24 +59,44 @@ public interface DeviceConnectionService {
      * Clear the receive buffer
      */
     void clearBuffer();
+
+    default void clearBuffer(String deviceId) {
+        clearBuffer();
+    }
     
     /**
      * Get the current buffer length
      * @return Buffer length in bytes
      */
     int getBufferLength();
+
+    default int getBufferLength(String deviceId) {
+        return getBufferLength();
+    }
     
     /**
      * Load data into the buffer
      * @param data Data to load
      */
     void loadBuffer(byte[] data);
+
+    default void loadBuffer(byte[] data, String deviceId) {
+        loadBuffer(data);
+    }
     
     /**
      * Get the current buffer contents
      * @return Buffer contents as byte array
      */
     byte[] getBuffer();
+
+    default byte[] getBuffer(String deviceId) {
+        return getBuffer();
+    }
+
+    default String currentScriptDeviceId() {
+        return "active";
+    }
     
     /**
      * Compress data bits for sampler visualization

@@ -118,7 +118,7 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (bufferSessionLock) {
             TransportDeviceSession session = bufferSessionsByDeviceId.get(key);
             if (session == null) {
-                session = new DeviceBufferSession();
+                session = new DeviceBufferSession(key);
                 bufferSessionsByDeviceId.put(key, session);
             }
             return session;
@@ -146,20 +146,45 @@ public class USBService extends Service implements DeviceConnectionService {
         return activeBufferSession().compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
+    @Override
+    public String currentScriptDeviceId() {
+        return activeBufferSession().deviceId();
+    }
+
     public void clearBuffer() {
         activeBufferSession().clearAll();
+    }
+
+    @Override
+    public void clearBuffer(String deviceId) {
+        bufferSession(deviceId).clearAll();
     }
 
     public int getBufferLength() {
         return activeBufferSession().getBufferLength();
     }
 
+    @Override
+    public int getBufferLength(String deviceId) {
+        return bufferSession(deviceId).getBufferLength();
+    }
+
     public void loadBuffer(byte[] data) {
         activeBufferSession().loadBuffer(data);
     }
 
+    @Override
+    public void loadBuffer(byte[] data, String deviceId) {
+        bufferSession(deviceId).loadBuffer(data);
+    }
+
     public byte[] getBuffer() {
         return activeBufferSession().getBuffer();
+    }
+
+    @Override
+    public byte[] getBuffer(String deviceId) {
+        return bufferSession(deviceId).getBuffer();
     }
 
     private void logTx(byte[] data) {
@@ -744,11 +769,16 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public byte[] sendCommand(byte[] command, int timeout) {
+        return sendCommand(command, timeout, activeBufferSession().deviceId());
+    }
+
+    @Override
+    public byte[] sendCommand(byte[] command, int timeout, String deviceId) {
         if (command == null) {
             return null;
         }
 
-        TransportDeviceSession bufferSession = activeBufferSession();
+        TransportDeviceSession bufferSession = bufferSession(deviceId);
         bufferSession.prepareCommandResponseWait();
 
         // This calls write(), which sends on cmd lane.

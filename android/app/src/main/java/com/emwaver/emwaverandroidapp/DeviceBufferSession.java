@@ -23,6 +23,20 @@ final class DeviceBufferSession implements TransportDeviceSession {
     private boolean samplerStreamingActive = false;
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
     private boolean inSysex = false;
+    private final String deviceId;
+
+    DeviceBufferSession() {
+        this("active");
+    }
+
+    DeviceBufferSession(String deviceId) {
+        this.deviceId = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
+    }
+
+    @Override
+    public String deviceId() {
+        return deviceId;
+    }
 
     @Override
     public synchronized void clearAll() {

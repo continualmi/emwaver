@@ -7,6 +7,7 @@
 package com.emwaver.emwaverandroidapp;
 
 interface TransportDeviceSession {
+    String deviceId();
     void clearAll();
     int getBufferLength();
     void loadBuffer(byte[] data);
