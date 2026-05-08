@@ -6,7 +6,7 @@ export type RemoteDeviceStatus = {
   hostSessionId?: string;
   connected: boolean;
   runtimeOwner?: string;
-  devices?: Array<{ id?: string; name?: string; transport?: string; boardType?: string; connected?: boolean; isActive?: boolean }>;
+  devices?: Array<{ id?: string; name?: string; transport?: string; boardType?: string; endpoint?: string; connected?: boolean; isActive?: boolean }>;
 };
 
 export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null; deviceId?: string | null };

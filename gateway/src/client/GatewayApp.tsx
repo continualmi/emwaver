@@ -46,6 +46,17 @@ function runtimeLabel(runtimeOwner?: string) {
   return "Local Runtime";
 }
 
+function deviceDetail(device: NonNullable<RemoteDeviceStatus["devices"]>[number], runtimeOwner?: string) {
+  const parts = [
+    device.connected ? "connected" : "available",
+    device.transport,
+    device.boardType,
+    device.endpoint,
+    runtimeLabel(runtimeOwner),
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
 function summarizeUiNode(node: RemoteUiNode | null, depth = 0): unknown {
   if (!node || depth > 3) return null;
   return {
@@ -832,7 +843,7 @@ function RuntimePanel(props: {
                   {device.name || device.id || runtimeLabel(deviceStatus.runtimeOwner)}
                 </div>
                 <div className="text-[11px] text-[color:var(--ink-dim)]">
-                  {device.connected ? "connected" : "available"} · {runtimeLabel(deviceStatus.runtimeOwner)}
+                  {deviceDetail(device, deviceStatus.runtimeOwner)}
                 </div>
               </li>
             ))}

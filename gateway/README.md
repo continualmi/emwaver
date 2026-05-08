@@ -98,7 +98,7 @@ native app role=app
   then offline
 ```
 
-This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway. The browser UI can also request `POST /v1/daemon/start`, which runs the existing CLI daemon start path for the current gateway port. The runtime panel can start the default daemon or pass a manual ESP32 Wi-Fi host/IP, port, and pairing secret for networks where mDNS does not cross LAN or user-owned VPN boundaries. Set `EMWAVER_CLI_BIN` to point at an installed CLI binary; in repo development it defaults to `daemon/dev`. Additional daemon flags can be supplied through `EMWAVER_GATEWAY_DAEMON_ARGS`, for example `--ble`, `--sim-device`, or `--wifi <host-or-ip> --wifi-secret <local-secret>`.
+This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway. The browser UI can also request `POST /v1/daemon/start`, which runs the existing CLI daemon start path for the current gateway port. The runtime panel can start the default daemon or pass a manual ESP32 Wi-Fi host/IP, port, and pairing secret for networks where mDNS does not cross LAN or user-owned VPN boundaries. When a daemon is connected, the runtime panel displays the daemon's selected transport plus best-effort `_emwaver._tcp` Wi-Fi discoveries reported by daemon `device.status`. Set `EMWAVER_CLI_BIN` to point at an installed CLI binary; in repo development it defaults to `daemon/dev`. Additional daemon flags can be supplied through `EMWAVER_GATEWAY_DAEMON_ARGS`, for example `--ble`, `--sim-device`, or `--wifi <host-or-ip> --wifi-secret <local-secret>`.
 
 ## Security Model
 

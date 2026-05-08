@@ -17,6 +17,16 @@ use tracing::info;
 use tungstenite::{connect, stream::MaybeTlsStream, Message};
 use url::Url;
 
+#[derive(Clone)]
+struct DaemonTransportStatus {
+    device_id: Option<String>,
+    ble: bool,
+    wifi: Option<String>,
+    wifi_port: u16,
+    no_device: bool,
+    sim_device: bool,
+}
+
 #[derive(Parser, Debug)]
 #[command(name = "emwaver", about = "EMWaver headless host daemon CLI (beta)")]
 struct Cli {
@@ -1601,6 +1611,14 @@ fn daemon_serve(
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
+    let transport_status = DaemonTransportStatus {
+        device_id: device_id.clone(),
+        ble,
+        wifi: wifi.clone(),
+        wifi_port,
+        no_device,
+        sim_device,
+    };
     let bridge = make_command_bridge(
         device_id,
         ble,
@@ -1614,7 +1632,12 @@ fn daemon_serve(
 
     println!("daemon host connecting to {url}");
     loop {
-        match daemon_host_session(url.as_str(), &bootstrap, bridge.clone()) {
+        match daemon_host_session(
+            url.as_str(),
+            &bootstrap,
+            bridge.clone(),
+            transport_status.clone(),
+        ) {
             Ok(()) => println!("gateway session ended; reconnecting"),
             Err(err) => println!("gateway session failed: {err:#}; reconnecting"),
         }
@@ -1622,7 +1645,12 @@ fn daemon_serve(
     }
 }
 
-fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge>) -> Result<()> {
+fn daemon_host_session(
+    url: &str,
+    bootstrap: &str,
+    bridge: Arc<dyn CommandBridge>,
+    transport_status: DaemonTransportStatus,
+) -> Result<()> {
     let (mut ws, _response) =
         connect(url).with_context(|| format!("failed to connect to local gateway at {url}"))?;
     if let MaybeTlsStream::Plain(stream) = ws.get_mut() {
@@ -1641,7 +1669,7 @@ fn daemon_host_session(url: &str, bootstrap: &str, bridge: Arc<dyn CommandBridge
     ))
     .context("failed to send daemon host hello")?;
 
-    send_host_device_status(&mut ws, true)?;
+    send_host_device_status(&mut ws, true, &transport_status)?;
 
     let mut active_engine: Option<Engine> = None;
     let mut active_script_id: Option<String> = None;
@@ -1797,6 +1825,7 @@ fn pump_engine_timers(
 fn send_host_device_status(
     ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
     connected: bool,
+    transport_status: &DaemonTransportStatus,
 ) -> Result<()> {
     ws.send(Message::Text(
         serde_json::json!({
@@ -1804,15 +1833,103 @@ fn send_host_device_status(
             "hostSessionId": "local",
             "connected": connected,
             "runtimeOwner": "emwaver-daemon",
-            "devices": [{
-                "id": "local-daemon",
-                "name": "EMWaver daemon",
-                "connected": connected,
-            }],
+            "devices": daemon_status_devices(connected, transport_status),
         })
         .to_string(),
     ))?;
     Ok(())
+}
+
+fn daemon_status_devices(
+    connected: bool,
+    transport_status: &DaemonTransportStatus,
+) -> Vec<serde_json::Value> {
+    let mut devices = vec![selected_daemon_device(connected, transport_status)];
+    let selected_id = devices
+        .first()
+        .and_then(|device| device.get("id"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+
+    if !transport_status.no_device && !transport_status.sim_device {
+        if let Ok(wifi_devices) = list_wifi_devices(750) {
+            for device in wifi_devices {
+                let id = format!("wifi:{}:{}", device.host, device.port);
+                if selected_id.as_deref() == Some(id.as_str()) {
+                    continue;
+                }
+                let board = device
+                    .txt
+                    .get("board")
+                    .cloned()
+                    .unwrap_or_else(|| "esp32".to_string());
+                devices.push(serde_json::json!({
+                    "id": id,
+                    "name": device.name,
+                    "transport": "Wi-Fi",
+                    "boardType": board,
+                    "connected": false,
+                    "endpoint": format!("{}:{}", device.host, device.port),
+                }));
+            }
+        }
+    }
+
+    devices
+}
+
+fn selected_daemon_device(
+    connected: bool,
+    transport_status: &DaemonTransportStatus,
+) -> serde_json::Value {
+    if transport_status.no_device {
+        return serde_json::json!({
+            "id": "local-daemon-no-device",
+            "name": "Daemon hardware disabled",
+            "transport": "None",
+            "connected": connected,
+        });
+    }
+    if transport_status.sim_device {
+        return serde_json::json!({
+            "id": "local-daemon-sim",
+            "name": "EMWaver simulator",
+            "transport": "Simulator",
+            "boardType": "sim",
+            "connected": connected,
+        });
+    }
+    if transport_status.ble {
+        return serde_json::json!({
+            "id": "ble:auto",
+            "name": "ESP32 BLE",
+            "transport": "BLE",
+            "boardType": "esp32s3",
+            "connected": connected,
+        });
+    }
+    if let Some(host) = transport_status.wifi.as_deref() {
+        return serde_json::json!({
+            "id": format!("wifi:{host}:{}", transport_status.wifi_port),
+            "name": format!("ESP32 Wi-Fi {host}:{}", transport_status.wifi_port),
+            "transport": "Wi-Fi",
+            "boardType": "esp32",
+            "connected": connected,
+            "endpoint": format!("{host}:{}", transport_status.wifi_port),
+        });
+    }
+
+    let selected_id = transport_status
+        .device_id
+        .as_deref()
+        .unwrap_or("auto")
+        .to_string();
+    serde_json::json!({
+        "id": format!("midi:{selected_id}"),
+        "name": if selected_id == "auto" { "USB MIDI auto".to_string() } else { format!("USB MIDI {selected_id}") },
+        "transport": "USB",
+        "connected": connected,
+    })
 }
 
 fn send_ui_snapshot(
