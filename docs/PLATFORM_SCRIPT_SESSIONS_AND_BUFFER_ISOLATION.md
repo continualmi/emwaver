@@ -68,13 +68,14 @@ Current first step:
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
 - Android USB and BLE connections now select keyed buffer sessions, matching the Windows/macOS direction even though only one transport session is active at a time today.
 - Android script sampler packet APIs now use the active bridge packet size instead of assuming 64-byte packets.
+- Android sampler stream lane policy state now lives on the active `DeviceBufferSession` instead of singleton fields on `USBService`.
 
 Remaining isolation work:
 
 - replace `USBService`'s process-wide `NativeBuffer` usage with a per-device session store,
 - extend `DeviceConnectionService` / `ScriptDeviceBridge` with target-device routing,
 - bind each script run to a target service/session,
-- keep sampler stream state and command response state scoped to that target session.
+- keep command response state scoped to that target session.
 - split USB, BLE, and future Wi-Fi connection code into transport-specific services that expose the same session contract.
 
 ## iOS direction
@@ -112,6 +113,7 @@ Remaining isolation work:
 - [x] Windows scopes command response wait state to the active transport buffer session.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
+- [x] Android scopes sampler stream state to the active transport buffer session.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS scopes sampler stream state to the active transport buffer session.

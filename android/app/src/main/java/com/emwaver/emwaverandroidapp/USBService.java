@@ -73,11 +73,6 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_OP_ENTER_DFU = 0x06;
     private static final int EMW_OP_BOARD_GET = 0x09;
 
-    // Sampler opcodes.
-    private static final int EMW_OP_SAMPLE = 0x60;
-    private static final int EMW_SAMPLE_START = 0x00;
-    private static final int EMW_SAMPLE_STOP = 0x01;
-
     private static final UUID EMW_BLE_SERVICE_UUID = UUID.fromString("45C7158E-0C3B-4E90-A847-452A15B14191");
     private static final UUID EMW_BLE_COMMAND_UUID = UUID.fromString("46C7158E-0C3B-4E90-A847-452A15B14191");
     private static final UUID EMW_BLE_NOTIFY_UUID = UUID.fromString("47C7158E-0C3B-4E90-A847-452A15B14191");
@@ -117,9 +112,6 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile boolean bleConnected = false;
     private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
-
-    // Keep all-zero stream lanes while sampler stream mode is active.
-    private volatile boolean isSamplerStreamingActive = false;
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
@@ -211,19 +203,7 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private void updateSamplerStreamingState(byte[] lane) {
-        if (lane == null || lane.length < 2) {
-            return;
-        }
-        int opcode = lane[0] & 0xFF;
-        if (opcode != EMW_OP_SAMPLE) {
-            return;
-        }
-        int sub = lane[1] & 0xFF;
-        if (sub == EMW_SAMPLE_START) {
-            isSamplerStreamingActive = true;
-        } else if (sub == EMW_SAMPLE_STOP) {
-            isSamplerStreamingActive = false;
-        }
+        activeBufferSession().updateSamplerStreamingState(lane);
     }
 
     private void writeFrame(byte[] cmdLane18, byte[] streamLane18) {
@@ -433,7 +413,8 @@ public class USBService extends Service implements DeviceConnectionService {
                     if (!isLaneEmpty(cmdLane)) {
                         storeBulkPkt(cmdLane, tsMs);
                     }
-                    if (!isLaneEmpty(streamLane) || isSamplerStreamingActive) {
+                    DeviceBufferSession bufferSession = activeBufferSession();
+                    if (bufferSession.shouldStoreStreamLane(streamLane)) {
                         storeBulkPkt(streamLane, tsMs);
                     }
                 }
@@ -593,7 +574,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
         connectedBoardType = null;
         deviceFirmwareVersion = null;
-        isSamplerStreamingActive = false;
+        activeBufferSession().resetSamplerStreaming();
     }
 
     private boolean hasBlePermission() {

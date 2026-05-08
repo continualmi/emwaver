@@ -10,12 +10,16 @@ import java.util.Arrays;
 
 final class DeviceBufferSession {
     private static final int PACKET_SIZE_BYTES = 18;
+    private static final int EMW_OP_SAMPLE = 0x60;
+    private static final int EMW_SAMPLE_START = 0x00;
+    private static final int EMW_SAMPLE_STOP = 0x01;
 
     private byte[] rxBytes = new byte[0];
     private long[] rxTsMs = new long[0];
     private long rxCounter = 0;
     private byte[] txBytes = new byte[0];
     private long[] txTsMs = new long[0];
+    private boolean samplerStreamingActive = false;
 
     synchronized void clearAll() {
         rxBytes = new byte[0];
@@ -23,6 +27,7 @@ final class DeviceBufferSession {
         rxCounter = 0;
         txBytes = new byte[0];
         txTsMs = new long[0];
+        samplerStreamingActive = false;
     }
 
     synchronized int getBufferLength() {
@@ -62,6 +67,30 @@ final class DeviceBufferSession {
             txBytes = appendBytes(txBytes, pkt);
             txTsMs = appendRepeated(txTsMs, tsMs, 1);
         }
+    }
+
+    synchronized void updateSamplerStreamingState(byte[] lane) {
+        if (lane == null || lane.length < 2) {
+            return;
+        }
+        int opcode = lane[0] & 0xFF;
+        if (opcode != EMW_OP_SAMPLE) {
+            return;
+        }
+        int sub = lane[1] & 0xFF;
+        if (sub == EMW_SAMPLE_START) {
+            samplerStreamingActive = true;
+        } else if (sub == EMW_SAMPLE_STOP) {
+            samplerStreamingActive = false;
+        }
+    }
+
+    synchronized boolean shouldStoreStreamLane(byte[] streamLane) {
+        return !isLaneEmpty(streamLane) || samplerStreamingActive;
+    }
+
+    synchronized void resetSamplerStreaming() {
+        samplerStreamingActive = false;
     }
 
     synchronized long getRxPacketCount() {
@@ -201,5 +230,13 @@ final class DeviceBufferSession {
         long[] out = Arrays.copyOf(a, a.length + count);
         for (int i = 0; i < count; i++) out[a.length + i] = value;
         return out;
+    }
+
+    private static boolean isLaneEmpty(byte[] lane) {
+        if (lane == null || lane.length == 0) return true;
+        for (byte b : lane) {
+            if (b != 0) return false;
+        }
+        return true;
     }
 }
