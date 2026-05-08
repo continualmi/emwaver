@@ -9,9 +9,11 @@ public sealed class ScriptSessionRegistryTests
     public void KeepsMultipleVisibleSessionsAndStopsOne()
     {
         var registry = new ScriptSessionRegistry();
+        var firstStops = 0;
+        var secondStops = 0;
 
-        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a");
-        var second = registry.Start("Beta", "USB B", "usb:b", "session-b");
+        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a", () => firstStops++);
+        var second = registry.Start("Beta", "USB B", "usb:b", "session-b", () => secondStops++);
 
         Assert.True(registry.HasSessions);
         Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
@@ -19,6 +21,8 @@ public sealed class ScriptSessionRegistryTests
 
         registry.Stop(first.InstanceId);
 
+        Assert.Equal(1, firstStops);
+        Assert.Equal(0, secondStops);
         Assert.Single(registry.Sessions);
         Assert.Equal(second.InstanceId, registry.SelectedSession?.InstanceId);
         Assert.Equal("usb:b", registry.SelectedSession?.DeviceId);
@@ -30,17 +34,37 @@ public sealed class ScriptSessionRegistryTests
     public void SelectedFallsBackToPreviousSessionAfterStop()
     {
         var registry = new ScriptSessionRegistry();
+        var firstStops = 0;
+        var secondStops = 0;
 
-        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a");
-        var second = registry.Start("Beta", "USB B", "usb:b", "session-b");
+        var first = registry.Start("Alpha", "USB A", "usb:a", "session-a", () => firstStops++);
+        var second = registry.Start("Beta", "USB B", "usb:b", "session-b", () => secondStops++);
 
         registry.Stop(second.InstanceId);
 
+        Assert.Equal(0, firstStops);
+        Assert.Equal(1, secondStops);
         Assert.Equal(first.InstanceId, registry.SelectedSession?.InstanceId);
 
         registry.StopSelected();
 
+        Assert.Equal(1, firstStops);
         Assert.False(registry.HasSessions);
         Assert.Null(registry.SelectedSession);
+    }
+
+    [Fact]
+    public void ClearStopsAllOwnedSessionRuntimes()
+    {
+        var registry = new ScriptSessionRegistry();
+        var stops = 0;
+
+        registry.Start("Alpha", "USB A", "usb:a", "session-a", () => stops++);
+        registry.Start("Beta", "USB B", "usb:b", "session-b", () => stops++);
+
+        registry.Clear();
+
+        Assert.Equal(2, stops);
+        Assert.False(registry.HasSessions);
     }
 }

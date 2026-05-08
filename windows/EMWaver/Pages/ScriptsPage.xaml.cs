@@ -813,7 +813,12 @@ public sealed partial class ScriptsPage : Page
         _scriptSessions.Clear();
         if (isRunning && !string.IsNullOrWhiteSpace(scriptName))
         {
-            _scriptSessions.Start(scriptName, ActiveDeviceLabel(), AppServices.Device.ActiveBufferSessionId);
+            _scriptSessions.Start(
+                scriptName,
+                ActiveDeviceLabel(),
+                AppServices.Device.ActiveBufferSessionId,
+                stopAction: _scriptEngine.Stop
+            );
         }
 
         _activeScriptDevice = CreateActiveScriptDevice(isRunning ? AppServices.Device.ActiveBufferSessionId : "active");
@@ -1599,7 +1604,6 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        _scriptEngine.Stop();
         if (string.IsNullOrWhiteSpace(sessionId))
         {
             _scriptSessions.StopSelected();

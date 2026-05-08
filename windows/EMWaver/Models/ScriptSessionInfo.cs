@@ -5,7 +5,8 @@ public sealed record ScriptSessionInfo(
     string DeviceId,
     string ScriptName,
     string DeviceLabel,
-    string StateText
+    string StateText,
+    Action StopAction
 )
 {
     public string FileName => ScriptName.EndsWith(".emw", System.StringComparison.OrdinalIgnoreCase)
@@ -13,4 +14,6 @@ public sealed record ScriptSessionInfo(
         : ScriptName + ".emw";
 
     public string StatusLabel => $"{StateText} on {DeviceLabel}";
+
+    public void Stop() => StopAction();
 }
