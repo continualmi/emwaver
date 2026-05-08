@@ -77,7 +77,7 @@ Remaining isolation work:
 
 - finish moving debug/monitor and transport helpers off the `NativeBufferRust` process-wide facade,
 - keep sampler stream state and capture buffers scoped to that device session.
-- split `WindowsDeviceManager` into USB MIDI, BLE, and future Wi-Fi transport units with a shared device/session contract.
+- continue reducing `WindowsDeviceManager` toward USB MIDI, BLE, and future Wi-Fi transport units with a shared device/session contract.
 
 ## Android direction
 
@@ -122,11 +122,11 @@ Current first step:
 Remaining isolation work:
 
 - keep remaining capture ownership scoped to the target session.
-- split USB, BLE, and future Wi-Fi connection code into transport-specific services that implement the same session contract.
+- continue reducing USB, BLE, and future Wi-Fi connection code into transport-specific services that implement the same session contract.
 
 ## iOS direction
 
-iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. Because iOS still has one singleton transport buffer, the current native path keeps one active visible local session and replaces that runtime without a stop-and-run prompt. Multi-device concurrency stays gated on target-scoped buffer state.
+iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. iOS now has keyed transport buffer sessions, but the current native path still keeps one active visible local session and replaces that runtime without a stop-and-run prompt. Multi-device concurrency stays gated on live multi-connection support and target-scoped script runtime ownership.
 
 Current first step:
 
@@ -160,9 +160,8 @@ Current first step:
 
 Remaining isolation work:
 
-- split `USBManager`'s single `NativeBufferRust` state into target-scoped sessions,
-- route remaining buffer APIs through the selected target session.
-- split `USBManager` into USB MIDI, BLE, and future Wi-Fi transport files that implement the same session contract.
+- continue routing any remaining legacy buffer helper usage through target-scoped sessions,
+- keep reducing `USBManager` into USB MIDI, BLE, and future Wi-Fi transport files that implement the same session contract.
 
 ## Acceptance checklist
 
@@ -225,9 +224,9 @@ Remaining isolation work:
 - [x] iOS BLE live handles are grouped behind transport-owned pending/connected values.
 - [x] iOS BLE scan state is grouped behind a transport-owned scan session.
 - [x] iOS BLE scan/connect/cancel mechanics are grouped behind transport helpers.
-- [ ] Windows has per-device host buffer/session state.
-- [ ] Android has per-device host buffer/session state.
-- [ ] iOS has per-device host buffer/session state.
+- [x] Windows has keyed per-device host buffer/session state.
+- [x] Android has keyed per-device host buffer/session state.
+- [x] iOS has keyed per-device host buffer/session state.
 - [ ] Windows USB/BLE/Wi-Fi transport code is split behind a shared session contract.
 - [ ] Android USB/BLE/Wi-Fi transport code is split behind a shared session contract.
 - [ ] iOS USB/BLE/Wi-Fi transport code is split behind a shared session contract.
