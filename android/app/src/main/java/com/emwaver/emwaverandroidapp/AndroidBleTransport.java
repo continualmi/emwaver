@@ -7,6 +7,9 @@
 package com.emwaver.emwaverandroidapp;
 
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCharacteristic;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
@@ -14,6 +17,8 @@ import java.util.Locale;
 import java.util.UUID;
 
 final class AndroidBleTransport {
+    private static final String TAG = "AndroidBleTransport";
+
     static final UUID SERVICE_UUID = UUID.fromString("45C7158E-0C3B-4E90-A847-452A15B14191");
     static final UUID COMMAND_UUID = UUID.fromString("46C7158E-0C3B-4E90-A847-452A15B14191");
     static final UUID NOTIFY_UUID = UUID.fromString("47C7158E-0C3B-4E90-A847-452A15B14191");
@@ -28,5 +33,23 @@ final class AndroidBleTransport {
 
     static boolean matchesAdvertisementName(@Nullable String name) {
         return name == null || name.toLowerCase(Locale.US).contains("emwaver");
+    }
+
+    static boolean writeSysex(
+            @Nullable BluetoothGatt gatt,
+            @Nullable BluetoothGattCharacteristic commandCharacteristic,
+            boolean connected,
+            byte[] sysex
+    ) {
+        if (gatt == null || commandCharacteristic == null || !connected || sysex == null) {
+            return false;
+        }
+        commandCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+        commandCharacteristic.setValue(sysex);
+        if (!gatt.writeCharacteristic(commandCharacteristic)) {
+            Log.e(TAG, "BLE writeCharacteristic returned false");
+            return false;
+        }
+        return true;
     }
 }

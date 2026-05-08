@@ -87,6 +87,7 @@ Current first step:
 - Android has a local `DeviceBufferSessionTest` covering RX/counter and sampler-stream state isolation across separate transport sessions.
 - Android USB MIDI and BLE receive callbacks now resolve the buffer session from the source device id before feeding SysEx data, removing one active-session contamination path in the live service.
 - Android `ScriptDeviceConnection` now captures the active device-session id when a script starts and routes script buffer reads/writes, transmit-buffer calls, raw writes, and command waits through that captured session.
+- Android USB MIDI send mechanics now live in `AndroidUsbMidiTransport`, and BLE characteristic write mechanics now live in `AndroidBleTransport`, reducing transport protocol code inside `USBService`.
 
 Remaining isolation work:
 

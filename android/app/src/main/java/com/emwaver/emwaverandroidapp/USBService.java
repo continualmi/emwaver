@@ -248,9 +248,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 Toast.makeText(this, "No USB device connected", Toast.LENGTH_SHORT).show();
                 return;
             }
-            try {
-                midiIn.send(sysex, 0, sysex.length, 0);
-
+            if (AndroidUsbMidiTransport.sendSysex(midiIn, sysex)) {
                 // Log non-empty lanes (buffer uses 18B packet size)
                 if (!isLaneEmpty(cmdLane18)) {
                     logTx(cmdLane18, bufferSession);
@@ -258,8 +256,6 @@ public class USBService extends Service implements DeviceConnectionService {
                 if (!isLaneEmpty(streamLane18)) {
                     logTx(streamLane18, bufferSession);
                 }
-            } catch (IOException e) {
-                Log.e(TAG, "Error writing USB packet", e);
             }
         }
     }
@@ -585,11 +581,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 Toast.makeText(this, "No BLE device connected", Toast.LENGTH_SHORT).show();
                 return;
             }
-            bleCommandCharacteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
-            bleCommandCharacteristic.setValue(sysex);
-            if (!bleGatt.writeCharacteristic(bleCommandCharacteristic)) {
-                Log.e(TAG, "BLE writeCharacteristic returned false");
-            }
+            AndroidBleTransport.writeSysex(bleGatt, bleCommandCharacteristic, bleConnected, sysex);
         }
     }
 

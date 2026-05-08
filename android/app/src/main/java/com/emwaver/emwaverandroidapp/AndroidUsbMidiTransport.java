@@ -8,12 +8,16 @@ package com.emwaver.emwaverandroidapp;
 
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
+import android.media.midi.MidiInputPort;
+import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import java.io.IOException;
 import java.util.Locale;
 
 final class AndroidUsbMidiTransport {
+    private static final String TAG = "AndroidUsbMidiTransport";
     private static final int EMW_USB_VENDOR_ID = 1155;   // 0x0483
     private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
 
@@ -74,6 +78,19 @@ final class AndroidUsbMidiTransport {
             return "esp32s3";
         }
         return "stm32f042";
+    }
+
+    static boolean sendSysex(@Nullable MidiInputPort midiIn, byte[] sysex) {
+        if (midiIn == null || sysex == null) {
+            return false;
+        }
+        try {
+            midiIn.send(sysex, 0, sysex.length, 0);
+            return true;
+        } catch (IOException e) {
+            Log.e(TAG, "Error writing USB packet", e);
+            return false;
+        }
     }
 
     private static boolean looksLikeMidi(UsbDevice device) {
