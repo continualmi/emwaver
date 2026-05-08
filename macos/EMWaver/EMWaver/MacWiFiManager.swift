@@ -137,8 +137,12 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi pairing secret is required")
                 return
             }
+            guard Self.isValidPort(port) else {
+                self.onError("Wi-Fi port must be between 1 and 65535")
+                return
+            }
 
-            let safePort = port > 0 ? port : Self.defaultPort
+            let safePort = port
             let id = Self.deviceID(host: trimmedHost, port: safePort)
             let record = MacWiFiDeviceRecord(
                 id: id,
@@ -174,7 +178,7 @@ final class MacWiFiManager {
         queue.async {
             guard !trimmedHost.isEmpty, !trimmedSecret.isEmpty else { return }
 
-            let safePort = port > 0 ? port : Self.defaultPort
+            let safePort = Self.isValidPort(port) ? port : Self.defaultPort
             let id = Self.deviceID(host: trimmedHost, port: safePort)
             let visibleName = (trimmedName?.isEmpty == false ? trimmedName! : trimmedHost)
             self.pairedDevicesByID[id] = PairedWiFiDevice(
@@ -206,7 +210,7 @@ final class MacWiFiManager {
         queue.async {
             guard !trimmedHost.isEmpty else { return }
 
-            let safePort = port > 0 ? port : Self.defaultPort
+            let safePort = Self.isValidPort(port) ? port : Self.defaultPort
             let id = Self.deviceID(host: trimmedHost, port: safePort)
             self.pairedDevicesByID.removeValue(forKey: id)
             if var record = self.discoveredDevicesByID[id] {
@@ -475,6 +479,10 @@ final class MacWiFiManager {
 
     private static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
+    }
+
+    private static func isValidPort(_ port: Int) -> Bool {
+        (1...65535).contains(port)
     }
 
     private static func bonjourMetadata(from metadata: NWBrowser.Result.Metadata) -> BonjourMetadata {
