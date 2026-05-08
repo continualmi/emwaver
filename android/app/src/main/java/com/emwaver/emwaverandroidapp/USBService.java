@@ -45,7 +45,6 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
 import java.util.Arrays;
 import java.util.HashMap;
-import java.util.Map;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -78,9 +77,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
-    private final Object bufferSessionLock = new Object();
-    private final Map<String, TransportDeviceSession> bufferSessionsByDeviceId = new HashMap<>();
-    private TransportDeviceSession activeBufferSession = new DeviceBufferSession();
+    private final TransportDeviceSessionRegistry bufferSessions = new TransportDeviceSessionRegistry();
 
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
@@ -96,31 +93,15 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile String connectedBoardType = null;
 
     private TransportDeviceSession activeBufferSession() {
-        synchronized (bufferSessionLock) {
-            return activeBufferSession;
-        }
+        return bufferSessions.active();
     }
 
     private TransportDeviceSession bufferSession(String deviceId) {
-        String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
-        synchronized (bufferSessionLock) {
-            TransportDeviceSession session = bufferSessionsByDeviceId.get(key);
-            if (session == null) {
-                session = new DeviceBufferSession(key);
-                bufferSessionsByDeviceId.put(key, session);
-            }
-            return session;
-        }
+        return bufferSessions.session(deviceId);
     }
 
     private void setActiveBufferSession(String deviceId, boolean resetSession) {
-        TransportDeviceSession session = bufferSession(deviceId);
-        synchronized (bufferSessionLock) {
-            activeBufferSession = session;
-            if (resetSession) {
-                activeBufferSession.clearAll();
-            }
-        }
+        bufferSessions.select(deviceId, resetSession);
     }
 
     private boolean isActiveDeviceSession(String deviceId) {

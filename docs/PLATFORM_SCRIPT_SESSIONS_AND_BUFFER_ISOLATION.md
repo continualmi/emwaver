@@ -96,6 +96,7 @@ Current first step:
 - Android captures the active device service into `ScriptDeviceConnection` when a local script starts, so script I/O no longer re-resolves whichever service is active later.
 - Android USB/BLE buffering now depends on a `TransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - Android active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
+- Android buffer session lookup/selection now lives in `TransportDeviceSessionRegistry` instead of inline map ownership inside `USBService`.
 - Android BLE transport constants, advertisement matching, and device-session identity helpers now live in `AndroidBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Android USB MIDI descriptor matching, board inference, display names, and session identity helpers now live in `AndroidUsbMidiTransport`, so the current Android service has separate USB and BLE transport helper files.
 - Android now has an `AndroidWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
@@ -193,6 +194,7 @@ Remaining isolation work:
 - [x] Android scopes command response wait state to the active transport buffer session.
 - [x] Android scopes SysEx parser state to the active transport buffer session.
 - [x] Android has focused TX buffer isolation coverage for separate transport sessions.
+- [x] Android has focused session registry coverage for select-without-reset and select-with-reset behavior.
 - [x] Android binds local script runs to the active device service captured at run start.
 - [x] Android refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Android keeps active transport and active script session identity synchronized through one active target descriptor.
