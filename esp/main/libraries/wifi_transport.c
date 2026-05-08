@@ -436,6 +436,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_auth_generation++;
         stop_server();
         if (s_suppress_next_disconnect_reconnect) {
+            s_last_disconnect_reason = 0;
             s_suppress_next_disconnect_reconnect = false;
             return;
         }
