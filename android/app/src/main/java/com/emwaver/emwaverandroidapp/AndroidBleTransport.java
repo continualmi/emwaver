@@ -35,6 +35,54 @@ final class AndroidBleTransport {
 
     private AndroidBleTransport() {}
 
+    static final class Connection implements AutoCloseable {
+        final BluetoothGatt gatt;
+        final BluetoothGattCharacteristic commandCharacteristic;
+        final String sessionId;
+        final String displayName;
+        private volatile boolean connected;
+
+        Connection(
+                BluetoothGatt gatt,
+                BluetoothGattCharacteristic commandCharacteristic,
+                @Nullable String displayName,
+                boolean connected
+        ) {
+            this.gatt = gatt;
+            this.commandCharacteristic = commandCharacteristic;
+            this.sessionId = sessionId(gatt.getDevice());
+            String name = displayName != null && !displayName.trim().isEmpty()
+                    ? displayName.trim()
+                    : gatt.getDevice().getAddress();
+            this.displayName = name;
+            this.connected = connected;
+        }
+
+        boolean isOpen() {
+            return gatt != null && commandCharacteristic != null && connected;
+        }
+
+        boolean owns(BluetoothGatt gatt) {
+            return this.gatt == gatt;
+        }
+
+        boolean writeSysex(byte[] sysex) {
+            return AndroidBleTransport.writeSysex(gatt, commandCharacteristic, connected, sysex);
+        }
+
+        @Override
+        public void close() {
+            connected = false;
+            try {
+                if (gatt != null) {
+                    gatt.disconnect();
+                    gatt.close();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
     static String sessionId(@Nullable BluetoothDevice device) {
         if (device == null) return "ble:active";
         return "ble:" + device.getAddress();
@@ -63,6 +111,14 @@ final class AndroidBleTransport {
             BluetoothGattCallback callback
     ) {
         return device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
+    }
+
+    static Connection connectedSession(
+            BluetoothGatt gatt,
+            BluetoothGattCharacteristic command,
+            @Nullable String displayName
+    ) {
+        return new Connection(gatt, command, displayName, true);
     }
 
     static void discoverServices(BluetoothGatt gatt) {

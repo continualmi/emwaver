@@ -85,9 +85,8 @@ public class USBService extends Service implements DeviceConnectionService {
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
-    private BluetoothGatt bleGatt;
-    private BluetoothGattCharacteristic bleCommandCharacteristic;
-    private volatile boolean bleConnected = false;
+    private BluetoothGatt pendingBleGatt;
+    private volatile AndroidBleTransport.Connection bleConnection;
     private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
     private volatile ActiveDeviceTarget<ActiveTransport> activeDeviceTarget =
@@ -95,7 +94,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
-    private volatile String connectedBleDeviceLabel = null;
+    private volatile String pendingBleDeviceLabel = null;
 
     private TransportDeviceSession activeBufferSession() {
         synchronized (bufferSessionLock) {
@@ -323,7 +322,8 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     public boolean checkConnection() {
-        if (bleConnected && bleCommandCharacteristic != null) {
+        AndroidBleTransport.Connection ble = bleConnection;
+        if (ble != null && ble.isOpen()) {
             return true;
         }
         synchronized (midiLock) {
@@ -381,7 +381,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
-                connectedBleDeviceLabel = null;
+                pendingBleDeviceLabel = null;
                 usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device);
                 if (usbMidiConnection.output != null) {
                     usbMidiConnection.output.connect(rxReceiver);
@@ -477,7 +477,7 @@ public class USBService extends Service implements DeviceConnectionService {
             usbMidiConnection.close();
         }
         usbMidiConnection = null;
-        connectedBleDeviceLabel = null;
+        pendingBleDeviceLabel = null;
         clearActiveDeviceTarget(ActiveTransport.USB);
         connectedBoardType = null;
         deviceFirmwareVersion = null;
@@ -520,7 +520,8 @@ public class USBService extends Service implements DeviceConnectionService {
             }
         }
         synchronized (bleLock) {
-            if (bleConnected || bleScanning) {
+            AndroidBleTransport.Connection connection = bleConnection;
+            if ((connection != null && connection.isOpen()) || bleScanning) {
                 return;
             }
             bleScanner = bluetoothAdapter.getBluetoothLeScanner();
@@ -546,25 +547,31 @@ public class USBService extends Service implements DeviceConnectionService {
     @SuppressLint("MissingPermission")
     private void closeBleLocked() {
         stopBleScan();
-        if (bleGatt != null) {
-            bleGatt.disconnect();
-            bleGatt.close();
+        if (bleConnection != null) {
+            bleConnection.close();
         }
-        bleGatt = null;
-        bleCommandCharacteristic = null;
-        bleConnected = false;
-        connectedBleDeviceLabel = null;
+        if (pendingBleGatt != null) {
+            try {
+                pendingBleGatt.disconnect();
+                pendingBleGatt.close();
+            } catch (Exception ignored) {
+            }
+        }
+        bleConnection = null;
+        pendingBleGatt = null;
+        pendingBleDeviceLabel = null;
         clearActiveDeviceTarget(ActiveTransport.BLE);
     }
 
     @SuppressLint("MissingPermission")
     private void writeBleSysex(byte[] sysex) {
         synchronized (bleLock) {
-            if (bleGatt == null || bleCommandCharacteristic == null || !bleConnected) {
+            AndroidBleTransport.Connection connection = bleConnection;
+            if (connection == null || !connection.isOpen()) {
                 Toast.makeText(this, "No BLE device connected", Toast.LENGTH_SHORT).show();
                 return;
             }
-            AndroidBleTransport.writeSysex(bleGatt, bleCommandCharacteristic, bleConnected, sysex);
+            connection.writeSysex(sysex);
         }
     }
 
@@ -586,10 +593,10 @@ public class USBService extends Service implements DeviceConnectionService {
             stopBleScan();
             synchronized (bleLock) {
                 closeBleLocked();
-                connectedBleDeviceLabel = name != null && !name.trim().isEmpty()
+                pendingBleDeviceLabel = name != null && !name.trim().isEmpty()
                         ? name.trim()
                         : device.getAddress();
-                bleGatt = AndroidBleTransport.connect(USBService.this, device, bleGattCallback);
+                pendingBleGatt = AndroidBleTransport.connect(USBService.this, device, bleGattCallback);
             }
             Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
         }
@@ -603,7 +610,8 @@ public class USBService extends Service implements DeviceConnectionService {
                 AndroidBleTransport.discoverServices(gatt);
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 synchronized (bleLock) {
-                    if (bleGatt == gatt) {
+                    AndroidBleTransport.Connection connection = bleConnection;
+                    if (pendingBleGatt == gatt || (connection != null && connection.owns(gatt))) {
                         closeBleLocked();
                     }
                 }
@@ -626,9 +634,10 @@ public class USBService extends Service implements DeviceConnectionService {
                 return;
             }
             synchronized (bleLock) {
-                bleCommandCharacteristic = command;
-                bleConnected = true;
-                setActiveDeviceTarget(AndroidBleTransport.sessionId(gatt.getDevice()), ActiveTransport.BLE);
+                bleConnection = AndroidBleTransport.connectedSession(gatt, command, pendingBleDeviceLabel);
+                pendingBleGatt = null;
+                pendingBleDeviceLabel = null;
+                setActiveDeviceTarget(bleConnection.sessionId, ActiveTransport.BLE);
             }
             AndroidBleTransport.enableNotifications(gatt);
             connectedBoardType = "esp32s3";
@@ -944,7 +953,8 @@ public class USBService extends Service implements DeviceConnectionService {
     public String getConnectionStatus() {
         if (checkConnection()) {
             if (activeTransport == ActiveTransport.BLE) {
-                String label = connectedBleDeviceLabel;
+                AndroidBleTransport.Connection connection = bleConnection;
+                String label = connection != null ? connection.displayName : null;
                 return label == null || label.trim().isEmpty()
                         ? "Connected (BLE)"
                         : "Connected (BLE: " + label.trim() + ")";
