@@ -21,6 +21,7 @@
 #include <string.h>
 
 #include "command_registry.h"
+#include "emw_target.h"
 #include "emw_proto.h"
 #include "driver/ledc.h"
 #include "driver/gpio.h"
@@ -51,7 +52,7 @@
 #define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"
 #define CMD_QUEUE_LEN 10
 #define STARTUP_LED GPIO_NUM_1
-#define IR_TX_PIN_SHIELD GPIO_NUM_37
+#define IR_TX_PIN_SHIELD EMW_TARGET_IR_TX_PIN_SHIELD
 #define IR_TX_PIN_DEFAULT GPIO_NUM_4
 #define IR_LED_GUARD_PIN GPIO_NUM_5
 #define FW_VERSION_MAJOR 1u
@@ -140,7 +141,9 @@ void emwaver_init(void)
     configASSERT(cmd_queue != NULL);
 
     usb_init(cmd_queue);
-    ble_server_init(cmd_queue);
+    if (EMW_TARGET_HAS_BLE) {
+        ble_server_init(cmd_queue);
+    }
     wifi_transport_init(cmd_queue);
 
     BaseType_t created = xTaskCreatePinnedToCore(command_task,
@@ -149,7 +152,7 @@ void emwaver_init(void)
                                                 NULL,
                                                 5,
                                                 &command_task_handle,
-                                                APP_CPU_NUM);
+                                                EMW_TARGET_COMMAND_CORE);
     configASSERT(created == pdPASS);
 
     ESP_LOGI(TAG, "Firmware initialized. Free heap: %u bytes",
@@ -160,6 +163,9 @@ static void init_ir_tx_pins(void)
 {
     const gpio_num_t pins[] = {IR_TX_PIN_DEFAULT, IR_TX_PIN_SHIELD, IR_LED_GUARD_PIN};
     for (int i = 0; i < (int)(sizeof(pins) / sizeof(pins[0])); ++i) {
+        if (pins[i] == GPIO_NUM_NC) {
+            continue;
+        }
         gpio_reset_pin(pins[i]);
         gpio_set_direction(pins[i], GPIO_MODE_OUTPUT);
         gpio_set_level(pins[i], 0);
@@ -250,7 +256,7 @@ static bool handle_binary_packet(const command_t *cmd)
             return true;
         }
         case EMW_OP_BOARD_GET: {
-            static const uint8_t board_type[] = "esp32s3";
+            static const uint8_t board_type[] = EMW_TARGET_BOARD_TYPE;
             send_binary_ok(board_type, sizeof(board_type) - 1u);
             return true;
         }
@@ -485,11 +491,11 @@ static void get_default_device_name(char *out, size_t out_len)
 
     uint8_t mac[6] = {0};
     if (esp_efuse_mac_get_default(mac) != ESP_OK) {
-        strlcpy(out, "ESP32-S3", out_len);
+        strlcpy(out, EMW_TARGET_DEVICE_NAME_PREFIX, out_len);
         return;
     }
 
-    snprintf(out, out_len, "ESP32-S3-%02X%02X", mac[4], mac[5]);
+    snprintf(out, out_len, "%s-%02X%02X", EMW_TARGET_DEVICE_NAME_PREFIX, mac[4], mac[5]);
 }
 
 static void load_device_name(char *out, size_t out_len)

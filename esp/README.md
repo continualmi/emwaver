@@ -2,18 +2,18 @@
   <img src="../docs/content/logo.png" alt="EMWaver Logo" width="250">
 </div>
 
-This folder contains the EMWaver ESP32-S3 firmware workspace (ESP-IDF).
+This folder contains the EMWaver ESP firmware workspace (ESP-IDF).
 
-# EMWaver ESP32-S3 Firmware
+# EMWaver ESP Firmware
 
-Target device: ESP32-S3 running on ESP-IDF v5.5.1.
+Primary targets: ESP32-S3 and ESP32-S2 running on ESP-IDF v5.5.1.
 
 This workspace was restored from git history as the starting point for bringing ESP32 support back to EMWaver.
 
 Product direction for this folder:
 - ESP32 is a managed EMWaver board class, not a user-built firmware workflow.
 - End users should not be asked to install ESP-IDF, build firmware, or flash devices manually.
-- The platform direction is multi-transport: BLE for direct proximity workflows, Wi-Fi for remote/autonomous control, and USB where appropriate on ESP32-S3 hardware.
+- The platform direction is multi-transport: ESP32-S3 supports USB, BLE, and Wi-Fi; ESP32-S2 supports USB and Wi-Fi only.
 - Apps remain responsible for firmware distribution, setup, and update UX.
 
 ## Project Structure
@@ -40,7 +40,7 @@ git clone -b v5.5.1 --recursive https://github.com/espressif/esp-idf.git
 cd esp-idf
 mkdir -p ~/esp/tools
 export IDF_TOOLS_PATH=~/esp/tools
-./install.sh esp32s3
+./install.sh esp32s3 esp32s2
 source export.sh
 idf.py --version  # Expect v5.5.1
 rm -rf ../tools/dist  # Optional: drop cached downloads
@@ -56,6 +56,9 @@ cd ~/emwaver/esp
 source setup.sh  # Must be sourced, not executed, to load ESP-IDF tools
 python -m serial.tools.list_ports -v  # Note your board's port (e.g., /dev/ttyACM0)
 idf.py set-target esp32s3
+idf.py build
+# Or build the USB + Wi-Fi target:
+idf.py set-target esp32s2
 idf.py build
 idf.py -p /dev/ttyACM0 flash
 idf.py -p /dev/ttyACM0 monitor  # Exit with Ctrl+]
@@ -73,7 +76,7 @@ git clone -b v5.5.1 --recursive https://github.com/espressif/esp-idf.git
 cd esp-idf
 mkdir -p ~/esp/tools
 export IDF_TOOLS_PATH=~/esp/tools
-./install.sh esp32s3
+./install.sh esp32s3 esp32s2
 source export.sh
 idf.py --version
 rm -rf ../tools/dist  # Optional: drop cached downloads
@@ -89,6 +92,9 @@ cd ~/emwaver/esp
 source setup.sh
 python -m serial.tools.list_ports -v  # Note the board's port (e.g., /dev/cu.usbmodemXXXX)
 idf.py set-target esp32s3
+idf.py build
+# Or build the USB + Wi-Fi target:
+idf.py set-target esp32s2
 idf.py build
 idf.py -p /dev/cu.usbmodemXXXX flash
 idf.py -p /dev/cu.usbmodemXXXX monitor  # Exit with Ctrl+]
@@ -114,6 +120,9 @@ python -m serial.tools.list_ports -v  # Lists COM ports; note the ESP board's CO
 idf.py --version
 idf.py set-target esp32s3
 idf.py build
+# Or build the USB + Wi-Fi target:
+idf.py set-target esp32s2
+idf.py build
 idf.py -p COM7 flash  # Replace with the COM port reported above
 idf.py -p COM7 monitor  # Exit with Ctrl+]
 ```
@@ -130,12 +139,13 @@ Current restored codebase includes historical support for:
 - USB support components
 
 Current reintegration status:
-- USB is the active wired transport for the restored ESP32-S3 target.
+- USB is the active wired transport for restored ESP targets.
+- ESP32-S2 uses the same USB and Wi-Fi runtime paths as ESP32-S3, with BLE compiled out because the chip has no Bluetooth radio.
 - Firmware now enumerates as USB MIDI and accepts STM32-style EMWaver SysEx framing.
 - BLE is active as the wireless direct-local transport. It advertises the EMWaver GATT service and accepts the same 36-byte EMWaver superframe encoded inside the same SysEx payload used by USB MIDI.
 - Binary opcode support now covers the core shared bring-up surface over USB and BLE: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.
-- Wi-Fi transport foundation is active behind `EMWAVER_ENABLE_WIFI_TRANSPORT`: provisioned ESP32-S3 boards join station-mode Wi-Fi from NVS, advertise `_emwaver._tcp` on port `3922` with board/version/capability/local-id TXT records, and expose an authenticated WebSocket at `/v1/ws` carrying the same EMWaver SysEx/superframe bytes as USB MIDI and BLE.
+- Wi-Fi transport foundation is active behind `EMWAVER_ENABLE_WIFI_TRANSPORT`: provisioned ESP boards join station-mode Wi-Fi from NVS, advertise `_emwaver._tcp` on port `3922` with board/version/capability/local-id TXT records, and expose an authenticated WebSocket at `/v1/ws` carrying the same EMWaver SysEx/superframe bytes as USB MIDI and BLE-capable targets.
 - Station-mode Wi-Fi reconnect uses capped exponential backoff so bad credentials or poor signal do not create a tight reconnect loop.
 - On station disconnect, the firmware clears active Wi-Fi auth/session state and stops the WebSocket/mDNS service until a new IP address is acquired.
 - Reprovisioning Wi-Fi while station mode is already running clears the active WebSocket/mDNS listener state and reconnects with the new credentials instead of relying on a cold-start station event.
@@ -154,10 +164,20 @@ Current reintegration status:
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
 
 Planned EMWaver direction for ESP32:
-- BLE remains available for direct nearby workflows.
+- BLE remains available for direct nearby workflows on BLE-capable targets such as ESP32-S3.
 - Wi-Fi is the path for remote autonomous control without a host.
-- USB remains available where the ESP32-S3 hardware/runtime benefits from it.
+- USB remains available where the ESP32 hardware/runtime benefits from it.
 - Managed EMWaver provisioning, runtime, and update flows take precedence over raw transport-specific tooling.
+
+## ESP32-S2 support
+
+ESP32-S2 support is USB + Wi-Fi only. Do not duplicate the ESP firmware tree for S2. The firmware uses target capability macros so ESP32-S2 builds share the same command registry, USB transport, Wi-Fi provisioning, WebSocket runtime, and opcode behavior while compiling out BLE/NimBLE sources.
+
+Expected target capabilities:
+- ESP32-S2: `board=esp32s2`, `cap=wifi,usb`
+- ESP32-S3: `board=esp32s3`, `cap=wifi,usb,ble`
+
+See `../docs/ESP32_S2_SUPPORT_PLAN.md` for the implementation plan and validation checklist.
 
 ## Recommended transport architecture
 

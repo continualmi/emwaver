@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include "command_registry.h"
+#include "emw_target.h"
 #include "esp_event.h"
 #include "esp_http_server.h"
 #include "esp_log.h"
@@ -500,9 +501,9 @@ static void start_server(void)
     (void)mdns_instance_name_set(instance_name);
     (void)mdns_service_add(instance_name, "_emwaver", "_tcp", WIFI_CONTROL_PORT, NULL, 0);
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "proto", "1");
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "board", "esp32s3");
+    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "board", EMW_TARGET_BOARD_TYPE);
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION);
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "cap", "wifi,usb,ble");
+    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "cap", EMW_TARGET_CAPABILITIES);
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id);
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
