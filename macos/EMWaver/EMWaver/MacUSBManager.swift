@@ -23,6 +23,7 @@ struct LocalDeviceDescriptor: Identifiable, Equatable {
         case discovered
         case connecting
         case connected
+        case disconnected
     }
 
     let id: String
@@ -1171,6 +1172,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         for record in wifiDevices.sorted(by: { $0.displayName < $1.displayName }) {
             let isActive = activeTransport == .wifi && wifiManager?.activeDeviceID == record.id && isTransportConnectedInternal()
             let isConnecting = record.id == connectingWiFiID
+            let connectionState = Self.wiFiConnectionState(
+                isActive: isActive,
+                isConnecting: isConnecting,
+                isPaired: record.isPaired,
+                isAdvertised: record.isAdvertised
+            )
             let endpoint = "\(record.host):\(record.port)"
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
             appendOrMerge(LocalDeviceDescriptor(
@@ -1179,7 +1186,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .wifi,
                 boardType: record.boardType ?? "esp32",
                 moduleLabel: detail,
-                connectionState: isActive ? .connected : (isConnecting ? .connecting : .discovered),
+                connectionState: connectionState,
                 lastErrorText: record.isPaired ? nil : "Pairing required",
                 isActive: isActive
             ), hardwareUID: nil)
@@ -1200,6 +1207,19 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func strongestConnectionState(_ a: LocalDeviceDescriptor.ConnectionState, _ b: LocalDeviceDescriptor.ConnectionState) -> LocalDeviceDescriptor.ConnectionState {
         if a == .connected || b == .connected { return .connected }
         if a == .connecting || b == .connecting { return .connecting }
+        if a == .disconnected || b == .disconnected { return .disconnected }
+        return .discovered
+    }
+
+    static func wiFiConnectionState(
+        isActive: Bool,
+        isConnecting: Bool,
+        isPaired: Bool,
+        isAdvertised: Bool
+    ) -> LocalDeviceDescriptor.ConnectionState {
+        if isActive { return .connected }
+        if isConnecting { return .connecting }
+        if isPaired && !isAdvertised { return .disconnected }
         return .discovered
     }
 

@@ -19,6 +19,7 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var protocolVersion: String?
     var capabilities: [String]
     var isPaired: Bool
+    var isAdvertised: Bool
     var lastSeen: Date
 }
 
@@ -159,6 +160,7 @@ final class MacWiFiManager {
                 protocolVersion: "1",
                 capabilities: ["wifi"],
                 isPaired: true,
+                isAdvertised: false,
                 lastSeen: Date()
             )
             self.discoveredDevicesByID[id] = record
@@ -205,6 +207,7 @@ final class MacWiFiManager {
                 protocolVersion: "1",
                 capabilities: ["wifi"],
                 isPaired: true,
+                isAdvertised: false,
                 lastSeen: Date()
             )
             self.savePairedDevices()
@@ -378,6 +381,7 @@ final class MacWiFiManager {
                 protocolVersion: metadata.protocolVersion,
                 capabilities: metadata.capabilities,
                 isPaired: pairedDevicesByID[id] != nil,
+                isAdvertised: true,
                 lastSeen: Date()
             )
         }
@@ -397,6 +401,7 @@ final class MacWiFiManager {
                 protocolVersion: "1",
                 capabilities: ["wifi"],
                 isPaired: true,
+                isAdvertised: false,
                 lastSeen: paired.lastSeen
             )
         }
@@ -630,6 +635,7 @@ final class MacWiFiManager {
                 protocolVersion: "1",
                 capabilities: ["wifi"],
                 isPaired: true,
+                isAdvertised: false,
                 lastSeen: record.lastSeen
             )
         }
