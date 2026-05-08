@@ -83,6 +83,7 @@ iOS already uses the shared SwiftUI scripts surface, so list-level session displ
 Current first step:
 
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
+- iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
 
 Remaining isolation work:
@@ -109,6 +110,7 @@ Remaining isolation work:
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
+- [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

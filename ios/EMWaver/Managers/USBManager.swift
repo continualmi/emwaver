@@ -109,7 +109,8 @@ final class USBManager: NSObject, ObservableObject {
     private let midiQueue = DispatchQueue(label: "com.emwaver.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
     private let bufferQueueKey = DispatchSpecificKey<Void>()
-    private let activeBufferSession = DeviceBufferSession()
+    private var activeBufferSession = DeviceBufferSession()
+    private var bufferSessionsByDeviceId: [String: DeviceBufferSession] = [:]
 
     private var client: MIDIClientRef = 0
     private var inPort: MIDIPortRef = 0
@@ -156,6 +157,17 @@ final class USBManager: NSObject, ObservableObject {
             return block()
         }
         return bufferQueue.sync(execute: block)
+    }
+
+    private func setActiveBufferSession(deviceId: String) {
+        let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        withBufferQueueSync {
+            let sessionKey = key.isEmpty ? "active" : key
+            let session = bufferSessionsByDeviceId[sessionKey] ?? DeviceBufferSession()
+            bufferSessionsByDeviceId[sessionKey] = session
+            activeBufferSession = session
+            activeBufferSession.clearAll()
+        }
     }
 
     // MARK: - Common helpers (used across the iOS codebase)
@@ -806,6 +818,7 @@ final class USBManager: NSObject, ObservableObject {
 
         connectedSource = chosen.source
         connectedDestination = chosen.destination
+        setActiveBufferSession(deviceId: "usbmidi:\(chosen.source):\(chosen.destination):\(chosen.name)")
 
         let st = MIDIPortConnectSource(inPort, chosen.source, nil)
         guard st == noErr else {
@@ -1241,6 +1254,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
+            self.setActiveBufferSession(deviceId: "ble:\(peripheral.identifier.uuidString)")
             self.activeTransport = .ble
             DispatchQueue.main.async {
                 self.connectedPortName = peripheral.name ?? "EMWaver BLE"
