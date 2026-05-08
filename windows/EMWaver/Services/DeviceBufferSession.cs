@@ -1,5 +1,6 @@
 using EMWaver.Interop;
 using System;
+using System.Threading.Tasks;
 
 namespace EMWaver.Services;
 
@@ -12,6 +13,9 @@ internal sealed class DeviceBufferSession
     private ulong _rxCounter;
     private byte[] _txBytes = Array.Empty<byte>();
     private ulong[] _txTsMs = Array.Empty<ulong>();
+    private readonly object _responseLock = new();
+    private TaskCompletionSource<byte[]?>? _responseTcs;
+    private Func<byte[], bool>? _responsePredicate;
 
     internal string DeviceId { get; }
 
@@ -116,6 +120,55 @@ internal sealed class DeviceBufferSession
         lock (_lock)
         {
             _rxCounter = (ulong)(_rxBytes.Length / NativeBufferRust.PacketSizeBytes);
+        }
+    }
+
+    internal TaskCompletionSource<byte[]?> BeginResponseWait(Func<byte[], bool> predicate)
+    {
+        lock (_responseLock)
+        {
+            _responsePredicate = predicate;
+            _responseTcs = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
+            return _responseTcs;
+        }
+    }
+
+    internal void CompleteResponseIfMatch(byte[] lane18)
+    {
+        lock (_responseLock)
+        {
+            if (_responseTcs == null || _responsePredicate == null)
+            {
+                return;
+            }
+            if (!_responsePredicate(lane18))
+            {
+                return;
+            }
+            _responseTcs.TrySetResult(lane18);
+        }
+    }
+
+    internal void ClearResponseWait(TaskCompletionSource<byte[]?> tcs)
+    {
+        lock (_responseLock)
+        {
+            if (!ReferenceEquals(_responseTcs, tcs))
+            {
+                return;
+            }
+            _responseTcs = null;
+            _responsePredicate = null;
+        }
+    }
+
+    internal void CancelResponseWait()
+    {
+        lock (_responseLock)
+        {
+            _responseTcs?.TrySetResult(null);
+            _responseTcs = null;
+            _responsePredicate = null;
         }
     }
 

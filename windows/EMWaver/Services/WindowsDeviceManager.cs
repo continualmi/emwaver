@@ -192,10 +192,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private readonly Dictionary<string, DeviceBufferSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
     private DeviceBufferSession _activeBufferSession = new("active");
 
-    private readonly object _rxLock = new();
-    private TaskCompletionSource<byte[]?>? _responseTcs;
-    private Func<byte[], bool>? _responsePredicate;
-
     private DeviceBufferSession ActiveBufferSession
     {
         get
@@ -446,12 +442,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         CloseBleDevice();
 
-        lock (_rxLock)
-        {
-            _responseTcs?.TrySetResult(null);
-            _responseTcs = null;
-            _responsePredicate = null;
-        }
+        ActiveBufferSession.CancelResponseWait();
 
         ConnectedPort = null;
         ActiveTransport = DeviceTransport.None;
@@ -551,29 +542,22 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return null;
         }
 
-        TaskCompletionSource<byte[]?> tcs;
-        lock (_rxLock)
-        {
-            _responsePredicate = responsePredicate;
-            _responseTcs = new TaskCompletionSource<byte[]?>(TaskCreationOptions.RunContinuationsAsynchronously);
-            tcs = _responseTcs;
-        }
-
-        var pkt = MakeLanePacket(commandLane);
-        var sf = MakeSuperframe(cmdLane: pkt, streamLane: null);
-        SendSuperframe(sf);
+        var session = ActiveBufferSession;
+        var tcs = session.BeginResponseWait(responsePredicate);
 
         using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
         using var reg = cts.Token.Register(() => tcs.TrySetResult(null));
-        var result = await tcs.Task;
-
-        lock (_rxLock)
+        try
         {
-            _responseTcs = null;
-            _responsePredicate = null;
+            var pkt = MakeLanePacket(commandLane);
+            var sf = MakeSuperframe(cmdLane: pkt, streamLane: null);
+            SendSuperframe(sf);
+            return await tcs.Task;
         }
-
-        return result;
+        finally
+        {
+            session.ClearResponseWait(tcs);
+        }
     }
 
     private void OnMidiMessage(MidiInPort sender, MidiMessageReceivedEventArgs args)
@@ -669,18 +653,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void HandleLane(byte[] lane18)
     {
-        lock (_rxLock)
-        {
-            if (_responseTcs == null || _responsePredicate == null)
-            {
-                return;
-            }
-            if (!_responsePredicate(lane18))
-            {
-                return;
-            }
-            _responseTcs.TrySetResult(lane18);
-        }
+        ActiveBufferSession.CompleteResponseIfMatch(lane18);
     }
 
     private void SendSuperframe(byte[] superframe36)
