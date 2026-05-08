@@ -197,7 +197,7 @@ struct DeviceConnectionSheet: View {
 
                             Spacer(minLength: 0)
 
-                            Button(item.isActive ? "Connected" : "Connect") {
+                            Button(deviceActionTitle(for: item)) {
                                 device.connectDevice(id: item.id)
                             }
                             .buttonStyle(.bordered)
@@ -269,6 +269,13 @@ struct DeviceConnectionSheet: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private func deviceActionTitle(for item: LocalDeviceDescriptor) -> String {
+        if item.isActive { return "Active" }
+        if item.connectionState == .connected { return "Select" }
+        if item.connectionState == .connecting { return "Connecting" }
+        return "Connect"
     }
 
     private var bleStatusText: String {

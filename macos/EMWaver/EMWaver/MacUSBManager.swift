@@ -106,6 +106,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var blePeripheral: CBPeripheral?
     private var bleCommandCharacteristic: CBCharacteristic?
     private var bleNotifyCharacteristic: CBCharacteristic?
+    private var bleConnectedPeripheralsByID: [UUID: CBPeripheral] = [:]
+    private var bleCommandCharacteristicsByID: [UUID: CBCharacteristic] = [:]
+    private var bleNotifyCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleDiscoveredNamesByID: [UUID: String] = [:]
 
     private var captureBuffer = Data()
@@ -151,7 +154,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             case .usbMidi:
                 return connectedSource != 0 && connectedDestination != 0
             case .ble:
-                return blePeripheral?.state == .connected && bleCommandCharacteristic != nil
+                guard let peripheral = blePeripheral else { return false }
+                return peripheral.state == .connected && bleCommandCharacteristicsByID[peripheral.identifier] != nil
             case .none:
                 return false
             }
@@ -468,14 +472,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         for (uuid, peripheral) in bleDiscoveredPeripheralsByID.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
             let name = bleDiscoveredNamesByID[uuid] ?? peripheral.name ?? "EMWaver BLE"
             let isActive = activeTransport == .ble && blePeripheral?.identifier == uuid && isTransportConnectedInternal()
-            let isConnecting = blePeripheral?.identifier == uuid && peripheral.state == .connecting
+            let isConnected = peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
+            let isConnecting = peripheral.state == .connecting
             devices.append(LocalDeviceDescriptor(
                 id: "ble:\(uuid.uuidString)",
                 displayName: name,
                 transport: .ble,
                 boardType: "esp32s3",
                 moduleLabel: nil,
-                connectionState: isActive ? .connected : (isConnecting ? .connecting : .discovered),
+                connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: nil,
                 isActive: isActive
             ))
@@ -576,9 +581,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         connectedDestination = 0
         activeTransport = .none
 
-        if let peripheral = blePeripheral {
+        for peripheral in bleConnectedPeripheralsByID.values {
             bleCentral?.cancelPeripheralConnection(peripheral)
         }
+        bleConnectedPeripheralsByID.removeAll()
+        bleCommandCharacteristicsByID.removeAll()
+        bleNotifyCharacteristicsByID.removeAll()
         blePeripheral = nil
         bleCommandCharacteristic = nil
         bleNotifyCharacteristic = nil
@@ -711,7 +719,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if activeTransport == .ble {
             guard let peripheral = blePeripheral,
                   peripheral.state == .connected,
-                  let characteristic = bleCommandCharacteristic else {
+                  let characteristic = bleCommandCharacteristicsByID[peripheral.identifier] ?? bleCommandCharacteristic else {
                 setError("BLE write failed: Not connected")
                 return
             }
@@ -806,13 +814,19 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func connectBleInternal(_ peripheral: CBPeripheral, name: String?) {
-        stopBleScanInternal()
         disconnectMidiOnlyInternal()
         blePeripheral = peripheral
-        bleCommandCharacteristic = nil
-        bleNotifyCharacteristic = nil
+        bleCommandCharacteristic = bleCommandCharacteristicsByID[peripheral.identifier]
+        bleNotifyCharacteristic = bleNotifyCharacteristicsByID[peripheral.identifier]
         peripheral.delegate = self
-        bleCentral?.connect(peripheral, options: nil)
+        if peripheral.state == .connected {
+            activeTransport = .ble
+            DispatchQueue.main.async {
+                self.isConnected = self.bleCommandCharacteristicsByID[peripheral.identifier] != nil
+            }
+        } else if peripheral.state != .connecting {
+            bleCentral?.connect(peripheral, options: nil)
+        }
         DispatchQueue.main.async {
             self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
             self.connectedBoardType = "esp32s3"
@@ -1020,8 +1034,11 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        guard peripheral == blePeripheral else { return }
-        activeTransport = .ble
+        bleConnectedPeripheralsByID[peripheral.identifier] = peripheral
+        if blePeripheral == nil || blePeripheral == peripheral {
+            blePeripheral = peripheral
+            activeTransport = .ble
+        }
         peripheral.discoverServices([Self.bleServiceUUID])
         DispatchQueue.main.async {
             self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
@@ -1034,28 +1051,36 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
-        guard peripheral == blePeripheral else { return }
-        blePeripheral = nil
-        bleCommandCharacteristic = nil
-        bleNotifyCharacteristic = nil
-        activeTransport = .none
+        if blePeripheral == peripheral {
+            blePeripheral = nil
+            bleCommandCharacteristic = nil
+            bleNotifyCharacteristic = nil
+            activeTransport = .none
+        }
+        bleConnectedPeripheralsByID.removeValue(forKey: peripheral.identifier)
+        bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
+        bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         setError(error?.localizedDescription ?? "BLE connection failed")
         publishDiscoveredDevices()
         autoConnectIfNeededInternal()
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        guard peripheral == blePeripheral else { return }
-        blePeripheral = nil
-        bleCommandCharacteristic = nil
-        bleNotifyCharacteristic = nil
-        activeTransport = .none
-        DispatchQueue.main.async {
-            self.isConnected = false
-            self.connectedPortName = nil
-            self.deviceEmwaverVersion = nil
-            self.connectedBoardType = nil
-            self.connectedTransportKind = nil
+        bleConnectedPeripheralsByID.removeValue(forKey: peripheral.identifier)
+        bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
+        bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
+        if blePeripheral == peripheral {
+            blePeripheral = nil
+            bleCommandCharacteristic = nil
+            bleNotifyCharacteristic = nil
+            activeTransport = .none
+            DispatchQueue.main.async {
+                self.isConnected = false
+                self.connectedPortName = nil
+                self.deviceEmwaverVersion = nil
+                self.connectedBoardType = nil
+                self.connectedTransportKind = nil
+            }
         }
         publishDiscoveredDevices()
         if autoConnectEnabled {
@@ -1086,14 +1111,16 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
 
         for characteristic in service.characteristics ?? [] {
             if characteristic.uuid == Self.bleCommandUUID {
-                bleCommandCharacteristic = characteristic
+                bleCommandCharacteristicsByID[peripheral.identifier] = characteristic
+                if blePeripheral == peripheral { bleCommandCharacteristic = characteristic }
             } else if characteristic.uuid == Self.bleNotifyUUID {
-                bleNotifyCharacteristic = characteristic
+                bleNotifyCharacteristicsByID[peripheral.identifier] = characteristic
+                if blePeripheral == peripheral { bleNotifyCharacteristic = characteristic }
                 peripheral.setNotifyValue(true, for: characteristic)
             }
         }
 
-        if bleCommandCharacteristic != nil {
+        if bleCommandCharacteristicsByID[peripheral.identifier] != nil {
             DispatchQueue.global(qos: .userInitiated).async {
                 let version = self.queryDeviceVersion(timeoutMs: 2000)
                 DispatchQueue.main.async {
@@ -1112,6 +1139,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         guard error == nil, characteristic.uuid == Self.bleNotifyUUID, let value = characteristic.value else {
             return
         }
+        guard blePeripheral == peripheral else { return }
         midiQueue.async {
             self.handleMidiBytes(value)
         }
