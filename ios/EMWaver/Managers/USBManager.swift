@@ -131,7 +131,6 @@ final class USBManager: NSObject, ObservableObject {
 
     // SysEx receive accumulator (CoreMIDI may chunk messages)
     private var sysexAccumulator = UsbMidiSysexAccumulator()
-    private var isSamplerStreamingActive = false
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -420,8 +419,7 @@ final class USBManager: NSObject, ObservableObject {
                 return
             }
 
-            let policy = SamplerLanePolicy.forOutgoingPacket(data, samplerStreamingActive: self.isSamplerStreamingActive)
-            self.isSamplerStreamingActive = policy.nextSamplerStreamingActive
+            _ = self.withBufferQueueSync { self.activeBufferSession.outgoingSamplerPolicy(for: data) }
             
             // Log command lane transmission
             self.withBufferQueueSync {
@@ -850,7 +848,7 @@ final class USBManager: NSObject, ObservableObject {
         commandCharacteristic = nil
         notifyCharacteristic = nil
         activeTransport = .none
-        isSamplerStreamingActive = false
+        withBufferQueueSync { activeBufferSession.resetSamplerStreaming() }
 
         DispatchQueue.main.async {
             self.isConnected = false
@@ -1078,11 +1076,9 @@ final class USBManager: NSObject, ObservableObject {
             let cmdLane = superframe.subdata(in: 0..<Self.laneSizeBytes)
             let streamLane = superframe.subdata(in: Self.laneSizeBytes..<Self.superframeSizeBytes)
 
-            let policy = SamplerLanePolicy.forIncomingSuperframe(
-                commandLane: cmdLane,
-                streamLane: streamLane,
-                samplerStreamingActive: isSamplerStreamingActive
-            )
+            let policy = withBufferQueueSync {
+                activeBufferSession.incomingSamplerPolicy(commandLane: cmdLane, streamLane: streamLane)
+            }
 
             if policy.shouldStoreCommandLane {
                 dbg("RX: Demux CMD lane")
@@ -1206,7 +1202,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.notifyCharacteristic = nil
             if self.activeTransport == .ble {
                 self.activeTransport = .none
-                self.isSamplerStreamingActive = false
+                self.withBufferQueueSync { self.activeBufferSession.resetSamplerStreaming() }
                 DispatchQueue.main.async {
                     self.isConnected = false
                     self.connectedPortName = nil

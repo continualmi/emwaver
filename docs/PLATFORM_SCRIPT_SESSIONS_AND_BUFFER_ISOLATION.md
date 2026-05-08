@@ -86,12 +86,13 @@ Current first step:
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
 - iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
+- iOS sampler stream lane policy state now lives on the active `DeviceBufferSession` instead of singleton fields on `USBManager`.
 
 Remaining isolation work:
 
 - split `USBManager`'s single `NativeBufferRust` state into target-scoped sessions,
 - add a target-aware script-device bridge instead of attaching scripts directly to the singleton `USBManager`,
-- route buffer APIs, command waits, packet parsing, and sampler stream state through the selected target session.
+- route buffer APIs, command waits, and packet parsing through the selected target session.
 - split `USBManager` into USB MIDI, BLE, and future Wi-Fi transport files that publish a shared connected-device/session model.
 
 ## Acceptance checklist
@@ -113,6 +114,7 @@ Remaining isolation work:
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS has an active transport buffer session object used by script sampler reads.
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
+- [x] iOS scopes sampler stream state to the active transport buffer session.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

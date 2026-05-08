@@ -15,6 +15,7 @@ final class DeviceBufferSession {
     private var rxCounter: UInt64 = 0
     private var txBytes: [UInt8] = []
     private var txTsMs: [UInt64] = []
+    private var samplerStreamingActive = false
 
     func clearAll() {
         lock.lock()
@@ -24,6 +25,7 @@ final class DeviceBufferSession {
         rxCounter = 0
         txBytes = []
         txTsMs = []
+        samplerStreamingActive = false
     }
 
     func getRxPacketCount() -> UInt64 {
@@ -79,6 +81,30 @@ final class DeviceBufferSession {
             txTsMs.append(tsMs)
             offset += take
         }
+    }
+
+    func outgoingSamplerPolicy(for data: Data) -> SamplerLanePolicy {
+        lock.lock()
+        defer { lock.unlock() }
+        let policy = SamplerLanePolicy.forOutgoingPacket(data, samplerStreamingActive: samplerStreamingActive)
+        samplerStreamingActive = policy.nextSamplerStreamingActive
+        return policy
+    }
+
+    func incomingSamplerPolicy(commandLane: Data, streamLane: Data) -> SamplerLanePolicy {
+        lock.lock()
+        defer { lock.unlock() }
+        return SamplerLanePolicy.forIncomingSuperframe(
+            commandLane: commandLane,
+            streamLane: streamLane,
+            samplerStreamingActive: samplerStreamingActive
+        )
+    }
+
+    func resetSamplerStreaming() {
+        lock.lock()
+        defer { lock.unlock() }
+        samplerStreamingActive = false
     }
 
     func loadBuffer(_ data: Data) {
