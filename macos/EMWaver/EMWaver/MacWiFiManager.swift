@@ -14,6 +14,7 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var host: String
     var port: Int
     var boardType: String?
+    var firmwareVersion: String?
     var isPaired: Bool
     var lastSeen: Date
 }
@@ -41,6 +42,11 @@ final class MacWiFiManager {
     private struct WiFiChallenge: Codable {
         var type: String
         var challenge: String
+    }
+
+    private struct BonjourMetadata {
+        var boardType: String?
+        var firmwareVersion: String?
     }
 
     private static let pairingStoreKey = "com.emwaver.macos.pairedWifiDevices.v1"
@@ -134,6 +140,7 @@ final class MacWiFiManager {
                 host: trimmedHost,
                 port: safePort,
                 boardType: "esp32s3",
+                firmwareVersion: nil,
                 isPaired: true,
                 lastSeen: Date()
             )
@@ -174,6 +181,7 @@ final class MacWiFiManager {
                 host: trimmedHost,
                 port: safePort,
                 boardType: "esp32s3",
+                firmwareVersion: nil,
                 isPaired: true,
                 lastSeen: Date()
             )
@@ -248,12 +256,14 @@ final class MacWiFiManager {
                 .replacingOccurrences(of: "..", with: ".")
                 .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             let id = Self.deviceID(host: host, port: Self.defaultPort)
+            let metadata = Self.bonjourMetadata(from: result.metadata)
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
                 host: host,
                 port: Self.defaultPort,
-                boardType: "esp32s3",
+                boardType: metadata.boardType ?? "esp32s3",
+                firmwareVersion: metadata.firmwareVersion,
                 isPaired: pairedDevicesByID[id] != nil,
                 lastSeen: Date()
             )
@@ -266,6 +276,7 @@ final class MacWiFiManager {
                 host: paired.host,
                 port: paired.port,
                 boardType: "esp32s3",
+                firmwareVersion: nil,
                 isPaired: true,
                 lastSeen: paired.lastSeen
             )
@@ -348,6 +359,7 @@ final class MacWiFiManager {
                 host: record.host,
                 port: record.port,
                 boardType: "esp32s3",
+                firmwareVersion: nil,
                 isPaired: true,
                 lastSeen: record.lastSeen
             )
@@ -361,6 +373,35 @@ final class MacWiFiManager {
 
     private static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
+    }
+
+    private static func bonjourMetadata(from metadata: NWBrowser.Result.Metadata) -> BonjourMetadata {
+        guard case .bonjour(let txtRecord) = metadata else {
+            return BonjourMetadata()
+        }
+        let dictionary = txtRecord.dictionary
+        return BonjourMetadata(
+            boardType: normalizedBoardType(dictionary["board"]),
+            firmwareVersion: nonEmpty(dictionary["fw"])
+        )
+    }
+
+    private static func normalizedBoardType(_ value: String?) -> String? {
+        guard let value = nonEmpty(value) else { return nil }
+        switch value.lowercased() {
+        case "esp32s3", "esp32-s3":
+            return "esp32s3"
+        default:
+            return value
+        }
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 
     private static func hmacHex(secret: String, message: String) -> String {

@@ -64,6 +64,7 @@ Transport behavior:
 - USB MIDI remains the preferred wired path when present.
 - The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and paired/discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
+- Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32-S3 metadata instead of relying only on hardcoded defaults.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - The device sheet can provision ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
 - When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.

@@ -807,12 +807,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         for record in wifiDevices.sorted(by: { $0.displayName < $1.displayName }) {
             let isActive = activeTransport == .wifi && wifiManager?.activeDeviceID == record.id && isTransportConnectedInternal()
+            let endpoint = "\(record.host):\(record.port)"
+            let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
             appendOrMerge(LocalDeviceDescriptor(
                 id: record.id,
                 displayName: record.displayName,
                 transport: .wifi,
                 boardType: record.boardType ?? "esp32s3",
-                moduleLabel: "\(record.host):\(record.port)",
+                moduleLabel: detail,
                 connectionState: isActive ? .connected : .discovered,
                 lastErrorText: record.isPaired ? nil : "Pairing required",
                 isActive: isActive
