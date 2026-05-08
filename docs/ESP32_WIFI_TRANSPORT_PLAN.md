@@ -211,6 +211,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - transport capabilities,
   - user-visible device name.
 - Keep manual IP connection as the fallback.
+- Current firmware progress: mDNS is published only after the WebSocket server and `/v1/ws` handler are ready. If mDNS initialization, hostname setup, or service publication fails, firmware leaves the authenticated WebSocket online for manual IP/hostname connections and logs the discovery failure; incomplete TXT metadata is also logged.
 
 ### Phase 5: Validation
 

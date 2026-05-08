@@ -100,6 +100,7 @@ static void wifi_reconnect_task(void *arg);
 static void start_server(void);
 static void stop_server(void);
 static void close_session(httpd_handle_t hd, int sockfd);
+static bool publish_mdns(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
@@ -599,21 +600,11 @@ static void start_server(void)
         return;
     }
 
-    char instance_name[48];
-    char local_id[8];
-    build_mdns_instance_name(instance_name, sizeof(instance_name));
-    build_local_id_suffix(local_id, sizeof(local_id));
-
-    (void)mdns_init();
-    (void)mdns_hostname_set(s_config.hostname);
-    (void)mdns_instance_name_set(instance_name);
-    (void)mdns_service_add(instance_name, "_emwaver", "_tcp", WIFI_CONTROL_PORT, NULL, 0);
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "proto", "1");
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "board", EMW_TARGET_BOARD_TYPE);
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION);
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "cap", EMW_TARGET_CAPABILITIES);
-    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id);
-    ESP_LOGI(TAG, "Wi-Fi WebSocket listening on port %d%s as %s.local", WIFI_CONTROL_PORT, WIFI_WS_PATH, s_config.hostname);
+    if (publish_mdns()) {
+        ESP_LOGI(TAG, "Wi-Fi WebSocket listening on port %d%s as %s.local", WIFI_CONTROL_PORT, WIFI_WS_PATH, s_config.hostname);
+    } else {
+        ESP_LOGW(TAG, "Wi-Fi WebSocket listening on port %d%s; mDNS advertisement unavailable", WIFI_CONTROL_PORT, WIFI_WS_PATH);
+    }
 }
 
 static void stop_server(void)
@@ -636,6 +627,52 @@ static void close_session(httpd_handle_t hd, int sockfd)
         s_auth_generation++;
     }
     close(sockfd);
+}
+
+static bool publish_mdns(void)
+{
+    char instance_name[48];
+    char local_id[8];
+    build_mdns_instance_name(instance_name, sizeof(instance_name));
+    build_local_id_suffix(local_id, sizeof(local_id));
+
+    esp_err_t err = mdns_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        ESP_LOGW(TAG, "failed to initialize mDNS: %s", esp_err_to_name(err));
+        return false;
+    }
+
+    err = mdns_hostname_set(s_config.hostname);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to set mDNS hostname '%s': %s", s_config.hostname, esp_err_to_name(err));
+        mdns_free();
+        return false;
+    }
+
+    err = mdns_instance_name_set(instance_name);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to set mDNS instance name: %s", esp_err_to_name(err));
+        mdns_free();
+        return false;
+    }
+
+    err = mdns_service_add(instance_name, "_emwaver", "_tcp", WIFI_CONTROL_PORT, NULL, 0);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "failed to publish mDNS service: %s", esp_err_to_name(err));
+        mdns_free();
+        return false;
+    }
+
+    bool txt_ok = true;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "proto", "1") == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "board", EMW_TARGET_BOARD_TYPE) == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION) == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "cap", EMW_TARGET_CAPABILITIES) == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id) == ESP_OK;
+    if (!txt_ok) {
+        ESP_LOGW(TAG, "published mDNS service without complete TXT metadata");
+    }
+    return true;
 }
 
 static void build_mdns_instance_name(char *out, size_t out_len)
