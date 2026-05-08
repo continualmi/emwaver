@@ -5,6 +5,37 @@ import EMWaverScriptRuntime
 import EMWaverScriptModel
 
 @MainActor
+private final class TargetedScriptDevice: ScriptDevice {
+    private weak var base: MacUSBManager?
+    private let deviceID: String?
+
+    init(base: MacUSBManager, deviceID: String?) {
+        self.base = base
+        self.deviceID = deviceID
+    }
+
+    func getBuffer() -> Data { base?.getBuffer() ?? Data() }
+    func clearBuffer() { base?.clearBuffer() }
+    func loadBuffer(data: Data) { base?.loadBuffer(data: data) }
+    func sendPacket(_ data: Data) { base?.sendPacket(data, deviceID: deviceID) }
+    func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout, deviceID: deviceID) }
+    func transmitBuffer() { base?.transmitBuffer() }
+}
+
+@MainActor
+private final class RemoteScriptSession {
+    let manager: ScriptPreviewManager
+    let deviceID: String?
+    var uiRev: Int = 0
+    var cancellable: AnyCancellable?
+
+    init(manager: ScriptPreviewManager, deviceID: String?) {
+        self.manager = manager
+        self.deviceID = deviceID
+    }
+}
+
+@MainActor
 final class RemoteControlHostService: ObservableObject {
     static let localGatewayEnabledKey = "emwaver.localGateway.enabled"
 
@@ -21,6 +52,7 @@ final class RemoteControlHostService: ObservableObject {
 
     private var previewManager: ScriptPreviewManager?
     private var treeCancellable: AnyCancellable?
+    private var remoteSessionsByScriptId: [String: RemoteScriptSession] = [:]
 
     private var uiRev: Int = 0
 
@@ -231,35 +263,17 @@ final class RemoteControlHostService: ObservableObject {
             return
 
         case "script.run":
-            guard let previewManager else { return }
             guard let source = obj["source"] as? String else {
-                sendJson(["type": "script.error", "error": "missing_source", "hostSessionId": hostSessions?.hostSessionId ?? ""]) 
+                sendJson(["type": "script.error", "error": "missing_source", "hostSessionId": hostSessions?.hostSessionId ?? ""])
                 return
             }
             let name = (obj["name"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
-
-            uiRev = 0
-
-            // Persist the currently remote-controlled script name for UX (best-effort).
-            if let name, !name.isEmpty {
-                UserDefaults.standard.set(name, forKey: "emwaver.remote.activeScriptName")
-            } else {
-                UserDefaults.standard.removeObject(forKey: "emwaver.remote.activeScriptName")
-            }
-
-            previewManager.render(script: source, name: name, moduleSources: [:])
-
-            sendJson([
-                "type": "script.started",
-                "hostSessionId": hostSessions?.hostSessionId ?? "",
-                "scriptInstanceId": previewManager.activeScriptInstanceId ?? "",
-                "name": name ?? "",
-            ])
+            let deviceID = (obj["deviceId"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            startRemoteScript(source: source, name: name, deviceID: deviceID?.isEmpty == false ? deviceID : nil)
 
         case "ui.event":
-            guard let previewManager else { return }
             guard let scriptInstanceId = obj["scriptInstanceId"] as? String else { return }
-            guard scriptInstanceId == previewManager.activeScriptInstanceId else { return }
+            guard let previewManager = previewManager(for: scriptInstanceId) else { return }
             guard let targetNodeId = obj["targetNodeId"] as? String else { return }
             guard let name = obj["name"] as? String else { return }
             let payload = obj["payload"] as? [String: Any] ?? [:]
@@ -269,27 +283,36 @@ final class RemoteControlHostService: ObservableObject {
             if name == "viewport" {
                 // First, let the script handle it (if it has a handler) so the host UI stays in sync.
                 // Then, also compute the compressed viewport for the web renderer.
-                dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
-                _ = handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload)
+                dispatchUiEvent(previewManager: previewManager, targetNodeId: targetNodeId, name: name, payload: payload)
+                _ = handlePlotViewportRequest(previewManager: previewManager, targetNodeId: targetNodeId, payload: payload)
                 return
             }
 
-            dispatchUiEvent(targetNodeId: targetNodeId, name: name, payload: payload)
+            dispatchUiEvent(previewManager: previewManager, targetNodeId: targetNodeId, name: name, payload: payload)
 
         case "plot.viewport":
             // Host-side plot viewport computation only (no script handler invocation).
-            guard let previewManager else { return }
-            guard let _ = obj["scriptInstanceId"] as? String else { return }
-            guard (obj["scriptInstanceId"] as? String) == previewManager.activeScriptInstanceId else { return }
+            guard let scriptInstanceId = obj["scriptInstanceId"] as? String else { return }
+            guard let previewManager = previewManager(for: scriptInstanceId) else { return }
             guard let targetNodeId = obj["targetNodeId"] as? String else { return }
             let payload = obj["payload"] as? [String: Any] ?? [:]
-            _ = handlePlotViewportRequest(targetNodeId: targetNodeId, payload: payload)
+            _ = handlePlotViewportRequest(previewManager: previewManager, targetNodeId: targetNodeId, payload: payload)
             return
 
         case "script.stop":
-            guard let previewManager else { return }
-            let currentId = previewManager.activeScriptInstanceId ?? ""
-            if !currentId.isEmpty {
+            let requestedId = obj["scriptInstanceId"] as? String
+            let currentId = requestedId ?? previewManager?.activeScriptInstanceId ?? ""
+            if !currentId.isEmpty, let session = remoteSessionsByScriptId.removeValue(forKey: currentId) {
+                session.cancellable?.cancel()
+                session.manager.exitPreview()
+                sendJson([
+                    "type": "script.stopped",
+                    "hostSessionId": hostSessions?.hostSessionId ?? "",
+                    "scriptInstanceId": currentId,
+                    "deviceId": session.deviceID ?? "",
+                    "reason": "stopped_by_controller",
+                ])
+            } else if !currentId.isEmpty, let previewManager, currentId == previewManager.activeScriptInstanceId {
                 previewManager.exitPreview()
                 sendJson([
                     "type": "script.stopped",
@@ -305,6 +328,59 @@ final class RemoteControlHostService: ObservableObject {
         }
     }
 
+    private func previewManager(for scriptInstanceId: String) -> ScriptPreviewManager? {
+        if let session = remoteSessionsByScriptId[scriptInstanceId] {
+            return session.manager
+        }
+        if previewManager?.activeScriptInstanceId == scriptInstanceId {
+            return previewManager
+        }
+        return nil
+    }
+
+    private func startRemoteScript(source: String, name: String?, deviceID: String?) {
+        guard let device else { return }
+
+        let manager = ScriptPreviewManager()
+        manager.attach(device: TargetedScriptDevice(base: device, deviceID: deviceID))
+        let session = RemoteScriptSession(manager: manager, deviceID: deviceID)
+
+        session.cancellable = manager.$scriptTree
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self, weak session, weak manager] tree in
+                guard let self, let session, let manager else { return }
+                guard let scriptId = manager.activeScriptInstanceId else { return }
+                session.uiRev += 1
+                self.remoteScriptTree = tree
+                self.remoteActiveScriptName = manager.activeScriptName
+                self.sendJson([
+                    "type": "ui.snapshot",
+                    "hostSessionId": self.hostSessions?.hostSessionId ?? "",
+                    "scriptInstanceId": scriptId,
+                    "deviceId": session.deviceID ?? "",
+                    "rev": session.uiRev,
+                    "root": tree.map { self.encodeNode($0.root) } ?? NSNull(),
+                    "metadata": tree?.metadata ?? [:],
+                ])
+            }
+
+        manager.render(script: source, name: name, moduleSources: [:])
+        guard let scriptId = manager.activeScriptInstanceId else { return }
+        remoteSessionsByScriptId[scriptId] = session
+
+        if let name, !name.isEmpty {
+            UserDefaults.standard.set(name, forKey: "emwaver.remote.activeScriptName")
+        }
+
+        sendJson([
+            "type": "script.started",
+            "hostSessionId": hostSessions?.hostSessionId ?? "",
+            "scriptInstanceId": scriptId,
+            "deviceId": deviceID ?? "",
+            "name": name ?? "",
+        ])
+    }
+
     /// Invoke a handler token coming from a locally-rendered ScriptRenderView.
     ///
     /// This is used for the in-app “Remote Control” overlay so the host can
@@ -317,8 +393,7 @@ final class RemoteControlHostService: ObservableObject {
         previewManager.invoke(token: token, arguments: arguments)
     }
 
-    private func dispatchUiEvent(targetNodeId: String, name: String, payload: [String: Any]) {
-        guard let previewManager else { return }
+    private func dispatchUiEvent(previewManager: ScriptPreviewManager, targetNodeId: String, name: String, payload: [String: Any]) {
         guard let tree = previewManager.scriptTree else { return }
 
         guard let ev = ScriptEventType(rawValue: name) else { return }
@@ -344,8 +419,7 @@ final class RemoteControlHostService: ObservableObject {
 
     /// Handle a web plot viewport request by computing a compressed viewport on the host.
     /// Returns true if the request was understood and handled.
-    private func handlePlotViewportRequest(targetNodeId: String, payload: [String: Any]) -> Bool {
-        guard let previewManager else { return false }
+    private func handlePlotViewportRequest(previewManager: ScriptPreviewManager, targetNodeId: String, payload: [String: Any]) -> Bool {
         guard let scriptInstanceId = previewManager.activeScriptInstanceId else { return false }
         guard let tree = previewManager.scriptTree else { return false }
         guard let node = findNode(in: tree.root, id: targetNodeId) else { return false }

@@ -129,6 +129,7 @@ Useful flags:
 emwaver run scripts/blink.emw --port 3930
 emwaver run scripts/blink.emw --gateway-url http://127.0.0.1:3930
 emwaver run scripts/blink.emw --name blink.emw --timeout-ms 10000
+emwaver run scripts/blink.emw --device uid:local-hardware-id
 emwaver run scripts/blink.emw --no-wait
 emwaver run scripts/blink.emw --direct --bootstrap-path assets/default-scripts/script_bootstrap.emw
 ```
@@ -236,7 +237,7 @@ Daemon-side transport is local USB MIDI/SysEx by default, with ESP32 BLE availab
 - Device command path routes through the local USB or BLE command bridge and shared packet send/response semantics.
 - Remote side never directly owns USB/BLE — only forwards commands/events through daemon session.
 
-Current daemon/runtime ownership is single-device-oriented. The planned automation-bench direction is multi-device: discover multiple BLE/USB boards, connect to more than one at the same time, assign stable names/ids, route script commands to a selected board, and report per-device status/snapshots/logs so an agent can validate connected modules and cross-device loops.
+Current direct daemon/runtime ownership is single-device-oriented. Through the gateway/native-app bridge, `emwaver run <script> --device <id>` forwards `deviceId` to the macOS app, which can create a separate remote script session and route packet/command traffic to a selected connected device. The remaining automation-bench work is to expose real gateway device listing, harden per-session buffers/logs, and support fully isolated mixed USB/BLE concurrent ownership.
 
 This model applies to host-backed boards. Autonomous Wi-Fi-capable boards are expected to use a different direct session model once implemented.
 

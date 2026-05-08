@@ -1066,9 +1066,6 @@ fn run_script(
             bootstrap_path,
         );
     }
-    if device.is_some() {
-        anyhow::bail!("--device is only supported with --direct for now");
-    }
     if no_device {
         anyhow::bail!("--no-device is only supported with --direct");
     }
@@ -1116,6 +1113,7 @@ fn run_script(
             "type": "script.run",
             "name": name,
             "source": source,
+            "deviceId": device,
         })
         .to_string(),
     ))

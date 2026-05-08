@@ -63,7 +63,8 @@ Transport behavior:
 - The device sheet now exposes a unified local device list for discovered USB MIDI and ESP32-S3 BLE candidates, so multi-board bench work can start with explicit user selection.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
-- The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the existing single-script runtime. Concurrent per-device script sessions remain a follow-up.
+- The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
+- Gateway-controlled runs can now include a `deviceId`; the macOS app creates a separate remote script runtime per `script.run` request and routes `Device.sendPacket` / `Device.sendCommand` through a targeted device bridge. This enables the initial automation-bench shape of one connected device = one remote script session. Shared capture buffers and mixed USB/BLE concurrent ownership still need hardening before treating every script API as fully isolated.
 - The app queries `EMW_OP_HARDWARE_UID_GET` after connection and uses that local hardware UID to merge the same physical device across transports when known. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 

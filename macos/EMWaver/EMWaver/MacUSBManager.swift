@@ -296,11 +296,25 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    func sendPacket(_ data: Data, deviceID: String?) {
+        midiQueue.async {
+            self.sendPacketNow(data, deviceID: deviceID)
+        }
+    }
+
     func sendCommand(_ command: Data, timeout: Int) -> Data? {
         sendCommandInternal(command, timeout: timeout, responsePredicate: nil)
     }
 
+    func sendCommand(_ command: Data, timeout: Int, deviceID: String?) -> Data? {
+        sendCommandInternal(command, timeout: timeout, responsePredicate: nil, deviceID: deviceID)
+    }
+
     private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?) -> Data? {
+        sendCommandInternal(command, timeout: timeout, responsePredicate: responsePredicate, deviceID: nil)
+    }
+
+    private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?, deviceID: String?) -> Data? {
         guard isTransportConnectedInternal() else {
             setError("Cannot send command: Not connected")
             return nil
@@ -322,7 +336,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         withMidiQueueSync {
-            self.sendPacketNow(command)
+            self.sendPacketNow(command, deviceID: deviceID)
         }
 
         let ms = max(1, timeout)
@@ -342,7 +356,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendPacketNow(_ data: Data) {
-        guard activeTransport == .ble || connectedDestination != 0 else {
+        sendPacketNow(data, deviceID: nil)
+    }
+
+    private func sendPacketNow(_ data: Data, deviceID: String?) {
+        guard deviceID != nil || activeTransport == .ble || connectedDestination != 0 else {
             setError("Cannot send packet: Not connected")
             return
         }
@@ -366,7 +384,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
-        sendSuperframe(sf)
+        sendSuperframe(sf, deviceID: deviceID)
     }
 
     func transmitBuffer() {
@@ -540,6 +558,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func displayNameFromDeviceID(_ id: String) -> String? {
         let raw = String(id.dropFirst("midi:".count))
         return portCandidatesByDisplayName.keys.first(where: { $0 == raw })
+    }
+
+    private func resolvedTransportID(for deviceID: String?) -> String? {
+        guard let deviceID, !deviceID.isEmpty else { return nil }
+        if deviceID.hasPrefix("uid:") {
+            let uid = String(deviceID.dropFirst("uid:".count))
+            return hardwareUIDByDeviceID.first(where: { $0.value == uid })?.key
+        }
+        return deviceID
     }
 
     private func connectToFirstPortInternal() {
@@ -781,13 +808,24 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendSuperframe(_ superframe: Data) {
+        sendSuperframe(superframe, deviceID: nil)
+    }
+
+    private func sendSuperframe(_ superframe: Data, deviceID: String?) {
         guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else {
             setError("SysEx encode failed")
             return
         }
 
-        if activeTransport == .ble {
-            guard let peripheral = blePeripheral,
+        let targetID = resolvedTransportID(for: deviceID)
+        if targetID?.hasPrefix("ble:") == true || (targetID == nil && activeTransport == .ble) {
+            let targetPeripheral: CBPeripheral?
+            if let targetID, let uuid = UUID(uuidString: String(targetID.dropFirst("ble:".count))) {
+                targetPeripheral = bleConnectedPeripheralsByID[uuid] ?? bleDiscoveredPeripheralsByID[uuid]
+            } else {
+                targetPeripheral = blePeripheral
+            }
+            guard let peripheral = targetPeripheral,
                   peripheral.state == .connected,
                   let characteristic = bleCommandCharacteristicsByID[peripheral.identifier] ?? bleCommandCharacteristic else {
                 setError("BLE write failed: Not connected")
@@ -1216,7 +1254,6 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         guard error == nil, characteristic.uuid == Self.bleNotifyUUID, let value = characteristic.value else {
             return
         }
-        guard blePeripheral == peripheral else { return }
         midiQueue.async {
             self.handleMidiBytes(value)
         }
