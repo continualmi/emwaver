@@ -596,6 +596,7 @@ static void start_server(void)
     if (httpd_start(&s_httpd, &config) != ESP_OK) {
         ESP_LOGE(TAG, "failed to start Wi-Fi WebSocket server");
         s_httpd = NULL;
+        mdns_free();
         return;
     }
 
@@ -606,7 +607,13 @@ static void start_server(void)
         .user_ctx = NULL,
         .is_websocket = true,
     };
-    ESP_ERROR_CHECK(httpd_register_uri_handler(s_httpd, &ws));
+    if (httpd_register_uri_handler(s_httpd, &ws) != ESP_OK) {
+        ESP_LOGE(TAG, "failed to register Wi-Fi WebSocket handler");
+        (void)httpd_stop(s_httpd);
+        s_httpd = NULL;
+        mdns_free();
+        return;
+    }
     ESP_LOGI(TAG, "Wi-Fi WebSocket listening on port %d%s as %s.local", WIFI_CONTROL_PORT, WIFI_WS_PATH, s_config.hostname);
 }
 
