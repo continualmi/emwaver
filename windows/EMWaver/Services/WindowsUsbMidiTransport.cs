@@ -32,6 +32,8 @@ internal static class WindowsUsbMidiTransport
         internal string DisplayName { get; }
         internal bool IsOpen => InPort != null && OutPort != null;
 
+        internal string InferBoardType() => WindowsUsbMidiTransport.InferBoardType(DisplayName);
+
         internal string? SendSuperframe(byte[] superframe36, Func<byte[], IBuffer> bufferFromBytes)
         {
             return OutPort == null
@@ -138,6 +140,16 @@ internal static class WindowsUsbMidiTransport
         return ports.FirstOrDefault(p => p.DisplayName.Contains("emwaver", StringComparison.OrdinalIgnoreCase)) ??
                ports.FirstOrDefault(p => !p.DisplayName.Contains("network", StringComparison.OrdinalIgnoreCase)) ??
                ports.FirstOrDefault();
+    }
+
+    internal static string InferBoardType(string? displayName)
+    {
+        var name = (displayName ?? string.Empty).ToLowerInvariant();
+        if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("s3") || name.Contains("emwaver esp"))
+        {
+            return "esp32s3";
+        }
+        return "stm32f042";
     }
 
     internal static string? SendSuperframe(

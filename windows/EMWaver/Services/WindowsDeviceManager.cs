@@ -329,7 +329,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             {
                 try
                 {
-                    var boardType = InferBoardType(port.DisplayName);
+                    var boardType = connection.InferBoardType();
                     RunOnUi(() =>
                     {
                         ConnectedBoardType = boardType;
@@ -340,7 +340,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 {
                     RunOnUi(() =>
                     {
-                        ConnectedBoardType = InferBoardType(port.DisplayName);
+                        ConnectedBoardType = connection.InferBoardType();
                         LastDetectedBoardType = ConnectedBoardType;
                     });
                 }
@@ -420,20 +420,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         {
             DfuConnected = false;
         }
-    }
-
-    private static string InferBoardType(string? portName)
-    {
-        var name = (portName ?? string.Empty).ToLowerInvariant();
-        if (name.Contains("esp32") || name.Contains("esp 32") || name.Contains("s3"))
-        {
-            return "esp32s3";
-        }
-        if (name.Contains("emwaver esp"))
-        {
-            return "esp32s3";
-        }
-        return "stm32f042";
     }
 
     private async Task<string?> QueryDeviceVersionAsync(int timeoutMs)
