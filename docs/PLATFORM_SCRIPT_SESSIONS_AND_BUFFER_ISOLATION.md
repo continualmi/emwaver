@@ -52,6 +52,7 @@ Current first step:
 - Windows SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession`, including BLE notification chunk reassembly.
 - Windows captures the active transport session id when a local script starts and routes script buffer/command APIs through that keyed session.
 - Windows USB MIDI/BLE buffering now depends on an `ITransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
+- Windows active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
 - Windows BLE transport constants and device-session identity helpers now live in `WindowsBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Windows USB MIDI port pairing, target selection, and session identity helpers now live in `WindowsUsbMidiTransport`, so the current Windows manager has separate USB and BLE transport helper files.
 - Windows now has a `WindowsWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
@@ -91,6 +92,7 @@ Current first step:
 - Android SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession` instead of singleton fields on `USBService`.
 - Android captures the active device service into `ScriptDeviceConnection` when a local script starts, so script I/O no longer re-resolves whichever service is active later.
 - Android USB/BLE buffering now depends on a `TransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
+- Android active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
 - Android BLE transport constants, advertisement matching, and device-session identity helpers now live in `AndroidBleTransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - Android USB MIDI descriptor matching, board inference, display names, and session identity helpers now live in `AndroidUsbMidiTransport`, so the current Android service has separate USB and BLE transport helper files.
 - Android now has an `AndroidWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
@@ -129,6 +131,7 @@ Current first step:
 - iOS SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession` instead of singleton fields on `USBManager`.
 - iOS captures the active transport session key when a local script starts and routes script buffer/command APIs through that keyed session.
 - iOS USB MIDI/BLE buffering now depends on a `TransportDeviceSession` protocol, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
+- iOS active-session selection now makes buffer reset an explicit choice, preserving the future path where selecting an already-connected device session does not silently wipe its buffers.
 - iOS BLE transport constants, advertisement matching, display names, and device-session identity helpers now live in `BLETransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - iOS USB MIDI endpoint pairing, target selection, display names, and session identity helpers now live in `USBMidiTransport`, so the current iOS manager has separate USB MIDI and BLE transport helper files.
 - iOS now has a `WiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.

@@ -151,7 +151,7 @@ final class USBManager: NSObject, ObservableObject {
         return bufferQueue.sync(execute: block)
     }
 
-    private func setActiveBufferSession(deviceId: String) {
+    private func setActiveBufferSession(deviceId: String, resetSession: Bool) {
         let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
         withBufferQueueSync {
             let sessionKey = key.isEmpty ? "active" : key
@@ -159,7 +159,9 @@ final class USBManager: NSObject, ObservableObject {
             bufferSessionsByDeviceId[sessionKey] = session
             activeBufferSession = session
             activeBufferSessionKey = sessionKey
-            activeBufferSession.clearAll()
+            if resetSession {
+                activeBufferSession.clearAll()
+            }
         }
     }
 
@@ -197,7 +199,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) {
         let target = ActiveDeviceTarget(deviceId: deviceId, transport: transport)
-        setActiveBufferSession(deviceId: target.deviceId)
+        setActiveBufferSession(deviceId: target.deviceId, resetSession: true)
         activeDeviceTarget = target
         activeTransport = target.transport
     }

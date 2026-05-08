@@ -213,13 +213,16 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
-    private void SetActiveBufferSession(string deviceId)
+    private void SetActiveBufferSession(string deviceId, bool resetSession)
     {
         lock (_bufferSessionLock)
         {
             var session = BufferSession(deviceId);
             _activeBufferSession = session;
-            _activeBufferSession.ClearAll();
+            if (resetSession)
+            {
+                _activeBufferSession.ClearAll();
+            }
         }
     }
 
@@ -243,7 +246,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private void SetActiveDeviceTarget(string deviceId, DeviceTransport transport)
     {
         var target = new ActiveDeviceTarget(deviceId, transport);
-        SetActiveBufferSession(target.DeviceId);
+        SetActiveBufferSession(target.DeviceId, resetSession: true);
         _activeDeviceTarget = target;
         ActiveTransport = target.Transport;
     }

@@ -113,11 +113,13 @@ public class USBService extends Service implements DeviceConnectionService {
         }
     }
 
-    private void setActiveBufferSession(String deviceId) {
+    private void setActiveBufferSession(String deviceId, boolean resetSession) {
         TransportDeviceSession session = bufferSession(deviceId);
         synchronized (bufferSessionLock) {
             activeBufferSession = session;
-            activeBufferSession.clearAll();
+            if (resetSession) {
+                activeBufferSession.clearAll();
+            }
         }
     }
 
@@ -153,7 +155,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private void setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
         ActiveDeviceTarget<ActiveTransport> target = new ActiveDeviceTarget<>(deviceId, transport);
-        setActiveBufferSession(target.deviceId);
+        setActiveBufferSession(target.deviceId, true);
         activeDeviceTarget = target;
         activeTransport = target.transport;
     }
