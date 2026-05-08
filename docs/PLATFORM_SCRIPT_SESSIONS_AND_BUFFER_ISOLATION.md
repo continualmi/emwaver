@@ -78,6 +78,7 @@ Current first step:
 - Windows now tracks the live script target as one `ActiveDeviceTarget` descriptor instead of parallel USB/BLE session fields, so send guards and receive routing resolve against one explicit active transport/session identity.
 - Windows has an `ActiveDeviceTargetTests` suite for active-target device-id normalization and transport matching; local execution still depends on a machine with `dotnet` installed.
 - Windows local script I/O now goes through a `TargetedScriptDeviceConnection` adapter, matching the target-scoped bridge direction on Apple/Android instead of leaving packet, sampler, and clear callbacks as loose page-level lambdas.
+- Windows `TargetedScriptDeviceConnection` has focused coverage for blank captured device ids routing as `active`, matching the other host adapters.
 - Windows has a focused `TargetedScriptDeviceConnectionTests` case covering captured-device routing for packet sends, sampler reads, and sampler clears; local execution still depends on a machine with `dotnet` installed.
 
 Remaining isolation work:

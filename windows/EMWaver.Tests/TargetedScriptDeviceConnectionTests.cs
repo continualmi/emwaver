@@ -39,4 +39,27 @@ public sealed class TargetedScriptDeviceConnectionTests
         Assert.Equal(new byte[] { 0x80 }, response);
         Assert.Equal(payload, sampler);
     }
+
+    [Fact]
+    public void RoutesBlankCapturedDeviceIdAsActive()
+    {
+        string? sendDeviceId = null;
+        var payload = new byte[] { 0x01, 0x02 };
+
+        var connection = new TargetedScriptDeviceConnection(
+            "   ",
+            (bytes, timeoutMs, deviceId) =>
+            {
+                sendDeviceId = deviceId;
+                return [0x80];
+            },
+            _ => payload,
+            _ => { }
+        );
+
+        _ = connection.SendPacket(payload, 500);
+
+        Assert.Equal("active", connection.DeviceId);
+        Assert.Equal("active", sendDeviceId);
+    }
 }
