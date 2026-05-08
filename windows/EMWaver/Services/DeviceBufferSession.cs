@@ -1,5 +1,6 @@
 using EMWaver.Interop;
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace EMWaver.Services;
@@ -16,6 +17,8 @@ internal sealed class DeviceBufferSession
     private readonly object _responseLock = new();
     private TaskCompletionSource<byte[]?>? _responseTcs;
     private Func<byte[], bool>? _responsePredicate;
+    private readonly List<byte> _sysexBytes = [];
+    private bool _inSysex;
 
     internal string DeviceId { get; }
 
@@ -33,6 +36,8 @@ internal sealed class DeviceBufferSession
             _rxCounter = 0;
             _txBytes = Array.Empty<byte>();
             _txTsMs = Array.Empty<ulong>();
+            _sysexBytes.Clear();
+            _inSysex = false;
         }
     }
 
@@ -123,6 +128,69 @@ internal sealed class DeviceBufferSession
         }
     }
 
+    internal void FeedSysexBytes(byte[] bytes, ulong tsMs)
+    {
+        if (bytes.Length == 0) return;
+
+        List<byte[]> completeSysex = [];
+        lock (_lock)
+        {
+            foreach (var b in bytes)
+            {
+                if (b == 0xF0)
+                {
+                    _sysexBytes.Clear();
+                    _inSysex = true;
+                }
+
+                if (!_inSysex)
+                {
+                    continue;
+                }
+
+                _sysexBytes.Add(b);
+                if (_sysexBytes.Count > 128)
+                {
+                    _sysexBytes.Clear();
+                    _inSysex = false;
+                    continue;
+                }
+
+                if (b == 0xF7)
+                {
+                    completeSysex.Add(_sysexBytes.ToArray());
+                    _sysexBytes.Clear();
+                    _inSysex = false;
+                }
+            }
+        }
+
+        foreach (var sysex in completeSysex)
+        {
+            var superframe = UsbMidiSysex.DecodeSysexToSuperframe(sysex);
+            if (superframe == null || superframe.Length != NativeBufferRust.PacketSizeBytes * 2)
+            {
+                continue;
+            }
+
+            var cmdLane = new byte[NativeBufferRust.PacketSizeBytes];
+            var streamLane = new byte[NativeBufferRust.PacketSizeBytes];
+            Array.Copy(superframe, 0, cmdLane, 0, cmdLane.Length);
+            Array.Copy(superframe, cmdLane.Length, streamLane, 0, streamLane.Length);
+
+            if (!IsAllZero(cmdLane))
+            {
+                StoreBulkPkt(cmdLane, tsMs);
+                CompleteResponseIfMatch(cmdLane);
+            }
+            if (!IsAllZero(streamLane))
+            {
+                StoreBulkPkt(streamLane, tsMs);
+                CompleteResponseIfMatch(streamLane);
+            }
+        }
+    }
+
     internal TaskCompletionSource<byte[]?> BeginResponseWait(Func<byte[], bool> predicate)
     {
         lock (_responseLock)
@@ -190,5 +258,14 @@ internal sealed class DeviceBufferSession
         if (existing.Length > 0) Array.Copy(existing, outArr, existing.Length);
         for (var i = 0; i < count; i++) outArr[existing.Length + i] = value;
         return outArr;
+    }
+
+    private static bool IsAllZero(byte[] data)
+    {
+        foreach (var b in data)
+        {
+            if (b != 0) return false;
+        }
+        return true;
     }
 }

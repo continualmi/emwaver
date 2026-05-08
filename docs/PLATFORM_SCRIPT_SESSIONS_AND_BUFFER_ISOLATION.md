@@ -49,12 +49,13 @@ Current first step:
 - Windows USB and BLE connections now select keyed buffer sessions, matching the macOS target-session direction even though only one transport connection is active at a time today.
 - Windows script sampler packet APIs now use the transport lane size exposed by `NativeBufferRust.PacketSizeBytes` instead of assuming 64-byte packets.
 - Windows command response wait state now lives on the active `DeviceBufferSession` instead of singleton fields on `WindowsDeviceManager`.
+- Windows SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession`, including BLE notification chunk reassembly.
 
 Remaining isolation work:
 
 - finish moving debug/monitor and transport helpers off the `NativeBufferRust` process-wide facade,
 - route script engines through a targeted device/session bridge,
-- keep parser state, sampler stream state, and capture buffers scoped to that device session.
+- keep sampler stream state and capture buffers scoped to that device session.
 - split `WindowsDeviceManager` into USB MIDI, BLE, and future Wi-Fi transport units with a shared device/session contract.
 
 ## Android direction
@@ -115,6 +116,7 @@ Remaining isolation work:
 - [x] Windows has an active transport buffer session object used by script sampler reads.
 - [x] Windows selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] Windows scopes command response wait state to the active transport buffer session.
+- [x] Windows scopes SysEx parser state to the active transport buffer session.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] Android scopes sampler stream state to the active transport buffer session.

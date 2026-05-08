@@ -592,30 +592,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private void ProcessIncomingSysex(byte[] bytes, string transportLabel)
     {
         Debug.WriteLine($"[EMWaver][{transportLabel}][RX] sysex={bytes.Length}");
-
-        var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
-        if (superframe == null || superframe.Length != SuperframeSizeBytes)
-        {
-            Debug.WriteLine($"[EMWaver][{transportLabel}][RX] decode superframe failed");
-            return;
-        }
-
-        Debug.WriteLine($"[EMWaver][{transportLabel}][RX] superframe36 ok cmd0=0x{superframe[0]:X2}");
-
-        var tsMs = NowMs();
-        var cmdLane = superframe.Take(LaneSizeBytes).ToArray();
-        var streamLane = superframe.Skip(LaneSizeBytes).Take(LaneSizeBytes).ToArray();
-
-        if (!IsAllZero(cmdLane))
-        {
-            ActiveBufferSession.StoreBulkPkt(cmdLane, tsMs);
-            HandleLane(cmdLane);
-        }
-        if (!IsAllZero(streamLane))
-        {
-            ActiveBufferSession.StoreBulkPkt(streamLane, tsMs);
-            HandleLane(streamLane);
-        }
+        ActiveBufferSession.FeedSysexBytes(bytes, NowMs());
     }
 
     internal byte[]? SendPacket(byte[] payload, int timeoutMs)
@@ -649,11 +626,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             timeoutMs: timeoutMs,
             responsePredicate: lane18 => lane18.Length > 0 && (lane18[0] == 0x80 || lane18[0] == 0x81)
         );
-    }
-
-    private void HandleLane(byte[] lane18)
-    {
-        ActiveBufferSession.CompleteResponseIfMatch(lane18);
     }
 
     private void SendSuperframe(byte[] superframe36)
@@ -939,15 +911,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             System.Buffer.BlockCopy(streamLane, 0, sf, LaneSizeBytes, Math.Min(streamLane.Length, LaneSizeBytes));
         }
         return sf;
-    }
-
-    private static bool IsAllZero(byte[] bytes)
-    {
-        for (int i = 0; i < bytes.Length; i++)
-        {
-            if (bytes[i] != 0) return false;
-        }
-        return true;
     }
 
     private static IBuffer BufferFromBytes(byte[] bytes)
