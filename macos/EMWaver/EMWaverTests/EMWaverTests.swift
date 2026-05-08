@@ -101,6 +101,15 @@ struct EMWaverTests {
         #expect(MacUSBManager.isValidWiFiHostname(MacUSBManager.generatedWiFiHostname(randomSuffix: "ABC-123_xyz")))
     }
 
+    @Test func wifiProvisioningHostnameRejectsMalformedLocalNames() {
+        #expect(MacUSBManager.isValidWiFiHostname(""))
+        #expect(MacUSBManager.isValidWiFiHostname("emwaver-a1b2"))
+        #expect(!MacUSBManager.isValidWiFiHostname("-emwaver"))
+        #expect(!MacUSBManager.isValidWiFiHostname("emwaver-"))
+        #expect(!MacUSBManager.isValidWiFiHostname("emwaver.local"))
+        #expect(!MacUSBManager.isValidWiFiHostname("emwaver local"))
+    }
+
     @Test func wifiBoardMetadataNormalizesEspTargets() {
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")

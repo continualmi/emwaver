@@ -624,6 +624,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             setError("Wi-Fi pairing secret is too long.")
             return
         }
+        guard Self.isValidWiFiHostname(trimmedHostname) else {
+            setError("Wi-Fi hostname must use letters, numbers, or hyphens and cannot start or end with a hyphen.")
+            return
+        }
         guard trimmedPairingHost.isEmpty || MacWiFiManager.isValidManualHost(trimmedPairingHost) else {
             setError("Wi-Fi host must be a hostname or IP address without a scheme, path, or port.")
             return
