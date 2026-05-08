@@ -27,6 +27,9 @@ Implemented files:
 - `esp/main/libraries/wifi_transport.c` publishes target-aware mDNS `board` and `cap` TXT values.
 - `esp/sdkconfig.defaults`, `esp/sdkconfig.defaults.esp32s2`, and `esp/sdkconfig.defaults.esp32s3` provide clean target defaults for USB MIDI, WebSocket support, partition sizing, and BLE target setup.
 - `esp/README.md` documents S2/S3 as the primary ESP targets and keeps end-user firmware handling managed by EMWaver tooling.
+- Android USB metadata inference distinguishes ESP32-S2, ESP32-S3, and generic ESP32 board names, and Android firmware-update UI keeps ESP boards out of the STM32 DFU flow without S3-only assumptions.
+- Bundled default scripts detect ESP32-S2 as an ESP runtime target for shared GPIO/ADC/PWM/blink/sampler/CC1101 behavior, and report S2 accurately in scripts where ESP pin routing is not exposed yet.
+- `web/lib/emwaver/exampleEmwScripts.ts` is regenerated from the default scripts so web-bundled examples preserve the same ESP32-S2 handling.
 
 ## Build Targets
 
@@ -54,6 +57,8 @@ Static validation completed:
 - ESP32-S3 builds include `ble_server.c`, `ota_ble.c`, `ota_ble_gatt.c`, and `bt`.
 - ESP32-S2 metadata resolves to `board=esp32s2` and `cap=wifi,usb`.
 - ESP32-S3 metadata resolves to `board=esp32s3` and `cap=wifi,usb,ble`.
+- Android board metadata tests cover ESP32-S2 USB product-name inference, generic ESP32 handling, and S2/S3/generic ESP exclusion from Android's STM32 DFU flow.
+- Default script syntax validation covers the bundled `.emw` scripts after ESP32-S2 normalization.
 
 Hardware validation still required on an attached ESP32-S2 board:
 
