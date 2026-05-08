@@ -129,9 +129,6 @@ final class USBManager: NSObject, ObservableObject {
     private var commandCharacteristic: CBCharacteristic?
     private var notifyCharacteristic: CBCharacteristic?
 
-    // SysEx receive accumulator (CoreMIDI may chunk messages)
-    private var sysexAccumulator = UsbMidiSysexAccumulator()
-
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
     private var firstPacketTimeMillis: TimeInterval = 0
@@ -1024,33 +1021,8 @@ final class USBManager: NSObject, ObservableObject {
 
     private func feedMidiBytes(_ data: Data) {
         let normalized = normalizeIncomingMidiBytes(data)
-
-        // Debug: if we get complete SysEx frames, log their header.
-        for sysex in sysexAccumulator.feed(normalized) {
-            let head = sysex.prefix(min(16, sysex.count)).map { String(format: "%02X", $0) }.joined(separator: " ")
-            dbg("RX: sysex len=\(sysex.count) head=\(head)")
-
-            guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex) else {
-                dbg("RX: sysex did not decode as EMWaver superframe")
-                continue
-            }
-            
-            let cmdLane = superframe.subdata(in: 0..<Self.laneSizeBytes)
-            let streamLane = superframe.subdata(in: Self.laneSizeBytes..<Self.superframeSizeBytes)
-
-            let policy = withBufferQueueSync {
-                activeBufferSession.incomingSamplerPolicy(commandLane: cmdLane, streamLane: streamLane)
-            }
-
-            if policy.shouldStoreCommandLane {
-                dbg("RX: Demux CMD lane")
-                storeBulkPkt(cmdLane)
-            }
-
-            if policy.shouldStoreStreamLane {
-                dbg("RX: Demux STREAM lane")
-                storeBulkPkt(streamLane)
-            }
+        withBufferQueueSync {
+            activeBufferSession.feedMidiBytes(normalized, tsMs: Self.nowMs())
         }
     }
 

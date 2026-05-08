@@ -16,6 +16,7 @@ final class DeviceBufferSession {
     private var txBytes: [UInt8] = []
     private var txTsMs: [UInt64] = []
     private var samplerStreamingActive = false
+    private var sysexAccumulator = UsbMidiSysexAccumulator()
 
     func clearAll() {
         lock.lock()
@@ -26,6 +27,7 @@ final class DeviceBufferSession {
         txBytes = []
         txTsMs = []
         samplerStreamingActive = false
+        sysexAccumulator = UsbMidiSysexAccumulator()
     }
 
     func getRxPacketCount() -> UInt64 {
@@ -57,7 +59,10 @@ final class DeviceBufferSession {
         if data.isEmpty { return }
         lock.lock()
         defer { lock.unlock() }
+        storeBulkPktLocked(data, tsMs: tsMs)
+    }
 
+    private func storeBulkPktLocked(_ data: Data, tsMs: UInt64) {
         let prevPackets = rxBytes.count / Self.packetSizeBytes
         rxBytes.append(contentsOf: data)
         let newPackets = rxBytes.count / Self.packetSizeBytes
@@ -91,20 +96,40 @@ final class DeviceBufferSession {
         return policy
     }
 
-    func incomingSamplerPolicy(commandLane: Data, streamLane: Data) -> SamplerLanePolicy {
-        lock.lock()
-        defer { lock.unlock() }
-        return SamplerLanePolicy.forIncomingSuperframe(
-            commandLane: commandLane,
-            streamLane: streamLane,
-            samplerStreamingActive: samplerStreamingActive
-        )
-    }
-
     func resetSamplerStreaming() {
         lock.lock()
         defer { lock.unlock() }
         samplerStreamingActive = false
+    }
+
+    func feedMidiBytes(_ normalized: Data, tsMs: UInt64) {
+        if normalized.isEmpty { return }
+        lock.lock()
+        defer { lock.unlock() }
+
+        for sysex in sysexAccumulator.feed(normalized) {
+            guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(sysex) else {
+                continue
+            }
+            guard superframe.count >= Self.packetSizeBytes * 2 else {
+                continue
+            }
+
+            let commandLane = superframe.subdata(in: 0..<Self.packetSizeBytes)
+            let streamLane = superframe.subdata(in: Self.packetSizeBytes..<(Self.packetSizeBytes * 2))
+            let policy = SamplerLanePolicy.forIncomingSuperframe(
+                commandLane: commandLane,
+                streamLane: streamLane,
+                samplerStreamingActive: samplerStreamingActive
+            )
+
+            if policy.shouldStoreCommandLane {
+                storeBulkPktLocked(commandLane, tsMs: tsMs)
+            }
+            if policy.shouldStoreStreamLane {
+                storeBulkPktLocked(streamLane, tsMs: tsMs)
+            }
+        }
     }
 
     func prepareCommandResponseWait() {

@@ -91,12 +91,13 @@ Current first step:
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
 - iOS sampler stream lane policy state now lives on the active `DeviceBufferSession` instead of singleton fields on `USBManager`.
 - iOS command response wait cursor/polling now lives on the active `DeviceBufferSession` instead of inline state in `USBManager`.
+- iOS SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession` instead of singleton fields on `USBManager`.
 
 Remaining isolation work:
 
 - split `USBManager`'s single `NativeBufferRust` state into target-scoped sessions,
 - add a target-aware script-device bridge instead of attaching scripts directly to the singleton `USBManager`,
-- route buffer APIs and packet parsing through the selected target session.
+- route remaining buffer APIs through the selected target session.
 - split `USBManager` into USB MIDI, BLE, and future Wi-Fi transport files that publish a shared connected-device/session model.
 
 ## Acceptance checklist
@@ -123,6 +124,7 @@ Remaining isolation work:
 - [x] iOS selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] iOS scopes sampler stream state to the active transport buffer session.
 - [x] iOS scopes command response wait state to the active transport buffer session.
+- [x] iOS scopes SysEx parser state to the active transport buffer session.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.
