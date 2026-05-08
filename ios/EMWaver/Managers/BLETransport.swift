@@ -84,6 +84,29 @@ enum BLETransport {
         return name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil
     }
 
+    static func startScan(on central: CBCentralManager) {
+        central.scanForPeripherals(withServices: [serviceUUID], options: [
+            CBCentralManagerScanOptionAllowDuplicatesKey: false
+        ])
+    }
+
+    static func stopScan(on central: CBCentralManager?) {
+        central?.stopScan()
+    }
+
+    static func connect(_ pending: PendingConnection, using central: CBCentralManager, delegate: CBPeripheralDelegate) {
+        pending.peripheral.delegate = delegate
+        central.connect(pending.peripheral)
+    }
+
+    static func cancel(_ connection: Connection, using central: CBCentralManager?) {
+        central?.cancelPeripheralConnection(connection.peripheral)
+    }
+
+    static func cancel(_ pending: PendingConnection, using central: CBCentralManager?) {
+        central?.cancelPeripheralConnection(pending.peripheral)
+    }
+
     static func discoverServices(on peripheral: CBPeripheral) {
         peripheral.discoverServices([serviceUUID])
     }

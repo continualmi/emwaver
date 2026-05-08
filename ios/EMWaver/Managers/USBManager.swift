@@ -334,7 +334,7 @@ final class USBManager: NSObject, ObservableObject {
 
     func stopScan() {
         midiQueue.async {
-            self.centralManager?.stopScan()
+            BLETransport.stopScan(on: self.centralManager)
             DispatchQueue.main.async { self.isScanning = false }
         }
     }
@@ -914,9 +914,9 @@ final class USBManager: NSObject, ObservableObject {
             _ = connection.disconnect(inPort: inPort)
         }
         if let connection = bleConnection {
-            centralManager?.cancelPeripheralConnection(connection.peripheral)
+            BLETransport.cancel(connection, using: centralManager)
         } else if let pending = pendingBleConnection {
-            centralManager?.cancelPeripheralConnection(pending.peripheral)
+            BLETransport.cancel(pending, using: centralManager)
         }
         usbMidiConnection = nil
         pendingBleConnection = nil
@@ -953,9 +953,9 @@ final class USBManager: NSObject, ObservableObject {
         guard activeTransport != .usbMidi else { return }
 
         dbg("BLE scan: service=\(BLETransport.serviceUUID.uuidString)")
-        centralManager?.scanForPeripherals(withServices: [BLETransport.serviceUUID], options: [
-            CBCentralManagerScanOptionAllowDuplicatesKey: false
-        ])
+        if let centralManager {
+            BLETransport.startScan(on: centralManager)
+        }
     }
 
     private func sendBleSysex(_ sysex: Data, reportErrors: Bool) {
@@ -1122,14 +1122,14 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             guard BLETransport.matchesAdvertisementName(peripheral: peripheral, advertisementData: advertisementData) else { return }
 
             self.dbg("BLE discovered: \(name) rssi=\(RSSI)")
-            self.centralManager?.stopScan()
-            self.pendingBleConnection = BLETransport.pendingConnection(
+            BLETransport.stopScan(on: self.centralManager)
+            let pending = BLETransport.pendingConnection(
                 peripheral: peripheral,
                 advertisementData: advertisementData
             )
+            self.pendingBleConnection = pending
             self.bleConnection = nil
-            peripheral.delegate = self
-            central.connect(peripheral)
+            BLETransport.connect(pending, using: central, delegate: self)
         }
     }
 
