@@ -6,7 +6,7 @@
 
 import Foundation
 
-final class DeviceBufferSession {
+final class DeviceBufferSession: TransportDeviceSession {
     private static let packetSizeBytes = 18
     private let lock = NSLock()
 

@@ -109,8 +109,8 @@ final class USBManager: NSObject, ObservableObject {
     private let midiQueue = DispatchQueue(label: "com.emwaver.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
     private let bufferQueueKey = DispatchSpecificKey<Void>()
-    private var activeBufferSession = DeviceBufferSession()
-    private var bufferSessionsByDeviceId: [String: DeviceBufferSession] = [:]
+    private var activeBufferSession: TransportDeviceSession = DeviceBufferSession()
+    private var bufferSessionsByDeviceId: [String: TransportDeviceSession] = [:]
     private var activeBufferSessionKey = "active"
 
     private var client: MIDIClientRef = 0
@@ -172,7 +172,7 @@ final class USBManager: NSObject, ObservableObject {
         withBufferQueueSync { activeBufferSessionKey }
     }
 
-    private func bufferSession(deviceId: String) -> DeviceBufferSession {
+    private func bufferSession(deviceId: String) -> TransportDeviceSession {
         let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
         let sessionKey = key.isEmpty ? "active" : key
         if let session = bufferSessionsByDeviceId[sessionKey] {
