@@ -383,6 +383,11 @@ static void handle_wifi_config_opcode(const command_t *cmd)
                 send_binary_err();
                 return;
             }
+            memset(staged_ssid, 0, sizeof(staged_ssid));
+            memset(staged_password, 0, sizeof(staged_password));
+            memset(staged_secret, 0, sizeof(staged_secret));
+            memset(staged_hostname, 0, sizeof(staged_hostname));
+            staged_active = false;
             send_binary_ok(NULL, 0);
             return;
         case EMW_WIFI_CFG_PAIR_RESET:
