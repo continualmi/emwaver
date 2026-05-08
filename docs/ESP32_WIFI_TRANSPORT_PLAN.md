@@ -267,6 +267,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
 - Show transport as `Wi-Fi` with LAN/VPN-neutral language.
 - Keep gateway bound to localhost by default.
 - Do not turn the gateway into a hosted relay.
+- Current gateway progress: the browser runtime panel can start the local daemon with a manual ESP32 Wi-Fi host/IP, port, and pairing secret through `POST /v1/daemon/start`; the server validates the request and forwards `--wifi`, `--wifi-port`, and `--wifi-secret` to the CLI daemon start path. Automatic gateway device-list discovery is still pending.
 
 ### Native Apps
 
@@ -362,7 +363,7 @@ Resolved v1 decisions:
 4. Add authenticated Wi-Fi server carrying EMWaver frames.
 5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip> --wifi-secret <local-secret>`.
 6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint; automatic mDNS Wi-Fi discovery output is still pending.
-7. Add gateway device selection/manual IP path.
+7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel; automatic device-list discovery and selection remain pending.
 8. Add native app discovery/manual connect surfaces.
 9. Validate LAN script execution on real ESP32-S3 hardware.
 10. Validate VPN-by-IP execution.

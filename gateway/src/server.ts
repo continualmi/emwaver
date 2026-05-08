@@ -17,6 +17,8 @@ const nativeApps = new Set<WebSocket>();
 const daemonHosts = new Set<WebSocket>();
 let agentUniverse: string | null = null;
 
+class DaemonStartInputError extends Error {}
+
 function numberEnv(name: string, fallback: number): number {
   const raw = String(process.env[name] || "").trim();
   if (!raw) return fallback;
@@ -66,7 +68,7 @@ function gatewayPort(): number {
   return numberEnv("EMWAVER_GATEWAY_PORT", DEFAULT_PORT);
 }
 
-function daemonStartCommand(): { command: string; args: string[] } {
+function daemonStartCommand(extraArgs: string[] = []): { command: string; args: string[] } {
   const command = stringEnv("EMWAVER_CLI_BIN") || resolve(REPO_ROOT, "daemon", "dev");
   const configuredArgs = stringEnv("EMWAVER_GATEWAY_DAEMON_ARGS")
     .split(/\s+/)
@@ -74,8 +76,30 @@ function daemonStartCommand(): { command: string; args: string[] } {
     .filter(Boolean);
   return {
     command,
-    args: ["daemon", "start", "--port", String(gatewayPort()), ...configuredArgs],
+    args: ["daemon", "start", "--port", String(gatewayPort()), ...configuredArgs, ...extraArgs],
   };
+}
+
+function daemonStartArgs(payload: JsonObject): string[] {
+  const args: string[] = [];
+  const wifi = typeof payload.wifi === "string" ? payload.wifi.trim() : "";
+  const wifiSecret = typeof payload.wifiSecret === "string" ? payload.wifiSecret.trim() : "";
+  const wifiPortRaw = typeof payload.wifiPort === "number" || typeof payload.wifiPort === "string" ? String(payload.wifiPort).trim() : "";
+
+  if (wifi || wifiSecret || wifiPortRaw) {
+    if (!wifi) throw new DaemonStartInputError("Wi-Fi host or IP is required.");
+    if (wifi.includes("://") || /[/\\?#@]/.test(wifi) || /\s/.test(wifi) || wifi.includes(":")) {
+      throw new DaemonStartInputError("Wi-Fi host must be a bare hostname or IP address.");
+    }
+    if (!wifiSecret) throw new DaemonStartInputError("Wi-Fi pairing secret is required.");
+    const wifiPort = wifiPortRaw ? Number(wifiPortRaw) : 3922;
+    if (!Number.isInteger(wifiPort) || wifiPort < 1 || wifiPort > 65535) {
+      throw new DaemonStartInputError("Wi-Fi port must be between 1 and 65535.");
+    }
+    args.push("--wifi", wifi, "--wifi-port", String(wifiPort), "--wifi-secret", wifiSecret);
+  }
+
+  return args;
 }
 
 function loadBundledExamples(): Array<{ name: string; source: string }> {
@@ -157,7 +181,7 @@ async function handleAgentRequest(payload: JsonObject): Promise<{ status: number
   return { status: response.status, body };
 }
 
-async function handleDaemonStartRequest(): Promise<{ status: number; body: JsonObject }> {
+async function handleDaemonStartRequest(payload: JsonObject = {}): Promise<{ status: number; body: JsonObject }> {
   if (daemonHosts.size > 0) {
     return { status: 200, body: { ok: true, runtimeOwner: "emwaver-daemon", alreadyRunning: true } };
   }
@@ -165,7 +189,7 @@ async function handleDaemonStartRequest(): Promise<{ status: number; body: JsonO
     return { status: 200, body: { ok: true, runtimeOwner: "native-app", alreadyRunning: true } };
   }
 
-  const { command, args } = daemonStartCommand();
+  const { command, args } = daemonStartCommand(daemonStartArgs(payload));
   const result = await new Promise<{ code: number | null; stdout: string; stderr: string; error?: string }>((resolveResult) => {
     const child = spawn(command, args, {
       cwd: REPO_ROOT,
@@ -375,12 +399,18 @@ const server = createServer((req, res) => {
   if (req.method === "POST" && url.pathname === "/v1/daemon/start") {
     void (async () => {
       try {
-        const result = await handleDaemonStartRequest();
+        const payload = await readJsonBody(req);
+        const result = await handleDaemonStartRequest(payload);
         res.writeHead(result.status, { "content-type": "application/json" });
         res.end(JSON.stringify(result.body));
       } catch (error) {
-        res.writeHead(500, { "content-type": "application/json" });
-        res.end(JSON.stringify({ ok: false, error: "daemon_start_failed", message: error instanceof Error ? error.message : String(error) }));
+        const inputError = error instanceof DaemonStartInputError;
+        res.writeHead(inputError ? 400 : 500, { "content-type": "application/json" });
+        res.end(JSON.stringify({
+          ok: false,
+          error: inputError ? "daemon_start_invalid" : "daemon_start_failed",
+          message: error instanceof Error ? error.message : String(error),
+        }));
       }
     })();
     return;

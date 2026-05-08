@@ -88,7 +88,7 @@ emwaver gateway
 emwaver daemon serve --sim-device
 ```
 
-The daemon connects to `/v1/ws` as `role=host`, receives `script.run` and `ui.event`, executes scripts through `emwaver-runtime`, sends hardware commands through `emwaver-device`, and streams `ui.snapshot` back through the gateway. USB MIDI/SysEx is the default daemon transport; `emwaver gateway --daemon-fallback --ble` selects the ESP32 BLE GATT transport using the same SysEx/superframe envelope. The gateway remains a localhost bridge and web renderer; it does not own BLE/USB/MIDI hardware directly.
+The daemon connects to `/v1/ws` as `role=host`, receives `script.run` and `ui.event`, executes scripts through `emwaver-runtime`, sends hardware commands through `emwaver-device`, and streams `ui.snapshot` back through the gateway. USB MIDI/SysEx is the default daemon transport; `emwaver gateway --daemon-fallback --ble` selects the ESP32 BLE GATT transport, and `emwaver gateway --daemon-fallback --wifi <host-or-ip> --wifi-secret <local-secret>` selects the authenticated ESP32 Wi-Fi transport. The gateway remains a localhost bridge and web renderer; it does not own BLE/USB/MIDI/Wi-Fi hardware directly.
 
 Runtime-owner preference is:
 
@@ -98,7 +98,7 @@ native app role=app
   then offline
 ```
 
-This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway. The browser UI can also request `POST /v1/daemon/start`, which runs the existing CLI daemon start path for the current gateway port. Set `EMWAVER_CLI_BIN` to point at an installed CLI binary; in repo development it defaults to `daemon/dev`. Additional daemon flags can be supplied through `EMWAVER_GATEWAY_DAEMON_ARGS`, for example `--ble` or `--sim-device`.
+This lets `emwaver gateway --daemon-fallback` provide a headless fallback while still allowing a running native app to take priority when it is connected to the same gateway. The browser UI can also request `POST /v1/daemon/start`, which runs the existing CLI daemon start path for the current gateway port. The runtime panel can start the default daemon or pass a manual ESP32 Wi-Fi host/IP, port, and pairing secret for networks where mDNS does not cross LAN or user-owned VPN boundaries. Set `EMWAVER_CLI_BIN` to point at an installed CLI binary; in repo development it defaults to `daemon/dev`. Additional daemon flags can be supplied through `EMWAVER_GATEWAY_DAEMON_ARGS`, for example `--ble`, `--sim-device`, or `--wifi <host-or-ip> --wifi-secret <local-secret>`.
 
 ## Security Model
 

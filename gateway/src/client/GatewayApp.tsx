@@ -87,6 +87,9 @@ export function GatewayApp() {
   const [agentBusy, setAgentBusy] = useState(false);
   const [daemonAction, setDaemonAction] = useState("");
   const [daemonBusy, setDaemonBusy] = useState(false);
+  const [daemonWifiHost, setDaemonWifiHost] = useState("");
+  const [daemonWifiSecret, setDaemonWifiSecret] = useState("");
+  const [daemonWifiPort, setDaemonWifiPort] = useState("3922");
   const [activity, setActivity] = useState<ActivityId | null>("library");
   const [unreadAgent, setUnreadAgent] = useState(false);
   const [unreadLog, setUnreadLog] = useState(0);
@@ -311,13 +314,20 @@ export function GatewayApp() {
     }
   }
 
-  async function startDaemon() {
+  async function startDaemon(options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) {
     if (daemonBusy) return;
     setDaemonBusy(true);
-    setDaemonAction("Starting daemon…");
+    setDaemonAction(options?.wifi ? "Starting Wi-Fi daemon…" : "Starting daemon…");
     setUiError(null);
     try {
-      const response = await fetch("/v1/daemon/start", { method: "POST" });
+      const payload = options?.wifi
+        ? { wifi: options.wifi, wifiSecret: options.wifiSecret || "", wifiPort: options.wifiPort || "3922" }
+        : {};
+      const response = await fetch("/v1/daemon/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const body = await response.json();
       if (!response.ok || body?.ok === false) {
         throw new Error(body?.message || body?.error || "daemon_start_failed");
@@ -374,6 +384,12 @@ export function GatewayApp() {
           startDaemon={startDaemon}
           daemonBusy={daemonBusy}
           daemonAction={daemonAction}
+          daemonWifiHost={daemonWifiHost}
+          setDaemonWifiHost={setDaemonWifiHost}
+          daemonWifiSecret={daemonWifiSecret}
+          setDaemonWifiSecret={setDaemonWifiSecret}
+          daemonWifiPort={daemonWifiPort}
+          setDaemonWifiPort={setDaemonWifiPort}
           agentPrompt={agentPrompt}
           setAgentPrompt={setAgentPrompt}
           agentOutput={agentOutput}
@@ -613,9 +629,15 @@ function SidePanel(props: {
   saveLocal: () => void;
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: () => void;
+  startDaemon: (options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) => void;
   daemonBusy: boolean;
   daemonAction: string;
+  daemonWifiHost: string;
+  setDaemonWifiHost: (v: string) => void;
+  daemonWifiSecret: string;
+  setDaemonWifiSecret: (v: string) => void;
+  daemonWifiPort: string;
+  setDaemonWifiPort: (v: string) => void;
   agentPrompt: string;
   setAgentPrompt: (v: string) => void;
   agentOutput: string;
@@ -755,11 +777,30 @@ function LibraryPanel(props: {
 function RuntimePanel(props: {
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: () => void;
+  startDaemon: (options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) => void;
   daemonBusy: boolean;
   daemonAction: string;
+  daemonWifiHost: string;
+  setDaemonWifiHost: (v: string) => void;
+  daemonWifiSecret: string;
+  setDaemonWifiSecret: (v: string) => void;
+  daemonWifiPort: string;
+  setDaemonWifiPort: (v: string) => void;
 }) {
-  const { deviceStatus, connected, startDaemon, daemonBusy, daemonAction } = props;
+  const {
+    deviceStatus,
+    connected,
+    startDaemon,
+    daemonBusy,
+    daemonAction,
+    daemonWifiHost,
+    setDaemonWifiHost,
+    daemonWifiSecret,
+    setDaemonWifiSecret,
+    daemonWifiPort,
+    setDaemonWifiPort,
+  } = props;
+  const canStartWifi = daemonWifiHost.trim() && daemonWifiSecret.trim() && !connected && !daemonBusy;
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3">
@@ -806,7 +847,7 @@ function RuntimePanel(props: {
       <div>
         <button
           type="button"
-          onClick={startDaemon}
+          onClick={() => startDaemon()}
           disabled={connected || daemonBusy}
           className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -814,6 +855,53 @@ function RuntimePanel(props: {
         </button>
         <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-dim)]">
           {daemonAction || "Falls back to the CLI runtime when no native app is connected."}
+        </p>
+      </div>
+
+      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
+          Wi-Fi
+        </div>
+        <div className="mt-3 grid grid-cols-[1fr_72px] gap-2">
+          <input
+            value={daemonWifiHost}
+            onChange={(event) => setDaemonWifiHost(event.target.value)}
+            placeholder="Host or IP"
+            disabled={connected || daemonBusy}
+            className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
+          />
+          <input
+            value={daemonWifiPort}
+            onChange={(event) => setDaemonWifiPort(event.target.value)}
+            placeholder="3922"
+            disabled={connected || daemonBusy}
+            className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
+          />
+        </div>
+        <input
+          value={daemonWifiSecret}
+          onChange={(event) => setDaemonWifiSecret(event.target.value)}
+          placeholder="Pairing secret"
+          type="password"
+          disabled={connected || daemonBusy}
+          className="mt-2 h-9 w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
+        />
+        <button
+          type="button"
+          onClick={() =>
+            startDaemon({
+              wifi: daemonWifiHost.trim(),
+              wifiSecret: daemonWifiSecret.trim(),
+              wifiPort: daemonWifiPort.trim() || "3922",
+            })
+          }
+          disabled={!canStartWifi}
+          className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          Start Wi-Fi daemon
+        </button>
+        <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-dim)]">
+          Manual IP works when mDNS does not cross a LAN or user-owned VPN.
         </p>
       </div>
     </div>

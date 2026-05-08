@@ -112,12 +112,14 @@ async function verifyIndexHtml() {
   const clientBody = String(clientScript.body || "");
   for (const required of [
     "EMWaver Gateway",
-    "openFile",
+    "Files stay",
     "Open",
     "Save",
     "Local Runtime",
-    "Start Daemon",
-    "Ask Agent",
+    "Start daemon",
+    "Start Wi-Fi daemon",
+    "Pairing secret",
+    "Ask agent",
     "plot.data",
     "textField",
     "textEditor",
@@ -359,6 +361,31 @@ try {
   const daemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {});
   if (daemonStart.status !== 202 || daemonStart.body?.ok !== true || daemonStart.body?.runtimeOwner !== "emwaver-daemon") {
     throw new Error(`unexpected daemon-start response: ${JSON.stringify(daemonStart)}`);
+  }
+  const wifiDaemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {
+    wifi: "192.168.1.44",
+    wifiSecret: "local-secret",
+    wifiPort: "3923",
+  });
+  if (
+    wifiDaemonStart.status !== 202 ||
+    wifiDaemonStart.body?.ok !== true ||
+    !Array.isArray(wifiDaemonStart.body?.args) ||
+    !wifiDaemonStart.body.args.includes("--wifi") ||
+    !wifiDaemonStart.body.args.includes("192.168.1.44") ||
+    !wifiDaemonStart.body.args.includes("--wifi-port") ||
+    !wifiDaemonStart.body.args.includes("3923") ||
+    !wifiDaemonStart.body.args.includes("--wifi-secret") ||
+    !wifiDaemonStart.body.args.includes("local-secret")
+  ) {
+    throw new Error(`unexpected wifi daemon-start response: ${JSON.stringify(wifiDaemonStart)}`);
+  }
+  const badWifiDaemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {
+    wifi: "http://192.168.1.44/path",
+    wifiSecret: "local-secret",
+  });
+  if (badWifiDaemonStart.status !== 400 || badWifiDaemonStart.body?.ok !== false) {
+    throw new Error(`unexpected bad wifi daemon-start response: ${JSON.stringify(badWifiDaemonStart)}`);
   }
   const examples = await getJson(`${baseUrl}/v1/examples`);
   if (
