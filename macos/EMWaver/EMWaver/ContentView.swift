@@ -143,7 +143,7 @@ struct ContentView: View {
                     onRequestOpenSettings: {
                         showingSettings = true
                     },
-                    leadingHeaderItem: AnyView(deviceHeaderItem),
+                    leadingHeaderItem: nil,
                     agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
                     onRunScript: { request in
                         scriptSessions.run(request)
@@ -259,20 +259,6 @@ struct ContentView: View {
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
                 localDevicePicker
-
-                Button {
-                } label: {
-                    Label("Run in New Session", systemImage: "plus.rectangle.on.rectangle")
-                }
-                .disabled(true)
-                .help("Press Run in a script or editor to start a new local session on the selected device.")
-
-                Button {
-                    scriptSessions.selectFirstSession()
-                } label: {
-                    Label("Sessions: \(scriptSessions.sessionCount)", systemImage: "square.stack.3d.up")
-                }
-                .help("Show local script sessions")
             }
 
             ToolbarItem(placement: .automatic) {
@@ -357,25 +343,6 @@ struct ContentView: View {
     }
 
     @ViewBuilder
-    private var deviceHeaderItem: some View {
-        Button {
-            appRouter.isDeviceSheetPresented = true
-        } label: {
-            HStack(spacing: 7) {
-                Image(systemName: toolbarDeviceStatus.icon)
-                    .imageScale(.medium)
-                    .frame(width: 16, alignment: .center)
-
-                Text(toolbarDeviceStatus.text)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 8)
-        }
-        .buttonStyle(.plain)
-        .help("Device / connection options")
-    }
-
-    @ViewBuilder
     private var localDevicePicker: some View {
         Menu {
             if device.discoveredDevices.isEmpty {
@@ -390,9 +357,16 @@ struct ContentView: View {
                         }
                     } label: {
                         if item.id == scriptSessions.selectedDeviceID {
-                            Label(LocalDeviceLabelFormatter.label(for: item), systemImage: "checkmark")
+                            Label {
+                                Text(LocalDeviceLabelFormatter.label(for: item))
+                            } icon: {
+                                HStack(spacing: 4) {
+                                    Image(systemName: transportIcon(for: item.transport))
+                                    Image(systemName: "checkmark")
+                                }
+                            }
                         } else {
-                            Text(LocalDeviceLabelFormatter.label(for: item))
+                            Label(LocalDeviceLabelFormatter.label(for: item), systemImage: transportIcon(for: item.transport))
                         }
                     }
                 }
@@ -404,10 +378,19 @@ struct ContentView: View {
                 appRouter.isDeviceSheetPresented = true
             }
         } label: {
-            Label("Device: \(selectedLocalDeviceLabel)", systemImage: "cable.connector")
+            Label("Device: \(selectedLocalDeviceLabel)", systemImage: selectedLocalDevice.map { transportIcon(for: $0.transport) } ?? toolbarDeviceStatus.icon)
                 .labelStyle(.titleAndIcon)
         }
         .help("Select the local device used by the next script session")
+    }
+
+    private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {
+        switch transport {
+        case .ble:
+            return "antenna.radiowaves.left.and.right"
+        case .usbMidi:
+            return "cable.connector"
+        }
     }
 
     @ViewBuilder

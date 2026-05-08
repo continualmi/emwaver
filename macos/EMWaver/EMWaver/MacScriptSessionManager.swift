@@ -136,11 +136,6 @@ final class MacScriptSessionManager: ObservableObject {
         refreshSummaries()
     }
 
-    func selectFirstSession() {
-        guard let id = sessions.first?.id else { return }
-        selectSession(id)
-    }
-
     func stopSelectedSession() {
         guard let selectedSessionID else { return }
         stopSession(selectedSessionID)
