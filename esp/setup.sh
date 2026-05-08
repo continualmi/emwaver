@@ -44,9 +44,10 @@ fi
 # currently first on PATH (for example Homebrew vs pyenv), point export.sh
 # at the existing virtualenv so sourcing remains stable across shells.
 if [[ -z "${IDF_PYTHON_ENV_PATH:-}" && -d "${IDF_TOOLS_PATH}/python_env" ]]; then
-    shopt -s nullglob
-    python_env_matches=("${IDF_TOOLS_PATH}"/python_env/idf*_py*_env)
-    shopt -u nullglob
+    python_env_matches=()
+    for python_env_match in "${IDF_TOOLS_PATH}"/python_env/idf*_py*_env; do
+        [[ -d "${python_env_match}" ]] && python_env_matches+=("${python_env_match}")
+    done
     if (( ${#python_env_matches[@]} > 0 )); then
         export IDF_PYTHON_ENV_PATH="${python_env_matches[0]}"
     fi
