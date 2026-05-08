@@ -174,20 +174,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsBleTransport.Connection? _bleConnection;
     private bool _bleConnecting;
     private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
-    private readonly object _bufferSessionLock = new();
-    private readonly Dictionary<string, ITransportDeviceSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
-    private ITransportDeviceSession _activeBufferSession = new DeviceBufferSession("active");
+    private readonly TransportDeviceSessionRegistry _bufferSessions = new();
 
-    private ITransportDeviceSession ActiveBufferSession
-    {
-        get
-        {
-            lock (_bufferSessionLock)
-            {
-                return _activeBufferSession;
-            }
-        }
-    }
+    private ITransportDeviceSession ActiveBufferSession => _bufferSessions.Active;
 
     internal byte[] GetActiveRxSnapshot() => ActiveBufferSession.GetRxSnapshot();
     internal void ClearActiveBuffer() => ActiveBufferSession.ClearAll();
@@ -198,32 +187,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal byte[] GetRxSnapshot(string deviceId) => BufferSession(deviceId).GetRxSnapshot();
     internal void ClearBuffer(string deviceId) => BufferSession(deviceId).ClearAll();
 
-    private ITransportDeviceSession BufferSession(string deviceId)
-    {
-        var key = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
-        lock (_bufferSessionLock)
-        {
-            if (!_bufferSessionsByDeviceId.TryGetValue(key, out var session))
-            {
-                session = new DeviceBufferSession(key);
-                _bufferSessionsByDeviceId[key] = session;
-            }
-
-            return session;
-        }
-    }
+    private ITransportDeviceSession BufferSession(string deviceId) => _bufferSessions.Session(deviceId);
 
     private void SetActiveBufferSession(string deviceId, bool resetSession)
     {
-        lock (_bufferSessionLock)
-        {
-            var session = BufferSession(deviceId);
-            _activeBufferSession = session;
-            if (resetSession)
-            {
-                _activeBufferSession.ClearAll();
-            }
-        }
+        _bufferSessions.Select(deviceId, resetSession);
     }
 
     private bool IsActiveDeviceSession(string deviceId)
