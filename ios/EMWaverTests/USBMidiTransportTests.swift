@@ -30,4 +30,26 @@ final class USBMidiTransportTests: XCTestCase {
 
         XCTAssertFalse(connection.isConnected)
     }
+
+    func testCopiesMidiPacketListData() {
+        let first = Data([0xF0, 0x01, 0x02])
+        let second = Data([0x03, 0xF7])
+        let capacity = 1024
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: capacity, alignment: MemoryLayout<MIDIPacketList>.alignment)
+        defer { raw.deallocate() }
+
+        let packetList = raw.assumingMemoryBound(to: MIDIPacketList.self)
+        var packet = MIDIPacketListInit(packetList)
+
+        first.withUnsafeBytes { bytes in
+            let base = bytes.bindMemory(to: UInt8.self).baseAddress!
+            packet = MIDIPacketListAdd(packetList, capacity, packet, 0, first.count, base)
+        }
+        second.withUnsafeBytes { bytes in
+            let base = bytes.bindMemory(to: UInt8.self).baseAddress!
+            _ = MIDIPacketListAdd(packetList, capacity, packet, 1, second.count, base)
+        }
+
+        XCTAssertEqual(USBMidiTransport.copyPacketData(from: packetList), [first, second])
+    }
 }
