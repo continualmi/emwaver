@@ -294,7 +294,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            var connection = await WindowsUsbMidiTransport.OpenConnectionAsync(port);
+            var connection = await WindowsUsbMidiTransport.OpenConnectionAsync(port, OnMidiMessage);
             _usbMidiConnection = connection;
             SetActiveDeviceTarget(connection.SessionId, DeviceTransport.UsbMidi);
 
@@ -305,7 +305,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
-            connection.InPort!.MessageReceived += OnMidiMessage;
             ConnectedPort = port;
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
@@ -360,18 +359,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         var usbMidiConnection = _usbMidiConnection;
         if (usbMidiConnection != null)
         {
-            try
-            {
-                if (usbMidiConnection.InPort != null)
-                {
-                    usbMidiConnection.InPort.MessageReceived -= OnMidiMessage;
-                }
-            }
-            catch
-            {
-                // Ignore detach errors.
-            }
-
             usbMidiConnection.Dispose();
             _usbMidiConnection = null;
         }

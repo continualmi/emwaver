@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Windows.Devices.Enumeration;
 using Windows.Devices.Midi;
+using Windows.Foundation;
 using Windows.Storage.Streams;
 
 namespace EMWaver.Services;
@@ -16,13 +17,25 @@ internal static class WindowsUsbMidiTransport
 
     internal sealed class Connection : IDisposable
     {
-        internal Connection(DevicePort port, MidiInPort? inPort, IMidiOutPort? outPort)
+        private readonly TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? _receivedHandler;
+
+        internal Connection(
+            DevicePort port,
+            MidiInPort? inPort,
+            IMidiOutPort? outPort,
+            TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null)
         {
             Port = port;
             InPort = inPort;
             OutPort = outPort;
+            _receivedHandler = receivedHandler;
             SessionId = WindowsUsbMidiTransport.SessionId(port);
             DisplayName = string.IsNullOrWhiteSpace(port.DisplayName) ? "USB MIDI" : port.DisplayName;
+
+            if (InPort != null && _receivedHandler != null)
+            {
+                InPort.MessageReceived += _receivedHandler;
+            }
         }
 
         internal DevicePort Port { get; }
@@ -43,6 +56,18 @@ internal static class WindowsUsbMidiTransport
 
         public void Dispose()
         {
+            try
+            {
+                if (InPort != null && _receivedHandler != null)
+                {
+                    InPort.MessageReceived -= _receivedHandler;
+                }
+            }
+            catch
+            {
+                // Ignore handler detach errors.
+            }
+
             try
             {
                 InPort?.Dispose();
@@ -88,10 +113,12 @@ internal static class WindowsUsbMidiTransport
         return (inPortTask.Result, outPortTask.Result);
     }
 
-    internal static async Task<Connection> OpenConnectionAsync(DevicePort port)
+    internal static async Task<Connection> OpenConnectionAsync(
+        DevicePort port,
+        TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null)
     {
         var ports = await OpenPortsAsync(port);
-        return new Connection(port, ports.InPort, ports.OutPort);
+        return new Connection(port, ports.InPort, ports.OutPort, receivedHandler);
     }
 
     internal static IReadOnlyList<DevicePort> PairPorts(

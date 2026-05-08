@@ -73,6 +73,7 @@ Current first step:
 - Windows command TX logging now follows the command's target transport session instead of always appending to the mutable active buffer session.
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows USB MIDI live handles now sit behind a `WindowsUsbMidiTransport.Connection` object that owns the opened port pair, session id, display name, send helper, and close behavior.
+- Windows USB MIDI receive subscription now belongs to `WindowsUsbMidiTransport.Connection`, matching the BLE notification-subscription ownership pattern.
 - Windows BLE live handles now sit behind a `WindowsBleTransport.Connection` object that owns the BLE device, command/notify characteristics, session id, display name, notification subscription, send helper, and dispose behavior.
 - Windows STM32 DFU presence probing now lives on the `Dfu` service instead of duplicating USB enumeration inside higher-level managers.
 - Windows targeted script packet sends now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
