@@ -83,10 +83,9 @@ public class USBService extends Service implements DeviceConnectionService {
     private AndroidBleTransport.ScanSession bleScanSession;
     private AndroidBleTransport.PendingConnection pendingBleConnection;
     private volatile AndroidBleTransport.Connection bleConnection;
-    private volatile TransportDeviceConnection activeTransportConnection;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
-    private volatile ActiveDeviceTarget<ActiveTransport> activeDeviceTarget =
-            new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
+    private final TransportDeviceConnectionState<ActiveTransport> activeConnectionState =
+            new TransportDeviceConnectionState<>(ActiveTransport.NONE);
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
@@ -104,7 +103,7 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     private boolean isActiveDeviceSession(String deviceId) {
-        return activeDeviceTarget.matchesDeviceId(deviceId);
+        return activeConnectionState.matchesDeviceId(deviceId);
     }
 
     private boolean requireActiveDeviceSession(String deviceId, String operation) {
@@ -130,23 +129,20 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public String currentScriptDeviceId() {
-        TransportDeviceConnection connection = activeTransportConnection;
-        return connection != null ? connection.sessionId() : activeDeviceTarget.deviceId;
+        return activeConnectionState.currentScriptDeviceId();
     }
 
     private TransportDeviceSession setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
-        ActiveDeviceTarget<ActiveTransport> target = new ActiveDeviceTarget<>(deviceId, transport);
+        ActiveDeviceTarget<ActiveTransport> target = activeConnectionState.setTarget(deviceId, transport);
         TransportDeviceSession session = bufferSessions.select(target.deviceId, true);
-        activeDeviceTarget = target;
         activeTransport = target.transport;
         return session;
     }
 
     private void clearActiveDeviceTarget(ActiveTransport transport) {
-        if (activeDeviceTarget.matchesTransport(transport)) {
-            activeDeviceTarget = new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
+        if (activeConnectionState.matchesTransport(transport)) {
+            activeConnectionState.clear();
             activeTransport = ActiveTransport.NONE;
-            activeTransportConnection = null;
         }
     }
 
@@ -362,7 +358,7 @@ public class USBService extends Service implements DeviceConnectionService {
                         AndroidUsbMidiTransport.sessionId(usbDevice),
                         ActiveTransport.USB);
                 usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver, session);
-                activeTransportConnection = usbMidiConnection;
+                activeConnectionState.setConnection(usbMidiConnection);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -608,7 +604,7 @@ public class USBService extends Service implements DeviceConnectionService {
                         AndroidBleTransport.sessionId(gatt.getDevice()),
                         ActiveTransport.BLE);
                 bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName, session);
-                activeTransportConnection = bleConnection;
+                activeConnectionState.setConnection(bleConnection);
                 pendingBleConnection = null;
             }
             AndroidBleTransport.enableNotifications(gatt);
@@ -928,7 +924,7 @@ public class USBService extends Service implements DeviceConnectionService {
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
-            TransportDeviceConnection activeConnection = activeTransportConnection;
+            TransportDeviceConnection activeConnection = activeConnectionState.connection();
             if (activeConnection != null) {
                 String label = activeConnection.displayName();
                 if (activeTransport == ActiveTransport.BLE) {
