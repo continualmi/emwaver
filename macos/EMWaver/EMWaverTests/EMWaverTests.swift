@@ -40,4 +40,24 @@ struct EMWaverTests {
         #expect(MacWiFiManager.nextWiFiSequence(after: UInt16.max) == 1)
     }
 
+    @Test func wifiEnvelopeRoundTripsSequenceAndPayload() throws {
+        let payload = Data([0xf0, 0x7d, 0x45, 0x4d, 0x57, 0xf7])
+        let frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload))
+        let envelope = try #require(MacWiFiManager.unwrapEnvelope(frame))
+        #expect(envelope.sequence == 42)
+        #expect(envelope.payload == payload)
+    }
+
+    @Test func wifiEnvelopeRejectsOversizedPayloads() {
+        let payload = Data(repeating: 0, count: Int(UInt16.max) + 1)
+        #expect(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload) == nil)
+    }
+
+    @Test func wifiEnvelopeRejectsLengthMismatch() throws {
+        let payload = Data([0xf0, 0x7d, 0xf7])
+        var frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload))
+        frame[8] = UInt8(payload.count + 1)
+        #expect(MacWiFiManager.unwrapEnvelope(frame) == nil)
+    }
+
 }

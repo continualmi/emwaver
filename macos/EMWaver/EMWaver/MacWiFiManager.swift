@@ -283,7 +283,10 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
-            let frame = self.makeEnvelope(kind: 1, sequence: self.nextSequence(), payload: data)
+            guard let frame = Self.makeEnvelope(kind: 1, sequence: self.nextSequence(), payload: data) else {
+                self.onError("Wi-Fi write failed: Payload too large")
+                return
+            }
             socket.send(.data(frame)) { [weak self] error in
                 if let error {
                     self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
@@ -312,7 +315,12 @@ final class MacWiFiManager {
                 pending.semaphore.signal()
                 return
             }
-            let frame = self.makeEnvelope(kind: 1, sequence: sequence, payload: data)
+            guard let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: data) else {
+                self.pendingResponses.removeValue(forKey: sequence)
+                self.onError("Wi-Fi write failed: Payload too large")
+                pending.semaphore.signal()
+                return
+            }
             socket.send(.data(frame)) { [weak self] error in
                 if let error {
                     self?.queue.async {
@@ -582,7 +590,8 @@ final class MacWiFiManager {
         return next == 0 ? 1 : next
     }
 
-    private func makeEnvelope(kind: UInt8, sequence: UInt16, payload: Data) -> Data {
+    static func makeEnvelope(kind: UInt8, sequence: UInt16, payload: Data) -> Data? {
+        guard payload.count <= UInt16.max else { return nil }
         var frame = Data()
         frame.reserveCapacity(10 + payload.count)
         frame.append(contentsOf: [0x45, 0x4d, 0x57, 0x01, kind])
@@ -595,7 +604,7 @@ final class MacWiFiManager {
         return frame
     }
 
-    private static func unwrapEnvelope(_ data: Data) -> (payload: Data, sequence: UInt16)? {
+    static func unwrapEnvelope(_ data: Data) -> (payload: Data, sequence: UInt16)? {
         guard data.count >= 10,
               data[0] == 0x45,
               data[1] == 0x4d,
