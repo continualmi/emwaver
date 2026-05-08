@@ -70,6 +70,7 @@ final class MacWiFiManager {
     private var pendingAuthSecret: String?
     private var pendingAuthRecord: MacWiFiDeviceRecord?
     private var authTimeoutWorkItem: DispatchWorkItem?
+    private var pendingPairingRollback: (id: String, previous: PairedWiFiDevice?)?
 
     init(
         onDevicesChanged: @escaping ([MacWiFiDeviceRecord]) -> Void,
@@ -152,6 +153,7 @@ final class MacWiFiManager {
                 lastSeen: Date()
             )
             self.discoveredDevicesByID[id] = record
+            self.pendingPairingRollback = (id: id, previous: self.pairedDevicesByID[id])
             self.pairedDevicesByID[id] = PairedWiFiDevice(
                 host: trimmedHost,
                 port: safePort,
@@ -272,8 +274,12 @@ final class MacWiFiManager {
 
     private func disconnect(notify: Bool) {
         let oldID = connectedDeviceID
+        let wasAuthenticated = connectedDeviceID != nil
         authTimeoutWorkItem?.cancel()
         authTimeoutWorkItem = nil
+        if !wasAuthenticated {
+            rollbackPendingPairing()
+        }
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
@@ -347,6 +353,7 @@ final class MacWiFiManager {
                 return
             }
             self.onError("Wi-Fi authentication timed out")
+            self.rollbackPendingPairing()
             self.disconnect(notify: true)
         }
         authTimeoutWorkItem = workItem
@@ -375,6 +382,7 @@ final class MacWiFiManager {
                         self.connectedDeviceID = record.id
                         self.pendingAuthSecret = nil
                         self.pendingAuthRecord = nil
+                        self.pendingPairingRollback = nil
                         self.onConnected(record)
                         self.publishDevices()
                     } else if text.localizedCaseInsensitiveContains("auth") &&
@@ -382,6 +390,7 @@ final class MacWiFiManager {
                         self.onError("Wi-Fi pairing secret rejected")
                         self.queue.async {
                             if self.socket === socket {
+                                self.rollbackPendingPairing()
                                 self.disconnect(notify: true)
                             }
                         }
@@ -389,6 +398,7 @@ final class MacWiFiManager {
                         self.onError("Wi-Fi device is busy with another session")
                         self.queue.async {
                             if self.socket === socket {
+                                self.rollbackPendingPairing()
                                 self.disconnect(notify: true)
                             }
                         }
@@ -401,11 +411,35 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
                 self.queue.async {
                     if self.socket === socket {
+                        if self.connectedDeviceID == nil {
+                            self.rollbackPendingPairing()
+                        }
                         self.disconnect(notify: true)
                     }
                 }
             }
         }
+    }
+
+    private func rollbackPendingPairing() {
+        guard let rollback = pendingPairingRollback else { return }
+        if let previous = rollback.previous {
+            pairedDevicesByID[rollback.id] = previous
+            if var record = discoveredDevicesByID[rollback.id] {
+                record.isPaired = true
+                record.displayName = previous.displayName
+                discoveredDevicesByID[rollback.id] = record
+            }
+        } else {
+            pairedDevicesByID.removeValue(forKey: rollback.id)
+            if var record = discoveredDevicesByID[rollback.id] {
+                record.isPaired = false
+                discoveredDevicesByID[rollback.id] = record
+            }
+        }
+        pendingPairingRollback = nil
+        savePairedDevices()
+        publishDevices()
     }
 
     private func publishDevices() {
