@@ -395,12 +395,12 @@ public class USBService extends Service implements DeviceConnectionService {
             }
             String boardTypeHint = queryBoardTypeHint();
             connectedBoardType = activeTransport == ActiveTransport.BLE && boardTypeHint == null
-                    ? "esp32s3"
+                    ? AndroidBleTransport.boardType()
                     : inferConnectedUsbBoardType(boardTypeHint);
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
             connectedBoardType = activeTransport == ActiveTransport.BLE
-                    ? "esp32s3"
+                    ? AndroidBleTransport.boardType()
                     : inferConnectedUsbBoardType(null);
         }
     }
@@ -610,7 +610,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 setActiveDeviceTarget(bleConnection.sessionId, ActiveTransport.BLE);
             }
             AndroidBleTransport.enableNotifications(gatt);
-            connectedBoardType = "esp32s3";
+            connectedBoardType = AndroidBleTransport.boardType();
             Toast.makeText(USBService.this, "BLE Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
         }

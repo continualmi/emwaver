@@ -181,6 +181,10 @@ final class AndroidBleTransport {
                 : result.getDevice().getAddress();
     }
 
+    static String boardType() {
+        return "esp32s3";
+    }
+
     static List<ScanFilter> scanFilters() {
         ScanFilter filter = new ScanFilter.Builder()
                 .setServiceUuid(new ParcelUuid(SERVICE_UUID))

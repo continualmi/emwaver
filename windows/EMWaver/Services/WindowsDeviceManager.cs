@@ -699,7 +699,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             DeviceEmwaverVersion = version;
-            ConnectedBoardType = "esp32s3";
+            ConnectedBoardType = WindowsBleTransport.BoardType();
             LastDetectedBoardType = ConnectedBoardType;
         }
         catch (Exception ex)
