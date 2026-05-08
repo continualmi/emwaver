@@ -38,6 +38,7 @@
 #define WIFI_MAX_SECRET 64u
 #define WIFI_CONTROL_PORT 3922
 #define WIFI_WS_PATH "/v1/ws"
+#define WIFI_FIRMWARE_VERSION "1.0.0"
 #define EMW_SYSEX_BYTES 48u
 #define EMW_ENCODED_BYTES 42u
 #define EMW_LANE_SIZE 18u
@@ -69,6 +70,8 @@ static void default_hostname(char *out, size_t out_len);
 static void start_station(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 static void start_server(void);
+static void build_mdns_instance_name(char *out, size_t out_len);
+static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
 static bool auth_message_matches(const uint8_t *data, size_t len);
 static void generate_auth_challenge(void);
@@ -319,13 +322,20 @@ static void start_server(void)
         return;
     }
 
+    char instance_name[48];
+    char local_id[8];
+    build_mdns_instance_name(instance_name, sizeof(instance_name));
+    build_local_id_suffix(local_id, sizeof(local_id));
+
     (void)mdns_init();
     (void)mdns_hostname_set(s_config.hostname);
-    (void)mdns_instance_name_set("EMWaver ESP32-S3");
-    (void)mdns_service_add("EMWaver ESP32-S3", "_emwaver", "_tcp", WIFI_CONTROL_PORT, NULL, 0);
+    (void)mdns_instance_name_set(instance_name);
+    (void)mdns_service_add(instance_name, "_emwaver", "_tcp", WIFI_CONTROL_PORT, NULL, 0);
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "proto", "1");
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "board", "esp32s3");
+    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION);
     (void)mdns_service_txt_item_set("_emwaver", "_tcp", "cap", "wifi,usb,ble");
+    (void)mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id);
 
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.server_port = WIFI_CONTROL_PORT;
@@ -347,6 +357,23 @@ static void start_server(void)
     };
     ESP_ERROR_CHECK(httpd_register_uri_handler(s_httpd, &ws));
     ESP_LOGI(TAG, "Wi-Fi WebSocket listening on port %d%s as %s.local", WIFI_CONTROL_PORT, WIFI_WS_PATH, s_config.hostname);
+}
+
+static void build_mdns_instance_name(char *out, size_t out_len)
+{
+    char suffix[8];
+    build_local_id_suffix(suffix, sizeof(suffix));
+    snprintf(out, out_len, "EMWaver ESP32-S3 %s", suffix);
+}
+
+static void build_local_id_suffix(char *out, size_t out_len)
+{
+    uint8_t mac[6] = {0};
+    if (esp_efuse_mac_get_default(mac) == ESP_OK) {
+        snprintf(out, out_len, "%02X%02X", mac[4], mac[5]);
+    } else {
+        strlcpy(out, "ESP32", out_len);
+    }
 }
 
 static esp_err_t ws_handler(httpd_req_t *req)
