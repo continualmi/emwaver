@@ -279,7 +279,7 @@ final class MacWiFiManager {
 
     func send(_ data: Data) {
         queue.async {
-            guard let socket = self.socket else {
+            guard let socket = self.socket, self.connectedDeviceID != nil else {
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
