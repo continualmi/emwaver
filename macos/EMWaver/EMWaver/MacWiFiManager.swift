@@ -195,7 +195,9 @@ final class MacWiFiManager {
         let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         queue.async {
-            guard !trimmedHost.isEmpty, !trimmedSecret.isEmpty else { return }
+            guard !trimmedHost.isEmpty,
+                  Self.isValidManualHost(trimmedHost),
+                  !trimmedSecret.isEmpty else { return }
 
             let safePort = Self.isValidPort(port) ? port : Self.defaultPort
             let id = Self.deviceID(host: trimmedHost, port: safePort)

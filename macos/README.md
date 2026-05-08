@@ -77,7 +77,7 @@ Transport behavior:
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
 - Manual Wi-Fi connection supports bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
 - The device sheet seeds a local hostname for Wi-Fi provisioning so the app can immediately store the matching `<hostname>.local` pairing record after setup, while still allowing manual override.
-- Manual Wi-Fi hostnames are validated before provisioning so macOS does not store a local pairing record for a name the ESP32 firmware cannot advertise through mDNS.
+- Manual Wi-Fi hostnames are validated before provisioning and before local pairing persistence, so macOS does not store a local pairing record for a malformed hostname, IP address, or mDNS name.
 - The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision a Wi-Fi-capable ESP32 board without inventing their own secret, while still allowing manual override.
 - The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE where available. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
 - The same USB/BLE local setup surface can clear ESP32 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
