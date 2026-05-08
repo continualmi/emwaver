@@ -39,6 +39,7 @@ macOS is also moving away from one large USB manager file toward separate USB MI
 
 Current first step:
 
+- Windows shows the current script target in the top device button before Run, using the connected port display name when available.
 - scripts list shows the active run as a session row,
 - the session row shows the active device label when available,
 - the Windows session row now reads the connected port's `DisplayName`, so USB MIDI rows show the actual target label instead of falling back to transport text.
@@ -173,6 +174,7 @@ Remaining isolation work:
 - [x] macOS creates separate visible script sessions.
 - [x] macOS targets script device APIs to the selected device id.
 - [x] macOS has per-device host buffer/session state.
+- [x] Windows shows the current target device before Run.
 - [x] Windows shows active run status in the script list.
 - [x] Windows has a row-level stop control for the active run.
 - [x] Windows styles row-level and toolbar stop controls as destructive actions.

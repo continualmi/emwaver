@@ -270,7 +270,10 @@ public sealed partial class MainWindow : Window
             switch (device.Mode)
             {
                 case Services.DeviceMode.RunMode:
-                    DeviceStatusText.Text = "Connected";
+                    var targetLabel = device.ConnectedPort?.DisplayName;
+                    DeviceStatusText.Text = string.IsNullOrWhiteSpace(targetLabel)
+                        ? "Connected"
+                        : $"Target: {targetLabel}";
                     break;
                 case Services.DeviceMode.UpdateMode:
                     DeviceStatusText.Text = "Update Mode";
