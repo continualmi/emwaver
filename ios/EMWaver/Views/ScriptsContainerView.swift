@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import Combine
 import SwiftUI
 import EMWaverScriptsUI
 import EMWaverScriptRuntime
@@ -43,68 +44,106 @@ final class IOSTargetedScriptDevice: @preconcurrency ScriptDevice {
 private final class IOSScriptSessionManager: ObservableObject {
     @Published private(set) var sessionStatuses: [ScriptsRootView.ScriptSessionStatus] = []
 
-    private var activeManager: ScriptPreviewManager?
-    private var activeScriptId: String?
-    private var activeScriptName: String?
-    private var activeScriptInstanceId: String?
-    private var activeDeviceLabel: String = "active device"
+    private var selectedSessionId: String?
+    private var sessionsById: [String: IOSScriptSession] = [:]
 
     var activePreviewManager: ScriptPreviewManager? {
-        activeManager
+        guard let selectedSessionId else { return nil }
+        return sessionsById[selectedSessionId]?.manager
+    }
+
+    var hasRunningSessions: Bool {
+        !sessionsById.isEmpty
+    }
+
+    var activeScriptName: String? {
+        guard let selectedSessionId, let session = sessionsById[selectedSessionId] else {
+            return sessionsById.values.first?.scriptName
+        }
+        return session.manager.activeScriptName ?? session.scriptName
     }
 
     func run(_ request: ScriptsRootView.ScriptRunRequest, device: USBManager, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
-        activeManager?.exitPreview()
-
         let manager = ScriptPreviewManager()
         let deviceId = device.currentScriptDeviceId()
         manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
-        manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
 
-        let instanceId = manager.activeScriptInstanceId ?? UUID().uuidString
-        activeManager = manager
-        activeScriptId = request.scriptId
-        activeScriptName = request.name
-        activeScriptInstanceId = instanceId
-        activeDeviceLabel = deviceLabel.isEmpty ? "active device" : deviceLabel
+        let session = IOSScriptSession(
+            manager: manager,
+            scriptId: request.scriptId,
+            scriptName: request.name,
+            deviceLabel: deviceLabel.isEmpty ? "active device" : deviceLabel
+        )
+        session.cancellable = manager.objectWillChange
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshStatuses()
+            }
+
+        manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
+        guard let instanceId = manager.activeScriptInstanceId else { return nil }
+
+        sessionsById[instanceId] = session
+        selectedSessionId = instanceId
         refreshStatuses()
 
         return ScriptsRootView.ScriptRunResult(scriptInstanceId: instanceId, name: request.name, running: true)
     }
 
     func selectSession(_ id: String) {
-        guard id == activeScriptInstanceId else { return }
+        guard sessionsById[id] != nil else { return }
+        selectedSessionId = id
         refreshStatuses()
     }
 
     func stopSession(_ id: String) {
-        guard id == activeScriptInstanceId else { return }
-        stopActiveSession()
-    }
-
-    func stopActiveSession() {
-        activeManager?.exitPreview()
-        activeManager = nil
-        activeScriptId = nil
-        activeScriptName = nil
-        activeScriptInstanceId = nil
+        guard let session = sessionsById[id] else { return }
+        session.manager.exitPreview()
+        sessionsById.removeValue(forKey: id)
+        if selectedSessionId == id {
+            selectedSessionId = sessionsById.keys.sorted().first
+        }
         refreshStatuses()
     }
 
-    private func refreshStatuses() {
-        guard let id = activeScriptInstanceId, let scriptId = activeScriptId else {
-            sessionStatuses = []
-            return
-        }
+    func stopActiveSession() {
+        guard let selectedSessionId else { return }
+        stopSession(selectedSessionId)
+    }
 
-        sessionStatuses = [
-            ScriptsRootView.ScriptSessionStatus(
-                id: id,
-                scriptId: scriptId,
-                deviceLabel: activeDeviceLabel,
-                stateText: activeManager?.activeScriptName == nil ? "stopped" : "running"
+    private func refreshStatuses() {
+        sessionStatuses = sessionsById
+            .map { id, session in
+                ScriptsRootView.ScriptSessionStatus(
+                    id: id,
+                    scriptId: session.scriptId,
+                    deviceLabel: session.deviceLabel,
+                    stateText: session.manager.activeScriptName == nil ? "stopped" : "running"
+                )
+            }
+            .sorted(
+                by: {
+                    let lhs = sessionsById[$0.id]?.scriptName ?? ""
+                    let rhs = sessionsById[$1.id]?.scriptName ?? ""
+                    return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
+                }
             )
-        ]
+    }
+}
+
+@MainActor
+private final class IOSScriptSession {
+    let manager: ScriptPreviewManager
+    let scriptId: String
+    let scriptName: String
+    let deviceLabel: String
+    var cancellable: AnyCancellable?
+
+    init(manager: ScriptPreviewManager, scriptId: String, scriptName: String, deviceLabel: String) {
+        self.manager = manager
+        self.scriptId = scriptId
+        self.scriptName = scriptName
+        self.deviceLabel = deviceLabel
     }
 }
 
@@ -139,7 +178,10 @@ struct ScriptsContainerView: View {
                 },
                 onStopActiveScript: {
                     scriptSessions.stopActiveSession()
-                    hostSessions.setScriptStatus(running: false, activeScriptName: nil)
+                    hostSessions.setScriptStatus(
+                        running: scriptSessions.hasRunningSessions,
+                        activeScriptName: scriptSessions.activeScriptName
+                    )
                 },
                 externalScriptSessions: scriptSessions.sessionStatuses,
                 onSelectExternalScriptSession: { id in
@@ -147,7 +189,10 @@ struct ScriptsContainerView: View {
                 },
                 onStopExternalScriptSession: { id in
                     scriptSessions.stopSession(id)
-                    hostSessions.setScriptStatus(running: false, activeScriptName: nil)
+                    hostSessions.setScriptStatus(
+                        running: scriptSessions.hasRunningSessions,
+                        activeScriptName: scriptSessions.activeScriptName
+                    )
                 }
             )
             .toolbar {

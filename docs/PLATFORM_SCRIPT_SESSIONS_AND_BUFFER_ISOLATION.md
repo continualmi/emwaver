@@ -130,11 +130,12 @@ Remaining isolation work:
 
 ## iOS direction
 
-iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. iOS now has keyed transport buffer sessions, but the current native path still keeps one active visible local session and replaces that runtime without a stop-and-run prompt. Multi-device concurrency stays gated on live multi-connection support and target-scoped script runtime ownership.
+iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. iOS now has keyed transport buffer sessions and can keep multiple visible local script sessions in the shared scripts list. Multi-device concurrency stays gated on live multi-connection support and target-scoped script runtime ownership.
 
 Current first step:
 
 - iOS shows the current run target in the scripts toolbar before a script starts, using the same selected device label captured into the session row after Run.
+- iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
 - iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
@@ -184,6 +185,7 @@ Remaining isolation work:
 - [x] Android styles the row-level stop control as a destructive action instead of a normal edit/action button.
 - [x] iOS shows active run status in the shared scripts list.
 - [x] iOS shows the current target device before Run.
+- [x] iOS can keep separate visible local script sessions in the shared scripts list.
 - [x] iOS has a row-level stop control for the active run through the shared scripts row.
 - [x] Windows has an active transport buffer session object used by script sampler reads.
 - [x] Windows selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
