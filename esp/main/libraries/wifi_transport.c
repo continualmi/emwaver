@@ -108,6 +108,62 @@ esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payloa
     return send_superframe(frame);
 }
 
+esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
+{
+    wifi_transport_config_t config = {0};
+    strlcpy(config.ssid, ssid ? ssid : "", sizeof(config.ssid));
+    strlcpy(config.password, password ? password : "", sizeof(config.password));
+    strlcpy(config.secret, secret ? secret : "", sizeof(config.secret));
+    if (hostname && hostname[0] != '\0') {
+        strlcpy(config.hostname, hostname, sizeof(config.hostname));
+    } else {
+        default_hostname(config.hostname, sizeof(config.hostname));
+    }
+
+    if (config.ssid[0] == '\0' || config.secret[0] == '\0') {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    esp_err_t err = save_config(&config);
+    if (err != ESP_OK) {
+        return err;
+    }
+
+    s_config = config;
+    s_has_config = true;
+#if EMWAVER_ENABLE_WIFI_TRANSPORT
+    start_station();
+#endif
+    return ESP_OK;
+}
+
+esp_err_t wifi_transport_clear_config(void)
+{
+    nvs_handle_t nvs = 0;
+    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs);
+    if (err == ESP_OK) {
+        (void)nvs_erase_all(nvs);
+        err = nvs_commit(nvs);
+        nvs_close(nvs);
+    }
+    if (err == ESP_OK) {
+        memset(&s_config, 0, sizeof(s_config));
+        s_has_config = false;
+        s_authenticated = false;
+    }
+    return err;
+}
+
+bool wifi_transport_is_provisioned(void)
+{
+    return s_has_config;
+}
+
+bool wifi_transport_is_authenticated(void)
+{
+    return s_authenticated;
+}
+
 static void wifi_register_commands(void)
 {
     (void)register_command(
@@ -126,49 +182,19 @@ static void wifi_register_commands(void)
 
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname)
 {
-    wifi_transport_config_t config = {0};
-    strlcpy(config.ssid, ssid ? ssid : "", sizeof(config.ssid));
-    strlcpy(config.password, password ? password : "", sizeof(config.password));
-    strlcpy(config.secret, secret ? secret : "", sizeof(config.secret));
-    if (hostname && hostname[0] != '\0') {
-        strlcpy(config.hostname, hostname, sizeof(config.hostname));
-    } else {
-        default_hostname(config.hostname, sizeof(config.hostname));
-    }
-
-    if (config.ssid[0] == '\0' || config.secret[0] == '\0') {
-        command_send_err("missing wifi setup");
-        return;
-    }
-
-    if (save_config(&config) != ESP_OK) {
+    if (wifi_transport_provision(ssid, password, secret, hostname) != ESP_OK) {
         command_send_err("wifi nvs");
         return;
     }
-
-    s_config = config;
-    s_has_config = true;
     command_send_ok((const uint8_t *)"wifi provisioned", strlen("wifi provisioned"));
-#if EMWAVER_ENABLE_WIFI_TRANSPORT
-    start_station();
-#endif
 }
 
 static void wifi_clear_command(void)
 {
-    nvs_handle_t nvs = 0;
-    esp_err_t err = nvs_open(WIFI_NAMESPACE, NVS_READWRITE, &nvs);
-    if (err == ESP_OK) {
-        (void)nvs_erase_all(nvs);
-        err = nvs_commit(nvs);
-        nvs_close(nvs);
-    }
-    if (err != ESP_OK) {
+    if (wifi_transport_clear_config() != ESP_OK) {
         command_send_err("wifi clear");
         return;
     }
-    memset(&s_config, 0, sizeof(s_config));
-    s_has_config = false;
     command_send_ok((const uint8_t *)"wifi cleared", strlen("wifi cleared"));
 }
 

@@ -179,10 +179,22 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
         static let hardwareUID: UInt8 = 0x08
+        static let wifiConfig: UInt8 = 0x0A
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
         static let sampleStop: UInt8 = 0x01
+
+        static let wifiBegin: UInt8 = 0x00
+        static let wifiField: UInt8 = 0x01
+        static let wifiApply: UInt8 = 0x02
+        static let wifiClear: UInt8 = 0x03
+        static let wifiStatus: UInt8 = 0x04
+
+        static let wifiFieldSSID: UInt8 = 0x00
+        static let wifiFieldPassword: UInt8 = 0x01
+        static let wifiFieldSecret: UInt8 = 0x02
+        static let wifiFieldHostname: UInt8 = 0x03
     }
 
     @Published var isConnected: Bool = false
@@ -207,6 +219,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var connectedTransportKind: String? = nil
     @Published var isBleScanning: Bool = false
     @Published var bluetoothStateText: String = "Starting"
+    @Published var wifiProvisioningStatus: String? = nil
+    @Published var isWiFiProvisioning: Bool = false
 
     private enum ActiveTransport {
         case none
@@ -389,6 +403,83 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         wifiManager?.connect(host: host, port: port, pairingSecret: pairingSecret)
     }
 
+    func provisionWiFi(ssid: String, password: String, pairingSecret: String, hostname: String) {
+        let trimmedSSID = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedSSID.isEmpty else {
+            setError("Wi-Fi SSID is required")
+            return
+        }
+        guard !trimmedSecret.isEmpty else {
+            setError("Wi-Fi pairing secret is required")
+            return
+        }
+
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = true
+            self.wifiProvisioningStatus = "Sending Wi-Fi setup"
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let canProvision = self.midiQueue.sync {
+                self.activeTransport == .usbMidi || self.activeTransport == .ble
+            }
+            guard canProvision else {
+                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before provisioning Wi-Fi.", isError: true)
+                return
+            }
+            let boardType = self.midiQueue.sync {
+                self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
+            }
+            guard boardType.lowercased() == "esp32s3" else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup is available for ESP32-S3 devices.", isError: true)
+                return
+            }
+
+            let passwordBytes = Array(password.utf8)
+            let hostnameBytes = Array(trimmedHostname.utf8)
+            let fields: [(UInt8, [UInt8], Int)] = [
+                (EmwOpcode.wifiFieldSSID, Array(trimmedSSID.utf8), 32),
+                (EmwOpcode.wifiFieldPassword, passwordBytes, 64),
+                (EmwOpcode.wifiFieldSecret, Array(trimmedSecret.utf8), 64),
+                (EmwOpcode.wifiFieldHostname, hostnameBytes, 32),
+            ]
+
+            for (_, bytes, maxLen) in fields where bytes.count > maxLen {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup value is too long.", isError: true)
+                return
+            }
+
+            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiBegin]) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup failed to start.", isError: true)
+                return
+            }
+
+            for (field, bytes, _) in fields where !bytes.isEmpty {
+                var offset = 0
+                while offset < bytes.count {
+                    let count = min(13, bytes.count - offset)
+                    var command = Data([EmwOpcode.wifiConfig, EmwOpcode.wifiField, field, UInt8(offset), UInt8(count)])
+                    command.append(contentsOf: bytes[offset..<(offset + count)])
+                    guard self.sendWiFiConfigCommand(command) else {
+                        self.finishWiFiProvisioning(message: "Wi-Fi setup failed while sending credentials.", isError: true)
+                        return
+                    }
+                    offset += count
+                }
+            }
+
+            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiApply]) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup was rejected by the device.", isError: true)
+                return
+            }
+
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32-S3 will join the network and advertise itself on the LAN.", isError: false)
+        }
+    }
+
     private func connectDeviceInternal(transportID id: String) {
             if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
                 self.connectInternal(portName: displayName)
@@ -525,6 +616,31 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         let sf = Self.makeSuperframe(cmdLane: packet, streamLane: nil)
         sendSuperframe(sf, deviceID: deviceID)
+    }
+
+    private func sendWiFiConfigCommand(_ bytes: [UInt8]) -> Bool {
+        sendWiFiConfigCommand(Data(bytes))
+    }
+
+    private func sendWiFiConfigCommand(_ data: Data) -> Bool {
+        let response = sendCommandInternal(
+            data,
+            timeout: 2000,
+            responsePredicate: { lane in
+                lane.first == 0x80 || lane.first == 0x81
+            }
+        )
+        return response?.first == 0x80
+    }
+
+    private func finishWiFiProvisioning(message: String, isError: Bool) {
+        if isError {
+            setError(message)
+        }
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = false
+            self.wifiProvisioningStatus = message
+        }
     }
 
     func transmitBuffer() {

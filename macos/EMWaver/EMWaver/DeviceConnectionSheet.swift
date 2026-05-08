@@ -8,6 +8,9 @@ struct DeviceConnectionSheet: View {
     @State private var wifiHost: String = ""
     @State private var wifiPort: String = "3922"
     @State private var wifiPairingSecret: String = ""
+    @State private var wifiSSID: String = ""
+    @State private var wifiPassword: String = ""
+    @State private var wifiHostname: String = ""
 
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
@@ -239,6 +242,60 @@ struct DeviceConnectionSheet: View {
                     .padding(.vertical, 5)
                     .background(Capsule().fill(Color.secondary.opacity(0.12)))
             }
+
+            if isEspBoard && device.connectedTransportKind != "Wi-Fi" {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text("Provision ESP32-S3")
+                        .font(.subheadline.weight(.semibold))
+
+                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                        GridRow {
+                            TextField("SSID", text: $wifiSSID)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(minWidth: 250)
+
+                            TextField("Hostname", text: $wifiHostname)
+                                .textFieldStyle(.roundedBorder)
+                                .frame(minWidth: 180)
+                        }
+
+                        GridRow {
+                            SecureField("Wi-Fi password", text: $wifiPassword)
+                                .textFieldStyle(.roundedBorder)
+
+                            SecureField("Pairing secret", text: $wifiPairingSecret)
+                                .textFieldStyle(.roundedBorder)
+                        }
+                    }
+
+                    HStack(spacing: 10) {
+                        Button(device.isWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup") {
+                            device.provisionWiFi(
+                                ssid: wifiSSID,
+                                password: wifiPassword,
+                                pairingSecret: wifiPairingSecret,
+                                hostname: wifiHostname
+                            )
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(device.isWiFiProvisioning ||
+                                  !device.isConnected ||
+                                  device.connectedTransportKind == "Wi-Fi" ||
+                                  wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        if let status = device.wifiProvisioningStatus, !status.isEmpty {
+                            Text(status)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(2)
+                        }
+                    }
+                }
+                .padding(.bottom, 4)
+            }
+
+            Divider()
 
             Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
                 GridRow {

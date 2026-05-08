@@ -89,6 +89,7 @@ static void handle_sample_opcode(const command_t *cmd);
 static void handle_transmit_opcode(const command_t *cmd);
 static void handle_pwm_opcode(const command_t *cmd);
 static void handle_adc_opcode(const command_t *cmd);
+static void handle_wifi_config_opcode(const command_t *cmd);
 static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz);
 static void register_core_commands(void);
 static void version_command(void);
@@ -249,6 +250,9 @@ static bool handle_binary_packet(const command_t *cmd)
             send_binary_ok(board_type, sizeof(board_type) - 1u);
             return true;
         }
+        case EMW_OP_WIFI_CONFIG:
+            handle_wifi_config_opcode(cmd);
+            return true;
         case EMW_OP_NAME_GET:
             handle_name_get();
             return true;
@@ -280,6 +284,93 @@ static bool handle_binary_packet(const command_t *cmd)
         default:
             send_binary_err();
             return true;
+    }
+}
+
+static void handle_wifi_config_opcode(const command_t *cmd)
+{
+    enum {
+        WIFI_STAGE_SSID_MAX = 32,
+        WIFI_STAGE_PASS_MAX = 64,
+        WIFI_STAGE_SECRET_MAX = 64,
+        WIFI_STAGE_HOST_MAX = 32,
+    };
+    static char staged_ssid[WIFI_STAGE_SSID_MAX + 1];
+    static char staged_password[WIFI_STAGE_PASS_MAX + 1];
+    static char staged_secret[WIFI_STAGE_SECRET_MAX + 1];
+    static char staged_hostname[WIFI_STAGE_HOST_MAX + 1];
+
+    const uint8_t sub = cmd->data[1];
+    switch (sub) {
+        case EMW_WIFI_CFG_BEGIN:
+            memset(staged_ssid, 0, sizeof(staged_ssid));
+            memset(staged_password, 0, sizeof(staged_password));
+            memset(staged_secret, 0, sizeof(staged_secret));
+            memset(staged_hostname, 0, sizeof(staged_hostname));
+            send_binary_ok(NULL, 0);
+            return;
+        case EMW_WIFI_CFG_FIELD: {
+            char *target = NULL;
+            size_t target_len = 0;
+            switch (cmd->data[2]) {
+                case EMW_WIFI_FIELD_SSID:
+                    target = staged_ssid;
+                    target_len = sizeof(staged_ssid);
+                    break;
+                case EMW_WIFI_FIELD_PASSWORD:
+                    target = staged_password;
+                    target_len = sizeof(staged_password);
+                    break;
+                case EMW_WIFI_FIELD_SECRET:
+                    target = staged_secret;
+                    target_len = sizeof(staged_secret);
+                    break;
+                case EMW_WIFI_FIELD_HOSTNAME:
+                    target = staged_hostname;
+                    target_len = sizeof(staged_hostname);
+                    break;
+                default:
+                    send_binary_err();
+                    return;
+            }
+
+            uint8_t offset = cmd->data[3];
+            uint8_t len = cmd->data[4];
+            const uint8_t max_payload = (uint8_t)(EMW_USB_CMD_LANE_SIZE - 5u);
+            if (len > max_payload || (size_t)offset + len >= target_len) {
+                send_binary_err();
+                return;
+            }
+            memcpy(&target[offset], &cmd->data[5], len);
+            target[offset + len] = '\0';
+            send_binary_ok(NULL, 0);
+            return;
+        }
+        case EMW_WIFI_CFG_APPLY:
+            if (wifi_transport_provision(staged_ssid, staged_password, staged_secret, staged_hostname) != ESP_OK) {
+                send_binary_err();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
+        case EMW_WIFI_CFG_CLEAR:
+            if (wifi_transport_clear_config() != ESP_OK) {
+                send_binary_err();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
+        case EMW_WIFI_CFG_STATUS: {
+            const uint8_t out[] = {
+                wifi_transport_is_provisioned() ? 1u : 0u,
+                wifi_transport_is_authenticated() ? 1u : 0u,
+            };
+            send_binary_ok(out, sizeof(out));
+            return;
+        }
+        default:
+            send_binary_err();
+            return;
     }
 }
 
