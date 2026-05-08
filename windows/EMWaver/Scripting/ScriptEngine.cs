@@ -31,6 +31,7 @@ public sealed class ScriptEngine : IDisposable
     private Func<byte[], int, byte[]?>? _sendPacket;
     private Func<byte[]>? _getSamplerBytes;
     private Action? _clearSamplerBuffer;
+    private int _samplerPacketSizeBytes = NativeBufferRust.PacketSizeBytes;
 
     private bool _haltedUntilNextExecute;
     private string _currentScriptSource = string.Empty;
@@ -52,13 +53,15 @@ public sealed class ScriptEngine : IDisposable
         Func<byte[], int, byte[]?> sendPacket,
         Action<string>? errorHandler = null,
         Func<byte[]>? getSamplerBytes = null,
-        Action? clearSamplerBuffer = null)
+        Action? clearSamplerBuffer = null,
+        int? samplerPacketSizeBytes = null)
     {
         _renderHandler = renderHandler;
         _sendPacket = sendPacket;
         _errorHandler = errorHandler;
         _getSamplerBytes = getSamplerBytes;
         _clearSamplerBuffer = clearSamplerBuffer;
+        _samplerPacketSizeBytes = Math.Max(1, samplerPacketSizeBytes ?? NativeBufferRust.PacketSizeBytes);
 
         Enqueue(() =>
         {
@@ -402,7 +405,7 @@ public sealed class ScriptEngine : IDisposable
         engine.SetValue("_scriptSamplerBufferGetPacketCount", new Func<int>(() =>
         {
             var len = GetSamplerBytes().Length;
-            return len <= 0 ? 0 : (len + 63) / 64;
+            return len <= 0 ? 0 : (len + _samplerPacketSizeBytes - 1) / _samplerPacketSizeBytes;
         }));
 
         engine.SetValue("_scriptSamplerBufferGetLenBytes", new Func<int>(() => GetSamplerBytes().Length));
@@ -422,13 +425,13 @@ public sealed class ScriptEngine : IDisposable
         engine.SetValue("_scriptSamplerBufferReadPacketsSince", new Func<int, int, JsValue>((packetIndex, maxPackets) =>
         {
             var data = GetSamplerBytes();
-            var totalPackets = data.Length <= 0 ? 0 : (data.Length + 63) / 64;
+            var totalPackets = data.Length <= 0 ? 0 : (data.Length + _samplerPacketSizeBytes - 1) / _samplerPacketSizeBytes;
             var startPacket = Math.Max(0, packetIndex);
             var availablePackets = Math.Max(0, totalPackets - startPacket);
             var toRead = Math.Max(0, Math.Min(availablePackets, Math.Max(1, maxPackets)));
 
-            var startByte = startPacket * 64;
-            var endByte = Math.Min(data.Length, startByte + toRead * 64);
+            var startByte = startPacket * _samplerPacketSizeBytes;
+            var endByte = Math.Min(data.Length, startByte + toRead * _samplerPacketSizeBytes);
             var slice = startByte < endByte ? data[startByte..endByte] : Array.Empty<byte>();
 
             var payload = new Dictionary<string, object?>

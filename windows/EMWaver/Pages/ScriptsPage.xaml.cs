@@ -1,4 +1,5 @@
 using EMWaver.Models;
+using EMWaver.Interop;
 using EMWaver.Scripting;
 using EMWaver.Scripting.Render;
 using EMWaver.Services;
@@ -203,7 +204,8 @@ public sealed partial class ScriptsPage : Page
                 _ = DispatcherQueue.TryEnqueue(async () => await ShowScriptErrorAsync(message));
             },
             getSamplerBytes: () => AppServices.Device.GetActiveRxSnapshot(),
-            clearSamplerBuffer: () => AppServices.Device.ClearActiveBuffer()
+            clearSamplerBuffer: () => AppServices.Device.ClearActiveBuffer(),
+            samplerPacketSizeBytes: NativeBufferRust.PacketSizeBytes
         );
 
         Loaded += OnLoaded;
