@@ -1,8 +1,11 @@
 using EMWaver.Models;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Windows.Devices.Enumeration;
+using Windows.Devices.Midi;
+using Windows.Storage.Streams;
 
 namespace EMWaver.Services;
 
@@ -58,6 +61,24 @@ internal static class WindowsUsbMidiTransport
         return ports.FirstOrDefault(p => p.DisplayName.Contains("emwaver", StringComparison.OrdinalIgnoreCase)) ??
                ports.FirstOrDefault(p => !p.DisplayName.Contains("network", StringComparison.OrdinalIgnoreCase)) ??
                ports.FirstOrDefault();
+    }
+
+    internal static string? SendSuperframe(
+        IMidiOutPort outPort,
+        byte[] superframe36,
+        Func<byte[], IBuffer> bufferFromBytes)
+    {
+        var sysex = UsbMidiSysex.EncodeSuperframe(superframe36);
+        if (sysex == null)
+        {
+            return "SysEx encode failed";
+        }
+
+        Debug.WriteLine($"[EMWaver][MIDI][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
+
+        var msg = new MidiSystemExclusiveMessage(bufferFromBytes(sysex));
+        outPort.SendMessage(msg);
+        return null;
     }
 
     private static string? ContainerIdOf(DeviceInformation device)

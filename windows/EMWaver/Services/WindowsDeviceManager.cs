@@ -639,21 +639,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
-        var sysex = UsbMidiSysex.EncodeSuperframe(superframe36);
-        if (sysex == null)
-        {
-            LastErrorText = "SysEx encode failed";
-            return;
-        }
-
         // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
         ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
 
-        // Debug log (visible in Visual Studio Output -> Debug).
-        Debug.WriteLine($"[EMWaver][MIDI][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
-
-        var msg = new MidiSystemExclusiveMessage(BufferFromBytes(sysex));
-        _outPort.SendMessage(msg);
+        LastErrorText = WindowsUsbMidiTransport.SendSuperframe(_outPort, superframe36, BufferFromBytes);
     }
 
     private void StartBleScan()
@@ -821,32 +810,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
-        var sysex = UsbMidiSysex.EncodeSuperframe(superframe36);
-        if (sysex == null)
-        {
-            LastErrorText = "SysEx encode failed";
-            return;
-        }
-
         ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
-        Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
-
-        for (int offset = 0; offset < sysex.Length; offset += WindowsBleTransport.WriteChunkBytes)
-        {
-            var count = Math.Min(WindowsBleTransport.WriteChunkBytes, sysex.Length - offset);
-            var chunk = new byte[count];
-            System.Buffer.BlockCopy(sysex, offset, chunk, 0, count);
-            var status = characteristic
-                .WriteValueAsync(BufferFromBytes(chunk), GattWriteOption.WriteWithResponse)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-            if (status != GattCommunicationStatus.Success)
-            {
-                LastErrorText = $"BLE write failed: {status}";
-                break;
-            }
-        }
+        LastErrorText = WindowsBleTransport.SendSuperframe(characteristic, superframe36, BufferFromBytes);
     }
 
     private void CloseBleDevice()
