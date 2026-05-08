@@ -66,6 +66,7 @@ Transport behavior:
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32-S3 metadata instead of relying only on hardcoded defaults.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
+- The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision an ESP32-S3 without inventing their own secret, while still allowing manual override.
 - The device sheet can provision ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
 - The same USB/BLE local setup surface can clear ESP32-S3 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
 - The setup surface can query the ESP32-S3 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, and authenticated state for local diagnostics.

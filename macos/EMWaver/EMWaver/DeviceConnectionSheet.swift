@@ -1,3 +1,4 @@
+import Security
 import SwiftUI
 
 struct DeviceConnectionSheet: View {
@@ -82,6 +83,14 @@ struct DeviceConnectionSheet: View {
         false
     }
 
+    private static func generatePairingSecret() -> String {
+        var bytes = [UInt8](repeating: 0, count: 24)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
+            return bytes.map { String(format: "%02x", $0) }.joined()
+        }
+        return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -95,6 +104,9 @@ struct DeviceConnectionSheet: View {
         }
         .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
         .onAppear {
+            if wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                wifiPairingSecret = Self.generatePairingSecret()
+            }
             firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
         }
     }
