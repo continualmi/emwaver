@@ -234,6 +234,27 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
+    private bool IsActiveDeviceSession(string deviceId)
+    {
+        var requested = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
+        lock (_bufferSessionLock)
+        {
+            return string.Equals(requested, _activeBufferSession.DeviceId, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    private bool RequireActiveDeviceSession(string deviceId, string operation)
+    {
+        if (IsActiveDeviceSession(deviceId))
+        {
+            return true;
+        }
+
+        LastErrorText = $"{operation}: target device session is not active";
+        Debug.WriteLine($"[EMWaver][Windows][Device] {operation}: target session is not active: {deviceId}");
+        return false;
+    }
+
     internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)
     {
         _ui = dispatcherQueue;
@@ -600,6 +621,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal async Task<byte[]?> SendPacketAsync(byte[] payload, int timeoutMs, string deviceId)
     {
         if (payload == null)
+        {
+            return null;
+        }
+        if (!RequireActiveDeviceSession(deviceId, "SendPacket"))
         {
             return null;
         }
