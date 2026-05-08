@@ -6,6 +6,7 @@
 
 import Foundation
 import Network
+import CryptoKit
 
 struct MacWiFiDeviceRecord: Identifiable, Equatable {
     let id: String
@@ -33,7 +34,8 @@ final class MacWiFiManager {
         var type: String
         var client: String
         var protocolVersion: Int
-        var pairingSecret: String
+        var nonce: String
+        var response: String
     }
 
     private static let pairingStoreKey = "com.emwaver.macos.pairedWifiDevices.v1"
@@ -233,7 +235,9 @@ final class MacWiFiManager {
     }
 
     private func sendHello(socket: URLSessionWebSocketTask, secret: String) {
-        let hello = WiFiHello(type: "auth", client: "emwaver-macos", protocolVersion: 1, pairingSecret: secret)
+        let nonce = Self.randomHex(byteCount: 16)
+        let response = Self.hmacHex(secret: secret, message: nonce)
+        let hello = WiFiHello(type: "auth", client: "emwaver-macos", protocolVersion: 1, nonce: nonce, response: response)
         guard let data = try? JSONEncoder().encode(hello) else { return }
         socket.send(.data(data)) { [weak self] error in
             if let error {
@@ -300,5 +304,17 @@ final class MacWiFiManager {
 
     private static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
+    }
+
+    private static func randomHex(byteCount: Int) -> String {
+        var bytes = [UInt8](repeating: 0, count: max(1, byteCount))
+        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        return bytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func hmacHex(secret: String, message: String) -> String {
+        let key = SymmetricKey(data: Data(secret.utf8))
+        let signature = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
+        return signature.map { String(format: "%02x", $0) }.joined()
     }
 }

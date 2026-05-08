@@ -18,6 +18,7 @@
 #include "esp_netif.h"
 #include "esp_wifi.h"
 #include "mdns.h"
+#include "mbedtls/md.h"
 #include "nvs.h"
 #include "usb.h"
 
@@ -68,6 +69,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 static void start_server(void);
 static esp_err_t ws_handler(httpd_req_t *req);
 static bool auth_message_matches(const uint8_t *data, size_t len);
+static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
+static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
 static bool enqueue_sysex(const uint8_t *sysex);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
@@ -400,13 +403,84 @@ static bool auth_message_matches(const uint8_t *data, size_t len)
     if (!data || len == 0 || s_config.secret[0] == '\0') {
         return false;
     }
-    const size_t secret_len = strlen(s_config.secret);
-    for (size_t i = 0; i + secret_len <= len; ++i) {
-        if (memcmp(&data[i], s_config.secret, secret_len) == 0) {
-            return true;
-        }
+
+    char json[257] = {0};
+    size_t copy_len = len;
+    if (copy_len >= sizeof(json)) {
+        copy_len = sizeof(json) - 1u;
     }
-    return false;
+    memcpy(json, data, copy_len);
+
+    char nonce[65] = {0};
+    char response[65] = {0};
+    char expected[65] = {0};
+    if (!extract_json_string(json, "nonce", nonce, sizeof(nonce)) ||
+        !extract_json_string(json, "response", response, sizeof(response)) ||
+        !hmac_sha256_hex(s_config.secret, nonce, expected, sizeof(expected))) {
+        return false;
+    }
+
+    return strlen(response) == strlen(expected) && memcmp(response, expected, strlen(expected)) == 0;
+}
+
+static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len)
+{
+    if (!json || !key || !out || out_len == 0) {
+        return false;
+    }
+
+    char pattern[40];
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    const char *pos = strstr(json, pattern);
+    if (!pos) {
+        return false;
+    }
+    pos = strchr(pos + strlen(pattern), ':');
+    if (!pos) {
+        return false;
+    }
+    pos++;
+    while (*pos == ' ' || *pos == '\t') {
+        pos++;
+    }
+    if (*pos != '"') {
+        return false;
+    }
+    pos++;
+
+    size_t written = 0;
+    while (*pos && *pos != '"' && written + 1u < out_len) {
+        out[written++] = *pos++;
+    }
+    out[written] = '\0';
+    return *pos == '"' && written > 0;
+}
+
+static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len)
+{
+    if (!secret || !message || !out || out_len < 65u) {
+        return false;
+    }
+
+    uint8_t digest[32] = {0};
+    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+    if (!info) {
+        return false;
+    }
+    if (mbedtls_md_hmac(info,
+                        (const unsigned char *)secret,
+                        strlen(secret),
+                        (const unsigned char *)message,
+                        strlen(message),
+                        digest) != 0) {
+        return false;
+    }
+
+    for (size_t i = 0; i < sizeof(digest); ++i) {
+        snprintf(&out[i * 2u], out_len - (i * 2u), "%02x", digest[i]);
+    }
+    out[64] = '\0';
+    return true;
 }
 
 static bool enqueue_sysex(const uint8_t *sysex)

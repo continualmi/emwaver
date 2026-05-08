@@ -131,6 +131,9 @@ Preferred first security slice:
 4. Client proves knowledge of the paired secret.
 5. Firmware accepts command frames only after authentication.
 
+Current implementation note:
+- The first firmware/macOS slice uses a client nonce plus HMAC-SHA256 over the local pairing secret instead of sending the raw secret on the WebSocket. A firmware-issued challenge remains the preferred hardening step.
+
 TLS is desirable later, but authenticated sessions are the first hard requirement. Do not ship an unauthenticated Wi-Fi command socket.
 
 ## Same-Wi-Fi Setup Flow
