@@ -82,6 +82,7 @@ static uint16_t s_last_disconnect_reason;
 static void wifi_register_commands(void);
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
 static void wifi_clear_command(void);
+static void wifi_pairing_reset_command(const char *secret);
 static void wifi_status_command(void);
 static bool load_config(wifi_transport_config_t *out);
 static esp_err_t save_config(const wifi_transport_config_t *config);
@@ -248,6 +249,32 @@ esp_err_t wifi_transport_clear_config(void)
     return err;
 }
 
+esp_err_t wifi_transport_reset_pairing(const char *secret)
+{
+    if (!s_has_config || !secret || secret[0] == '\0' || !config_field_fits(secret, WIFI_MAX_SECRET)) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    wifi_transport_config_t next = s_config;
+    strlcpy(next.secret, secret, sizeof(next.secret));
+    esp_err_t err = save_config(&next);
+    if (err != ESP_OK) {
+        return err;
+    }
+    s_config = next;
+
+    const int fd = s_active_fd;
+    s_authenticated = false;
+    s_use_envelope = false;
+    s_auth_challenge[0] = '\0';
+    s_auth_generation++;
+    if (s_httpd && fd >= 0) {
+        s_active_fd = -1;
+        (void)httpd_sess_trigger_close(s_httpd, fd);
+    }
+    return ESP_OK;
+}
+
 bool wifi_transport_is_provisioned(void)
 {
     return s_has_config;
@@ -286,6 +313,13 @@ static void wifi_register_commands(void)
             {NULL, CMD_ARG_DONE, false},
         });
     (void)register_command("wifi clear", (void *)wifi_clear_command, (const cmd_arg_spec_t[]){{NULL, CMD_ARG_DONE, false}});
+    (void)register_command(
+        "wifi pair",
+        (void *)wifi_pairing_reset_command,
+        (const cmd_arg_spec_t[]){
+            {"secret", CMD_ARG_STRING, true},
+            {NULL, CMD_ARG_DONE, false},
+        });
     (void)register_command("wifi status", (void *)wifi_status_command, (const cmd_arg_spec_t[]){{NULL, CMD_ARG_DONE, false}});
 }
 
@@ -305,6 +339,15 @@ static void wifi_clear_command(void)
         return;
     }
     command_send_ok((const uint8_t *)"wifi cleared", strlen("wifi cleared"));
+}
+
+static void wifi_pairing_reset_command(const char *secret)
+{
+    if (wifi_transport_reset_pairing(secret) != ESP_OK) {
+        command_send_err("wifi pair");
+        return;
+    }
+    command_send_ok((const uint8_t *)"wifi pairing reset", strlen("wifi pairing reset"));
 }
 
 static void wifi_status_command(void)

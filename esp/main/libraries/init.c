@@ -370,6 +370,13 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             }
             send_binary_ok(NULL, 0);
             return;
+        case EMW_WIFI_CFG_PAIR_RESET:
+            if (wifi_transport_reset_pairing(staged_secret) != ESP_OK) {
+                send_binary_err();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
         case EMW_WIFI_CFG_STATUS: {
             const uint16_t reason = wifi_transport_last_disconnect_reason();
             const uint8_t out[] = {

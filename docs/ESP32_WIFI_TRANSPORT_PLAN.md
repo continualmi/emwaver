@@ -184,7 +184,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 - Generate or accept a stable local hostname used for mDNS advertisement.
 - After successful provisioning, attempt station-mode Wi-Fi connection and report status over the provisioning transport.
 - Support clearing Wi-Fi credentials from a local command.
-- Support pairing reset through a local-only path.
+- Support pairing reset through a local-only path. Current firmware/macOS progress: the binary Wi-Fi config lane has a pairing-reset opcode that rotates only the stored pairing secret and closes any active Wi-Fi session, and the macOS USB/BLE setup surface exposes it as `Reset Pairing`.
 
 ### Phase 3: Runtime Transport
 

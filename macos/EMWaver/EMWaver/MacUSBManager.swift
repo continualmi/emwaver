@@ -229,6 +229,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let wifiApply: UInt8 = 0x02
         static let wifiClear: UInt8 = 0x03
         static let wifiStatus: UInt8 = 0x04
+        static let wifiPairReset: UInt8 = 0x05
 
         static let wifiFieldSSID: UInt8 = 0x00
         static let wifiFieldPassword: UInt8 = 0x01
@@ -589,6 +590,71 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.wifiManager?.removePairing(host: host)
             }
             self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false)
+        }
+    }
+
+    func resetWiFiPairing(pairingSecret: String, hostname: String) {
+        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedSecret.isEmpty else {
+            setError("Wi-Fi pairing secret is required")
+            return
+        }
+        guard trimmedSecret.utf8.count <= 64 else {
+            setError("Wi-Fi pairing secret is too long.")
+            return
+        }
+
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = true
+            self.wifiProvisioningStatus = "Resetting Wi-Fi pairing"
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let canProvision = self.midiQueue.sync {
+                self.activeTransport == .usbMidi || self.activeTransport == .ble
+            }
+            guard canProvision else {
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before resetting Wi-Fi pairing.", isError: true)
+                return
+            }
+            let boardType = self.midiQueue.sync {
+                self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
+            }
+            guard self.isWiFiProvisionableBoardType(boardType) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset is available for Wi-Fi-capable ESP32 devices.", isError: true)
+                return
+            }
+            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiBegin]) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset failed to start.", isError: true)
+                return
+            }
+            let bytes = Array(trimmedSecret.utf8)
+            var offset = 0
+            while offset < bytes.count {
+                let count = min(13, bytes.count - offset)
+                var command = Data([EmwOpcode.wifiConfig, EmwOpcode.wifiField, EmwOpcode.wifiFieldSecret, UInt8(offset), UInt8(count)])
+                command.append(contentsOf: bytes[offset..<(offset + count)])
+                guard self.sendWiFiConfigCommand(command) else {
+                    self.finishWiFiProvisioning(message: "Wi-Fi pairing reset failed while sending the secret.", isError: true)
+                    return
+                }
+                offset += count
+            }
+            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiPairReset]) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset was rejected by the device.", isError: true)
+                return
+            }
+            if !trimmedHostname.isEmpty {
+                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
+                self.wifiManager?.storePairing(
+                    host: host,
+                    displayName: trimmedHostname,
+                    pairingSecret: trimmedSecret
+                )
+            }
+            self.finishWiFiProvisioning(message: "Wi-Fi pairing reset. Existing network settings remain on the ESP32 board.", isError: false)
         }
     }
 

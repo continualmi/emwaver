@@ -24,6 +24,7 @@ esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonbl
 esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking);
 esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname);
 esp_err_t wifi_transport_clear_config(void);
+esp_err_t wifi_transport_reset_pairing(const char *secret);
 bool wifi_transport_is_provisioned(void);
 bool wifi_transport_is_authenticated(void);
 bool wifi_transport_is_station_online(void);
