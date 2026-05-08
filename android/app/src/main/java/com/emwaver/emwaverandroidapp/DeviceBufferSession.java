@@ -93,6 +93,31 @@ final class DeviceBufferSession {
         samplerStreamingActive = false;
     }
 
+    synchronized void prepareCommandResponseWait() {
+        rxCounter = rxBytes.length / (long) PACKET_SIZE_BYTES;
+    }
+
+    byte[] awaitCommandResponse(int timeoutMs) {
+        long startTime = System.currentTimeMillis();
+        int safeTimeout = Math.max(1, timeoutMs);
+        while (System.currentTimeMillis() - startTime < safeTimeout) {
+            byte[] pkt = nextRxPacketData();
+            if (pkt != null && pkt.length >= PACKET_SIZE_BYTES) {
+                int status = pkt[0] & 0xFF;
+                if (status >= 0x80) {
+                    return Arrays.copyOf(pkt, PACKET_SIZE_BYTES);
+                }
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException ignored) {
+                Thread.currentThread().interrupt();
+                return null;
+            }
+        }
+        return null;
+    }
+
     synchronized long getRxPacketCount() {
         return rxBytes.length / (long) PACKET_SIZE_BYTES;
     }
@@ -104,6 +129,17 @@ final class DeviceBufferSession {
     }
 
     synchronized Object[] nextRxPacket() {
+        byte[] pkt = nextRxPacketDataLocked();
+        if (pkt == null) return null;
+        long ts = rxCounter > 0 && rxCounter - 1 < rxTsMs.length ? rxTsMs[(int) rxCounter - 1] : 0;
+        return new Object[] { pkt, ts };
+    }
+
+    private synchronized byte[] nextRxPacketData() {
+        return nextRxPacketDataLocked();
+    }
+
+    private byte[] nextRxPacketDataLocked() {
         long packets = rxBytes.length / (long) PACKET_SIZE_BYTES;
         if (rxCounter >= packets) return null;
 
@@ -111,9 +147,8 @@ final class DeviceBufferSession {
         if (startByte + PACKET_SIZE_BYTES > rxBytes.length) return null;
 
         byte[] pkt = Arrays.copyOfRange(rxBytes, startByte, startByte + PACKET_SIZE_BYTES);
-        long ts = (rxCounter >= 0 && rxCounter < rxTsMs.length) ? rxTsMs[(int) rxCounter] : 0;
         rxCounter += 1;
-        return new Object[] { pkt, ts };
+        return pkt;
     }
 
     synchronized Object[] takeRxState() {

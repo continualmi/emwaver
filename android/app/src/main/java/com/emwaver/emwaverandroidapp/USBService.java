@@ -864,10 +864,8 @@ public class USBService extends Service implements DeviceConnectionService {
             return null;
         }
 
-        // Desktop-parity: drop any stale RX packets before sending so the "next packet"
-        // consumed via rx_counter belongs to this command's response.
         DeviceBufferSession bufferSession = activeBufferSession();
-        bufferSession.setRxCounter(bufferSession.getRxPacketCount());
+        bufferSession.prepareCommandResponseWait();
 
         // This calls write(), which sends on cmd lane.
         byte[] packet = makeLanePacket(command);
@@ -878,27 +876,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
         write(packet);
 
-        // Wait for a cmd-lane response packet: response status is >= 0x80.
-        long startTime = System.currentTimeMillis();
-        while (System.currentTimeMillis() - startTime < timeout) {
-            Object[] next = bufferSession.nextRxPacket();
-            if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
-                byte[] pkt = (byte[]) next[0];
-                if (pkt.length >= UsbMidiSysex.LANE_SIZE) {
-                    int status = pkt[0] & 0xFF;
-                    if (status >= 0x80) {
-                        return Arrays.copyOf(pkt, UsbMidiSysex.LANE_SIZE);
-                    }
-                }
-                // Not a cmd response (likely stream/BS); keep waiting.
-            }
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException ignored) {
-            }
-        }
-
-        return null;
+        return bufferSession.awaitCommandResponse(timeout);
     }
 
     @Override
