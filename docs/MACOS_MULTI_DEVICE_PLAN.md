@@ -36,6 +36,7 @@ This is the foundation for validating EMWaver capabilities directly from a termi
 - auto-connect prefers USB MIDI first, then scans BLE when no wired device is connected.
 - the script runtime receives one `ScriptDevice` and sends packets to that active transport.
 - the local gateway app-role path forwards script control to the macOS app, which owns the single runtime/device session.
+- only one script preview/runtime is currently active at a time.
 
 That is enough for one board, but not enough for a bench with CC1101 and RFM69HW connected at the same time.
 
@@ -57,7 +58,7 @@ BLE session A     BLE session B     USB MIDI session N
 ESP32+CC1101      ESP32+RFM69HW     STM32/other
 ```
 
-Key idea: preserve the existing single-device transport behavior as a per-device session, but manage multiple sessions in a registry. The UI and gateway choose an active device for normal script execution, while future coordinated tests can address more than one device.
+Key idea: preserve the existing single-device transport behavior as a per-device session, but manage multiple sessions in a registry. The first compatibility layer can still expose an active device for old single-script flows, but the target architecture should allow one script runtime per connected device so two scripts can run at the same time on different boards.
 
 ## Device model
 
@@ -137,17 +138,37 @@ Acceptance:
 - Switching active device changes where `sendPacket`/`sendCommand` go.
 - Disconnecting one device does not tear down the other.
 
-### Phase 3 — Gateway and CLI selection
+### Phase 3 — Per-device script runtimes
 
-Goal: let terminal agents choose the target device through the gateway.
+Goal: allow multiple scripts to run at the same time when they target different devices.
+
+Tasks:
+
+- Introduce a `ScriptSession` concept keyed by `sessionId` and `deviceId`.
+- Each connected device can own at most one active script session initially.
+- Each session owns its own script runtime state, UI tree, plot buffers, latest snapshot, logs/errors, and stop/reset lifecycle.
+- Route `sendPacket`/`sendCommand` from that runtime only to its bound device session.
+- Keep the current active-device/current-script UI as a compatibility view, but allow a device/session switcher to inspect another running script.
+- Add per-device safe stop/reset so stopping the RFM69HW script does not stop the CC1101 script.
+
+Acceptance:
+
+- A CC1101 script can keep running on ESP32-S3 device A while an RFM69HW script runs on ESP32-S3 device B.
+- UI snapshots and logs are attributed to the correct script session and device.
+- Stopping or disconnecting one device/session does not tear down the other.
+
+### Phase 4 — Gateway and CLI selection
+
+Goal: let terminal agents choose the target device/session through the gateway.
 
 Tasks:
 
 - Extend gateway/native app status with a real device list instead of only `local-native-app`.
 - Add device fields to status messages:
   - `id`, `name`, `transport`, `boardType`, `moduleLabel`, `connected`, `active`.
-- Add a control message for active-device selection, e.g. `device.select`.
-- Optionally allow `script.run` to include `deviceId` for one-shot target selection.
+- Add control messages for active-device/session selection, e.g. `device.select` and `script.session.select`.
+- Allow `script.run` to include `deviceId` for one-shot target selection and return a `sessionId`.
+- Include `deviceId` and `sessionId` on `script.started`, `script.stopped`, `script.error`, `ui.snapshot`, plot messages, and future log/status messages.
 - Add CLI helpers later:
   - `emw devices --gateway`,
   - `emw device select <id>`,
@@ -157,9 +178,10 @@ Acceptance:
 
 - A terminal agent can list app-owned devices through localhost gateway.
 - A terminal agent can select CC1101 board vs RFM69HW board before running a script.
-- Existing `emw run script.emw` still targets the current active device.
+- A terminal agent can run two scripts concurrently by targeting different `deviceId`s.
+- Existing `emw run script.emw` still targets the current active device/session.
 
-### Phase 4 — Module-aware labels and test bench presets
+### Phase 5 — Module-aware labels and test bench presets
 
 Goal: make the physical bench understandable to humans and agents.
 
@@ -184,7 +206,7 @@ Acceptance:
 - Agent can identify the intended target by label, not by unstable Bluetooth names alone.
 - The app remembers labels across launches.
 
-### Phase 5 — Coordinated multi-device tests
+### Phase 6 — Coordinated multi-device tests
 
 Goal: validate loops where one device stimulates and another observes.
 
@@ -196,13 +218,14 @@ Examples:
 
 Tasks:
 
-- Decide whether `.emw` scripts remain single-device initially or gain a multi-device API.
-- For the first version, prefer single-device scripts plus CLI/gateway orchestration:
-  - run script on device A,
-  - switch/select device B,
-  - run capture/check script,
-  - collect snapshots/logs.
-- Later consider a multi-device script API only after the simple orchestration path is reliable.
+- Keep each `.emw` script single-device initially, but allow multiple single-device scripts to run concurrently on different devices.
+- Prefer CLI/gateway orchestration before adding a multi-device `.emw` language API:
+  - run TX/control script on device A,
+  - run RX/capture/check script on device B,
+  - collect snapshots/logs from both sessions,
+  - send UI events to either session by `sessionId`,
+  - stop/reset either session independently.
+- Later consider a multi-device script API only after concurrent single-device sessions are reliable.
 
 Acceptance:
 
@@ -215,14 +238,14 @@ Acceptance:
 - No hardware UID activation or ownership check.
 - No paid gate around local multi-device use.
 - No requirement to solve distributed remote control before local multi-device works.
-- No immediate need for a multi-device `.emw` language extension; gateway/CLI orchestration can come first.
+- No immediate need for a multi-device `.emw` language extension; concurrent single-device scripts plus gateway/CLI orchestration can come first.
 
 ## Risks and design notes
 
 - CoreBluetooth scanning/connection behavior may need careful handling to keep scanning while connected to one peripheral.
-- The current `ScriptDevice` protocol is single-target. Preserve compatibility by exposing an active-device adapter first.
+- The current `ScriptDevice` protocol is single-target. Preserve compatibility by exposing an active-device adapter first, then move toward one `ScriptDevice` binding per script session.
 - Shared Apple code may eventually need a generic multi-device abstraction, but the first implementation can stay macOS-specific until proven.
-- UI snapshot attribution becomes important once scripts can target different devices. Include device id in gateway status and future run metadata.
+- UI snapshot attribution becomes mandatory once multiple scripts can run. Include `deviceId` and `sessionId` in gateway status, run metadata, snapshots, plots, logs, errors, and stop events.
 - Hardware reset/safe-state commands should be available per device, especially for PWM/GPIO/RF tests.
 
 ## Suggested first PR
@@ -230,5 +253,6 @@ Acceptance:
 1. Add the device descriptor model and local label storage.
 2. Refactor discovery state so the UI can show multiple USB/BLE candidates.
 3. Add a basic device picker with active-device selection.
-4. Keep actual script execution routed through the selected active device.
-5. Document validation results with two ESP32-S3 BLE boards: `CC1101` and `RFM69HW`.
+4. Keep initial script execution routed through the selected active device for compatibility.
+5. Follow with per-device script sessions so CC1101 and RFM69HW scripts can run concurrently.
+6. Document validation results with two ESP32-S3 BLE boards: `CC1101` and `RFM69HW`.
