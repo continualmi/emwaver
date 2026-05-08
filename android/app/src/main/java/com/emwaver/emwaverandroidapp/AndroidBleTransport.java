@@ -16,6 +16,7 @@ import android.bluetooth.BluetoothGattService;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.os.ParcelUuid;
 import android.util.Log;
@@ -156,6 +157,28 @@ final class AndroidBleTransport {
 
     static boolean matchesAdvertisementName(@Nullable String name) {
         return name == null || name.toLowerCase(Locale.US).contains("emwaver");
+    }
+
+    @Nullable
+    static String advertisementName(@Nullable ScanResult result) {
+        if (result == null || result.getDevice() == null) {
+            return null;
+        }
+        String name = result.getDevice().getName();
+        if (name == null && result.getScanRecord() != null) {
+            name = result.getScanRecord().getDeviceName();
+        }
+        return name;
+    }
+
+    static String displayName(@Nullable ScanResult result) {
+        if (result == null || result.getDevice() == null) {
+            return "EMWaver BLE";
+        }
+        String name = advertisementName(result);
+        return name != null && !name.trim().isEmpty()
+                ? name.trim()
+                : result.getDevice().getAddress();
     }
 
     static List<ScanFilter> scanFilters() {

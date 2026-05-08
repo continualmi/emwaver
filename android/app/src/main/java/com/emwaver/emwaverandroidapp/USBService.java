@@ -551,23 +551,17 @@ public class USBService extends Service implements DeviceConnectionService {
                 return;
             }
             BluetoothDevice device = result.getDevice();
-            String name = device.getName();
-            if (name == null && result.getScanRecord() != null) {
-                name = result.getScanRecord().getDeviceName();
-            }
+            String name = AndroidBleTransport.advertisementName(result);
             if (!AndroidBleTransport.matchesAdvertisementName(name)) {
                 return;
             }
             stopBleScan();
             synchronized (bleLock) {
                 closeBleLocked();
-                String displayName = name != null && !name.trim().isEmpty()
-                        ? name.trim()
-                        : device.getAddress();
                 pendingBleConnection = AndroidBleTransport.pendingSession(
                         USBService.this,
                         device,
-                        displayName,
+                        AndroidBleTransport.displayName(result),
                         bleGattCallback);
             }
             Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
