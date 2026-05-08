@@ -146,7 +146,7 @@ Current restored codebase includes historical support for:
 Current reintegration status:
 - USB is the active wired transport for restored ESP targets.
 - ESP32-S2 uses the same USB and Wi-Fi runtime paths as ESP32-S3, with BLE compiled out because the chip has no Bluetooth radio.
-- Firmware now enumerates as USB MIDI and accepts STM32-style EMWaver SysEx framing.
+- Firmware now enumerates as USB MIDI with target-aware ESP32-S2/ESP32-S3 product names and accepts STM32-style EMWaver SysEx framing.
 - BLE is active as the wireless direct-local transport. It advertises the EMWaver GATT service and accepts the same 36-byte EMWaver superframe encoded inside the same SysEx payload used by USB MIDI.
 - Binary opcode support now covers the core shared bring-up surface over USB and BLE: version/reset/help, hardware UID, board info, device name, GPIO, ADC pin reads, SPI xfer, sample start/stop, PWM freq/write/stop, and transmit start/stop.
 - USB sampling and retransmit now follow the STM32 runtime contract: 18-byte EMW stream lanes, command-lane piggyback during active streaming, `BS` flow-control status packets during retransmit, USB circular RX buffering for transmit data, and opcode-configurable sample/transmit tick timing.

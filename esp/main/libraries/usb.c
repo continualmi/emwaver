@@ -23,6 +23,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
 #include "esp_mac.h"
+#include "emw_target.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -74,7 +75,7 @@ static char s_serial_string[13];
 static const char *s_string_desc[] = {
     (char[]){0x09, 0x04},
     "EMWaver",
-    "EMWaver ESP32-S3",
+    "EMWaver " EMW_TARGET_DEVICE_NAME_PREFIX,
     s_serial_string,
     "EMWaver MIDI",
 };
