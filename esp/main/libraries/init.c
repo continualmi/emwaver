@@ -747,6 +747,7 @@ static void handle_sample_opcode(const command_t *cmd)
             send_binary_err();
             return;
         }
+        sampler_set_stream_source(active_command_source);
         send_binary_ok(NULL, 0);
         return;
     }
@@ -756,6 +757,7 @@ static void handle_sample_opcode(const command_t *cmd)
             send_binary_err();
             return;
         }
+        sampler_set_stream_source(EMW_COMMAND_SOURCE_UNKNOWN);
         send_binary_ok(NULL, 0);
         return;
     }

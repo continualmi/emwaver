@@ -31,6 +31,7 @@
 #include "freertos/task.h"
 #include "hal/ledc_ll.h"
 #include "usb.h"
+#include "wifi_transport.h"
 
 #define SAMPLER_RING_LANES 16u
 #define SAMPLER_RING_MASK (SAMPLER_RING_LANES - 1u)
@@ -61,6 +62,7 @@ static volatile uint8_t sampler_overflow_active;
 static volatile uint8_t sampler_bit_index;
 static volatile uint8_t sampler_byte_index;
 static volatile uint8_t sampler_current_byte;
+static volatile uint8_t sampler_stream_source;
 
 static volatile uint8_t tx_bit_index;
 static volatile uint8_t tx_current_byte;
@@ -172,6 +174,13 @@ bool sampler_is_transmitting(void)
     return transmission_active;
 }
 
+void sampler_set_stream_source(uint8_t source)
+{
+    portENTER_CRITICAL(&s_sampler_lock);
+    sampler_stream_source = source;
+    portEXIT_CRITICAL(&s_sampler_lock);
+}
+
 void sampler_stop_all(void)
 {
     sampler_stop_sampling();
@@ -215,6 +224,7 @@ static void reset_sampler_state(void)
     sampler_bit_index = 0;
     sampler_byte_index = 0;
     sampler_current_byte = 0;
+    sampler_stream_source = EMW_COMMAND_SOURCE_UNKNOWN;
     memset((void *)sampler_ring, 0, sizeof(sampler_ring));
     memset((void *)sampler_overflow_lane, 0, sizeof(sampler_overflow_lane));
     portEXIT_CRITICAL(&s_sampler_lock);
@@ -281,7 +291,19 @@ static void sampler_task(void *pv_parameters)
             portEXIT_CRITICAL(&s_sampler_lock);
 
             if (has_lane) {
-                if (usb_send_stream_lane((const uint8_t *)sampler_ring[lane_index], true) == ESP_OK) {
+                uint8_t stream_source = EMW_COMMAND_SOURCE_UNKNOWN;
+                portENTER_CRITICAL(&s_sampler_lock);
+                stream_source = sampler_stream_source;
+                portEXIT_CRITICAL(&s_sampler_lock);
+
+                esp_err_t err = ESP_FAIL;
+                if (stream_source == EMW_COMMAND_SOURCE_WIFI) {
+                    err = wifi_transport_send_stream_lane((const uint8_t *)sampler_ring[lane_index], true);
+                } else {
+                    err = usb_send_stream_lane((const uint8_t *)sampler_ring[lane_index], true);
+                }
+
+                if (err == ESP_OK) {
                     portENTER_CRITICAL(&s_sampler_lock);
                     if (sampler_ring_count > 0u) {
                         sampler_ring_tail = (uint8_t)((sampler_ring_tail + 1u) & SAMPLER_RING_MASK);

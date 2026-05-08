@@ -73,7 +73,7 @@ final class MacWiFiManager {
     private var authTimeoutWorkItem: DispatchWorkItem?
     private var pendingPairingRollback: (id: String, previous: PairedWiFiDevice?)?
     private var pendingResponses: [UInt16: PendingResponse] = [:]
-    private var txSequence: UInt16 = 0
+    private var txSequence: UInt16 = 1
 
     private final class PendingResponse {
         let semaphore = DispatchSemaphore(value: 0)
@@ -349,7 +349,7 @@ final class MacWiFiManager {
         socket = nil
         connectedDeviceID = nil
         failPendingResponses()
-        txSequence = 0
+        txSequence = 1
         pendingAuthSecret = nil
         pendingAuthRecord = nil
         if notify {

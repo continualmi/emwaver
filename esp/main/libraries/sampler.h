@@ -26,6 +26,7 @@ void sampler_register_commands(void);
 void sampler_stop_all(void);
 bool sampler_is_sampling(void);
 bool sampler_is_transmitting(void);
+void sampler_set_stream_source(uint8_t source);
 bool sampler_start_sampling(int pin, uint8_t tick_us);
 bool sampler_stop_sampling(void);
 bool sampler_start_transmission(int pin, uint8_t duty_percent, int freq_hz, uint8_t tick_us);

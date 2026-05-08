@@ -147,6 +147,21 @@ esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, co
     return send_superframe(frame, sequence);
 }
 
+esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonblocking)
+{
+    (void)nonblocking;
+    if (!stream_lane) {
+        return ESP_ERR_INVALID_ARG;
+    }
+    if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
+    memcpy(&frame[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
+    return send_superframe(frame, 0);
+}
+
 esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
 {
     if (!config_field_fits(ssid, WIFI_MAX_SSID) ||
