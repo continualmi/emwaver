@@ -56,7 +56,6 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Locale;
-import java.util.UUID;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -71,11 +70,6 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_OP_VERSION = 0x01;
     private static final int EMW_OP_ENTER_DFU = 0x06;
     private static final int EMW_OP_BOARD_GET = 0x09;
-
-    private static final UUID EMW_BLE_SERVICE_UUID = UUID.fromString("45C7158E-0C3B-4E90-A847-452A15B14191");
-    private static final UUID EMW_BLE_COMMAND_UUID = UUID.fromString("46C7158E-0C3B-4E90-A847-452A15B14191");
-    private static final UUID EMW_BLE_NOTIFY_UUID = UUID.fromString("47C7158E-0C3B-4E90-A847-452A15B14191");
-    private static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
 
     private enum ActiveTransport {
         NONE,
@@ -139,11 +133,6 @@ public class USBService extends Service implements DeviceConnectionService {
     private static String usbDeviceSessionId(UsbDevice device) {
         if (device == null) return "usb:active";
         return "usb:" + device.getVendorId() + ":" + device.getProductId() + ":" + device.getDeviceName();
-    }
-
-    private static String bleDeviceSessionId(BluetoothDevice device) {
-        if (device == null) return "ble:active";
-        return "ble:" + device.getAddress();
     }
 
     // Buffer bridge methods
@@ -573,7 +562,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 return;
             }
             ScanFilter filter = new ScanFilter.Builder()
-                    .setServiceUuid(new android.os.ParcelUuid(EMW_BLE_SERVICE_UUID))
+                    .setServiceUuid(new android.os.ParcelUuid(AndroidBleTransport.SERVICE_UUID))
                     .build();
             ScanSettings settings = new ScanSettings.Builder()
                     .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
@@ -637,7 +626,7 @@ public class USBService extends Service implements DeviceConnectionService {
             if (name == null && result.getScanRecord() != null) {
                 name = result.getScanRecord().getDeviceName();
             }
-            if (name != null && !name.toLowerCase(Locale.US).contains("emwaver")) {
+            if (!AndroidBleTransport.matchesAdvertisementName(name)) {
                 return;
             }
             stopBleScan();
@@ -679,14 +668,14 @@ public class USBService extends Service implements DeviceConnectionService {
         @SuppressLint("MissingPermission")
         @Override
         public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            BluetoothGattService service = gatt.getService(EMW_BLE_SERVICE_UUID);
+            BluetoothGattService service = gatt.getService(AndroidBleTransport.SERVICE_UUID);
             if (service == null) {
                 Log.e(TAG, "BLE EMWaver service missing");
                 gatt.disconnect();
                 return;
             }
-            BluetoothGattCharacteristic command = service.getCharacteristic(EMW_BLE_COMMAND_UUID);
-            BluetoothGattCharacteristic notify = service.getCharacteristic(EMW_BLE_NOTIFY_UUID);
+            BluetoothGattCharacteristic command = service.getCharacteristic(AndroidBleTransport.COMMAND_UUID);
+            BluetoothGattCharacteristic notify = service.getCharacteristic(AndroidBleTransport.NOTIFY_UUID);
             if (command == null) {
                 Log.e(TAG, "BLE command characteristic missing");
                 gatt.disconnect();
@@ -695,12 +684,12 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (bleLock) {
                 bleCommandCharacteristic = command;
                 bleConnected = true;
-                setActiveBufferSession(bleDeviceSessionId(gatt.getDevice()));
+                setActiveBufferSession(AndroidBleTransport.sessionId(gatt.getDevice()));
                 activeTransport = ActiveTransport.BLE;
             }
             if (notify != null) {
                 gatt.setCharacteristicNotification(notify, true);
-                BluetoothGattDescriptor cccd = notify.getDescriptor(CLIENT_CHARACTERISTIC_CONFIG_UUID);
+                BluetoothGattDescriptor cccd = notify.getDescriptor(AndroidBleTransport.CLIENT_CHARACTERISTIC_CONFIG_UUID);
                 if (cccd != null) {
                     cccd.setValue(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE);
                     gatt.writeDescriptor(cccd);
@@ -713,7 +702,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
         @Override
         public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            if (characteristic != null && EMW_BLE_NOTIFY_UUID.equals(characteristic.getUuid())) {
+            if (characteristic != null && AndroidBleTransport.NOTIFY_UUID.equals(characteristic.getUuid())) {
                 byte[] value = characteristic.getValue();
                 if (value != null) {
                     feedSysexBytes(value, 0, value.length);
