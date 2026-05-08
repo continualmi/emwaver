@@ -47,7 +47,6 @@
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
-#include <string.h>
 
 #define FIRMWARE_VERSION "1.0.0"
 #define EMWAVER_FIRMWARE_WELCOME "Welcome to EMWaver firmware"

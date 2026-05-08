@@ -7,6 +7,7 @@
 #ifndef WIFI_TRANSPORT_H
 #define WIFI_TRANSPORT_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
