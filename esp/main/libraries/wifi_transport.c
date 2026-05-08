@@ -62,9 +62,11 @@ static char s_auth_challenge[33];
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
+static bool s_station_started;
 static bool s_station_online;
 static uint8_t s_reconnect_attempt;
 static bool s_reconnect_pending;
+static bool s_suppress_next_disconnect_reconnect;
 
 static void wifi_register_commands(void);
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
@@ -177,10 +179,12 @@ esp_err_t wifi_transport_clear_config(void)
         s_active_fd = -1;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
+        s_suppress_next_disconnect_reconnect = false;
 #if EMWAVER_ENABLE_WIFI_TRANSPORT
         stop_server();
         (void)esp_wifi_disconnect();
         (void)esp_wifi_stop();
+        s_station_started = false;
 #endif
     }
     return err;
@@ -354,9 +358,28 @@ static void start_station(void)
 
     ESP_ERROR_CHECK(esp_wifi_set_storage(WIFI_STORAGE_RAM));
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    if (s_station_started) {
+        s_authenticated = false;
+        s_station_online = false;
+        s_active_fd = -1;
+        s_reconnect_attempt = 0;
+        s_reconnect_pending = false;
+        s_suppress_next_disconnect_reconnect = true;
+        stop_server();
+        (void)esp_wifi_disconnect();
+    }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
-    ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_LOGI(TAG, "Wi-Fi station starting for SSID '%s'", s_config.ssid);
+    if (!s_station_started) {
+        ESP_ERROR_CHECK(esp_wifi_start());
+        s_station_started = true;
+        ESP_LOGI(TAG, "Wi-Fi station starting for SSID '%s'", s_config.ssid);
+    } else {
+        esp_err_t err = esp_wifi_connect();
+        if (err != ESP_OK && err != ESP_ERR_WIFI_STATE) {
+            ESP_ERROR_CHECK(err);
+        }
+        ESP_LOGI(TAG, "Wi-Fi station reconnecting for SSID '%s'", s_config.ssid);
+    }
 }
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
@@ -364,12 +387,17 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     (void)arg;
     (void)event_data;
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
+        s_station_started = true;
         (void)esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_authenticated = false;
         s_station_online = false;
         s_active_fd = -1;
         stop_server();
+        if (s_suppress_next_disconnect_reconnect) {
+            s_suppress_next_disconnect_reconnect = false;
+            return;
+        }
         if (s_has_config && !s_reconnect_pending) {
             s_reconnect_pending = true;
             (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
