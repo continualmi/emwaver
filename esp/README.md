@@ -67,6 +67,8 @@ idf.py -p /dev/ttyACM0 monitor  # Exit with Ctrl+]
 
 Use `idf.py -p /dev/ttyACM0 flash monitor` to combine flashing and monitoring.
 
+For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`.
+
 ## macOS (Intel & Apple Silicon)
 
 ```bash
@@ -102,6 +104,8 @@ idf.py -p /dev/cu.usbmodemXXXX monitor  # Exit with Ctrl+]
 ```
 
 `idf.py -p /dev/cu.usbmodemXXXX flash monitor` performs flash and monitor in one command.
+
+For target-specific validation without reusing the default `build/` directory, use an ignored alternate build directory, for example `idf.py -B build-esp32s3-check build` after `idf.py set-target esp32s3`.
 
 ## Windows (ESP-IDF Tools Installer)
 
