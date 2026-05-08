@@ -284,6 +284,14 @@ struct DeviceConnectionSheet: View {
                                   wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                                   wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
 
+                        Button("Clear Setup") {
+                            device.clearWiFiProvisioning(hostname: wifiHostname)
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(device.isWiFiProvisioning ||
+                                  !device.isConnected ||
+                                  device.connectedTransportKind == "Wi-Fi")
+
                         if let status = device.wifiProvisioningStatus, !status.isEmpty {
                             Text(status)
                                 .font(.caption)

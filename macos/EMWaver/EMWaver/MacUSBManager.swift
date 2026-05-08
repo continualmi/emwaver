@@ -488,6 +488,41 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    func clearWiFiProvisioning(hostname: String) {
+        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = true
+            self.wifiProvisioningStatus = "Clearing Wi-Fi setup"
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let canProvision = self.midiQueue.sync {
+                self.activeTransport == .usbMidi || self.activeTransport == .ble
+            }
+            guard canProvision else {
+                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before clearing Wi-Fi setup.", isError: true)
+                return
+            }
+            let boardType = self.midiQueue.sync {
+                self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
+            }
+            guard boardType.lowercased() == "esp32s3" else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup recovery is available for ESP32-S3 devices.", isError: true)
+                return
+            }
+            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiClear]) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup clear was rejected by the device.", isError: true)
+                return
+            }
+            if !trimmedHostname.isEmpty {
+                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
+                self.wifiManager?.removePairing(host: host)
+            }
+            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32-S3 again before using Wi-Fi control.", isError: false)
+        }
+    }
+
     private func connectDeviceInternal(transportID id: String) {
             if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
                 self.connectInternal(portName: displayName)

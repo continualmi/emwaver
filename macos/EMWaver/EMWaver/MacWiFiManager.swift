@@ -190,6 +190,23 @@ final class MacWiFiManager {
         }
     }
 
+    func removePairing(host: String, port: Int = MacWiFiManager.defaultPort) {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        queue.async {
+            guard !trimmedHost.isEmpty else { return }
+
+            let safePort = port > 0 ? port : Self.defaultPort
+            let id = Self.deviceID(host: trimmedHost, port: safePort)
+            self.pairedDevicesByID.removeValue(forKey: id)
+            if var record = self.discoveredDevicesByID[id] {
+                record.isPaired = false
+                self.discoveredDevicesByID[id] = record
+            }
+            self.savePairedDevices()
+            self.publishDevices()
+        }
+    }
+
     func connect(record: MacWiFiDeviceRecord) {
         queue.async {
             guard let paired = self.pairedDevicesByID[record.id], !paired.secret.isEmpty else {
