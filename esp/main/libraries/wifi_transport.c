@@ -749,7 +749,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
     uint16_t sequence = 0;
-    bool has_sysex = frame.type == HTTPD_WS_TYPE_BINARY && frame.len == EMW_SYSEX_BYTES;
+    bool has_sysex = !s_use_envelope && frame.type == HTTPD_WS_TYPE_BINARY && frame.len == EMW_SYSEX_BYTES;
     if (has_sysex) {
         memcpy(sysex, data, sizeof(sysex));
     } else if (frame.type == HTTPD_WS_TYPE_BINARY) {
