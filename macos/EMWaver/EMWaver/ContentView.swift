@@ -352,25 +352,24 @@ struct ContentView: View {
                 Text("No local devices")
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(device.discoveredDevices) { item in
-                    Button {
-                        scriptSessions.selectedDeviceID = item.id
-                        if item.connectionState != .connected {
-                            device.connectDevice(id: item.id)
-                        }
-                    } label: {
-                        if item.id == scriptSessions.selectedDeviceID {
-                            HStack {
-                                Image(systemName: transportIcon(for: item.transport))
-                                Text(LocalDeviceLabelFormatter.label(for: item))
-                                Spacer()
-                                Image(systemName: "checkmark")
-                            }
-                        } else {
-                            Label(LocalDeviceLabelFormatter.label(for: item), systemImage: transportIcon(for: item.transport))
+                Picker("Local Device", selection: Binding(
+                    get: { scriptSessions.selectedDeviceID },
+                    set: { selectedID in
+                        scriptSessions.selectedDeviceID = selectedID
+                        if let selectedID,
+                           let item = device.discoveredDevices.first(where: { $0.id == selectedID }),
+                           item.connectionState != .connected {
+                            device.connectDevice(id: selectedID)
                         }
                     }
+                )) {
+                    ForEach(device.discoveredDevices) { item in
+                        Label(LocalDeviceLabelFormatter.label(for: item), systemImage: transportIcon(for: item.transport))
+                            .tag(Optional(item.id))
+                    }
                 }
+                .labelsHidden()
+                .pickerStyle(.inline)
             }
 
             Divider()
