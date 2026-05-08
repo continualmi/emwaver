@@ -350,18 +350,18 @@ Hardware validation should include:
 
 ## Open Decisions
 
-- Pairing protocol details.
-- How active script ownership is represented when multiple apps can see the same LAN device.
-- Whether device-to-host outbound mode is useful later for stricter firewall environments.
+- Whether device-to-host outbound mode is useful later for stricter firewall environments. Deferred for v1 because the local-first LAN/VPN/SSH model already gives users a controllable remote path without introducing a hosted relay.
 
 Resolved v1 decisions:
 
 - Use fixed control port `3922`.
 - Advertise service type `_emwaver._tcp`.
 - Use WebSocket at `/v1/ws`.
+- Use local USB/BLE provisioning to store SSID/password/hostname plus a per-device pairing secret in ESP32 NVS and local app/daemon state; use firmware-issued challenge plus HMAC-SHA256 proof on the WebSocket, never the raw pairing secret.
 - Use authenticated binary envelope version `1` for new clients while keeping raw 48-byte SysEx binary frames as a compatibility path during the transition; echo request sequence ids on command responses and match them in the macOS command path.
 - Use USB and BLE provisioning where platform APIs allow it.
 - Support multiple ESP32 boards on the same LAN by opening one WebSocket per selected endpoint; no per-device port allocation.
+- Represent active ownership per ESP32 endpoint as one active authenticated WebSocket session. A second client receives a busy response instead of silently taking over the board.
 
 ## Implementation Order
 
