@@ -176,7 +176,8 @@ internal static class WindowsBleTransport
     internal static async Task<(Connection? Connection, string? Error)> OpenConnectionAsync(
         ulong bluetoothAddress,
         string displayName,
-        TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs> notifyHandler)
+        TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs> notifyHandler,
+        ITransportDeviceSession? session = null)
     {
         var device = await OpenDeviceAsync(bluetoothAddress);
         if (device == null)
@@ -205,7 +206,8 @@ internal static class WindowsBleTransport
             device,
             commandCharacteristic,
             notifyCharacteristic,
-            notifyHandler);
+            notifyHandler,
+            session);
 
         if (notifyCharacteristic != null)
         {

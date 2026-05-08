@@ -118,10 +118,11 @@ internal static class WindowsUsbMidiTransport
 
     internal static async Task<Connection> OpenConnectionAsync(
         DevicePort port,
-        TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null)
+        TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null,
+        ITransportDeviceSession? session = null)
     {
         var ports = await OpenPortsAsync(port);
-        return new Connection(port, ports.InPort, ports.OutPort, receivedHandler);
+        return new Connection(port, ports.InPort, ports.OutPort, receivedHandler, session);
     }
 
     internal static IReadOnlyList<DevicePort> PairPorts(
