@@ -125,6 +125,7 @@ Current first step:
 - iOS CoreMIDI SysEx send mechanics now live in `USBMidiTransport`, and BLE chunked characteristic writes now live in `BLETransport`, reducing transport protocol code inside `USBManager`.
 - iOS BLE service discovery, characteristic lookup, and notify enablement now live in `BLETransport`, further reducing BLE protocol ownership inside `USBManager`.
 - iOS CoreMIDI source connection/disconnection now lives in `USBMidiTransport`, moving another USB MIDI setup detail out of `USBManager`.
+- iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 
 Remaining isolation work:
 

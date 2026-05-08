@@ -169,9 +169,27 @@ final class USBManager: NSObject, ObservableObject {
         withBufferQueueSync { activeBufferSessionKey }
     }
 
-    private func bufferSession(deviceId: String) -> TransportDeviceSession {
+    private func normalizedDeviceSessionKey(_ deviceId: String) -> String {
         let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        let sessionKey = key.isEmpty ? "active" : key
+        return key.isEmpty ? "active" : key
+    }
+
+    private func isActiveDeviceSession(deviceId: String) -> Bool {
+        let requested = normalizedDeviceSessionKey(deviceId)
+        return withBufferQueueSync { requested == activeBufferSessionKey }
+    }
+
+    private func requireActiveDeviceSession(deviceId: String, operation: String) -> Bool {
+        if isActiveDeviceSession(deviceId: deviceId) {
+            return true
+        }
+        setError("\(operation): target device session is not active")
+        dbg("\(operation): target device session is not active: \(deviceId)")
+        return false
+    }
+
+    private func bufferSession(deviceId: String) -> TransportDeviceSession {
+        let sessionKey = normalizedDeviceSessionKey(deviceId)
         if let session = bufferSessionsByDeviceId[sessionKey] {
             return session
         }
@@ -431,6 +449,9 @@ final class USBManager: NSObject, ObservableObject {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
+            guard self.requireActiveDeviceSession(deviceId: deviceId, operation: "sendPacket") else {
+                return
+            }
 
             guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else {
                 self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
@@ -643,6 +664,9 @@ final class USBManager: NSObject, ObservableObject {
             setError("Cannot transmit buffer: Not connected")
             return
         }
+        guard requireActiveDeviceSession(deviceId: deviceId, operation: "transmitBuffer") else {
+            return
+        }
 
         let bufferToSend = getBuffer(deviceId: deviceId)
         guard !bufferToSend.isEmpty else { return }
@@ -680,6 +704,7 @@ final class USBManager: NSObject, ObservableObject {
 
             // Construct and send as Stream Lane
             midiQueue.async {
+                guard self.requireActiveDeviceSession(deviceId: deviceId, operation: "transmitBuffer") else { return }
                 guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(chunk) }) else { return }
                 
                 // Log stream lane transmission
@@ -725,6 +750,9 @@ final class USBManager: NSObject, ObservableObject {
     func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
         guard isConnected else {
             setError("Cannot send command: Not connected")
+            return nil
+        }
+        guard requireActiveDeviceSession(deviceId: deviceId, operation: "sendCommand") else {
             return nil
         }
 
