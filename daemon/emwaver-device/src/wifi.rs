@@ -3,7 +3,7 @@ use hmac::{Hmac, Mac};
 use serde_json::{json, Value};
 use sha2::Sha256;
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddrV4, TcpStream, UdpSocket};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tracing::warn;
@@ -102,17 +102,12 @@ impl WiFiDevice {
     }
 
     pub fn connect(host: &str, port: u16, secret: &str) -> Result<Arc<Self>> {
-        let host = host.trim();
         let secret = secret.trim();
-        if host.is_empty() {
-            anyhow::bail!("Wi-Fi host is required");
-        }
         if secret.is_empty() {
             anyhow::bail!("Wi-Fi pairing secret is required");
         }
 
-        let url = format!("ws://{host}:{port}{WIFI_WS_PATH}");
-        Url::parse(&url).with_context(|| format!("invalid Wi-Fi device URL for {host}:{port}"))?;
+        let url = wifi_websocket_url(host, port)?;
         let (mut socket, _) = connect(url.as_str()).context("failed to connect Wi-Fi WebSocket")?;
         authenticate(&mut socket, secret)?;
 
@@ -261,6 +256,37 @@ fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Dura
     if let MaybeTlsStream::Plain(stream) = stream {
         let _ = stream.set_read_timeout(timeout);
     }
+}
+
+fn wifi_websocket_url(host: &str, port: u16) -> Result<String> {
+    let host = host.trim();
+    if host.is_empty() {
+        anyhow::bail!("Wi-Fi host is required");
+    }
+    if host.chars().any(char::is_whitespace)
+        || host.contains("://")
+        || host.contains('/')
+        || host.contains('?')
+        || host.contains('#')
+        || host.contains('@')
+        || host.starts_with('[')
+        || host.ends_with(']')
+    {
+        anyhow::bail!(
+            "Wi-Fi host must be a hostname or IP address without a scheme, path, or port"
+        );
+    }
+
+    let url_host = if host.contains(':') {
+        host.parse::<Ipv6Addr>()
+            .with_context(|| format!("invalid IPv6 Wi-Fi host: {host}"))?;
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    };
+    let url = format!("ws://{url_host}:{port}{WIFI_WS_PATH}");
+    Url::parse(&url).with_context(|| format!("invalid Wi-Fi device URL for {host}:{port}"))?;
+    Ok(url)
 }
 
 fn authenticate(socket: &mut WiFiSocket, secret: &str) -> Result<()> {
@@ -583,6 +609,42 @@ mod tests {
             digest,
             "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
         );
+    }
+
+    #[test]
+    fn wifi_websocket_url_accepts_hostname_ipv4_and_bare_ipv6() {
+        assert_eq!(
+            wifi_websocket_url("emwaver-1234.local", 3922).expect("hostname url"),
+            "ws://emwaver-1234.local:3922/v1/ws"
+        );
+        assert_eq!(
+            wifi_websocket_url("192.168.1.44", 3922).expect("ipv4 url"),
+            "ws://192.168.1.44:3922/v1/ws"
+        );
+        assert_eq!(
+            wifi_websocket_url("fd00::1234", 3922).expect("ipv6 url"),
+            "ws://[fd00::1234]:3922/v1/ws"
+        );
+    }
+
+    #[test]
+    fn wifi_websocket_url_rejects_url_or_socket_address_input() {
+        for host in [
+            "",
+            "ws://192.168.1.44",
+            "192.168.1.44:3922",
+            "emwaver.local/v1/ws",
+            "emwaver.local?x=1",
+            "emwaver.local#frag",
+            "[fd00::1234]",
+            "fd00::1234%en0",
+            "emwaver local",
+        ] {
+            assert!(
+                wifi_websocket_url(host, 3922).is_err(),
+                "expected {host:?} to be rejected"
+            );
+        }
     }
 
     #[test]
