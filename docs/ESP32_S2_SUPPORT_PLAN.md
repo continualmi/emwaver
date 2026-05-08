@@ -86,7 +86,7 @@ EMWAVER_ESP32_S3_MDNS_INSTANCE=<S3_INSTANCE_NAME> \
 scripts/esp32-s2-hardware-validation.sh
 ```
 
-`EMWAVER_ESP32_S3_DEVICE_ID` and `EMWAVER_ESP32_S3_MDNS_INSTANCE` are optional, but should be set when an ESP32-S3 board is attached so the script also checks the physical S3 board identity and mDNS regression.
+`EMWAVER_ESP32_S3_DEVICE_ID` and `EMWAVER_ESP32_S3_MDNS_INSTANCE` are optional, but should be set when an ESP32-S3 board is attached so the script also checks the physical S3 board identity and mDNS regression. When `EMWAVER_MDNS_INSTANCE` or `EMWAVER_ESP32_S3_MDNS_INSTANCE` is set, the script fails if the advertised TXT records do not include the expected `board` and `cap` values.
 
 1. Build and flash the S2 target:
 

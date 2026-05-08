@@ -63,6 +63,36 @@ json_string() {
   fi
 }
 
+validate_mdns_txt() {
+  local instance="$1"
+  local expected_board="$2"
+  local expected_cap="$3"
+  local label="$4"
+  local dns_log
+  local dns_pid
+
+  dns_log="$(mktemp /tmp/emwaver-mdns-txt.XXXXXX.log)"
+  dns-sd -L "$instance" _emwaver._tcp local >"$dns_log" 2>&1 &
+  dns_pid=$!
+  sleep 8
+  kill "$dns_pid" >/dev/null 2>&1 || true
+  wait "$dns_pid" >/dev/null 2>&1 || true
+  cat "$dns_log"
+
+  if ! grep -Eiq "(^|[[:space:]\"])board=${expected_board}($|[[:space:]\"])" "$dns_log"; then
+    rm -f "$dns_log"
+    echo "missing ${label} mDNS TXT board=${expected_board}" >&2
+    return 1
+  fi
+  if ! grep -Eiq "(^|[[:space:]\"])cap=${expected_cap}($|[[:space:]\"])" "$dns_log"; then
+    rm -f "$dns_log"
+    echo "missing ${label} mDNS TXT cap=${expected_cap}" >&2
+    return 1
+  fi
+  rm -f "$dns_log"
+  echo "${label} mDNS TXT OK: board=${expected_board} cap=${expected_cap}"
+}
+
 echo "== EMWaver ESP32-S2 hardware validation =="
 echo "repo: $ROOT"
 echo
@@ -243,7 +273,7 @@ if command -v dns-sd >/dev/null 2>&1; then
   rm -f "$dns_log"
 
   if [[ -n "$MDNS_INSTANCE" ]]; then
-    dns-sd -L "$MDNS_INSTANCE" _emwaver._tcp local
+    validate_mdns_txt "$MDNS_INSTANCE" "esp32s2" "wifi,usb" "ESP32-S2"
   else
     cat <<'EOF'
 
@@ -258,7 +288,7 @@ EOF
   if [[ -n "$S3_MDNS_INSTANCE" ]]; then
     echo
     echo "== ESP32-S3 mDNS TXT regression =="
-    dns-sd -L "$S3_MDNS_INSTANCE" _emwaver._tcp local
+    validate_mdns_txt "$S3_MDNS_INSTANCE" "esp32s3" "wifi,usb,ble" "ESP32-S3"
   else
     cat <<'EOF'
 
