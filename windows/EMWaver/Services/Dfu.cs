@@ -72,6 +72,13 @@ internal sealed class Dfu : IAsyncDisposable
         return dfu;
     }
 
+    public static async Task<bool> IsPresentAsync()
+    {
+        var selector = UsbDevice.GetDeviceSelector(USB_VENDOR_ID, USB_PRODUCT_ID);
+        var devices = await DeviceInformation.FindAllAsync(selector);
+        return devices.Count > 0;
+    }
+
     public async ValueTask DisposeAsync()
     {
         await Task.CompletedTask;

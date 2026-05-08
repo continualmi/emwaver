@@ -8,8 +8,6 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.Devices.Enumeration;
-using Windows.Devices.Usb;
 
 namespace EMWaver.Services;
 
@@ -684,12 +682,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
         return path;
     }
 
-    private static async Task<bool> IsDfuPresentAsync()
-    {
-        var selector = UsbDevice.GetDeviceSelector(Dfu.USB_VENDOR_ID, Dfu.USB_PRODUCT_ID);
-        var devices = await DeviceInformation.FindAllAsync(selector);
-        return devices.Count > 0;
-    }
+    private static Task<bool> IsDfuPresentAsync() => Dfu.IsPresentAsync();
 
     private string EffectiveBoardType(WindowsDeviceManager device)
     {

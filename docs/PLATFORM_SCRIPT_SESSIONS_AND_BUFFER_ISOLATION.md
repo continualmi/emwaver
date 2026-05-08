@@ -68,6 +68,7 @@ Current first step:
 - Windows USB MIDI device enumeration, port pairing, and port opening now live in `WindowsUsbMidiTransport`, moving more USB transport setup out of `WindowsDeviceManager`.
 - Windows USB MIDI live handles now sit behind a `WindowsUsbMidiTransport.Connection` object that owns the opened port pair, session id, display name, send helper, and close behavior.
 - Windows BLE live handles now sit behind a `WindowsBleTransport.Connection` object that owns the BLE device, command/notify characteristics, session id, display name, notification subscription, send helper, and dispose behavior.
+- Windows STM32 DFU presence probing now lives on the `Dfu` service instead of duplicating USB enumeration inside higher-level managers.
 - Windows targeted script packet sends now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.
 - Windows now tracks the live script target as one `ActiveDeviceTarget` descriptor instead of parallel USB/BLE session fields, so send guards and receive routing resolve against one explicit active transport/session identity.
 - Windows has an `ActiveDeviceTargetTests` suite for active-target device-id normalization and transport matching; local execution still depends on a machine with `dotnet` installed.

@@ -10,9 +10,7 @@ using System.Threading.Tasks;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.Advertisement;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
-using Windows.Devices.Enumeration;
 using Windows.Devices.Midi;
-using Windows.Devices.Usb;
 using Windows.Storage.Streams;
 using System.Diagnostics;
 
@@ -826,18 +824,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
-    private static async Task<bool> IsDfuPresentAsync()
-    {
-        // STM32 ROM DFU (commonly 0483:DF11).
-        // If this fails due to capability/permission constraints in unpackaged mode,
-        // the UI will simply show Update Mode as not detected.
-        const ushort vid = 0x0483;
-        const ushort pid = 0xDF11;
-
-        var selector = UsbDevice.GetDeviceSelector(vid, pid);
-        var devices = await DeviceInformation.FindAllAsync(selector);
-        return devices.Count > 0;
-    }
+    private static Task<bool> IsDfuPresentAsync() => Dfu.IsPresentAsync();
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
