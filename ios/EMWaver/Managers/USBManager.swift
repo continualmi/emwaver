@@ -122,9 +122,8 @@ final class USBManager: NSObject, ObservableObject {
     private var centralManager: CBCentralManager?
     private var activeTransport: ActiveTransport = .none
     private var activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
-    private var connectedPeripheral: CBPeripheral?
-    private var commandCharacteristic: CBCharacteristic?
-    private var notifyCharacteristic: CBCharacteristic?
+    private var pendingBleConnection: BLETransport.PendingConnection?
+    private var bleConnection: BLETransport.Connection?
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -914,13 +913,14 @@ final class USBManager: NSObject, ObservableObject {
         if let connection = usbMidiConnection {
             _ = connection.disconnect(inPort: inPort)
         }
-        if let peripheral = connectedPeripheral {
-            centralManager?.cancelPeripheralConnection(peripheral)
+        if let connection = bleConnection {
+            centralManager?.cancelPeripheralConnection(connection.peripheral)
+        } else if let pending = pendingBleConnection {
+            centralManager?.cancelPeripheralConnection(pending.peripheral)
         }
         usbMidiConnection = nil
-        connectedPeripheral = nil
-        commandCharacteristic = nil
-        notifyCharacteristic = nil
+        pendingBleConnection = nil
+        bleConnection = nil
         clearActiveDeviceTarget()
         withBufferQueueSync { activeBufferSession.resetSamplerStreaming() }
 
@@ -959,12 +959,12 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func sendBleSysex(_ sysex: Data, reportErrors: Bool) {
-        guard let peripheral = connectedPeripheral, let characteristic = commandCharacteristic else {
+        guard let connection = bleConnection else {
             if reportErrors { setError("BLE send failed: command characteristic unavailable") }
             return
         }
 
-        BLETransport.writeSysex(sysex, peripheral: peripheral, characteristic: characteristic)
+        connection.writeSysex(sysex)
     }
 
     private func handlePacketDatas(_ packets: [Data], deviceId: String?) {
@@ -1123,9 +1123,11 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
 
             self.dbg("BLE discovered: \(name) rssi=\(RSSI)")
             self.centralManager?.stopScan()
-            self.connectedPeripheral = peripheral
-            self.commandCharacteristic = nil
-            self.notifyCharacteristic = nil
+            self.pendingBleConnection = BLETransport.pendingConnection(
+                peripheral: peripheral,
+                advertisementData: advertisementData
+            )
+            self.bleConnection = nil
             peripheral.delegate = self
             central.connect(peripheral)
         }
@@ -1149,11 +1151,12 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         midiQueue.async {
-            guard self.connectedPeripheral?.identifier == peripheral.identifier else { return }
+            let matchesConnected = self.bleConnection?.matches(peripheral) == true
+            let matchesPending = self.pendingBleConnection?.matches(peripheral) == true
+            guard matchesConnected || matchesPending else { return }
             self.dbg("BLE disconnected: \(error?.localizedDescription ?? "clean")")
-            self.connectedPeripheral = nil
-            self.commandCharacteristic = nil
-            self.notifyCharacteristic = nil
+            self.pendingBleConnection = nil
+            self.bleConnection = nil
             if self.activeTransport == .ble {
                 self.clearActiveDeviceTarget()
                 self.withBufferQueueSync { self.activeBufferSession.resetSamplerStreaming() }
@@ -1187,20 +1190,28 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
+            guard let pending = self.pendingBleConnection, pending.matches(peripheral) else {
+                return
+            }
+
             let characteristics = BLETransport.characteristics(in: service)
-            self.commandCharacteristic = characteristics.command
-            self.notifyCharacteristic = characteristics.notify
             BLETransport.enableNotifications(on: peripheral, characteristic: characteristics.notify)
 
-            guard self.commandCharacteristic != nil else {
+            guard let command = characteristics.command else {
                 self.setError("BLE characteristic discovery failed: command characteristic missing")
                 return
             }
 
-            let bleSessionKey = BLETransport.sessionKey(for: peripheral)
-            self.setActiveDeviceTarget(deviceId: bleSessionKey, transport: .ble)
+            let connection = BLETransport.Connection(
+                pending: pending,
+                commandCharacteristic: command,
+                notifyCharacteristic: characteristics.notify
+            )
+            self.bleConnection = connection
+            self.pendingBleConnection = nil
+            self.setActiveDeviceTarget(deviceId: connection.sessionKey, transport: .ble)
             DispatchQueue.main.async {
-                self.connectedPortName = peripheral.name ?? "EMWaver BLE"
+                self.connectedPortName = connection.displayName
                 self.isConnected = true
                 self.lastErrorText = nil
                 self.isScanning = false
@@ -1215,7 +1226,10 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
             guard characteristic.uuid == BLETransport.notifyCharacteristicUUID, let data = characteristic.value else { return }
-            self.feedMidiBytes(data, deviceId: BLETransport.sessionKey(for: peripheral))
+            let deviceId = self.bleConnection?.matches(peripheral) == true
+                ? self.bleConnection?.sessionKey
+                : BLETransport.sessionKey(for: peripheral)
+            self.feedMidiBytes(data, deviceId: deviceId)
         }
     }
 }

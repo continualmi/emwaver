@@ -12,6 +12,47 @@ enum BLETransport {
     static let commandCharacteristicUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
     static let notifyCharacteristicUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
 
+    struct PendingConnection {
+        let peripheral: CBPeripheral
+        let displayName: String
+
+        var sessionKey: String {
+            BLETransport.sessionKey(for: peripheral)
+        }
+
+        func matches(_ peripheral: CBPeripheral) -> Bool {
+            self.peripheral.identifier == peripheral.identifier
+        }
+    }
+
+    struct Connection {
+        let peripheral: CBPeripheral
+        let commandCharacteristic: CBCharacteristic
+        let notifyCharacteristic: CBCharacteristic?
+        let sessionKey: String
+        let displayName: String
+
+        init(
+            pending: PendingConnection,
+            commandCharacteristic: CBCharacteristic,
+            notifyCharacteristic: CBCharacteristic?
+        ) {
+            self.peripheral = pending.peripheral
+            self.commandCharacteristic = commandCharacteristic
+            self.notifyCharacteristic = notifyCharacteristic
+            self.sessionKey = pending.sessionKey
+            self.displayName = pending.displayName
+        }
+
+        func matches(_ peripheral: CBPeripheral) -> Bool {
+            self.peripheral.identifier == peripheral.identifier
+        }
+
+        func writeSysex(_ sysex: Data) {
+            BLETransport.writeSysex(sysex, peripheral: peripheral, characteristic: commandCharacteristic)
+        }
+    }
+
     static func sessionKey(for peripheral: CBPeripheral) -> String {
         "ble:\(peripheral.identifier.uuidString)"
     }
@@ -22,6 +63,16 @@ enum BLETransport {
     ) -> String {
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         return peripheral.name ?? advertisedName ?? "EMWaver BLE"
+    }
+
+    static func pendingConnection(
+        peripheral: CBPeripheral,
+        advertisementData: [String: Any]
+    ) -> PendingConnection {
+        PendingConnection(
+            peripheral: peripheral,
+            displayName: displayName(peripheral: peripheral, advertisementData: advertisementData)
+        )
     }
 
     static func matchesAdvertisementName(
