@@ -343,25 +343,13 @@ public class USBService extends Service implements DeviceConnectionService {
             return;
         }
 
-        MidiDeviceInfo target = null;
-        for (MidiDeviceInfo info : midiManager.getDevices()) {
-            Object prop = info.getProperties().get(MidiDeviceInfo.PROPERTY_USB_DEVICE);
-            if (prop instanceof UsbDevice) {
-                UsbDevice dev = (UsbDevice) prop;
-                if (dev.getVendorId() == usbDevice.getVendorId() && dev.getProductId() == usbDevice.getProductId()) {
-                    target = info;
-                    break;
-                }
-            }
-        }
-
+        MidiDeviceInfo target = AndroidUsbMidiTransport.findDeviceInfo(midiManager, usbDevice);
         if (target == null) {
             Toast.makeText(this, "No USB interface found for EMWaver device", Toast.LENGTH_SHORT).show();
             return;
         }
 
-        final MidiDeviceInfo deviceInfo = target;
-        midiManager.openDevice(deviceInfo, device -> {
+        midiManager.openDevice(target, device -> {
             if (device == null) {
                 Log.e(TAG, "Failed to open USB device");
                 return;

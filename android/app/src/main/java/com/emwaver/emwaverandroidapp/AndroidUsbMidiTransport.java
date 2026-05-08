@@ -8,7 +8,9 @@ package com.emwaver.emwaverandroidapp;
 
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
+import android.media.midi.MidiDeviceInfo;
 import android.media.midi.MidiInputPort;
+import android.media.midi.MidiManager;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
@@ -61,6 +63,23 @@ final class AndroidUsbMidiTransport {
                 product.contains("esp32-s3") ||
                 product.contains("s3")) &&
                 looksLikeMidi(device);
+    }
+
+    @Nullable
+    static MidiDeviceInfo findDeviceInfo(@Nullable MidiManager midiManager, UsbDevice usbDevice) {
+        if (midiManager == null) {
+            return null;
+        }
+        for (MidiDeviceInfo info : midiManager.getDevices()) {
+            Object prop = info.getProperties().get(MidiDeviceInfo.PROPERTY_USB_DEVICE);
+            if (prop instanceof UsbDevice) {
+                UsbDevice dev = (UsbDevice) prop;
+                if (dev.getVendorId() == usbDevice.getVendorId() && dev.getProductId() == usbDevice.getProductId()) {
+                    return info;
+                }
+            }
+        }
+        return null;
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
