@@ -37,6 +37,7 @@ final class MacWiFiManager {
         var type: String
         var client: String
         var protocolVersion: Int
+        var envelopeVersion: Int
         var challenge: String
         var response: String
     }
@@ -71,6 +72,7 @@ final class MacWiFiManager {
     private var pendingAuthRecord: MacWiFiDeviceRecord?
     private var authTimeoutWorkItem: DispatchWorkItem?
     private var pendingPairingRollback: (id: String, previous: PairedWiFiDevice?)?
+    private var txSequence: UInt16 = 0
 
     init(
         onDevicesChanged: @escaping ([MacWiFiDeviceRecord]) -> Void,
@@ -272,7 +274,8 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
-            socket.send(.data(data)) { [weak self] error in
+            let frame = self.makeEnvelope(kind: 1, payload: data)
+            socket.send(.data(frame)) { [weak self] error in
                 if let error {
                     self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
                 }
@@ -297,6 +300,7 @@ final class MacWiFiManager {
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
+        txSequence = 0
         pendingAuthSecret = nil
         pendingAuthRecord = nil
         if notify {
@@ -354,7 +358,7 @@ final class MacWiFiManager {
 
     private func sendHello(socket: URLSessionWebSocketTask, secret: String, challenge: String) {
         let response = Self.hmacHex(secret: secret, message: challenge)
-        let hello = WiFiAuth(type: "auth", client: "emwaver-macos", protocolVersion: 1, challenge: challenge, response: response)
+        let hello = WiFiAuth(type: "auth", client: "emwaver-macos", protocolVersion: 1, envelopeVersion: 1, challenge: challenge, response: response)
         guard let data = try? JSONEncoder().encode(hello) else { return }
         socket.send(.data(data)) { [weak self] error in
             if let error {
@@ -387,7 +391,11 @@ final class MacWiFiManager {
             case .success(let message):
                 switch message {
                 case .data(let data):
-                    self.onData(data, self.connectedDeviceID)
+                    if let payload = Self.unwrapEnvelope(data) {
+                        self.onData(payload, self.connectedDeviceID)
+                    } else {
+                        self.onData(data, self.connectedDeviceID)
+                    }
                 case .string(let text):
                     if let data = text.data(using: .utf8),
                        let challenge = try? JSONDecoder().decode(WiFiChallenge.self, from: data),
@@ -486,6 +494,36 @@ final class MacWiFiManager {
 
     private func publishDevices() {
         onDevicesChanged(Array(discoveredDevicesByID.values).sorted { $0.displayName < $1.displayName })
+    }
+
+    private func makeEnvelope(kind: UInt8, payload: Data) -> Data {
+        var frame = Data()
+        frame.reserveCapacity(10 + payload.count)
+        frame.append(contentsOf: [0x45, 0x4d, 0x57, 0x01, kind])
+        frame.append(UInt8(txSequence & 0xff))
+        frame.append(UInt8((txSequence >> 8) & 0xff))
+        frame.append(0)
+        frame.append(UInt8(payload.count & 0xff))
+        frame.append(UInt8((payload.count >> 8) & 0xff))
+        frame.append(payload)
+        txSequence &+= 1
+        return frame
+    }
+
+    private static func unwrapEnvelope(_ data: Data) -> Data? {
+        guard data.count >= 10,
+              data[0] == 0x45,
+              data[1] == 0x4d,
+              data[2] == 0x57,
+              data[3] == 0x01,
+              data[4] == 0x01 else {
+            return nil
+        }
+        let payloadLength = Int(data[8]) | (Int(data[9]) << 8)
+        guard data.count == 10 + payloadLength else {
+            return nil
+        }
+        return data.subdata(in: 10..<data.count)
     }
 
     private func loadPairedDevices() {
