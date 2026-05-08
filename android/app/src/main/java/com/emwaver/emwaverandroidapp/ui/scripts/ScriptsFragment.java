@@ -1940,12 +1940,6 @@ public class ScriptsFragment extends Fragment {
 
     private void renderScript(String script) {
         Log.d(TAG, "renderScript called with script length: " + (script != null ? script.length() : 0));
-        setupScriptEngineIfNeeded();
-        if (scriptEngine == null) {
-            Log.e(TAG, "Script engine is null!");
-            showToast("Script engine not ready.");
-            return;
-        }
         if (viewModel != null) {
             viewModel.setLastScriptContent(script);
             viewModel.setLastScriptName(currentScriptName);
@@ -1957,6 +1951,12 @@ public class ScriptsFragment extends Fragment {
             scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), deviceLabel);
             scriptSessions.clear();
             scriptSessions.start(
+                    () -> {
+                        if (scriptEngine != null) {
+                            scriptEngine.shutdown();
+                            scriptEngine = null;
+                        }
+                    },
                     currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
                     currentScriptName,
                     runningSessionLabel(deviceLabel),
@@ -1966,11 +1966,26 @@ public class ScriptsFragment extends Fragment {
         } else {
             scriptSessions.clear();
             scriptSessions.start(
+                    () -> {
+                        if (scriptEngine != null) {
+                            scriptEngine.shutdown();
+                            scriptEngine = null;
+                        }
+                    },
                     currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
                     currentScriptName,
                     "active device",
                     "active"
             );
+        }
+        setupScriptEngineIfNeeded();
+        if (scriptEngine == null) {
+            Log.e(TAG, "Script engine is null!");
+            showToast("Script engine not ready.");
+            return;
+        }
+        if (scriptDeviceConnection != null) {
+            scriptEngine.setDeviceConnection(scriptDeviceConnection);
         }
         isRenderingScript = true;
         activeScriptTree = null;
@@ -2104,10 +2119,6 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void stopRunningScript(@Nullable String sessionId) {
-        if (scriptEngine != null) {
-            scriptEngine.shutdown();
-            scriptEngine = null;
-        }
         if (sessionId == null) {
             scriptSessions.stopSelected();
         } else {

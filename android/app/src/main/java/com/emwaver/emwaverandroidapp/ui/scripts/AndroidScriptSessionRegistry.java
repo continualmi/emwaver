@@ -20,13 +20,14 @@ final class AndroidScriptSessionRegistry {
     private String selectedSessionId;
 
     AndroidScriptSession start(
+            @NonNull Runnable stopAction,
             @Nullable String scriptId,
             @NonNull String scriptName,
             @NonNull String deviceLabel,
             @NonNull String deviceId
     ) {
         String instanceId = UUID.randomUUID().toString();
-        AndroidScriptSession session = new AndroidScriptSession(instanceId, deviceId, scriptId, scriptName, deviceLabel);
+        AndroidScriptSession session = new AndroidScriptSession(instanceId, stopAction, deviceId, scriptId, scriptName, deviceLabel);
         sessionsById.put(instanceId, session);
         selectedSessionId = instanceId;
         return session;
@@ -36,7 +37,10 @@ final class AndroidScriptSessionRegistry {
         if (instanceId == null) {
             return;
         }
-        sessionsById.remove(instanceId);
+        AndroidScriptSession removed = sessionsById.remove(instanceId);
+        if (removed != null) {
+            removed.stop();
+        }
         if (instanceId.equals(selectedSessionId)) {
             selectedSessionId = sessionsById.isEmpty()
                     ? null
@@ -49,6 +53,9 @@ final class AndroidScriptSessionRegistry {
     }
 
     void clear() {
+        for (AndroidScriptSession session : sessionsById.values()) {
+            session.stop();
+        }
         sessionsById.clear();
         selectedSessionId = null;
     }

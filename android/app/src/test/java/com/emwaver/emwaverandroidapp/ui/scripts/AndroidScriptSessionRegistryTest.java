@@ -14,14 +14,17 @@ import org.junit.Test;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class AndroidScriptSessionRegistryTest {
     @Test
     public void keepsMultipleVisibleSessionsAndStopsOne() {
         AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
+        AtomicInteger firstStops = new AtomicInteger();
+        AtomicInteger secondStops = new AtomicInteger();
 
-        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A", "usb:a");
-        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B", "usb:b");
+        AndroidScriptSession first = registry.start(firstStops::incrementAndGet, "script-a", "Alpha", "USB A", "usb:a");
+        AndroidScriptSession second = registry.start(secondStops::incrementAndGet, "script-b", "Beta", "USB B", "usb:b");
 
         assertTrue(registry.hasSessions());
         assertEquals(second.instanceId, registry.selectedSession().instanceId);
@@ -29,6 +32,8 @@ public class AndroidScriptSessionRegistryTest {
 
         registry.stop(first.instanceId);
 
+        assertEquals(1, firstStops.get());
+        assertEquals(0, secondStops.get());
         assertEquals(1, registry.sessions().size());
         assertEquals(second.instanceId, registry.selectedSession().instanceId);
         assertEquals("usb:b", registry.selectedSession().deviceId);
@@ -39,16 +44,35 @@ public class AndroidScriptSessionRegistryTest {
     @Test
     public void selectedFallsBackToPreviousSessionAfterStop() {
         AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
+        AtomicInteger firstStops = new AtomicInteger();
+        AtomicInteger secondStops = new AtomicInteger();
 
-        AndroidScriptSession first = registry.start("script-a", "Alpha", "USB A", "usb:a");
-        AndroidScriptSession second = registry.start("script-b", "Beta", "USB B", "usb:b");
+        AndroidScriptSession first = registry.start(firstStops::incrementAndGet, "script-a", "Alpha", "USB A", "usb:a");
+        AndroidScriptSession second = registry.start(secondStops::incrementAndGet, "script-b", "Beta", "USB B", "usb:b");
 
         registry.stop(second.instanceId);
 
+        assertEquals(0, firstStops.get());
+        assertEquals(1, secondStops.get());
         assertEquals(first.instanceId, registry.selectedSession().instanceId);
 
         registry.stopSelected();
 
+        assertEquals(1, firstStops.get());
+        assertFalse(registry.hasSessions());
+    }
+
+    @Test
+    public void clearStopsAllOwnedSessionRuntimes() {
+        AndroidScriptSessionRegistry registry = new AndroidScriptSessionRegistry();
+        AtomicInteger stops = new AtomicInteger();
+
+        registry.start(stops::incrementAndGet, "script-a", "Alpha", "USB A", "usb:a");
+        registry.start(stops::incrementAndGet, "script-b", "Beta", "USB B", "usb:b");
+
+        registry.clear();
+
+        assertEquals(2, stops.get());
         assertFalse(registry.hasSessions());
     }
 

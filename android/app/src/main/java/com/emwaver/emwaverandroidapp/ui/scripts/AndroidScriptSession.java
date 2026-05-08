@@ -11,6 +11,7 @@ import androidx.annotation.Nullable;
 
 final class AndroidScriptSession {
     final String instanceId;
+    private final Runnable stopAction;
     final String deviceId;
     final String scriptId;
     final String scriptName;
@@ -18,12 +19,14 @@ final class AndroidScriptSession {
 
     AndroidScriptSession(
             @NonNull String instanceId,
+            @NonNull Runnable stopAction,
             @NonNull String deviceId,
             @Nullable String scriptId,
             @NonNull String scriptName,
             @NonNull String deviceLabel
     ) {
         this.instanceId = instanceId;
+        this.stopAction = stopAction;
         this.deviceId = deviceId.trim().isEmpty() ? "active" : deviceId.trim();
         this.scriptId = scriptId == null ? "" : scriptId;
         this.scriptName = scriptName;
@@ -38,5 +41,9 @@ final class AndroidScriptSession {
 
     String statusLabel() {
         return "Running on " + deviceLabel;
+    }
+
+    void stop() {
+        stopAction.run();
     }
 }
