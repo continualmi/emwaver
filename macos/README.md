@@ -66,6 +66,7 @@ Transport behavior:
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - The device sheet can provision ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
+- When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.
 - Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
 - Wi-Fi pairing records are stored in local macOS app preferences. They are not account-backed, cloud-synced, or used for hardware ownership/activation.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.

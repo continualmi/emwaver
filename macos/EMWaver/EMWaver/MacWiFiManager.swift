@@ -151,6 +151,37 @@ final class MacWiFiManager {
         }
     }
 
+    func storePairing(host: String, port: Int = MacWiFiManager.defaultPort, displayName: String? = nil, pairingSecret: String) {
+        let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
+        queue.async {
+            guard !trimmedHost.isEmpty, !trimmedSecret.isEmpty else { return }
+
+            let safePort = port > 0 ? port : Self.defaultPort
+            let id = Self.deviceID(host: trimmedHost, port: safePort)
+            let visibleName = (trimmedName?.isEmpty == false ? trimmedName! : trimmedHost)
+            self.pairedDevicesByID[id] = PairedWiFiDevice(
+                host: trimmedHost,
+                port: safePort,
+                displayName: visibleName,
+                secret: trimmedSecret,
+                lastSeen: Date()
+            )
+            self.discoveredDevicesByID[id] = MacWiFiDeviceRecord(
+                id: id,
+                displayName: visibleName,
+                host: trimmedHost,
+                port: safePort,
+                boardType: "esp32s3",
+                isPaired: true,
+                lastSeen: Date()
+            )
+            self.savePairedDevices()
+            self.publishDevices()
+        }
+    }
+
     func connect(record: MacWiFiDeviceRecord) {
         queue.async {
             guard let paired = self.pairedDevicesByID[record.id], !paired.secret.isEmpty else {

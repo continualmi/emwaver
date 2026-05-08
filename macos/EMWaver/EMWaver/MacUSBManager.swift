@@ -476,6 +476,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
 
+            if !trimmedHostname.isEmpty {
+                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
+                self.wifiManager?.storePairing(
+                    host: host,
+                    displayName: trimmedHostname,
+                    pairingSecret: trimmedSecret
+                )
+            }
             self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32-S3 will join the network and advertise itself on the LAN.", isError: false)
         }
     }
