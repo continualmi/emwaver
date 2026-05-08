@@ -6,13 +6,20 @@
 
 package com.emwaver.emwaverandroidapp;
 
+import android.content.Context;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
+import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
+import android.bluetooth.le.ScanFilter;
+import android.bluetooth.le.ScanSettings;
+import android.os.ParcelUuid;
 import android.util.Log;
 
 import androidx.annotation.Nullable;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -33,6 +40,27 @@ final class AndroidBleTransport {
 
     static boolean matchesAdvertisementName(@Nullable String name) {
         return name == null || name.toLowerCase(Locale.US).contains("emwaver");
+    }
+
+    static List<ScanFilter> scanFilters() {
+        ScanFilter filter = new ScanFilter.Builder()
+                .setServiceUuid(new ParcelUuid(SERVICE_UUID))
+                .build();
+        return Collections.singletonList(filter);
+    }
+
+    static ScanSettings scanSettings() {
+        return new ScanSettings.Builder()
+                .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+                .build();
+    }
+
+    static BluetoothGatt connect(
+            Context context,
+            BluetoothDevice device,
+            BluetoothGattCallback callback
+    ) {
+        return device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE);
     }
 
     static boolean writeSysex(

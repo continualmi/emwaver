@@ -21,9 +21,7 @@ import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
 import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanResult;
-import android.bluetooth.le.ScanSettings;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -52,7 +50,6 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
 import java.io.IOException;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -536,14 +533,8 @@ public class USBService extends Service implements DeviceConnectionService {
             if (bleScanner == null) {
                 return;
             }
-            ScanFilter filter = new ScanFilter.Builder()
-                    .setServiceUuid(new android.os.ParcelUuid(AndroidBleTransport.SERVICE_UUID))
-                    .build();
-            ScanSettings settings = new ScanSettings.Builder()
-                    .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                    .build();
             bleScanning = true;
-            bleScanner.startScan(Collections.singletonList(filter), settings, bleScanCallback);
+            bleScanner.startScan(AndroidBleTransport.scanFilters(), AndroidBleTransport.scanSettings(), bleScanCallback);
             Log.d(TAG, "BLE scan started");
         }
     }
@@ -606,7 +597,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 connectedBleDeviceLabel = name != null && !name.trim().isEmpty()
                         ? name.trim()
                         : device.getAddress();
-                bleGatt = device.connectGatt(USBService.this, false, bleGattCallback, BluetoothDevice.TRANSPORT_LE);
+                bleGatt = AndroidBleTransport.connect(USBService.this, device, bleGattCallback);
             }
             Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
         }
