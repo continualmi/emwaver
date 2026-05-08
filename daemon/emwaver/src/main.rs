@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use emwaver_device::{list_ble_devices, BleDevice, Device};
+use emwaver_device::{list_ble_devices, BleDevice, Device, WiFiDevice};
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -39,6 +39,18 @@ enum Commands {
         /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon hardware mode.
         #[arg(long)]
         ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon hardware mode.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
 
         /// Start daemon with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
@@ -111,6 +123,18 @@ enum Commands {
         #[arg(long)]
         ble: bool,
 
+        /// Use ESP32 Wi-Fi transport by hostname or IP for direct mode.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+
         /// Run direct mode with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
         no_device: bool,
@@ -142,6 +166,18 @@ enum Commands {
         #[arg(long)]
         ble: bool,
 
+        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+
         /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
         no_device: bool,
@@ -172,6 +208,18 @@ enum Commands {
         /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon fallback.
         #[arg(long)]
         ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
 
         /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
@@ -233,6 +281,18 @@ enum DaemonCmd {
         #[arg(long)]
         ble: bool,
 
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+
         /// Start with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
         no_device: bool,
@@ -263,6 +323,18 @@ enum DaemonCmd {
         /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
         #[arg(long)]
         ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
 
         /// Use a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
@@ -303,6 +375,18 @@ enum ServiceCmd {
         #[arg(long)]
         ble: bool,
 
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+
         /// Start with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
         no_device: bool,
@@ -336,6 +420,18 @@ enum ServiceCmd {
         /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
         #[arg(long)]
         ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
 
         /// Start with a no-op hardware bridge for UI-only scripts.
         #[arg(long)]
@@ -444,6 +540,9 @@ fn daemon_start(
     gateway_url: Option<String>,
     device: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -478,6 +577,13 @@ fn daemon_start(
     if ble {
         cmd.arg("--ble");
     }
+    if let Some(wifi) = wifi {
+        cmd.arg("--wifi").arg(wifi);
+        cmd.arg("--wifi-port").arg(wifi_port.to_string());
+    }
+    if let Some(wifi_secret) = wifi_secret {
+        cmd.arg("--wifi-secret").arg(wifi_secret);
+    }
     if no_device {
         cmd.arg("--no-device");
     }
@@ -506,6 +612,9 @@ fn start_local_stack(
     port: Option<u16>,
     device: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -516,6 +625,9 @@ fn start_local_stack(
         None,
         device,
         ble,
+        wifi,
+        wifi_secret,
+        wifi_port,
         no_device,
         sim_device,
         bootstrap_path,
@@ -625,6 +737,8 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
 fn validate_service_transport_flags(
     device: Option<&str>,
     ble: bool,
+    wifi: Option<&str>,
+    wifi_secret: Option<&str>,
     no_device: bool,
     sim_device: bool,
 ) -> Result<()> {
@@ -636,6 +750,24 @@ fn validate_service_transport_flags(
     }
     if ble && sim_device {
         anyhow::bail!("--ble cannot be combined with --sim-device");
+    }
+    if ble && wifi.is_some() {
+        anyhow::bail!("--ble cannot be combined with --wifi");
+    }
+    if wifi.is_some() && device.is_some() {
+        anyhow::bail!("--device cannot be combined with --wifi");
+    }
+    if wifi.is_some() && no_device {
+        anyhow::bail!("--wifi cannot be combined with --no-device");
+    }
+    if wifi.is_some() && sim_device {
+        anyhow::bail!("--wifi cannot be combined with --sim-device");
+    }
+    if wifi.is_some() && wifi_secret.unwrap_or("").trim().is_empty() {
+        anyhow::bail!("--wifi-secret is required with --wifi");
+    }
+    if wifi.is_none() && wifi_secret.is_some() {
+        anyhow::bail!("--wifi-secret requires --wifi");
     }
     if no_device && sim_device {
         anyhow::bail!("--no-device cannot be combined with --sim-device");
@@ -654,11 +786,21 @@ fn service_unit(
     port: Option<u16>,
     device: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
 ) -> Result<String> {
-    validate_service_transport_flags(device.as_deref(), ble, no_device, sim_device)?;
+    validate_service_transport_flags(
+        device.as_deref(),
+        ble,
+        wifi.as_deref(),
+        wifi_secret.as_deref(),
+        no_device,
+        sim_device,
+    )?;
 
     let mut exec_args = vec![
         shell_escape(&exe.display().to_string()),
@@ -675,6 +817,16 @@ fn service_unit(
     }
     if ble {
         exec_args.push("--ble".to_string());
+    }
+    if let Some(wifi) = wifi {
+        exec_args.push("--wifi".to_string());
+        exec_args.push(shell_escape(&wifi));
+        exec_args.push("--wifi-port".to_string());
+        exec_args.push(wifi_port.to_string());
+    }
+    if let Some(wifi_secret) = wifi_secret {
+        exec_args.push("--wifi-secret".to_string());
+        exec_args.push(shell_escape(&wifi_secret));
     }
     if no_device {
         exec_args.push("--no-device".to_string());
@@ -710,6 +862,9 @@ fn service_install(
     port: Option<u16>,
     device: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -721,6 +876,9 @@ fn service_install(
             port,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -746,6 +904,9 @@ fn service_install(
             port,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -1026,6 +1187,32 @@ impl CommandBridge for BleCommandBridge {
     }
 }
 
+struct WiFiCommandBridge {
+    device: Arc<WiFiDevice>,
+}
+
+impl CommandBridge for WiFiCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
+
+    fn get_buffer(&self) -> Vec<u8> {
+        self.device.get_buffer()
+    }
+
+    fn clear_buffer(&self) {
+        self.device.clear_buffer();
+    }
+
+    fn load_buffer(&self, data: Vec<u8>) {
+        self.device.load_buffer(data);
+    }
+
+    fn transmit_buffer(&self) -> Result<()> {
+        self.device.transmit_buffer()
+    }
+}
+
 struct NoDeviceCommandBridge;
 
 impl CommandBridge for NoDeviceCommandBridge {
@@ -1044,6 +1231,9 @@ fn run_script(
     direct: bool,
     device: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -1061,6 +1251,9 @@ fn run_script(
             name,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -1071,6 +1264,9 @@ fn run_script(
     }
     if sim_device {
         anyhow::bail!("--sim-device is only supported with --direct");
+    }
+    if wifi.is_some() || wifi_secret.is_some() {
+        anyhow::bail!("--wifi and --wifi-secret are only supported with --direct");
     }
     if bootstrap_path.is_some() {
         anyhow::bail!("--bootstrap-path is only supported with --direct");
@@ -1157,6 +1353,9 @@ fn run_script_direct(
     name: String,
     device_id: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -1175,7 +1374,15 @@ fn run_script_direct(
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
 
-    let bridge = make_command_bridge(device_id, ble, no_device, sim_device)?;
+    let bridge = make_command_bridge(
+        device_id,
+        ble,
+        wifi,
+        wifi_secret,
+        wifi_port,
+        no_device,
+        sim_device,
+    )?;
 
     let engine = Engine::new(&bootstrap, bridge)?;
     engine.run_script(&source)?;
@@ -1197,27 +1404,20 @@ fn run_script_direct(
 fn make_command_bridge(
     device_id: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
 ) -> Result<Arc<dyn CommandBridge>> {
-    if no_device && device_id.is_some() {
-        anyhow::bail!("--device cannot be combined with --no-device");
-    }
-    if sim_device && device_id.is_some() {
-        anyhow::bail!("--device cannot be combined with --sim-device");
-    }
-    if sim_device && no_device {
-        anyhow::bail!("--no-device cannot be combined with --sim-device");
-    }
-    if ble && device_id.is_some() {
-        anyhow::bail!("--device cannot be combined with --ble");
-    }
-    if ble && no_device {
-        anyhow::bail!("--ble cannot be combined with --no-device");
-    }
-    if ble && sim_device {
-        anyhow::bail!("--ble cannot be combined with --sim-device");
-    }
+    validate_service_transport_flags(
+        device_id.as_deref(),
+        ble,
+        wifi.as_deref(),
+        wifi_secret.as_deref(),
+        no_device,
+        sim_device,
+    )?;
 
     if no_device {
         Ok(Arc::new(NoDeviceCommandBridge))
@@ -1226,6 +1426,11 @@ fn make_command_bridge(
     } else if ble {
         Ok(Arc::new(BleCommandBridge {
             device: BleDevice::connect_auto(5_000)?,
+        }))
+    } else if let Some(wifi) = wifi {
+        let secret = wifi_secret.unwrap_or_default();
+        Ok(Arc::new(WiFiCommandBridge {
+            device: WiFiDevice::connect(&wifi, wifi_port, &secret)?,
         }))
     } else {
         let device = Device::new();
@@ -1243,6 +1448,9 @@ fn daemon_serve(
     gateway_url: Option<String>,
     device_id: Option<String>,
     ble: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
@@ -1255,7 +1463,15 @@ fn daemon_serve(
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
-    let bridge = make_command_bridge(device_id, ble, no_device, sim_device)?;
+    let bridge = make_command_bridge(
+        device_id,
+        ble,
+        wifi,
+        wifi_secret,
+        wifi_port,
+        no_device,
+        sim_device,
+    )?;
     let url = gateway_ws_url(port, gateway_url)?;
 
     println!("daemon host connecting to {url}");
@@ -1877,16 +2093,32 @@ fn main() -> Result<()> {
             port,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
-        } => start_local_stack(port, device, ble, no_device, sim_device, bootstrap_path),
+        } => start_local_stack(
+            port,
+            device,
+            ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
+            no_device,
+            sim_device,
+            bootstrap_path,
+        ),
         Commands::Daemon { cmd } => match cmd {
             DaemonCmd::Start {
                 port,
                 gateway_url,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1895,6 +2127,9 @@ fn main() -> Result<()> {
                 gateway_url,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1904,6 +2139,9 @@ fn main() -> Result<()> {
                 gateway_url,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1912,6 +2150,9 @@ fn main() -> Result<()> {
                 gateway_url,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1935,6 +2176,9 @@ fn main() -> Result<()> {
                 port,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1943,6 +2187,9 @@ fn main() -> Result<()> {
                 port,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1953,6 +2200,9 @@ fn main() -> Result<()> {
                 port,
                 device,
                 ble,
+                wifi,
+                wifi_secret,
+                wifi_port,
                 no_device,
                 sim_device,
                 bootstrap_path,
@@ -1966,9 +2216,12 @@ fn main() -> Result<()> {
                         port,
                         device,
                         ble,
+                        wifi,
+                        wifi_secret,
+                        wifi_port,
                         no_device,
                         sim_device,
-                        bootstrap_path
+                        bootstrap_path,
                     )?
                 );
                 Ok(())
@@ -1990,6 +2243,9 @@ fn main() -> Result<()> {
             direct,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -2003,6 +2259,9 @@ fn main() -> Result<()> {
             direct,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -2012,6 +2271,9 @@ fn main() -> Result<()> {
             daemon_fallback,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
@@ -2021,14 +2283,34 @@ fn main() -> Result<()> {
             daemon_fallback,
             device,
             ble,
+            wifi,
+            wifi_secret,
+            wifi_port,
             no_device,
             sim_device,
             bootstrap_path,
         } => {
             if daemon_fallback {
-                start_local_stack(port, device, ble, no_device, sim_device, bootstrap_path)
+                start_local_stack(
+                    port,
+                    device,
+                    ble,
+                    wifi,
+                    wifi_secret,
+                    wifi_port,
+                    no_device,
+                    sim_device,
+                    bootstrap_path,
+                )
             } else {
-                if device.is_some() || ble || no_device || sim_device || bootstrap_path.is_some() {
+                if device.is_some()
+                    || ble
+                    || wifi.is_some()
+                    || wifi_secret.is_some()
+                    || no_device
+                    || sim_device
+                    || bootstrap_path.is_some()
+                {
                     anyhow::bail!("daemon transport flags require --daemon-fallback");
                 }
                 start_gateway(port)
@@ -2115,7 +2397,9 @@ fn run_tui() -> Result<()> {
                         }
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
-                            let _ = daemon_start(None, None, None, false, false, false, None);
+                            let _ = daemon_start(
+                                None, None, None, false, None, None, 3922, false, false, None,
+                            );
                         }
                         KeyCode::Char('t') => {
                             let _ = daemon_stop();

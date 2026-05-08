@@ -243,13 +243,13 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 - Add direct run support, for example:
 
 ```bash
-emwaver run script.emw --direct --wifi 192.168.1.44
+emwaver run script.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
 ```
 
 - Add gateway daemon fallback support, for example:
 
 ```bash
-emwaver gateway --daemon-fallback --wifi 192.168.1.44
+emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secret>
 ```
 
 - Add doctor checks for:
@@ -359,8 +359,8 @@ Resolved v1 decisions:
 2. Add ESP32 station-mode connection manager behind a feature gate.
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add authenticated Wi-Fi server carrying EMWaver frames.
-5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI flag wiring is still pending.
-6. Add `emwaver devices` and `emwaver run --direct --wifi`.
+5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip> --wifi-secret <local-secret>`.
+6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired; Wi-Fi discovery output in `emwaver devices` is still pending.
 7. Add gateway device selection/manual IP path.
 8. Add native app discovery/manual connect surfaces.
 9. Validate LAN script execution on real ESP32-S3 hardware.
