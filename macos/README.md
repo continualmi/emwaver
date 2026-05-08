@@ -64,7 +64,7 @@ Transport behavior:
 - USB MIDI remains the preferred wired path when present.
 - The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and paired/discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
-- macOS opts into Wi-Fi binary envelope version `1` during WebSocket authentication. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model.
+- macOS opts into Wi-Fi binary envelope version `1` during WebSocket authentication. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model; firmware echoes the request sequence id on command responses.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32-S3 metadata instead of relying only on hardcoded defaults.
 - Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection/auth.
 - Wi-Fi mDNS discovery prunes unpaired devices that stop advertising while keeping paired/manual records as local fallback entries.

@@ -72,6 +72,7 @@ static uint32_t pwm_freq_hz = PWM_DEFAULT_FREQ_HZ;
 static int pwm_active_pin = -1;
 static bool pwm_configured = false;
 static uint8_t active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
+static uint16_t active_command_wifi_sequence = 0;
 
 static void command_task(void *pv_parameters);
 static bool handle_binary_packet(const command_t *cmd);
@@ -177,11 +178,14 @@ static void command_task(void *pv_parameters)
             }
 
             active_command_source = cmd.source;
+            active_command_wifi_sequence = cmd.wifi_sequence;
             if (handle_binary_packet(&cmd)) {
                 active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
+                active_command_wifi_sequence = 0;
                 continue;
             }
             active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
+            active_command_wifi_sequence = 0;
 
             // Desktop/clients may send fixed 64-byte packets padded with 0x00.
             // Treat 0x00 as end-of-command, and trim trailing whitespace so the
@@ -389,7 +393,7 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
     }
 
     if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
-        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_OK, active_command_wifi_sequence, payload, len) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to send Wi-Fi OK response");
         }
         return;
@@ -410,7 +414,7 @@ static void send_binary_err(void)
     }
 
     if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
-        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_ERR, active_command_wifi_sequence, NULL, 0) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to send Wi-Fi ERR response");
         }
         return;

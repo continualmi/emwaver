@@ -391,8 +391,8 @@ final class MacWiFiManager {
             case .success(let message):
                 switch message {
                 case .data(let data):
-                    if let payload = Self.unwrapEnvelope(data) {
-                        self.onData(payload, self.connectedDeviceID)
+                    if let envelope = Self.unwrapEnvelope(data) {
+                        self.onData(envelope.payload, self.connectedDeviceID)
                     } else {
                         self.onData(data, self.connectedDeviceID)
                     }
@@ -510,7 +510,7 @@ final class MacWiFiManager {
         return frame
     }
 
-    private static func unwrapEnvelope(_ data: Data) -> Data? {
+    private static func unwrapEnvelope(_ data: Data) -> (payload: Data, sequence: UInt16)? {
         guard data.count >= 10,
               data[0] == 0x45,
               data[1] == 0x4d,
@@ -523,7 +523,8 @@ final class MacWiFiManager {
         guard data.count == 10 + payloadLength else {
             return nil
         }
-        return data.subdata(in: 10..<data.count)
+        let sequence = UInt16(data[5]) | (UInt16(data[6]) << 8)
+        return (data.subdata(in: 10..<data.count), sequence)
     }
 
     private func loadPairedDevices() {

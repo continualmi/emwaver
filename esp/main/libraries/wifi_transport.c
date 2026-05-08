@@ -68,7 +68,6 @@ static char s_auth_challenge[33];
 static TickType_t s_auth_deadline_ticks;
 static uint32_t s_auth_generation;
 static bool s_use_envelope;
-static uint16_t s_tx_sequence;
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
@@ -98,7 +97,7 @@ static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
 static bool auth_message_matches(const uint8_t *data, size_t len);
-static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len);
+static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence);
 static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_t sequence, const uint8_t *payload, size_t payload_len);
 static bool auth_challenge_expired(void);
 static void auth_timeout_task(void *arg);
@@ -107,10 +106,10 @@ static bool extract_json_string(const char *json, const char *key, char *out, si
 static bool extract_json_int(const char *json, const char *key, int *out);
 static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
 static bool constant_time_equal(const char *a, const char *b, size_t len);
-static bool enqueue_sysex(const uint8_t *sysex);
+static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
-static esp_err_t send_superframe(const uint8_t *frame);
+static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence);
 
 void wifi_transport_init(QueueHandle_t cmd_queue)
 {
@@ -129,7 +128,7 @@ void wifi_transport_init(QueueHandle_t cmd_queue)
 #endif
 }
 
-esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len)
+esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, const uint8_t *payload, size_t payload_len)
 {
     if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
         return ESP_ERR_INVALID_STATE;
@@ -144,7 +143,7 @@ esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payloa
     if (payload && payload_len > 0) {
         memcpy(&frame[1], payload, payload_len);
     }
-    return send_superframe(frame);
+    return send_superframe(frame, sequence);
 }
 
 esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
@@ -202,7 +201,6 @@ esp_err_t wifi_transport_clear_config(void)
         s_station_online = false;
         s_active_fd = -1;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
         s_reconnect_attempt = 0;
@@ -407,7 +405,6 @@ static void start_station(void)
         s_station_online = false;
         s_active_fd = -1;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
         s_reconnect_attempt = 0;
@@ -444,7 +441,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         s_station_online = false;
         s_active_fd = -1;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
         stop_server();
@@ -548,7 +544,6 @@ static void close_session(httpd_handle_t hd, int sockfd)
         s_active_fd = -1;
         s_authenticated = false;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
     }
@@ -590,7 +585,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
         s_active_fd = current_fd;
         s_authenticated = false;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         generate_auth_challenge();
         (void)xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL);
         char challenge_json[72];
@@ -658,7 +652,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
             s_active_fd = -1;
             s_authenticated = false;
             s_use_envelope = false;
-            s_tx_sequence = 0;
             s_auth_challenge[0] = '\0';
             s_auth_generation++;
         }
@@ -666,13 +659,14 @@ static esp_err_t ws_handler(httpd_req_t *req)
     }
 
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
+    uint16_t sequence = 0;
     bool has_sysex = frame.type == HTTPD_WS_TYPE_BINARY && frame.len == EMW_SYSEX_BYTES;
     if (has_sysex) {
         memcpy(sysex, data, sizeof(sysex));
     } else if (frame.type == HTTPD_WS_TYPE_BINARY) {
-        has_sysex = unwrap_envelope(data, frame.len, sysex, sizeof(sysex));
+        has_sysex = unwrap_envelope(data, frame.len, sysex, sizeof(sysex), &sequence);
     }
-    if (!has_sysex || !enqueue_sysex(sysex)) {
+    if (!has_sysex || !enqueue_sysex(sysex, sequence)) {
         return ESP_FAIL;
     }
     return ESP_OK;
@@ -716,7 +710,7 @@ static bool auth_message_matches(const uint8_t *data, size_t len)
     return ok;
 }
 
-static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len)
+static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence)
 {
     if (!data || !out || out_len < EMW_SYSEX_BYTES || len < WIFI_ENVELOPE_HEADER_BYTES) {
         return false;
@@ -729,6 +723,9 @@ static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_
     const uint16_t payload_len = (uint16_t)data[8] | ((uint16_t)data[9] << 8u);
     if (payload_len != EMW_SYSEX_BYTES || len != (size_t)WIFI_ENVELOPE_HEADER_BYTES + payload_len) {
         return false;
+    }
+    if (sequence) {
+        *sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
     }
     memcpy(out, &data[WIFI_ENVELOPE_HEADER_BYTES], EMW_SYSEX_BYTES);
     return true;
@@ -788,7 +785,6 @@ static void auth_timeout_task(void *arg)
         (void)httpd_ws_send_data(s_httpd, fd, &reply);
         s_active_fd = -1;
         s_use_envelope = false;
-        s_tx_sequence = 0;
         s_auth_challenge[0] = '\0';
         s_auth_generation++;
         (void)httpd_sess_trigger_close(s_httpd, fd);
@@ -901,7 +897,7 @@ static bool constant_time_equal(const char *a, const char *b, size_t len)
     return diff == 0;
 }
 
-static bool enqueue_sysex(const uint8_t *sysex)
+static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence)
 {
     if (!sysex || !s_cmd_queue) {
         return false;
@@ -931,6 +927,7 @@ static bool enqueue_sysex(const uint8_t *sysex)
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;
     cmd.source = EMW_COMMAND_SOURCE_WIFI;
+    cmd.wifi_sequence = sequence;
     memcpy(cmd.data, decoded, EMW_LANE_SIZE);
     return xQueueSendToBack(s_cmd_queue, &cmd, 0) == pdTRUE;
 }
@@ -978,7 +975,7 @@ static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
     }
 }
 
-static esp_err_t send_superframe(const uint8_t *frame)
+static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence)
 {
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
     sysex[0] = 0xF0;
@@ -996,7 +993,7 @@ static esp_err_t send_superframe(const uint8_t *frame)
         payload_len = build_envelope(envelope,
                                      sizeof(envelope),
                                      WIFI_ENVELOPE_KIND_SYSEX,
-                                     s_tx_sequence++,
+                                     sequence,
                                      sysex,
                                      sizeof(sysex));
         if (payload_len == 0) {
