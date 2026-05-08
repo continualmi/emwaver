@@ -104,6 +104,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
+    private final DeviceBufferSession activeBufferSession = new DeviceBufferSession();
 
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
@@ -127,36 +128,36 @@ public class USBService extends Service implements DeviceConnectionService {
 
     // Buffer bridge methods
     public void storeBulkPkt(byte[] data, long tsMs) {
-        NativeBuffer.storeBulkPkt(data, tsMs);
+        activeBufferSession.storeBulkPkt(data, tsMs);
     }
 
     public void storeBulkPkt(byte[] data) {
-        NativeBuffer.storeBulkPkt(data, System.currentTimeMillis());
+        activeBufferSession.storeBulkPkt(data, System.currentTimeMillis());
     }
 
     public Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
-        return NativeBuffer.compressDataBits(rangeStart, rangeEnd, numberBins);
+        return activeBufferSession.compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
     public void clearBuffer() {
-        NativeBuffer.clearBuffer();
+        activeBufferSession.clearAll();
     }
 
     public int getBufferLength() {
-        return NativeBuffer.getBufferLength();
+        return activeBufferSession.getBufferLength();
     }
 
     public void loadBuffer(byte[] data) {
-        NativeBuffer.loadBuffer(data);
+        activeBufferSession.loadBuffer(data);
     }
 
     public byte[] getBuffer() {
-        return NativeBuffer.getBuffer();
+        return activeBufferSession.getBuffer();
     }
 
     private void logTx(byte[] data) {
         if (data == null || data.length == 0) return;
-        NativeBuffer.appendTxBytes(data, System.currentTimeMillis());
+        activeBufferSession.appendTxBytes(data, System.currentTimeMillis());
     }
 
     private static byte[] makeLanePacket(byte[] data) {
@@ -773,7 +774,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
         // Swap out sampler RX while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
-        Object[] saved = NativeBuffer.takeRxState();
+        Object[] saved = activeBufferSession.takeRxState();
         byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
         long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
         long savedRxCounter = 0;
@@ -781,8 +782,8 @@ public class USBService extends Service implements DeviceConnectionService {
             savedRxCounter = (Long) saved[2];
         }
 
-        NativeBuffer.loadBuffer(new byte[0]);
-        NativeBuffer.setRxCounter(0);
+        activeBufferSession.loadBuffer(new byte[0]);
+        activeBufferSession.setRxCounter(0);
 
         int nativeBufferSize = samplerBytes.length;
         int[] txProfile = NativeBuffer.txUsbProfile();
@@ -800,7 +801,7 @@ public class USBService extends Service implements DeviceConnectionService {
             startTime += period;
             int lastStatus = 0;
             while (true) {
-                Object[] next = NativeBuffer.nextRxPacket();
+                Object[] next = activeBufferSession.nextRxPacket();
                 if (next == null || next.length < 1 || !(next[0] instanceof byte[])) {
                     break;
                 }
@@ -831,7 +832,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         // Restore sampler RX snapshot (discarding packets accumulated during transmit).
-        NativeBuffer.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
+        activeBufferSession.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
     }
 
     @Override
@@ -842,7 +843,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
         // Desktop-parity: drop any stale RX packets before sending so the "next packet"
         // consumed via rx_counter belongs to this command's response.
-        NativeBuffer.setRxCounter(NativeBuffer.getRxPacketCount());
+        activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount());
 
         // This calls write(), which sends on cmd lane.
         byte[] packet = makeLanePacket(command);
@@ -856,7 +857,7 @@ public class USBService extends Service implements DeviceConnectionService {
         // Wait for a cmd-lane response packet: response status is >= 0x80.
         long startTime = System.currentTimeMillis();
         while (System.currentTimeMillis() - startTime < timeout) {
-            Object[] next = NativeBuffer.nextRxPacket();
+            Object[] next = activeBufferSession.nextRxPacket();
             if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
                 byte[] pkt = (byte[]) next[0];
                 if (pkt.length >= UsbMidiSysex.LANE_SIZE) {

@@ -1,0 +1,205 @@
+/*
+ * EMWaver
+ * Copyright (c) 2026 Luís Marnoto
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+package com.emwaver.emwaverandroidapp;
+
+import java.util.Arrays;
+
+final class DeviceBufferSession {
+    private static final int PACKET_SIZE_BYTES = 18;
+
+    private byte[] rxBytes = new byte[0];
+    private long[] rxTsMs = new long[0];
+    private long rxCounter = 0;
+    private byte[] txBytes = new byte[0];
+    private long[] txTsMs = new long[0];
+
+    synchronized void clearAll() {
+        rxBytes = new byte[0];
+        rxTsMs = new long[0];
+        rxCounter = 0;
+        txBytes = new byte[0];
+        txTsMs = new long[0];
+    }
+
+    synchronized int getBufferLength() {
+        return rxBytes.length;
+    }
+
+    synchronized void loadBuffer(byte[] data) {
+        rxBytes = data != null ? Arrays.copyOf(data, data.length) : new byte[0];
+        rxCounter = 0;
+        int packets = rxBytes.length / PACKET_SIZE_BYTES;
+        rxTsMs = new long[packets];
+    }
+
+    synchronized byte[] getBuffer() {
+        return Arrays.copyOf(rxBytes, rxBytes.length);
+    }
+
+    synchronized void storeBulkPkt(byte[] data, long tsMs) {
+        if (data == null || data.length == 0) return;
+
+        int prevPackets = rxBytes.length / PACKET_SIZE_BYTES;
+        rxBytes = appendBytes(rxBytes, data);
+        int newPackets = rxBytes.length / PACKET_SIZE_BYTES;
+        int delta = Math.max(0, newPackets - prevPackets);
+        if (delta > 0) {
+            rxTsMs = appendRepeated(rxTsMs, tsMs, delta);
+        }
+    }
+
+    synchronized void appendTxBytes(byte[] data, long tsMs) {
+        if (data == null || data.length == 0) return;
+
+        for (int offset = 0; offset < data.length; offset += PACKET_SIZE_BYTES) {
+            int take = Math.min(PACKET_SIZE_BYTES, data.length - offset);
+            byte[] pkt = new byte[PACKET_SIZE_BYTES];
+            System.arraycopy(data, offset, pkt, 0, take);
+            txBytes = appendBytes(txBytes, pkt);
+            txTsMs = appendRepeated(txTsMs, tsMs, 1);
+        }
+    }
+
+    synchronized long getRxPacketCount() {
+        return rxBytes.length / (long) PACKET_SIZE_BYTES;
+    }
+
+    synchronized void setRxCounter(long value) {
+        long packets = rxBytes.length / (long) PACKET_SIZE_BYTES;
+        long desired = Math.max(0, value);
+        rxCounter = Math.min(desired, packets);
+    }
+
+    synchronized Object[] nextRxPacket() {
+        long packets = rxBytes.length / (long) PACKET_SIZE_BYTES;
+        if (rxCounter >= packets) return null;
+
+        int startByte = (int) (rxCounter * PACKET_SIZE_BYTES);
+        if (startByte + PACKET_SIZE_BYTES > rxBytes.length) return null;
+
+        byte[] pkt = Arrays.copyOfRange(rxBytes, startByte, startByte + PACKET_SIZE_BYTES);
+        long ts = (rxCounter >= 0 && rxCounter < rxTsMs.length) ? rxTsMs[(int) rxCounter] : 0;
+        rxCounter += 1;
+        return new Object[] { pkt, ts };
+    }
+
+    synchronized Object[] takeRxState() {
+        return new Object[] { Arrays.copyOf(rxBytes, rxBytes.length), Arrays.copyOf(rxTsMs, rxTsMs.length), rxCounter };
+    }
+
+    synchronized void restoreRxState(byte[] rxBytesIn, long[] rxTsMsIn, long rxCounterIn) {
+        rxBytes = rxBytesIn != null ? Arrays.copyOf(rxBytesIn, rxBytesIn.length) : new byte[0];
+        rxTsMs = rxTsMsIn != null ? Arrays.copyOf(rxTsMsIn, rxTsMsIn.length) : new long[0];
+
+        int packets = rxBytes.length / PACKET_SIZE_BYTES;
+        if (rxTsMs.length != packets) {
+            rxTsMs = Arrays.copyOf(rxTsMs, packets);
+        }
+
+        long desired = Math.max(0, rxCounterIn);
+        rxCounter = Math.min(desired, (long) packets);
+    }
+
+    synchronized Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
+        int totalBits = rxBytes.length * 8;
+        if (rxBytes.length == 0 || rangeStart >= rangeEnd || rangeStart >= totalBits || numberBins <= 0) {
+            return new Object[] { new float[0], new float[0] };
+        }
+
+        int end = Math.min(rangeEnd, totalBits);
+        int start = Math.min(rangeStart, end);
+        int span = end - start;
+        if (span <= 0) {
+            return new Object[] { new float[0], new float[0] };
+        }
+
+        if (span <= numberBins * 2) {
+            float[] t = new float[span];
+            float[] v = new float[span];
+            for (int i = 0; i < span; i++) {
+                int bitIndex = start + i;
+                t[i] = bitIndex;
+                v[i] = bitAt(rxBytes, bitIndex) == 1 ? 255f : 0f;
+            }
+            return new Object[] { t, v };
+        }
+
+        float[] tTmp = new float[numberBins * 2];
+        float[] vTmp = new float[numberBins * 2];
+        int outCount = 0;
+
+        double binWidth = (double) span / (double) numberBins;
+        for (int bin = 0; bin < numberBins; bin++) {
+            int binStart = (int) Math.floor((double) start + (double) bin * binWidth);
+            int binEnd = (int) Math.floor((double) binStart + binWidth);
+            if (binEnd > end) binEnd = end;
+            if (binEnd <= binStart) continue;
+
+            boolean hasLow = false;
+            boolean hasHigh = false;
+
+            int i = binStart;
+            while (i < binEnd) {
+                int byteIndex = i >> 3;
+                if (byteIndex >= rxBytes.length) break;
+
+                if ((i & 7) == 0 && i + 8 <= binEnd) {
+                    int byteVal = rxBytes[byteIndex] & 0xFF;
+                    if (byteVal == 0) {
+                        hasLow = true;
+                    } else if (byteVal == 255) {
+                        hasHigh = true;
+                    } else {
+                        hasLow = true;
+                        hasHigh = true;
+                    }
+                    i += 8;
+                } else {
+                    if (bitAt(rxBytes, i) == 1) hasHigh = true; else hasLow = true;
+                    i += 1;
+                }
+
+                if (hasLow && hasHigh) break;
+            }
+
+            if (hasLow || hasHigh) {
+                if (outCount + 2 > tTmp.length) break;
+                tTmp[outCount] = binStart;
+                vTmp[outCount] = hasLow ? 0f : 255f;
+                outCount++;
+                tTmp[outCount] = (binEnd - 1);
+                vTmp[outCount] = hasHigh ? 255f : 0f;
+                outCount++;
+            }
+        }
+
+        return new Object[] { Arrays.copyOf(tTmp, outCount), Arrays.copyOf(vTmp, outCount) };
+    }
+
+    private static int bitAt(byte[] buf, int bitIndex) {
+        int byteIndex = bitIndex >> 3;
+        if (byteIndex < 0 || byteIndex >= buf.length) return 0;
+        int b = buf[byteIndex] & 0xFF;
+        int shift = bitIndex & 7;
+        return (b >> shift) & 1;
+    }
+
+    private static byte[] appendBytes(byte[] a, byte[] b) {
+        if (b.length == 0) return a;
+        if (a.length == 0) return Arrays.copyOf(b, b.length);
+        byte[] out = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    private static long[] appendRepeated(long[] a, long value, int count) {
+        if (count <= 0) return a;
+        long[] out = Arrays.copyOf(a, a.length + count);
+        for (int i = 0; i < count; i++) out[a.length + i] = value;
+        return out;
+    }
+}

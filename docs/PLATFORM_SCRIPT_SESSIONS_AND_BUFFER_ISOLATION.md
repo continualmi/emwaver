@@ -59,6 +59,7 @@ Current first step:
 - script rows show "Running on active device" for the current run,
 - the running row has a stop button,
 - leaving preview can keep the run visible in the list rather than making the list look idle.
+- `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
 
 Remaining isolation work:
 
@@ -92,6 +93,7 @@ Remaining isolation work:
 - [x] iOS shows active run status in the shared scripts list.
 - [x] iOS has a row-level stop control for the active run through the shared scripts row.
 - [x] Windows has an active transport buffer session object used by script sampler reads.
+- [x] Android has an active transport buffer session object used by script sampler reads.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.
