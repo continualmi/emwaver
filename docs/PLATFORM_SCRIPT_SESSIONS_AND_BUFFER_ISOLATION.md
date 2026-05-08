@@ -157,6 +157,7 @@ Current first step:
 - the shared Apple `ScriptSessionStatus` now carries `deviceId`, so macOS and iOS visible session rows can retain target identity separately from display labels.
 - iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
 - iOS script sessions now own their stop path explicitly, so row-level stop shuts down the session-owned preview manager instead of reaching through manager internals.
+- iOS/shared Apple script rows now only show the destructive stop control when a retained session status is actually running, so stopped history rows do not look like live controls.
 - iOS local script sessions now retain the captured transport device-session id alongside the visible status row data.
 - iOS local script session creation now depends on the targeted-device protocol boundary rather than the concrete `USBManager`, and focused tests cover separate sessions retaining distinct captured transport ids.
 - iOS local script session creation normalizes blank captured device ids as `active`, matching the Windows and Android target adapters.

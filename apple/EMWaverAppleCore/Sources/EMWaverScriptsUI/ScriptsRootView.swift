@@ -57,6 +57,10 @@ public struct ScriptsRootView: View {
             self.deviceLabel = deviceLabel
             self.stateText = stateText
         }
+
+        public var isRunning: Bool {
+            stateText.caseInsensitiveCompare("running") == .orderedSame
+        }
     }
 
     @StateObject private var viewModel = ScriptsViewModel()
@@ -1458,9 +1462,9 @@ private struct ScriptRow: View {
                     if !sessionStatuses.isEmpty {
                         HStack(spacing: 6) {
                             ForEach(sessionStatuses.prefix(3)) { session in
-                                Label(session.deviceLabel, systemImage: session.stateText == "running" ? "play.fill" : "stop.fill")
+                                Label(session.deviceLabel, systemImage: session.isRunning ? "play.fill" : "stop.fill")
                                     .font(.caption)
-                                    .foregroundStyle(session.stateText == "running" ? .green : .secondary)
+                                    .foregroundStyle(session.isRunning ? .green : .secondary)
                                     .lineLimit(1)
                             }
 
@@ -1488,7 +1492,7 @@ private struct ScriptRow: View {
                 }
             }
             Spacer()
-            if !sessionStatuses.isEmpty, let onStopSession {
+            if sessionStatuses.contains(where: \.isRunning), let onStopSession {
                 Button(role: .destructive, action: onStopSession) {
                     Image(systemName: "stop.fill")
                 }
