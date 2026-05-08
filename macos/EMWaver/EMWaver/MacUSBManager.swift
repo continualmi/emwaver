@@ -523,6 +523,39 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    func refreshWiFiProvisioningStatus() {
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = true
+            self.wifiProvisioningStatus = "Checking Wi-Fi status"
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let canQuery = self.midiQueue.sync {
+                self.activeTransport == .usbMidi || self.activeTransport == .ble
+            }
+            guard canQuery else {
+                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before checking Wi-Fi status.", isError: true)
+                return
+            }
+            let boardType = self.midiQueue.sync {
+                self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
+            }
+            guard boardType.lowercased() == "esp32s3" else {
+                self.finishWiFiProvisioning(message: "Wi-Fi status is available for ESP32-S3 devices.", isError: true)
+                return
+            }
+            guard let response = self.sendWiFiConfigRequest([EmwOpcode.wifiConfig, EmwOpcode.wifiStatus]),
+                  response.count >= 3,
+                  response.first == 0x80 else {
+                self.finishWiFiProvisioning(message: "Wi-Fi status request was rejected by the device.", isError: true)
+                return
+            }
+            let provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned"
+            let authText = response[2] == 0 ? "idle" : "authenticated"
+            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText); socket is \(authText).", isError: false)
+        }
+    }
+
     private func connectDeviceInternal(transportID id: String) {
             if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
                 self.connectInternal(portName: displayName)
@@ -666,14 +699,21 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendWiFiConfigCommand(_ data: Data) -> Bool {
-        let response = sendCommandInternal(
+        sendWiFiConfigRequest(data)?.first == 0x80
+    }
+
+    private func sendWiFiConfigRequest(_ bytes: [UInt8]) -> Data? {
+        sendWiFiConfigRequest(Data(bytes))
+    }
+
+    private func sendWiFiConfigRequest(_ data: Data) -> Data? {
+        sendCommandInternal(
             data,
             timeout: 2000,
             responsePredicate: { lane in
                 lane.first == 0x80 || lane.first == 0x81
             }
         )
-        return response?.first == 0x80
     }
 
     private func finishWiFiProvisioning(message: String, isError: Bool) {

@@ -292,6 +292,14 @@ struct DeviceConnectionSheet: View {
                                   !device.isConnected ||
                                   device.connectedTransportKind == "Wi-Fi")
 
+                        Button("Status") {
+                            device.refreshWiFiProvisioningStatus()
+                        }
+                        .buttonStyle(.bordered)
+                        .disabled(device.isWiFiProvisioning ||
+                                  !device.isConnected ||
+                                  device.connectedTransportKind == "Wi-Fi")
+
                         if let status = device.wifiProvisioningStatus, !status.isEmpty {
                             Text(status)
                                 .font(.caption)
