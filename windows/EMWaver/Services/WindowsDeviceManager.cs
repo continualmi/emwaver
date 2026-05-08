@@ -170,9 +170,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private WindowsBleTransport.ScanSession? _bleScanSession;
     private WindowsBleTransport.Connection? _bleConnection;
-    private ITransportDeviceConnection? _activeTransportConnection;
+    private readonly TransportDeviceConnectionState _activeConnectionState = new();
     private bool _bleConnecting;
-    private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
     private readonly TransportDeviceSessionRegistry _bufferSessions = new();
 
     private ITransportDeviceSession ActiveBufferSession => _bufferSessions.Active;
@@ -181,7 +180,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal void ClearActiveBuffer() => ActiveBufferSession.ClearAll();
     internal ulong GetActiveRxPacketCount() => ActiveBufferSession.GetRxPacketCount();
     internal ulong GetActiveTxPacketCount() => ActiveBufferSession.GetTxPacketCount();
-    internal string ActiveBufferSessionId => _activeTransportConnection?.SessionId ?? ActiveBufferSession.DeviceId;
+    internal string ActiveBufferSessionId => _activeConnectionState.CurrentScriptDeviceId;
 
     internal byte[] GetRxSnapshot(string deviceId) => BufferSession(deviceId).GetRxSnapshot();
     internal void ClearBuffer(string deviceId) => BufferSession(deviceId).ClearAll();
@@ -195,7 +194,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private bool IsActiveDeviceSession(string deviceId)
     {
-        return _activeDeviceTarget.MatchesDeviceId(deviceId);
+        return _activeConnectionState.MatchesDeviceId(deviceId);
     }
 
     private bool RequireActiveDeviceSession(string deviceId, string operation)
@@ -212,23 +211,21 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private ITransportDeviceSession SetActiveDeviceTarget(string deviceId, DeviceTransport transport)
     {
-        var target = new ActiveDeviceTarget(deviceId, transport);
+        var target = _activeConnectionState.SetTarget(deviceId, transport);
         var session = SetActiveBufferSession(target.DeviceId, resetSession: true);
-        _activeDeviceTarget = target;
         ActiveTransport = target.Transport;
         return session;
     }
 
     private void ClearActiveDeviceTarget()
     {
-        _activeDeviceTarget = ActiveDeviceTarget.None;
+        _activeConnectionState.Clear();
         ActiveTransport = DeviceTransport.None;
-        _activeTransportConnection = null;
     }
 
     private string? ActiveDeviceSessionId(DeviceTransport transport)
     {
-        return _activeDeviceTarget.MatchesTransport(transport) ? _activeDeviceTarget.DeviceId : null;
+        return _activeConnectionState.MatchesTransport(transport) ? _activeConnectionState.CurrentScriptDeviceId : null;
     }
 
     internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)
@@ -300,7 +297,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var session = SetActiveDeviceTarget(WindowsUsbMidiTransport.SessionId(port), DeviceTransport.UsbMidi);
             var connection = await WindowsUsbMidiTransport.OpenConnectionAsync(port, OnMidiMessage, session);
             _usbMidiConnection = connection;
-            _activeTransportConnection = connection;
+            _activeConnectionState.SetConnection(connection);
 
             if (!connection.IsOpen)
             {
@@ -679,7 +676,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             _bleConnection = opened.Connection;
-            _activeTransportConnection = _bleConnection;
+            _activeConnectionState.SetConnection(_bleConnection);
             ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);

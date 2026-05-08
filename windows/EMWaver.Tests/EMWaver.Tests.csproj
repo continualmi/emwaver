@@ -31,6 +31,7 @@
     <Compile Include="..\EMWaver\Services\DeviceTransport.cs" Link="EMWaver\Services\DeviceTransport.cs" />
     <Compile Include="..\EMWaver\Services\DeviceBufferSession.cs" Link="EMWaver\Services\DeviceBufferSession.cs" />
     <Compile Include="..\EMWaver\Services\ITransportDeviceSession.cs" Link="EMWaver\Services\ITransportDeviceSession.cs" />
+    <Compile Include="..\EMWaver\Services\TransportDeviceConnectionState.cs" Link="EMWaver\Services\TransportDeviceConnectionState.cs" />
     <Compile Include="..\EMWaver\Services\WindowsWiFiTransport.cs" Link="EMWaver\Services\WindowsWiFiTransport.cs" />
     <Compile Include="..\EMWaver\Services\UsbMidiSysex.cs" Link="EMWaver\Services\UsbMidiSysex.cs" />
     <Compile Include="..\EMWaver\Scripting\PlotBufferStore.cs" Link="EMWaver\Scripting\PlotBufferStore.cs" />
