@@ -326,12 +326,12 @@ The app should not bundle:
 
 ### Session model recommendation
 
-Backend/web docs already note that host-backed remote control and future ESP32 direct-to-cloud control are separate paths.
+The local gateway/daemon/app paths should treat host-backed boards and autonomous ESP32 Wi-Fi boards as separate local transport shapes.
 
 Recommended session model:
-- keep current `web <-> host` remote session model for daemon/native-app host-backed boards,
+- keep host-backed board control routed through the local daemon/native app and localhost gateway,
 - add a new **device session role** for autonomous ESP32 boards,
-- let web/apps attach to either a host session or a device session depending on board class.
+- let local gateway/app surfaces attach to either a host session or a direct device session depending on board class.
 
 That keeps the platform coherent:
 - STM32/USB host-backed boards continue to use host ownership where that model fits,
@@ -355,8 +355,8 @@ Recommended practical priority for reintegration:
 3. **Wi-Fi**
    - evolve from OTA-only support into:
      - provisioning/bootstrap,
-     - direct device/backend session,
-     - remote controller attachment,
+     - authenticated direct local device sessions,
+     - user-owned LAN/VPN remote access by hostname or IP,
      - OTA/update delivery,
      - same EMWaver packet semantics over a Wi-Fi transport binding.
 
@@ -379,8 +379,8 @@ Near-term steps:
 - implement USB first with STM32-compatible EMWaver protocol behavior on ESP32-S3,
 - replace or complement current USB HID logic with an EMWaver runtime/control path appropriate for ESP32-S3,
 - convert BLE from ASCII-command-only plumbing into the same SysEx packet protocol,
-- extend web/backend WS/session design with authenticated device-direct sessions,
-- define provisioning flows that let BLE/USB bootstrap Wi-Fi credentials and cloud attach cleanly.
+- extend the local gateway/daemon/app paths with authenticated device-direct Wi-Fi sessions,
+- define provisioning flows that let BLE/USB bootstrap Wi-Fi credentials and a local pairing secret cleanly.
 
 ## Features
 
@@ -394,6 +394,6 @@ Near-term steps:
 
 This folder is a restored baseline, not yet a fully reintegrated supported target. Expect follow-up work in:
 - firmware modernization and cleanup,
-- direct backend/device session design,
+- direct local device session validation,
 - app-managed provisioning/update flows,
 - capability alignment with the current `.emw` runtime model.
