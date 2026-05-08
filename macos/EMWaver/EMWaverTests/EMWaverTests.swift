@@ -35,4 +35,9 @@ struct EMWaverTests {
         #expect(url.absoluteString == "ws://emwaver-a1b2.local:3922/v1/ws")
     }
 
+    @Test func wifiCommandSequenceSkipsReservedZeroAfterWrap() {
+        #expect(MacWiFiManager.nextWiFiSequence(after: 1) == 2)
+        #expect(MacWiFiManager.nextWiFiSequence(after: UInt16.max) == 1)
+    }
+
 }

@@ -571,8 +571,13 @@ final class MacWiFiManager {
 
     private func nextSequence() -> UInt16 {
         let sequence = txSequence
-        txSequence &+= 1
+        txSequence = Self.nextWiFiSequence(after: txSequence)
         return sequence
+    }
+
+    static func nextWiFiSequence(after sequence: UInt16) -> UInt16 {
+        let next = sequence &+ 1
+        return next == 0 ? 1 : next
     }
 
     private func makeEnvelope(kind: UInt8, sequence: UInt16, payload: Data) -> Data {

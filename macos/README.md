@@ -66,7 +66,7 @@ Transport behavior:
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
 - macOS opts into Wi-Fi binary envelope version `1` during WebSocket authentication. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model; firmware echoes the request sequence id on command responses, and macOS matches synchronous command replies by that sequence.
 - If no matching Wi-Fi command response arrives before the caller timeout, macOS reports `Wi-Fi command timed out`.
-- macOS reserves Wi-Fi envelope sequence `0` for uncorrelated stream/status frames; command requests start at sequence `1`.
+- macOS reserves Wi-Fi envelope sequence `0` for uncorrelated stream/status frames; command requests start at sequence `1` and skip `0` after wraparound.
 - Wi-Fi retransmit buffers use firmware `BS` status frames for host-side pacing, and those status frames are not appended to the script capture buffer.
 - Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.
