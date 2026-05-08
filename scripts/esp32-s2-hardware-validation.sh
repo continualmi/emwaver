@@ -31,6 +31,7 @@ if [[ -n "${EMWAVER_ESP_SDKCONFIG:-}" ]]; then
 else
   ESP_SDKCONFIG="$(mktemp /tmp/emwaver-esp32-s2-sdkconfig.XXXXXX)"
   TEMP_PATHS+=("$ESP_SDKCONFIG")
+  TEMP_PATHS+=("$ESP_SDKCONFIG.old")
 fi
 
 ESP_DEPENDENCIES_LOCK_BACKUP=""
@@ -100,7 +101,9 @@ fi
 
 echo
 echo "== Host USB device listing =="
-if command -v python >/dev/null 2>&1 && python -c 'import serial.tools.list_ports' >/dev/null 2>&1; then
+if command -v python3 >/dev/null 2>&1 && python3 -c 'import serial.tools.list_ports' >/dev/null 2>&1; then
+  python3 -m serial.tools.list_ports -v
+elif command -v python >/dev/null 2>&1 && python -c 'import serial.tools.list_ports' >/dev/null 2>&1; then
   python -m serial.tools.list_ports -v
 else
   echo "pyserial unavailable; falling back to /dev serial device listing"
