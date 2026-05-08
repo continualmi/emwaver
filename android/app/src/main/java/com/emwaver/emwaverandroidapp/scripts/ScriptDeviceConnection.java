@@ -20,25 +20,54 @@ import com.emwaver.emwaverandroidapp.DeviceConnectionService;
  */
 public final class ScriptDeviceConnection implements ScriptDeviceBridge {
     private final DeviceConnectionManager connectionManager;
+    private final DeviceConnectionService targetService;
+    private final DeviceConnectionService.ConnectionType targetConnectionType;
+    private final String targetLabel;
 
     public ScriptDeviceConnection(Context context) {
         this.connectionManager = DeviceConnectionManager.getInstance(context);
+        this.targetService = null;
+        this.targetConnectionType = DeviceConnectionService.ConnectionType.NONE;
+        this.targetLabel = null;
+    }
+
+    private ScriptDeviceConnection(Context context, DeviceConnectionService targetService, String targetLabel) {
+        this.connectionManager = DeviceConnectionManager.getInstance(context);
+        this.targetService = targetService;
+        this.targetConnectionType = targetService != null ? targetService.getConnectionType() : DeviceConnectionService.ConnectionType.NONE;
+        this.targetLabel = targetLabel;
+    }
+
+    public static ScriptDeviceConnection captureActive(Context context, String targetLabel) {
+        DeviceConnectionManager manager = DeviceConnectionManager.getInstance(context);
+        DeviceConnectionService service = manager != null ? manager.getActiveService() : null;
+        return new ScriptDeviceConnection(context, service, targetLabel);
     }
 
     @Nullable
     private DeviceConnectionService activeService() {
+        if (targetService != null) {
+            return targetService;
+        }
         return connectionManager != null ? connectionManager.getActiveService() : null;
     }
 
     public boolean isConnected() {
-        return connectionManager != null && connectionManager.isConnected();
+        DeviceConnectionService service = activeService();
+        return service != null && service.checkConnection();
     }
 
     public String connectionStatus() {
+        if (targetService != null) {
+            return targetLabel != null && !targetLabel.trim().isEmpty() ? targetLabel : targetService.getConnectionStatus();
+        }
         return connectionManager != null ? connectionManager.getConnectionStatus() : "Not connected";
     }
 
     public String connectionType() {
+        if (targetService != null) {
+            return targetConnectionType.name();
+        }
         if (connectionManager == null) {
             return DeviceConnectionService.ConnectionType.NONE.name();
         }
@@ -121,6 +150,10 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
     }
 
     public void disconnect() {
+        if (targetService != null) {
+            targetService.disconnect();
+            return;
+        }
         if (connectionManager != null) {
             connectionManager.disconnect();
         }

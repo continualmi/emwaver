@@ -1922,6 +1922,10 @@ public class ScriptsFragment extends Fragment {
         runningScriptId = currentScriptMetadata != null ? currentScriptMetadata.getId() : null;
         runningScriptName = currentScriptName;
         runningDeviceLabel = currentDeviceLabel();
+        if (isAdded()) {
+            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), runningDeviceLabel);
+            scriptEngine.setDeviceConnection(scriptDeviceConnection);
+        }
         isRenderingScript = true;
         activeScriptTree = null;
         showingPreview = true;
