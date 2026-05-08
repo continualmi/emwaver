@@ -416,6 +416,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             setError("Wi-Fi pairing secret is required")
             return
         }
+        guard Self.isValidWiFiHostname(trimmedHostname) else {
+            setError("Wi-Fi hostname must use letters, numbers, or hyphens and cannot start or end with a hyphen.")
+            return
+        }
 
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
@@ -728,6 +732,20 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.main.async {
             self.isWiFiProvisioning = false
             self.wifiProvisioningStatus = message
+        }
+    }
+
+    private static func isValidWiFiHostname(_ hostname: String) -> Bool {
+        if hostname.isEmpty {
+            return true
+        }
+        guard hostname.count <= 32,
+              hostname.first != "-",
+              hostname.last != "-" else {
+            return false
+        }
+        return hostname.unicodeScalars.allSatisfy { scalar in
+            CharacterSet.alphanumerics.contains(scalar) || scalar == "-"
         }
     }
 

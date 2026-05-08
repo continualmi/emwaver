@@ -68,6 +68,7 @@ Transport behavior:
 - Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices with an incompatible protocol version or without the `wifi` capability are rejected before WebSocket connection/auth.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - The device sheet seeds a local hostname for Wi-Fi provisioning so the app can immediately store the matching `<hostname>.local` pairing record after setup, while still allowing manual override.
+- Manual Wi-Fi hostnames are validated before provisioning so macOS does not store a local pairing record for a name the ESP32-S3 cannot advertise through mDNS.
 - The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision an ESP32-S3 without inventing their own secret, while still allowing manual override.
 - The device sheet can provision ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
 - The same USB/BLE local setup surface can clear ESP32-S3 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
