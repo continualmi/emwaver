@@ -17,6 +17,7 @@
 
 #include "main.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -309,6 +310,7 @@ static void handle_wifi_config_opcode(const command_t *cmd)
     static char staged_password[WIFI_STAGE_PASS_MAX + 1];
     static char staged_secret[WIFI_STAGE_SECRET_MAX + 1];
     static char staged_hostname[WIFI_STAGE_HOST_MAX + 1];
+    static bool staged_active;
 
     const uint8_t sub = cmd->data[1];
     switch (sub) {
@@ -317,9 +319,14 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             memset(staged_password, 0, sizeof(staged_password));
             memset(staged_secret, 0, sizeof(staged_secret));
             memset(staged_hostname, 0, sizeof(staged_hostname));
+            staged_active = true;
             send_binary_ok(NULL, 0);
             return;
         case EMW_WIFI_CFG_FIELD: {
+            if (!staged_active) {
+                send_binary_err();
+                return;
+            }
             char *target = NULL;
             size_t target_len = 0;
             switch (cmd->data[2]) {
@@ -357,10 +364,19 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             return;
         }
         case EMW_WIFI_CFG_APPLY:
+            if (!staged_active) {
+                send_binary_err();
+                return;
+            }
             if (wifi_transport_provision(staged_ssid, staged_password, staged_secret, staged_hostname) != ESP_OK) {
                 send_binary_err();
                 return;
             }
+            memset(staged_ssid, 0, sizeof(staged_ssid));
+            memset(staged_password, 0, sizeof(staged_password));
+            memset(staged_secret, 0, sizeof(staged_secret));
+            memset(staged_hostname, 0, sizeof(staged_hostname));
+            staged_active = false;
             send_binary_ok(NULL, 0);
             return;
         case EMW_WIFI_CFG_CLEAR:
@@ -371,10 +387,19 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             send_binary_ok(NULL, 0);
             return;
         case EMW_WIFI_CFG_PAIR_RESET:
+            if (!staged_active) {
+                send_binary_err();
+                return;
+            }
             if (wifi_transport_reset_pairing(staged_secret) != ESP_OK) {
                 send_binary_err();
                 return;
             }
+            memset(staged_ssid, 0, sizeof(staged_ssid));
+            memset(staged_password, 0, sizeof(staged_password));
+            memset(staged_secret, 0, sizeof(staged_secret));
+            memset(staged_hostname, 0, sizeof(staged_hostname));
+            staged_active = false;
             send_binary_ok(NULL, 0);
             return;
         case EMW_WIFI_CFG_STATUS: {
