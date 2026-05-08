@@ -373,8 +373,8 @@ Resolved v1 decisions:
 6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint.
 7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel, gateway-side `emwaver devices --json` discovery can fill host/port from discovered endpoints, daemon-reported Wi-Fi discoveries appear in the runtime device list, and bare IPv6 literals are accepted by the daemon adapter; pairing still requires the user-owned local secret.
 8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and paired Wi-Fi auto-connect are wired.
-9. Validate LAN script execution on real ESP32-S3 hardware.
-10. Validate VPN-by-IP execution.
+9. Validate LAN script execution on real ESP32-S3 hardware. Tracked as `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` in `docs/TESTS.md`.
+10. Validate VPN-by-IP execution. Tracked as `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` in `docs/TESTS.md`.
 11. Add docs for user-owned VPN remote access. Current docs progress: `docs/ESP32_WIFI_REMOTE_ACCESS.md` covers same-LAN, VPN-by-IP, SSH/port-forwarding, pairing-secret rotation, CLI examples, and troubleshooting without introducing an EMWaver-hosted relay.
 
 ## Non-Negotiables
