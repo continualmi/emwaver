@@ -13,6 +13,7 @@ internal interface ITransportDeviceSession
     void StoreBulkPkt(byte[] data, ulong tsMs);
     void AppendTxBytes(byte[] data, ulong tsMs);
     byte[] GetRxSnapshot();
+    byte[] GetTxSnapshot();
     (byte[] packet, ulong tsMs)? NextRxPacket();
     void SetRxCounterToEnd();
     void FeedSysexBytes(byte[] bytes, ulong tsMs);

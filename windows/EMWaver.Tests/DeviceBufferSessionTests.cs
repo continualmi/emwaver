@@ -60,6 +60,24 @@ public sealed class DeviceBufferSessionTests
         Assert.Equal(bleCommand, ble.NextRxPacket()!.Value.packet);
     }
 
+    [Fact]
+    public void SeparateSessionsKeepTxBuffersIsolated()
+    {
+        var usb = new DeviceBufferSession("usb:test");
+        var ble = new DeviceBufferSession("ble:test");
+
+        var usbPacket = Packet(0x55);
+        var blePacket = Packet(0x66);
+
+        usb.AppendTxBytes(usbPacket, 500);
+        ble.AppendTxBytes(blePacket, 600);
+
+        Assert.Equal((ulong)1, usb.GetTxPacketCount());
+        Assert.Equal((ulong)1, ble.GetTxPacketCount());
+        Assert.Equal(usbPacket, usb.GetTxSnapshot());
+        Assert.Equal(blePacket, ble.GetTxSnapshot());
+    }
+
     private static byte[] Packet(byte value)
     {
         return Enumerable.Repeat(value, NativeBufferRust.PacketSizeBytes).ToArray();

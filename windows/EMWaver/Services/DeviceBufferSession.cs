@@ -101,6 +101,16 @@ internal sealed class DeviceBufferSession : ITransportDeviceSession
         }
     }
 
+    public byte[] GetTxSnapshot()
+    {
+        lock (_lock)
+        {
+            var outBytes = new byte[_txBytes.Length];
+            Array.Copy(_txBytes, outBytes, outBytes.Length);
+            return outBytes;
+        }
+    }
+
     public (byte[] packet, ulong tsMs)? NextRxPacket()
     {
         lock (_lock)

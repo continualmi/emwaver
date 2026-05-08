@@ -56,6 +56,7 @@ Current first step:
 - Windows USB MIDI port pairing, target selection, and session identity helpers now live in `WindowsUsbMidiTransport`, so the current Windows manager has separate USB and BLE transport helper files.
 - Windows now has a `WindowsWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
 - Windows has a local `DeviceBufferSessionTests` suite covering RX/counter and SysEx parser state isolation across separate transport sessions.
+- Windows `DeviceBufferSessionTests` now also cover TX buffer isolation across separate transport sessions.
 - Windows USB MIDI and BLE receive callbacks now feed SysEx data into the connected transport session instead of always using the mutable active session.
 - Windows USB MIDI SysEx message sending now lives in `WindowsUsbMidiTransport`, and BLE chunked GATT writes now live in `WindowsBleTransport`, reducing transport protocol code inside `WindowsDeviceManager`.
 - Windows BLE watcher creation, device opening, service/characteristic lookup, and notification descriptor setup now live in `WindowsBleTransport`, further reducing BLE protocol ownership inside `WindowsDeviceManager`.
@@ -166,6 +167,7 @@ Remaining isolation work:
 - [x] Windows scopes command response wait state to the active transport buffer session.
 - [x] Windows scopes SysEx parser state to the active transport buffer session.
 - [x] Windows scopes command TX logging to the command target transport session.
+- [x] Windows has focused TX buffer isolation coverage for separate transport sessions.
 - [x] Windows binds local script runs to the active transport session id captured at run start.
 - [x] Windows refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Windows keeps active transport and active script session identity synchronized through one active target descriptor.
