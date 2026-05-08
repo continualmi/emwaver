@@ -95,6 +95,12 @@ final class MacWiFiManager {
         socket != nil && connectedDeviceID != nil
     }
 
+    var connectingDeviceID: String? {
+        queue.sync {
+            socket != nil && connectedDeviceID == nil ? pendingAuthRecord?.id : nil
+        }
+    }
+
     func startDiscovery() {
         let browser = NWBrowser(
             for: .bonjour(type: Self.serviceType, domain: nil),
