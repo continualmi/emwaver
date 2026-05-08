@@ -52,7 +52,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
-import androidx.cardview.widget.CardView;
 import androidx.core.view.MenuHost;
 import androidx.core.view.MenuProvider;
 import androidx.fragment.app.Fragment;
@@ -156,7 +155,7 @@ public class ScriptsFragment extends Fragment {
 
     private ActivityResultLauncher<String[]> openFileLauncher;
 
-    private CardView scriptsCard;
+    private View scriptsCard;
     private ScrollView editorScrollViewWrap;
     private HorizontalScrollView editorScrollViewNoWrap;
     private EditText scriptEditorContentWrap;
@@ -362,6 +361,7 @@ public class ScriptsFragment extends Fragment {
         scriptsCard = binding.scriptsCard;
         scriptAdapter = new ScriptListAdapter(scripts);
         binding.scriptsListView.setAdapter(scriptAdapter);
+        updateTargetDeviceStatus();
 
         binding.scriptsListView.setOnItemClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= scripts.size()) {
@@ -520,6 +520,7 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void refreshScriptList() {
+        updateTargetDeviceStatus();
         if (scriptAdapter != null) {
             Log.d(TAG, "refreshScriptList: notifying adapter with " + scripts.size() + " items");
             scriptAdapter.notifyDataSetChanged();
@@ -2086,10 +2087,23 @@ public class ScriptsFragment extends Fragment {
         return "active device";
     }
 
+    private void updateTargetDeviceStatus() {
+        if (binding == null || binding.scriptTargetStatus == null) {
+            return;
+        }
+
+        if (scriptDeviceConnection == null && isAdded()) {
+            scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
+        }
+
+        binding.scriptTargetStatus.setText("Target: " + currentDeviceLabel());
+    }
+
     private void updateViewMode() {
         if (binding == null) {
             return;
         }
+        updateTargetDeviceStatus();
         boolean hideMainView = showingPreview || showingEditor;
         
         if (backPressedCallback != null) {

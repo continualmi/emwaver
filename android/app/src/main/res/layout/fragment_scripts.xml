@@ -8,24 +8,43 @@
     android:background="@color/surfaceBackground"
     tools:context=".ui.scripts.ScriptsFragment">
 
-    <androidx.cardview.widget.CardView
+    <LinearLayout
         android:id="@+id/scripts_card"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
-        android:maxHeight="260dp"
-        app:cardElevation="2dp"
-        app:cardCornerRadius="4dp"
-        app:cardBackgroundColor="@color/surfaceCard"
+        android:orientation="vertical"
         app:layout_constraintTop_toTopOf="parent"
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <ListView
-            android:id="@+id/scripts_list_view"
+        <TextView
+            android:id="@+id/script_target_status"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@color/surfaceCard" />
-    </androidx.cardview.widget.CardView>
+            android:layout_height="wrap_content"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp"
+            android:text="Target: active device"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+            android:textColor="@color/textSecondary"
+            android:background="@color/surfaceBackground" />
+
+        <androidx.cardview.widget.CardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:maxHeight="260dp"
+            app:cardElevation="2dp"
+            app:cardCornerRadius="4dp"
+            app:cardBackgroundColor="@color/surfaceCard">
+
+            <ListView
+                android:id="@+id/scripts_list_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/surfaceCard" />
+        </androidx.cardview.widget.CardView>
+    </LinearLayout>
 
     <FrameLayout
         android:id="@+id/script_container"

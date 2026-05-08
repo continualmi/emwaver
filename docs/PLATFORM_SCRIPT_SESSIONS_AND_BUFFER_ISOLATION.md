@@ -86,6 +86,7 @@ Remaining isolation work:
 Current first step:
 
 - script rows show "Running on active device" for the current run,
+- Android shows the current run target above the scripts list before a script starts, so the visible Run target no longer only appears after the session row is running.
 - Android now captures the active USB/BLE connection label when a script starts and shows that label in the running script row when available.
 - the running row has a stop button,
 - the running row stop button now uses a destructive action color instead of the normal edit/action tint, matching the simplified row-control treatment on the other hosts.
@@ -175,6 +176,7 @@ Remaining isolation work:
 - [x] Windows has a row-level stop control for the active run.
 - [x] Windows styles row-level and toolbar stop controls as destructive actions.
 - [x] Android shows active run status in the script list.
+- [x] Android shows the current target device before Run.
 - [x] Android has a row-level stop control for the active run.
 - [x] Android styles the row-level stop control as a destructive action instead of a normal edit/action button.
 - [x] iOS shows active run status in the shared scripts list.
