@@ -128,6 +128,21 @@ public class USBService extends Service implements DeviceConnectionService {
         }
     }
 
+    private boolean isActiveDeviceSession(String deviceId) {
+        String requested = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
+        synchronized (bufferSessionLock) {
+            return requested.equals(activeBufferSession.deviceId());
+        }
+    }
+
+    private boolean requireActiveDeviceSession(String deviceId, String operation) {
+        if (isActiveDeviceSession(deviceId)) {
+            return true;
+        }
+        Log.w(TAG, operation + ": target device session is not active: " + deviceId);
+        return false;
+    }
+
     // Buffer bridge methods
     public void storeBulkPkt(byte[] data, long tsMs) {
         activeBufferSession().storeBulkPkt(data, tsMs);
@@ -653,6 +668,9 @@ public class USBService extends Service implements DeviceConnectionService {
         if (bytes == null) {
             return;
         }
+        if (!requireActiveDeviceSession(deviceId, "write")) {
+            return;
+        }
 
         TransportDeviceSession bufferSession = bufferSession(deviceId);
         updateSamplerStreamingState(bytes, bufferSession);
@@ -674,6 +692,9 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public void transmitBuffer(String deviceId) {
+        if (!requireActiveDeviceSession(deviceId, "transmitBuffer")) {
+            return;
+        }
         TransportDeviceSession bufferSession = bufferSession(deviceId);
         byte[] samplerBytes = bufferSession.getBuffer();
         if (samplerBytes == null || samplerBytes.length == 0) {
@@ -751,6 +772,9 @@ public class USBService extends Service implements DeviceConnectionService {
     @Override
     public byte[] sendCommand(byte[] command, int timeout, String deviceId) {
         if (command == null) {
+            return null;
+        }
+        if (!requireActiveDeviceSession(deviceId, "sendCommand")) {
             return null;
         }
 
