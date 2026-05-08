@@ -496,6 +496,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         let trimmedSSID = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
+        let effectiveHostname = trimmedHostname.isEmpty ? Self.generatedWiFiHostname() : trimmedHostname
 
         guard !trimmedSSID.isEmpty else {
             setError("Wi-Fi SSID is required")
@@ -505,7 +506,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             setError("Wi-Fi pairing secret is required")
             return
         }
-        guard Self.isValidWiFiHostname(trimmedHostname) else {
+        guard Self.isValidWiFiHostname(effectiveHostname) else {
             setError("Wi-Fi hostname must use letters, numbers, or hyphens and cannot start or end with a hyphen.")
             return
         }
@@ -530,7 +531,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
 
             let passwordBytes = Array(password.utf8)
-            let hostnameBytes = Array(trimmedHostname.utf8)
+            let hostnameBytes = Array(effectiveHostname.utf8)
             let fields: [(UInt8, [UInt8], Int)] = [
                 (EmwOpcode.wifiFieldSSID, Array(trimmedSSID.utf8), 32),
                 (EmwOpcode.wifiFieldPassword, passwordBytes, 64),
@@ -567,15 +568,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
 
-            if !trimmedHostname.isEmpty {
-                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
-                self.wifiManager?.storePairing(
-                    host: host,
-                    displayName: trimmedHostname,
-                    pairingSecret: trimmedSecret
-                )
-            }
-            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself on the LAN.", isError: false)
+            let host = effectiveHostname.contains(".") ? effectiveHostname : "\(effectiveHostname).local"
+            self.wifiManager?.storePairing(
+                host: host,
+                displayName: effectiveHostname,
+                pairingSecret: trimmedSecret
+            )
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network as \(host).", isError: false)
         }
     }
 
@@ -963,7 +962,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
-    private static func isValidWiFiHostname(_ hostname: String) -> Bool {
+    static func generatedWiFiHostname(randomSuffix: String = UUID().uuidString) -> String {
+        let suffixScalars = randomSuffix.lowercased().unicodeScalars.filter { scalar in
+            (scalar.value >= 48 && scalar.value <= 57) || (scalar.value >= 97 && scalar.value <= 122)
+        }
+        let suffix = String(String.UnicodeScalarView(suffixScalars)).prefix(8)
+        if suffix.isEmpty {
+            return "emwaver-local"
+        }
+        return "emwaver-\(suffix)"
+    }
+
+    static func isValidWiFiHostname(_ hostname: String) -> Bool {
         if hostname.isEmpty {
             return true
         }

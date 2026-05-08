@@ -100,14 +100,6 @@ struct DeviceConnectionSheet: View {
         return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
     }
 
-    private static func generateWiFiHostname() -> String {
-        var bytes = [UInt8](repeating: 0, count: 2)
-        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
-            return "emwaver-\(bytes.map { String(format: "%02x", $0) }.joined())"
-        }
-        return "emwaver-\(UUID().uuidString.prefix(4).lowercased())"
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -125,7 +117,7 @@ struct DeviceConnectionSheet: View {
                 wifiPairingSecret = Self.generatePairingSecret()
             }
             if wifiHostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                wifiHostname = Self.generateWiFiHostname()
+                wifiHostname = MacUSBManager.generatedWiFiHostname()
             }
             firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
         }
