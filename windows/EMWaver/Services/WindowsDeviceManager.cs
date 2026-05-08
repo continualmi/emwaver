@@ -171,9 +171,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private BluetoothLEAdvertisementWatcher? _bleWatcher;
-    private BluetoothLEDevice? _bleDevice;
-    private GattCharacteristic? _bleCommandCharacteristic;
-    private GattCharacteristic? _bleNotifyCharacteristic;
+    private WindowsBleTransport.Connection? _bleConnection;
     private bool _bleConnecting;
     private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
     private readonly object _bufferSessionLock = new();
@@ -508,7 +506,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         if (ActiveTransport == DeviceTransport.Ble)
         {
-            if (_bleCommandCharacteristic == null)
+            if (_bleConnection?.IsOpen != true)
             {
                 LastErrorText = "Cannot send command: BLE not connected";
                 return null;
@@ -724,41 +722,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
             CloseBleDevice();
 
-            var device = await WindowsBleTransport.OpenDeviceAsync(bluetoothAddress);
-            if (device == null)
+            var opened = await WindowsBleTransport.OpenConnectionAsync(bluetoothAddress, displayName, OnBleValueChanged);
+            if (opened.Connection == null)
             {
-                LastErrorText = "Failed to open BLE device";
+                LastErrorText = opened.Error;
                 return;
             }
 
-            var service = await WindowsBleTransport.FindServiceAsync(device);
-            if (service == null)
-            {
-                device.Dispose();
-                LastErrorText = "BLE EMWaver service not found";
-                return;
-            }
-
-            var commandCharacteristic = await WindowsBleTransport.FindCommandCharacteristicAsync(service);
-            if (commandCharacteristic == null)
-            {
-                device.Dispose();
-                LastErrorText = "BLE command characteristic not found";
-                return;
-            }
-
-            _bleDevice = device;
-            _bleCommandCharacteristic = commandCharacteristic;
-
-            var notifyCharacteristic = await WindowsBleTransport.FindNotifyCharacteristicAsync(service);
-            if (notifyCharacteristic != null)
-            {
-                _bleNotifyCharacteristic = notifyCharacteristic;
-                _bleNotifyCharacteristic.ValueChanged += OnBleValueChanged;
-                await WindowsBleTransport.EnableNotificationsAsync(_bleNotifyCharacteristic);
-            }
-
-            ConnectedPort = new DevicePort(displayName, string.Empty, string.Empty);
+            _bleConnection = opened.Connection;
+            ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
@@ -800,46 +772,25 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private void SendBleSuperframe(byte[] superframe36)
     {
-        var characteristic = _bleCommandCharacteristic;
-        if (characteristic == null)
+        var connection = _bleConnection;
+        if (connection == null || !connection.IsOpen)
         {
             LastErrorText = "Cannot send: BLE not connected";
             return;
         }
 
         ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
-        LastErrorText = WindowsBleTransport.SendSuperframe(characteristic, superframe36, BufferFromBytes);
+        LastErrorText = connection.SendSuperframe(superframe36, BufferFromBytes);
     }
 
     private void CloseBleDevice()
     {
-        try
+        if (_bleConnection != null)
         {
-            if (_bleNotifyCharacteristic != null)
-            {
-                _bleNotifyCharacteristic.ValueChanged -= OnBleValueChanged;
-            }
+            _bleConnection.Dispose();
+            _bleConnection = null;
         }
-        catch
-        {
-            // Ignore dispose errors.
-        }
-
-        try
-        {
-            _bleDevice?.Dispose();
-        }
-        catch
-        {
-            // Ignore dispose errors.
-        }
-        finally
-        {
-            _bleNotifyCharacteristic = null;
-            _bleCommandCharacteristic = null;
-            _bleDevice = null;
-            _bleConnecting = false;
-        }
+        _bleConnecting = false;
     }
 
     private static ulong NowMs()

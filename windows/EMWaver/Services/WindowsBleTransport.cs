@@ -17,6 +17,70 @@ internal static class WindowsBleTransport
 
     internal const int WriteChunkBytes = 20;
 
+    internal sealed class Connection : IDisposable
+    {
+        private readonly TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? _notifyHandler;
+
+        internal Connection(
+            ulong bluetoothAddress,
+            string displayName,
+            BluetoothLEDevice device,
+            GattCharacteristic commandCharacteristic,
+            GattCharacteristic? notifyCharacteristic,
+            TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? notifyHandler)
+        {
+            BluetoothAddress = bluetoothAddress;
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? "EMWaver BLE" : displayName;
+            Device = device;
+            CommandCharacteristic = commandCharacteristic;
+            NotifyCharacteristic = notifyCharacteristic;
+            _notifyHandler = notifyHandler;
+            SessionId = WindowsBleTransport.SessionId(bluetoothAddress);
+
+            if (NotifyCharacteristic != null && _notifyHandler != null)
+            {
+                NotifyCharacteristic.ValueChanged += _notifyHandler;
+            }
+        }
+
+        internal ulong BluetoothAddress { get; }
+        internal string DisplayName { get; }
+        internal BluetoothLEDevice Device { get; }
+        internal GattCharacteristic CommandCharacteristic { get; }
+        internal GattCharacteristic? NotifyCharacteristic { get; }
+        internal string SessionId { get; }
+        internal bool IsOpen => CommandCharacteristic != null;
+
+        internal string? SendSuperframe(byte[] superframe36, Func<byte[], IBuffer> bufferFromBytes)
+        {
+            return WindowsBleTransport.SendSuperframe(CommandCharacteristic, superframe36, bufferFromBytes);
+        }
+
+        public void Dispose()
+        {
+            try
+            {
+                if (NotifyCharacteristic != null && _notifyHandler != null)
+                {
+                    NotifyCharacteristic.ValueChanged -= _notifyHandler;
+                }
+            }
+            catch
+            {
+                // Ignore dispose errors.
+            }
+
+            try
+            {
+                Device.Dispose();
+            }
+            catch
+            {
+                // Ignore dispose errors.
+            }
+        }
+    }
+
     internal static string SessionId(ulong bluetoothAddress) => $"ble:{bluetoothAddress:X}";
 
     internal static BluetoothLEAdvertisementWatcher CreateWatcher(
@@ -40,6 +104,48 @@ internal static class WindowsBleTransport
     internal static async Task<BluetoothLEDevice?> OpenDeviceAsync(ulong bluetoothAddress)
     {
         return await BluetoothLEDevice.FromBluetoothAddressAsync(bluetoothAddress);
+    }
+
+    internal static async Task<(Connection? Connection, string? Error)> OpenConnectionAsync(
+        ulong bluetoothAddress,
+        string displayName,
+        TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs> notifyHandler)
+    {
+        var device = await OpenDeviceAsync(bluetoothAddress);
+        if (device == null)
+        {
+            return (null, "Failed to open BLE device");
+        }
+
+        var service = await FindServiceAsync(device);
+        if (service == null)
+        {
+            device.Dispose();
+            return (null, "BLE EMWaver service not found");
+        }
+
+        var commandCharacteristic = await FindCommandCharacteristicAsync(service);
+        if (commandCharacteristic == null)
+        {
+            device.Dispose();
+            return (null, "BLE command characteristic not found");
+        }
+
+        var notifyCharacteristic = await FindNotifyCharacteristicAsync(service);
+        var connection = new Connection(
+            bluetoothAddress,
+            displayName,
+            device,
+            commandCharacteristic,
+            notifyCharacteristic,
+            notifyHandler);
+
+        if (notifyCharacteristic != null)
+        {
+            await EnableNotificationsAsync(notifyCharacteristic);
+        }
+
+        return (connection, null);
     }
 
     internal static async Task<GattDeviceService?> FindServiceAsync(BluetoothLEDevice device)
