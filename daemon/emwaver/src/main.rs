@@ -92,6 +92,10 @@ enum Commands {
 
     /// List local devices and optionally probe a paired Wi-Fi endpoint.
     Devices {
+        /// Print structured JSON instead of human-readable device lines.
+        #[arg(long)]
+        json: bool,
+
         /// Probe an ESP32 Wi-Fi device by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
@@ -1129,11 +1133,92 @@ fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
     }
 }
 
-fn list_devices(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> Result<()> {
+fn list_devices(
+    json: bool,
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
+) -> Result<()> {
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_secret, wifi_port)?)?
+        );
+        return Ok(());
+    }
     for line in list_devices_lines(wifi, wifi_secret, wifi_port)? {
         println!("{line}");
     }
     Ok(())
+}
+
+fn list_devices_json(
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
+) -> Result<serde_json::Value> {
+    let mut devices = Vec::new();
+    for device in emwaver_device::list_devices()? {
+        devices.push(serde_json::json!({
+            "id": format!("midi:{}", device.id),
+            "name": device.name,
+            "transport": "USB",
+            "likelyEmwaver": device.likely_emwaver,
+        }));
+    }
+
+    let ble_error = match list_ble_devices(1_500) {
+        Ok(ble_devices) => {
+            for device in ble_devices {
+                devices.push(serde_json::json!({
+                    "id": format!("ble:{}", device.id),
+                    "name": device.name,
+                    "transport": "BLE",
+                    "boardType": "esp32s3",
+                    "address": device.address,
+                }));
+            }
+            None
+        }
+        Err(err) => Some(format!("BLE scan unavailable: {err:#}")),
+    };
+
+    let wifi_discovery_error = match list_wifi_devices(1_500) {
+        Ok(wifi_devices) => {
+            for device in wifi_devices {
+                let board = device
+                    .txt
+                    .get("board")
+                    .cloned()
+                    .unwrap_or_else(|| "esp32".to_string());
+                devices.push(serde_json::json!({
+                    "id": format!("wifi:{}:{}", device.host, device.port),
+                    "name": device.name,
+                    "transport": "Wi-Fi",
+                    "boardType": board,
+                    "firmwareVersion": device.txt.get("fw").cloned(),
+                    "host": device.host,
+                    "port": device.port,
+                    "endpoint": format!("{}:{}", device.host, device.port),
+                    "addresses": device.addresses,
+                }));
+            }
+            None
+        }
+        Err(err) => Some(format!("Wi-Fi discovery unavailable: {err:#}")),
+    };
+
+    let (wifi_probe_lines, wifi_ok) = wifi_probe_lines(wifi, wifi_secret, wifi_port)?;
+    Ok(serde_json::json!({
+        "ok": ble_error.is_none() && wifi_discovery_error.is_none(),
+        "devices": devices,
+        "bleError": ble_error,
+        "wifiDiscoveryError": wifi_discovery_error,
+        "wifiProbe": {
+            "ok": wifi_ok,
+            "lines": wifi_probe_lines,
+        },
+    }))
 }
 
 fn command_available(name: &str) -> bool {
@@ -2487,10 +2572,11 @@ fn main() -> Result<()> {
         },
         Commands::Tui => run_tui(),
         Commands::Devices {
+            json,
             wifi,
             wifi_secret,
             wifi_port,
-        } => list_devices(wifi, wifi_secret, wifi_port),
+        } => list_devices(json, wifi, wifi_secret, wifi_port),
         Commands::Doctor {
             wifi,
             wifi_secret,

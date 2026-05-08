@@ -12,6 +12,7 @@ import {
 } from "./remoteSessions";
 
 type ExampleScript = { name: string; source: string };
+type GatewayDevice = NonNullable<RemoteDeviceStatus["devices"]>[number];
 type WsStatus = "connecting" | "open" | "closed" | "error";
 type ActivityId = "library" | "runtime" | "agent" | "log";
 
@@ -101,6 +102,8 @@ export function GatewayApp() {
   const [daemonWifiHost, setDaemonWifiHost] = useState("");
   const [daemonWifiSecret, setDaemonWifiSecret] = useState("");
   const [daemonWifiPort, setDaemonWifiPort] = useState("3922");
+  const [gatewayDevices, setGatewayDevices] = useState<GatewayDevice[]>([]);
+  const [gatewayDevicesBusy, setGatewayDevicesBusy] = useState(false);
   const [activity, setActivity] = useState<ActivityId | null>("library");
   const [unreadAgent, setUnreadAgent] = useState(false);
   const [unreadLog, setUnreadLog] = useState(0);
@@ -135,6 +138,10 @@ export function GatewayApp() {
     return () => {
       cancelled = true;
     };
+  }, []);
+
+  useEffect(() => {
+    void refreshGatewayDevices();
   }, []);
 
   useEffect(() => {
@@ -353,6 +360,30 @@ export function GatewayApp() {
     }
   }
 
+  async function refreshGatewayDevices() {
+    setGatewayDevicesBusy(true);
+    try {
+      const response = await fetch("/v1/devices");
+      const body = await response.json();
+      if (!response.ok || body?.ok === false) {
+        throw new Error(body?.message || body?.error || "devices_failed");
+      }
+      setGatewayDevices(Array.isArray(body.devices) ? body.devices : []);
+    } catch (error) {
+      setUiError(formatError(error));
+    } finally {
+      setGatewayDevicesBusy(false);
+    }
+  }
+
+  function useGatewayWifiDevice(device: GatewayDevice) {
+    const host = String(device.host || String(device.endpoint || "").split(":")[0] || "").trim();
+    if (!host) return;
+    setDaemonWifiHost(host);
+    setDaemonWifiPort(String(device.port || String(device.endpoint || "").split(":")[1] || "3922"));
+    setActivity("runtime");
+  }
+
   const canPreview = !!(selected && isEmw(selected));
   const connected = !!deviceStatus?.connected;
   const tone = statusTone(wsStatus, deviceStatus);
@@ -401,6 +432,10 @@ export function GatewayApp() {
           setDaemonWifiSecret={setDaemonWifiSecret}
           daemonWifiPort={daemonWifiPort}
           setDaemonWifiPort={setDaemonWifiPort}
+          gatewayDevices={gatewayDevices}
+          gatewayDevicesBusy={gatewayDevicesBusy}
+          refreshGatewayDevices={refreshGatewayDevices}
+          useGatewayWifiDevice={useGatewayWifiDevice}
           agentPrompt={agentPrompt}
           setAgentPrompt={setAgentPrompt}
           agentOutput={agentOutput}
@@ -649,6 +684,10 @@ function SidePanel(props: {
   setDaemonWifiSecret: (v: string) => void;
   daemonWifiPort: string;
   setDaemonWifiPort: (v: string) => void;
+  gatewayDevices: GatewayDevice[];
+  gatewayDevicesBusy: boolean;
+  refreshGatewayDevices: () => void;
+  useGatewayWifiDevice: (device: GatewayDevice) => void;
   agentPrompt: string;
   setAgentPrompt: (v: string) => void;
   agentOutput: string;
@@ -797,6 +836,10 @@ function RuntimePanel(props: {
   setDaemonWifiSecret: (v: string) => void;
   daemonWifiPort: string;
   setDaemonWifiPort: (v: string) => void;
+  gatewayDevices: GatewayDevice[];
+  gatewayDevicesBusy: boolean;
+  refreshGatewayDevices: () => void;
+  useGatewayWifiDevice: (device: GatewayDevice) => void;
 }) {
   const {
     deviceStatus,
@@ -810,8 +853,13 @@ function RuntimePanel(props: {
     setDaemonWifiSecret,
     daemonWifiPort,
     setDaemonWifiPort,
+    gatewayDevices,
+    gatewayDevicesBusy,
+    refreshGatewayDevices,
+    useGatewayWifiDevice,
   } = props;
   const canStartWifi = daemonWifiHost.trim() && daemonWifiSecret.trim() && !connected && !daemonBusy;
+  const wifiDevices = gatewayDevices.filter((device) => device.transport === "Wi-Fi" && (device.host || device.endpoint));
   return (
     <div className="flex flex-col gap-4 p-4">
       <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3">
@@ -873,6 +921,39 @@ function RuntimePanel(props: {
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
           Wi-Fi
         </div>
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-[color:var(--ink-dim)]">
+            {wifiDevices.length ? `${wifiDevices.length} discovered` : "No discovered endpoints"}
+          </span>
+          <button
+            type="button"
+            onClick={refreshGatewayDevices}
+            disabled={gatewayDevicesBusy || daemonBusy}
+            className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
+          >
+            {gatewayDevicesBusy ? "Scanning" : "Scan"}
+          </button>
+        </div>
+        {wifiDevices.length ? (
+          <ul className="mt-2 space-y-1">
+            {wifiDevices.slice(0, 4).map((device) => (
+              <li key={device.id || device.endpoint || device.name} className="flex items-center gap-2 rounded-lg bg-[color:var(--surface-3)] px-2 py-1.5">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[12px] font-semibold text-[color:var(--ink)]">{device.name || device.endpoint}</div>
+                  <div className="truncate text-[10px] text-[color:var(--ink-dim)]">{device.endpoint || device.host}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => useGatewayWifiDevice(device)}
+                  disabled={connected || daemonBusy}
+                  className="rounded-md border border-[color:var(--line)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
+                >
+                  Use
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="mt-3 grid grid-cols-[1fr_72px] gap-2">
           <input
             value={daemonWifiHost}

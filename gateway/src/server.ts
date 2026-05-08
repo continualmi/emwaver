@@ -80,6 +80,13 @@ function daemonStartCommand(extraArgs: string[] = []): { command: string; args: 
   };
 }
 
+function cliCommand(args: string[]): { command: string; args: string[] } {
+  return {
+    command: stringEnv("EMWAVER_CLI_BIN") || resolve(REPO_ROOT, "daemon", "dev"),
+    args,
+  };
+}
+
 function daemonStartArgs(payload: JsonObject): string[] {
   const args: string[] = [];
   const wifi = typeof payload.wifi === "string" ? payload.wifi.trim() : "";
@@ -233,6 +240,53 @@ async function handleDaemonStartRequest(payload: JsonObject = {}): Promise<{ sta
   };
 }
 
+async function handleDevicesRequest(): Promise<{ status: number; body: JsonObject }> {
+  const { command, args } = cliCommand(["devices", "--json"]);
+  const result = await new Promise<{ code: number | null; stdout: string; stderr: string; error?: string }>((resolveResult) => {
+    const child = spawn(command, args, {
+      cwd: REPO_ROOT,
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk) => {
+      stdout += String(chunk);
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += String(chunk);
+    });
+    child.on("error", (error) => resolveResult({ code: null, stdout, stderr, error: error.message }));
+    child.on("close", (code) => resolveResult({ code, stdout, stderr }));
+  });
+
+  if (result.code !== 0) {
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "devices_failed",
+        command,
+        args,
+        message: result.error || result.stderr || result.stdout || `devices exited with ${result.code}`,
+      },
+    };
+  }
+
+  try {
+    return { status: 200, body: JSON.parse(result.stdout) };
+  } catch (error) {
+    return {
+      status: 500,
+      body: {
+        ok: false,
+        error: "devices_invalid_json",
+        message: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
+}
+
 function sendJson(ws: WebSocket, payload: JsonObject) {
   ws.send(JSON.stringify(payload));
 }
@@ -380,6 +434,19 @@ const server = createServer((req, res) => {
   if (req.method === "GET" && url.pathname === "/v1/examples") {
     res.writeHead(200, { "content-type": "application/json" });
     res.end(JSON.stringify({ examples: loadBundledExamples() }));
+    return;
+  }
+  if (req.method === "GET" && url.pathname === "/v1/devices") {
+    void (async () => {
+      try {
+        const result = await handleDevicesRequest();
+        res.writeHead(result.status, { "content-type": "application/json" });
+        res.end(JSON.stringify(result.body));
+      } catch (error) {
+        res.writeHead(500, { "content-type": "application/json" });
+        res.end(JSON.stringify({ ok: false, error: "devices_failed", message: error instanceof Error ? error.message : String(error) }));
+      }
+    })();
     return;
   }
   if (req.method === "POST" && url.pathname === "/v1/agent") {

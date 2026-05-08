@@ -387,6 +387,10 @@ try {
   if (badWifiDaemonStart.status !== 400 || badWifiDaemonStart.body?.ok !== false) {
     throw new Error(`unexpected bad wifi daemon-start response: ${JSON.stringify(badWifiDaemonStart)}`);
   }
+  const devices = await getJson(`${baseUrl}/v1/devices`);
+  if (devices.status !== 500 || devices.body?.error !== "devices_invalid_json") {
+    throw new Error(`unexpected devices response with echo CLI fixture: ${JSON.stringify(devices)}`);
+  }
   const examples = await getJson(`${baseUrl}/v1/examples`);
   if (
     examples.status !== 200 ||
