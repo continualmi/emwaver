@@ -360,7 +360,7 @@ Resolved v1 decisions:
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add authenticated Wi-Fi server carrying EMWaver frames.
 5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip> --wifi-secret <local-secret>`.
-6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired; Wi-Fi discovery output in `emwaver devices` is still pending.
+6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint; automatic mDNS Wi-Fi discovery output is still pending.
 7. Add gateway device selection/manual IP path.
 8. Add native app discovery/manual connect surfaces.
 9. Validate LAN script execution on real ESP32-S3 hardware.

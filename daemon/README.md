@@ -127,6 +127,8 @@ emwaver run scripts/blink.emw --direct --sim-device
 Direct mode uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects a USB MIDI input id from `emwaver devices`. `--ble` selects the ESP32 BLE GATT transport and uses the same SysEx/superframe envelope as USB MIDI. `--wifi <host-or-ip> --wifi-secret <local-secret>` selects the authenticated ESP32 Wi-Fi WebSocket transport on port `3922`; override the port with `--wifi-port <port>`.
 `--sim-device` uses the shared mock EMWaver device simulator so hardware-touching scripts can be smoke-tested without a connected board.
 
+`emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` performs a manual authenticated Wi-Fi probe and prints the endpoint if the pairing handshake succeeds. Full mDNS Wi-Fi discovery in `emwaver devices` is still pending.
+
 Useful flags:
 
 ```bash

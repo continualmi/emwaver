@@ -80,8 +80,20 @@ enum Commands {
     /// Terminal UI for daemon + device status.
     Tui,
 
-    /// List MIDI devices and highlight likely EMWaver ports.
-    Devices,
+    /// List local devices and optionally probe a paired Wi-Fi endpoint.
+    Devices {
+        /// Probe an ESP32 Wi-Fi device by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret for the Wi-Fi probe.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port for the Wi-Fi probe.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+    },
 
     /// Check local CLI, gateway, and device prerequisites.
     Doctor,
@@ -965,7 +977,11 @@ fn shell_escape(value: &str) -> String {
     }
 }
 
-fn list_devices_lines() -> Result<Vec<String>> {
+fn list_devices_lines(
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
+) -> Result<Vec<String>> {
     let devices = emwaver_device::list_devices()?;
     let mut out: Vec<String> = Vec::new();
     if devices.is_empty() {
@@ -996,11 +1012,26 @@ fn list_devices_lines() -> Result<Vec<String>> {
         Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
     }
 
+    if wifi.is_some() || wifi_secret.is_some() {
+        let Some(host) = wifi else {
+            anyhow::bail!("--wifi-secret requires --wifi");
+        };
+        let Some(secret) = wifi_secret else {
+            anyhow::bail!("--wifi-secret is required with --wifi");
+        };
+        match WiFiDevice::connect(&host, wifi_port, &secret) {
+            Ok(_) => out.push(format!("Wi-Fi device: {host}:{wifi_port} authenticated")),
+            Err(err) => out.push(format!(
+                "Wi-Fi probe failed for {host}:{wifi_port}: {err:#}"
+            )),
+        }
+    }
+
     Ok(out)
 }
 
-fn list_devices() -> Result<()> {
-    for line in list_devices_lines()? {
+fn list_devices(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> Result<()> {
+    for line in list_devices_lines(wifi, wifi_secret, wifi_port)? {
         println!("{line}");
     }
     Ok(())
@@ -1071,7 +1102,7 @@ fn doctor() -> Result<()> {
         println!("missing: rustc");
     }
 
-    match list_devices_lines() {
+    match list_devices_lines(None, None, 3922) {
         Ok(lines) => {
             for line in lines {
                 println!("{line}");
@@ -2231,7 +2262,11 @@ fn main() -> Result<()> {
             ServiceCmd::Status => service_status(),
         },
         Commands::Tui => run_tui(),
-        Commands::Devices => list_devices(),
+        Commands::Devices {
+            wifi,
+            wifi_secret,
+            wifi_port,
+        } => list_devices(wifi, wifi_secret, wifi_port),
         Commands::Doctor => doctor(),
         Commands::Run {
             script,
@@ -2355,7 +2390,7 @@ fn run_tui() -> Result<()> {
                 None => "not running".to_string(),
             };
             let autostart = autostart_status()?;
-            let devices = list_devices_lines()?;
+            let devices = list_devices_lines(None, None, 3922)?;
 
             terminal.draw(|f| {
                 let size = f.size();
