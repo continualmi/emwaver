@@ -343,6 +343,13 @@ final class MacWiFiManager {
                                 self.disconnect(notify: true)
                             }
                         }
+                    } else if text.localizedCaseInsensitiveContains("busy") {
+                        self.onError("Wi-Fi device is busy with another session")
+                        self.queue.async {
+                            if self.socket === socket {
+                                self.disconnect(notify: true)
+                            }
+                        }
                     }
                 @unknown default:
                     break

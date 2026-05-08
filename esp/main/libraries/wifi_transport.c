@@ -428,8 +428,20 @@ static void build_local_id_suffix(char *out, size_t out_len)
 
 static esp_err_t ws_handler(httpd_req_t *req)
 {
+    const int current_fd = httpd_req_to_sockfd(req);
     if (req->method == HTTP_GET) {
-        s_active_fd = httpd_req_to_sockfd(req);
+        if (s_authenticated && s_active_fd >= 0 && s_active_fd != current_fd) {
+            httpd_ws_frame_t reply = {
+                .final = true,
+                .fragmented = false,
+                .type = HTTPD_WS_TYPE_TEXT,
+                .payload = (uint8_t *)"busy",
+                .len = strlen("busy"),
+            };
+            (void)httpd_ws_send_frame(req, &reply);
+            return ESP_FAIL;
+        }
+        s_active_fd = current_fd;
         s_authenticated = false;
         generate_auth_challenge();
         char challenge_json[72];
@@ -459,9 +471,21 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return err;
     }
 
+    if (s_authenticated && s_active_fd >= 0 && s_active_fd != current_fd) {
+        httpd_ws_frame_t reply = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)"busy",
+            .len = strlen("busy"),
+        };
+        (void)httpd_ws_send_frame(req, &reply);
+        return ESP_FAIL;
+    }
+
     if (!s_authenticated) {
         if (auth_message_matches(data, frame.len)) {
-            s_active_fd = httpd_req_to_sockfd(req);
+            s_active_fd = current_fd;
             s_authenticated = true;
             httpd_ws_frame_t reply = {
                 .final = true,
