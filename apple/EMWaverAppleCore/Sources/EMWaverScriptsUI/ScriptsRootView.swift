@@ -17,11 +17,40 @@ import AppKit
 #endif
 
 public struct ScriptsRootView: View {
+    public struct ScriptRunRequest {
+        public let scriptId: String
+        public let name: String
+        public let source: String
+        public let moduleSources: [String: String]
+
+        public init(scriptId: String, name: String, source: String, moduleSources: [String: String]) {
+            self.scriptId = scriptId
+            self.name = name
+            self.source = source
+            self.moduleSources = moduleSources
+        }
+    }
+
+    public struct ScriptRunResult {
+        public let scriptInstanceId: String
+        public let name: String
+        public let running: Bool
+
+        public init(scriptInstanceId: String, name: String, running: Bool) {
+            self.scriptInstanceId = scriptInstanceId
+            self.name = name
+            self.running = running
+        }
+    }
+
     @StateObject private var viewModel = ScriptsViewModel()
     @StateObject private var previewManager: ScriptPreviewManager
     @StateObject private var agentViewModel: AgentChatViewModel
 
     private let agentEndpointProvider: (() -> (baseURL: URL, accessToken: String)?)?
+    private let onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)?
+    private let activePreviewManagerProvider: (() -> ScriptPreviewManager?)?
+    private let onStopActiveScript: (() -> Void)?
 
     private let device: (any ScriptDevice)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
@@ -74,7 +103,10 @@ public struct ScriptsRootView: View {
         onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
-        agentLeadingToolbarItem: AnyView? = nil
+        agentLeadingToolbarItem: AnyView? = nil,
+        onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
+        activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
+        onStopActiveScript: (() -> Void)? = nil
     ) {
         self.device = device
         self.hostStatusSink = hostStatusSink
@@ -84,6 +116,9 @@ public struct ScriptsRootView: View {
         self.leadingHeaderItem = leadingHeaderItem
         self.agentLeadingToolbarItem = agentLeadingToolbarItem
         self.agentEndpointProvider = agentEndpointProvider
+        self.onRunScript = onRunScript
+        self.activePreviewManagerProvider = activePreviewManagerProvider
+        self.onStopActiveScript = onStopActiveScript
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
             wrappedValue: AgentChatViewModel(endpointProvider: agentEndpointProvider)
@@ -99,7 +134,10 @@ public struct ScriptsRootView: View {
         onRequestAgentUpgrade: (() -> Void)? = nil,
         onRequestOpenSettings: (() -> Void)? = nil,
         leadingHeaderItem: AnyView? = nil,
-        agentLeadingToolbarItem: AnyView? = nil
+        agentLeadingToolbarItem: AnyView? = nil,
+        onRunScript: ((ScriptRunRequest) async -> ScriptRunResult?)? = nil,
+        activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
+        onStopActiveScript: (() -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -110,7 +148,10 @@ public struct ScriptsRootView: View {
             onRequestAgentUpgrade: onRequestAgentUpgrade,
             onRequestOpenSettings: onRequestOpenSettings,
             leadingHeaderItem: leadingHeaderItem,
-            agentLeadingToolbarItem: agentLeadingToolbarItem
+            agentLeadingToolbarItem: agentLeadingToolbarItem,
+            onRunScript: onRunScript,
+            activePreviewManagerProvider: activePreviewManagerProvider,
+            onStopActiveScript: onStopActiveScript
         )
     }
 
@@ -260,16 +301,17 @@ public struct ScriptsRootView: View {
     private var mainView: some View {
         Group {
             if showingPreview {
+                let renderManager = activePreviewManager
                 ZStack {
-                    ScriptRenderView(tree: previewManager.scriptTree) { token, args in
-                        previewManager.invoke(token: token, arguments: args)
+                    ScriptRenderView(tree: renderManager.scriptTree) { token, args in
+                        renderManager.invoke(token: token, arguments: args)
                     }
-                    .opacity(previewManager.scriptTree == nil ? 0 : 1)
+                    .opacity(renderManager.scriptTree == nil ? 0 : 1)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
 
-                    if previewManager.scriptTree == nil {
+                    if renderManager.scriptTree == nil {
                         VStack {
-                            if previewManager.isRendering {
+                            if renderManager.isRendering {
                                 ProgressView("Rendering…")
                             } else {
                                 Text("Render a script to preview it here.")
@@ -427,6 +469,10 @@ public struct ScriptsRootView: View {
         return "EMWaver"
     }
 
+    private var activePreviewManager: ScriptPreviewManager {
+        activePreviewManagerProvider?() ?? previewManager
+    }
+
     private func loadScripts() {
         Task {
             await viewModel.loadScripts()
@@ -434,7 +480,7 @@ public struct ScriptsRootView: View {
     }
 
     private func previewScript(_ id: String) {
-        if shouldConfirmSwitchBeforePreview(id: id) {
+        if onRunScript == nil, shouldConfirmSwitchBeforePreview(id: id) {
             pendingScriptPreviewId = id
             showingSwitchScriptConfirmation = true
             return
@@ -464,7 +510,7 @@ public struct ScriptsRootView: View {
                 let script = viewModel.scriptDraft(for: id)
                 let name = viewModel.scriptName(for: id)
                 let modules = viewModel.moduleSources()
-                previewManager.render(script: script, name: name, moduleSources: modules)
+                startScriptRuntime(scriptId: id, script: script, name: name, moduleSources: modules)
                 previewLaunchedFromEditor = wasInEditor
                 showingPreview = true
                 showingEditor = false
@@ -473,6 +519,7 @@ public struct ScriptsRootView: View {
     }
 
     private func shouldConfirmSwitchBeforePreview(id: String) -> Bool {
+        guard onRunScript == nil else { return false }
         guard let runningName = previewManager.activeScriptName, !runningName.isEmpty else {
             return false
         }
@@ -484,6 +531,20 @@ public struct ScriptsRootView: View {
         let runningName = previewManager.activeScriptName ?? "current script"
         let targetName = pendingScriptPreviewId.map { viewModel.scriptName(for: $0) } ?? "selected script"
         return "\(runningName) is still running in the background. Stop it and run \(targetName)?"
+    }
+
+    private func startScriptRuntime(scriptId: String, script: String, name: String, moduleSources: [String: String]) {
+        guard let onRunScript else {
+            previewManager.render(script: script, name: name, moduleSources: moduleSources)
+            return
+        }
+
+        Task {
+            let request = ScriptRunRequest(scriptId: scriptId, name: name, source: script, moduleSources: moduleSources)
+            if let result = await onRunScript(request) {
+                hostStatusSink?(result.running, result.name)
+            }
+        }
     }
 
     private func openEditor(for id: String) {
@@ -587,7 +648,7 @@ public struct ScriptsRootView: View {
         previewLaunchedFromEditor = false
 
         #if os(macOS)
-        previewManager.hidePreview()
+        activePreviewManager.hidePreview()
         #else
         previewManager.exitPreview()
         #endif
@@ -812,8 +873,9 @@ public struct ScriptsRootView: View {
 
     private func macAgentToolContext() -> String {
         let selected = currentScriptId ?? viewModel.selectedScriptId ?? ""
-        let running = previewManager.activeScriptName ?? ""
-        let hasTree = previewManager.scriptTree != nil
+        let manager = activePreviewManager
+        let running = manager.activeScriptName ?? ""
+        let hasTree = manager.scriptTree != nil
         let deviceState = device == nil ? "not attached" : "attached"
         return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); hasUISnapshot=\(hasTree)"
     }
@@ -832,7 +894,11 @@ public struct ScriptsRootView: View {
             case "preview_script", "run_script":
                 return try await agentToolPreviewScript(scriptId: arguments["scriptId"]?.stringValue, toolName: name)
             case "stop_script":
-                previewManager.exitPreview()
+                if let onStopActiveScript {
+                    onStopActiveScript()
+                } else {
+                    previewManager.exitPreview()
+                }
                 hostStatusSink?(false, nil)
                 return AgentToolResult(id: nil, name: name, ok: true, result: .object(["stopped": .bool(true)]))
             case "get_device_status":
@@ -953,7 +1019,7 @@ public struct ScriptsRootView: View {
         guard !script.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MacAgentToolError.scriptNotFound(id)
         }
-        previewManager.render(script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
+        startScriptRuntime(scriptId: id, script: script, name: viewModel.scriptName(for: id), moduleSources: viewModel.moduleSources())
         showingPreview = true
         showingEditor = false
         hostStatusSink?(true, viewModel.scriptName(for: id))
@@ -965,18 +1031,19 @@ public struct ScriptsRootView: View {
     }
 
     private func agentToolDeviceStatus() -> AgentToolResult {
-        AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
+        let manager = activePreviewManager
+        return AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
             "connected": .bool(device != nil),
             "runtimeOwner": .string("macos-native-app"),
-            "activeScriptName": .string(previewManager.activeScriptName ?? ""),
-            "activeScriptInstanceId": .string(previewManager.activeScriptInstanceId ?? ""),
-            "isRendering": .bool(previewManager.isRendering),
-            "lastScriptError": .string(previewManager.scriptError ?? "")
+            "activeScriptName": .string(manager.activeScriptName ?? ""),
+            "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
+            "isRendering": .bool(manager.isRendering),
+            "lastScriptError": .string(manager.scriptError ?? "")
         ]))
     }
 
     private func agentToolUISnapshot() -> AgentToolResult {
-        guard let tree = previewManager.scriptTree else {
+        guard let tree = activePreviewManager.scriptTree else {
             return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object(["available": .bool(false)]))
         }
         return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object([
@@ -995,7 +1062,7 @@ public struct ScriptsRootView: View {
         } else {
             args = []
         }
-        previewManager.invoke(token: token, arguments: args)
+        activePreviewManager.invoke(token: token, arguments: args)
         return AgentToolResult(id: nil, name: "send_ui_event", ok: true, result: .object([
             "token": .string(token),
             "dispatched": .bool(true)
@@ -1146,7 +1213,8 @@ public struct ScriptsRootView: View {
             }
         } else {
             // If a script is running but we're on the main menu, expose a quick way to return to it.
-            if let runningName = previewManager.activeScriptName, !runningName.isEmpty {
+            let toolbarPreviewManager = activePreviewManager
+            if let runningName = toolbarPreviewManager.activeScriptName, !runningName.isEmpty {
                 ToolbarItem(placement: .navigation) {
                     Button {
                         showingPreview = true
@@ -1162,8 +1230,11 @@ public struct ScriptsRootView: View {
 
                 ToolbarItem(placement: .primaryAction) {
                     Button(role: .destructive) {
-                        // Best-effort stop: clears preview state. (Engine timers may still exist.)
-                        previewManager.exitPreview()
+                        if let onStopActiveScript {
+                            onStopActiveScript()
+                        } else {
+                            previewManager.exitPreview()
+                        }
                     } label: {
                         Image(systemName: "stop.fill")
                     }

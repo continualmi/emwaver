@@ -80,6 +80,8 @@ Representative files:
 - `SignalViewerView.swift`
 - `AgentChat*` files
 
+`ScriptsRootView` supports an optional host-provided script run hook. macOS uses this to create local script sessions outside the shared single-preview manager while iOS keeps the default single-preview behavior.
+
 Agent configuration direction:
 - the Apple shared Agent UI uses a host-provided Agent endpoint plus user-provided API key,
 - app clients call the MGPT stateful Responses API for Agent chat,

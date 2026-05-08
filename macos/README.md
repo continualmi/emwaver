@@ -85,6 +85,12 @@ Representative views:
 - `SettingsView.swift`
 - firmware/device connection sheets.
 
+Script sessions:
+- macOS owns local multi-session script runs through a native session manager.
+- The toolbar exposes the selected local device and current local session count before Run.
+- Running a script from the shared scripts UI creates a new local session instead of replacing the current one.
+- Each local session owns its own `ScriptPreviewManager` and targets the selected local device id through the existing macOS transport bridge.
+
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
 - the macOS Agent interface/runtime calls the MGPT responses endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,

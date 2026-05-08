@@ -18,6 +18,7 @@ struct ContentView: View {
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
     @ObservedObject var remoteControlHost: RemoteControlHostService
+    @ObservedObject var scriptSessions: MacScriptSessionManager
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
     @Environment(\.openURL) private var openURL
@@ -25,6 +26,7 @@ struct ContentView: View {
     let previewManager: ScriptPreviewManager
 
     @State private var showingSettings: Bool = false
+    @State private var showingLocalSessions: Bool = false
 
     @State private var autoFirmwarePromptKey: String? = nil
 
@@ -111,6 +113,22 @@ struct ContentView: View {
         return "\(currentBoardType)-\(suffix)"
     }
 
+    private var selectedLocalDevice: LocalDeviceDescriptor? {
+        guard let id = scriptSessions.selectedDeviceID else { return nil }
+        return device.discoveredDevices.first(where: { $0.id == id })
+    }
+
+    private var selectedLocalDeviceLabel: String {
+        guard let selectedLocalDevice else {
+            return device.isConnected ? currentBoardDisplayName : "No Device"
+        }
+        let board = boardDisplayName(selectedLocalDevice.boardType)
+        if let module = selectedLocalDevice.moduleLabel, !module.isEmpty {
+            return "\(board) / \(module)"
+        }
+        return selectedLocalDevice.displayName.isEmpty ? board : "\(board) / \(selectedLocalDevice.displayName)"
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
@@ -132,7 +150,16 @@ struct ContentView: View {
                         showingSettings = true
                     },
                     leadingHeaderItem: AnyView(deviceHeaderItem),
-                    agentLeadingToolbarItem: AnyView(agentKeyToolbarItem)
+                    agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
+                    onRunScript: { request in
+                        scriptSessions.run(request)
+                    },
+                    activePreviewManagerProvider: {
+                        scriptSessions.activePreviewManager
+                    },
+                    onStopActiveScript: {
+                        scriptSessions.stopSelectedSession()
+                    }
                 )
                 .id(scriptDeviceAttachmentKey)
 
@@ -226,12 +253,35 @@ struct ContentView: View {
                     .background(.thinMaterial)
                     .transition(.opacity)
                 }
+
+                if showingLocalSessions {
+                    localSessionsOverlay
+                        .transition(.opacity)
+                }
             }
             .overlay(alignment: .top) {
                 Divider()
             }
         }
         .toolbar {
+            ToolbarItemGroup(placement: .automatic) {
+                localDevicePicker
+
+                Button {
+                } label: {
+                    Label("Run in New Session", systemImage: "plus.rectangle.on.rectangle")
+                }
+                .disabled(true)
+                .help("Press Run in a script or editor to start a new local session on the selected device.")
+
+                Button {
+                    showingLocalSessions = true
+                } label: {
+                    Label("Sessions: \(scriptSessions.sessionCount)", systemImage: "square.stack.3d.up")
+                }
+                .help("Show local script sessions")
+            }
+
             ToolbarItem(placement: .automatic) {
                 if remoteControlHost.isRemoteControlled || !remoteControlHost.remoteScriptSessions.isEmpty {
                     Button {
@@ -269,6 +319,7 @@ struct ContentView: View {
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
+            scriptSessions.attach(device: device)
             await auth.waitForInitialRestore()
             firmwareUpdater.refreshDfuPresence()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
@@ -277,6 +328,9 @@ struct ContentView: View {
         }
         .onChange(of: device.connectedBoardType) {
             triggerAutomaticFirmwarePromptIfNeeded()
+        }
+        .onChange(of: device.discoveredDevices) { _, devices in
+            scriptSessions.updateDevices(devices)
         }
         .onChange(of: device.isConnected) { _, connected in
             if !connected && !firmwareUpdater.dfuConnected {
@@ -329,6 +383,137 @@ struct ContentView: View {
     }
 
     @ViewBuilder
+    private var localDevicePicker: some View {
+        Menu {
+            if device.discoveredDevices.isEmpty {
+                Text("No local devices")
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(device.discoveredDevices) { item in
+                    Button {
+                        scriptSessions.selectedDeviceID = item.id
+                        if item.connectionState != .connected {
+                            device.connectDevice(id: item.id)
+                        }
+                    } label: {
+                        if item.id == scriptSessions.selectedDeviceID {
+                            Label(localDeviceLabel(item), systemImage: "checkmark")
+                        } else {
+                            Text(localDeviceLabel(item))
+                        }
+                    }
+                }
+            }
+
+            Divider()
+
+            Button("Open Device Options...") {
+                appRouter.isDeviceSheetPresented = true
+            }
+        } label: {
+            Label("Device: \(selectedLocalDeviceLabel)", systemImage: "cable.connector")
+                .labelStyle(.titleAndIcon)
+        }
+        .help("Select the local device used by the next script session")
+    }
+
+    private var localSessionsOverlay: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Label("Local Sessions", systemImage: "square.stack.3d.up")
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Done") {
+                    showingLocalSessions = false
+                }
+                .keyboardShortcut(.escape, modifiers: [])
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(.ultraThinMaterial)
+
+            Divider()
+
+            HStack(spacing: 0) {
+                List(selection: Binding(
+                    get: { scriptSessions.selectedSessionID },
+                    set: { id in if let id { scriptSessions.selectSession(id) } }
+                )) {
+                    ForEach(scriptSessions.sessions) { session in
+                        HStack(alignment: .top, spacing: 8) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(session.scriptName)
+                                    .font(.subheadline.weight(.semibold))
+                                    .lineLimit(1)
+                                Text(session.deviceLabel)
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                                Text(session.stateText)
+                                    .font(.caption2)
+                                    .foregroundStyle(session.stateText == "running" ? .green : .secondary)
+                            }
+                            Spacer(minLength: 4)
+                            Button {
+                                scriptSessions.stopSession(session.id)
+                            } label: {
+                                Image(systemName: "stop.fill")
+                            }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.red)
+                            .help("Stop this session")
+                        }
+                        .tag(session.id)
+                    }
+                }
+                .frame(width: 300)
+
+                Divider()
+
+                if let manager = scriptSessions.activePreviewManager, let tree = manager.scriptTree {
+                    ScriptRenderView(tree: tree) { token, args in
+                        manager.invoke(token: token, arguments: args)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .background(Color.black.opacity(0.12))
+                } else {
+                    VStack(spacing: 10) {
+                        Image(systemName: "square.stack.3d.up.slash")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("No local session selected")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(.thinMaterial)
+    }
+
+    private func localDeviceLabel(_ item: LocalDeviceDescriptor) -> String {
+        let board = boardDisplayName(item.boardType)
+        if let module = item.moduleLabel, !module.isEmpty {
+            return "\(board) / \(module)"
+        }
+        return item.displayName.isEmpty ? board : "\(board) / \(item.displayName)"
+    }
+
+    private func boardDisplayName(_ boardType: String?) -> String {
+        switch (boardType ?? "").lowercased() {
+        case "esp32s3":
+            return "ESP32-S3"
+        case "stm32f042":
+            return "STM32F042"
+        default:
+            return boardType?.isEmpty == false ? boardType! : "Device"
+        }
+    }
+
+    @ViewBuilder
     private var agentKeyToolbarItem: some View {
         if auth.isSignedIn {
             Menu {
@@ -373,6 +558,7 @@ struct ContentView: View {
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
         remoteControlHost: RemoteControlHostService(),
+        scriptSessions: MacScriptSessionManager(),
         previewManager: ScriptPreviewManager()
     )
     .environmentObject(AuthenticationManager())
