@@ -73,6 +73,7 @@ static void wifi_status_command(void);
 static bool load_config(wifi_transport_config_t *out);
 static esp_err_t save_config(const wifi_transport_config_t *config);
 static void default_hostname(char *out, size_t out_len);
+static bool is_valid_hostname(const char *hostname);
 static void start_station(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 static void wifi_reconnect_task(void *arg);
@@ -134,6 +135,9 @@ esp_err_t wifi_transport_provision(const char *ssid, const char *password, const
     strlcpy(config.password, password ? password : "", sizeof(config.password));
     strlcpy(config.secret, secret ? secret : "", sizeof(config.secret));
     if (hostname && hostname[0] != '\0') {
+        if (!is_valid_hostname(hostname)) {
+            return ESP_ERR_INVALID_ARG;
+        }
         strlcpy(config.hostname, hostname, sizeof(config.hostname));
     } else {
         default_hostname(config.hostname, sizeof(config.hostname));
@@ -266,7 +270,7 @@ static bool load_config(wifi_transport_config_t *out)
         err = nvs_get_str(nvs, WIFI_KEY_SECRET, out->secret, &secret_len);
     }
     nvs_close(nvs);
-    if (out->hostname[0] == '\0') {
+    if (out->hostname[0] == '\0' || !is_valid_hostname(out->hostname)) {
         default_hostname(out->hostname, sizeof(out->hostname));
     }
     return err == ESP_OK && out->ssid[0] != '\0' && out->secret[0] != '\0';
@@ -296,6 +300,29 @@ static void default_hostname(char *out, size_t out_len)
     } else {
         strlcpy(out, "emwaver-esp32", out_len);
     }
+}
+
+static bool is_valid_hostname(const char *hostname)
+{
+    if (!hostname || hostname[0] == '\0') {
+        return false;
+    }
+
+    const size_t len = strlen(hostname);
+    if (len > WIFI_MAX_HOST || hostname[0] == '-' || hostname[len - 1u] == '-') {
+        return false;
+    }
+
+    for (size_t i = 0; i < len; ++i) {
+        const char c = hostname[i];
+        const bool is_digit = c >= '0' && c <= '9';
+        const bool is_lower = c >= 'a' && c <= 'z';
+        const bool is_upper = c >= 'A' && c <= 'Z';
+        if (!is_digit && !is_lower && !is_upper && c != '-') {
+            return false;
+        }
+    }
+    return true;
 }
 
 static void start_station(void)
