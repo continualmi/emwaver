@@ -874,7 +874,8 @@ final class USBManager: NSObject, ObservableObject {
         dbg("connect: chosen=\(chosen.name)")
 
         disconnectInternal()
-        centralManager?.stopScan()
+        bleScanSession?.stop()
+        bleScanSession = nil
 
         let connection = USBMidiTransport.Connection(candidate: chosen)
         usbMidiConnection = connection
