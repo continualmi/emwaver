@@ -39,6 +39,8 @@
 #define WIFI_CONTROL_PORT 3922
 #define WIFI_WS_PATH "/v1/ws"
 #define WIFI_FIRMWARE_VERSION "1.0.0"
+#define WIFI_RECONNECT_BASE_MS 1000u
+#define WIFI_RECONNECT_MAX_MS 30000u
 #define EMW_SYSEX_BYTES 48u
 #define EMW_ENCODED_BYTES 42u
 #define EMW_LANE_SIZE 18u
@@ -59,6 +61,8 @@ static char s_auth_challenge[33];
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
+static uint8_t s_reconnect_attempt;
+static bool s_reconnect_pending;
 
 static void wifi_register_commands(void);
 static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
@@ -69,6 +73,7 @@ static esp_err_t save_config(const wifi_transport_config_t *config);
 static void default_hostname(char *out, size_t out_len);
 static void start_station(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
+static void wifi_reconnect_task(void *arg);
 static void start_server(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
@@ -309,11 +314,35 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         (void)esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_authenticated = false;
-        ESP_LOGW(TAG, "Wi-Fi disconnected; reconnecting");
-        (void)esp_wifi_connect();
+        if (!s_reconnect_pending) {
+            s_reconnect_pending = true;
+            (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
+        }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        s_reconnect_attempt = 0;
+        s_reconnect_pending = false;
         start_server();
     }
+}
+
+static void wifi_reconnect_task(void *arg)
+{
+    (void)arg;
+    uint32_t delay_ms = WIFI_RECONNECT_BASE_MS;
+    for (uint8_t i = 0; i < s_reconnect_attempt && delay_ms < WIFI_RECONNECT_MAX_MS; ++i) {
+        delay_ms *= 2u;
+        if (delay_ms > WIFI_RECONNECT_MAX_MS) {
+            delay_ms = WIFI_RECONNECT_MAX_MS;
+        }
+    }
+    if (s_reconnect_attempt < 8u) {
+        s_reconnect_attempt++;
+    }
+    ESP_LOGW(TAG, "Wi-Fi disconnected; reconnecting in %u ms", (unsigned)delay_ms);
+    vTaskDelay(pdMS_TO_TICKS(delay_ms));
+    s_reconnect_pending = false;
+    (void)esp_wifi_connect();
+    vTaskDelete(NULL);
 }
 
 static void start_server(void)
