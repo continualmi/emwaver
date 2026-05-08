@@ -41,6 +41,14 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         this.targetDeviceId = targetService != null ? targetService.currentScriptDeviceId() : null;
     }
 
+    ScriptDeviceConnection(DeviceConnectionService targetService, String targetLabel) {
+        this.connectionManager = null;
+        this.targetService = targetService;
+        this.targetConnectionType = targetService != null ? targetService.getConnectionType() : DeviceConnectionService.ConnectionType.NONE;
+        this.targetLabel = targetLabel;
+        this.targetDeviceId = targetService != null ? targetService.currentScriptDeviceId() : null;
+    }
+
     public static ScriptDeviceConnection captureActive(Context context, String targetLabel) {
         DeviceConnectionManager manager = DeviceConnectionManager.getInstance(context);
         DeviceConnectionService service = manager != null ? manager.getActiveService() : null;
