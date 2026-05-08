@@ -15,7 +15,7 @@ internal static class WindowsUsbMidiTransport
 {
     internal static readonly string[] ContainerProperties = ["System.Devices.ContainerId"];
 
-    internal sealed class Connection : IDisposable
+    internal sealed class Connection : ITransportDeviceConnection, IDisposable
     {
         private readonly TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? _receivedHandler;
 
@@ -23,7 +23,8 @@ internal static class WindowsUsbMidiTransport
             DevicePort port,
             MidiInPort? inPort,
             IMidiOutPort? outPort,
-            TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null)
+            TypedEventHandler<MidiInPort, MidiMessageReceivedEventArgs>? receivedHandler = null,
+            ITransportDeviceSession? session = null)
         {
             Port = port;
             InPort = inPort;
@@ -31,6 +32,7 @@ internal static class WindowsUsbMidiTransport
             _receivedHandler = receivedHandler;
             SessionId = WindowsUsbMidiTransport.SessionId(port);
             DisplayName = string.IsNullOrWhiteSpace(port.DisplayName) ? "USB MIDI" : port.DisplayName;
+            Session = session ?? new DeviceBufferSession(SessionId);
 
             if (InPort != null && _receivedHandler != null)
             {
@@ -41,8 +43,9 @@ internal static class WindowsUsbMidiTransport
         internal DevicePort Port { get; }
         internal MidiInPort? InPort { get; }
         internal IMidiOutPort? OutPort { get; }
-        internal string SessionId { get; }
-        internal string DisplayName { get; }
+        public string SessionId { get; }
+        public string DisplayName { get; }
+        public ITransportDeviceSession Session { get; }
         internal bool IsOpen => InPort != null && OutPort != null;
 
         internal string InferBoardType() => WindowsUsbMidiTransport.InferBoardType(DisplayName);

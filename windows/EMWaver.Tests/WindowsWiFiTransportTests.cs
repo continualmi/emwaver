@@ -21,13 +21,22 @@ public sealed class WindowsWiFiTransportTests
         var first = new WindowsWiFiTransport.Connection(" 192.168.4.2 ");
         var second = new WindowsWiFiTransport.Connection(" 192.168.4.3 ");
 
-        first.Session.AppendTxBytes([0x01], 1);
-
         Assert.Equal("192.168.4.2", first.HostOrDeviceId);
-        Assert.Equal("wifi:192.168.4.2", first.SessionId);
-        Assert.Equal("Wi-Fi: 192.168.4.2", first.DisplayName);
-        Assert.Equal("wifi:192.168.4.2", first.Session.DeviceId);
-        Assert.Equal(1UL, first.Session.GetTxPacketCount());
-        Assert.Equal(0UL, second.Session.GetTxPacketCount());
+        AssertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2", "Wi-Fi: 192.168.4.2", second);
+    }
+
+    private static void AssertConnectionOwnsIsolatedSession(
+        ITransportDeviceConnection connection,
+        string expectedSessionId,
+        string expectedDisplayName,
+        ITransportDeviceConnection isolatedFrom)
+    {
+        connection.Session.AppendTxBytes([0x01], 1);
+
+        Assert.Equal(expectedSessionId, connection.SessionId);
+        Assert.Equal(expectedDisplayName, connection.DisplayName);
+        Assert.Equal(expectedSessionId, connection.Session.DeviceId);
+        Assert.Equal(1UL, connection.Session.GetTxPacketCount());
+        Assert.Equal(0UL, isolatedFrom.Session.GetTxPacketCount());
     }
 }

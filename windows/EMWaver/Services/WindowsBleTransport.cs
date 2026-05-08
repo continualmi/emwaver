@@ -47,7 +47,7 @@ internal static class WindowsBleTransport
         }
     }
 
-    internal sealed class Connection : IDisposable
+    internal sealed class Connection : ITransportDeviceConnection, IDisposable
     {
         private readonly TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? _notifyHandler;
 
@@ -57,7 +57,8 @@ internal static class WindowsBleTransport
             BluetoothLEDevice device,
             GattCharacteristic commandCharacteristic,
             GattCharacteristic? notifyCharacteristic,
-            TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? notifyHandler)
+            TypedEventHandler<GattCharacteristic, GattValueChangedEventArgs>? notifyHandler,
+            ITransportDeviceSession? session = null)
         {
             BluetoothAddress = bluetoothAddress;
             DisplayName = string.IsNullOrWhiteSpace(displayName) ? "EMWaver BLE" : displayName;
@@ -66,6 +67,7 @@ internal static class WindowsBleTransport
             NotifyCharacteristic = notifyCharacteristic;
             _notifyHandler = notifyHandler;
             SessionId = WindowsBleTransport.SessionId(bluetoothAddress);
+            Session = session ?? new DeviceBufferSession(SessionId);
 
             if (NotifyCharacteristic != null && _notifyHandler != null)
             {
@@ -74,11 +76,12 @@ internal static class WindowsBleTransport
         }
 
         internal ulong BluetoothAddress { get; }
-        internal string DisplayName { get; }
+        public string DisplayName { get; }
         internal BluetoothLEDevice Device { get; }
         internal GattCharacteristic CommandCharacteristic { get; }
         internal GattCharacteristic? NotifyCharacteristic { get; }
-        internal string SessionId { get; }
+        public string SessionId { get; }
+        public ITransportDeviceSession Session { get; }
         internal bool IsOpen => CommandCharacteristic != null;
 
         internal string? SendSuperframe(byte[] superframe36, Func<byte[], IBuffer> bufferFromBytes)

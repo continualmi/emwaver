@@ -22,3 +22,10 @@ internal interface ITransportDeviceSession
     void ClearResponseWait(TaskCompletionSource<byte[]?> tcs);
     void CancelResponseWait();
 }
+
+internal interface ITransportDeviceConnection
+{
+    string SessionId { get; }
+    string DisplayName { get; }
+    ITransportDeviceSession Session { get; }
+}

@@ -4,7 +4,7 @@ internal static class WindowsWiFiTransport
 {
     internal const string TransportName = "Wi-Fi";
 
-    internal sealed class Connection
+    internal sealed class Connection : ITransportDeviceConnection
     {
         internal Connection(string? hostOrDeviceId, ITransportDeviceSession? session = null)
         {
@@ -15,9 +15,9 @@ internal static class WindowsWiFiTransport
         }
 
         internal string HostOrDeviceId { get; }
-        internal string SessionId { get; }
-        internal string DisplayName { get; }
-        internal ITransportDeviceSession Session { get; }
+        public string SessionId { get; }
+        public string DisplayName { get; }
+        public ITransportDeviceSession Session { get; }
     }
 
     internal static string SessionId(string hostOrDeviceId)

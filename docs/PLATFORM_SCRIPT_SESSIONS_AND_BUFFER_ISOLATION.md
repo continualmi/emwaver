@@ -231,6 +231,7 @@ Remaining isolation work:
 - [x] Windows keeps active transport and active script session identity synchronized through one active target descriptor.
 - [x] Windows has focused active-target normalization/matching tests in the local test project.
 - [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
+- [x] Windows USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `ITransportDeviceConnection` contract that exposes session identity, display name, and a transport-owned `ITransportDeviceSession`.
 - [x] Windows USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE scan watcher state is grouped behind a transport-owned scan session.
