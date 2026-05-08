@@ -2,7 +2,10 @@
 // Desktop scripts are sync-only; long operations are chunked via setTimeout.
 
 function normalizeBoardType(value) {
-  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
 }
 
 function detectBoardType() {
@@ -55,30 +58,35 @@ var boardType = detectedBoardType;
 var LEGACY_CC1101_CS =
   typeof CC1101_CS !== "undefined" && isNumericPinValue(CC1101_CS) ? CC1101_CS : undefined;
 var BOARD_TYPE_OPTIONS = [
+  { label: "ESP32-S2", value: "esp32s2" },
   { label: "ESP32-S3", value: "esp32s3" },
   { label: "STM32F042", value: "stm32f042" },
 ];
 
+function isEspBoard(type) {
+  return type === "esp32s2" || type === "esp32s3";
+}
+
 function defaultCc1101CsPinForBoard(type) {
-  return typeof LEGACY_CC1101_CS !== "undefined" && type !== "esp32s3"
+  return typeof LEGACY_CC1101_CS !== "undefined" && !isEspBoard(type)
     ? LEGACY_CC1101_CS
-    : type === "esp32s3"
+    : isEspBoard(type)
       ? 10
       : 4;
 }
 
 function defaultGdo0PinForBoard(type) {
-  return type === "esp32s3" ? 2 : GDO0;
+  return isEspBoard(type) ? 2 : GDO0;
 }
 
 function spiSummaryForBoard(type) {
-  return type === "esp32s3"
-    ? "Board mode: ESP32-S3. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."
+  return isEspBoard(type)
+    ? "Board mode: ESP32. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."
     : "Board mode: STM32F042. Default CC1101 wiring: CS=A4, MOSI=A7, MISO=A6, SCK=A5, GDO0=A2.";
 }
 
 function pinOptionsForBoard(type) {
-  return type === "esp32s3" ? buildEspPins() : buildStmPins();
+  return isEspBoard(type) ? buildEspPins() : buildStmPins();
 }
 
 var DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
@@ -1104,7 +1112,11 @@ function render() {
                     UI.text({
                       text:
                         "Detected board: " +
-                        (detectedBoardType === "esp32s3" ? "ESP32-S3" : "STM32F042") +
+                        (detectedBoardType === "esp32s2"
+                          ? "ESP32-S2"
+                          : detectedBoardType === "esp32s3"
+                            ? "ESP32-S3"
+                            : "STM32F042") +
                         ". " +
                         spiSummaryForBoard(boardType),
                       font: "caption",

@@ -1,6 +1,9 @@
 // Simple UART test script for STM32F042 (USART1 on B6/B7)
 function normalizeBoardType(value) {
-  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
 }
 
 function detectBoardType() {
@@ -22,7 +25,7 @@ let statusText = "";
 let logLines = [];
 
 function ensureSupported() {
-  if (boardType === "esp32s3") {
+  if (boardType === "esp32s2" || boardType === "esp32s3") {
     statusText = "UART script support is currently wired for STM32F042 only.";
     render();
     return false;
@@ -159,11 +162,13 @@ function render() {
           text:
             (boardType === "stm32f042"
               ? "Detected MCU: STM32F042. "
-              : "Detected MCU: ESP32-S3. ") +
+              : boardType === "esp32s2"
+                ? "Detected MCU: ESP32-S2. "
+                : "Detected MCU: ESP32-S3. ") +
             (
             boardType === "stm32f042"
               ? "Note: B6/B7 are shared with I2C1; using UART will switch the pins to USART1."
-              : "ESP32-S3 UART pin routing is not exposed through this script yet."),
+              : "ESP32 UART pin routing is not exposed through this script yet."),
         }),
 
         UI.row({
