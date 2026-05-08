@@ -232,11 +232,11 @@ final class MacWiFiManager {
                 self.onError("Pair this Wi-Fi device locally before connecting")
                 return
             }
-            if let protocolVersion = record.protocolVersion, protocolVersion != "1" {
+            guard record.protocolVersion == "1" else {
                 self.onError("Firmware does not support this Wi-Fi transport protocol")
                 return
             }
-            if !record.capabilities.isEmpty && !record.capabilities.contains("wifi") {
+            guard record.capabilities.contains("wifi") else {
                 self.onError("Firmware does not advertise Wi-Fi transport support")
                 return
             }
