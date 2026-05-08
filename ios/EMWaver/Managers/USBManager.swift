@@ -817,14 +817,8 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
-    private struct PortCandidate {
-        let name: String
-        let source: MIDIEndpointRef
-        let destination: MIDIEndpointRef
-    }
-
     private func refreshPortsInternal() {
-        let candidates = listPortCandidatesInternal()
+        let candidates = USBMidiTransport.listPortCandidates()
         let ports = candidates.map { $0.name }
         dbg("refreshPorts: candidates=\(ports)")
         DispatchQueue.main.async {
@@ -834,10 +828,8 @@ final class USBManager: NSObject, ObservableObject {
 
     @discardableResult
     private func connectToFirstPortInternal() -> Bool {
-        let candidates = listPortCandidatesInternal()
-        let chosen = candidates.first(where: { $0.name.localizedCaseInsensitiveContains("emwaver") })
-            ?? candidates.first(where: { !$0.name.localizedCaseInsensitiveContains("network") })
-            ?? candidates.first
+        let candidates = USBMidiTransport.listPortCandidates()
+        let chosen = USBMidiTransport.choosePreferred(candidates)
         guard let chosen else {
             dbg("connect: no port candidates")
             return false
@@ -849,7 +841,7 @@ final class USBManager: NSObject, ObservableObject {
 
         connectedSource = chosen.source
         connectedDestination = chosen.destination
-        setActiveBufferSession(deviceId: "usbmidi:\(chosen.source):\(chosen.destination):\(chosen.name)")
+        setActiveBufferSession(deviceId: USBMidiTransport.sessionKey(for: chosen))
 
         let st = MIDIPortConnectSource(inPort, chosen.source, nil)
         guard st == noErr else {
@@ -887,81 +879,6 @@ final class USBManager: NSObject, ObservableObject {
             self.isConnected = false
             self.connectedPortName = nil
         }
-    }
-
-    private func listPortCandidatesInternal() -> [PortCandidate] {
-        let sources = allSources()
-        let dests = allDestinations()
-
-        var out: [PortCandidate] = []
-        for d in dests {
-            let dEntity = entityName(for: d.endpoint)
-            if let s = sources.first(where: { entityName(for: $0.endpoint) == dEntity }) {
-                out.append(PortCandidate(name: dEntity ?? d.name, source: s.endpoint, destination: d.endpoint))
-            }
-        }
-
-        if out.isEmpty {
-            let common = Set(sources.map { $0.name }).intersection(Set(dests.map { $0.name }))
-            for name in common.sorted() {
-                if let s = sources.first(where: { $0.name == name }), let d = dests.first(where: { $0.name == name }) {
-                    out.append(PortCandidate(name: name, source: s.endpoint, destination: d.endpoint))
-                }
-            }
-        }
-
-        return out
-    }
-
-    private func allSources() -> [(name: String, endpoint: MIDIEndpointRef)] {
-        var out: [(String, MIDIEndpointRef)] = []
-        let n = MIDIGetNumberOfSources()
-        out.reserveCapacity(Int(n))
-        for i in 0..<n {
-            let ep = MIDIGetSource(i)
-            if ep != 0, !isOffline(MIDIObjectRef(ep)) { out.append((endpointDisplayName(ep), ep)) }
-        }
-        return out
-    }
-
-    private func allDestinations() -> [(name: String, endpoint: MIDIEndpointRef)] {
-        var out: [(String, MIDIEndpointRef)] = []
-        let n = MIDIGetNumberOfDestinations()
-        out.reserveCapacity(Int(n))
-        for i in 0..<n {
-            let ep = MIDIGetDestination(i)
-            if ep != 0, !isOffline(MIDIObjectRef(ep)) { out.append((endpointDisplayName(ep), ep)) }
-        }
-        return out
-    }
-
-    private func endpointDisplayName(_ ep: MIDIEndpointRef) -> String {
-        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyDisplayName) {
-            return s.replacingOccurrences(of: "USB MIDI", with: "USB")
-        }
-        if let s = getStringProperty(MIDIObjectRef(ep), kMIDIPropertyName) {
-            return s.replacingOccurrences(of: "USB MIDI", with: "USB")
-        }
-        return "USB \(ep)"
-    }
-
-    private func entityName(for ep: MIDIEndpointRef) -> String? {
-        var entity: MIDIEntityRef = 0
-        guard MIDIEndpointGetEntity(ep, &entity) == noErr, entity != 0 else { return nil }
-        return getStringProperty(MIDIObjectRef(entity), kMIDIPropertyName)
-    }
-
-    private func getStringProperty(_ obj: MIDIObjectRef, _ key: CFString) -> String? {
-        var unmanaged: Unmanaged<CFString>?
-        let st = MIDIObjectGetStringProperty(obj, key, &unmanaged)
-        guard st == noErr, let unmanaged else { return nil }
-        return unmanaged.takeRetainedValue() as String
-    }
-
-    private func isOffline(_ obj: MIDIObjectRef) -> Bool {
-        var value: Int32 = 0
-        let st = MIDIObjectGetIntegerProperty(obj, kMIDIPropertyOffline, &value)
-        return st == noErr && value != 0
     }
 
     private func sendSysex(_ sysex: Data, to destination: MIDIEndpointRef) -> OSStatus {

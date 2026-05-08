@@ -101,6 +101,7 @@ Current first step:
 - iOS captures the active transport session key when a local script starts and routes script buffer/command APIs through that keyed session.
 - iOS USB MIDI/BLE buffering now depends on a `TransportDeviceSession` protocol, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 - iOS BLE transport constants, advertisement matching, display names, and device-session identity helpers now live in `BLETransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
+- iOS USB MIDI endpoint pairing, target selection, display names, and session identity helpers now live in `USBMidiTransport`, so the current iOS manager has separate USB MIDI and BLE transport helper files.
 
 Remaining isolation work:
 
