@@ -544,7 +544,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
 {
     const int current_fd = httpd_req_to_sockfd(req);
     if (req->method == HTTP_GET) {
-        if (s_authenticated && s_active_fd >= 0 && s_active_fd != current_fd) {
+        if (s_active_fd >= 0 && s_active_fd != current_fd) {
             httpd_ws_frame_t reply = {
                 .final = true,
                 .fragmented = false,
@@ -586,7 +586,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return err;
     }
 
-    if (s_authenticated && s_active_fd >= 0 && s_active_fd != current_fd) {
+    if (s_active_fd >= 0 && s_active_fd != current_fd) {
         httpd_ws_frame_t reply = {
             .final = true,
             .fragmented = false,

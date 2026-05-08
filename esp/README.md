@@ -147,7 +147,7 @@ Current reintegration status:
 - The auth message must identify itself as `type=auth`, and firmware checks the HMAC response with a constant-time comparison before accepting a Wi-Fi command session.
 - A Wi-Fi WebSocket client must complete challenge/auth within the firmware auth timeout; otherwise the pending unauthenticated socket is closed so it cannot reserve the active session slot indefinitely.
 - A rejected Wi-Fi auth response immediately clears the active socket owner and challenge state before the server drops the WebSocket request.
-- The Wi-Fi WebSocket server keeps a single active authenticated socket and rejects another concurrent client as busy instead of letting a second app silently replace the active command owner. When the active WebSocket closes, firmware clears the owner state so the next local client can connect.
+- The Wi-Fi WebSocket server keeps a single active socket from challenge through authenticated control and rejects another concurrent client as busy instead of letting a second app silently replace the active command owner. When the active WebSocket closes, firmware clears the owner state so the next local client can connect.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
 - macOS now auto-connects to ESP32-S3 over USB MIDI first when present, then scans for the EMWaver BLE service and uses BLE for local scripts when no wired runtime is connected.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
