@@ -74,6 +74,10 @@ Remaining isolation work:
 
 iOS already uses the shared SwiftUI scripts surface, so list-level session display now uses the same `ScriptsRootView.ScriptSessionStatus` hook as macOS. Because iOS still has one singleton transport buffer, the current native path keeps one active visible local session and replaces that runtime without a stop-and-run prompt. Multi-device concurrency stays gated on target-scoped buffer state.
 
+Current first step:
+
+- `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
+
 Remaining isolation work:
 
 - split `USBManager`'s single `NativeBufferRust` state into target-scoped sessions,
@@ -96,6 +100,7 @@ Remaining isolation work:
 - [x] Windows has an active transport buffer session object used by script sampler reads.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
+- [x] iOS has an active transport buffer session object used by script sampler reads.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

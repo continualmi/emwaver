@@ -109,6 +109,7 @@ final class USBManager: NSObject, ObservableObject {
     private let midiQueue = DispatchQueue(label: "com.emwaver.midi", qos: .userInitiated)
     private let bufferQueue = DispatchQueue(label: "com.emwaver.bufferQueue")
     private let bufferQueueKey = DispatchSpecificKey<Void>()
+    private let activeBufferSession = DeviceBufferSession()
 
     private var client: MIDIClientRef = 0
     private var inPort: MIDIPortRef = 0
@@ -297,7 +298,7 @@ final class USBManager: NSObject, ObservableObject {
 
         // Drop any stale RX packets so next_rx_packet returns this command's response.
         withBufferQueueSync {
-            NativeBufferRust.setRxCounter(NativeBufferRust.getRxPacketCount())
+            activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount())
         }
 
         // Send synchronously to avoid racing the RX wait-loop.
@@ -310,7 +311,7 @@ final class USBManager: NSObject, ObservableObject {
         while out.count < Self.packetSizeBytes {
             if activeTransport != .ble && connectedDestination == 0 { return nil }
 
-            let nextPacket = withBufferQueueSync { NativeBufferRust.nextRxPacket() }
+            let nextPacket = withBufferQueueSync { activeBufferSession.nextRxPacket() }
             if let pkt = nextPacket {
                 out.append(pkt.packet64)
                 break
@@ -336,7 +337,7 @@ final class USBManager: NSObject, ObservableObject {
             guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else { return }
 
             self.withBufferQueueSync {
-                NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
+                self.activeBufferSession.appendTxBytes(packet64, tsMs: Self.nowMs())
             }
             DispatchQueue.main.async { self.bufferVersion += 1 }
 
@@ -412,7 +413,7 @@ final class USBManager: NSObject, ObservableObject {
             
             // Log command lane transmission
             self.withBufferQueueSync {
-                NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
+                self.activeBufferSession.appendTxBytes(packet64, tsMs: Self.nowMs())
             }
             DispatchQueue.main.async { self.bufferVersion += 1 }
 
@@ -430,24 +431,24 @@ final class USBManager: NSObject, ObservableObject {
 
     func bufferReadPacketsSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
         withBufferQueueSync {
-            let rp = NativeBufferRust.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+            let rp = activeBufferSession.readRxSince(packetIndex: packetIndex, maxPackets: maxPackets)
             return ReadPackets(data: rp.data, ts_ms: rp.ts_ms, next_packet_index: rp.next_packet_index, available_packets: rp.available_packets)
         }
     }
 
     func bufferReadTxSince(packetIndex: UInt64, maxPackets: Int) -> ReadPackets {
         withBufferQueueSync {
-            let rp = NativeBufferRust.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets)
+            let rp = activeBufferSession.readTxSince(packetIndex: packetIndex, maxPackets: maxPackets)
             return ReadPackets(data: rp.data, ts_ms: rp.ts_ms, next_packet_index: rp.next_packet_index, available_packets: rp.available_packets)
         }
     }
 
     func bufferGetPacketCount() -> UInt64 {
-        withBufferQueueSync { NativeBufferRust.getRxPacketCount() }
+        withBufferQueueSync { activeBufferSession.getRxPacketCount() }
     }
 
     func bufferGetTxPacketCount() -> UInt64 {
-        withBufferQueueSync { NativeBufferRust.getTxPacketCount() }
+        withBufferQueueSync { activeBufferSession.getTxPacketCount() }
     }
 
     struct BufferPacket {
@@ -457,17 +458,17 @@ final class USBManager: NSObject, ObservableObject {
 
     func bufferNextRxPacket() -> BufferPacket? {
         withBufferQueueSync {
-            guard let pkt = NativeBufferRust.nextRxPacket() else { return nil }
+            guard let pkt = activeBufferSession.nextRxPacket() else { return nil }
             return BufferPacket(data: Array(pkt.packet64), ts_ms: pkt.tsMs)
         }
     }
 
     func bufferGetRxCounter() -> UInt64 {
-        withBufferQueueSync { NativeBufferRust.getRxCounter() }
+        withBufferQueueSync { activeBufferSession.getRxCounter() }
     }
 
     func bufferSetRxCounter(_ value: UInt64) {
-        withBufferQueueSync { NativeBufferRust.setRxCounter(value) }
+        withBufferQueueSync { activeBufferSession.setRxCounter(value) }
     }
 
     struct BufferMonitorEntry: Identifiable {
@@ -483,14 +484,14 @@ final class USBManager: NSObject, ObservableObject {
         return withBufferQueueSync {
             let maxPackets = min(limit, 1500)
 
-            let txCount = NativeBufferRust.getTxPacketCount()
-            let rxCount = NativeBufferRust.getRxPacketCount()
+            let txCount = activeBufferSession.getTxPacketCount()
+            let rxCount = activeBufferSession.getRxPacketCount()
 
             let txStart = txCount > UInt64(maxPackets) ? (txCount - UInt64(maxPackets)) : 0
             let rxStart = rxCount > UInt64(maxPackets) ? (rxCount - UInt64(maxPackets)) : 0
 
-            let txRust = NativeBufferRust.readTxSince(packetIndex: txStart, maxPackets: maxPackets)
-            let rxRust = NativeBufferRust.readRxSince(packetIndex: rxStart, maxPackets: maxPackets)
+            let txRust = activeBufferSession.readTxSince(packetIndex: txStart, maxPackets: maxPackets)
+            let rxRust = activeBufferSession.readRxSince(packetIndex: rxStart, maxPackets: maxPackets)
             let tx = ReadPackets(data: txRust.data, ts_ms: txRust.ts_ms, next_packet_index: txRust.next_packet_index, available_packets: txRust.available_packets)
             let rx = ReadPackets(data: rxRust.data, ts_ms: rxRust.ts_ms, next_packet_index: rxRust.next_packet_index, available_packets: rxRust.available_packets)
 
@@ -533,7 +534,7 @@ final class USBManager: NSObject, ObservableObject {
     // MARK: - Buffer Operations
 
     @objc func clearBuffer() {
-        withBufferQueueSync { NativeBufferRust.clearAll() }
+        withBufferQueueSync { activeBufferSession.clearAll() }
         DispatchQueue.main.async {
             self.bufferVersion += 1
         }
@@ -543,7 +544,7 @@ final class USBManager: NSObject, ObservableObject {
 
     func storeBulkPkt(_ data: Data) {
         withBufferQueueSync {
-            NativeBufferRust.storeBulkPkt(data, tsMs: Self.nowMs())
+            activeBufferSession.storeBulkPkt(data, tsMs: Self.nowMs())
         }
         DispatchQueue.main.async {
             self.bufferVersion += 1
@@ -558,7 +559,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     @objc func loadBuffer(data: Data) {
-        withBufferQueueSync { NativeBufferRust.loadBuffer(data) }
+        withBufferQueueSync { activeBufferSession.loadBuffer(data) }
         DispatchQueue.main.async {
             self.bufferVersion += 1
         }
@@ -568,7 +569,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     @objc func getBuffer() -> Data {
-        withBufferQueueSync { NativeBufferRust.getBuffer() }
+        withBufferQueueSync { activeBufferSession.getBuffer() }
     }
 
     func getReceptionSpeedBps() -> Double {
@@ -584,7 +585,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     func compressDataBits(rangeStart: Int, rangeEnd: Int, numberBins: Int) -> ([Float], [Float]) {
-        withBufferQueueSync { NativeBufferRust.compressDataBits(rangeStart: rangeStart, rangeEnd: rangeEnd, numberBins: numberBins) }
+        withBufferQueueSync { activeBufferSession.compressDataBits(rangeStart: rangeStart, rangeEnd: rangeEnd, numberBins: numberBins) }
     }
 
     /// Transmits the current buffer content to the connected device.
@@ -599,8 +600,8 @@ final class USBManager: NSObject, ObservableObject {
         guard !bufferToSend.isEmpty else { return }
 
         let saved = withBufferQueueSync {
-            let saved = NativeBufferRust.takeRxState()
-            NativeBufferRust.setRxCounter(0)
+            let saved = activeBufferSession.takeRxState()
+            activeBufferSession.setRxCounter(0)
             return saved
         }
         DispatchQueue.main.async { self.bufferVersion += 1 }
@@ -614,7 +615,7 @@ final class USBManager: NSObject, ObservableObject {
 
         var bytesSent = 0
         while bytesSent < totalBytesToSend {
-            while let next = withBufferQueueSync({ NativeBufferRust.nextRxPacket() }) {
+            while let next = withBufferQueueSync({ activeBufferSession.nextRxPacket() }) {
                 let status = withBufferQueueSync { NativeBufferRust.parseBsStatus(next.packet64) }
                 if status >= 0 { lastStatus = status }
             }
@@ -634,7 +635,7 @@ final class USBManager: NSObject, ObservableObject {
                 
                 // Log stream lane transmission
                 self.withBufferQueueSync {
-                    NativeBufferRust.appendTxBytes(packet64, tsMs: Self.nowMs())
+                    self.activeBufferSession.appendTxBytes(packet64, tsMs: Self.nowMs())
                 }
                 
                 let sf = self.makeSuperframe(cmdLane: nil, streamLane: packet64)
@@ -648,7 +649,7 @@ final class USBManager: NSObject, ObservableObject {
         Thread.sleep(forTimeInterval: 0.1)
 
         withBufferQueueSync {
-            NativeBufferRust.restoreRxState(rxBytes: saved.rxBytes, rxTsMs: saved.rxTsMs, rxCounter: saved.rxCounter)
+            activeBufferSession.restoreRxState(rxBytes: saved.rxBytes, rxTsMs: saved.rxTsMs, rxCounter: saved.rxCounter)
         }
         DispatchQueue.main.async { self.bufferVersion += 1 }
     }
@@ -662,7 +663,7 @@ final class USBManager: NSObject, ObservableObject {
 
         // Drop any stale RX packets so next_rx_packet returns this command's response.
         withBufferQueueSync {
-            NativeBufferRust.setRxCounter(NativeBufferRust.getRxPacketCount())
+            activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount())
         }
 
         sendPacket(command)
@@ -674,7 +675,7 @@ final class USBManager: NSObject, ObservableObject {
         while out.count < Self.packetSizeBytes {
             if !isConnected { return nil }
 
-            let nextPacket = withBufferQueueSync { NativeBufferRust.nextRxPacket() }
+            let nextPacket = withBufferQueueSync { activeBufferSession.nextRxPacket() }
             if let pkt = nextPacket {
                 out.append(pkt.packet64)
                 break
@@ -711,7 +712,7 @@ final class USBManager: NSObject, ObservableObject {
                 }
             }
 
-            self.withBufferQueueSync { NativeBufferRust.clearAll() }
+            self.withBufferQueueSync { self.activeBufferSession.clearAll() }
             DispatchQueue.main.async { self.bufferVersion += 1 }
 
             let test = Data((0..<64).map { UInt8($0 & 0xFF) })
@@ -730,7 +731,7 @@ final class USBManager: NSObject, ObservableObject {
 
             Thread.sleep(forTimeInterval: 0.2)
 
-            let got = self.withBufferQueueSync { NativeBufferRust.getRxPacketCount() }
+            let got = self.withBufferQueueSync { self.activeBufferSession.getRxPacketCount() }
             DispatchQueue.main.async {
                 self.selfTestStatus = got > 0 ? "OK (received \(got) packet)" : "FAILED (no packet received)"
             }
