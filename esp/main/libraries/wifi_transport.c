@@ -74,6 +74,7 @@ static void wifi_clear_command(void);
 static void wifi_status_command(void);
 static bool load_config(wifi_transport_config_t *out);
 static esp_err_t save_config(const wifi_transport_config_t *config);
+static bool config_field_fits(const char *value, size_t max_len);
 static void default_hostname(char *out, size_t out_len);
 static bool is_valid_hostname(const char *hostname);
 static void start_station(void);
@@ -132,6 +133,13 @@ esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payloa
 
 esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
 {
+    if (!config_field_fits(ssid, WIFI_MAX_SSID) ||
+        !config_field_fits(password, WIFI_MAX_PASS) ||
+        !config_field_fits(secret, WIFI_MAX_SECRET) ||
+        (hostname && hostname[0] != '\0' && !config_field_fits(hostname, WIFI_MAX_HOST))) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
     wifi_transport_config_t config = {0};
     strlcpy(config.ssid, ssid ? ssid : "", sizeof(config.ssid));
     strlcpy(config.password, password ? password : "", sizeof(config.password));
@@ -294,6 +302,11 @@ static esp_err_t save_config(const wifi_transport_config_t *config)
     if (err == ESP_OK) err = nvs_commit(nvs);
     nvs_close(nvs);
     return err;
+}
+
+static bool config_field_fits(const char *value, size_t max_len)
+{
+    return !value || strlen(value) <= max_len;
 }
 
 static void default_hostname(char *out, size_t out_len)
