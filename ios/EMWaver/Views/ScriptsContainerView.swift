@@ -170,7 +170,11 @@ struct ScriptsContainerView: View {
 
                             if let port = bleManager.connectedPortName, !port.isEmpty {
                                 Divider()
-                                Text(port)
+                                Text("Target: \(port)")
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Divider()
+                                Text("Target: \(selectedDeviceLabel)")
                                     .foregroundStyle(.secondary)
                             }
 
@@ -185,9 +189,14 @@ struct ScriptsContainerView: View {
                                     .fill(connectionStatusColor)
                                     .frame(width: 8, height: 8)
                                 Image(systemName: "cable.connector")
+                                Text(selectedDeviceLabel)
+                                    .font(.caption)
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                    .frame(maxWidth: 140, alignment: .leading)
                             }
                             .contentShape(Rectangle())
-                            .accessibilityLabel(connectionStatusText)
+                            .accessibilityLabel("\(connectionStatusText), target \(selectedDeviceLabel)")
                         }
                     }
 
