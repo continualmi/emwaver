@@ -379,8 +379,10 @@ struct ContentView: View {
                 appRouter.isDeviceSheetPresented = true
             }
         } label: {
-            Label(selectedLocalDeviceLabel, systemImage: selectedLocalDevice.map { transportIcon(for: $0.transport) } ?? toolbarDeviceStatus.icon)
-                .labelStyle(.titleAndIcon)
+            HStack(spacing: 8) {
+                Image(systemName: selectedLocalDevice.map { transportIcon(for: $0.transport) } ?? toolbarDeviceStatus.icon)
+                Text(selectedLocalDeviceLabel)
+            }
         }
         .help("Select the local device used by the next script session")
     }
