@@ -34,9 +34,7 @@ private enum EnvBootstrap {
         if ProcessInfo.processInfo.environment["EMWAVER_DISABLE_ENV_BOOTSTRAP"] == "1" {
             return
         }
-#if !DEBUG
-        return
-#endif
+#if DEBUG
         guard let repoRoot = findRepoRoot() else { return }
 
         let files = [".env"]
@@ -65,6 +63,7 @@ private enum EnvBootstrap {
                 }
             }
         }
+#endif
     }
 
     private static func findRepoRoot() -> URL? {
