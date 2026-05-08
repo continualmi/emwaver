@@ -60,6 +60,7 @@ Current first step:
 - the running row has a stop button,
 - leaving preview can keep the run visible in the list rather than making the list look idle.
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
+- Android USB and BLE connections now select keyed buffer sessions, matching the Windows/macOS direction even though only one transport session is active at a time today.
 
 Remaining isolation work:
 
@@ -94,6 +95,7 @@ Remaining isolation work:
 - [x] iOS has a row-level stop control for the active run through the shared scripts row.
 - [x] Windows has an active transport buffer session object used by script sampler reads.
 - [x] Android has an active transport buffer session object used by script sampler reads.
+- [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.

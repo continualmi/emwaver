@@ -55,6 +55,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.Locale;
 import java.util.UUID;
 
@@ -104,7 +105,9 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
-    private final DeviceBufferSession activeBufferSession = new DeviceBufferSession();
+    private final Object bufferSessionLock = new Object();
+    private final Map<String, DeviceBufferSession> bufferSessionsByDeviceId = new HashMap<>();
+    private DeviceBufferSession activeBufferSession = new DeviceBufferSession();
 
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
@@ -126,38 +129,67 @@ public class USBService extends Service implements DeviceConnectionService {
     private final ByteArrayOutputStream sysexBuf = new ByteArrayOutputStream(64);
     private boolean inSysex = false;
 
+    private DeviceBufferSession activeBufferSession() {
+        synchronized (bufferSessionLock) {
+            return activeBufferSession;
+        }
+    }
+
+    private void setActiveBufferSession(String deviceId) {
+        String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
+        synchronized (bufferSessionLock) {
+            DeviceBufferSession session = bufferSessionsByDeviceId.get(key);
+            if (session == null) {
+                session = new DeviceBufferSession();
+                bufferSessionsByDeviceId.put(key, session);
+            }
+            activeBufferSession = session;
+            activeBufferSession.clearAll();
+        }
+    }
+
+    private static String usbDeviceSessionId(UsbDevice device) {
+        if (device == null) return "usb:active";
+        return "usb:" + device.getVendorId() + ":" + device.getProductId() + ":" + device.getDeviceName();
+    }
+
+    private static String bleDeviceSessionId(BluetoothDevice device) {
+        if (device == null) return "ble:active";
+        return "ble:" + device.getAddress();
+    }
+
     // Buffer bridge methods
     public void storeBulkPkt(byte[] data, long tsMs) {
-        activeBufferSession.storeBulkPkt(data, tsMs);
+        activeBufferSession().storeBulkPkt(data, tsMs);
     }
 
     public void storeBulkPkt(byte[] data) {
-        activeBufferSession.storeBulkPkt(data, System.currentTimeMillis());
+        activeBufferSession().storeBulkPkt(data, System.currentTimeMillis());
     }
 
     public Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins) {
-        return activeBufferSession.compressDataBits(rangeStart, rangeEnd, numberBins);
+        return activeBufferSession().compressDataBits(rangeStart, rangeEnd, numberBins);
     }
 
     public void clearBuffer() {
-        activeBufferSession.clearAll();
+        activeBufferSession().clearAll();
     }
 
     public int getBufferLength() {
-        return activeBufferSession.getBufferLength();
+        return activeBufferSession().getBufferLength();
     }
 
     public void loadBuffer(byte[] data) {
-        activeBufferSession.loadBuffer(data);
+        activeBufferSession().loadBuffer(data);
     }
 
     public byte[] getBuffer() {
-        return activeBufferSession.getBuffer();
+        return activeBufferSession().getBuffer();
     }
 
     private void logTx(byte[] data) {
         if (data == null || data.length == 0) return;
-        activeBufferSession.appendTxBytes(data, System.currentTimeMillis());
+        activeBufferSession().appendTxBytes(data, System.currentTimeMillis());
     }
 
     private static byte[] makeLanePacket(byte[] data) {
@@ -450,6 +482,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 if (midiOut != null) {
                     midiOut.connect(rxReceiver);
                 }
+                setActiveBufferSession(usbDeviceSessionId(usbDevice));
                 activeTransport = ActiveTransport.USB;
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
@@ -721,6 +754,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (bleLock) {
                 bleCommandCharacteristic = command;
                 bleConnected = true;
+                setActiveBufferSession(bleDeviceSessionId(gatt.getDevice()));
                 activeTransport = ActiveTransport.BLE;
             }
             if (notify != null) {
@@ -774,7 +808,8 @@ public class USBService extends Service implements DeviceConnectionService {
 
         // Swap out sampler RX while transmitting so BS flow-control packets
         // don't contaminate sampler data stored in the same buffer.
-        Object[] saved = activeBufferSession.takeRxState();
+        DeviceBufferSession bufferSession = activeBufferSession();
+        Object[] saved = bufferSession.takeRxState();
         byte[] savedRxBytes = saved != null && saved.length > 0 && saved[0] instanceof byte[] ? (byte[]) saved[0] : new byte[0];
         long[] savedRxTsMs = saved != null && saved.length > 1 && saved[1] instanceof long[] ? (long[]) saved[1] : new long[0];
         long savedRxCounter = 0;
@@ -782,8 +817,8 @@ public class USBService extends Service implements DeviceConnectionService {
             savedRxCounter = (Long) saved[2];
         }
 
-        activeBufferSession.loadBuffer(new byte[0]);
-        activeBufferSession.setRxCounter(0);
+        bufferSession.loadBuffer(new byte[0]);
+        bufferSession.setRxCounter(0);
 
         int nativeBufferSize = samplerBytes.length;
         int[] txProfile = NativeBuffer.txUsbProfile();
@@ -801,7 +836,7 @@ public class USBService extends Service implements DeviceConnectionService {
             startTime += period;
             int lastStatus = 0;
             while (true) {
-                Object[] next = activeBufferSession.nextRxPacket();
+                Object[] next = bufferSession.nextRxPacket();
                 if (next == null || next.length < 1 || !(next[0] instanceof byte[])) {
                     break;
                 }
@@ -832,7 +867,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         // Restore sampler RX snapshot (discarding packets accumulated during transmit).
-        activeBufferSession.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
+        bufferSession.restoreRxState(savedRxBytes, savedRxTsMs, savedRxCounter);
     }
 
     @Override
@@ -843,7 +878,8 @@ public class USBService extends Service implements DeviceConnectionService {
 
         // Desktop-parity: drop any stale RX packets before sending so the "next packet"
         // consumed via rx_counter belongs to this command's response.
-        activeBufferSession.setRxCounter(activeBufferSession.getRxPacketCount());
+        DeviceBufferSession bufferSession = activeBufferSession();
+        bufferSession.setRxCounter(bufferSession.getRxPacketCount());
 
         // This calls write(), which sends on cmd lane.
         byte[] packet = makeLanePacket(command);
@@ -857,7 +893,7 @@ public class USBService extends Service implements DeviceConnectionService {
         // Wait for a cmd-lane response packet: response status is >= 0x80.
         long startTime = System.currentTimeMillis();
         while (System.currentTimeMillis() - startTime < timeout) {
-            Object[] next = activeBufferSession.nextRxPacket();
+            Object[] next = bufferSession.nextRxPacket();
             if (next != null && next.length >= 1 && next[0] instanceof byte[]) {
                 byte[] pkt = (byte[]) next[0];
                 if (pkt.length >= UsbMidiSysex.LANE_SIZE) {
