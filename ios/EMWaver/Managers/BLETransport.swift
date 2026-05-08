@@ -33,6 +33,39 @@ enum BLETransport {
         return name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil
     }
 
+    static func discoverServices(on peripheral: CBPeripheral) {
+        peripheral.discoverServices([serviceUUID])
+    }
+
+    static func service(on peripheral: CBPeripheral) -> CBService? {
+        peripheral.services?.first { $0.uuid == serviceUUID }
+    }
+
+    static func discoverCharacteristics(on peripheral: CBPeripheral, for service: CBService) {
+        peripheral.discoverCharacteristics([
+            commandCharacteristicUUID,
+            notifyCharacteristicUUID
+        ], for: service)
+    }
+
+    static func characteristics(in service: CBService) -> (command: CBCharacteristic?, notify: CBCharacteristic?) {
+        var command: CBCharacteristic?
+        var notify: CBCharacteristic?
+        for characteristic in service.characteristics ?? [] {
+            if characteristic.uuid == commandCharacteristicUUID {
+                command = characteristic
+            } else if characteristic.uuid == notifyCharacteristicUUID {
+                notify = characteristic
+            }
+        }
+        return (command, notify)
+    }
+
+    static func enableNotifications(on peripheral: CBPeripheral, characteristic: CBCharacteristic?) {
+        guard let characteristic else { return }
+        peripheral.setNotifyValue(true, for: characteristic)
+    }
+
     static func writeSysex(
         _ sysex: Data,
         peripheral: CBPeripheral,

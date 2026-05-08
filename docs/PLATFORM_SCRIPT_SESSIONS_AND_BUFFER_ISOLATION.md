@@ -117,6 +117,7 @@ Current first step:
 - iOS CoreMIDI and BLE receive callbacks now feed MIDI/SysEx bytes into the source transport session instead of always using the mutable active session.
 - iOS targeted script devices now route `transmitBuffer()` through the captured device-session id instead of the mutable active session.
 - iOS CoreMIDI SysEx send mechanics now live in `USBMidiTransport`, and BLE chunked characteristic writes now live in `BLETransport`, reducing transport protocol code inside `USBManager`.
+- iOS BLE service discovery, characteristic lookup, and notify enablement now live in `BLETransport`, further reducing BLE protocol ownership inside `USBManager`.
 
 Remaining isolation work:
 

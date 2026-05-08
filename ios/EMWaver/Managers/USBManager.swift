@@ -1093,7 +1093,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         midiQueue.async {
             self.dbg("BLE connected: \(peripheral.name ?? peripheral.identifier.uuidString)")
-            peripheral.discoverServices([BLETransport.serviceUUID])
+            BLETransport.discoverServices(on: peripheral)
         }
     }
 
@@ -1131,14 +1131,11 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.setError("BLE service discovery failed: \(error.localizedDescription)")
                 return
             }
-            guard let service = peripheral.services?.first(where: { $0.uuid == BLETransport.serviceUUID }) else {
+            guard let service = BLETransport.service(on: peripheral) else {
                 self.setError("BLE service discovery failed: EMWaver service missing")
                 return
             }
-            peripheral.discoverCharacteristics([
-                BLETransport.commandCharacteristicUUID,
-                BLETransport.notifyCharacteristicUUID
-            ], for: service)
+            BLETransport.discoverCharacteristics(on: peripheral, for: service)
         }
     }
 
@@ -1149,14 +1146,10 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
-            for characteristic in service.characteristics ?? [] {
-                if characteristic.uuid == BLETransport.commandCharacteristicUUID {
-                    self.commandCharacteristic = characteristic
-                } else if characteristic.uuid == BLETransport.notifyCharacteristicUUID {
-                    self.notifyCharacteristic = characteristic
-                    peripheral.setNotifyValue(true, for: characteristic)
-                }
-            }
+            let characteristics = BLETransport.characteristics(in: service)
+            self.commandCharacteristic = characteristics.command
+            self.notifyCharacteristic = characteristics.notify
+            BLETransport.enableNotifications(on: peripheral, characteristic: characteristics.notify)
 
             guard self.commandCharacteristic != nil else {
                 self.setError("BLE characteristic discovery failed: command characteristic missing")
