@@ -154,7 +154,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func setActiveBufferSession(deviceId: String, resetSession: Bool) {
-        withBufferQueueSync {
+        _ = withBufferQueueSync {
             bufferSessions.select(deviceId: deviceId, resetSession: resetSession)
         }
     }
