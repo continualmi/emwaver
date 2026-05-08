@@ -139,7 +139,7 @@ struct ContentView: View {
                 if showingRemoteOverlay {
                     VStack(spacing: 0) {
                         HStack {
-                            Label("Remote Control", systemImage: "antenna.radiowaves.left.and.right")
+                            Label("Local Script Sessions", systemImage: "antenna.radiowaves.left.and.right")
                                 .font(.headline)
 
                             Spacer()
@@ -162,19 +162,53 @@ struct ContentView: View {
 
                         Divider()
 
-                        if let tree = remoteControlHost.remoteScriptTree {
-                            ScriptRenderView(tree: tree) { token, args in
-                                remoteControlHost.invokeRemoteHandler(token: token, arguments: args)
+                        HStack(spacing: 0) {
+                            List(selection: Binding(
+                                get: { remoteControlHost.selectedRemoteScriptInstanceId },
+                                set: { id in if let id { remoteControlHost.selectRemoteSession(id) } }
+                            )) {
+                                ForEach(remoteControlHost.remoteScriptSessions) { session in
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(session.name)
+                                            .font(.subheadline.weight(.semibold))
+                                            .lineLimit(1)
+                                        if let deviceID = session.deviceID, !deviceID.isEmpty {
+                                            Text(deviceID)
+                                                .font(.caption2.monospaced())
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                        } else {
+                                            Text("Active device")
+                                                .font(.caption2)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    .tag(session.id)
+                                    .contextMenu {
+                                        Button("Stop Script", role: .destructive) {
+                                            remoteControlHost.stopRemoteSession(session.id)
+                                        }
+                                    }
+                                }
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                            .background(Color.black.opacity(0.12))
-                        } else {
-                            VStack(spacing: 10) {
-                                ProgressView()
-                                Text("Remote control is active, waiting for UI…")
-                                    .foregroundStyle(.secondary)
+                            .frame(width: 260)
+
+                            Divider()
+
+                            if let tree = remoteControlHost.remoteScriptTree {
+                                ScriptRenderView(tree: tree) { token, args in
+                                    remoteControlHost.invokeRemoteHandler(token: token, arguments: args)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                                .background(Color.black.opacity(0.12))
+                            } else {
+                                VStack(spacing: 10) {
+                                    ProgressView()
+                                    Text("Local script session is active, waiting for UI…")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
                             }
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -193,7 +227,7 @@ struct ContentView: View {
                         showingRemoteOverlay = true
                     } label: {
                         HStack(spacing: 8) {
-                            Label("Remote", systemImage: "antenna.radiowaves.left.and.right")
+                            Label("Sessions", systemImage: "antenna.radiowaves.left.and.right")
                             if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
                                 Text(n)
                                     .foregroundStyle(.secondary)
@@ -201,7 +235,7 @@ struct ContentView: View {
                             }
                         }
                     }
-                    .help("This host is being controlled remotely. Click to open the remote script UI.")
+                    .help("Local gateway script sessions are running. Click to view and switch between them.")
                 }
             }
         }

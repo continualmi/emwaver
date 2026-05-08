@@ -35,6 +35,12 @@ private final class RemoteScriptSession {
     }
 }
 
+struct RemoteScriptSessionSummary: Identifiable, Equatable {
+    let id: String
+    let name: String
+    let deviceID: String?
+}
+
 @MainActor
 final class RemoteControlHostService: ObservableObject {
     static let localGatewayEnabledKey = "emwaver.localGateway.enabled"
@@ -42,6 +48,8 @@ final class RemoteControlHostService: ObservableObject {
     @Published private(set) var isRemoteControlled: Bool = false
     @Published private(set) var remoteScriptTree: ScriptTree?
     @Published private(set) var remoteActiveScriptName: String?
+    @Published private(set) var remoteScriptSessions: [RemoteScriptSessionSummary] = []
+    @Published private(set) var selectedRemoteScriptInstanceId: String?
     private let urlSession: URLSession
 
     private weak var device: MacUSBManager?
@@ -104,6 +112,12 @@ final class RemoteControlHostService: ObservableObject {
         treeCancellable = nil
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
+        for session in remoteSessionsByScriptId.values {
+            session.cancellable?.cancel()
+            session.manager.exitPreview()
+        }
+        remoteSessionsByScriptId.removeAll()
+        refreshRemoteSessionSummaries()
     }
 
     private func hostSocketConfig() -> HostSocketConfig? {
@@ -305,6 +319,16 @@ final class RemoteControlHostService: ObservableObject {
             if !currentId.isEmpty, let session = remoteSessionsByScriptId.removeValue(forKey: currentId) {
                 session.cancellable?.cancel()
                 session.manager.exitPreview()
+                if selectedRemoteScriptInstanceId == currentId {
+                    selectedRemoteScriptInstanceId = remoteSessionsByScriptId.keys.sorted().first
+                    if let selectedRemoteScriptInstanceId {
+                        selectRemoteSession(selectedRemoteScriptInstanceId)
+                    } else {
+                        remoteScriptTree = nil
+                        remoteActiveScriptName = nil
+                    }
+                }
+                refreshRemoteSessionSummaries()
                 sendJson([
                     "type": "script.stopped",
                     "hostSessionId": hostSessions?.hostSessionId ?? "",
@@ -326,6 +350,48 @@ final class RemoteControlHostService: ObservableObject {
         default:
             return
         }
+    }
+
+    func selectRemoteSession(_ scriptInstanceId: String) {
+        guard let session = remoteSessionsByScriptId[scriptInstanceId] else { return }
+        selectedRemoteScriptInstanceId = scriptInstanceId
+        remoteScriptTree = session.manager.scriptTree
+        remoteActiveScriptName = session.manager.activeScriptName
+    }
+
+    func stopRemoteSession(_ scriptInstanceId: String) {
+        guard let session = remoteSessionsByScriptId.removeValue(forKey: scriptInstanceId) else { return }
+        session.cancellable?.cancel()
+        session.manager.exitPreview()
+        if selectedRemoteScriptInstanceId == scriptInstanceId {
+            selectedRemoteScriptInstanceId = remoteSessionsByScriptId.keys.sorted().first
+            if let selectedRemoteScriptInstanceId {
+                selectRemoteSession(selectedRemoteScriptInstanceId)
+            } else {
+                remoteScriptTree = nil
+                remoteActiveScriptName = nil
+            }
+        }
+        refreshRemoteSessionSummaries()
+        sendJson([
+            "type": "script.stopped",
+            "hostSessionId": hostSessions?.hostSessionId ?? "",
+            "scriptInstanceId": scriptInstanceId,
+            "deviceId": session.deviceID ?? "",
+            "reason": "stopped_in_app",
+        ])
+    }
+
+    private func refreshRemoteSessionSummaries() {
+        remoteScriptSessions = remoteSessionsByScriptId
+            .map { id, session in
+                RemoteScriptSessionSummary(
+                    id: id,
+                    name: session.manager.activeScriptName ?? "Script",
+                    deviceID: session.deviceID
+                )
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     private func previewManager(for scriptInstanceId: String) -> ScriptPreviewManager? {
@@ -351,8 +417,11 @@ final class RemoteControlHostService: ObservableObject {
                 guard let self, let session, let manager else { return }
                 guard let scriptId = manager.activeScriptInstanceId else { return }
                 session.uiRev += 1
-                self.remoteScriptTree = tree
-                self.remoteActiveScriptName = manager.activeScriptName
+                if self.selectedRemoteScriptInstanceId == scriptId {
+                    self.remoteScriptTree = tree
+                    self.remoteActiveScriptName = manager.activeScriptName
+                }
+                self.refreshRemoteSessionSummaries()
                 self.sendJson([
                     "type": "ui.snapshot",
                     "hostSessionId": self.hostSessions?.hostSessionId ?? "",
@@ -367,6 +436,10 @@ final class RemoteControlHostService: ObservableObject {
         manager.render(script: source, name: name, moduleSources: [:])
         guard let scriptId = manager.activeScriptInstanceId else { return }
         remoteSessionsByScriptId[scriptId] = session
+        selectedRemoteScriptInstanceId = scriptId
+        remoteScriptTree = manager.scriptTree
+        remoteActiveScriptName = manager.activeScriptName
+        refreshRemoteSessionSummaries()
 
         if let name, !name.isEmpty {
             UserDefaults.standard.set(name, forKey: "emwaver.remote.activeScriptName")
@@ -387,10 +460,9 @@ final class RemoteControlHostService: ObservableObject {
     /// interact with the remotely-running script UI while the web client is also
     /// attached.
     func invokeRemoteHandler(token: String, arguments: [Any]) {
-        guard let previewManager else { return }
-        // Only allow invoking when a script is actually running.
-        guard previewManager.activeScriptInstanceId != nil else { return }
-        previewManager.invoke(token: token, arguments: arguments)
+        guard let selectedRemoteScriptInstanceId,
+              let manager = previewManager(for: selectedRemoteScriptInstanceId) else { return }
+        manager.invoke(token: token, arguments: arguments)
     }
 
     private func dispatchUiEvent(previewManager: ScriptPreviewManager, targetNodeId: String, name: String, payload: [String: Any]) {
