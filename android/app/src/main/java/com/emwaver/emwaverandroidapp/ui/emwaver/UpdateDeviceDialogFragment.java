@@ -74,10 +74,21 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     private int lastPct = 0;
 
     private boolean isEspBoardConnected() {
-        return usbService != null && Objects.equals("esp32s3", normalizeBoardType(usbService.getConnectedBoardType()));
+        return usbService != null && isEspBoardType(usbService.getConnectedBoardType());
     }
 
-    private String normalizeBoardType(@Nullable String boardType) {
+    public static boolean isEspBoardType(@Nullable String boardType) {
+        String normalized = normalizeBoardType(boardType);
+        return Objects.equals("esp32", normalized)
+                || Objects.equals("esp32s2", normalized)
+                || Objects.equals("esp32s3", normalized);
+    }
+
+    public static String espUpdateUnavailableMessage() {
+        return "ESP32 flashing is not wired on Android yet. The runtime USB path now connects, but firmware updates still need the ESP-native flow on macOS.";
+    }
+
+    private static String normalizeBoardType(@Nullable String boardType) {
         return boardType == null ? "" : boardType.trim().toLowerCase(Locale.US);
     }
 
@@ -196,7 +207,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         boolean canEnterUpdate = runConnected && !dfuDevicePresent && !espBoardConnected;
 
         if (espBoardConnected && !isFlashing && !updateDone) {
-            showError("ESP32-S3 flashing is not wired on Android yet. The runtime USB path now connects, but firmware updates still need the ESP-native flow on macOS.");
+            showError(espUpdateUnavailableMessage());
         }
 
         if (instructionsCard != null) {
@@ -233,7 +244,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             return;
         }
         if (isEspBoardConnected()) {
-            showError("ESP32-S3 does not support the STM32 DFU flow on Android. Use the ESP flashing path on macOS for now.");
+            showError("ESP32 does not support the STM32 DFU flow on Android. Use the ESP flashing path on macOS for now.");
             return;
         }
 
@@ -262,7 +273,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             return;
         }
         if (isEspBoardConnected()) {
-            showError("ESP32-S3 flashing is not available on Android yet. Use the ESP flashing path on macOS for now.");
+            showError("ESP32 flashing is not available on Android yet. Use the ESP flashing path on macOS for now.");
             return;
         }
         if (!usbService.isFlashDeviceConnected() || !usbService.hasUsbPermission()) {
