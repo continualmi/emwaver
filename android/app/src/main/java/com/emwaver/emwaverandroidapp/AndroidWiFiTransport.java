@@ -13,7 +13,7 @@ final class AndroidWiFiTransport {
 
     private AndroidWiFiTransport() {}
 
-    static final class Connection {
+    static final class Connection implements TransportDeviceConnection {
         final String hostOrDeviceId;
         final String sessionId;
         final String displayName;
@@ -29,6 +29,21 @@ final class AndroidWiFiTransport {
             this.sessionId = AndroidWiFiTransport.sessionId(key);
             this.displayName = AndroidWiFiTransport.displayName(key);
             this.session = session != null ? session : new DeviceBufferSession(this.sessionId);
+        }
+
+        @Override
+        public String sessionId() {
+            return sessionId;
+        }
+
+        @Override
+        public String displayName() {
+            return displayName;
+        }
+
+        @Override
+        public TransportDeviceSession session() {
+            return session;
         }
     }
 

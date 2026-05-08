@@ -102,27 +102,45 @@ final class AndroidBleTransport {
         }
     }
 
-    static final class Connection implements AutoCloseable {
+    static final class Connection implements TransportDeviceConnection, AutoCloseable {
         final BluetoothGatt gatt;
         final BluetoothGattCharacteristic commandCharacteristic;
         final String sessionId;
         final String displayName;
+        final TransportDeviceSession session;
         private volatile boolean connected;
 
         Connection(
                 BluetoothGatt gatt,
                 BluetoothGattCharacteristic commandCharacteristic,
                 @Nullable String displayName,
-                boolean connected
+                boolean connected,
+                @Nullable TransportDeviceSession session
         ) {
             this.gatt = gatt;
             this.commandCharacteristic = commandCharacteristic;
-            this.sessionId = sessionId(gatt.getDevice());
+            this.sessionId = AndroidBleTransport.sessionId(gatt.getDevice());
             String name = displayName != null && !displayName.trim().isEmpty()
                     ? displayName.trim()
                     : gatt.getDevice().getAddress();
             this.displayName = name;
+            this.session = session != null ? session : new DeviceBufferSession(this.sessionId);
             this.connected = connected;
+        }
+
+        @Override
+        public String sessionId() {
+            return sessionId;
+        }
+
+        @Override
+        public String displayName() {
+            return displayName;
+        }
+
+        @Override
+        public TransportDeviceSession session() {
+            return session;
         }
 
         boolean isOpen() {
@@ -220,7 +238,7 @@ final class AndroidBleTransport {
             BluetoothGattCharacteristic command,
             @Nullable String displayName
     ) {
-        return new Connection(gatt, command, displayName, true);
+        return new Connection(gatt, command, displayName, true, null);
     }
 
     static void closeHandles(

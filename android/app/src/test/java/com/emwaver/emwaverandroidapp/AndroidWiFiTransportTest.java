@@ -28,13 +28,22 @@ public class AndroidWiFiTransportTest {
         AndroidWiFiTransport.Connection first = new AndroidWiFiTransport.Connection(" 192.168.4.2 ");
         AndroidWiFiTransport.Connection second = new AndroidWiFiTransport.Connection(" 192.168.4.3 ");
 
-        first.session.appendTxBytes(new byte[] { 0x01 }, 1);
-
         assertEquals("192.168.4.2", first.hostOrDeviceId);
-        assertEquals("wifi:192.168.4.2", first.sessionId);
-        assertEquals("Wi-Fi: 192.168.4.2", first.displayName);
-        assertEquals("wifi:192.168.4.2", first.session.deviceId());
-        assertEquals(1, first.session.getTxPacketCount());
-        assertEquals(0, second.session.getTxPacketCount());
+        assertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2", "Wi-Fi: 192.168.4.2", second);
+    }
+
+    private static void assertConnectionOwnsIsolatedSession(
+            TransportDeviceConnection connection,
+            String expectedSessionId,
+            String expectedDisplayName,
+            TransportDeviceConnection isolatedFrom
+    ) {
+        connection.session().appendTxBytes(new byte[] { 0x01 }, 1);
+
+        assertEquals(expectedSessionId, connection.sessionId());
+        assertEquals(expectedDisplayName, connection.displayName());
+        assertEquals(expectedSessionId, connection.session().deviceId());
+        assertEquals(1, connection.session().getTxPacketCount());
+        assertEquals(0, isolatedFrom.session().getTxPacketCount());
     }
 }

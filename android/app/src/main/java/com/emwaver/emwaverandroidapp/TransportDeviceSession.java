@@ -29,3 +29,9 @@ interface TransportDeviceSession {
     void restoreRxState(byte[] rxBytesIn, long[] rxTsMsIn, long rxCounterIn);
     Object[] compressDataBits(int rangeStart, int rangeEnd, int numberBins);
 }
+
+interface TransportDeviceConnection {
+    String sessionId();
+    String displayName();
+    TransportDeviceSession session();
+}

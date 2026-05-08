@@ -40,31 +40,49 @@ final class AndroidUsbMidiTransport {
         }
     }
 
-    static final class Connection implements AutoCloseable {
+    static final class Connection implements TransportDeviceConnection, AutoCloseable {
         final UsbDevice usbDevice;
         final MidiDevice midiDevice;
         final MidiInputPort input;
         final MidiOutputPort output;
         final String sessionId;
         final String displayName;
+        final TransportDeviceSession session;
 
         private Connection(
                 UsbDevice usbDevice,
                 MidiDevice midiDevice,
                 MidiInputPort input,
                 MidiOutputPort output,
-                @Nullable MidiReceiver receiver
+                @Nullable MidiReceiver receiver,
+                @Nullable TransportDeviceSession session
         ) {
             this.usbDevice = usbDevice;
             this.midiDevice = midiDevice;
             this.input = input;
             this.output = output;
-            this.sessionId = sessionId(usbDevice);
-            String name = displayName(usbDevice);
+            this.sessionId = AndroidUsbMidiTransport.sessionId(usbDevice);
+            String name = AndroidUsbMidiTransport.displayName(usbDevice);
             this.displayName = name != null ? name : "USB MIDI";
+            this.session = session != null ? session : new DeviceBufferSession(this.sessionId);
             if (this.output != null && receiver != null) {
                 this.output.connect(receiver);
             }
+        }
+
+        @Override
+        public String sessionId() {
+            return sessionId;
+        }
+
+        @Override
+        public String displayName() {
+            return displayName;
+        }
+
+        @Override
+        public TransportDeviceSession session() {
+            return session;
         }
 
         boolean isOpen() {
@@ -164,7 +182,7 @@ final class AndroidUsbMidiTransport {
 
     static Connection openConnection(UsbDevice usbDevice, MidiDevice midiDevice, @Nullable MidiReceiver receiver) {
         OpenPorts ports = openPorts(midiDevice);
-        return new Connection(usbDevice, midiDevice, ports.input, ports.output, receiver);
+        return new Connection(usbDevice, midiDevice, ports.input, ports.output, receiver, null);
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {

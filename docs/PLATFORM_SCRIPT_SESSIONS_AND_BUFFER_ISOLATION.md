@@ -247,6 +247,7 @@ Remaining isolation work:
 - [x] Android keeps active transport and active script session identity synchronized through one active target descriptor.
 - [x] Android has focused active-target normalization/matching tests.
 - [x] Android has a shared transport device-session contract used by the current USB/BLE service.
+- [x] Android USB MIDI, BLE, and Wi-Fi connection values now conform to a shared `TransportDeviceConnection` contract that exposes session identity, display name, and a transport-owned `TransportDeviceSession`.
 - [x] Android USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE pending connection state is grouped behind a transport-owned pending value.
