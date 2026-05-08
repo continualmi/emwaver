@@ -60,6 +60,25 @@ struct EMWaverTests {
         #expect(MacWiFiManager.unwrapEnvelope(frame) == nil)
     }
 
+    @Test func wifiBufferStatusLaneRequiresExactPaddedStatusShape() {
+        var status = Data(repeating: 0, count: 18)
+        status[0] = 0x42
+        status[1] = 0x53
+        status[2] = 0x12
+        status[3] = 0x34
+
+        #expect(MacUSBManager.isBufferStatusLane(status))
+        #expect(!MacUSBManager.isBufferStatusLane(Data("BSdata".utf8)))
+
+        var streamData = Data(repeating: 0, count: 18)
+        streamData[0] = 0x42
+        streamData[1] = 0x53
+        streamData[2] = 0x12
+        streamData[3] = 0x34
+        streamData[4] = 0x56
+        #expect(!MacUSBManager.isBufferStatusLane(streamData))
+    }
+
     @Test func wifiBoardMetadataNormalizesEspTargets() {
         #expect(MacWiFiManager.normalizedBoardType("esp32-s3") == "esp32s3")
         #expect(MacWiFiManager.normalizedBoardType("ESP32S2") == "esp32s2")

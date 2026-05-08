@@ -147,7 +147,7 @@ private final class MacTransportDeviceSession {
 
             if !cmdEmpty { storeRxLane(cmdLane) }
 
-            if isBufferStatusLane(streamLane) {
+            if MacUSBManager.isBufferStatusLane(streamLane) {
                 storeBufferStatus(streamLane)
                 continue
             }
@@ -173,10 +173,6 @@ private final class MacTransportDeviceSession {
         }
 
         return waitResult == .timedOut ? nil : status
-    }
-
-    private func isBufferStatusLane(_ lane: Data) -> Bool {
-        lane.count >= 4 && lane[lane.startIndex] == 0x42 && lane[lane.startIndex.advanced(by: 1)] == 0x53
     }
 
     private func storeBufferStatus(_ lane: Data) {
@@ -213,6 +209,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
+
+    static func isBufferStatusLane(_ lane: Data) -> Bool {
+        guard lane.count == laneSizeBytes,
+              lane[lane.startIndex] == 0x42,
+              lane[lane.startIndex.advanced(by: 1)] == 0x53 else {
+            return false
+        }
+        return lane.dropFirst(4).allSatisfy { $0 == 0 }
+    }
 
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
