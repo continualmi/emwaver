@@ -32,6 +32,20 @@ internal enum DeviceTransport
     Ble = 2,
 }
 
+internal sealed class ActiveDeviceTarget
+{
+    internal static readonly ActiveDeviceTarget None = new("active", DeviceTransport.None);
+
+    internal ActiveDeviceTarget(string deviceId, DeviceTransport transport)
+    {
+        DeviceId = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
+        Transport = transport;
+    }
+
+    internal string DeviceId { get; }
+    internal DeviceTransport Transport { get; }
+}
+
 internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 {
     private static readonly int LaneSizeBytes = 18;
@@ -183,8 +197,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private GattCharacteristic? _bleCommandCharacteristic;
     private GattCharacteristic? _bleNotifyCharacteristic;
     private bool _bleConnecting;
-    private string? _connectedUsbSessionId;
-    private string? _connectedBleSessionId;
+    private ActiveDeviceTarget _activeDeviceTarget = ActiveDeviceTarget.None;
     private readonly object _bufferSessionLock = new();
     private readonly Dictionary<string, ITransportDeviceSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
     private ITransportDeviceSession _activeBufferSession = new DeviceBufferSession("active");
@@ -237,10 +250,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private bool IsActiveDeviceSession(string deviceId)
     {
         var requested = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
-        lock (_bufferSessionLock)
-        {
-            return string.Equals(requested, _activeBufferSession.DeviceId, StringComparison.OrdinalIgnoreCase);
-        }
+        return string.Equals(requested, _activeDeviceTarget.DeviceId, StringComparison.OrdinalIgnoreCase);
     }
 
     private bool RequireActiveDeviceSession(string deviceId, string operation)
@@ -253,6 +263,25 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         LastErrorText = $"{operation}: target device session is not active";
         Debug.WriteLine($"[EMWaver][Windows][Device] {operation}: target session is not active: {deviceId}");
         return false;
+    }
+
+    private void SetActiveDeviceTarget(string deviceId, DeviceTransport transport)
+    {
+        var target = new ActiveDeviceTarget(deviceId, transport);
+        SetActiveBufferSession(target.DeviceId);
+        _activeDeviceTarget = target;
+        ActiveTransport = target.Transport;
+    }
+
+    private void ClearActiveDeviceTarget()
+    {
+        _activeDeviceTarget = ActiveDeviceTarget.None;
+        ActiveTransport = DeviceTransport.None;
+    }
+
+    private string? ActiveDeviceSessionId(DeviceTransport transport)
+    {
+        return _activeDeviceTarget.Transport == transport ? _activeDeviceTarget.DeviceId : null;
     }
 
     internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)
@@ -321,9 +350,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            _connectedUsbSessionId = WindowsUsbMidiTransport.SessionId(port);
-            _connectedBleSessionId = null;
-            SetActiveBufferSession(_connectedUsbSessionId);
+            SetActiveDeviceTarget(WindowsUsbMidiTransport.SessionId(port), DeviceTransport.UsbMidi);
 
             var ports = await WindowsUsbMidiTransport.OpenPortsAsync(port);
             _inPort = ports.InPort;
@@ -337,7 +364,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             _inPort.MessageReceived += OnMidiMessage;
-            ActiveTransport = DeviceTransport.UsbMidi;
             ConnectedPort = port;
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
@@ -422,11 +448,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         CloseBleDevice();
 
         ActiveBufferSession.CancelResponseWait();
-        _connectedUsbSessionId = null;
-        _connectedBleSessionId = null;
+        ClearActiveDeviceTarget();
 
         ConnectedPort = null;
-        ActiveTransport = DeviceTransport.None;
         DeviceEmwaverVersion = null;
         ConnectedBoardType = null;
 
@@ -570,7 +594,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
-            ProcessIncomingSysex(bytes, "MIDI", _connectedUsbSessionId);
+            ProcessIncomingSysex(bytes, "MIDI", ActiveDeviceSessionId(DeviceTransport.UsbMidi));
         }
         catch
         {
@@ -731,9 +755,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = null;
             DeviceEmwaverVersion = null;
             ConnectedBoardType = null;
-            _connectedBleSessionId = WindowsBleTransport.SessionId(bluetoothAddress);
-            _connectedUsbSessionId = null;
-            SetActiveBufferSession(_connectedBleSessionId);
+            SetActiveDeviceTarget(WindowsBleTransport.SessionId(bluetoothAddress), DeviceTransport.Ble);
 
             CloseBleDevice();
 
@@ -771,7 +793,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 await WindowsBleTransport.EnableNotificationsAsync(_bleNotifyCharacteristic);
             }
 
-            ActiveTransport = DeviceTransport.Ble;
             ConnectedPort = new DevicePort(displayName, string.Empty, string.Empty);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
@@ -803,7 +824,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var bytes = BufferFromIbuffer(args.CharacteristicValue);
             if (bytes != null)
             {
-                ProcessIncomingSysex(bytes, "BLE", _connectedBleSessionId);
+                ProcessIncomingSysex(bytes, "BLE", ActiveDeviceSessionId(DeviceTransport.Ble));
             }
         }
         catch

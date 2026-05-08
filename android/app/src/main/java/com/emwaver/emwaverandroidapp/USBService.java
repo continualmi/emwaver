@@ -68,6 +68,19 @@ public class USBService extends Service implements DeviceConnectionService {
         BLE
     }
 
+    private static final class ActiveDeviceTarget {
+        static final ActiveDeviceTarget NONE = new ActiveDeviceTarget("active", ActiveTransport.NONE);
+
+        final String deviceId;
+        final ActiveTransport transport;
+
+        ActiveDeviceTarget(String deviceId, ActiveTransport transport) {
+            String key = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
+            this.deviceId = key;
+            this.transport = transport;
+        }
+    }
+
     private final IBinder binder = new LocalBinder();
 
     // DFU/flash (USB control transfers)
@@ -96,6 +109,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private volatile boolean bleConnected = false;
     private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
+    private volatile ActiveDeviceTarget activeDeviceTarget = ActiveDeviceTarget.NONE;
 
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
@@ -130,9 +144,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private boolean isActiveDeviceSession(String deviceId) {
         String requested = deviceId == null || deviceId.trim().isEmpty() ? "active" : deviceId.trim();
-        synchronized (bufferSessionLock) {
-            return requested.equals(activeBufferSession.deviceId());
-        }
+        return requested.equals(activeDeviceTarget.deviceId);
     }
 
     private boolean requireActiveDeviceSession(String deviceId, String operation) {
@@ -158,7 +170,21 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public String currentScriptDeviceId() {
-        return activeBufferSession().deviceId();
+        return activeDeviceTarget.deviceId;
+    }
+
+    private void setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
+        ActiveDeviceTarget target = new ActiveDeviceTarget(deviceId, transport);
+        setActiveBufferSession(target.deviceId);
+        activeDeviceTarget = target;
+        activeTransport = target.transport;
+    }
+
+    private void clearActiveDeviceTarget(ActiveTransport transport) {
+        if (activeDeviceTarget.transport == transport) {
+            activeDeviceTarget = ActiveDeviceTarget.NONE;
+            activeTransport = ActiveTransport.NONE;
+        }
     }
 
     public void clearBuffer() {
@@ -381,8 +407,7 @@ public class USBService extends Service implements DeviceConnectionService {
                 if (midiOut != null) {
                     midiOut.connect(rxReceiver);
                 }
-                setActiveBufferSession(AndroidUsbMidiTransport.sessionId(usbDevice));
-                activeTransport = ActiveTransport.USB;
+                setActiveDeviceTarget(AndroidUsbMidiTransport.sessionId(usbDevice), ActiveTransport.USB);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -485,9 +510,7 @@ public class USBService extends Service implements DeviceConnectionService {
         midiDevice = null;
         connectedMidiUsbDevice = null;
         connectedBleDeviceLabel = null;
-        if (activeTransport == ActiveTransport.USB) {
-            activeTransport = ActiveTransport.NONE;
-        }
+        clearActiveDeviceTarget(ActiveTransport.USB);
         connectedBoardType = null;
         deviceFirmwareVersion = null;
         activeBufferSession().resetSamplerStreaming();
@@ -562,9 +585,7 @@ public class USBService extends Service implements DeviceConnectionService {
         bleCommandCharacteristic = null;
         bleConnected = false;
         connectedBleDeviceLabel = null;
-        if (activeTransport == ActiveTransport.BLE) {
-            activeTransport = ActiveTransport.NONE;
-        }
+        clearActiveDeviceTarget(ActiveTransport.BLE);
     }
 
     @SuppressLint("MissingPermission")
@@ -638,8 +659,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (bleLock) {
                 bleCommandCharacteristic = command;
                 bleConnected = true;
-                setActiveBufferSession(AndroidBleTransport.sessionId(gatt.getDevice()));
-                activeTransport = ActiveTransport.BLE;
+                setActiveDeviceTarget(AndroidBleTransport.sessionId(gatt.getDevice()), ActiveTransport.BLE);
             }
             AndroidBleTransport.enableNotifications(gatt);
             connectedBoardType = "esp32s3";

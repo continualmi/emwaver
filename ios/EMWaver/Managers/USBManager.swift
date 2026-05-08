@@ -74,6 +74,19 @@ final class USBManager: NSObject, ObservableObject {
         case ble
     }
 
+    private struct ActiveDeviceTarget {
+        static let none = ActiveDeviceTarget(deviceId: "active", transport: .none)
+
+        let deviceId: String
+        let transport: ActiveTransport
+
+        init(deviceId: String, transport: ActiveTransport) {
+            let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+            self.deviceId = key.isEmpty ? "active" : key
+            self.transport = transport
+        }
+    }
+
     private func dbg(_ msg: String) {
         #if DEBUG
         // Both: `print` always shows in Xcode debug console; Logger integrates with Console.app.
@@ -115,7 +128,6 @@ final class USBManager: NSObject, ObservableObject {
 
     private var connectedSource: MIDIEndpointRef = 0
     private var connectedDestination: MIDIEndpointRef = 0
-    private var connectedUsbSessionKey: String?
 
     private var virtualDestination: MIDIEndpointRef = 0
 
@@ -123,6 +135,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private var centralManager: CBCentralManager?
     private var activeTransport: ActiveTransport = .none
+    private var activeDeviceTarget = ActiveDeviceTarget.none
     private var connectedPeripheral: CBPeripheral?
     private var commandCharacteristic: CBCharacteristic?
     private var notifyCharacteristic: CBCharacteristic?
@@ -166,7 +179,7 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     func currentScriptDeviceId() -> String {
-        withBufferQueueSync { activeBufferSessionKey }
+        activeDeviceTarget.deviceId
     }
 
     private func normalizedDeviceSessionKey(_ deviceId: String) -> String {
@@ -176,7 +189,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private func isActiveDeviceSession(deviceId: String) -> Bool {
         let requested = normalizedDeviceSessionKey(deviceId)
-        return withBufferQueueSync { requested == activeBufferSessionKey }
+        return requested == activeDeviceTarget.deviceId
     }
 
     private func requireActiveDeviceSession(deviceId: String, operation: String) -> Bool {
@@ -196,6 +209,22 @@ final class USBManager: NSObject, ObservableObject {
         let session = DeviceBufferSession()
         bufferSessionsByDeviceId[sessionKey] = session
         return session
+    }
+
+    private func setActiveDeviceTarget(deviceId: String, transport: ActiveTransport) {
+        let target = ActiveDeviceTarget(deviceId: deviceId, transport: transport)
+        setActiveBufferSession(deviceId: target.deviceId)
+        activeDeviceTarget = target
+        activeTransport = target.transport
+    }
+
+    private func clearActiveDeviceTarget() {
+        activeDeviceTarget = .none
+        activeTransport = .none
+    }
+
+    private func activeDeviceSessionKey(for transport: ActiveTransport) -> String? {
+        activeDeviceTarget.transport == transport ? activeDeviceTarget.deviceId : nil
     }
 
     // MARK: - Common helpers (used across the iOS codebase)
@@ -876,8 +905,7 @@ final class USBManager: NSObject, ObservableObject {
         connectedSource = chosen.source
         connectedDestination = chosen.destination
         let usbSessionKey = USBMidiTransport.sessionKey(for: chosen)
-        connectedUsbSessionKey = usbSessionKey
-        setActiveBufferSession(deviceId: usbSessionKey)
+        setActiveDeviceTarget(deviceId: usbSessionKey, transport: .usbMidi)
 
         let st = USBMidiTransport.connectSource(chosen, inPort: inPort)
         guard st == noErr else {
@@ -887,7 +915,6 @@ final class USBManager: NSObject, ObservableObject {
             return false
         }
 
-        activeTransport = .usbMidi
         DispatchQueue.main.async {
             self.connectedPortName = chosen.name
             self.isConnected = true
@@ -905,11 +932,10 @@ final class USBManager: NSObject, ObservableObject {
         }
         connectedSource = 0
         connectedDestination = 0
-        connectedUsbSessionKey = nil
         connectedPeripheral = nil
         commandCharacteristic = nil
         notifyCharacteristic = nil
-        activeTransport = .none
+        clearActiveDeviceTarget()
         withBufferQueueSync { activeBufferSession.resetSamplerStreaming() }
 
         DispatchQueue.main.async {
@@ -1082,7 +1108,7 @@ final class USBManager: NSObject, ObservableObject {
         }
 
         mgr.midiQueue.async {
-            mgr.handlePacketDatas(packets, deviceId: mgr.connectedUsbSessionKey)
+            mgr.handlePacketDatas(packets, deviceId: mgr.activeDeviceSessionKey(for: .usbMidi))
         }
     }
 }
@@ -1142,7 +1168,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.commandCharacteristic = nil
             self.notifyCharacteristic = nil
             if self.activeTransport == .ble {
-                self.activeTransport = .none
+                self.clearActiveDeviceTarget()
                 self.withBufferQueueSync { self.activeBufferSession.resetSamplerStreaming() }
                 DispatchQueue.main.async {
                     self.isConnected = false
@@ -1185,9 +1211,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             }
 
             let bleSessionKey = BLETransport.sessionKey(for: peripheral)
-            self.connectedUsbSessionKey = nil
-            self.setActiveBufferSession(deviceId: bleSessionKey)
-            self.activeTransport = .ble
+            self.setActiveDeviceTarget(deviceId: bleSessionKey, transport: .ble)
             DispatchQueue.main.async {
                 self.connectedPortName = peripheral.name ?? "EMWaver BLE"
                 self.isConnected = true
