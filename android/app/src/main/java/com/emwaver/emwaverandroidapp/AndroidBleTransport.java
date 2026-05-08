@@ -13,6 +13,8 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothGattDescriptor;
 import android.bluetooth.BluetoothGattService;
+import android.bluetooth.le.BluetoothLeScanner;
+import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanFilter;
 import android.bluetooth.le.ScanSettings;
 import android.os.ParcelUuid;
@@ -34,6 +36,42 @@ final class AndroidBleTransport {
     static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
 
     private AndroidBleTransport() {}
+
+    static final class ScanSession implements AutoCloseable {
+        private final BluetoothLeScanner scanner;
+        private final ScanCallback callback;
+        private volatile boolean scanning;
+
+        ScanSession(BluetoothLeScanner scanner, ScanCallback callback) {
+            this.scanner = scanner;
+            this.callback = callback;
+        }
+
+        boolean isScanning() {
+            return scanning;
+        }
+
+        void start() {
+            if (scanner == null || callback == null || scanning) {
+                return;
+            }
+            scanner.startScan(scanFilters(), scanSettings(), callback);
+            scanning = true;
+        }
+
+        @Override
+        public void close() {
+            if (scanner == null || callback == null || !scanning) {
+                scanning = false;
+                return;
+            }
+            try {
+                scanner.stopScan(callback);
+            } catch (Exception ignored) {
+            }
+            scanning = false;
+        }
+    }
 
     static final class PendingConnection implements AutoCloseable {
         final BluetoothGatt gatt;

@@ -17,7 +17,6 @@ import android.bluetooth.BluetoothGattCallback;
 import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.BluetoothLeScanner;
 import android.bluetooth.le.ScanCallback;
 import android.bluetooth.le.ScanResult;
 import android.content.BroadcastReceiver;
@@ -81,10 +80,9 @@ public class USBService extends Service implements DeviceConnectionService {
 
     // ESP32 BLE transport
     private BluetoothAdapter bluetoothAdapter;
-    private BluetoothLeScanner bleScanner;
+    private AndroidBleTransport.ScanSession bleScanSession;
     private AndroidBleTransport.PendingConnection pendingBleConnection;
     private volatile AndroidBleTransport.Connection bleConnection;
-    private volatile boolean bleScanning = false;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
     private volatile ActiveDeviceTarget<ActiveTransport> activeDeviceTarget =
             new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
@@ -501,15 +499,17 @@ public class USBService extends Service implements DeviceConnectionService {
         }
         synchronized (bleLock) {
             AndroidBleTransport.Connection connection = bleConnection;
-            if ((connection != null && connection.isOpen()) || bleScanning) {
+            if ((connection != null && connection.isOpen())
+                    || (bleScanSession != null && bleScanSession.isScanning())) {
                 return;
             }
-            bleScanner = bluetoothAdapter.getBluetoothLeScanner();
-            if (bleScanner == null) {
+            if (bluetoothAdapter.getBluetoothLeScanner() == null) {
                 return;
             }
-            bleScanning = true;
-            bleScanner.startScan(AndroidBleTransport.scanFilters(), AndroidBleTransport.scanSettings(), bleScanCallback);
+            bleScanSession = new AndroidBleTransport.ScanSession(
+                    bluetoothAdapter.getBluetoothLeScanner(),
+                    bleScanCallback);
+            bleScanSession.start();
             Log.d(TAG, "BLE scan started");
         }
     }
@@ -517,10 +517,10 @@ public class USBService extends Service implements DeviceConnectionService {
     @SuppressLint("MissingPermission")
     private void stopBleScan() {
         synchronized (bleLock) {
-            if (bleScanner != null && bleScanning && hasBlePermission()) {
-                bleScanner.stopScan(bleScanCallback);
+            if (bleScanSession != null && hasBlePermission()) {
+                bleScanSession.close();
             }
-            bleScanning = false;
+            bleScanSession = null;
         }
     }
 
