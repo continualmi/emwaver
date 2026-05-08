@@ -66,7 +66,7 @@ final class IOSScriptSessionManager: ObservableObject {
 
     func run(_ request: ScriptsRootView.ScriptRunRequest, device: IOSTargetedScriptDeviceBase, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
         let manager = ScriptPreviewManager()
-        let deviceId = device.currentScriptDeviceId()
+        let deviceId = Self.normalizeDeviceId(device.currentScriptDeviceId())
         manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
 
         let session = IOSScriptSession(
@@ -135,6 +135,11 @@ final class IOSScriptSessionManager: ObservableObject {
                     return lhs.localizedCaseInsensitiveCompare(rhs) == .orderedAscending
                 }
             )
+    }
+
+    private static func normalizeDeviceId(_ deviceId: String) -> String {
+        let trimmed = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "active" : trimmed
     }
 }
 

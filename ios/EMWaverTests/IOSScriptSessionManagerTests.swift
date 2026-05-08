@@ -61,6 +61,21 @@ final class IOSScriptSessionManagerTests: XCTestCase {
         XCTAssertEqual(Set(manager.sessionStatuses.map(\.deviceId)), ["usbmidi:board-a", "ble:board-b"])
     }
 
+    func testCapturesBlankDeviceIdAsActive() {
+        let manager = IOSScriptSessionManager()
+        let device = FakeScriptSessionDevice(deviceId: "   ")
+
+        let result = manager.run(
+            scriptRequest(id: "script-a", name: "Alpha"),
+            device: device,
+            deviceLabel: "Active Device"
+        )
+
+        XCTAssertNotNil(result)
+        XCTAssertEqual(manager.sessionDeviceId(result!.scriptInstanceId), "active")
+        XCTAssertEqual(manager.sessionStatuses.first?.deviceId, "active")
+    }
+
     private func scriptRequest(id: String, name: String) -> ScriptsRootView.ScriptRunRequest {
         ScriptsRootView.ScriptRunRequest(
             scriptId: id,
