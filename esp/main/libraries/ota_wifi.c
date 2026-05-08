@@ -247,14 +247,13 @@ esp_err_t ota_wifi_start_softap(void)
 
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
+    g_running = true;
 
     esp_err_t err = ota_http_server_start();
     if (err != ESP_OK) {
         ota_wifi_stop();
         return err;
     }
-
-    g_running = true;
 
     ESP_LOGI(TAG, "SoftAP started: ssid=%s ip=192.168.4.1 url=http://192.168.4.1/ota", OTA_AP_SSID);
     ota_status_notify(OTA_STATUS_WIFI_READY, 0x00, 0, 0);
@@ -270,7 +269,6 @@ void ota_wifi_stop(void)
 
     if (g_running) {
         esp_wifi_stop();
-        esp_wifi_deinit();
     }
 
     if (g_ap_netif != NULL) {
@@ -279,6 +277,7 @@ void ota_wifi_stop(void)
     }
 
     g_running = false;
+    wifi_transport_resume_runtime();
 }
 
 bool ota_wifi_is_running(void)

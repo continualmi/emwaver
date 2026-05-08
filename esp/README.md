@@ -205,7 +205,7 @@ This keeps app complexity under control:
 
 This also avoids the current restored-state problem where:
 - BLE is closest to an EMWaver command transport,
-- OTA SoftAP remains separate from the station-mode Wi-Fi runtime socket; starting OTA SoftAP explicitly suspends the authenticated runtime WebSocket, mDNS advertisement, active Wi-Fi session state, and station reconnect state before switching the radio into AP mode.
+- OTA SoftAP remains separate from the station-mode Wi-Fi runtime socket; starting OTA SoftAP explicitly suspends the authenticated runtime WebSocket, mDNS advertisement, active Wi-Fi session state, and station reconnect state before switching the radio into AP mode. If OTA SoftAP is stopped or fails to finish starting before a firmware reboot, provisioned station-mode runtime resumes without requiring manual reprovisioning.
 - USB is currently HID/BadUSB-oriented rather than an EMWaver device runtime transport.
 
 ### Why all transports still make sense

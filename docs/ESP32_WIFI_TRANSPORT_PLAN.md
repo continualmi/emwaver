@@ -212,6 +212,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - user-visible device name.
 - Keep manual IP connection as the fallback.
 - Current firmware progress: mDNS is published only after the WebSocket server and `/v1/ws` handler are ready. If mDNS initialization, hostname setup, or service publication fails, firmware leaves the authenticated WebSocket online for manual IP/hostname connections and logs the discovery failure; incomplete TXT metadata is also logged.
+- Current OTA coexistence progress: starting OTA SoftAP suspends the station-mode runtime WebSocket, mDNS advertisement, active Wi-Fi session state, and reconnect state before switching the radio into AP mode. If OTA SoftAP is stopped or fails to finish starting before the firmware reboots into an update, a provisioned board resumes station-mode Wi-Fi automatically.
 
 ### Phase 5: Validation
 

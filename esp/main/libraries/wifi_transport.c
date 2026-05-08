@@ -82,6 +82,7 @@ static bool s_station_online;
 static uint8_t s_reconnect_attempt;
 static bool s_reconnect_pending;
 static bool s_suppress_next_disconnect_reconnect;
+static bool s_runtime_suspended;
 static uint16_t s_last_disconnect_reason;
 static char s_station_ip[16];
 static uint8_t s_station_ipv4[4];
@@ -282,6 +283,7 @@ esp_err_t wifi_transport_reset_pairing(const char *secret)
 void wifi_transport_suspend_runtime(void)
 {
 #if EMWAVER_ENABLE_WIFI_TRANSPORT
+    s_runtime_suspended = true;
     clear_active_session_state();
     s_station_online = false;
     s_station_started = false;
@@ -295,6 +297,20 @@ void wifi_transport_suspend_runtime(void)
     if (s_netif_ready) {
         (void)esp_wifi_disconnect();
         (void)esp_wifi_stop();
+    }
+#endif
+}
+
+void wifi_transport_resume_runtime(void)
+{
+#if EMWAVER_ENABLE_WIFI_TRANSPORT
+    if (!s_runtime_suspended) {
+        return;
+    }
+    s_runtime_suspended = false;
+    s_suppress_next_disconnect_reconnect = false;
+    if (s_has_config) {
+        start_station();
     }
 #endif
 }

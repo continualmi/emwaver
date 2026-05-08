@@ -27,6 +27,7 @@ esp_err_t wifi_transport_provision(const char *ssid, const char *password, const
 esp_err_t wifi_transport_clear_config(void);
 esp_err_t wifi_transport_reset_pairing(const char *secret);
 void wifi_transport_suspend_runtime(void);
+void wifi_transport_resume_runtime(void);
 bool wifi_transport_is_provisioned(void);
 bool wifi_transport_is_authenticated(void);
 bool wifi_transport_is_station_online(void);
