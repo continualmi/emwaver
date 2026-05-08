@@ -291,7 +291,6 @@ public struct AgentChatPanelView: View {
             "Help me write a script for a connected board.",
             "Help me write a script to blink a GPIO pin.",
             "How do I capture and replay an IR remote?",
-            "How do I save scripts locally?",
         ]
 
         if viewModel.messages.isEmpty && viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -301,28 +300,7 @@ public struct AgentChatPanelView: View {
                         viewModel.draft = text
                         // Don't auto-send; user can edit then Send.
                     } label: {
-                        HStack(alignment: .top, spacing: 8) {
-                            Image(systemName: suggestionIcon(for: text))
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 16, height: 16)
-
-                            Text(text)
-                                .font(.caption)
-                                .foregroundStyle(.primary)
-                                .lineLimit(3)
-                                .multilineTextAlignment(.leading)
-
-                            Spacer(minLength: 0)
-                        }
-                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
-                        .padding(10)
-                        .background(messageCardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                .strokeBorder(messageCardBorder)
-                        )
-                        .shadow(color: messageCardShadow, radius: 8, y: 3)
+                        SuggestionCard(title: text, icon: suggestionIcon(for: text))
                     }
                     .buttonStyle(.plain)
                 }
@@ -336,6 +314,54 @@ public struct AgentChatPanelView: View {
         if text.localizedCaseInsensitiveContains("GPIO") { return "lightbulb" }
         if text.localizedCaseInsensitiveContains("IR remote") { return "dot.radiowaves.left.and.right" }
         return "folder"
+    }
+}
+
+private struct SuggestionCard: View {
+    let title: String
+    let icon: String
+
+    @State private var isHovering = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 16, height: 16)
+
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.primary)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+        .padding(10)
+        .background(
+            (isHovering ? Color.accentColor.opacity(0.10) : messageCardBackground),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(isHovering ? Color.accentColor.opacity(0.28) : messageCardBorder)
+        )
+        .shadow(color: isHovering ? Color.black.opacity(0.12) : messageCardShadow, radius: isHovering ? 10 : 8, y: 3)
+        .scaleEffect(isHovering ? 1.015 : 1)
+        .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .onHover { hovering in
+            isHovering = hovering
+            #if canImport(AppKit)
+            if hovering {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+            #endif
+        }
+        .animation(.easeInOut(duration: 0.12), value: isHovering)
     }
 }
 
