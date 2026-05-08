@@ -115,6 +115,7 @@ final class USBManager: NSObject, ObservableObject {
 
     private var connectedSource: MIDIEndpointRef = 0
     private var connectedDestination: MIDIEndpointRef = 0
+    private var connectedUsbSessionKey: String?
 
     private var virtualDestination: MIDIEndpointRef = 0
 
@@ -841,7 +842,9 @@ final class USBManager: NSObject, ObservableObject {
 
         connectedSource = chosen.source
         connectedDestination = chosen.destination
-        setActiveBufferSession(deviceId: USBMidiTransport.sessionKey(for: chosen))
+        let usbSessionKey = USBMidiTransport.sessionKey(for: chosen)
+        connectedUsbSessionKey = usbSessionKey
+        setActiveBufferSession(deviceId: usbSessionKey)
 
         let st = MIDIPortConnectSource(inPort, chosen.source, nil)
         guard st == noErr else {
@@ -869,6 +872,7 @@ final class USBManager: NSObject, ObservableObject {
         }
         connectedSource = 0
         connectedDestination = 0
+        connectedUsbSessionKey = nil
         connectedPeripheral = nil
         commandCharacteristic = nil
         notifyCharacteristic = nil
@@ -941,7 +945,7 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
-    private func handlePacketDatas(_ packets: [Data]) {
+    private func handlePacketDatas(_ packets: [Data], deviceId: String?) {
         dbg("RX: packets=\(packets.count)")
         for data in packets {
             let prefix = data.prefix(min(24, data.count)).map { String(format: "%02X", $0) }.joined(separator: " ")
@@ -950,7 +954,7 @@ final class USBManager: NSObject, ObservableObject {
             if !ascii.isEmpty {
                 dbg("RX: ascii(<=64): \(ascii)")
             }
-            feedMidiBytes(data)
+            feedMidiBytes(data, deviceId: deviceId)
         }
     }
 
@@ -1010,10 +1014,14 @@ final class USBManager: NSObject, ObservableObject {
         return out
     }
 
-    private func feedMidiBytes(_ data: Data) {
+    private func feedMidiBytes(_ data: Data, deviceId: String? = nil) {
         let normalized = normalizeIncomingMidiBytes(data)
         withBufferQueueSync {
-            activeBufferSession.feedMidiBytes(normalized, tsMs: Self.nowMs())
+            if let deviceId, !deviceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                bufferSession(deviceId: deviceId).feedMidiBytes(normalized, tsMs: Self.nowMs())
+            } else {
+                activeBufferSession.feedMidiBytes(normalized, tsMs: Self.nowMs())
+            }
         }
     }
 
@@ -1065,7 +1073,7 @@ final class USBManager: NSObject, ObservableObject {
         }
 
         mgr.midiQueue.async {
-            mgr.handlePacketDatas(packets)
+            mgr.handlePacketDatas(packets, deviceId: mgr.connectedUsbSessionKey)
         }
     }
 }
@@ -1174,7 +1182,9 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
-            self.setActiveBufferSession(deviceId: BLETransport.sessionKey(for: peripheral))
+            let bleSessionKey = BLETransport.sessionKey(for: peripheral)
+            self.connectedUsbSessionKey = nil
+            self.setActiveBufferSession(deviceId: bleSessionKey)
             self.activeTransport = .ble
             DispatchQueue.main.async {
                 self.connectedPortName = peripheral.name ?? "EMWaver BLE"
@@ -1192,7 +1202,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
             guard characteristic.uuid == BLETransport.notifyCharacteristicUUID, let data = characteristic.value else { return }
-            self.feedMidiBytes(data)
+            self.feedMidiBytes(data, deviceId: BLETransport.sessionKey(for: peripheral))
         }
     }
 }
