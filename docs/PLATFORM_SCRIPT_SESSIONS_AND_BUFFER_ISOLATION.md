@@ -176,6 +176,7 @@ Current first step:
 - iOS BLE live handles now sit behind `BLETransport.PendingConnection` and `BLETransport.Connection` values that own the peripheral, command/notify characteristics, session key, display name, write helper, and peripheral matching.
 - iOS BLE scan state now sits behind a `BLETransport.ScanSession` object that owns scan start/stop state.
 - iOS BLE scan, connect, and cancel operations now route through `BLETransport` helpers instead of direct CoreBluetooth calls in `USBManager`.
+- iOS BLE composite shutdown now routes through `BLETransport.closeHandles(...)`, so `USBManager` clears app state while the BLE transport owns scan stop and pending/connected cancellation.
 - iOS CoreMIDI source connection/disconnection now lives in `USBMidiTransport`, moving another USB MIDI setup detail out of `USBManager`.
 - iOS USB MIDI endpoint handles now sit behind a `USBMidiTransport.Connection` value that owns the endpoint pair, session key, display name, connect/disconnect behavior, and send helper.
 - iOS targeted script packet sends, command waits, and buffer transmit now refuse to send when the captured device-session id is no longer the active connected session, avoiding stale-script writes through the wrong active transport.

@@ -120,6 +120,20 @@ enum BLETransport {
         central?.cancelPeripheralConnection(pending.peripheral)
     }
 
+    static func closeHandles(
+        scanSession: ScanSession?,
+        connection: Connection?,
+        pendingConnection: PendingConnection?,
+        using central: CBCentralManager?
+    ) {
+        scanSession?.stop()
+        if let connection {
+            cancel(connection, using: central)
+        } else if let pendingConnection {
+            cancel(pendingConnection, using: central)
+        }
+    }
+
     static func discoverServices(on peripheral: CBPeripheral) {
         peripheral.discoverServices([serviceUUID])
     }

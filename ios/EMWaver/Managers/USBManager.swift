@@ -900,12 +900,14 @@ final class USBManager: NSObject, ObservableObject {
         if let connection = usbMidiConnection {
             _ = connection.disconnect(inPort: inPort)
         }
-        if let connection = bleConnection {
-            BLETransport.cancel(connection, using: centralManager)
-        } else if let pending = pendingBleConnection {
-            BLETransport.cancel(pending, using: centralManager)
-        }
+        BLETransport.closeHandles(
+            scanSession: bleScanSession,
+            connection: bleConnection,
+            pendingConnection: pendingBleConnection,
+            using: centralManager
+        )
         usbMidiConnection = nil
+        bleScanSession = nil
         pendingBleConnection = nil
         bleConnection = nil
         clearActiveDeviceTarget()
