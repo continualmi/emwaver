@@ -33,6 +33,10 @@ private final class FakeTargetedScriptDeviceBase: IOSTargetedScriptDeviceBase {
     var lastSendCommandDeviceId: String?
     var lastTransmitDeviceId: String?
 
+    func currentScriptDeviceId() -> String {
+        "USB:Board-1"
+    }
+
     func getBuffer(deviceId: String) -> Data {
         lastGetDeviceId = deviceId
         return Data([0x01, 0x02])

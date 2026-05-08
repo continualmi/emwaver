@@ -6,7 +6,7 @@ import EMWaverScriptsUI
 final class IOSScriptSessionManagerTests: XCTestCase {
     func testKeepsMultipleVisibleSessionRowsAndStopsIndividually() {
         let manager = IOSScriptSessionManager()
-        let device = USBManager()
+        let device = FakeScriptSessionDevice(deviceId: "active")
 
         let first = manager.run(
             scriptRequest(id: "script-a", name: "Alpha"),
@@ -37,6 +37,30 @@ final class IOSScriptSessionManagerTests: XCTestCase {
         XCTAssertEqual(manager.activeScriptName, "Beta")
     }
 
+    func testCapturesDistinctDeviceIdsPerSession() {
+        let manager = IOSScriptSessionManager()
+        let device = FakeScriptSessionDevice(deviceId: "usbmidi:board-a")
+
+        let first = manager.run(
+            scriptRequest(id: "script-a", name: "Alpha"),
+            device: device,
+            deviceLabel: "USB A"
+        )
+
+        device.deviceId = "ble:board-b"
+        let second = manager.run(
+            scriptRequest(id: "script-b", name: "Beta"),
+            device: device,
+            deviceLabel: "BLE B"
+        )
+
+        XCTAssertNotNil(first)
+        XCTAssertNotNil(second)
+        XCTAssertEqual(manager.sessionDeviceId(first!.scriptInstanceId), "usbmidi:board-a")
+        XCTAssertEqual(manager.sessionDeviceId(second!.scriptInstanceId), "ble:board-b")
+        XCTAssertEqual(Set(manager.sessionStatuses.map(\.deviceId)), ["usbmidi:board-a", "ble:board-b"])
+    }
+
     private func scriptRequest(id: String, name: String) -> ScriptsRootView.ScriptRunRequest {
         ScriptsRootView.ScriptRunRequest(
             scriptId: id,
@@ -47,4 +71,32 @@ final class IOSScriptSessionManagerTests: XCTestCase {
             moduleSources: [:]
         )
     }
+}
+
+private final class FakeScriptSessionDevice: IOSTargetedScriptDeviceBase {
+    var deviceId: String
+
+    init(deviceId: String) {
+        self.deviceId = deviceId
+    }
+
+    func currentScriptDeviceId() -> String {
+        deviceId
+    }
+
+    func getBuffer(deviceId: String) -> Data {
+        Data()
+    }
+
+    func clearBuffer(deviceId: String) {}
+
+    func loadBuffer(data: Data, deviceId: String) {}
+
+    func sendPacket(_ data: Data, deviceId: String) {}
+
+    func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
+        nil
+    }
+
+    func transmitBuffer(deviceId: String) {}
 }

@@ -12,6 +12,7 @@ import EMWaverScriptSwiftUI
 import EMWaverScriptModel
 
 protocol IOSTargetedScriptDeviceBase: AnyObject {
+    func currentScriptDeviceId() -> String
     func getBuffer(deviceId: String) -> Data
     func clearBuffer(deviceId: String)
     func loadBuffer(data: Data, deviceId: String)
@@ -63,7 +64,7 @@ final class IOSScriptSessionManager: ObservableObject {
         return session.manager.activeScriptName ?? session.scriptName
     }
 
-    func run(_ request: ScriptsRootView.ScriptRunRequest, device: USBManager, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
+    func run(_ request: ScriptsRootView.ScriptRunRequest, device: IOSTargetedScriptDeviceBase, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
         let manager = ScriptPreviewManager()
         let deviceId = device.currentScriptDeviceId()
         manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))

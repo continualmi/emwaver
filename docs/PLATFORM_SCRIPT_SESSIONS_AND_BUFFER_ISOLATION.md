@@ -148,6 +148,7 @@ Current first step:
 - iOS keeps local script sessions in a session registry and lets the shared scripts list select/stop individual visible sessions instead of replacing the active row on every Run.
 - iOS script sessions now own their stop path explicitly, so row-level stop shuts down the session-owned preview manager instead of reaching through manager internals.
 - iOS local script sessions now retain the captured transport device-session id alongside the visible status row data.
+- iOS local script session creation now depends on the targeted-device protocol boundary rather than the concrete `USBManager`, and focused tests cover separate sessions retaining distinct captured transport ids.
 - `USBManager` now routes script-facing capture buffer reads/writes through a `DeviceBufferSession` object instead of direct stateful access to the `NativeBufferRust` process-wide facade.
 - iOS USB MIDI and BLE connections now select keyed buffer sessions, matching the Windows/Android/macOS direction even though only one transport session is active at a time today.
 - the shared Apple script runtime now derives sampler packet slicing from `ScriptDevice.bufferPacketSizeBytes()` instead of assuming 64-byte packets.
