@@ -13,16 +13,18 @@ import EMWaverScriptModel
 @MainActor
 private final class IOSTargetedScriptDevice: ScriptDevice {
     private weak var base: USBManager?
+    private let deviceId: String
 
-    init(base: USBManager) {
+    init(base: USBManager, deviceId: String) {
         self.base = base
+        self.deviceId = deviceId
     }
 
-    func getBuffer() -> Data { base?.getBuffer() ?? Data() }
-    func clearBuffer() { base?.clearBuffer() }
-    func loadBuffer(data: Data) { base?.loadBuffer(data: data) }
-    func sendPacket(_ data: Data) { base?.sendPacket(data) }
-    func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout) }
+    func getBuffer() -> Data { base?.getBuffer(deviceId: deviceId) ?? Data() }
+    func clearBuffer() { base?.clearBuffer(deviceId: deviceId) }
+    func loadBuffer(data: Data) { base?.loadBuffer(data: data, deviceId: deviceId) }
+    func sendPacket(_ data: Data) { base?.sendPacket(data, deviceId: deviceId) }
+    func sendCommand(_ command: Data, timeout: Int) -> Data? { base?.sendCommand(command, timeout: timeout, deviceId: deviceId) }
     func transmitBuffer() { base?.transmitBuffer() }
 }
 
@@ -44,7 +46,8 @@ private final class IOSScriptSessionManager: ObservableObject {
         activeManager?.exitPreview()
 
         let manager = ScriptPreviewManager()
-        manager.attach(device: IOSTargetedScriptDevice(base: device))
+        let deviceId = device.currentScriptDeviceId()
+        manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
         manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
 
         let instanceId = manager.activeScriptInstanceId ?? UUID().uuidString

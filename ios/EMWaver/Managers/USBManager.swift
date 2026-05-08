@@ -111,6 +111,7 @@ final class USBManager: NSObject, ObservableObject {
     private let bufferQueueKey = DispatchSpecificKey<Void>()
     private var activeBufferSession = DeviceBufferSession()
     private var bufferSessionsByDeviceId: [String: DeviceBufferSession] = [:]
+    private var activeBufferSessionKey = "active"
 
     private var client: MIDIClientRef = 0
     private var inPort: MIDIPortRef = 0
@@ -162,8 +163,24 @@ final class USBManager: NSObject, ObservableObject {
             let session = bufferSessionsByDeviceId[sessionKey] ?? DeviceBufferSession()
             bufferSessionsByDeviceId[sessionKey] = session
             activeBufferSession = session
+            activeBufferSessionKey = sessionKey
             activeBufferSession.clearAll()
         }
+    }
+
+    func currentScriptDeviceId() -> String {
+        withBufferQueueSync { activeBufferSessionKey }
+    }
+
+    private func bufferSession(deviceId: String) -> DeviceBufferSession {
+        let key = deviceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        let sessionKey = key.isEmpty ? "active" : key
+        if let session = bufferSessionsByDeviceId[sessionKey] {
+            return session
+        }
+        let session = DeviceBufferSession()
+        bufferSessionsByDeviceId[sessionKey] = session
+        return session
     }
 
     // MARK: - Common helpers (used across the iOS codebase)
@@ -411,6 +428,30 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
+    func sendPacket(_ data: Data, deviceId: String) {
+        midiQueue.async {
+            guard self.isConnected, self.activeTransport == .ble || self.connectedDestination != 0 else {
+                self.setError("Cannot send packet: Not connected")
+                return
+            }
+
+            guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else {
+                self.setError("Cannot send packet: too large (\(data.count) bytes, max \(Self.packetSizeBytes))")
+                return
+            }
+
+            self.withBufferQueueSync {
+                let session = self.bufferSession(deviceId: deviceId)
+                _ = session.outgoingSamplerPolicy(for: data)
+                session.appendTxBytes(packet64, tsMs: Self.nowMs())
+            }
+            DispatchQueue.main.async { self.bufferVersion += 1 }
+
+            let sf = self.makeSuperframe(cmdLane: packet64, streamLane: nil)
+            self.sendSuperframe(sf)
+        }
+    }
+
     // MARK: - Buffer Monitor APIs (non-destructive)
 
     func bufferClear() {
@@ -528,6 +569,13 @@ final class USBManager: NSObject, ObservableObject {
         }
     }
 
+    func clearBuffer(deviceId: String) {
+        withBufferQueueSync { bufferSession(deviceId: deviceId).clearAll() }
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
+    }
+
     // setInvertRx removed (legacy)
 
     func storeBulkPkt(_ data: Data) {
@@ -556,8 +604,19 @@ final class USBManager: NSObject, ObservableObject {
         lastPacketReceivedTime = firstPacketTimeMillis
     }
 
+    func loadBuffer(data: Data, deviceId: String) {
+        withBufferQueueSync { bufferSession(deviceId: deviceId).loadBuffer(data) }
+        DispatchQueue.main.async {
+            self.bufferVersion += 1
+        }
+    }
+
     @objc func getBuffer() -> Data {
         withBufferQueueSync { activeBufferSession.getBuffer() }
+    }
+
+    func getBuffer(deviceId: String) -> Data {
+        withBufferQueueSync { bufferSession(deviceId: deviceId).getBuffer() }
     }
 
     func getReceptionSpeedBps() -> Double {
@@ -655,6 +714,25 @@ final class USBManager: NSObject, ObservableObject {
         }
 
         sendPacket(command)
+
+        return session.awaitCommandResponse(timeout: timeout) {
+            isConnected
+        }
+    }
+
+    func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
+        guard isConnected else {
+            setError("Cannot send command: Not connected")
+            return nil
+        }
+
+        let session = withBufferQueueSync {
+            let session = bufferSession(deviceId: deviceId)
+            session.prepareCommandResponseWait()
+            return session
+        }
+
+        sendPacket(command, deviceId: deviceId)
 
         return session.awaitCommandResponse(timeout: timeout) {
             isConnected
