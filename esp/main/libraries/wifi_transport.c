@@ -25,10 +25,15 @@
 #include "mdns.h"
 #include "mbedtls/md.h"
 #include "nvs.h"
+#include "sdkconfig.h"
 #include "usb.h"
 
 #ifndef EMWAVER_ENABLE_WIFI_TRANSPORT
+#ifdef CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT
+#define EMWAVER_ENABLE_WIFI_TRANSPORT CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT
+#else
 #define EMWAVER_ENABLE_WIFI_TRANSPORT 1
+#endif
 #endif
 
 #define WIFI_NAMESPACE "emw_wifi"
