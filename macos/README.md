@@ -49,6 +49,7 @@ Auth UX rule:
 
 Core files include:
 - `MacUSBManager.swift`
+- `MacWiFiManager.swift`
 - `HostSessionManager.swift`
 - `RemoteControlHostService.swift`
 
@@ -58,9 +59,13 @@ Responsibilities:
 - firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Transport behavior:
-- `MacUSBManager.swift` owns both CoreMIDI USB and CoreBluetooth BLE runtime sessions.
+- `MacUSBManager.swift` currently coordinates CoreMIDI USB, CoreBluetooth BLE, and the app-facing `ScriptDevice` routing surface.
+- `MacWiFiManager.swift` owns the first ESP32 Wi-Fi transport slice: local mDNS discovery, manual LAN/VPN host pairing records, WebSocket connection/auth bootstrap, binary packet send/receive, and disconnect handling.
 - USB MIDI remains the preferred wired path when present.
-- The device sheet now exposes a unified local device list for discovered USB MIDI and ESP32-S3 BLE candidates, so multi-board bench work can start with explicit user selection.
+- The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and paired/discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
+- Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
+- The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
+- Wi-Fi pairing records are stored in local macOS app preferences. They are not account-backed, cloud-synced, or used for hardware ownership/activation.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.

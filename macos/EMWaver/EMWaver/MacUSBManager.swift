@@ -16,6 +16,7 @@ struct LocalDeviceDescriptor: Identifiable, Equatable {
     enum TransportKind: String {
         case ble = "BLE"
         case usbMidi = "USB"
+        case wifi = "Wi-Fi"
     }
 
     enum ConnectionState: String {
@@ -211,6 +212,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         case none
         case usbMidi
         case ble
+        case wifi
     }
 
     private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
@@ -234,6 +236,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var bleDiscoveredPeripheralsByID: [UUID: CBPeripheral] = [:]
     private var deviceSessionsByID: [String: MacTransportDeviceSession] = [:]
     private var activeDeviceID: String?
+    private var wifiDevices: [MacWiFiDeviceRecord] = []
+    private var wifiManager: MacWiFiManager?
 
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
@@ -254,6 +258,33 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         // The rest of the I/O work is still serialized on `midiQueue`.
         self.ensureClient()
         self.bleCentral = CBCentralManager(delegate: self, queue: midiQueue)
+        self.wifiManager = MacWiFiManager(
+            onDevicesChanged: { [weak self] records in
+                self?.midiQueue.async {
+                    self?.wifiDevices = records
+                    self?.publishDiscoveredDevices()
+                }
+            },
+            onData: { [weak self] data, deviceID in
+                self?.midiQueue.async {
+                    self?.handleMidiBytes(data, deviceID: deviceID)
+                }
+            },
+            onError: { [weak self] message in
+                self?.setError(message)
+            },
+            onConnected: { [weak self] record in
+                self?.midiQueue.async {
+                    self?.handleWiFiConnected(record)
+                }
+            },
+            onDisconnected: { [weak self] deviceID in
+                self?.midiQueue.async {
+                    self?.handleWiFiDisconnected(deviceID: deviceID)
+                }
+            }
+        )
+        self.wifiManager?.startDiscovery()
         midiQueue.async {
             self.refreshPortsInternal()
             self.autoConnectIfNeededInternal()
@@ -276,6 +307,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             case .ble:
                 guard let peripheral = blePeripheral else { return false }
                 return peripheral.state == .connected && bleCommandCharacteristicsByID[peripheral.identifier] != nil
+            case .wifi:
+                return wifiManager?.isConnected == true
             case .none:
                 return false
             }
@@ -352,6 +385,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
+    func connectWiFi(host: String, port: Int = MacWiFiManager.defaultPort, pairingSecret: String) {
+        wifiManager?.connect(host: host, port: port, pairingSecret: pairingSecret)
+    }
+
     private func connectDeviceInternal(transportID id: String) {
             if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
                 self.connectInternal(portName: displayName)
@@ -361,6 +398,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                let uuid = UUID(uuidString: String(id.dropFirst("ble:".count))),
                let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
                 self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid])
+                return
+            }
+            if id.hasPrefix("wifi:"), let record = self.wifiDevices.first(where: { $0.id == id }) {
+                self.wifiManager?.connect(record: record)
                 return
             }
             self.setError("No matching device: \(id)")
@@ -640,6 +681,20 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             ), hardwareUID: hardwareUIDByDeviceID[id])
         }
 
+        for record in wifiDevices.sorted(by: { $0.displayName < $1.displayName }) {
+            let isActive = activeTransport == .wifi && wifiManager?.activeDeviceID == record.id && isTransportConnectedInternal()
+            appendOrMerge(LocalDeviceDescriptor(
+                id: record.id,
+                displayName: record.displayName,
+                transport: .wifi,
+                boardType: record.boardType ?? "esp32s3",
+                moduleLabel: "\(record.host):\(record.port)",
+                connectionState: isActive ? .connected : .discovered,
+                lastErrorText: record.isPaired ? nil : "Pairing required",
+                isActive: isActive
+            ), hardwareUID: nil)
+        }
+
         DispatchQueue.main.async {
             self.discoveredDevices = devices
         }
@@ -793,6 +848,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         blePeripheral = nil
         bleCommandCharacteristic = nil
         bleNotifyCharacteristic = nil
+        wifiManager?.disconnect()
 
         DispatchQueue.main.async {
             self.isConnected = false
@@ -962,6 +1018,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return
         }
 
+        if targetID?.hasPrefix("wifi:") == true || (targetID == nil && activeTransport == .wifi) {
+            guard wifiManager?.isConnected == true else {
+                setError("Wi-Fi write failed: Not connected")
+                return
+            }
+            wifiManager?.send(sysex)
+            return
+        }
+
         let st = sendSysex(sysex, to: connectedDestination)
         if st != noErr {
             setError("MIDISend failed: \(st)")
@@ -1025,79 +1090,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
-    // MARK: - Wi-Fi transport
-
-    private func startWiFiDiscovery() {
-        let browser = NWBrowser(
-            for: .bonjour(type: Self.wifiServiceType, domain: nil),
-            using: .tcp
-        )
-        browser.browseResultsChangedHandler = { [weak self] results, _ in
-            self?.handleWiFiBrowseResults(results)
-        }
-        browser.stateUpdateHandler = { [weak self] state in
-            if case .failed(let error) = state {
-                self?.setError("Wi-Fi discovery failed: \(error.localizedDescription)")
-            }
-        }
-        wifiBrowser = browser
-        browser.start(queue: wifiQueue)
-    }
-
-    private func handleWiFiBrowseResults(_ results: Set<NWBrowser.Result>) {
-        var records: [String: WiFiDeviceRecord] = [:]
-        for result in results {
-            guard case let .service(name, type, domain, _) = result.endpoint,
-                  type == Self.wifiServiceType else { continue }
-            let host = "\(name).\(domain)"
-                .replacingOccurrences(of: "..", with: ".")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
-            let id = wifiDeviceID(host: host, port: Self.wifiDefaultPort)
-            records[id] = WiFiDeviceRecord(
-                id: id,
-                displayName: name.isEmpty ? host : name,
-                host: host,
-                port: Self.wifiDefaultPort,
-                boardType: "esp32s3",
-                isPaired: wifiPairedDevicesByID[id] != nil,
-                lastSeen: Date()
-            )
-        }
-
-        midiQueue.async {
-            for (id, record) in records {
-                self.wifiDiscoveredDevicesByID[id] = record
-            }
-            for (id, paired) in self.wifiPairedDevicesByID where self.wifiDiscoveredDevicesByID[id] == nil {
-                self.wifiDiscoveredDevicesByID[id] = WiFiDeviceRecord(
-                    id: id,
-                    displayName: paired.displayName,
-                    host: paired.host,
-                    port: paired.port,
-                    boardType: "esp32s3",
-                    isPaired: true,
-                    lastSeen: paired.lastSeen
-                )
-            }
-            self.publishDiscoveredDevices()
-        }
-    }
-
-    private func connectWiFiInternal(record: WiFiDeviceRecord) {
-        guard let paired = wifiPairedDevicesByID[record.id], !paired.secret.isEmpty else {
-            setError("Pair this Wi-Fi device locally before connecting")
-            return
-        }
-        disconnectInternal()
-
-        guard let url = URL(string: "ws://\(record.host):\(record.port)/v1/ws") else {
-            setError("Invalid Wi-Fi device address")
-            return
-        }
-
-        let socket = URLSession.shared.webSocketTask(with: url)
-        wifiSocket = socket
-        wifiConnectedDeviceID = record.id
+    private func handleWiFiConnected(_ record: MacWiFiDeviceRecord) {
+        disconnectMidiOnlyInternal()
         activeTransport = .wifi
         activeDeviceID = record.id
         ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
@@ -1110,96 +1104,29 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.lastErrorText = nil
             self.deviceEmwaverVersion = nil
             self.connectedHardwareUID = nil
-        }
-
-        socket.resume()
-        sendWiFiHello(socket: socket, secret: paired.secret)
-        receiveWiFiLoop(socket: socket)
-
-        DispatchQueue.main.async {
             self.isConnected = true
         }
         publishDiscoveredDevices()
     }
 
-    private func sendWiFiHello(socket: URLSessionWebSocketTask, secret: String) {
-        let hello = WiFiHello(type: "auth", client: "emwaver-macos", protocolVersion: 1, pairingSecret: secret)
-        guard let data = try? JSONEncoder().encode(hello) else { return }
-        socket.send(.data(data)) { [weak self] error in
-            if let error {
-                self?.setError("Wi-Fi authentication failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func receiveWiFiLoop(socket: URLSessionWebSocketTask) {
-        socket.receive { [weak self] result in
-            guard let self else { return }
-            switch result {
-            case .success(let message):
-                switch message {
-                case .data(let data):
-                    self.midiQueue.async {
-                        self.handleMidiBytes(data, deviceID: self.wifiConnectedDeviceID)
-                    }
-                case .string(let text):
-                    if text.localizedCaseInsensitiveContains("auth") &&
-                        text.localizedCaseInsensitiveContains("fail") {
-                        self.setError("Wi-Fi pairing secret rejected")
-                    }
-                @unknown default:
-                    break
-                }
-                self.receiveWiFiLoop(socket: socket)
-            case .failure(let error):
-                self.setError("Wi-Fi disconnected: \(error.localizedDescription)")
-                self.midiQueue.async {
-                    if self.wifiSocket === socket {
-                        self.wifiSocket = nil
-                        self.wifiConnectedDeviceID = nil
-                        self.activeDeviceID = nil
-                        if self.activeTransport == .wifi {
-                            self.activeTransport = .none
-                            DispatchQueue.main.async {
-                                self.isConnected = false
-                                self.connectedPortName = nil
-                                self.connectedTransportKind = nil
-                                self.connectedBoardType = nil
-                            }
-                        }
-                        self.publishDiscoveredDevices()
-                    }
-                }
-            }
-        }
-    }
-
-    private func wifiDeviceID(host: String, port: Int) -> String {
-        "wifi:\(host.lowercased()):\(port)"
-    }
-
-    private func loadPairedWiFiDevices() {
-        guard let data = UserDefaults.standard.data(forKey: Self.wifiPairingStoreKey),
-              let records = try? JSONDecoder().decode([String: PairedWiFiDevice].self, from: data) else {
+    private func handleWiFiDisconnected(deviceID: String?) {
+        guard activeTransport == .wifi else {
+            publishDiscoveredDevices()
             return
         }
-        wifiPairedDevicesByID = records
-        for (id, record) in records {
-            wifiDiscoveredDevicesByID[id] = WiFiDeviceRecord(
-                id: id,
-                displayName: record.displayName,
-                host: record.host,
-                port: record.port,
-                boardType: "esp32s3",
-                isPaired: true,
-                lastSeen: record.lastSeen
-            )
+        if let deviceID, activeDeviceID != deviceID {
+            publishDiscoveredDevices()
+            return
         }
-    }
-
-    private func savePairedWiFiDevices() {
-        guard let data = try? JSONEncoder().encode(wifiPairedDevicesByID) else { return }
-        UserDefaults.standard.set(data, forKey: Self.wifiPairingStoreKey)
+        activeTransport = .none
+        activeDeviceID = nil
+        DispatchQueue.main.async {
+            self.isConnected = false
+            self.connectedPortName = nil
+            self.connectedTransportKind = nil
+            self.connectedBoardType = nil
+        }
+        publishDiscoveredDevices()
     }
 
     private func disconnectMidiOnlyInternal() {
@@ -1371,7 +1298,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.autoConnectIfNeededInternal()
             } else {
                 self.stopBleScanInternal()
-                if self.activeTransport == .ble {
+                if case .ble = self.activeTransport {
                     self.disconnectInternal()
                     self.setError("Bluetooth unavailable")
                 }
