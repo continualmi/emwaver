@@ -93,6 +93,7 @@ Current first step:
 - Android BLE scan filters/settings and `connectGatt` setup now live in `AndroidBleTransport`, moving more live BLE connection setup out of `USBService`.
 - Android BLE MTU/service discovery, command characteristic lookup, and notification enablement now live in `AndroidBleTransport`, further reducing BLE protocol ownership inside `USBService`.
 - Android USB MIDI device-info matching now lives in `AndroidUsbMidiTransport`, moving another USB connection-selection detail out of `USBService`.
+- Android USB MIDI input/output port opening now lives in `AndroidUsbMidiTransport`, moving another USB setup detail out of `USBService`.
 
 Remaining isolation work:
 

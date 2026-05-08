@@ -360,8 +360,9 @@ public class USBService extends Service implements DeviceConnectionService {
                 midiDevice = device;
                 connectedMidiUsbDevice = usbDevice;
                 connectedBleDeviceLabel = null;
-                midiIn = midiDevice.openInputPort(0);
-                midiOut = midiDevice.openOutputPort(0);
+                AndroidUsbMidiTransport.OpenPorts ports = AndroidUsbMidiTransport.openPorts(midiDevice);
+                midiIn = ports.input;
+                midiOut = ports.output;
                 if (midiOut != null) {
                     midiOut.connect(rxReceiver);
                 }

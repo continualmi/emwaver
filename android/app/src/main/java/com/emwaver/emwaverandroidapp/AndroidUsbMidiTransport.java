@@ -8,8 +8,10 @@ package com.emwaver.emwaverandroidapp;
 
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbInterface;
+import android.media.midi.MidiDevice;
 import android.media.midi.MidiDeviceInfo;
 import android.media.midi.MidiInputPort;
+import android.media.midi.MidiOutputPort;
 import android.media.midi.MidiManager;
 import android.util.Log;
 
@@ -24,6 +26,16 @@ final class AndroidUsbMidiTransport {
     private static final int EMW_USB_PRODUCT_ID = 22336; // 0x5740
 
     private AndroidUsbMidiTransport() {}
+
+    static final class OpenPorts {
+        final MidiInputPort input;
+        final MidiOutputPort output;
+
+        OpenPorts(@Nullable MidiInputPort input, @Nullable MidiOutputPort output) {
+            this.input = input;
+            this.output = output;
+        }
+    }
 
     static String sessionId(@Nullable UsbDevice device) {
         if (device == null) return "usb:active";
@@ -80,6 +92,10 @@ final class AndroidUsbMidiTransport {
             }
         }
         return null;
+    }
+
+    static OpenPorts openPorts(MidiDevice device) {
+        return new OpenPorts(device.openInputPort(0), device.openOutputPort(0));
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
