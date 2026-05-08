@@ -68,18 +68,19 @@ Transport behavior:
 - If no matching Wi-Fi command response arrives before the caller timeout, macOS reports `Wi-Fi command timed out`.
 - macOS reserves Wi-Fi envelope sequence `0` for uncorrelated stream/status frames; command requests start at sequence `1`.
 - Wi-Fi retransmit buffers use firmware `BS` status frames for host-side pacing, and those status frames are not appended to the script capture buffer.
-- Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32-S3 metadata instead of relying only on hardcoded defaults.
+- Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
+- Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.
 - Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection/auth.
 - Wi-Fi mDNS discovery prunes unpaired devices that stop advertising while keeping paired/manual records as local fallback entries.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - Manual Wi-Fi connection rejects ports outside the valid TCP range before storing a pairing record or opening the WebSocket.
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
 - The device sheet seeds a local hostname for Wi-Fi provisioning so the app can immediately store the matching `<hostname>.local` pairing record after setup, while still allowing manual override.
-- Manual Wi-Fi hostnames are validated before provisioning so macOS does not store a local pairing record for a name the ESP32-S3 cannot advertise through mDNS.
-- The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision an ESP32-S3 without inventing their own secret, while still allowing manual override.
-- The device sheet can provision ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
-- The same USB/BLE local setup surface can clear ESP32-S3 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
-- The setup surface can query the ESP32-S3 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, reconnecting, last station disconnect reason, and authenticated state for local diagnostics.
+- Manual Wi-Fi hostnames are validated before provisioning so macOS does not store a local pairing record for a name the ESP32 firmware cannot advertise through mDNS.
+- The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision a Wi-Fi-capable ESP32 board without inventing their own secret, while still allowing manual override.
+- The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE where available. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
+- The same USB/BLE local setup surface can clear ESP32 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
+- The setup surface can query the ESP32 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, reconnecting, last station disconnect reason, and authenticated state for local diagnostics.
 - When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.
 - Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
 - Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local or firmware timeout are disconnected with a specific authentication-timeout error.

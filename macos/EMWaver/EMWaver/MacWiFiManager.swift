@@ -167,7 +167,7 @@ final class MacWiFiManager {
                 displayName: trimmedHost,
                 host: trimmedHost,
                 port: safePort,
-                boardType: "esp32s3",
+                boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
@@ -211,7 +211,7 @@ final class MacWiFiManager {
                 displayName: visibleName,
                 host: trimmedHost,
                 port: safePort,
-                boardType: "esp32s3",
+                boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
@@ -375,7 +375,7 @@ final class MacWiFiManager {
                 displayName: name.isEmpty ? host : name,
                 host: host,
                 port: Self.defaultPort,
-                boardType: metadata.boardType ?? "esp32s3",
+                boardType: metadata.boardType ?? "esp32",
                 firmwareVersion: metadata.firmwareVersion,
                 protocolVersion: metadata.protocolVersion,
                 capabilities: metadata.capabilities,
@@ -394,7 +394,7 @@ final class MacWiFiManager {
                 displayName: paired.displayName,
                 host: paired.host,
                 port: paired.port,
-                boardType: "esp32s3",
+                boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
@@ -616,7 +616,7 @@ final class MacWiFiManager {
                 displayName: record.displayName,
                 host: record.host,
                 port: record.port,
-                boardType: "esp32s3",
+                boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
@@ -667,6 +667,10 @@ final class MacWiFiManager {
         switch value.lowercased() {
         case "esp32s3", "esp32-s3":
             return "esp32s3"
+        case "esp32s2", "esp32-s2":
+            return "esp32s2"
+        case "esp32":
+            return "esp32"
         default:
             return value
         }

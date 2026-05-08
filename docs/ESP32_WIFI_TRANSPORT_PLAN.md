@@ -270,6 +270,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
 ### Native Apps
 
 - Add Wi-Fi device discovery and manual connection surfaces.
+- Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3.
 - Reuse existing script/device runtime paths.
 - Add Wi-Fi provisioning from BLE/USB where platform APIs allow it.
 - Show clear connection state:

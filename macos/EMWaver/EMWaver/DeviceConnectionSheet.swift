@@ -65,11 +65,20 @@ struct DeviceConnectionSheet: View {
     }
 
     private var isEspBoard: Bool {
-        currentBoardType.caseInsensitiveCompare("esp32s3") == .orderedSame
+        switch currentBoardType.lowercased() {
+        case "esp32", "esp32s2", "esp32s3":
+            return true
+        default:
+            return false
+        }
     }
 
     private var currentBoardDisplayName: String {
         switch currentBoardType.lowercased() {
+        case "esp32":
+            return "ESP32"
+        case "esp32s2":
+            return "ESP32-S2"
         case "esp32s3":
             return "ESP32-S3"
         case "stm32f042":
@@ -268,7 +277,7 @@ struct DeviceConnectionSheet: View {
 
             if isEspBoard && device.connectedTransportKind != "Wi-Fi" {
                 VStack(alignment: .leading, spacing: 10) {
-                    Text("Provision ESP32-S3")
+                    Text("Provision ESP32 Wi-Fi")
                         .font(.subheadline.weight(.semibold))
 
                     Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {

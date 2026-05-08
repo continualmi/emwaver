@@ -371,13 +371,25 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func inferBoardType(portName: String?) -> String {
         let name = (portName ?? "").lowercased()
-        if name.contains("esp32") || name.contains("s3") || name.contains("ble") {
+        if name.contains("esp32-s2") || name.contains("esp32s2") {
+            return "esp32s2"
+        }
+        if name.contains("esp32-s3") || name.contains("esp32s3") || name.contains("s3") || name.contains("ble") {
             return "esp32s3"
         }
-        if name.contains("emwaver esp") {
-            return "esp32s3"
+        if name.contains("esp32") || name.contains("emwaver esp") {
+            return "esp32"
         }
         return "stm32f042"
+    }
+
+    private func isWiFiProvisionableBoardType(_ boardType: String) -> Bool {
+        switch boardType.lowercased() {
+        case "esp32", "esp32s2", "esp32s3":
+            return true
+        default:
+            return false
+        }
     }
 
     // MARK: - ScriptDevice (buffer)
@@ -470,14 +482,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.activeTransport == .usbMidi || self.activeTransport == .ble
             }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before provisioning Wi-Fi.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before provisioning Wi-Fi.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
-            guard boardType.lowercased() == "esp32s3" else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup is available for ESP32-S3 devices.", isError: true)
+            guard self.isWiFiProvisionableBoardType(boardType) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup is available for Wi-Fi-capable ESP32 devices.", isError: true)
                 return
             }
 
@@ -527,7 +539,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                     pairingSecret: trimmedSecret
                 )
             }
-            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32-S3 will join the network and advertise itself on the LAN.", isError: false)
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself on the LAN.", isError: false)
         }
     }
 
@@ -544,14 +556,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.activeTransport == .usbMidi || self.activeTransport == .ble
             }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before clearing Wi-Fi setup.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before clearing Wi-Fi setup.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
-            guard boardType.lowercased() == "esp32s3" else {
-                self.finishWiFiProvisioning(message: "Wi-Fi setup recovery is available for ESP32-S3 devices.", isError: true)
+            guard self.isWiFiProvisionableBoardType(boardType) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup recovery is available for Wi-Fi-capable ESP32 devices.", isError: true)
                 return
             }
             guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiClear]) else {
@@ -562,7 +574,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
                 self.wifiManager?.removePairing(host: host)
             }
-            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32-S3 again before using Wi-Fi control.", isError: false)
+            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false)
         }
     }
 
@@ -577,14 +589,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.activeTransport == .usbMidi || self.activeTransport == .ble
             }
             guard canQuery else {
-                self.finishWiFiProvisioning(message: "Connect the ESP32-S3 over USB or BLE before checking Wi-Fi status.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before checking Wi-Fi status.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
                 self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
             }
-            guard boardType.lowercased() == "esp32s3" else {
-                self.finishWiFiProvisioning(message: "Wi-Fi status is available for ESP32-S3 devices.", isError: true)
+            guard self.isWiFiProvisionableBoardType(boardType) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi status is available for Wi-Fi-capable ESP32 devices.", isError: true)
                 return
             }
             guard let response = self.sendWiFiConfigRequest([EmwOpcode.wifiConfig, EmwOpcode.wifiStatus]),
@@ -1034,7 +1046,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: record.id,
                 displayName: record.displayName,
                 transport: .wifi,
-                boardType: record.boardType ?? "esp32s3",
+                boardType: record.boardType ?? "esp32",
                 moduleLabel: detail,
                 connectionState: isActive ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: record.isPaired ? nil : "Pairing required",
@@ -1445,8 +1457,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         DispatchQueue.main.async {
             self.connectedPortName = "\(record.host):\(record.port)"
-            self.connectedBoardType = record.boardType ?? "esp32s3"
-            self.lastDetectedBoardType = record.boardType ?? "esp32s3"
+            self.connectedBoardType = record.boardType ?? "esp32"
+            self.lastDetectedBoardType = record.boardType ?? "esp32"
             self.connectedTransportKind = "Wi-Fi"
             self.lastErrorText = nil
             self.deviceEmwaverVersion = nil

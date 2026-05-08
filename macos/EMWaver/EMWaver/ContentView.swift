@@ -66,8 +66,12 @@ struct ContentView: View {
         switch currentBoardType.lowercased() {
         case "stm32f042":
             return "STM32F042"
+        case "esp32s2":
+            return "ESP32-S2"
         case "esp32s3":
             return "ESP32-S3"
+        case "esp32":
+            return "ESP32"
         default:
             return device.connectedPortName ?? "Connected"
         }
