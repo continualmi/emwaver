@@ -183,6 +183,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private GattCharacteristic? _bleCommandCharacteristic;
     private GattCharacteristic? _bleNotifyCharacteristic;
     private bool _bleConnecting;
+    private string? _connectedUsbSessionId;
+    private string? _connectedBleSessionId;
     private readonly object _bufferSessionLock = new();
     private readonly Dictionary<string, ITransportDeviceSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
     private ITransportDeviceSession _activeBufferSession = new DeviceBufferSession("active");
@@ -306,7 +308,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            SetActiveBufferSession(WindowsUsbMidiTransport.SessionId(port));
+            _connectedUsbSessionId = WindowsUsbMidiTransport.SessionId(port);
+            _connectedBleSessionId = null;
+            SetActiveBufferSession(_connectedUsbSessionId);
 
             _inPort = await MidiInPort.FromIdAsync(port.InDeviceId);
             _outPort = await MidiOutPort.FromIdAsync(port.OutDeviceId);
@@ -404,6 +408,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         CloseBleDevice();
 
         ActiveBufferSession.CancelResponseWait();
+        _connectedUsbSessionId = null;
+        _connectedBleSessionId = null;
 
         ConnectedPort = null;
         ActiveTransport = DeviceTransport.None;
@@ -550,7 +556,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 return;
             }
 
-            ProcessIncomingSysex(bytes, "MIDI");
+            ProcessIncomingSysex(bytes, "MIDI", _connectedUsbSessionId);
         }
         catch
         {
@@ -558,10 +564,13 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
-    private void ProcessIncomingSysex(byte[] bytes, string transportLabel)
+    private void ProcessIncomingSysex(byte[] bytes, string transportLabel, string? deviceId = null)
     {
         Debug.WriteLine($"[EMWaver][{transportLabel}][RX] sysex={bytes.Length}");
-        ActiveBufferSession.FeedSysexBytes(bytes, NowMs());
+        var session = string.IsNullOrWhiteSpace(deviceId)
+            ? ActiveBufferSession
+            : BufferSession(deviceId);
+        session.FeedSysexBytes(bytes, NowMs());
     }
 
     internal byte[]? SendPacket(byte[] payload, int timeoutMs)
@@ -720,7 +729,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = null;
             DeviceEmwaverVersion = null;
             ConnectedBoardType = null;
-            SetActiveBufferSession(WindowsBleTransport.SessionId(bluetoothAddress));
+            _connectedBleSessionId = WindowsBleTransport.SessionId(bluetoothAddress);
+            _connectedUsbSessionId = null;
+            SetActiveBufferSession(_connectedBleSessionId);
 
             CloseBleDevice();
 
@@ -792,7 +803,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var bytes = BufferFromIbuffer(args.CharacteristicValue);
             if (bytes != null)
             {
-                ProcessIncomingSysex(bytes, "BLE");
+                ProcessIncomingSysex(bytes, "BLE", _connectedBleSessionId);
             }
         }
         catch
