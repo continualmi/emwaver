@@ -721,7 +721,20 @@ static esp_err_t ws_handler(httpd_req_t *req)
             .payload = (uint8_t *)challenge_json,
             .len = strlen(challenge_json),
         };
-        (void)httpd_ws_send_frame(req, &challenge);
+        esp_err_t err = httpd_ws_send_frame(req, &challenge);
+        if (err != ESP_OK) {
+            if (current_fd == s_active_fd) {
+                s_active_fd = -1;
+                s_authenticated = false;
+                s_use_envelope = false;
+                s_auth_challenge[0] = '\0';
+                s_auth_generation++;
+            }
+            if (s_httpd) {
+                (void)httpd_sess_trigger_close(s_httpd, current_fd);
+            }
+            return err;
+        }
         return ESP_OK;
     }
 
