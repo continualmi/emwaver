@@ -36,6 +36,18 @@ public class TransportMetadataTest {
     }
 
     @Test
+    public void usbBoardTypeInfersEsp32S2FromProductName() {
+        assertEquals("esp32s2", AndroidUsbMidiTransport.inferBoardType("EMWaver ESP32-S2", null, null));
+        assertEquals("esp32s2", AndroidUsbMidiTransport.inferBoardType("EMWaver ESP32S2", null, null));
+    }
+
+    @Test
+    public void usbBoardTypeInfersGenericEsp32WithoutAssumingBleCapableS3() {
+        assertEquals("esp32", AndroidUsbMidiTransport.inferBoardType("EMWaver ESP32", null, null));
+        assertEquals("esp32", AndroidUsbMidiTransport.inferBoardType(null, "Espressif", null));
+    }
+
+    @Test
     public void usbBoardTypeDefaultsToStm32WithoutDeviceMetadata() {
         assertEquals("stm32f042", AndroidUsbMidiTransport.inferBoardType(null, null));
     }

@@ -90,7 +90,7 @@ Release distribution:
 ## 6) Guardrails
 
 1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model). USB MIDI remains preferred when a wired device is available; when no wired device is found, Android scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
-2. Keep Android USB discovery aligned with both STM32 and ESP32-S3 EMWaver runtime descriptors; do not hard-code STM32-only identity assumptions in the runtime path.
+2. Keep Android USB discovery aligned with STM32 and ESP32 EMWaver runtime descriptors, including target-aware ESP32-S2/ESP32-S3 product names; do not hard-code STM32-only or ESP32-S3-only identity assumptions in the runtime path.
 3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
 4. Keep app-level dialogs/resources synced with underlying feature availability.
 5. Avoid introducing platform-specific divergence where shared behavior can be aligned with iOS/macOS/web patterns.
@@ -101,7 +101,7 @@ Simulator testing:
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.
-- ESP32-S3 runtime now shares the same USB connection path and can also connect over BLE, but Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
+- ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only. Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
 
 ---
 

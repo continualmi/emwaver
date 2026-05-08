@@ -1,7 +1,10 @@
 // Blink a pin using timers (setTimeout) + `every()`.
 
 function normalizeBoardType(value) {
-  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
 }
 
 function detectBoardType() {
@@ -51,6 +54,7 @@ const PINS_BY_BOARD = {
     { label: "UART_TX (B6)", value: UART_TX },
     { label: "UART_RX (B7)", value: UART_RX },
   ],
+  esp32s2: buildEspPins(),
   esp32s3: buildEspPins(),
 };
 
@@ -107,7 +111,7 @@ function render() {
       spacing: 14,
       children: [
         UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
+        UI.text({ text: boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
 
         UI.picker({
           id: "blink.pin",

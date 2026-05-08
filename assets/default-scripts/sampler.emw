@@ -1,7 +1,10 @@
 'use strict';
 
 function normalizeBoardType(value) {
-  return String(value || '').trim().toLowerCase() === 'esp32s3' ? 'esp32s3' : 'stm32f042';
+  var board = String(value || '').trim().toLowerCase();
+  if (board === 'esp32s2') return 'esp32s2';
+  if (board === 'esp32s3') return 'esp32s3';
+  return 'stm32f042';
 }
 
 function detectBoardType() {
@@ -48,8 +51,13 @@ var PINS_BY_BOARD = {
     { label: 'B6 (UART TX / I2C SCL)', value: String(16 + 6) },
     { label: 'B7 (UART RX / I2C SDA)', value: String(16 + 7) },
   ],
+  esp32s2: buildEspPins(),
   esp32s3: buildEspPins(),
 };
+
+function isEspBoard() {
+  return boardType === 'esp32s2' || boardType === 'esp32s3';
+}
 
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
@@ -67,7 +75,7 @@ function syncPins() {
     if (value === txCurrent) txValid = true;
   }
   if (!rxValid) rxPin = firstPin(options);
-  if (!txValid) txPin = boardType === 'esp32s3' ? '4' : '1';
+  if (!txValid) txPin = isEspBoard() ? '4' : '1';
 }
 
 function i(v, d) {
@@ -97,12 +105,12 @@ function signalsDir() {
 
 var status = '';
 var boardType = detectBoardType();
-var rxPin = boardType === 'esp32s3' ? '4' : '0';
+var rxPin = boardType === 'esp32s2' || boardType === 'esp32s3' ? '4' : '0';
 var recording = false;
 var recordId = null;
 
 // TX pin used for retransmit (firmware transmit supports GPIOA 0..3).
-var txPin = boardType === 'esp32s3' ? '4' : '1';
+var txPin = boardType === 'esp32s2' || boardType === 'esp32s3' ? '4' : '1';
 
 var samplePeriodUsText = '10';
 var maxBytesText = '393216';
@@ -495,7 +503,12 @@ function render() {
               spacing: 6,
               children: [
                 UI.text({
-                  text: boardType === 'esp32s3' ? 'Detected MCU: ESP32-S3' : 'Detected MCU: STM32F042',
+                  text:
+                    boardType === 'esp32s2'
+                      ? 'Detected MCU: ESP32-S2'
+                      : boardType === 'esp32s3'
+                        ? 'Detected MCU: ESP32-S3'
+                        : 'Detected MCU: STM32F042',
                   font: 'caption',
                 }),
               ],

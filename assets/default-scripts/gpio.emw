@@ -1,5 +1,8 @@
 function normalizeBoardType(value) {
-    return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+    var board = String(value || "").trim().toLowerCase();
+    if (board === "esp32s2") return "esp32s2";
+    if (board === "esp32s3") return "esp32s3";
+    return "stm32f042";
 }
 
 function detectBoardType() {
@@ -46,6 +49,7 @@ const PINS_BY_BOARD = {
         { label: "B6 (UART TX / I2C SCL)", value: B6 },
         { label: "B7 (UART RX / I2C SDA)", value: B7 },
     ],
+    esp32s2: buildEspPins(),
     esp32s3: buildEspPins(),
 };
 
@@ -71,7 +75,7 @@ function render() {
         padding: 16,
         spacing: 12,
         children: [
-            UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
+            UI.text({ text: boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
             UI.picker({
                 style: "menu",
                 selected: pin,

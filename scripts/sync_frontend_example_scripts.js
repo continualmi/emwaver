@@ -16,6 +16,7 @@ const assetsDir = path.join(repoRoot, "assets", "default-scripts");
 const outPaths = [
   path.join(repoRoot, "frontend", "src", "lib", "exampleEmwScripts.ts"),
   path.join(repoRoot, "web", "src", "lib", "exampleEmwScripts.ts"),
+  path.join(repoRoot, "web", "lib", "emwaver", "exampleEmwScripts.ts"),
 ];
 
 const allow = [

@@ -195,18 +195,32 @@ final class AndroidUsbMidiTransport {
     }
 
     static String inferBoardType(@Nullable UsbDevice device, @Nullable String boardTypeHint) {
+        return inferBoardType(
+                device != null ? device.getProductName() : null,
+                device != null ? device.getManufacturerName() : null,
+                boardTypeHint
+        );
+    }
+
+    static String inferBoardType(@Nullable String productName, @Nullable String manufacturerName, @Nullable String boardTypeHint) {
         String hint = lower(boardTypeHint);
         if (!hint.isEmpty()) {
             return hint;
         }
 
-        String product = lower(device != null ? device.getProductName() : null);
-        String manufacturer = lower(device != null ? device.getManufacturerName() : null);
-        if (product.contains("esp32") || product.contains("esp32-s3") || product.contains("s3")) {
+        String product = lower(productName);
+        String manufacturer = lower(manufacturerName);
+        if (product.contains("esp32-s2") || product.contains("esp32s2")) {
+            return "esp32s2";
+        }
+        if (product.contains("esp32-s3") || product.contains("esp32s3") || product.contains("s3")) {
             return "esp32s3";
         }
+        if (product.contains("esp32")) {
+            return "esp32";
+        }
         if (manufacturer.contains("espressif")) {
-            return "esp32s3";
+            return "esp32";
         }
         return "stm32f042";
     }

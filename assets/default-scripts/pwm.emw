@@ -2,7 +2,10 @@
 // Firmware: supports TIM2/TIM14/TIM16/TIM17 routes; TIM3 is excluded (A3 disabled).
 
 function normalizeBoardType(value) {
-  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
 }
 
 function detectBoardType() {
@@ -53,6 +56,7 @@ const PINS_BY_BOARD = {
     { label: "B7 / TIM17_CH1N (pin 23)", value: "23" },
     { label: "B8 / TIM16_CH1 (pin 24)", value: "24" },
   ],
+  esp32s2: buildEspPins(),
   esp32s3: buildEspPins(),
 };
 
@@ -164,19 +168,19 @@ function render() {
       spacing: 14,
       children: [
         UI.text({ text: "PWM", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
+        UI.text({ text: boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
         UI.text({
           text:
             boardType === "stm32f042"
               ? "Simple duty-cycle PWM. For servos: typically 50 Hz; duty controls pulse width indirectly (use a servo-focused script if needed)."
-              : "Simple duty-cycle PWM using ESP32-S3 LEDC-backed output.",
+              : "Simple duty-cycle PWM using ESP32 LEDC-backed output.",
         }),
         boardType === "stm32f042"
           ? UI.text({
               text: "Note: A3 is TIM3-based and disabled (TIM3 is reserved for sampling/transmit timing).",
             })
           : UI.text({
-              text: "ESP32-S3 firmware currently accepts raw GPIO numbers for PWM output.",
+              text: "ESP32 firmware currently accepts raw GPIO numbers for PWM output.",
             }),
 
         UI.text({ text: "Pin", fontWeight: "medium" }),

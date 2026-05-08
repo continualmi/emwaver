@@ -1,6 +1,9 @@
-// Simple ADC (analogRead) test script with STM32F042 / ESP32-S3 selection.
+// Simple ADC (analogRead) test script with STM32F042 / ESP32 selection.
 function normalizeBoardType(value) {
-  return String(value || "").trim().toLowerCase() === "esp32s3" ? "esp32s3" : "stm32f042";
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
 }
 
 function detectBoardType() {
@@ -35,6 +38,7 @@ const ADC_PINS_BY_BOARD = {
     { label: "A6 / ADC_IN6", value: "6" },
     { label: "A7 / ADC_IN7", value: "7" },
   ],
+  esp32s2: buildEspAdcPins(),
   esp32s3: buildEspAdcPins(),
 };
 
@@ -46,7 +50,7 @@ const INTERNAL_SOURCES = [
 
 const boardType = detectBoardType();
 let mode = "pin"; // "pin" | "internal"
-let selectedPin = boardType === "esp32s3" ? "4" : "0";
+let selectedPin = boardType === "esp32s2" || boardType === "esp32s3" ? "4" : "0";
 let internalSrc = "vrefint"; // "vrefint" | "temp" | "vbat"
 let samples = 1;
 let statusText = "";
@@ -100,7 +104,7 @@ function render() {
       spacing: 16,
       children: [
         UI.text({ text: "ADC / analogRead", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
+        UI.text({ text: boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
 
         UI.text({ text: "Source", fontWeight: "medium" }),
         UI.picker({
@@ -149,9 +153,9 @@ function render() {
               ],
             }),
 
-        boardType === "esp32s3"
+        boardType === "esp32s2" || boardType === "esp32s3"
           ? UI.text({
-              text: "ESP32-S3 uses GPIO ADC channels here; internal VREF/TEMP/VBAT sources are not exposed in the current firmware.",
+              text: "ESP32 uses GPIO ADC channels here; internal VREF/TEMP/VBAT sources are not exposed in the current firmware.",
               font: "caption",
             })
           : null,
