@@ -98,6 +98,7 @@
                                     Width="32"
                                     Height="32"
                                     Padding="0"
+                                    Foreground="{ThemeResource AppErrorTextBrush}"
                                     Click="OnSessionStopClick"
                                     ToolTipService.ToolTip="Stop script">
                                     <FontIcon Glyph="&#xE71A;" FontSize="12" />

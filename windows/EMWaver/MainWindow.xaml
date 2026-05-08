@@ -126,6 +126,7 @@
                         x:Name="StopRunningScriptButton"
                         Label="Stop"
                         Icon="Stop"
+                        Foreground="{ThemeResource AppErrorTextBrush}"
                         Visibility="Collapsed"
                         Click="OnStopRunningScriptClick" />
 

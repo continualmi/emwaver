@@ -45,6 +45,7 @@ Current first step:
 - the session row has a stop button,
 - running a different script no longer shows the old "Stop and Run" switch prompt.
 - the Windows session-row and toolbar stop controls now stop the active script directly, matching the simplified macOS row-control behavior.
+- the Windows session-row and toolbar stop controls now use the existing error/destructive brush instead of the normal command tint.
 - active transport buffer state is now represented by a `DeviceBufferSession` instead of direct script-runtime reads from the process-wide buffer facade.
 - Windows USB and BLE connections now select keyed buffer sessions, matching the macOS target-session direction even though only one transport connection is active at a time today.
 - Windows script sampler packet APIs now use the transport lane size exposed by `NativeBufferRust.PacketSizeBytes` instead of assuming 64-byte packets.
@@ -164,6 +165,7 @@ Remaining isolation work:
 - [x] macOS has per-device host buffer/session state.
 - [x] Windows shows active run status in the script list.
 - [x] Windows has a row-level stop control for the active run.
+- [x] Windows styles row-level and toolbar stop controls as destructive actions.
 - [x] Android shows active run status in the script list.
 - [x] Android has a row-level stop control for the active run.
 - [x] Android styles the row-level stop control as a destructive action instead of a normal edit/action button.
