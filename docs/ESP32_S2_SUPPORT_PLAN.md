@@ -66,6 +66,17 @@ Hardware validation still required on an attached ESP32-S2 board:
 
 Use this runbook when an ESP32-S2 board is attached. Replace `<PORT>`, `<SSID>`, `<PASSWORD>`, and `<SECRET>` with local values.
 
+The scripted version is:
+
+```bash
+EMWAVER_ESP32_S2_PORT=<PORT> \
+EMWAVER_DEVICE_ID=<DEVICE_ID> \
+EMWAVER_WIFI_SSID=<SSID> \
+EMWAVER_WIFI_PASSWORD=<PASSWORD> \
+EMWAVER_WIFI_SECRET=<SECRET> \
+scripts/esp32-s2-hardware-validation.sh
+```
+
 1. Build and flash the S2 target:
 
 ```bash
