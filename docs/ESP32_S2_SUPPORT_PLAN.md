@@ -62,6 +62,55 @@ Hardware validation still required on an attached ESP32-S2 board:
 - ESP32-S2 advertises `_emwaver._tcp` with `board=esp32s2` and `cap=wifi,usb`.
 - ESP32-S3 regression check confirms `board=esp32s3` and `cap=wifi,usb,ble` on physical hardware.
 
+## Hardware Validation Runbook
+
+Use this runbook when an ESP32-S2 board is attached. Replace `<PORT>`, `<SSID>`, `<PASSWORD>`, and `<SECRET>` with local values.
+
+1. Build and flash the S2 target:
+
+```bash
+cd esp
+source setup.sh
+idf.py set-target esp32s2
+idf.py build
+idf.py -p <PORT> flash monitor
+```
+
+2. Confirm USB enumeration:
+
+```bash
+python -m serial.tools.list_ports -v
+```
+
+Expected result: the flashed ESP32-S2 appears as a USB device/serial or USB MIDI-capable runtime, depending on host tooling.
+
+3. Confirm the board identity command through the normal EMWaver USB command path.
+
+Expected result: `EMW_OP_BOARD_GET` returns `esp32s2`.
+
+4. Provision Wi-Fi through the normal EMWaver USB command path using:
+
+```text
+ssid=<SSID>
+password=<PASSWORD>
+secret=<SECRET>
+```
+
+Expected result: firmware reports Wi-Fi provisioned, joins station mode, and starts the `_emwaver._tcp` service.
+
+5. Confirm mDNS TXT records from a machine on the same network:
+
+```bash
+dns-sd -B _emwaver._tcp local
+dns-sd -L <INSTANCE_NAME> _emwaver._tcp local
+```
+
+Expected result: TXT records include `board=esp32s2` and `cap=wifi,usb`.
+
+6. Run the S3 regression check with an ESP32-S3 board:
+
+Expected result: board identity remains `esp32s3`, and mDNS TXT records include `board=esp32s3` and `cap=wifi,usb,ble`.
+
 ## Assumptions
 
 - First ESP32-S2 support targets one known dev board before broad S2 compatibility is claimed.
