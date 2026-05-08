@@ -127,7 +127,7 @@ emwaver run scripts/blink.emw --direct --sim-device
 Direct mode uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects a USB MIDI input id from `emwaver devices`. `--ble` selects the ESP32 BLE GATT transport and uses the same SysEx/superframe envelope as USB MIDI. `--wifi <host-or-ip> --wifi-secret <local-secret>` selects the authenticated ESP32 Wi-Fi WebSocket transport on port `3922`; override the port with `--wifi-port <port>`.
 `--sim-device` uses the shared mock EMWaver device simulator so hardware-touching scripts can be smoke-tested without a connected board.
 
-`emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` performs a manual authenticated Wi-Fi probe and prints the endpoint if the pairing handshake succeeds. Full mDNS Wi-Fi discovery in `emwaver devices` is still pending.
+`emwaver devices` performs best-effort mDNS discovery for ESP32 Wi-Fi endpoints advertising `_emwaver._tcp` and prints each endpoint's service id, instance name, address, port, board, and firmware TXT metadata. `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` additionally performs a manual authenticated Wi-Fi probe and prints the endpoint if the pairing handshake succeeds.
 
 Useful flags:
 
@@ -209,7 +209,7 @@ EMWAVER_VALIDATE_SYSTEMD=1 scripts/rebirth-linux-validation.sh
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the first reusable ESP32 Wi-Fi WebSocket transport adapter: it performs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, and keeps received stream lanes in the local buffer.
+`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the reusable ESP32 Wi-Fi path: it performs best-effort `_emwaver._tcp` mDNS discovery for device listing, runs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, and keeps received stream lanes in the local buffer.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 

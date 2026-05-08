@@ -258,7 +258,8 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
   - authentication failure,
   - mDNS unavailable,
   - paired secret mismatch.
-  - Current daemon progress: `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, authentication, and paired-secret failures.
+- Current daemon progress: `emwaver devices` now performs best-effort `_emwaver._tcp` mDNS discovery and prints discovered ESP32 Wi-Fi endpoints with TXT board/firmware metadata. `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can still manually probe a paired endpoint.
+- Current daemon progress: `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, authentication, and paired-secret failures.
 
 ### Gateway
 
@@ -362,7 +363,7 @@ Resolved v1 decisions:
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add authenticated Wi-Fi server carrying EMWaver frames.
 5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable authenticated ESP32 Wi-Fi WebSocket transport adapter with HMAC auth, envelope version `1`, sequence-correlated command responses, and local receive buffering. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip> --wifi-secret <local-secret>`.
-6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint; automatic mDNS Wi-Fi discovery output is still pending.
+6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, and `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` can manually probe a paired endpoint.
 7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel; automatic device-list discovery and selection remain pending.
 8. Add native app discovery/manual connect surfaces.
 9. Validate LAN script execution on real ESP32-S3 hardware.

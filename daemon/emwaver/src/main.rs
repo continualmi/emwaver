@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use emwaver_device::{list_ble_devices, BleDevice, Device, WiFiDevice};
+use emwaver_device::{list_ble_devices, list_wifi_devices, BleDevice, Device, WiFiDevice};
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -1022,6 +1022,37 @@ fn list_devices_lines(
             }
         }
         Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
+    }
+
+    match list_wifi_devices(1_500) {
+        Ok(devices) if devices.is_empty() => {
+            out.push("No EMWaver Wi-Fi devices found.".to_string())
+        }
+        Ok(devices) => {
+            out.push("Wi-Fi devices:".to_string());
+            for device in devices {
+                let board = device
+                    .txt
+                    .get("board")
+                    .map(String::as_str)
+                    .unwrap_or("unknown board");
+                let firmware = device
+                    .txt
+                    .get("fw")
+                    .map(String::as_str)
+                    .unwrap_or("unknown fw");
+                let addresses = if device.addresses.is_empty() {
+                    device.host.clone()
+                } else {
+                    device.addresses.join(", ")
+                };
+                out.push(format!(
+                    "  {}: {} at {}:{} ({board}, {firmware})",
+                    device.id, device.name, addresses, device.port
+                ));
+            }
+        }
+        Err(err) => out.push(format!("Wi-Fi discovery unavailable: {err:#}")),
     }
 
     let (wifi_lines, _wifi_ok) = wifi_probe_lines(wifi, wifi_secret, wifi_port)?;
