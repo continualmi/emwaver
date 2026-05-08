@@ -69,6 +69,7 @@ final class MacWiFiManager {
     private var connectedDeviceID: String?
     private var pendingAuthSecret: String?
     private var pendingAuthRecord: MacWiFiDeviceRecord?
+    private var authTimeoutWorkItem: DispatchWorkItem?
 
     init(
         onDevicesChanged: @escaping ([MacWiFiDeviceRecord]) -> Void,
@@ -244,6 +245,7 @@ final class MacWiFiManager {
 
             socket.resume()
             self.receiveLoop(socket: socket)
+            self.scheduleAuthTimeout(for: socket)
             self.publishDevices()
         }
     }
@@ -270,6 +272,8 @@ final class MacWiFiManager {
 
     private func disconnect(notify: Bool) {
         let oldID = connectedDeviceID
+        authTimeoutWorkItem?.cancel()
+        authTimeoutWorkItem = nil
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
@@ -333,6 +337,22 @@ final class MacWiFiManager {
         }
     }
 
+    private func scheduleAuthTimeout(for socket: URLSessionWebSocketTask) {
+        authTimeoutWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self, weak socket] in
+            guard let self,
+                  let socket,
+                  self.socket === socket,
+                  self.connectedDeviceID == nil else {
+                return
+            }
+            self.onError("Wi-Fi authentication timed out")
+            self.disconnect(notify: true)
+        }
+        authTimeoutWorkItem = workItem
+        queue.asyncAfter(deadline: .now() + 8, execute: workItem)
+    }
+
     private func receiveLoop(socket: URLSessionWebSocketTask) {
         socket.receive { [weak self] result in
             guard let self else { return }
@@ -350,6 +370,8 @@ final class MacWiFiManager {
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("ok"),
                               let record = self.pendingAuthRecord {
+                        self.authTimeoutWorkItem?.cancel()
+                        self.authTimeoutWorkItem = nil
                         self.connectedDeviceID = record.id
                         self.pendingAuthSecret = nil
                         self.pendingAuthRecord = nil

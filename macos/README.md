@@ -75,6 +75,7 @@ Transport behavior:
 - The setup surface can query the ESP32-S3 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, and authenticated state for local diagnostics.
 - When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.
 - Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
+- Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local timeout are disconnected with a specific authentication-timeout error.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.
 - Wi-Fi pairing records are stored in local macOS app preferences. They are not account-backed, cloud-synced, or used for hardware ownership/activation.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
