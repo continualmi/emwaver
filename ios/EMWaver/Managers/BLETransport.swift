@@ -12,6 +12,29 @@ enum BLETransport {
     static let commandCharacteristicUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
     static let notifyCharacteristicUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
 
+    final class ScanSession {
+        private weak var central: CBCentralManager?
+        private(set) var isScanning = false
+
+        init(central: CBCentralManager) {
+            self.central = central
+        }
+
+        func start() {
+            guard !isScanning else { return }
+            central?.scanForPeripherals(withServices: [BLETransport.serviceUUID], options: [
+                CBCentralManagerScanOptionAllowDuplicatesKey: false
+            ])
+            isScanning = true
+        }
+
+        func stop() {
+            guard isScanning else { return }
+            central?.stopScan()
+            isScanning = false
+        }
+    }
+
     struct PendingConnection {
         let peripheral: CBPeripheral
         let displayName: String
@@ -82,16 +105,6 @@ enum BLETransport {
         let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let name = peripheral.name ?? advertisedName ?? ""
         return name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil
-    }
-
-    static func startScan(on central: CBCentralManager) {
-        central.scanForPeripherals(withServices: [serviceUUID], options: [
-            CBCentralManagerScanOptionAllowDuplicatesKey: false
-        ])
-    }
-
-    static func stopScan(on central: CBCentralManager?) {
-        central?.stopScan()
     }
 
     static func connect(_ pending: PendingConnection, using central: CBCentralManager, delegate: CBPeripheralDelegate) {

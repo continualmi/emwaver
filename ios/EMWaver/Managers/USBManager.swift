@@ -121,6 +121,7 @@ final class USBManager: NSObject, ObservableObject {
     // MARK: - BLE plumbing
 
     private var centralManager: CBCentralManager?
+    private var bleScanSession: BLETransport.ScanSession?
     private var activeTransport: ActiveTransport = .none
     private var activeDeviceTarget = ActiveDeviceTarget(deviceId: "active", transport: ActiveTransport.none)
     private var pendingBleConnection: BLETransport.PendingConnection?
@@ -318,7 +319,8 @@ final class USBManager: NSObject, ObservableObject {
 
     func stopScan() {
         midiQueue.async {
-            BLETransport.stopScan(on: self.centralManager)
+            self.bleScanSession?.stop()
+            self.bleScanSession = nil
             DispatchQueue.main.async { self.isScanning = false }
         }
     }
@@ -938,7 +940,12 @@ final class USBManager: NSObject, ObservableObject {
 
         dbg("BLE scan: service=\(BLETransport.serviceUUID.uuidString)")
         if let centralManager {
-            BLETransport.startScan(on: centralManager)
+            if bleScanSession?.isScanning == true {
+                return
+            }
+            let session = BLETransport.ScanSession(central: centralManager)
+            bleScanSession = session
+            session.start()
         }
     }
 
@@ -1106,7 +1113,8 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             guard BLETransport.matchesAdvertisementName(peripheral: peripheral, advertisementData: advertisementData) else { return }
 
             self.dbg("BLE discovered: \(name) rssi=\(RSSI)")
-            BLETransport.stopScan(on: self.centralManager)
+            self.bleScanSession?.stop()
+            self.bleScanSession = nil
             let pending = BLETransport.pendingConnection(
                 peripheral: peripheral,
                 advertisementData: advertisementData
