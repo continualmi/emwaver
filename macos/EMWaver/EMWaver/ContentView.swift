@@ -157,6 +157,9 @@ struct ContentView: View {
                     externalScriptSessions: scriptSessions.scriptSessionStatuses,
                     onSelectExternalScriptSession: { id in
                         scriptSessions.selectSession(id)
+                    },
+                    onStopExternalScriptSession: { id in
+                        scriptSessions.stopSession(id)
                     }
                 )
                 .id(scriptDeviceAttachmentKey)
@@ -357,13 +360,11 @@ struct ContentView: View {
                         }
                     } label: {
                         if item.id == scriptSessions.selectedDeviceID {
-                            Label {
+                            HStack {
+                                Image(systemName: transportIcon(for: item.transport))
                                 Text(LocalDeviceLabelFormatter.label(for: item))
-                            } icon: {
-                                HStack(spacing: 4) {
-                                    Image(systemName: transportIcon(for: item.transport))
-                                    Image(systemName: "checkmark")
-                                }
+                                Spacer()
+                                Image(systemName: "checkmark")
                             }
                         } else {
                             Label(LocalDeviceLabelFormatter.label(for: item), systemImage: transportIcon(for: item.transport))
@@ -378,7 +379,7 @@ struct ContentView: View {
                 appRouter.isDeviceSheetPresented = true
             }
         } label: {
-            Label("Device: \(selectedLocalDeviceLabel)", systemImage: selectedLocalDevice.map { transportIcon(for: $0.transport) } ?? toolbarDeviceStatus.icon)
+            Label(selectedLocalDeviceLabel, systemImage: selectedLocalDevice.map { transportIcon(for: $0.transport) } ?? toolbarDeviceStatus.icon)
                 .labelStyle(.titleAndIcon)
         }
         .help("Select the local device used by the next script session")

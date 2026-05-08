@@ -67,6 +67,7 @@ public struct ScriptsRootView: View {
     private let onStopActiveScript: (() -> Void)?
     private let externalScriptSessions: [ScriptSessionStatus]
     private let onSelectExternalScriptSession: ((String) -> Void)?
+    private let onStopExternalScriptSession: ((String) -> Void)?
 
     private let device: (any ScriptDevice)?
     private let hostStatusSink: ((Bool, String?) -> Void)?
@@ -124,7 +125,8 @@ public struct ScriptsRootView: View {
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
         onStopActiveScript: (() -> Void)? = nil,
         externalScriptSessions: [ScriptSessionStatus] = [],
-        onSelectExternalScriptSession: ((String) -> Void)? = nil
+        onSelectExternalScriptSession: ((String) -> Void)? = nil,
+        onStopExternalScriptSession: ((String) -> Void)? = nil
     ) {
         self.device = device
         self.hostStatusSink = hostStatusSink
@@ -139,6 +141,7 @@ public struct ScriptsRootView: View {
         self.onStopActiveScript = onStopActiveScript
         self.externalScriptSessions = externalScriptSessions
         self.onSelectExternalScriptSession = onSelectExternalScriptSession
+        self.onStopExternalScriptSession = onStopExternalScriptSession
         self._previewManager = StateObject(wrappedValue: previewManager)
         _agentViewModel = StateObject(
             wrappedValue: AgentChatViewModel(endpointProvider: agentEndpointProvider)
@@ -159,7 +162,8 @@ public struct ScriptsRootView: View {
         activePreviewManagerProvider: (() -> ScriptPreviewManager?)? = nil,
         onStopActiveScript: (() -> Void)? = nil,
         externalScriptSessions: [ScriptSessionStatus] = [],
-        onSelectExternalScriptSession: ((String) -> Void)? = nil
+        onSelectExternalScriptSession: ((String) -> Void)? = nil,
+        onStopExternalScriptSession: ((String) -> Void)? = nil
     ) {
         self.init(
             previewManager: ScriptPreviewManager(),
@@ -175,7 +179,8 @@ public struct ScriptsRootView: View {
             activePreviewManagerProvider: activePreviewManagerProvider,
             onStopActiveScript: onStopActiveScript,
             externalScriptSessions: externalScriptSessions,
-            onSelectExternalScriptSession: onSelectExternalScriptSession
+            onSelectExternalScriptSession: onSelectExternalScriptSession,
+            onStopExternalScriptSession: onStopExternalScriptSession
         )
     }
 
@@ -368,6 +373,7 @@ public struct ScriptsRootView: View {
                                     isSelected: script.id == viewModel.selectedScriptId,
                                     sessionStatuses: sessionStatuses(for: script.id),
                                     onTap: { openOrRestoreScript(script.id) },
+                                    onStopSession: { stopScriptSession(for: script.id) },
                                     onEdit: { openEditor(for: script.id) }
                                 )
                                 .listRowSeparator(.hidden)
@@ -383,6 +389,7 @@ public struct ScriptsRootView: View {
                                         isSelected: script.id == viewModel.selectedScriptId,
                                         sessionStatuses: sessionStatuses(for: script.id),
                                         onTap: { openOrRestoreScript(script.id) },
+                                        onStopSession: { stopScriptSession(for: script.id) },
                                         onEdit: { openEditor(for: script.id) }
                                     )
                                     .listRowSeparator(.hidden)
@@ -399,6 +406,7 @@ public struct ScriptsRootView: View {
                                         isSelected: false,
                                         sessionStatuses: [],
                                         onTap: { openSignalEditor(item) },
+                                        onStopSession: nil,
                                         onEdit: { openSignalEditor(item) }
                                     )
                                     .listRowSeparator(.hidden)
@@ -529,6 +537,11 @@ public struct ScriptsRootView: View {
 
     private func sessionStatuses(for scriptId: String) -> [ScriptSessionStatus] {
         externalScriptSessions.filter { $0.scriptId == scriptId }
+    }
+
+    private func stopScriptSession(for scriptId: String) {
+        guard let session = sessionStatuses(for: scriptId).first else { return }
+        onStopExternalScriptSession?(session.id)
     }
 
     private func startPendingScriptPreview() {
@@ -1255,36 +1268,6 @@ public struct ScriptsRootView: View {
                 }
             }
         } else {
-            // If a script is running but we're on the main menu, expose a quick way to return to it.
-            let toolbarPreviewManager = activePreviewManager
-            if let runningName = toolbarPreviewManager.activeScriptName, !runningName.isEmpty {
-                ToolbarItem(placement: .navigation) {
-                    Button {
-                        showingPreview = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "play.fill")
-                            Text(runningName)
-                                .lineLimit(1)
-                        }
-                    }
-                    .help("Return to running script")
-                }
-
-                ToolbarItem(placement: .primaryAction) {
-                    Button(role: .destructive) {
-                        if let onStopActiveScript {
-                            onStopActiveScript()
-                        } else {
-                            previewManager.exitPreview()
-                        }
-                    } label: {
-                        Image(systemName: "stop.fill")
-                    }
-                    .help("Stop running script")
-                }
-            }
-
             ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button("New Script") { openNewScriptEditor() }
@@ -1451,6 +1434,7 @@ private struct ScriptRow: View {
     let isSelected: Bool
     let sessionStatuses: [ScriptsRootView.ScriptSessionStatus]
     let onTap: () -> Void
+    let onStopSession: (() -> Void)?
     let onEdit: () -> Void
 
     var body: some View {
@@ -1499,6 +1483,14 @@ private struct ScriptRow: View {
                 }
             }
             Spacer()
+            if !sessionStatuses.isEmpty, let onStopSession {
+                Button(role: .destructive, action: onStopSession) {
+                    Image(systemName: "stop.fill")
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.red)
+                .help("Stop running script")
+            }
             Button(action: onEdit) {
                 if script.kind == .script {
                     Image(systemName: script.isAsset ? "eye" : "pencil")
