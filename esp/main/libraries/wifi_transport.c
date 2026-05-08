@@ -780,6 +780,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
             s_auth_challenge[0] = '\0';
             s_auth_generation++;
         }
+        if (s_httpd) {
+            (void)httpd_sess_trigger_close(s_httpd, current_fd);
+        }
         return ESP_FAIL;
     }
 
