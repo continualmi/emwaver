@@ -68,10 +68,6 @@ final class USBManager: NSObject, ObservableObject {
     
     private static let log = Logger(subsystem: "com.emwaver", category: "device-transport")
 
-    private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
-    private static let bleCommandCharacteristicUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
-    private static let bleNotifyCharacteristicUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
-
     private enum ActiveTransport {
         case none
         case usbMidi
@@ -1006,8 +1002,8 @@ final class USBManager: NSObject, ObservableObject {
         }
         guard activeTransport != .usbMidi else { return }
 
-        dbg("BLE scan: service=\(Self.bleServiceUUID.uuidString)")
-        centralManager?.scanForPeripherals(withServices: [Self.bleServiceUUID], options: [
+        dbg("BLE scan: service=\(BLETransport.serviceUUID.uuidString)")
+        centralManager?.scanForPeripherals(withServices: [BLETransport.serviceUUID], options: [
             CBCentralManagerScanOptionAllowDuplicatesKey: false
         ])
     }
@@ -1175,9 +1171,8 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     ) {
         midiQueue.async {
             guard self.activeTransport != .usbMidi else { return }
-            let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
-            let name = peripheral.name ?? advertisedName ?? "EMWaver BLE"
-            guard name.localizedCaseInsensitiveContains("emwaver") || advertisedName != nil else { return }
+            let name = BLETransport.displayName(peripheral: peripheral, advertisementData: advertisementData)
+            guard BLETransport.matchesAdvertisementName(peripheral: peripheral, advertisementData: advertisementData) else { return }
 
             self.dbg("BLE discovered: \(name) rssi=\(RSSI)")
             self.centralManager?.stopScan()
@@ -1192,7 +1187,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         midiQueue.async {
             self.dbg("BLE connected: \(peripheral.name ?? peripheral.identifier.uuidString)")
-            peripheral.discoverServices([Self.bleServiceUUID])
+            peripheral.discoverServices([BLETransport.serviceUUID])
         }
     }
 
@@ -1230,13 +1225,13 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.setError("BLE service discovery failed: \(error.localizedDescription)")
                 return
             }
-            guard let service = peripheral.services?.first(where: { $0.uuid == Self.bleServiceUUID }) else {
+            guard let service = peripheral.services?.first(where: { $0.uuid == BLETransport.serviceUUID }) else {
                 self.setError("BLE service discovery failed: EMWaver service missing")
                 return
             }
             peripheral.discoverCharacteristics([
-                Self.bleCommandCharacteristicUUID,
-                Self.bleNotifyCharacteristicUUID
+                BLETransport.commandCharacteristicUUID,
+                BLETransport.notifyCharacteristicUUID
             ], for: service)
         }
     }
@@ -1249,9 +1244,9 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             }
 
             for characteristic in service.characteristics ?? [] {
-                if characteristic.uuid == Self.bleCommandCharacteristicUUID {
+                if characteristic.uuid == BLETransport.commandCharacteristicUUID {
                     self.commandCharacteristic = characteristic
-                } else if characteristic.uuid == Self.bleNotifyCharacteristicUUID {
+                } else if characteristic.uuid == BLETransport.notifyCharacteristicUUID {
                     self.notifyCharacteristic = characteristic
                     peripheral.setNotifyValue(true, for: characteristic)
                 }
@@ -1262,7 +1257,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 return
             }
 
-            self.setActiveBufferSession(deviceId: "ble:\(peripheral.identifier.uuidString)")
+            self.setActiveBufferSession(deviceId: BLETransport.sessionKey(for: peripheral))
             self.activeTransport = .ble
             DispatchQueue.main.async {
                 self.connectedPortName = peripheral.name ?? "EMWaver BLE"
@@ -1279,7 +1274,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                 self.dbg("BLE notify failed: \(error.localizedDescription)")
                 return
             }
-            guard characteristic.uuid == Self.bleNotifyCharacteristicUUID, let data = characteristic.value else { return }
+            guard characteristic.uuid == BLETransport.notifyCharacteristicUUID, let data = characteristic.value else { return }
             self.feedMidiBytes(data)
         }
     }
