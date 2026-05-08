@@ -942,11 +942,11 @@ public sealed partial class ScriptsPage : Page
     internal void HandleToolbarSync() => _ = SyncNowAsync();
     internal void HandleToolbarPreviewToggle(bool preview) => SetPreviewMode(preview);
     internal void HandleToolbarAgentToggle(bool show) => SetAgentPaneVisibility(show);
-    internal Task HandleToolbarStopRunningAsync() => StopRunningScriptWithConfirmationAsync();
+    internal Task HandleToolbarStopRunningAsync() => StopRunningScriptAsync();
 
     private async void OnSessionStopClick(object sender, RoutedEventArgs e)
     {
-        await StopRunningScriptWithConfirmationAsync();
+        await StopRunningScriptAsync();
     }
 
     private void SetAgentPaneVisibility(bool show)
@@ -1570,22 +1570,9 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private async Task StopRunningScriptWithConfirmationAsync()
+    private async Task StopRunningScriptAsync()
     {
         if (!_hasActiveRunningScript)
-        {
-            return;
-        }
-
-        var runningName = string.IsNullOrWhiteSpace(_activeRunningScriptName) ? "script" : _activeRunningScriptName;
-        var stopOk = await ConfirmAsync(
-            title: "Stop running script?",
-            message: $"Stop '{runningName}'?",
-            primaryButtonText: "Stop",
-            closeButtonText: "Cancel"
-        );
-
-        if (!stopOk)
         {
             return;
         }

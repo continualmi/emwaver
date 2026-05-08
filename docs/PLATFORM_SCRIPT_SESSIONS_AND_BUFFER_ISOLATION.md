@@ -43,6 +43,7 @@ Current first step:
 - the session row shows the active device label when available,
 - the session row has a stop button,
 - running a different script no longer shows the old "Stop and Run" switch prompt.
+- the Windows session-row and toolbar stop controls now stop the active script directly, matching the simplified macOS row-control behavior.
 - active transport buffer state is now represented by a `DeviceBufferSession` instead of direct script-runtime reads from the process-wide buffer facade.
 - Windows USB and BLE connections now select keyed buffer sessions, matching the macOS target-session direction even though only one transport connection is active at a time today.
 - Windows script sampler packet APIs now use the transport lane size exposed by `NativeBufferRust.PacketSizeBytes` instead of assuming 64-byte packets.
