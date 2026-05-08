@@ -364,6 +364,7 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             const uint8_t out[] = {
                 wifi_transport_is_provisioned() ? 1u : 0u,
                 wifi_transport_is_authenticated() ? 1u : 0u,
+                wifi_transport_is_station_online() ? 1u : 0u,
             };
             send_binary_ok(out, sizeof(out));
             return;

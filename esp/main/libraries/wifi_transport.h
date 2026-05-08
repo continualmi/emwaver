@@ -24,6 +24,7 @@ esp_err_t wifi_transport_provision(const char *ssid, const char *password, const
 esp_err_t wifi_transport_clear_config(void);
 bool wifi_transport_is_provisioned(void);
 bool wifi_transport_is_authenticated(void);
+bool wifi_transport_is_station_online(void);
 
 #ifdef __cplusplus
 }

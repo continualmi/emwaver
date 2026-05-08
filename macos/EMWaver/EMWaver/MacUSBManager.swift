@@ -552,7 +552,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             let provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned"
             let authText = response[2] == 0 ? "idle" : "authenticated"
-            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText); socket is \(authText).", isError: false)
+            if response.count >= 4 {
+                let stationText = response[3] == 0 ? "offline" : "online"
+                self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText); socket is \(authText).", isError: false)
+            } else {
+                self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText); socket is \(authText).", isError: false)
+            }
         }
     }
 

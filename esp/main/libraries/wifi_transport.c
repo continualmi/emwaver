@@ -61,6 +61,7 @@ static char s_auth_challenge[33];
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
+static bool s_station_online;
 static uint8_t s_reconnect_attempt;
 static bool s_reconnect_pending;
 
@@ -165,6 +166,7 @@ esp_err_t wifi_transport_clear_config(void)
         memset(&s_config, 0, sizeof(s_config));
         s_has_config = false;
         s_authenticated = false;
+        s_station_online = false;
         s_active_fd = -1;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
@@ -185,6 +187,11 @@ bool wifi_transport_is_provisioned(void)
 bool wifi_transport_is_authenticated(void)
 {
     return s_authenticated;
+}
+
+bool wifi_transport_is_station_online(void)
+{
+    return s_station_online;
 }
 
 static void wifi_register_commands(void)
@@ -224,7 +231,14 @@ static void wifi_clear_command(void)
 static void wifi_status_command(void)
 {
     char status[128];
-    snprintf(status, sizeof(status), "wifi:%s:%s", s_has_config ? "provisioned" : "unprovisioned", s_authenticated ? "authenticated" : "idle");
+    snprintf(
+        status,
+        sizeof(status),
+        "wifi:%s:%s:%s",
+        s_has_config ? "provisioned" : "unprovisioned",
+        s_station_online ? "online" : "offline",
+        s_authenticated ? "authenticated" : "idle"
+    );
     command_send_ok((const uint8_t *)status, strlen(status));
 }
 
@@ -323,6 +337,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         (void)esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_authenticated = false;
+        s_station_online = false;
         s_active_fd = -1;
         stop_server();
         if (s_has_config && !s_reconnect_pending) {
@@ -330,6 +345,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
             (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
         }
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
+        s_station_online = true;
         s_reconnect_attempt = 0;
         s_reconnect_pending = false;
         start_server();
