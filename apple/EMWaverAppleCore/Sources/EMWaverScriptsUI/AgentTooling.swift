@@ -106,7 +106,7 @@ public struct AgentToolResult: Codable, Equatable {
 
 @MainActor
 public struct AgentToolRuntime {
-    let tools: () -> [AgentToolDefinition]
+    public let tools: () -> [AgentToolDefinition]
     public let context: () -> String
     public let execute: (_ name: String, _ arguments: [String: AgentToolJSON]) async -> AgentToolResult
 
