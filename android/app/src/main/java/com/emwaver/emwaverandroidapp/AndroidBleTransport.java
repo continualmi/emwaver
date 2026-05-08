@@ -71,6 +71,10 @@ final class AndroidBleTransport {
         }
     }
 
+    static void discoverServicesAfterMtu(BluetoothGatt gatt) {
+        gatt.discoverServices();
+    }
+
     @Nullable
     static BluetoothGattCharacteristic commandCharacteristic(BluetoothGatt gatt) {
         BluetoothGattService service = gatt.getService(SERVICE_UUID);

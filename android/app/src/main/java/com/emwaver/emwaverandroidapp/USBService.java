@@ -609,7 +609,7 @@ public class USBService extends Service implements DeviceConnectionService {
         @SuppressLint("MissingPermission")
         @Override
         public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
-            gatt.discoverServices();
+            AndroidBleTransport.discoverServicesAfterMtu(gatt);
         }
 
         @SuppressLint("MissingPermission")
