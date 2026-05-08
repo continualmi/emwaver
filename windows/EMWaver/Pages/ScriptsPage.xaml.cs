@@ -198,13 +198,13 @@ public sealed partial class ScriptsPage : Page
                     HandleScriptTreeRender(tree, gen);
                 });
             },
-            sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs),
+            sendPacket: (bytes, timeoutMs) => AppServices.Device.SendPacket(bytes, timeoutMs, _activeRunningDeviceSessionId),
             errorHandler: message =>
             {
                 _ = DispatcherQueue.TryEnqueue(async () => await ShowScriptErrorAsync(message));
             },
-            getSamplerBytes: () => AppServices.Device.GetActiveRxSnapshot(),
-            clearSamplerBuffer: () => AppServices.Device.ClearActiveBuffer(),
+            getSamplerBytes: () => AppServices.Device.GetRxSnapshot(_activeRunningDeviceSessionId),
+            clearSamplerBuffer: () => AppServices.Device.ClearBuffer(_activeRunningDeviceSessionId),
             samplerPacketSizeBytes: NativeBufferRust.PacketSizeBytes
         );
 
@@ -709,6 +709,7 @@ public sealed partial class ScriptsPage : Page
     private int _activeRenderGeneration;
     private bool _hasActiveRunningScript;
     private string? _activeRunningScriptName;
+    private string _activeRunningDeviceSessionId = "active";
     private Models.ScriptSessionInfo? _runningSessionItem;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
@@ -801,6 +802,7 @@ public sealed partial class ScriptsPage : Page
     {
         _hasActiveRunningScript = isRunning;
         _activeRunningScriptName = isRunning ? scriptName : null;
+        _activeRunningDeviceSessionId = isRunning ? AppServices.Device.ActiveBufferSessionId : "active";
         NotifyRunningScriptStatusChanged();
     }
 

@@ -207,8 +207,12 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal void ClearActiveBuffer() => ActiveBufferSession.ClearAll();
     internal ulong GetActiveRxPacketCount() => ActiveBufferSession.GetRxPacketCount();
     internal ulong GetActiveTxPacketCount() => ActiveBufferSession.GetTxPacketCount();
+    internal string ActiveBufferSessionId => ActiveBufferSession.DeviceId;
 
-    private void SetActiveBufferSession(string deviceId)
+    internal byte[] GetRxSnapshot(string deviceId) => BufferSession(deviceId).GetRxSnapshot();
+    internal void ClearBuffer(string deviceId) => BufferSession(deviceId).ClearAll();
+
+    private DeviceBufferSession BufferSession(string deviceId)
     {
         var key = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
         lock (_bufferSessionLock)
@@ -219,6 +223,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                 _bufferSessionsByDeviceId[key] = session;
             }
 
+            return session;
+        }
+    }
+
+    private void SetActiveBufferSession(string deviceId)
+    {
+        lock (_bufferSessionLock)
+        {
+            var session = BufferSession(deviceId);
             _activeBufferSession = session;
             _activeBufferSession.ClearAll();
         }
@@ -528,6 +541,15 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     private async Task<byte[]?> SendCommandAsync(byte[] commandLane, int timeoutMs, Func<byte[], bool> responsePredicate)
     {
+        return await SendCommandAsync(commandLane, timeoutMs, ActiveBufferSession, responsePredicate);
+    }
+
+    private async Task<byte[]?> SendCommandAsync(
+        byte[] commandLane,
+        int timeoutMs,
+        DeviceBufferSession session,
+        Func<byte[], bool> responsePredicate)
+    {
         if (ActiveTransport == DeviceTransport.Ble)
         {
             if (_bleCommandCharacteristic == null)
@@ -542,7 +564,6 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return null;
         }
 
-        var session = ActiveBufferSession;
         var tcs = session.BeginResponseWait(responsePredicate);
 
         using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
@@ -610,6 +631,24 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
     internal async Task<byte[]?> SendPacketAsync(byte[] payload, int timeoutMs)
     {
+        return await SendPacketAsync(payload, timeoutMs, ActiveBufferSession.DeviceId);
+    }
+
+    internal byte[]? SendPacket(byte[] payload, int timeoutMs, string deviceId)
+    {
+        try
+        {
+            return SendPacketAsync(payload, timeoutMs, deviceId).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+            return null;
+        }
+    }
+
+    internal async Task<byte[]?> SendPacketAsync(byte[] payload, int timeoutMs, string deviceId)
+    {
         if (payload == null)
         {
             return null;
@@ -624,6 +663,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         return await SendCommandAsync(
             commandLane: payload,
             timeoutMs: timeoutMs,
+            session: BufferSession(deviceId),
             responsePredicate: lane18 => lane18.Length > 0 && (lane18[0] == 0x80 || lane18[0] == 0x81)
         );
     }
