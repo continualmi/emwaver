@@ -174,7 +174,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - pairing/reset state.
 - Add station-mode connection manager.
 - Add reconnect/backoff behavior.
-- Add visible connection status over USB/BLE diagnostics.
+- Add visible connection status over USB/BLE diagnostics. Current firmware progress: binary Wi-Fi status and text `wifi status` both expose provisioned/authenticated/station state, reconnecting state, and the last ESP-IDF station disconnect reason.
 
 ### Phase 2: Provisioning
 

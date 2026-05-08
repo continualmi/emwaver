@@ -352,14 +352,17 @@ static void wifi_pairing_reset_command(const char *secret)
 
 static void wifi_status_command(void)
 {
-    char status[128];
+    char status[160];
+    const uint16_t reason = s_last_disconnect_reason;
     snprintf(
         status,
         sizeof(status),
-        "wifi:%s:%s:%s",
+        "wifi:%s:%s:%s:%s:reason=%u",
         s_has_config ? "provisioned" : "unprovisioned",
         s_station_online ? "online" : "offline",
-        s_authenticated ? "authenticated" : "idle"
+        s_authenticated ? "authenticated" : "idle",
+        s_reconnect_pending ? "reconnecting" : "stable",
+        (unsigned)reason
     );
     command_send_ok((const uint8_t *)status, strlen(status));
 }
