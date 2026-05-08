@@ -75,4 +75,9 @@ struct EMWaverTests {
         #expect(MacWiFiManager.capabilities(nil).isEmpty)
     }
 
+    @Test func wifiCapabilityCheckToleratesCaseAndWhitespace() {
+        #expect(MacWiFiManager.advertisesWiFiCapability([" WiFi ", "USB"]))
+        #expect(!MacWiFiManager.advertisesWiFiCapability(["usb", "ble"]))
+    }
+
 }

@@ -72,7 +72,7 @@ Transport behavior:
 - Wi-Fi retransmit buffers use firmware `BS` status frames for host-side pacing, and those status frames are not appended to the script capture buffer.
 - Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.
-- Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection/auth.
+- Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection/auth, with capability matching kept case/whitespace tolerant for TXT-record compatibility.
 - Wi-Fi mDNS discovery prunes unpaired devices that stop advertising while keeping paired/manual records as local fallback entries.
 - The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - Manual Wi-Fi connection rejects ports outside the valid TCP range before storing a pairing record or opening the WebSocket.

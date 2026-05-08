@@ -253,7 +253,7 @@ final class MacWiFiManager {
                 self.onError("Firmware does not support this Wi-Fi transport protocol")
                 return
             }
-            guard record.capabilities.contains("wifi") else {
+            guard Self.advertisesWiFiCapability(record.capabilities) else {
                 self.onError("Firmware does not advertise Wi-Fi transport support")
                 return
             }
@@ -721,6 +721,10 @@ final class MacWiFiManager {
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
+    }
+
+    static func advertisesWiFiCapability(_ capabilities: [String]) -> Bool {
+        capabilities.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("wifi") == .orderedSame }
     }
 
     private static func hmacHex(secret: String, message: String) -> String {
