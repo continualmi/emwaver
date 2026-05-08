@@ -57,7 +57,7 @@ struct ContentView: View {
 
     private var currentBoardType: String {
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
-            return "esp32s3"
+            return "esp32"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }

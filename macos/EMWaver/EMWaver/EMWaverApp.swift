@@ -47,7 +47,7 @@ struct EMWaverApp: App {
                 if device.isConnected {
                     Text("Status: Connected")
                         .foregroundStyle(.secondary)
-                } else if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
+                } else if FirmwareUpdateManager.isEspBoardType(device.connectedBoardType ?? device.lastDetectedBoardType), firmwareUpdater.espBootloaderConnected {
                     Text("Status: ESP Bootloader")
                         .foregroundStyle(.secondary)
                 } else if firmwareUpdater.dfuConnected {
@@ -100,7 +100,7 @@ struct EMWaverApp: App {
                 if device.isConnected {
                     Button("Enter Update Mode") {
                         let boardType = device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
-                        if boardType.caseInsensitiveCompare("esp32s3") == .orderedSame {
+                        if FirmwareUpdateManager.isEspBoardType(boardType) {
                             appRouter.isDeviceSheetPresented = true
                         } else {
                             device.requestEnterUpdateMode()
@@ -114,7 +114,7 @@ struct EMWaverApp: App {
                     firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
                 }
 
-                if (device.connectedBoardType ?? device.lastDetectedBoardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame, firmwareUpdater.espBootloaderConnected {
+                if FirmwareUpdateManager.isEspBoardType(device.connectedBoardType ?? device.lastDetectedBoardType), firmwareUpdater.espBootloaderConnected {
                     Text("ESP Bootloader: Detected")
                         .foregroundStyle(.secondary)
                 } else if firmwareUpdater.dfuConnected {

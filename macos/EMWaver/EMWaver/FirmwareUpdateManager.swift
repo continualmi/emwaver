@@ -68,7 +68,7 @@ final class FirmwareUpdateManager: ObservableObject {
         }
 
         let boardType = effectiveBoardType(for: device)
-        if isEspBoardType(boardType) || espBootloaderConnected || espBootloaderPort != nil {
+        if Self.isEspBoardType(boardType) || espBootloaderConnected || espBootloaderPort != nil {
             do {
                 try startEspSerialUpdate(device: device)
             } catch {
@@ -232,7 +232,7 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.espBootloaderConnected = (port != nil)
                     self.espBootloaderPort = port
                     if port != nil {
-                        self.presentedBoardType = "esp32s3"
+                        self.presentedBoardType = "esp32"
                     }
                 }
             } catch {
@@ -255,16 +255,34 @@ final class FirmwareUpdateManager: ObservableObject {
         }
     }
 
-    private func isEspBoardType(_ boardType: String?) -> Bool {
-        (boardType ?? "").caseInsensitiveCompare("esp32s3") == .orderedSame
+    static func isEspBoardType(_ boardType: String?) -> Bool {
+        switch (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "esp32", "esp32s2", "esp32-s2", "esp32s3", "esp32-s3":
+            return true
+        default:
+            return false
+        }
+    }
+
+    static func normalizedEspBoardType(_ boardType: String?) -> String? {
+        switch (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "esp32s2", "esp32-s2":
+            return "esp32s2"
+        case "esp32s3", "esp32-s3":
+            return "esp32s3"
+        case "esp32":
+            return "esp32"
+        default:
+            return nil
+        }
     }
 
     private func effectiveBoardType(for device: MacUSBManager) -> String {
-        if isEspBoardType(presentedBoardType) {
-            return "esp32s3"
+        if let boardType = Self.normalizedEspBoardType(presentedBoardType) {
+            return boardType
         }
         if espBootloaderConnected || espBootloaderPort != nil {
-            return "esp32s3"
+            return "esp32"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -407,7 +425,7 @@ final class FirmwareUpdateManager: ObservableObject {
     private func startEspSerialUpdate(device: MacUSBManager) throws {
         progressMessage = "Preparing ESP serial update..."
         completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
-        appendLog("ESP32-S3 update selected")
+        appendLog("ESP32 update selected")
         appendLog("ESP flashing uses the serial helper, not DFU.")
         if device.isConnected {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")

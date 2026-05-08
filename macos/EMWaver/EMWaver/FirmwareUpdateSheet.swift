@@ -12,7 +12,7 @@ struct FirmwareUpdateSheet: View {
         if updater.espBootloaderConnected || updater.espBootloaderPort != nil {
             return true
         }
-        return boardType.caseInsensitiveCompare("esp32s3") == .orderedSame
+        return FirmwareUpdateManager.isEspBoardType(boardType)
     }
 
     private var canStartEspFlash: Bool {
@@ -45,7 +45,7 @@ struct FirmwareUpdateSheet: View {
 
     private var titleText: String {
         if isEspWorkflow {
-            return "Flash ESP32-S3"
+            return "Flash ESP32"
         }
         if updater.updateDone {
             return "Reconnect device"
@@ -225,7 +225,7 @@ struct FirmwareUpdateSheet: View {
             VStack(alignment: .leading, spacing: 14) {
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Flash ESP32-S3")
+                        Text("Flash ESP32")
                             .font(.title3.weight(.semibold))
                         Text("Use the board's flash-capable serial USB connection.")
                             .font(.subheadline)

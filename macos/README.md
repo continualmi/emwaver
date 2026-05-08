@@ -8,7 +8,7 @@ The local-first rule is that connected supported boards can run local `.emw` scr
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
-- ESP32-S3 boards should use a separate serial flashing flow.
+- ESP32 boards should use a separate serial flashing flow.
 - The macOS app should not assume that all supported boards share one update-mode transport.
 
 ---
@@ -143,7 +143,7 @@ Tooling helper path:
 
 The helper is bundled for update flows and should be version-synced with firmware/update expectations.
 
-The macOS app bundles the canonical committed firmware image at `firmware/emwaver.bin`. Keep that file updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes. Firmware source changes must be built before completion so the relevant `.bin` artifacts are ready for the macOS app flashing flow; for ESP32-S3 changes, run the ESP-IDF build so `esp/build/emwaveresp.bin` and companion bootloader/partition/OTA images are current.
+The macOS app bundles the canonical committed firmware image at `firmware/emwaver.bin`. Keep that file updated from the current STM32 ELF with `stm/update_firmware_bins.sh` whenever STM firmware changes. Firmware source changes must be built before completion so the relevant `.bin` artifacts are ready for the macOS app flashing flow; for ESP32 changes, run the ESP-IDF build so `esp/build/emwaveresp.bin` and companion bootloader/partition/OTA images are current.
 
 Current macOS responsibility in this area:
 - local script execution for connected supported boards without account/backend activation gates,
@@ -161,13 +161,13 @@ STM32 update flow:
 - enter DFU/update mode from the app,
 - flash through the DFU helper.
 
-ESP32-S3 update flow:
+ESP32 update flow:
 - run-mode connection over USB remains separate from flashing,
 - flashing is performed over the board's flash-capable USB serial port,
 - the app should bundle a small helper based on `esptool` behavior,
 - the app should use prebuilt firmware images rather than ESP-IDF project logic,
 - manual bootloader entry is acceptable for the first shipping version on boards where automatic entry is unreliable,
-- when an ESP32-S3 is connected, "Enter Update Mode" should present the BOOT/RESET sequence instead of sending the STM32 DFU opcode.
+- when an ESP32 board is connected, "Enter Update Mode" should present the BOOT/RESET sequence instead of sending the STM32 DFU opcode.
 
 Explicit non-goal:
 - do not bundle `idf.py` or the full ESP-IDF inside the macOS app.

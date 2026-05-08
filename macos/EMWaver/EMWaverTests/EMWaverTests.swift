@@ -68,6 +68,21 @@ struct EMWaverTests {
         #expect(MacWiFiManager.normalizedBoardType("   ") == nil)
     }
 
+    @Test func firmwareUpdaterTreatsAllEspBoardTypesAsEspWorkflow() {
+        #expect(FirmwareUpdateManager.isEspBoardType("esp32"))
+        #expect(FirmwareUpdateManager.isEspBoardType(" ESP32-S2 "))
+        #expect(FirmwareUpdateManager.isEspBoardType("esp32s3"))
+        #expect(!FirmwareUpdateManager.isEspBoardType("stm32f042"))
+        #expect(!FirmwareUpdateManager.isEspBoardType(nil))
+    }
+
+    @Test func firmwareUpdaterNormalizesEspBoardTypes() {
+        #expect(FirmwareUpdateManager.normalizedEspBoardType("esp32") == "esp32")
+        #expect(FirmwareUpdateManager.normalizedEspBoardType(" ESP32-S2 ") == "esp32s2")
+        #expect(FirmwareUpdateManager.normalizedEspBoardType("esp32-s3") == "esp32s3")
+        #expect(FirmwareUpdateManager.normalizedEspBoardType("stm32f042") == nil)
+    }
+
     @Test func wifiCapabilitiesParseAdvertisedTxtList() {
         #expect(MacWiFiManager.capabilities("wifi,usb,ble") == ["wifi", "usb", "ble"])
         #expect(MacWiFiManager.capabilities(" WiFi, USB ") == ["wifi", "usb"])

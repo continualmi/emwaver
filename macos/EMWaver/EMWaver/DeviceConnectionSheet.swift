@@ -59,7 +59,7 @@ struct DeviceConnectionSheet: View {
 
     private var currentBoardType: String {
         if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
-            return "esp32s3"
+            return "esp32"
         }
         return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
     }
@@ -514,7 +514,7 @@ struct DeviceConnectionSheet: View {
             return "This device can be updated with managed EMWaver firmware for the best local runtime compatibility."
         }
         if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
-            return "This ESP32-S3 is in bootloader mode and can be flashed with the latest bundled EMWaver firmware."
+            return "This ESP32 board is in bootloader mode and can be flashed with the latest bundled EMWaver firmware."
         }
         return "This device is ready for local scripts and hardware control."
     }
