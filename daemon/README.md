@@ -146,7 +146,7 @@ Local setup can be checked with:
 emwaver doctor
 ```
 
-`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility.
+`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility. `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` also performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, and paired-secret failures.
 It also reports the current OS/architecture, local state directory, pidfile, logfile, and non-invasive autostart status so local installs can be debugged without a cloud account.
 
 Agent help is optional and paid. It never gates local hardware control:
@@ -209,7 +209,7 @@ EMWAVER_VALIDATE_SYSTEMD=1 scripts/rebirth-linux-validation.sh
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the first reusable ESP32 Wi-Fi WebSocket transport adapter: it performs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, and keeps received stream lanes in the local buffer. CLI and gateway flag wiring for this Wi-Fi adapter is still pending.
+`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the first reusable ESP32 Wi-Fi WebSocket transport adapter: it performs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, and keeps received stream lanes in the local buffer.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 

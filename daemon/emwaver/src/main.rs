@@ -96,7 +96,19 @@ enum Commands {
     },
 
     /// Check local CLI, gateway, and device prerequisites.
-    Doctor,
+    Doctor {
+        /// Probe an ESP32 Wi-Fi device by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// Local ESP32 Wi-Fi pairing secret for the Wi-Fi probe.
+        #[arg(long)]
+        wifi_secret: Option<String>,
+
+        /// ESP32 Wi-Fi control port for the Wi-Fi probe.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+    },
 
     /// Run a .emw script through the local gateway/native app bridge.
     Run {
@@ -1012,22 +1024,68 @@ fn list_devices_lines(
         Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
     }
 
-    if wifi.is_some() || wifi_secret.is_some() {
-        let Some(host) = wifi else {
-            anyhow::bail!("--wifi-secret requires --wifi");
-        };
-        let Some(secret) = wifi_secret else {
-            anyhow::bail!("--wifi-secret is required with --wifi");
-        };
-        match WiFiDevice::connect(&host, wifi_port, &secret) {
-            Ok(_) => out.push(format!("Wi-Fi device: {host}:{wifi_port} authenticated")),
-            Err(err) => out.push(format!(
-                "Wi-Fi probe failed for {host}:{wifi_port}: {err:#}"
-            )),
-        }
-    }
+    let (wifi_lines, _wifi_ok) = wifi_probe_lines(wifi, wifi_secret, wifi_port)?;
+    out.extend(wifi_lines);
 
     Ok(out)
+}
+
+fn wifi_probe_lines(
+    wifi: Option<String>,
+    wifi_secret: Option<String>,
+    wifi_port: u16,
+) -> Result<(Vec<String>, bool)> {
+    if wifi.is_none() && wifi_secret.is_none() {
+        return Ok((Vec::new(), true));
+    }
+
+    let Some(host) = wifi else {
+        anyhow::bail!("--wifi-secret requires --wifi");
+    };
+    let Some(secret) = wifi_secret else {
+        anyhow::bail!("--wifi-secret is required with --wifi");
+    };
+
+    match WiFiDevice::connect(&host, wifi_port, &secret) {
+        Ok(_) => Ok((
+            vec![format!("Wi-Fi device: {host}:{wifi_port} authenticated")],
+            true,
+        )),
+        Err(err) => Ok((
+            vec![format!(
+                "Wi-Fi probe failed for {host}:{wifi_port}: {}",
+                classify_wifi_probe_error(&err)
+            )],
+            false,
+        )),
+    }
+}
+
+fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
+    let text = format!("{err:#}");
+    let lower = text.to_ascii_lowercase();
+    if lower.contains("auth") || lower.contains("secret") {
+        format!("authentication failure or paired secret mismatch ({text})")
+    } else if lower.contains("connection refused") || lower.contains("refused") {
+        format!(
+            "connection refused; the device may be offline or the control port is closed ({text})"
+        )
+    } else if lower.contains("no route")
+        || lower.contains("network is unreachable")
+        || lower.contains("host is down")
+        || lower.contains("timed out")
+        || lower.contains("timeout")
+    {
+        format!("missing route or device not reachable ({text})")
+    } else if lower.contains("dns")
+        || lower.contains("name or service not known")
+        || lower.contains("nodename")
+        || lower.contains("could not resolve")
+    {
+        format!("mDNS/DNS name unavailable ({text})")
+    } else {
+        text
+    }
 }
 
 fn list_devices(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> Result<()> {
@@ -1047,7 +1105,7 @@ fn command_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn doctor() -> Result<()> {
+fn doctor(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> Result<()> {
     let mut issues = 0usize;
     let allow_midi_unavailable =
         env_trim("EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE").as_deref() == Some("1");
@@ -1115,6 +1173,24 @@ fn doctor() -> Result<()> {
                 issues += 1;
                 println!("device check failed: {err:#}");
             }
+        }
+    }
+
+    match wifi_probe_lines(wifi, wifi_secret, wifi_port) {
+        Ok((lines, true)) => {
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        Ok((lines, false)) => {
+            issues += 1;
+            for line in lines {
+                println!("{line}");
+            }
+        }
+        Err(err) => {
+            issues += 1;
+            println!("Wi-Fi doctor check failed: {err:#}");
         }
     }
 
@@ -2267,7 +2343,11 @@ fn main() -> Result<()> {
             wifi_secret,
             wifi_port,
         } => list_devices(wifi, wifi_secret, wifi_port),
-        Commands::Doctor => doctor(),
+        Commands::Doctor {
+            wifi,
+            wifi_secret,
+            wifi_port,
+        } => doctor(wifi, wifi_secret, wifi_port),
         Commands::Run {
             script,
             name,

@@ -258,6 +258,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
   - authentication failure,
   - mDNS unavailable,
   - paired secret mismatch.
+  - Current daemon progress: `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, authentication, and paired-secret failures.
 
 ### Gateway
 
