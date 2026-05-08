@@ -34,20 +34,6 @@ final class MacWiFiManager {
         var lastSeen: Date
     }
 
-    private struct WiFiAuth: Codable {
-        var type: String
-        var client: String
-        var protocolVersion: Int
-        var envelopeVersion: Int
-        var challenge: String
-        var response: String
-    }
-
-    private struct WiFiChallenge: Codable {
-        var type: String
-        var challenge: String
-    }
-
     private struct BonjourMetadata {
         var boardType: String?
         var firmwareVersion: String?
@@ -419,8 +405,15 @@ final class MacWiFiManager {
 
     private func sendHello(socket: URLSessionWebSocketTask, secret: String, challenge: String) {
         let response = Self.hmacHex(secret: secret, message: challenge)
-        let hello = WiFiAuth(type: "auth", client: "emwaver-macos", protocolVersion: 1, envelopeVersion: 1, challenge: challenge, response: response)
-        guard let data = try? JSONEncoder().encode(hello) else { return }
+        let hello: [String: Any] = [
+            "type": "auth",
+            "client": "emwaver-macos",
+            "protocolVersion": 1,
+            "envelopeVersion": 1,
+            "challenge": challenge,
+            "response": response,
+        ]
+        guard let data = try? JSONSerialization.data(withJSONObject: hello) else { return }
         socket.send(.data(data)) { [weak self] error in
             if let error {
                 self?.onError("Wi-Fi authentication failed: \(error.localizedDescription)")
@@ -461,11 +454,9 @@ final class MacWiFiManager {
                         self.onData(data, self.connectedDeviceID)
                     }
                 case .string(let text):
-                    if let data = text.data(using: .utf8),
-                       let challenge = try? JSONDecoder().decode(WiFiChallenge.self, from: data),
-                       challenge.type == "challenge",
+                    if let challenge = Self.challengeValue(from: text),
                        let secret = self.pendingAuthSecret {
-                        self.sendHello(socket: socket, secret: secret, challenge: challenge.challenge)
+                        self.sendHello(socket: socket, secret: secret, challenge: challenge)
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("ok"),
                               let record = self.pendingAuthRecord {
@@ -725,6 +716,18 @@ final class MacWiFiManager {
 
     static func advertisesWiFiCapability(_ capabilities: [String]) -> Bool {
         capabilities.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("wifi") == .orderedSame }
+    }
+
+    static func challengeValue(from text: String) -> String? {
+        guard let data = text.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let type = object["type"] as? String,
+              type == "challenge",
+              let challenge = object["challenge"] as? String,
+              !challenge.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return nil
+        }
+        return challenge
     }
 
     private static func hmacHex(secret: String, message: String) -> String {

@@ -80,4 +80,11 @@ struct EMWaverTests {
         #expect(!MacWiFiManager.advertisesWiFiCapability(["usb", "ble"]))
     }
 
+    @Test func wifiChallengeParserAcceptsChallengeJsonOnly() {
+        #expect(MacWiFiManager.challengeValue(from: #"{"type":"challenge","challenge":"abc123"}"#) == "abc123")
+        #expect(MacWiFiManager.challengeValue(from: #"{"type":"auth","challenge":"abc123"}"#) == nil)
+        #expect(MacWiFiManager.challengeValue(from: #"{"type":"challenge","challenge":"   "}"#) == nil)
+        #expect(MacWiFiManager.challengeValue(from: "auth ok") == nil)
+    }
+
 }
