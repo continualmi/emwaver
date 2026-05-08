@@ -106,6 +106,7 @@ Current first step:
 - iOS BLE transport constants, advertisement matching, display names, and device-session identity helpers now live in `BLETransport`, starting the same USB/BLE/Wi-Fi file split direction as macOS without changing connection behavior.
 - iOS USB MIDI endpoint pairing, target selection, display names, and session identity helpers now live in `USBMidiTransport`, so the current iOS manager has separate USB MIDI and BLE transport helper files.
 - iOS now has a `WiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
+- iOS has a local `DeviceBufferSessionTests` suite covering RX/counter and sampler-stream state isolation across separate transport sessions.
 
 Remaining isolation work:
 
