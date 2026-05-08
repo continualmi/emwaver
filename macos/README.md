@@ -87,8 +87,9 @@ Representative views:
 
 Script sessions:
 - macOS owns local multi-session script runs through a native session manager.
-- The toolbar exposes the selected local device and current local session count before Run.
-- Running a script from the shared scripts UI creates a new local session instead of replacing the current one.
+- The toolbar exposes the selected local device before Run, including the active USB/BLE transport icon and a local identifier suffix.
+- Running a script from the shared scripts UI creates or restores a local session from the normal script list instead of using a separate sessions pane.
+- Running sessions appear inline beside their script names, and each row owns its stop control.
 - Each local session owns its own `ScriptPreviewManager` and targets the selected local device id through the existing macOS transport bridge.
 
 Agent configuration on macOS:

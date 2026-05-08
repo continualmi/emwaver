@@ -1,6 +1,6 @@
 # macOS Script Sessions UI
 
-Status: planned / next implementation target.
+Status: implemented in the macOS shared scripts UI path.
 
 ## Goal
 
@@ -12,17 +12,17 @@ Users must be able to tell from the toolbar, immediately, where a script will ru
 
 ### Toolbar
 
-The toolbar should always expose the active script target and session state:
+The toolbar should always expose the active script target:
 
 ```text
-[Device: ESP32-S3 / CC1101 ▼] [Run in New Session] [Sessions: 2]
+[ESP32-S3 / B57C47 ▼]
 ```
 
 Requirements:
 - Device target is visible before running.
 - Device target is selectable from connected/discovered local devices.
-- Session count is visible from the toolbar.
-- Clicking Sessions opens the running session switcher.
+- The selected transport is visible with a USB/BLE icon.
+- The selected device is marked with a checkmark in the dropdown.
 - User-facing language should say local sessions / devices, not remote.
 
 ### Run behavior
@@ -47,16 +47,16 @@ Stop current script? / Stop & Run
 
 should not appear for the normal macOS multi-session path.
 
-### Session switcher
+### Script list sessions
 
-The app should show running sessions like multiple terminals:
+The app should show running sessions in the main script list instead of a separate sessions pane:
 
 ```text
-[cc1101.emw · CC1101 · running]
-[rfm69.emw · RFM69HW · running]
+cc1101.emw    ▶ ESP32-S3 / FB7E94    [stop]
+rfm69.emw     ▶ ESP32-S3 / B57C47     [stop]
 ```
 
-Each session row/card should show:
+Each script row should show:
 - script name,
 - target device label/id,
 - running/stopped state,
@@ -88,11 +88,11 @@ Each session row/card should show:
 
 ## Acceptance checklist
 
-- [ ] Toolbar clearly shows selected device before Run.
-- [ ] User can change selected target device from the toolbar.
-- [ ] Running one script then pressing Run on another starts a second session.
-- [ ] No Stop & Run confirmation appears in the normal macOS path.
-- [ ] Sessions list shows script name and target device.
-- [ ] Clicking a session restores that script UI.
-- [ ] Stop button stops only that session.
+- [x] Toolbar clearly shows selected device before Run.
+- [x] User can change selected target device from the toolbar.
+- [x] Running one script then pressing Run on another starts a second session.
+- [x] No Stop & Run confirmation appears in the normal macOS path.
+- [x] The script list shows script name and target device.
+- [x] Clicking a session restores that script UI.
+- [x] Stop button stops only that session.
 - [ ] Two ESP32-S3 BLE scripts can be run concurrently once hardware is available.

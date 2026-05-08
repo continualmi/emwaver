@@ -1448,8 +1448,28 @@ private struct ScriptRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(script.name)
-                    .font(isSelected ? .headline : .body)
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text(script.name)
+                        .font(isSelected ? .headline : .body)
+                        .lineLimit(1)
+
+                    if !sessionStatuses.isEmpty {
+                        HStack(spacing: 6) {
+                            ForEach(sessionStatuses.prefix(3)) { session in
+                                Label(session.deviceLabel, systemImage: session.stateText == "running" ? "play.fill" : "stop.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(session.stateText == "running" ? .green : .secondary)
+                                    .lineLimit(1)
+                            }
+
+                            if sessionStatuses.count > 3 {
+                                Text("+\(sessionStatuses.count - 3)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
 
                 HStack(spacing: 8) {
                     if let modifiedAt = script.modifiedAt {
@@ -1462,23 +1482,6 @@ private struct ScriptRow: View {
                         Text("Unsaved changes")
                             .font(.caption)
                             .foregroundColor(.orange)
-                    }
-                }
-
-                if !sessionStatuses.isEmpty {
-                    HStack(spacing: 6) {
-                        ForEach(sessionStatuses.prefix(3)) { session in
-                            Label(session.deviceLabel, systemImage: session.stateText == "running" ? "play.fill" : "stop.fill")
-                                .font(.caption2)
-                                .foregroundStyle(session.stateText == "running" ? .green : .secondary)
-                                .lineLimit(1)
-                        }
-
-                        if sessionStatuses.count > 3 {
-                            Text("+\(sessionStatuses.count - 3)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                        }
                     }
                 }
             }
