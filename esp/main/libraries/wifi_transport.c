@@ -362,11 +362,12 @@ static void wifi_status_command(void)
     snprintf(
         status,
         sizeof(status),
-        "wifi:%s:%s:%s:%s:reason=%u",
+        "wifi:%s:%s:%s:%s:host=%s:reason=%u",
         s_has_config ? "provisioned" : "unprovisioned",
         s_station_online ? "online" : "offline",
         s_authenticated ? "authenticated" : "idle",
         s_reconnect_pending ? "reconnecting" : "stable",
+        s_config.hostname[0] != '\0' ? s_config.hostname : "none",
         (unsigned)reason
     );
     command_send_ok((const uint8_t *)status, strlen(status));
