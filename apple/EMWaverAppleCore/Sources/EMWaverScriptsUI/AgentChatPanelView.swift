@@ -295,25 +295,47 @@ public struct AgentChatPanelView: View {
         ]
 
         if viewModel.messages.isEmpty && viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(items, id: \.self) { text in
-                        Button {
-                            viewModel.draft = text
-                            // Don't auto-send; user can edit then Send.
-                        } label: {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], alignment: .leading, spacing: 10) {
+                ForEach(items, id: \.self) { text in
+                    Button {
+                        viewModel.draft = text
+                        // Don't auto-send; user can edit then Send.
+                    } label: {
+                        HStack(alignment: .top, spacing: 8) {
+                            Image(systemName: suggestionIcon(for: text))
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 16, height: 16)
+
                             Text(text)
                                 .font(.caption)
-                                .lineLimit(1)
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 7)
-                                .background(Color.gray.opacity(0.12), in: Capsule())
+                                .foregroundStyle(.primary)
+                                .lineLimit(3)
+                                .multilineTextAlignment(.leading)
+
+                            Spacer(minLength: 0)
                         }
-                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity, minHeight: 52, alignment: .topLeading)
+                        .padding(10)
+                        .background(messageCardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(messageCardBorder)
+                        )
+                        .shadow(color: messageCardShadow, radius: 8, y: 3)
                     }
+                    .buttonStyle(.plain)
                 }
             }
         }
+    }
+
+    private func suggestionIcon(for text: String) -> String {
+        if text.localizedCaseInsensitiveContains("USB") { return "cable.connector" }
+        if text.localizedCaseInsensitiveContains("connected board") { return "cpu" }
+        if text.localizedCaseInsensitiveContains("GPIO") { return "lightbulb" }
+        if text.localizedCaseInsensitiveContains("IR remote") { return "dot.radiowaves.left.and.right" }
+        return "folder"
     }
 }
 
