@@ -47,6 +47,8 @@ private final class MacTransportDeviceSession {
     private var responseSemaphore: DispatchSemaphore?
     private var responseData: Data?
     private var responsePredicate: ((Data) -> Bool)?
+    private var bufferStatusSemaphore: DispatchSemaphore?
+    private var latestBufferStatus: UInt16?
 
     func getBuffer() -> Data {
         bufferQueue.sync { captureBuffer }
@@ -75,6 +77,8 @@ private final class MacTransportDeviceSession {
             responseSemaphore = nil
             responseData = nil
             responsePredicate = nil
+            bufferStatusSemaphore = nil
+            latestBufferStatus = nil
         }
     }
 
@@ -143,10 +147,45 @@ private final class MacTransportDeviceSession {
 
             if !cmdEmpty { storeRxLane(cmdLane) }
 
+            if isBufferStatusLane(streamLane) {
+                storeBufferStatus(streamLane)
+                continue
+            }
+
             let keepEmptyStream = bufferQueue.sync { isSamplerStreamingActive }
             if !streamEmpty || keepEmptyStream {
                 storeRxLane(streamLane)
             }
+        }
+    }
+
+    func waitForBufferStatus(timeoutMilliseconds: Int) -> UInt16? {
+        let sem = DispatchSemaphore(value: 0)
+        bufferQueue.sync {
+            latestBufferStatus = nil
+            bufferStatusSemaphore = sem
+        }
+
+        let waitResult = sem.wait(timeout: .now() + .milliseconds(max(1, timeoutMilliseconds)))
+        let status = bufferQueue.sync { latestBufferStatus }
+        bufferQueue.sync {
+            bufferStatusSemaphore = nil
+        }
+
+        return waitResult == .timedOut ? nil : status
+    }
+
+    private func isBufferStatusLane(_ lane: Data) -> Bool {
+        lane.count >= 4 && lane[lane.startIndex] == 0x42 && lane[lane.startIndex.advanced(by: 1)] == 0x53
+    }
+
+    private func storeBufferStatus(_ lane: Data) {
+        guard lane.count >= 4 else { return }
+        let high = UInt16(lane[lane.startIndex.advanced(by: 2)])
+        let low = UInt16(lane[lane.startIndex.advanced(by: 3)])
+        bufferQueue.sync {
+            latestBufferStatus = (high << 8) | low
+            bufferStatusSemaphore?.signal()
         }
     }
 
@@ -831,11 +870,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return
         }
 
+        guard let session = deviceSession(for: deviceID) else {
+            setError("Cannot transmit buffer: No matching device session")
+            return
+        }
+
         let data = getBuffer(deviceID: deviceID)
         guard !data.isEmpty else { return }
 
-        // Very simple sender: chunk into fixed 64B stream-lane packets.
-        // (No BS pacing yet on macOS; keep this predictable.)
+        let targetID = resolvedTransportID(for: deviceID)
+        let useWiFiPacing = targetID?.hasPrefix("wifi:") == true || (targetID == nil && activeTransport == .wifi)
+
         var idx = 0
         while idx < data.count {
             let end = min(idx + Self.laneSizeBytes, data.count)
@@ -844,7 +889,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let sf = Self.makeSuperframe(cmdLane: nil, streamLane: packet)
             withMidiQueueSync { self.sendSuperframe(sf, deviceID: deviceID) }
             idx = end
-            Thread.sleep(forTimeInterval: 0.001)
+            if useWiFiPacing {
+                _ = session.waitForBufferStatus(timeoutMilliseconds: 250)
+            } else {
+                Thread.sleep(forTimeInterval: 0.001)
+            }
         }
     }
 
