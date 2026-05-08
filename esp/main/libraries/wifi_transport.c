@@ -75,6 +75,7 @@ static void start_station(void);
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 static void wifi_reconnect_task(void *arg);
 static void start_server(void);
+static void stop_server(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
@@ -164,6 +165,14 @@ esp_err_t wifi_transport_clear_config(void)
         memset(&s_config, 0, sizeof(s_config));
         s_has_config = false;
         s_authenticated = false;
+        s_active_fd = -1;
+        s_reconnect_attempt = 0;
+        s_reconnect_pending = false;
+#if EMWAVER_ENABLE_WIFI_TRANSPORT
+        stop_server();
+        (void)esp_wifi_disconnect();
+        (void)esp_wifi_stop();
+#endif
     }
     return err;
 }
@@ -314,7 +323,8 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
         (void)esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
         s_authenticated = false;
-        if (!s_reconnect_pending) {
+        s_active_fd = -1;
+        if (s_has_config && !s_reconnect_pending) {
             s_reconnect_pending = true;
             (void)xTaskCreate(wifi_reconnect_task, "wifi_reconnect", 2048, NULL, 4, NULL);
         }
@@ -341,7 +351,9 @@ static void wifi_reconnect_task(void *arg)
     ESP_LOGW(TAG, "Wi-Fi disconnected; reconnecting in %u ms", (unsigned)delay_ms);
     vTaskDelay(pdMS_TO_TICKS(delay_ms));
     s_reconnect_pending = false;
-    (void)esp_wifi_connect();
+    if (s_has_config) {
+        (void)esp_wifi_connect();
+    }
     vTaskDelete(NULL);
 }
 
@@ -386,6 +398,15 @@ static void start_server(void)
     };
     ESP_ERROR_CHECK(httpd_register_uri_handler(s_httpd, &ws));
     ESP_LOGI(TAG, "Wi-Fi WebSocket listening on port %d%s as %s.local", WIFI_CONTROL_PORT, WIFI_WS_PATH, s_config.hostname);
+}
+
+static void stop_server(void)
+{
+    if (s_httpd) {
+        (void)httpd_stop(s_httpd);
+        s_httpd = NULL;
+    }
+    mdns_free();
 }
 
 static void build_mdns_instance_name(char *out, size_t out_len)
