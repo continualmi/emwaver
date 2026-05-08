@@ -83,6 +83,7 @@ Current first step:
 - script rows show "Running on active device" for the current run,
 - Android now captures the active USB/BLE connection label when a script starts and shows that label in the running script row when available.
 - the running row has a stop button,
+- the running row stop button now uses a destructive action color instead of the normal edit/action tint, matching the simplified row-control treatment on the other hosts.
 - leaving preview can keep the run visible in the list rather than making the list look idle.
 - `USBService` now routes script-facing capture buffers through a `DeviceBufferSession` instance instead of direct reads/writes to the process-wide `NativeBuffer` facade.
 - Android USB and BLE connections now select keyed buffer sessions, matching the Windows/macOS direction even though only one transport session is active at a time today.
@@ -165,6 +166,7 @@ Remaining isolation work:
 - [x] Windows has a row-level stop control for the active run.
 - [x] Android shows active run status in the script list.
 - [x] Android has a row-level stop control for the active run.
+- [x] Android styles the row-level stop control as a destructive action instead of a normal edit/action button.
 - [x] iOS shows active run status in the shared scripts list.
 - [x] iOS has a row-level stop control for the active run through the shared scripts row.
 - [x] Windows has an active transport buffer session object used by script sampler reads.

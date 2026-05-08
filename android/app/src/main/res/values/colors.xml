@@ -19,6 +19,7 @@
 
     <color name="accentBlue">#01579B</color>
     <color name="accentBlueDark">#004C8C</color>
+    <color name="destructiveAction">#B3261E</color>
 
     <color name="monitorBackground">#000000</color>
     <color name="monitorText">#00FF00</color>
