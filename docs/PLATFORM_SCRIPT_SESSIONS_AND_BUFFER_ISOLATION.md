@@ -51,6 +51,7 @@ Current first step:
 - Windows command response wait state now lives on the active `DeviceBufferSession` instead of singleton fields on `WindowsDeviceManager`.
 - Windows SysEx parser accumulator and lane demux now live on the active `DeviceBufferSession`, including BLE notification chunk reassembly.
 - Windows captures the active transport session id when a local script starts and routes script buffer/command APIs through that keyed session.
+- Windows USB MIDI/BLE buffering now depends on an `ITransportDeviceSession` contract, giving the future USB/BLE/Wi-Fi split a shared session boundary instead of binding transport code directly to `DeviceBufferSession`.
 
 Remaining isolation work:
 
@@ -119,6 +120,7 @@ Remaining isolation work:
 - [x] Windows scopes command response wait state to the active transport buffer session.
 - [x] Windows scopes SysEx parser state to the active transport buffer session.
 - [x] Windows binds local script runs to the active transport session id captured at run start.
+- [x] Windows has a shared transport device-session contract used by the current USB MIDI/BLE manager.
 - [x] Android has an active transport buffer session object used by script sampler reads.
 - [x] Android selects keyed USB/BLE buffer sessions instead of a single process-wide script buffer.
 - [x] Android scopes sampler stream state to the active transport buffer session.

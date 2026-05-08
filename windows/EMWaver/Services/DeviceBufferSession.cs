@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 
 namespace EMWaver.Services;
 
-internal sealed class DeviceBufferSession
+internal sealed class DeviceBufferSession : ITransportDeviceSession
 {
     private readonly object _lock = new();
 
@@ -20,14 +20,14 @@ internal sealed class DeviceBufferSession
     private readonly List<byte> _sysexBytes = [];
     private bool _inSysex;
 
-    internal string DeviceId { get; }
+    public string DeviceId { get; }
 
     internal DeviceBufferSession(string deviceId)
     {
         DeviceId = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
     }
 
-    internal void ClearAll()
+    public void ClearAll()
     {
         lock (_lock)
         {
@@ -41,7 +41,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal ulong GetRxPacketCount()
+    public ulong GetRxPacketCount()
     {
         lock (_lock)
         {
@@ -49,7 +49,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal ulong GetTxPacketCount()
+    public ulong GetTxPacketCount()
     {
         lock (_lock)
         {
@@ -57,7 +57,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void StoreBulkPkt(byte[] data, ulong tsMs)
+    public void StoreBulkPkt(byte[] data, ulong tsMs)
     {
         if (data.Length == 0) return;
 
@@ -74,7 +74,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void AppendTxBytes(byte[] data, ulong tsMs)
+    public void AppendTxBytes(byte[] data, ulong tsMs)
     {
         if (data.Length == 0) return;
 
@@ -91,7 +91,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal byte[] GetRxSnapshot()
+    public byte[] GetRxSnapshot()
     {
         lock (_lock)
         {
@@ -101,7 +101,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal (byte[] packet, ulong tsMs)? NextRxPacket()
+    public (byte[] packet, ulong tsMs)? NextRxPacket()
     {
         lock (_lock)
         {
@@ -120,7 +120,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void SetRxCounterToEnd()
+    public void SetRxCounterToEnd()
     {
         lock (_lock)
         {
@@ -128,7 +128,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void FeedSysexBytes(byte[] bytes, ulong tsMs)
+    public void FeedSysexBytes(byte[] bytes, ulong tsMs)
     {
         if (bytes.Length == 0) return;
 
@@ -191,7 +191,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal TaskCompletionSource<byte[]?> BeginResponseWait(Func<byte[], bool> predicate)
+    public TaskCompletionSource<byte[]?> BeginResponseWait(Func<byte[], bool> predicate)
     {
         lock (_responseLock)
         {
@@ -201,7 +201,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void CompleteResponseIfMatch(byte[] lane18)
+    public void CompleteResponseIfMatch(byte[] lane18)
     {
         lock (_responseLock)
         {
@@ -217,7 +217,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void ClearResponseWait(TaskCompletionSource<byte[]?> tcs)
+    public void ClearResponseWait(TaskCompletionSource<byte[]?> tcs)
     {
         lock (_responseLock)
         {
@@ -230,7 +230,7 @@ internal sealed class DeviceBufferSession
         }
     }
 
-    internal void CancelResponseWait()
+    public void CancelResponseWait()
     {
         lock (_responseLock)
         {

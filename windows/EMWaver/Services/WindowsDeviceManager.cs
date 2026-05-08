@@ -189,10 +189,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private GattCharacteristic? _bleNotifyCharacteristic;
     private bool _bleConnecting;
     private readonly object _bufferSessionLock = new();
-    private readonly Dictionary<string, DeviceBufferSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
-    private DeviceBufferSession _activeBufferSession = new("active");
+    private readonly Dictionary<string, ITransportDeviceSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
+    private ITransportDeviceSession _activeBufferSession = new DeviceBufferSession("active");
 
-    private DeviceBufferSession ActiveBufferSession
+    private ITransportDeviceSession ActiveBufferSession
     {
         get
         {
@@ -212,7 +212,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     internal byte[] GetRxSnapshot(string deviceId) => BufferSession(deviceId).GetRxSnapshot();
     internal void ClearBuffer(string deviceId) => BufferSession(deviceId).ClearAll();
 
-    private DeviceBufferSession BufferSession(string deviceId)
+    private ITransportDeviceSession BufferSession(string deviceId)
     {
         var key = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
         lock (_bufferSessionLock)
@@ -547,7 +547,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private async Task<byte[]?> SendCommandAsync(
         byte[] commandLane,
         int timeoutMs,
-        DeviceBufferSession session,
+        ITransportDeviceSession session,
         Func<byte[], bool> responsePredicate)
     {
         if (ActiveTransport == DeviceTransport.Ble)
