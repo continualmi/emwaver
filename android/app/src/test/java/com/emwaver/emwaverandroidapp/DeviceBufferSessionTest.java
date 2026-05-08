@@ -60,6 +60,23 @@ public class DeviceBufferSessionTest {
         assertEquals(0, ble.getRxPacketCount());
     }
 
+    @Test
+    public void separateSessionsKeepTxBuffersIsolated() {
+        DeviceBufferSession usb = new DeviceBufferSession();
+        DeviceBufferSession ble = new DeviceBufferSession();
+
+        byte[] usbPacket = packet((byte) 0x55);
+        byte[] blePacket = packet((byte) 0x66);
+
+        usb.appendTxBytes(usbPacket, 500);
+        ble.appendTxBytes(blePacket, 600);
+
+        assertEquals(1, usb.getTxPacketCount());
+        assertEquals(1, ble.getTxPacketCount());
+        assertArrayEquals(usbPacket, usb.getTxBuffer());
+        assertArrayEquals(blePacket, ble.getTxBuffer());
+    }
+
     private static byte[] packet(byte value) {
         byte[] packet = new byte[UsbMidiSysex.LANE_SIZE];
         for (int i = 0; i < packet.length; i++) {

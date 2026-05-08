@@ -14,6 +14,8 @@ interface TransportDeviceSession {
     byte[] getBuffer();
     void storeBulkPkt(byte[] data, long tsMs);
     void appendTxBytes(byte[] data, long tsMs);
+    long getTxPacketCount();
+    byte[] getTxBuffer();
     void updateSamplerStreamingState(byte[] lane);
     boolean shouldStoreStreamLane(byte[] streamLane);
     void resetSamplerStreaming();

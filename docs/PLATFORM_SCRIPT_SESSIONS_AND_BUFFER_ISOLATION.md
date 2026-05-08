@@ -95,6 +95,7 @@ Current first step:
 - Android USB MIDI descriptor matching, board inference, display names, and session identity helpers now live in `AndroidUsbMidiTransport`, so the current Android service has separate USB and BLE transport helper files.
 - Android now has an `AndroidWiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
 - Android has a local `DeviceBufferSessionTest` covering RX/counter and sampler-stream state isolation across separate transport sessions.
+- Android `DeviceBufferSessionTest` now also covers TX buffer isolation across separate transport sessions.
 - Android USB MIDI and BLE receive callbacks now resolve the buffer session from the source device id before feeding SysEx data, removing one active-session contamination path in the live service.
 - Android `ScriptDeviceConnection` now captures the active device-session id when a script starts and routes script buffer reads/writes, transmit-buffer calls, raw writes, and command waits through that captured session.
 - Android USB MIDI send mechanics now live in `AndroidUsbMidiTransport`, and BLE characteristic write mechanics now live in `AndroidBleTransport`, reducing transport protocol code inside `USBService`.
@@ -132,6 +133,7 @@ Current first step:
 - iOS USB MIDI endpoint pairing, target selection, display names, and session identity helpers now live in `USBMidiTransport`, so the current iOS manager has separate USB MIDI and BLE transport helper files.
 - iOS now has a `WiFiTransport` boundary with Wi-Fi session/display identity helpers for the future Wi-Fi runtime.
 - iOS has a local `DeviceBufferSessionTests` suite covering RX/counter and sampler-stream state isolation across separate transport sessions.
+- iOS `DeviceBufferSessionTests` now also cover TX buffer isolation across separate transport sessions.
 - iOS CoreMIDI and BLE receive callbacks now feed MIDI/SysEx bytes into the source transport session instead of always using the mutable active session.
 - iOS targeted script devices now route `transmitBuffer()` through the captured device-session id instead of the mutable active session.
 - iOS CoreMIDI SysEx send mechanics now live in `USBMidiTransport`, and BLE chunked characteristic writes now live in `BLETransport`, reducing transport protocol code inside `USBManager`.
@@ -181,6 +183,7 @@ Remaining isolation work:
 - [x] Android scopes sampler stream state to the active transport buffer session.
 - [x] Android scopes command response wait state to the active transport buffer session.
 - [x] Android scopes SysEx parser state to the active transport buffer session.
+- [x] Android has focused TX buffer isolation coverage for separate transport sessions.
 - [x] Android binds local script runs to the active device service captured at run start.
 - [x] Android refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] Android keeps active transport and active script session identity synchronized through one active target descriptor.
@@ -194,6 +197,7 @@ Remaining isolation work:
 - [x] iOS scopes sampler stream state to the active transport buffer session.
 - [x] iOS scopes command response wait state to the active transport buffer session.
 - [x] iOS scopes SysEx parser state to the active transport buffer session.
+- [x] iOS has focused TX buffer isolation coverage for separate transport sessions.
 - [x] iOS binds local script runs to the active transport session key captured at run start.
 - [x] iOS refuses targeted script sends when the captured transport session is no longer the active connected session.
 - [x] iOS keeps active transport and active script session identity synchronized through one active target descriptor.

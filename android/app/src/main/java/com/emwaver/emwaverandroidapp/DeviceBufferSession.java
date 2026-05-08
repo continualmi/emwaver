@@ -95,6 +95,16 @@ final class DeviceBufferSession implements TransportDeviceSession {
     }
 
     @Override
+    public synchronized long getTxPacketCount() {
+        return txTsMs.length;
+    }
+
+    @Override
+    public synchronized byte[] getTxBuffer() {
+        return Arrays.copyOf(txBytes, txBytes.length);
+    }
+
+    @Override
     public synchronized void updateSamplerStreamingState(byte[] lane) {
         if (lane == null || lane.length < 2) {
             return;

@@ -44,6 +44,25 @@ final class DeviceBufferSessionTests: XCTestCase {
         XCTAssertEqual(ble.getRxPacketCount(), 0)
     }
 
+    func testSeparateSessionsKeepTxBuffersIsolated() {
+        let usb = DeviceBufferSession()
+        let ble = DeviceBufferSession()
+
+        let usbPacket = packet(0x55)
+        let blePacket = packet(0x66)
+
+        usb.appendTxBytes(usbPacket, tsMs: 500)
+        ble.appendTxBytes(blePacket, tsMs: 600)
+
+        let usbTx = usb.readTxSince(packetIndex: 0, maxPackets: 8)
+        let bleTx = ble.readTxSince(packetIndex: 0, maxPackets: 8)
+
+        XCTAssertEqual(usb.getTxPacketCount(), 1)
+        XCTAssertEqual(ble.getTxPacketCount(), 1)
+        XCTAssertEqual(usbTx.bytes, usbPacket)
+        XCTAssertEqual(bleTx.bytes, blePacket)
+    }
+
     private func packet(_ value: UInt8) -> Data {
         Data(repeating: value, count: 18)
     }
