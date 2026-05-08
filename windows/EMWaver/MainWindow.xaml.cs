@@ -293,8 +293,8 @@ public sealed partial class MainWindow : Window
 
         if (device.IsConnected && NativeBufferRust.IsAvailable)
         {
-            var rx = NativeBufferRust.GetRxPacketCount();
-            var tx = NativeBufferRust.GetTxPacketCount();
+            var rx = device.GetActiveRxPacketCount();
+            var tx = device.GetActiveTxPacketCount();
             // Debug RX/TX counter UI removed.
         }
         else

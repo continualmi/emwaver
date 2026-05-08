@@ -188,10 +188,45 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private GattCharacteristic? _bleCommandCharacteristic;
     private GattCharacteristic? _bleNotifyCharacteristic;
     private bool _bleConnecting;
+    private readonly object _bufferSessionLock = new();
+    private readonly Dictionary<string, DeviceBufferSession> _bufferSessionsByDeviceId = new(StringComparer.OrdinalIgnoreCase);
+    private DeviceBufferSession _activeBufferSession = new("active");
 
     private readonly object _rxLock = new();
     private TaskCompletionSource<byte[]?>? _responseTcs;
     private Func<byte[], bool>? _responsePredicate;
+
+    private DeviceBufferSession ActiveBufferSession
+    {
+        get
+        {
+            lock (_bufferSessionLock)
+            {
+                return _activeBufferSession;
+            }
+        }
+    }
+
+    internal byte[] GetActiveRxSnapshot() => ActiveBufferSession.GetRxSnapshot();
+    internal void ClearActiveBuffer() => ActiveBufferSession.ClearAll();
+    internal ulong GetActiveRxPacketCount() => ActiveBufferSession.GetRxPacketCount();
+    internal ulong GetActiveTxPacketCount() => ActiveBufferSession.GetTxPacketCount();
+
+    private void SetActiveBufferSession(string deviceId)
+    {
+        var key = string.IsNullOrWhiteSpace(deviceId) ? "active" : deviceId;
+        lock (_bufferSessionLock)
+        {
+            if (!_bufferSessionsByDeviceId.TryGetValue(key, out var session))
+            {
+                session = new DeviceBufferSession(key);
+                _bufferSessionsByDeviceId[key] = session;
+            }
+
+            _activeBufferSession = session;
+            _activeBufferSession.ClearAll();
+        }
+    }
 
     internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)
     {
@@ -314,7 +349,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             ConnectedBoardType = null;
 
             // Keep parity with iOS/macOS: clear shared buffer state on connect.
-            NativeBufferRust.ClearAll();
+            SetActiveBufferSession(port.InDeviceId);
 
             _inPort = await MidiInPort.FromIdAsync(port.InDeviceId);
             _outPort = await MidiOutPort.FromIdAsync(port.OutDeviceId);
@@ -424,7 +459,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         ConnectedBoardType = null;
 
         // Keep parity with iOS/macOS: avoid stale capture across sessions.
-        NativeBufferRust.ClearAll();
+        ActiveBufferSession.ClearAll();
     }
 
     internal void RequestEnterUpdateMode()
@@ -589,12 +624,12 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         if (!IsAllZero(cmdLane))
         {
-            NativeBufferRust.StoreBulkPkt(cmdLane, tsMs);
+            ActiveBufferSession.StoreBulkPkt(cmdLane, tsMs);
             HandleLane(cmdLane);
         }
         if (!IsAllZero(streamLane))
         {
-            NativeBufferRust.StoreBulkPkt(streamLane, tsMs);
+            ActiveBufferSession.StoreBulkPkt(streamLane, tsMs);
             HandleLane(streamLane);
         }
     }
@@ -670,7 +705,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         // Log TX for buffer parity/debugging (Rust buffer core chunks to 18B packets).
-        NativeBufferRust.AppendTxBytes(superframe36, NowMs());
+        ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
 
         // Debug log (visible in Visual Studio Output -> Debug).
         Debug.WriteLine($"[EMWaver][MIDI][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
@@ -752,7 +787,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = null;
             DeviceEmwaverVersion = null;
             ConnectedBoardType = null;
-            NativeBufferRust.ClearAll();
+            SetActiveBufferSession($"ble:{bluetoothAddress:X}");
 
             CloseBleDevice();
 
@@ -849,7 +884,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return;
         }
 
-        NativeBufferRust.AppendTxBytes(superframe36, NowMs());
+        ActiveBufferSession.AppendTxBytes(superframe36, NowMs());
         Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
 
         const int BleWriteChunkBytes = 20;

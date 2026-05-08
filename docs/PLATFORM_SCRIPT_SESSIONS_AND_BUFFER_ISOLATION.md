@@ -11,6 +11,7 @@ Windows, Android, and iOS should follow the macOS direction for local script run
 - a row-level stop control for the running session,
 - no normal "Stop and Run" replacement prompt,
 - and host-side buffer isolation per target device before true multi-device concurrency is advertised.
+- transport code split into USB, BLE, and Wi-Fi units instead of growing monolithic device managers.
 
 ## macOS reference behavior
 
@@ -27,6 +28,13 @@ macOS now routes a script run through a target-specific bridge. The selected dev
 
 That is the bar for the other native hosts. Multiple visible sessions are not enough if they still share one capture buffer or one response queue.
 
+macOS is also moving away from one large USB manager file toward separate USB MIDI, BLE, and Wi-Fi transport implementations. The other native platforms should follow that direction as they gain multi-device support. The desired ownership boundary is:
+
+- a transport discovers and connects devices,
+- each connected device gets a transport-owned session object,
+- that session owns its parser, command wait state, sampler state, RX/TX logs, and capture buffer,
+- the script runtime gets only a target-scoped bridge into that session.
+
 ## Windows direction
 
 Current first step:
@@ -35,13 +43,14 @@ Current first step:
 - the session row shows the active device label when available,
 - the session row has a stop button,
 - running a different script no longer shows the old "Stop and Run" switch prompt.
+- active transport buffer state is now represented by a `DeviceBufferSession` instead of direct script-runtime reads from the process-wide buffer facade.
 
 Remaining isolation work:
 
-- move `NativeBufferRust` access out of global use in `WindowsDeviceManager`,
-- introduce a per-device session object equivalent to `MacTransportDeviceSession`,
+- finish moving debug/monitor and transport helpers off the `NativeBufferRust` process-wide facade,
 - route script engines through a targeted device/session bridge,
 - keep response wait state, parser state, sampler stream state, and capture buffers scoped to that device session.
+- split `WindowsDeviceManager` into USB MIDI, BLE, and future Wi-Fi transport units with a shared device/session contract.
 
 ## Android direction
 
@@ -57,6 +66,7 @@ Remaining isolation work:
 - extend `DeviceConnectionService` / `ScriptDeviceBridge` with target-device routing,
 - bind each script run to a target service/session,
 - keep sampler stream state and command response state scoped to that target session.
+- split USB, BLE, and future Wi-Fi connection code into transport-specific services that expose the same session contract.
 
 ## iOS direction
 
@@ -67,6 +77,7 @@ Remaining isolation work:
 - split `USBManager`'s single `NativeBufferRust` state into target-scoped sessions,
 - add a target-aware script-device bridge instead of attaching scripts directly to the singleton `USBManager`,
 - route buffer APIs, command waits, packet parsing, and sampler stream state through the selected target session.
+- split `USBManager` into USB MIDI, BLE, and future Wi-Fi transport files that publish a shared connected-device/session model.
 
 ## Acceptance checklist
 
@@ -80,9 +91,13 @@ Remaining isolation work:
 - [x] Android has a row-level stop control for the active run.
 - [x] iOS shows active run status in the shared scripts list.
 - [x] iOS has a row-level stop control for the active run through the shared scripts row.
+- [x] Windows has an active transport buffer session object used by script sampler reads.
 - [ ] Windows has per-device host buffer/session state.
 - [ ] Android has per-device host buffer/session state.
 - [ ] iOS has per-device host buffer/session state.
+- [ ] Windows USB/BLE/Wi-Fi transport code is split behind a shared session contract.
+- [ ] Android USB/BLE/Wi-Fi transport code is split behind a shared session contract.
+- [ ] iOS USB/BLE/Wi-Fi transport code is split behind a shared session contract.
 - [ ] Windows can safely run two hardware scripts against two devices without shared buffer contamination.
 - [ ] Android can safely run two hardware scripts against two devices without shared buffer contamination.
 - [ ] iOS can safely run two hardware scripts against two devices without shared buffer contamination.

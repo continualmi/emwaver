@@ -29,6 +29,8 @@ public sealed class ScriptEngine : IDisposable
     private Action<ScriptTree>? _renderHandler;
     private Action<string>? _errorHandler;
     private Func<byte[], int, byte[]?>? _sendPacket;
+    private Func<byte[]>? _getSamplerBytes;
+    private Action? _clearSamplerBuffer;
 
     private bool _haltedUntilNextExecute;
     private string _currentScriptSource = string.Empty;
@@ -48,11 +50,15 @@ public sealed class ScriptEngine : IDisposable
     public void Setup(
         Action<ScriptTree> renderHandler,
         Func<byte[], int, byte[]?> sendPacket,
-        Action<string>? errorHandler = null)
+        Action<string>? errorHandler = null,
+        Func<byte[]>? getSamplerBytes = null,
+        Action? clearSamplerBuffer = null)
     {
         _renderHandler = renderHandler;
         _sendPacket = sendPacket;
         _errorHandler = errorHandler;
+        _getSamplerBytes = getSamplerBytes;
+        _clearSamplerBuffer = clearSamplerBuffer;
 
         Enqueue(() =>
         {
@@ -410,7 +416,7 @@ public sealed class ScriptEngine : IDisposable
         engine.SetValue("_scriptSamplerBufferClear", new Action(() =>
         {
             lock (_samplerBufferLock) _samplerManualBuffer = Array.Empty<byte>();
-            NativeBufferRust.ClearAll();
+            (_clearSamplerBuffer ?? NativeBufferRust.ClearAll)();
         }));
 
         engine.SetValue("_scriptSamplerBufferReadPacketsSince", new Func<int, int, JsValue>((packetIndex, maxPackets) =>
@@ -571,7 +577,7 @@ public sealed class ScriptEngine : IDisposable
                 return (byte[])_samplerManualBuffer.Clone();
             }
         }
-        return NativeBufferRust.GetRxSnapshot();
+        return (_getSamplerBytes ?? NativeBufferRust.GetRxSnapshot)();
     }
 
     private static string GetScriptsDataDir()

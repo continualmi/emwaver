@@ -201,7 +201,9 @@ public sealed partial class ScriptsPage : Page
             errorHandler: message =>
             {
                 _ = DispatcherQueue.TryEnqueue(async () => await ShowScriptErrorAsync(message));
-            }
+            },
+            getSamplerBytes: () => AppServices.Device.GetActiveRxSnapshot(),
+            clearSamplerBuffer: () => AppServices.Device.ClearActiveBuffer()
         );
 
         Loaded += OnLoaded;
