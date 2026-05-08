@@ -75,6 +75,7 @@ struct DeviceConnectionSheet: View {
             VStack(alignment: .leading, spacing: 20) {
                 header
                 overviewCard
+                deviceListCard
                 bleCard
             }
             .padding(24)
@@ -145,6 +146,74 @@ struct DeviceConnectionSheet: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
+    private var deviceListCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack {
+                Label("Local devices", systemImage: "list.bullet.rectangle")
+                    .font(.headline)
+
+                Spacer()
+
+                Button("Refresh") {
+                    device.refreshPorts()
+                    if device.bluetoothStateText == "On" {
+                        device.startBleScan()
+                    }
+                }
+                .buttonStyle(.bordered)
+            }
+
+            if device.discoveredDevices.isEmpty {
+                Text("No EMWaver devices discovered yet. Start BLE scan or connect a USB MIDI board.")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(spacing: 8) {
+                    ForEach(device.discoveredDevices) { item in
+                        HStack(spacing: 12) {
+                            Image(systemName: item.transport == .ble ? "antenna.radiowaves.left.and.right" : "cable.connector")
+                                .foregroundStyle(item.isActive ? Color.green : .secondary)
+                                .frame(width: 20)
+
+                            VStack(alignment: .leading, spacing: 3) {
+                                HStack(spacing: 8) {
+                                    Text(item.moduleLabel?.isEmpty == false ? item.moduleLabel! : item.displayName)
+                                        .font(.subheadline.weight(.medium))
+                                        .lineLimit(1)
+                                    if item.isActive {
+                                        Text("Active")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.green)
+                                            .padding(.horizontal, 6)
+                                            .padding(.vertical, 2)
+                                            .background(Capsule().fill(Color.green.opacity(0.12)))
+                                    }
+                                }
+                                Text("\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+
+                            Spacer(minLength: 0)
+
+                            Button(item.isActive ? "Connected" : "Connect") {
+                                device.connectDevice(id: item.id)
+                            }
+                            .buttonStyle(.bordered)
+                            .disabled(item.isActive || item.connectionState == .connecting)
+                        }
+                        .padding(10)
+                        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.06)))
+                    }
+                }
+            }
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
     private var bleCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -184,7 +253,6 @@ struct DeviceConnectionSheet: View {
                         }
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(device.isConnected)
                 } else {
                     Button("Open Bluetooth Settings") {
                         if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
@@ -196,7 +264,6 @@ struct DeviceConnectionSheet: View {
 
                 Toggle("Auto connect", isOn: $device.autoConnectEnabled)
                     .toggleStyle(.checkbox)
-                    .disabled(device.isConnected)
             }
         }
         .padding(18)

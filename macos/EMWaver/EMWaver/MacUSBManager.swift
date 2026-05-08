@@ -12,6 +12,28 @@ import Foundation
 import EMWaverScriptRuntime
 import EMWaverTransport
 
+struct LocalDeviceDescriptor: Identifiable, Equatable {
+    enum TransportKind: String {
+        case ble = "BLE"
+        case usbMidi = "USB"
+    }
+
+    enum ConnectionState: String {
+        case discovered
+        case connecting
+        case connected
+    }
+
+    let id: String
+    var displayName: String
+    var transport: TransportKind
+    var boardType: String?
+    var moduleLabel: String?
+    var connectionState: ConnectionState
+    var lastErrorText: String?
+    var isActive: Bool
+}
+
 /// macOS USB MIDI (CoreMIDI) transport.
 ///
 /// This is intentionally minimal: enough to power Scripts execution.
@@ -33,6 +55,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var isConnected: Bool = false
     @Published var connectedPortName: String? = nil
     @Published var availablePorts: [String] = []
+    @Published var discoveredDevices: [LocalDeviceDescriptor] = []
     @Published var lastErrorText: String? = nil
     @Published var deviceEmwaverVersion: String? = nil
     @Published var autoConnectEnabled: Bool = true {
@@ -76,6 +99,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var activeTransport: ActiveTransport = .none
 
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
+    private var bleDiscoveredPeripheralsByID: [UUID: CBPeripheral] = [:]
 
     private var sysexAccumulator = UsbMidiSysexAccumulator()
     private var bleCentral: CBCentralManager?
@@ -179,6 +203,23 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         midiQueue.async {
             self.ensureClient()
             self.connectInternal(portName: portName)
+        }
+    }
+
+    func connectDevice(id: String) {
+        midiQueue.async {
+            self.ensureClient()
+            if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
+                self.connectInternal(portName: displayName)
+                return
+            }
+            if id.hasPrefix("ble:"),
+               let uuid = UUID(uuidString: String(id.dropFirst("ble:".count))),
+               let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
+                self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid])
+                return
+            }
+            self.setError("No matching device: \(id)")
         }
     }
 
@@ -399,9 +440,55 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
 
         self.portCandidatesByDisplayName = map
+        publishDiscoveredDevices(ports: ports)
         DispatchQueue.main.async {
             self.availablePorts = ports
         }
+    }
+
+    private func publishDiscoveredDevices(ports: [String]? = nil) {
+        let portNames = ports ?? Array(portCandidatesByDisplayName.keys).sorted()
+        var devices: [LocalDeviceDescriptor] = []
+
+        for port in portNames.sorted() {
+            let id = "midi:\(port)"
+            let isActive = activeTransport == .usbMidi && connectedPortName == port && isTransportConnectedInternal()
+            devices.append(LocalDeviceDescriptor(
+                id: id,
+                displayName: port,
+                transport: .usbMidi,
+                boardType: inferBoardType(portName: port),
+                moduleLabel: nil,
+                connectionState: isActive ? .connected : .discovered,
+                lastErrorText: nil,
+                isActive: isActive
+            ))
+        }
+
+        for (uuid, peripheral) in bleDiscoveredPeripheralsByID.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
+            let name = bleDiscoveredNamesByID[uuid] ?? peripheral.name ?? "EMWaver BLE"
+            let isActive = activeTransport == .ble && blePeripheral?.identifier == uuid && isTransportConnectedInternal()
+            let isConnecting = blePeripheral?.identifier == uuid && peripheral.state == .connecting
+            devices.append(LocalDeviceDescriptor(
+                id: "ble:\(uuid.uuidString)",
+                displayName: name,
+                transport: .ble,
+                boardType: "esp32s3",
+                moduleLabel: nil,
+                connectionState: isActive ? .connected : (isConnecting ? .connecting : .discovered),
+                lastErrorText: nil,
+                isActive: isActive
+            ))
+        }
+
+        DispatchQueue.main.async {
+            self.discoveredDevices = devices
+        }
+    }
+
+    private func displayNameFromDeviceID(_ id: String) -> String? {
+        let raw = String(id.dropFirst("midi:".count))
+        return portCandidatesByDisplayName.keys.first(where: { $0 == raw })
     }
 
     private func connectToFirstPortInternal() {
@@ -503,6 +590,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectedBoardType = nil
             self.connectedTransportKind = nil
         }
+        publishDiscoveredDevices()
     }
 
     private func queryDeviceVersion(timeoutMs: Int) -> String? {
@@ -693,7 +781,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             stopBleScanInternal()
             return
         }
-        guard blePeripheral == nil || blePeripheral?.state == .disconnected else { return }
         bleCentral?.scanForPeripherals(
             withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
@@ -733,6 +820,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.connectedTransportKind = "BLE"
             self.lastErrorText = nil
         }
+        publishDiscoveredDevices()
     }
 
     private func isEmwaverBleAdvertisement(
@@ -924,6 +1012,8 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         let localName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
         let name = localName ?? peripheral.name ?? "EMWaver BLE"
         bleDiscoveredNamesByID[peripheral.identifier] = name
+        bleDiscoveredPeripheralsByID[peripheral.identifier] = peripheral
+        publishDiscoveredDevices()
         guard autoConnectEnabled, !isTransportConnectedInternal() else { return }
         NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
         connectBleInternal(peripheral, name: name)
@@ -940,6 +1030,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.connectedTransportKind = "BLE"
             self.lastErrorText = nil
         }
+        publishDiscoveredDevices()
     }
 
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -949,6 +1040,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleNotifyCharacteristic = nil
         activeTransport = .none
         setError(error?.localizedDescription ?? "BLE connection failed")
+        publishDiscoveredDevices()
         autoConnectIfNeededInternal()
     }
 
@@ -965,6 +1057,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.connectedBoardType = nil
             self.connectedTransportKind = nil
         }
+        publishDiscoveredDevices()
         if autoConnectEnabled {
             startBleScanInternal()
         }
@@ -1010,6 +1103,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
                     self.lastDetectedBoardType = "esp32s3"
                     self.connectedTransportKind = "BLE"
                 }
+                self.publishDiscoveredDevices()
             }
         }
     }

@@ -60,7 +60,9 @@ Responsibilities:
 Transport behavior:
 - `MacUSBManager.swift` owns both CoreMIDI USB and CoreBluetooth BLE runtime sessions.
 - USB MIDI remains the preferred wired path when present.
+- The device sheet now exposes a unified local device list for discovered USB MIDI and ESP32-S3 BLE candidates, so multi-board bench work can start with explicit user selection.
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS scans for the ESP32-S3 EMWaver BLE GATT service and connects automatically.
+- BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Local-first gateway behavior:
