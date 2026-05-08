@@ -220,6 +220,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 - Validate VPN access by direct LAN IP.
 - Validate that unauthenticated clients cannot run commands.
 - Validate recovery when Wi-Fi credentials are wrong.
+- Current compile validation: ESP32-S3 `idf.py -B build-esp32s3-check esp-idf/main/libmain.a` and isolated ESP32-S2 `idf.py -B /tmp/emwaver-s2-wifi-check -DSDKCONFIG=/tmp/emwaver-s2-wifi-sdkconfig set-target esp32s2 esp-idf/main/libmain.a` both pass for the shared Wi-Fi transport source. Remaining gaps require real hardware LAN/VPN script execution.
 
 ## Host/App Work
 
@@ -276,6 +277,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secre
 
 - Add Wi-Fi device discovery and manual connection surfaces.
 - Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3. Manual macOS host/IP entry accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL, and local pairing persistence rejects malformed host strings before saving fallback records.
+- Current macOS validation: `xcodebuild build-for-testing -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO` compiles the Wi-Fi metadata, envelope, and host-validation tests. A targeted `xcodebuild test -only-testing` run for the new metadata tests was interrupted after hanging in the test runner, so it is not counted as a passing test result.
 - Current macOS auto-connect progress: paired Wi-Fi endpoints are attempted automatically when no wired runtime is active, so a provisioned same-LAN board can reconnect without re-entering the pairing secret.
 - Reuse existing script/device runtime paths.
 - Add Wi-Fi provisioning from BLE/USB where platform APIs allow it.

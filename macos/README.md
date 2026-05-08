@@ -86,7 +86,7 @@ Transport behavior:
 - The USB/BLE local setup surface can also reset only the ESP32 Wi-Fi pairing secret while keeping the existing SSID/password/hostname on the board, updating the matching local macOS pairing record when a hostname or manual host/IP is provided.
 - The setup surface can query the ESP32 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, reconnecting, last station disconnect reason, and authenticated state for local diagnostics.
 - When a hostname is supplied during Wi-Fi provisioning, the macOS app stores the matching local paired-device record immediately so the advertised `<hostname>.local` endpoint can be selected without re-entering the pairing secret.
-- Wi-Fi connection authentication waits for the ESP32-S3 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
+- Wi-Fi connection authentication waits for the ESP32 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
 - Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local or firmware timeout are disconnected with a specific authentication-timeout error.
 - Wi-Fi records report `connecting` while WebSocket challenge/auth is pending, so the local device list distinguishes authentication bootstrap from idle discovery and completed connection.
 - Manual Wi-Fi pairing records are rolled back if authentication fails, times out, or disconnects before `auth ok`, so a bad temporary secret does not replace the last good local pairing.
