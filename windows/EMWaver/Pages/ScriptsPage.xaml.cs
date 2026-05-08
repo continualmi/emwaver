@@ -709,8 +709,8 @@ public sealed partial class ScriptsPage : Page
     private int _activeRenderGeneration;
     private bool _hasActiveRunningScript;
     private string? _activeRunningScriptName;
+    private readonly Models.ScriptSessionRegistry _scriptSessions = new();
     private TargetedScriptDeviceConnection _activeScriptDevice = CreateActiveScriptDevice("active");
-    private Models.ScriptSessionInfo? _runningSessionItem;
     private DispatcherQueueTimer? _editorFocusTimer;
     private int _editorFocusAttemptsRemaining;
 
@@ -803,17 +803,28 @@ public sealed partial class ScriptsPage : Page
 
     private void NotifyRunningScriptStatusChanged()
     {
-        var showIndicator = _hasActiveRunningScript;
-        RunningScriptStatusChanged?.Invoke(showIndicator, _activeRunningScriptName);
+        SyncRunningScriptStateFromSessions();
+        RunningScriptStatusChanged?.Invoke(_hasActiveRunningScript, _activeRunningScriptName);
         RefreshRunningSessionRow();
     }
 
     private void SetRunningScriptState(bool isRunning, string? scriptName)
     {
-        _hasActiveRunningScript = isRunning;
-        _activeRunningScriptName = isRunning ? scriptName : null;
+        _scriptSessions.Clear();
+        if (isRunning && !string.IsNullOrWhiteSpace(scriptName))
+        {
+            _scriptSessions.Start(scriptName, ActiveDeviceLabel());
+        }
+
         _activeScriptDevice = CreateActiveScriptDevice(isRunning ? AppServices.Device.ActiveBufferSessionId : "active");
         NotifyRunningScriptStatusChanged();
+    }
+
+    private void SyncRunningScriptStateFromSessions()
+    {
+        var selected = _scriptSessions.SelectedSession;
+        _hasActiveRunningScript = selected != null;
+        _activeRunningScriptName = selected?.ScriptName;
     }
 
     private void RefreshRunningSessionRow()
@@ -824,31 +835,27 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        var examples = _sections.FirstOrDefault(s => s.Title == "Examples");
-        if (examples is null)
+        var running = _sections.FirstOrDefault(s => s.Title == "Running");
+        if (!_scriptSessions.HasSessions)
         {
-            return;
-        }
-
-        foreach (var section in _sections)
-        {
-            if (_runningSessionItem != null && section.Items.Contains(_runningSessionItem))
+            if (running != null)
             {
-                section.Items.Remove(_runningSessionItem);
+                _sections.Remove(running);
             }
-        }
-
-        if (!_hasActiveRunningScript || string.IsNullOrWhiteSpace(_activeRunningScriptName))
-        {
             return;
         }
 
-        _runningSessionItem = new Models.ScriptSessionInfo(
-            ScriptName: _activeRunningScriptName,
-            DeviceLabel: ActiveDeviceLabel(),
-            StateText: "running"
-        );
-        examples.Items.Insert(0, _runningSessionItem);
+        if (running is null)
+        {
+            running = new Models.ScriptListSection("Running");
+            _sections.Insert(0, running);
+        }
+
+        running.Items.Clear();
+        foreach (var session in _scriptSessions.Sessions)
+        {
+            running.Items.Add(session);
+        }
     }
 
     private static string ActiveDeviceLabel()
@@ -958,7 +965,10 @@ public sealed partial class ScriptsPage : Page
 
     private async void OnSessionStopClick(object sender, RoutedEventArgs e)
     {
-        await StopRunningScriptAsync();
+        var sessionId = (sender as FrameworkElement)?.DataContext is Models.ScriptSessionInfo session
+            ? session.InstanceId
+            : null;
+        await StopRunningScriptAsync(sessionId);
     }
 
     private void SetAgentPaneVisibility(bool show)
@@ -1582,7 +1592,7 @@ public sealed partial class ScriptsPage : Page
         }
     }
 
-    private async Task StopRunningScriptAsync()
+    private async Task StopRunningScriptAsync(string? sessionId = null)
     {
         if (!_hasActiveRunningScript)
         {
@@ -1590,7 +1600,20 @@ public sealed partial class ScriptsPage : Page
         }
 
         _scriptEngine.Stop();
-        SetRunningScriptState(false, null);
+        if (string.IsNullOrWhiteSpace(sessionId))
+        {
+            _scriptSessions.StopSelected();
+        }
+        else
+        {
+            _scriptSessions.Stop(sessionId);
+        }
+
+        if (!_scriptSessions.HasSessions)
+        {
+            _activeScriptDevice = CreateActiveScriptDevice("active");
+        }
+        NotifyRunningScriptStatusChanged();
 
         await RunOnUiAsync(async () =>
         {
