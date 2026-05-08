@@ -36,6 +36,7 @@ public class ScriptDeviceConnectionTest {
         assertEquals("USB:Board-1", service.lastLengthDeviceId);
         assertEquals("USB:Board-1", service.lastGetDeviceId);
         assertArrayEquals(new byte[] { 0x7F }, response);
+        assertEquals("USB:Board-1", connection.capturedDeviceId());
         assertEquals("USB", connection.connectionType());
         assertEquals("USB Board", connection.connectionStatus());
     }
