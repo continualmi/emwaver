@@ -10,12 +10,23 @@ import EMWaverScriptRuntime
 import EMWaverScriptSwiftUI
 import EMWaverScriptModel
 
+protocol IOSTargetedScriptDeviceBase: AnyObject {
+    func getBuffer(deviceId: String) -> Data
+    func clearBuffer(deviceId: String)
+    func loadBuffer(data: Data, deviceId: String)
+    func sendPacket(_ data: Data, deviceId: String)
+    func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data?
+    func transmitBuffer(deviceId: String)
+}
+
+extension USBManager: IOSTargetedScriptDeviceBase {}
+
 @MainActor
-private final class IOSTargetedScriptDevice: ScriptDevice {
-    private weak var base: USBManager?
+final class IOSTargetedScriptDevice: ScriptDevice {
+    private weak var base: IOSTargetedScriptDeviceBase?
     private let deviceId: String
 
-    init(base: USBManager, deviceId: String) {
+    init(base: IOSTargetedScriptDeviceBase, deviceId: String) {
         self.base = base
         self.deviceId = deviceId
     }
