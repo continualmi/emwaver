@@ -83,6 +83,7 @@ public class USBService extends Service implements DeviceConnectionService {
     private AndroidBleTransport.ScanSession bleScanSession;
     private AndroidBleTransport.PendingConnection pendingBleConnection;
     private volatile AndroidBleTransport.Connection bleConnection;
+    private volatile TransportDeviceConnection activeTransportConnection;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
     private volatile ActiveDeviceTarget<ActiveTransport> activeDeviceTarget =
             new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
@@ -129,7 +130,8 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public String currentScriptDeviceId() {
-        return activeDeviceTarget.deviceId;
+        TransportDeviceConnection connection = activeTransportConnection;
+        return connection != null ? connection.sessionId() : activeDeviceTarget.deviceId;
     }
 
     private TransportDeviceSession setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
@@ -144,6 +146,7 @@ public class USBService extends Service implements DeviceConnectionService {
         if (activeDeviceTarget.matchesTransport(transport)) {
             activeDeviceTarget = new ActiveDeviceTarget<>("active", ActiveTransport.NONE);
             activeTransport = ActiveTransport.NONE;
+            activeTransportConnection = null;
         }
     }
 
@@ -359,6 +362,7 @@ public class USBService extends Service implements DeviceConnectionService {
                         AndroidUsbMidiTransport.sessionId(usbDevice),
                         ActiveTransport.USB);
                 usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver, session);
+                activeTransportConnection = usbMidiConnection;
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -604,6 +608,7 @@ public class USBService extends Service implements DeviceConnectionService {
                         AndroidBleTransport.sessionId(gatt.getDevice()),
                         ActiveTransport.BLE);
                 bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName, session);
+                activeTransportConnection = bleConnection;
                 pendingBleConnection = null;
             }
             AndroidBleTransport.enableNotifications(gatt);
@@ -923,6 +928,18 @@ public class USBService extends Service implements DeviceConnectionService {
     @Override
     public String getConnectionStatus() {
         if (checkConnection()) {
+            TransportDeviceConnection activeConnection = activeTransportConnection;
+            if (activeConnection != null) {
+                String label = activeConnection.displayName();
+                if (activeTransport == ActiveTransport.BLE) {
+                    return label == null || label.trim().isEmpty()
+                            ? "Connected (BLE)"
+                            : "Connected (BLE: " + label.trim() + ")";
+                }
+                return label == null || label.trim().isEmpty()
+                        ? "Connected (USB)"
+                        : "Connected (USB: " + label.trim() + ")";
+            }
             if (activeTransport == ActiveTransport.BLE) {
                 AndroidBleTransport.Connection connection = bleConnection;
                 String label = connection != null ? connection.displayName : null;
