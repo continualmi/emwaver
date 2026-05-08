@@ -590,6 +590,11 @@ static esp_err_t ws_handler(httpd_req_t *req)
             .len = strlen("auth fail"),
         };
         (void)httpd_ws_send_frame(req, &reply);
+        if (current_fd == s_active_fd) {
+            s_active_fd = -1;
+            s_authenticated = false;
+            s_auth_challenge[0] = '\0';
+        }
         return ESP_FAIL;
     }
 
