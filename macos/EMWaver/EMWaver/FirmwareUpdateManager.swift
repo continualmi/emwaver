@@ -439,7 +439,7 @@ final class FirmwareUpdateManager: ObservableObject {
         let candidates = preferred.isEmpty ? ports : preferred
 
         for port in candidates {
-            let (code, _, _) = try runEspHelperAndWait(arguments: ["chip-id", "--port", port, "--baud", "115200", "--no-stub"])
+            let (code, _, _) = try runEspHelperAndWait(arguments: ["read-identity", "--port", port, "--baud", "115200"])
             if code == 0 {
                 return port
             }
