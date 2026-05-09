@@ -812,7 +812,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
     if (err != ESP_OK || frame.len == 0 || frame.len > 256) {
         close_active_session(current_fd);
-        return err;
+        return err == ESP_OK ? ESP_FAIL : err;
     }
 
     uint8_t data[256] = {0};
@@ -872,9 +872,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
         enveloped = has_sysex;
     }
     if (!has_sysex || !enqueue_sysex(sysex, sequence, enveloped)) {
-        if (!has_sysex) {
-            close_active_session(current_fd);
-        }
+        close_active_session(current_fd);
         return ESP_FAIL;
     }
     return ESP_OK;

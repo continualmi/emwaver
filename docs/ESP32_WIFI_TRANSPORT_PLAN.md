@@ -132,7 +132,7 @@ Preferred first security slice:
 5. Firmware accepts command frames only after authentication.
 
 Current implementation note:
-- The first firmware/macOS slice uses a firmware-issued challenge plus HMAC-SHA256 over the local pairing secret. The raw pairing secret is not sent on the WebSocket, and firmware accepts command frames only after an `auth ok` state. Firmware closes pending unauthenticated sockets on auth-timeout task creation failure, failed challenge send, auth timeout, auth failure, frame receive errors, or invalid command frames so rejected or malformed clients cannot hold the active session slot.
+- The first firmware/macOS slice uses a firmware-issued challenge plus HMAC-SHA256 over the local pairing secret. The raw pairing secret is not sent on the WebSocket, and firmware accepts command frames only after an `auth ok` state. Firmware closes pending unauthenticated sockets on auth-timeout task creation failure, failed challenge send, auth timeout, auth failure, frame receive errors, empty/oversized frames, or rejected command frames so rejected or malformed clients cannot hold the active session slot.
 
 TLS is desirable later, but authenticated sessions are the first hard requirement. Do not ship an unauthenticated Wi-Fi command socket.
 
