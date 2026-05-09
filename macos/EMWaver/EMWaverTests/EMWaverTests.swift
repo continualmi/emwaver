@@ -167,11 +167,12 @@ struct EMWaverTests {
     }
 
     @Test func wifiConnectionStateDistinguishesPairedOfflineFallbacks() {
-        #expect(MacUSBManager.wiFiConnectionState(isActive: true, isConnecting: false, isPaired: true, isAdvertised: true) == .connected)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnecting: true, isPaired: true, isAdvertised: true) == .connecting)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnecting: false, isPaired: true, isAdvertised: false) == .disconnected)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnecting: false, isPaired: true, isAdvertised: true) == .discovered)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnecting: false, isPaired: false, isAdvertised: true) == .discovered)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: true, isConnected: true, isConnecting: false, isPaired: true, isAdvertised: true) == .connected)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: true, isConnecting: false, isPaired: true, isAdvertised: true) == .connected)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: true, isPaired: true, isAdvertised: true) == .connecting)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: true, isAdvertised: false) == .disconnected)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: true, isAdvertised: true) == .discovered)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: false, isAdvertised: true) == .discovered)
     }
 
     @Test func wifiChallengeParserAcceptsChallengeJsonOnly() {

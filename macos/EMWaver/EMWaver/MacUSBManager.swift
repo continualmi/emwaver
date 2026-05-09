@@ -324,6 +324,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var bleCommandCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleNotifyCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleDiscoveredNamesByID: [UUID: String] = [:]
+    private var bleIdentityProbePeripheralIDs: Set<UUID> = []
 
     override init() {
         super.init()
@@ -396,6 +397,24 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
         }
         return midiQueue.sync { isTransportConnectedInternal() }
+    }
+
+    private func isTransportConnectedInternal(deviceID: String?) -> Bool {
+        guard let targetID = resolvedTransportID(for: deviceID) else {
+            return isTransportConnectedInternal()
+        }
+        if targetID.hasPrefix("midi:") {
+            return connectedSource != 0 && connectedDestination != 0 && activeDeviceID == targetID
+        }
+        if targetID.hasPrefix("ble:"),
+           let uuid = UUID(uuidString: String(targetID.dropFirst("ble:".count))),
+           let peripheral = bleConnectedPeripheralsByID[uuid] {
+            return peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
+        }
+        if targetID.hasPrefix("wifi:") {
+            return wifiManager?.isConnected == true && wifiManager?.activeDeviceID == targetID
+        }
+        return false
     }
 
     private func inferBoardType(portName: String?) -> String {
@@ -755,7 +774,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             if id.hasPrefix("ble:"),
                let uuid = UUID(uuidString: String(id.dropFirst("ble:".count))),
                let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
-                self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid])
+                self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid], makeActive: true)
                 return
             }
             if id.hasPrefix("wifi:"), let record = self.wifiDevices.first(where: { $0.id == id }) {
@@ -812,11 +831,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if bleCentral?.state == .poweredOn {
             startBleScanInternal()
         }
-        guard !isTransportConnectedInternal() else { return }
-        connectToFirstPortInternal()
-        if connectToFirstPairedWiFiInternal() {
-            return
+        if !isTransportConnectedInternal() {
+            connectToFirstPortInternal()
         }
+        _ = connectToFirstPairedWiFiInternal()
     }
 
     // MARK: - ScriptDevice (TX/RX)
@@ -846,7 +864,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?, deviceID: String?) -> Data? {
-        guard isTransportConnectedInternal() else {
+        guard isTransportConnectedInternal(deviceID: deviceID) else {
             setError("Cannot send command: Not connected")
             return nil
         }
@@ -1169,16 +1187,20 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         let connectingWiFiID = wifiManager?.connectingDeviceID
         for record in wifiDevices.sorted(by: { $0.displayName < $1.displayName }) {
             let isActive = activeTransport == .wifi && wifiManager?.activeDeviceID == record.id && isTransportConnectedInternal()
+            let isConnected = wifiManager?.activeDeviceID == record.id && wifiManager?.isConnected == true
             let isConnecting = record.id == connectingWiFiID
             let connectionState = Self.wiFiConnectionState(
                 isActive: isActive,
+                isConnected: isConnected,
                 isConnecting: isConnecting,
                 isPaired: record.isPaired,
                 isAdvertised: record.isAdvertised
             )
             let endpoint = "\(record.host):\(record.port)"
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
-            let identifierText = record.localIdentifier.map { "UID \($0)" }
+            let hardwareUID = hardwareUIDByDeviceID[record.id]
+                ?? (Self.isFullHardwareUID(record.localIdentifier) ? record.localIdentifier : nil)
+            let identifierText = hardwareUID.map { "UID \($0)" }
             let errorText: String? = {
                 if let error = wifiConnectionErrorsByID[record.id] { return error }
                 if !record.isPaired { return "Pairing required" }
@@ -1205,14 +1227,23 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     static func wiFiConnectionState(
         isActive: Bool,
+        isConnected: Bool,
         isConnecting: Bool,
         isPaired: Bool,
         isAdvertised: Bool
     ) -> LocalDeviceDescriptor.ConnectionState {
         if isActive { return .connected }
+        if isConnected { return .connected }
         if isConnecting { return .connecting }
         if isPaired && !isAdvertised { return .disconnected }
         return .discovered
+    }
+
+    private static func isFullHardwareUID(_ value: String?) -> Bool {
+        guard let value else { return false }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 12 else { return false }
+        return trimmed.allSatisfy { $0.isHexDigit }
     }
 
     private func displayNameFromDeviceID(_ id: String) -> String? {
@@ -1266,8 +1297,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func connectToFirstPairedWiFiInternal() -> Bool {
-        guard activeTransport == .none else { return false }
         if wifiManager?.connectingDeviceID != nil {
+            return true
+        }
+        if let activeWiFiID = wifiManager?.activeDeviceID,
+           wifiManager?.isConnected == true,
+           wifiDevices.contains(where: { $0.id == activeWiFiID }) {
             return true
         }
         guard let record = wifiDevices
@@ -1316,7 +1351,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func connectInternal(candidate: PortCandidate, displayName: String?) {
-        disconnectInternal()
+        disconnectMidiOnlyInternal()
 
         connectedSource = candidate.source
         connectedDestination = candidate.destination
@@ -1345,12 +1380,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         // Query only local runtime metadata needed for display and update guidance.
         DispatchQueue.global(qos: .userInitiated).async {
-            var v = self.queryDeviceVersion(timeoutMs: 1500)
+            var v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             if v == nil {
                 Thread.sleep(forTimeInterval: 0.25)
-                v = self.queryDeviceVersion(timeoutMs: 1500)
+                v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             }
-            let uid = self.queryHardwareUID(timeoutMs: 1500)
+            let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
             let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
 
             DispatchQueue.main.async {
@@ -1381,6 +1416,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         bleConnectedPeripheralsByID.removeAll()
         bleCommandCharacteristicsByID.removeAll()
         bleNotifyCharacteristicsByID.removeAll()
+        bleIdentityProbePeripheralIDs.removeAll()
         blePeripheral = nil
         bleCommandCharacteristic = nil
         bleNotifyCharacteristic = nil
@@ -1397,7 +1433,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         publishDiscoveredDevices()
     }
 
-    private func queryHardwareUID(timeoutMs: Int) -> String? {
+    private func queryHardwareUID(timeoutMs: Int, deviceID: String? = nil) -> String? {
         let resp = sendCommandInternal(
             Data([EmwOpcode.hardwareUID]),
             timeout: timeoutMs,
@@ -1405,7 +1441,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 guard lane64.count >= 7 else { return false }
                 guard lane64[0] == 0x80 else { return false }
                 return lane64.dropFirst(1).contains(where: { $0 != 0 })
-            }
+            },
+            deviceID: deviceID
         )
         guard let resp, resp.count >= 7, resp[0] == 0x80 else { return nil }
         let payload = resp.dropFirst(1)
@@ -1414,7 +1451,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return payload.prefix(significantLength).map { String(format: "%02x", $0) }.joined()
     }
 
-    private func queryDeviceVersion(timeoutMs: Int) -> String? {
+    private func queryDeviceVersion(timeoutMs: Int, deviceID: String? = nil) -> String? {
         // Opcode 0x01 is "VERSION". Expected response lane: [0x80, major, minor, patch, 0...]
         // Product UI uses major.minor (patch is internal / not shown).
         let resp = sendCommandInternal(
@@ -1424,7 +1461,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 if lane64.count < 4 { return false }
                 if lane64[0] != 0x80 { return false }
                 return !lane64.dropFirst(4).contains(where: { $0 != 0 })
-            }
+            },
+            deviceID: deviceID
         )
         guard let resp else { return nil }
         if resp.count < 4 { return nil }
@@ -1627,25 +1665,47 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func handleWiFiConnected(_ record: MacWiFiDeviceRecord) {
-        disconnectMidiOnlyInternal()
-        activeTransport = .wifi
-        activeDeviceID = record.id
+        let shouldBecomeActive = activeTransport == .none || pendingAutoConnectWiFiID != record.id
+        if shouldBecomeActive {
+            activeTransport = .wifi
+            activeDeviceID = record.id
+        }
         pendingAutoConnectWiFiID = nil
         suppressedAutoConnectWiFiIDs.remove(record.id)
         wifiConnectionErrorsByID.removeValue(forKey: record.id)
         ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
 
         DispatchQueue.main.async {
-            self.connectedPortName = "\(record.host):\(record.port)"
-            self.connectedBoardType = record.boardType ?? "esp32"
+            if shouldBecomeActive {
+                self.connectedPortName = "\(record.host):\(record.port)"
+                self.connectedBoardType = record.boardType ?? "esp32"
+                self.connectedTransportKind = "Wi-Fi"
+            }
             self.lastDetectedBoardType = record.boardType ?? "esp32"
-            self.connectedTransportKind = "Wi-Fi"
             self.lastErrorText = nil
-            self.deviceEmwaverVersion = nil
-            self.connectedHardwareUID = nil
+            if shouldBecomeActive {
+                self.deviceEmwaverVersion = nil
+                self.connectedHardwareUID = nil
+            }
             self.isConnected = true
         }
         publishDiscoveredDevices()
+
+        DispatchQueue.global(qos: .userInitiated).async {
+            let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: record.id)
+            let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: record.id)
+
+            DispatchQueue.main.async {
+                if shouldBecomeActive {
+                    self.deviceEmwaverVersion = version
+                    self.connectedHardwareUID = uid
+                }
+            }
+            self.midiQueue.async {
+                if let uid { self.hardwareUIDByDeviceID[record.id] = uid }
+                self.publishDiscoveredDevices()
+            }
+        }
     }
 
     private func handleWiFiDisconnected(deviceID: String?) {
@@ -1676,29 +1736,40 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         connectedDestination = 0
     }
 
-    private func connectBleInternal(_ peripheral: CBPeripheral, name: String?) {
-        disconnectMidiOnlyInternal()
-        blePeripheral = peripheral
-        bleCommandCharacteristic = bleCommandCharacteristicsByID[peripheral.identifier]
-        bleNotifyCharacteristic = bleNotifyCharacteristicsByID[peripheral.identifier]
+    private func connectBleInternal(_ peripheral: CBPeripheral, name: String?, makeActive: Bool = true) {
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
-        activeDeviceID = deviceID
+        if makeActive {
+            disconnectMidiOnlyInternal()
+            bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
+            blePeripheral = peripheral
+            bleCommandCharacteristic = bleCommandCharacteristicsByID[peripheral.identifier]
+            bleNotifyCharacteristic = bleNotifyCharacteristicsByID[peripheral.identifier]
+            activeDeviceID = deviceID
+        } else {
+            bleIdentityProbePeripheralIDs.insert(peripheral.identifier)
+        }
         ensureDeviceSessionInternal(deviceID: deviceID)
         peripheral.delegate = self
         if peripheral.state == .connected {
-            activeTransport = .ble
+            if makeActive {
+                activeTransport = .ble
+            }
             DispatchQueue.main.async {
-                self.isConnected = self.bleCommandCharacteristicsByID[peripheral.identifier] != nil
+                if makeActive {
+                    self.isConnected = self.bleCommandCharacteristicsByID[peripheral.identifier] != nil
+                }
             }
         } else if peripheral.state != .connecting {
             bleCentral?.connect(peripheral, options: nil)
         }
         DispatchQueue.main.async {
-            self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
-            self.connectedBoardType = "esp32s3"
+            if makeActive {
+                self.connectedPortName = name ?? peripheral.name ?? "EMWaver BLE"
+                self.connectedBoardType = "esp32s3"
+                self.connectedTransportKind = "BLE"
+                self.lastErrorText = nil
+            }
             self.lastDetectedBoardType = "esp32s3"
-            self.connectedTransportKind = "BLE"
-            self.lastErrorText = nil
         }
         publishDiscoveredDevices()
     }
@@ -1879,27 +1950,31 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleDiscoveredNamesByID[peripheral.identifier] = name
         bleDiscoveredPeripheralsByID[peripheral.identifier] = peripheral
         publishDiscoveredDevices()
-        guard autoConnectEnabled, !isTransportConnectedInternal() else { return }
+        guard autoConnectEnabled, peripheral.state != .connected, peripheral.state != .connecting else { return }
         NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
-        connectBleInternal(peripheral, name: name)
+        connectBleInternal(peripheral, name: name, makeActive: activeTransport == .none)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         bleConnectedPeripheralsByID[peripheral.identifier] = peripheral
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
         ensureDeviceSessionInternal(deviceID: deviceID)
-        if blePeripheral == nil || blePeripheral == peripheral {
+        let shouldBecomeActive = !bleIdentityProbePeripheralIDs.contains(peripheral.identifier) &&
+            (blePeripheral == nil || blePeripheral == peripheral)
+        if shouldBecomeActive {
             blePeripheral = peripheral
             activeTransport = .ble
             activeDeviceID = deviceID
         }
         peripheral.discoverServices([Self.bleServiceUUID])
         DispatchQueue.main.async {
-            self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
-            self.connectedBoardType = "esp32s3"
+            if shouldBecomeActive {
+                self.connectedPortName = self.bleDiscoveredNamesByID[peripheral.identifier] ?? peripheral.name ?? "EMWaver BLE"
+                self.connectedBoardType = "esp32s3"
+                self.connectedTransportKind = "BLE"
+                self.lastErrorText = nil
+            }
             self.lastDetectedBoardType = "esp32s3"
-            self.connectedTransportKind = "BLE"
-            self.lastErrorText = nil
         }
         publishDiscoveredDevices()
     }
@@ -1915,6 +1990,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleConnectedPeripheralsByID.removeValue(forKey: peripheral.identifier)
         bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
+        bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
         setError(error?.localizedDescription ?? "BLE connection failed")
         publishDiscoveredDevices()
         autoConnectIfNeededInternal()
@@ -1924,6 +2000,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleConnectedPeripheralsByID.removeValue(forKey: peripheral.identifier)
         bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
+        bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
         if blePeripheral == peripheral {
             blePeripheral = nil
             bleCommandCharacteristic = nil
@@ -1978,17 +2055,19 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         }
 
         if bleCommandCharacteristicsByID[peripheral.identifier] != nil {
+            let deviceID = "ble:\(peripheral.identifier.uuidString)"
             DispatchQueue.global(qos: .userInitiated).async {
-                let version = self.queryDeviceVersion(timeoutMs: 2000)
-                let uid = self.queryHardwareUID(timeoutMs: 2000)
-                let deviceID = "ble:\(peripheral.identifier.uuidString)"
+                let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: deviceID)
+                let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: deviceID)
                 DispatchQueue.main.async {
-                    self.isConnected = true
-                    self.deviceEmwaverVersion = version
-                    self.connectedHardwareUID = uid
-                    self.connectedBoardType = "esp32s3"
+                    if self.activeDeviceID == deviceID {
+                        self.isConnected = true
+                        self.deviceEmwaverVersion = version
+                        self.connectedHardwareUID = uid
+                        self.connectedBoardType = "esp32s3"
+                        self.connectedTransportKind = "BLE"
+                    }
                     self.lastDetectedBoardType = "esp32s3"
-                    self.connectedTransportKind = "BLE"
                 }
                 self.midiQueue.async {
                     if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
