@@ -745,6 +745,7 @@ static bool publish_mdns(void)
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "fw", WIFI_FIRMWARE_VERSION) == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "cap", EMW_TARGET_CAPABILITIES) == ESP_OK;
     txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "id", local_id) == ESP_OK;
+    txt_ok = txt_ok && mdns_service_txt_item_set("_emwaver", "_tcp", "host", s_config.hostname) == ESP_OK;
     if (!txt_ok) {
         ESP_LOGW(TAG, "published mDNS service without complete TXT metadata");
     }

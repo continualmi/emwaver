@@ -38,6 +38,7 @@ final class MacWiFiManager {
 
     private struct BonjourMetadata {
         var localIdentifier: String?
+        var host: String?
         var boardType: String?
         var firmwareVersion: String?
         var protocolVersion: String?
@@ -851,8 +852,8 @@ final class MacWiFiManager {
     }
 
     private static func bonjourHost(name: String, domain: String, metadata: BonjourMetadata) -> String {
-        if let localIdentifier = metadata.localIdentifier,
-           let host = hostFromLocalIdentifier(localIdentifier) {
+        if let advertisedHost = metadata.host,
+           let host = normalizedBonjourHost(advertisedHost) {
             return host
         }
         if let host = hostFromServiceName(name) {
@@ -861,6 +862,19 @@ final class MacWiFiManager {
         return "\(name).\(domain)"
             .replacingOccurrences(of: "..", with: ".")
             .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+
+    private static func normalizedBonjourHost(_ value: String) -> String? {
+        var host = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return nil }
+        let lowercasedHost = host.lowercased()
+        if lowercasedHost.hasSuffix(".local.") {
+            host.removeLast(1)
+        } else if !lowercasedHost.hasSuffix(".local") {
+            host += ".local"
+        }
+        guard isValidManualHost(host) else { return nil }
+        return host
     }
 
     private static func hostFromServiceName(_ name: String) -> String? {
@@ -890,6 +904,7 @@ final class MacWiFiManager {
         let dictionary = txtRecord.dictionary
         return BonjourMetadata(
             localIdentifier: nonEmpty(dictionary["id"]),
+            host: nonEmpty(dictionary["host"]),
             boardType: normalizedBoardType(dictionary["board"]),
             firmwareVersion: nonEmpty(dictionary["fw"]),
             protocolVersion: nonEmpty(dictionary["proto"]),
