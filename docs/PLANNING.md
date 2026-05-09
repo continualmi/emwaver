@@ -30,7 +30,7 @@ Use it to capture:
 | `P0` | Runtime + CLI | `in progress` | Rust runtime/device crates are extracted, `CommandBridge` decouples runtime from MIDI transport, direct UI-only `emwaver run` works, and `emwaver start`/`gateway --daemon-fallback` can connect browser-rendered scripts to the daemon underneath. Immediate goal: make `emw` excellent for agent-driven run/snapshot/event/stop/reset loops against local custom scripts. Hardware-backed Linux validation remains. |
 | `P0` | Multi-device automation bench | `planned` | Target a local test box with two simultaneous boards: two ESP32-S3 BLE devices, or ESP32-S3 BLE plus USB MIDI STM32. The CLI/gateway/runtime should expose device discovery, stable selection, concurrent connections, per-device script commands, and snapshots/events so an agent can validate hardware modules and loops without manual app work. macOS implementation plan: `MACOS_MULTI_DEVICE_PLAN.md`. |
 | `P0` | Transport/session isolation | `planned` | Fully isolate script/device buffers, command response waiters, parser state, sampler state, and stop/reset lifecycle so multiple scripts can run in parallel across devices without contamination. Plan: `TRANSPORT_SESSION_ISOLATION_PLAN.md`. |
-| `P1` | ESP32 Wi-Fi transport | `planned` | Add ESP32 Wi-Fi as a LAN/VPN-friendly transport carrying the same EMWaver protocol as USB/BLE, with local pairing/auth and no hosted relay. Plan: `ESP32_WIFI_TRANSPORT_PLAN.md`. |
+| `P1` | ESP32 Wi-Fi transport | `hardware validation pending` | Firmware, macOS, daemon, gateway, docs, and compile validation are wired for the local-first LAN/VPN Wi-Fi transport. Plan: `ESP32_WIFI_TRANSPORT_PLAN.md`; audit: `ESP32_WIFI_TRANSPORT_AUDIT.md`; remaining hardware gates: `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` and `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` in `TESTS.md`. |
 | `P0` | Device simulator | `done for protocol adapters` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, and Android `SimulatorScriptDeviceBridge` are added; virtual transport was evaluated and kept optional/local-only. |
 | `P0` | Remote control scope | `done for local-first surfaces` | Native apps now use localhost gateway control as the core path; hosted relay/directory code has been removed from the primary local-first app surfaces. |
 | `P0` | Agent interfaces | `mostly migrated` | Repo-shipped production prompt files are removed; gateway/CLI plus Apple iOS/macOS, Windows, and Android Agent paths now use API-key endpoint clients instead of EMWaver account chat routes. Remaining work: enrich runtime/hardware request context. |
@@ -45,14 +45,16 @@ Use it to capture:
 
 1. Add/verify CLI commands for the agent loop: run a local `.emw`, wait for `script.started`, print or save the latest `ui.snapshot`, send `ui.event` by node id/handler token, stop the script, and report runtime/device status.
 2. Fix development CLI ergonomics so `emw run path/to/script.emw` resolves paths from the caller's working directory while still using the repo dev wrapper.
-3. Validate local gateway script execution on real hardware through the macOS native app, including custom scripts outside `assets/default-scripts`.
-4. Validate `emwaver run --direct --ble` and `emwaver run --direct --device <id>` against attached hardware when the native app is not owning the device.
-5. Design the multi-device runtime contract for two simultaneous boards: device ids, transport labels, per-device status, routing commands to a chosen board, and UI/snapshot attribution.
-6. Validate Linux CLI/gateway/daemon execution on real USB and BLE hardware, including browser rendering through localhost.
-7. Validate Linux `emwaver service install --ble` or `--device <id>` on a real systemd user session.
-8. Validate Windows local gateway app-role wiring on a machine with the Windows/.NET toolchain.
-9. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
-10. Inventory `web/public/emwaver` and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
+3. Run `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION`: provision a real ESP32-S3, verify same-LAN mDNS/IP script execution, wrong/no-secret rejection, Wi-Fi drop recovery, USB/BLE recovery, and GPIO/ADC/SPI/PWM/sampler/retransmit coverage.
+4. Run `009_ESP32_WIFI_VPN_BY_IP_EXECUTION`: verify user-owned VPN/private-IP script execution, manual IP fallback without mDNS, wrong/no-secret rejection, reconnect behavior, and no hosted relay/account path.
+5. Validate local gateway script execution on real hardware through the macOS native app, including custom scripts outside `assets/default-scripts`.
+6. Validate `emwaver run --direct --ble` and `emwaver run --direct --device <id>` against attached hardware when the native app is not owning the device.
+7. Design the multi-device runtime contract for two simultaneous boards: device ids, transport labels, per-device status, routing commands to a chosen board, and UI/snapshot attribution.
+8. Validate Linux CLI/gateway/daemon execution on real USB and BLE hardware, including browser rendering through localhost.
+9. Validate Linux `emwaver service install --ble` or `--device <id>` on a real systemd user session.
+10. Validate Windows local gateway app-role wiring on a machine with the Windows/.NET toolchain.
+11. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
+12. Inventory `web/public/emwaver` and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
 
 ## Blockers / Risks
 
