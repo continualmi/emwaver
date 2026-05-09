@@ -754,9 +754,7 @@ static bool publish_mdns(void)
 
 static void build_mdns_instance_name(char *out, size_t out_len)
 {
-    char suffix[8];
-    build_local_id_suffix(suffix, sizeof(suffix));
-    snprintf(out, out_len, "EMWaver %s %s", EMW_TARGET_DEVICE_NAME_PREFIX, suffix);
+    strlcpy(out, s_config.hostname[0] != '\0' ? s_config.hostname : "emwaver-esp32", out_len);
 }
 
 static void build_local_id_suffix(char *out, size_t out_len)

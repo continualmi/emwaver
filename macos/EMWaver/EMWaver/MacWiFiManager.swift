@@ -856,7 +856,7 @@ final class MacWiFiManager {
            let host = normalizedBonjourHost(advertisedHost) {
             return host
         }
-        if let host = hostFromServiceName(name) {
+        if let host = normalizedBonjourHost(name) {
             return host
         }
         return "\(name).\(domain)"
@@ -875,21 +875,6 @@ final class MacWiFiManager {
         }
         guard isValidManualHost(host) else { return nil }
         return host
-    }
-
-    private static func hostFromServiceName(_ name: String) -> String? {
-        let parts = name.split(separator: " ")
-        guard let suffix = parts.last else { return nil }
-        return hostFromLocalIdentifier(String(suffix))
-    }
-
-    private static func hostFromLocalIdentifier(_ value: String) -> String? {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty,
-              trimmed.range(of: #"^[0-9A-Fa-f]{4,8}$"#, options: .regularExpression) != nil else {
-            return nil
-        }
-        return "emwaver-\(trimmed.lowercased()).local"
     }
 
     private static func isValidIPv6Literal(_ host: String) -> Bool {
