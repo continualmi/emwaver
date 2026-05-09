@@ -27,6 +27,7 @@
 #include "nvs.h"
 #include "sampler.h"
 #include "sdkconfig.h"
+#include "transport_debug.h"
 #include "usb.h"
 
 #ifndef EMWAVER_ENABLE_WIFI_TRANSPORT
@@ -1146,6 +1147,8 @@ static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool envelope
     if (!cmd_any) {
         return true;
     }
+
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_WIFI, "rx", decoded, EMW_LANE_SIZE, sequence);
 
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;

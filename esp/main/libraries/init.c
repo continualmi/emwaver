@@ -44,6 +44,7 @@
 #include "usb.h"
 #include "ble_server.h"
 #include "wifi_transport.h"
+#include "transport_debug.h"
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
@@ -136,6 +137,7 @@ void emwaver_init(void)
     gpio_register_commands();
     sampler_register_commands();
     register_core_commands();
+    transport_debug_register_commands();
 
     cmd_queue = xQueueCreate(CMD_QUEUE_LEN, sizeof(command_t));
     configASSERT(cmd_queue != NULL);
@@ -436,6 +438,17 @@ static void handle_wifi_config_opcode(const command_t *cmd)
 
 static void send_binary_ok(const uint8_t *payload, size_t len)
 {
+    uint8_t lane[EMW_USB_CMD_LANE_SIZE] = {0};
+    size_t payload_len = len;
+    if (payload_len > (EMW_USB_CMD_LANE_SIZE - 1u)) {
+        payload_len = EMW_USB_CMD_LANE_SIZE - 1u;
+    }
+    lane[0] = EMW_RESP_STATUS_OK;
+    if (payload && payload_len > 0) {
+        memcpy(&lane[1], payload, payload_len);
+    }
+    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane), active_command_wifi_sequence);
+
     if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
         if (ble_server_send_cmd_response(EMW_RESP_STATUS_OK, payload, (uint16_t)len) != 0) {
             ESP_LOGW(TAG, "Failed to send BLE OK response");
@@ -457,6 +470,10 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
 
 static void send_binary_err(void)
 {
+    uint8_t lane[EMW_USB_CMD_LANE_SIZE] = {0};
+    lane[0] = EMW_RESP_STATUS_ERR;
+    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane), active_command_wifi_sequence);
+
     if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
         if (ble_server_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != 0) {
             ESP_LOGW(TAG, "Failed to send BLE ERR response");

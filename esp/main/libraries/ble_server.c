@@ -27,6 +27,7 @@
 #include "ble_server.h"
 #include "command_registry.h"
 #include "emw_proto.h"
+#include "transport_debug.h"
 
 #ifndef EMWAVER_ENABLE_OTA
 #define EMWAVER_ENABLE_OTA 1
@@ -167,6 +168,8 @@ static bool ble_enqueue_superframe(const uint8_t *sysex)
     if (!cmd_any) {
         return true;
     }
+
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_BLE, "rx", decoded, EMW_BLE_LANE_SIZE, 0);
 
     command_t cmd = {0};
     cmd.length = EMW_BLE_LANE_SIZE;
@@ -505,7 +508,7 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         break;
         
     case BLE_GAP_EVENT_SUBSCRIBE:
-        ESP_LOGI(TAG, "Subscribe event; conn_handle=%d attr_handle=%d "
+        ESP_LOGD(TAG, "Subscribe event; conn_handle=%d attr_handle=%d "
                  "reason=%d prevn=%d curn=%d previ=%d curi=%d\n",
                  event->subscribe.conn_handle,
                  event->subscribe.attr_handle,
@@ -517,10 +520,10 @@ static int ble_gap_event(struct ble_gap_event *event, void *arg)
         break;
                  
     case BLE_GAP_EVENT_MTU:
-        ESP_LOGI(TAG, "MTU update: %d", event->mtu.value);
+        ESP_LOGD(TAG, "MTU update: %d", event->mtu.value);
         // Log additional information
-        ESP_LOGI(TAG, "MTU update for connection handle: %d", event->mtu.conn_handle);
-        ESP_LOGI(TAG, "New preferred MTU: %d", ble_att_preferred_mtu());
+        ESP_LOGD(TAG, "MTU update for connection handle: %d", event->mtu.conn_handle);
+        ESP_LOGD(TAG, "New preferred MTU: %d", ble_att_preferred_mtu());
         break;
     }
     
@@ -690,6 +693,7 @@ void ble_server_init(QueueHandle_t cmd_queue)
     
     // Save command queue handle
     cmd_queue_handle = cmd_queue;
+    esp_log_level_set("NimBLE", ESP_LOG_WARN);
     
     // Initialize NimBLE
     ret = nimble_port_init();

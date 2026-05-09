@@ -29,6 +29,7 @@
 #include "freertos/semphr.h"
 #include "freertos/task.h"
 #include "tinyusb.h"
+#include "transport_debug.h"
 #include "tusb.h"
 
 static const char *TAG = "USB";
@@ -339,6 +340,8 @@ static void process_sysex_frame(const uint8_t *sysex)
     if (!cmd_any || s_cmd_queue == NULL) {
         return;
     }
+
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_USB, "rx", decoded, EMW_LANE_SIZE, 0);
 
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;

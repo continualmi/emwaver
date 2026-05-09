@@ -1,6 +1,7 @@
 set(EMWAVER_ESP_SRCS
     "main.c"
     "libraries/init.c"
+    "libraries/transport_debug.c"
     "libraries/usb.c"
     "libraries/wifi_transport.c"
     "libraries/ota_core.c"
