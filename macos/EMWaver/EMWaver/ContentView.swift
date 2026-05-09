@@ -120,15 +120,8 @@ struct ContentView: View {
 
     private var selectedLocalDevice: LocalDeviceDescriptor? {
         guard let id = scriptSessions.selectedDeviceID else { return nil }
-        if let selectedChoice = toolbarDeviceChoices.first(where: { $0.id == id }) {
-            return selectedChoice
-        }
-        if let selectedDescriptor = device.discoveredDevices.first(where: { $0.id == id }),
-           let selectedUID = hardwareUID(from: selectedDescriptor.identifierText),
-           let preferredChoice = toolbarDeviceChoices.first(where: { hardwareUID(from: $0.identifierText) == selectedUID }) {
-            return preferredChoice
-        }
         return device.discoveredDevices.first(where: { $0.id == id })
+            ?? toolbarDeviceChoices.first(where: { $0.id == id })
     }
 
     private var selectedLocalDeviceLabel: String {
@@ -408,8 +401,21 @@ struct ContentView: View {
 
     private var toolbarDeviceChoices: [LocalDeviceDescriptor] {
         var choices: [String: LocalDeviceDescriptor] = [:]
+        let selectedUID = scriptSessions.selectedDeviceID
+            .flatMap { selectedID in device.discoveredDevices.first(where: { $0.id == selectedID }) }
+            .flatMap { hardwareUID(from: $0.identifierText) }
         for item in device.discoveredDevices {
             let key = hardwareUID(from: item.identifierText).map { "uid:\($0)" } ?? item.id
+            if let selectedDeviceID = scriptSessions.selectedDeviceID,
+               let selectedUID,
+               hardwareUID(from: item.identifierText) == selectedUID {
+                if item.id == selectedDeviceID {
+                    choices[key] = item
+                } else if choices[key] == nil {
+                    choices[key] = item
+                }
+                continue
+            }
             if let current = choices[key] {
                 choices[key] = preferredToolbarChoice(current, item)
             } else {

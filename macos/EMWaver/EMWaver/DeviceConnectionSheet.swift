@@ -208,27 +208,8 @@ struct DeviceConnectionSheet: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 16) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Device")
-                    .font(.title2.weight(.semibold))
-
-                HStack(spacing: 10) {
-                    Label(statusLabel.text, systemImage: statusLabel.icon)
-                        .font(.subheadline.weight(.medium))
-                }
-
-                if !deviceMetadata.isEmpty {
-                    HStack(alignment: .top, spacing: 42) {
-                        deviceMetadataColumn(deviceMetadataLeftColumn)
-                        deviceMetadataColumn(deviceMetadataRightColumn)
-                    }
-                    .frame(maxWidth: 520, alignment: .leading)
-                }
-            }
-
+        HStack {
             Spacer(minLength: 0)
-
             Button("Close") { dismiss() }
                 .buttonStyle(.bordered)
         }
@@ -267,23 +248,11 @@ struct DeviceConnectionSheet: View {
 
     private var deviceListCard: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Local devices", systemImage: "list.bullet.rectangle")
-                    .font(.headline)
-
-                Spacer()
-
-                Button("Refresh") {
-                    device.refreshPorts()
-                    if device.bluetoothStateText == "On" {
-                        device.startBleScan()
-                    }
-                }
-                .buttonStyle(.bordered)
-            }
+            Label("Local devices", systemImage: "list.bullet.rectangle")
+                .font(.headline)
 
             if device.discoveredDevices.isEmpty {
-                Text("No EMWaver devices discovered yet. Enter a Wi-Fi address, start BLE scan, or connect a USB MIDI board.")
+                Text("No EMWaver devices discovered yet.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
