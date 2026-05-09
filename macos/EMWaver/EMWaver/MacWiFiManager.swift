@@ -400,7 +400,10 @@ final class MacWiFiManager {
             guard case let .service(name, type, domain, _) = result.endpoint,
                   type == Self.serviceType else { continue }
             let metadata = Self.bonjourMetadata(from: result.metadata)
-            let host = Self.bonjourHost(name: name, domain: domain, metadata: metadata)
+            guard let host = Self.bonjourHost(name: name, domain: domain, metadata: metadata) else {
+                Self.log("ignoring Bonjour result without usable host name=\(name) domain=\(domain)")
+                continue
+            }
             let id = Self.deviceID(host: host, port: Self.defaultPort)
             advertisedIDs.insert(id)
             migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
@@ -851,7 +854,7 @@ final class MacWiFiManager {
         return URL(string: "ws://\(urlHost):\(port)/v1/ws")
     }
 
-    private static func bonjourHost(name: String, domain: String, metadata: BonjourMetadata) -> String {
+    private static func bonjourHost(name: String, domain: String, metadata: BonjourMetadata) -> String? {
         if let advertisedHost = metadata.host,
            let host = normalizedBonjourHost(advertisedHost) {
             return host
@@ -859,14 +862,15 @@ final class MacWiFiManager {
         if let host = normalizedBonjourHost(name) {
             return host
         }
-        return "\(name).\(domain)"
+        return normalizedBonjourHost("\(name).\(domain)"
             .replacingOccurrences(of: "..", with: ".")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".")))
     }
 
     private static func normalizedBonjourHost(_ value: String) -> String? {
         var host = value.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty else { return nil }
+        guard host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
         let lowercasedHost = host.lowercased()
         if lowercasedHost.hasSuffix(".local.") {
             host.removeLast(1)

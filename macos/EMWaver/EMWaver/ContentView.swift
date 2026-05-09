@@ -356,7 +356,7 @@ struct ContentView: View {
     @ViewBuilder
     private var localDevicePicker: some View {
         Menu {
-            if device.discoveredDevices.isEmpty {
+            if toolbarDeviceChoices.isEmpty {
                 Text("No local devices")
                     .foregroundStyle(.secondary)
             } else {
@@ -371,7 +371,7 @@ struct ContentView: View {
                         }
                     }
                 )) {
-                    ForEach(device.discoveredDevices) { item in
+                    ForEach(toolbarDeviceChoices) { item in
                         Label(LocalDeviceLabelFormatter.label(for: item), systemImage: transportIcon(for: item.transport))
                             .tag(Optional(item.id))
                     }
@@ -392,6 +392,37 @@ struct ContentView: View {
             }
         }
         .help("Select the local device used by the next script session")
+    }
+
+    private var toolbarDeviceChoices: [LocalDeviceDescriptor] {
+        var choices: [String: LocalDeviceDescriptor] = [:]
+        for item in device.discoveredDevices {
+            let key = hardwareUID(from: item.identifierText).map { "uid:\($0)" } ?? item.id
+            if let current = choices[key] {
+                choices[key] = preferredToolbarChoice(current, item)
+            } else {
+                choices[key] = item
+            }
+        }
+        return choices.values.sorted {
+            if $0.isActive != $1.isActive { return $0.isActive && !$1.isActive }
+            return LocalDeviceLabelFormatter.label(for: $0).localizedStandardCompare(LocalDeviceLabelFormatter.label(for: $1)) == .orderedAscending
+        }
+    }
+
+    private func preferredToolbarChoice(_ lhs: LocalDeviceDescriptor, _ rhs: LocalDeviceDescriptor) -> LocalDeviceDescriptor {
+        if lhs.isActive != rhs.isActive { return lhs.isActive ? lhs : rhs }
+        if lhs.connectionState == .connected && rhs.connectionState != .connected { return lhs }
+        if rhs.connectionState == .connected && lhs.connectionState != .connected { return rhs }
+        if lhs.transport == .wifi && rhs.transport != .wifi { return lhs }
+        if rhs.transport == .wifi && lhs.transport != .wifi { return rhs }
+        return lhs
+    }
+
+    private func hardwareUID(from identifierText: String?) -> String? {
+        guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
+        let uid = String(identifierText.dropFirst("UID ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return uid.isEmpty ? nil : uid
     }
 
     private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {
