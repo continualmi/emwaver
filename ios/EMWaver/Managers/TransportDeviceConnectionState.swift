@@ -8,6 +8,7 @@ import Foundation
 
 final class TransportDeviceConnectionState<Transport: Equatable> {
     private let noneTransport: Transport
+    private var connectionsByDeviceId: [String: TransportDeviceConnection] = [:]
     private var target: ActiveDeviceTarget<Transport>
     private(set) var connection: TransportDeviceConnection?
 
@@ -26,11 +27,15 @@ final class TransportDeviceConnectionState<Transport: Equatable> {
 
     func setConnection(_ connection: TransportDeviceConnection?) {
         self.connection = connection
+        if let connection {
+            connectionsByDeviceId[Self.normalize(connection.sessionKey)] = connection
+        }
     }
 
     func clear() {
         target = ActiveDeviceTarget(deviceId: "active", transport: noneTransport)
         connection = nil
+        connectionsByDeviceId.removeAll()
     }
 
     func clear(transport: Transport) {
@@ -52,5 +57,15 @@ final class TransportDeviceConnectionState<Transport: Equatable> {
 
     func matchesTransport(_ transport: Transport) -> Bool {
         target.matchesTransport(transport)
+    }
+
+    func connection(for deviceId: String?) -> TransportDeviceConnection? {
+        connectionsByDeviceId[Self.normalize(deviceId)]
+    }
+
+    private static func normalize(_ deviceId: String?) -> String {
+        let key = deviceId?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let normalized = key.isEmpty ? "active" : key
+        return normalized.lowercased()
     }
 }

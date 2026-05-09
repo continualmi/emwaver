@@ -36,6 +36,19 @@ final class TransportDeviceConnectionStateTests: XCTestCase {
         XCTAssertFalse(state.matchesDeviceId("ble:board"))
     }
 
+    func testRetainsConnectionsByDeviceIdForFutureMultiDeviceRouting() {
+        let state = TransportDeviceConnectionState(noneTransport: Transport.none)
+        let first = FakeConnection(sessionKey: "usb:board-1", displayName: "USB Board 1")
+        let second = FakeConnection(sessionKey: "ble:board-2", displayName: "BLE Board 2")
+
+        state.setConnection(first)
+        state.setConnection(second)
+
+        XCTAssertEqual(state.connection(for: " USB:BOARD-1 ")?.sessionKey, first.sessionKey)
+        XCTAssertEqual(state.connection(for: "ble:board-2")?.sessionKey, second.sessionKey)
+        XCTAssertEqual(state.connection?.sessionKey, second.sessionKey)
+    }
+
     private final class FakeConnection: TransportDeviceConnection {
         let sessionKey: String
         let displayName: String

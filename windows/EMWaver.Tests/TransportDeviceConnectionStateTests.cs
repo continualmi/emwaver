@@ -37,6 +37,21 @@ public sealed class TransportDeviceConnectionStateTests
         Assert.False(state.MatchesDeviceId("ble:board"));
     }
 
+    [Fact]
+    public void RetainsConnectionsByDeviceIdForFutureMultiDeviceRouting()
+    {
+        var state = new TransportDeviceConnectionState();
+        var first = new FakeConnection("usb:board-1", "USB Board 1");
+        var second = new FakeConnection("ble:board-2", "BLE Board 2");
+
+        state.SetConnection(first);
+        state.SetConnection(second);
+
+        Assert.Same(first, state.ConnectionFor(" USB:BOARD-1 "));
+        Assert.Same(second, state.ConnectionFor("ble:board-2"));
+        Assert.Same(second, state.Connection);
+    }
+
     private sealed class FakeConnection : ITransportDeviceConnection
     {
         internal FakeConnection(string sessionId, string displayName)

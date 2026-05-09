@@ -87,6 +87,7 @@ Current first step:
 - Windows active target/connection ownership now lives in a small `TransportDeviceConnectionState` helper with focused test coverage, matching the Android and iOS testable state boundary.
 - Windows `TargetedScriptDeviceConnection` has focused coverage for blank captured device ids routing as `active`, matching the other host adapters.
 - Windows has a focused `TargetedScriptDeviceConnectionTests` case covering captured-device routing for packet sends, sampler reads, and sampler clears; local execution still depends on a machine with `dotnet` installed.
+- Windows `TransportDeviceConnectionState` can now retain transport connections by normalized device-session id, giving future multi-device script routing a connection lookup instead of a single active-only pointer.
 
 Remaining isolation work:
 
@@ -201,6 +202,7 @@ Current first step:
 - iOS USB MIDI and BLE connection values now receive the same registry-owned `TransportDeviceSession` selected for the active target, so the shared connection protocol owns the live script-facing session instead of a parallel session object.
 - iOS now keeps the active connection behind the shared `TransportDeviceConnection` protocol for script target identity, reducing manager dependence on concrete USB MIDI/BLE connection values.
 - iOS active target/connection ownership now lives in a small `TransportDeviceConnectionState` helper with focused unit coverage, matching the Android testable state boundary.
+- iOS `TransportDeviceConnectionState` can now retain transport connections by normalized device-session id, giving future multi-device script routing a connection lookup instead of a single active-only pointer.
 - iOS has an `ActiveDeviceTargetTests` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
@@ -245,6 +247,7 @@ Remaining isolation work:
 - [x] Windows USB MIDI and BLE connection values are wired to the registry-owned `ITransportDeviceSession` selected for the active script target.
 - [x] Windows active script target identity is read through the shared `ITransportDeviceConnection` contract.
 - [x] Windows active connection state has focused coverage for connection-owned script target identity and transport-scoped clearing.
+- [x] Windows active connection state can retain multiple connections by normalized device-session id for future multi-device routing.
 - [x] Windows USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE live handles are grouped behind a transport-owned connection object.
 - [x] Windows BLE scan watcher state is grouped behind a transport-owned scan session.
@@ -285,6 +288,7 @@ Remaining isolation work:
 - [x] iOS USB MIDI and BLE connection values are wired to the registry-owned `TransportDeviceSession` selected for the active script target.
 - [x] iOS active script target identity is read through the shared `TransportDeviceConnection` protocol.
 - [x] iOS active connection state has focused unit coverage for connection-owned script target identity and transport-scoped clearing.
+- [x] iOS active connection state can retain multiple connections by normalized device-session id for future multi-device routing.
 - [x] iOS USB MIDI live endpoint handles are grouped behind a transport-owned connection value.
 - [x] iOS BLE live handles are grouped behind transport-owned pending/connected values.
 - [x] iOS BLE scan state is grouped behind a transport-owned scan session.
