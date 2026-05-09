@@ -13,6 +13,10 @@ struct DeviceConnectionSheet: View {
     @State private var wifiPassword: String = ""
     @State private var wifiHostname: String = ""
 
+    private var parsedWiFiPort: Int? {
+        Self.parsedWiFiPort(wifiPort)
+    }
+
     private var statusLabel: (text: String, icon: String) {
         if device.isConnected {
             if device.connectedTransportKind == "BLE" {
@@ -370,15 +374,17 @@ struct DeviceConnectionSheet: View {
 
             HStack(spacing: 10) {
                 Button("Connect Wi-Fi") {
+                    guard let parsedWiFiPort else { return }
                     device.connectWiFi(
                         host: wifiHost,
-                        port: Int(wifiPort) ?? 3922,
+                        port: parsedWiFiPort,
                         pairingSecret: wifiPairingSecret
                     )
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(wifiHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                          wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          parsedWiFiPort == nil)
 
                 Text("Manual IP works when mDNS does not cross a user-owned VPN.")
                     .font(.caption)
@@ -521,5 +527,13 @@ struct DeviceConnectionSheet: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.secondary.opacity(0.06)))
         }
+    }
+
+    static func parsedWiFiPort(_ value: String) -> Int? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let port = Int(trimmed), (1...65535).contains(port) else {
+            return nil
+        }
+        return port
     }
 }

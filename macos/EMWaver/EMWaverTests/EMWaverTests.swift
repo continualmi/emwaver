@@ -25,6 +25,15 @@ struct EMWaverTests {
         #expect(!MacWiFiManager.isValidManualHost("[2001:db8::44]"))
     }
 
+    @Test func wifiManualPortRequiresValidTcpPort() {
+        #expect(DeviceConnectionSheet.parsedWiFiPort("3922") == 3922)
+        #expect(DeviceConnectionSheet.parsedWiFiPort(" 443 ") == 443)
+        #expect(DeviceConnectionSheet.parsedWiFiPort("0") == nil)
+        #expect(DeviceConnectionSheet.parsedWiFiPort("65536") == nil)
+        #expect(DeviceConnectionSheet.parsedWiFiPort("abc") == nil)
+        #expect(DeviceConnectionSheet.parsedWiFiPort("3922/tcp") == nil)
+    }
+
     @Test func wifiWebSocketURLBracketsIPv6Literals() throws {
         let url = try #require(MacWiFiManager.webSocketURL(host: "2001:db8::44", port: 3922))
         #expect(url.absoluteString == "ws://[2001:db8::44]:3922/v1/ws")
