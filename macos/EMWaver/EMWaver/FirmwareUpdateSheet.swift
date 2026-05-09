@@ -309,7 +309,11 @@ struct FirmwareUpdateSheet: View {
         }
         .frame(width: 540, height: 420)
         .onAppear {
+            updater.setEspSerialPollingEnabled(true)
             updater.refreshDfuPresence(includeEspSerialProbe: true)
+        }
+        .onDisappear {
+            updater.setEspSerialPollingEnabled(false)
         }
     }
 

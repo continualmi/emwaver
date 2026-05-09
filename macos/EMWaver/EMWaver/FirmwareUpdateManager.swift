@@ -32,6 +32,9 @@ final class FirmwareUpdateManager: ObservableObject {
     @Published var customFirmwarePath: String? = nil
 
     private var dfuPollTimer: Timer? = nil
+    private let espSerialQueue = DispatchQueue(label: "com.emwaver.macos.esp-serial")
+    private var espSerialProbeInFlight: Bool = false
+    private var espSerialPollingEnabled: Bool = false
 
     private var flashProcess: Process? = nil
     private var flashStdoutBuffer = Data()
@@ -59,7 +62,12 @@ final class FirmwareUpdateManager: ObservableObject {
     }
 
     func dismiss() {
+        espSerialPollingEnabled = false
         isPresented = false
+    }
+
+    func setEspSerialPollingEnabled(_ enabled: Bool) {
+        espSerialPollingEnabled = enabled
     }
 
     func startUpdate(device: MacUSBManager) {
@@ -82,6 +90,7 @@ final class FirmwareUpdateManager: ObservableObject {
             } catch {
                 updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                 progressMessage = ""
+                isFlashing = false
                 appendLog(updateError ?? "ESP update failed")
             }
             return
@@ -206,6 +215,10 @@ final class FirmwareUpdateManager: ObservableObject {
 
     func refreshDfuPresence(includeEspSerialProbe: Bool = false) {
         if isFlashing { return }
+        if includeEspSerialProbe {
+            if espSerialProbeInFlight { return }
+            espSerialProbeInFlight = true
+        }
 
         DispatchQueue.global(qos: .utility).async { [weak self] in
             guard let self else { return }
@@ -235,8 +248,11 @@ final class FirmwareUpdateManager: ObservableObject {
             guard includeEspSerialProbe else { return }
 
             do {
-                let port = try self.detectEspBootloaderPort()
+                let port = try self.espSerialQueue.sync {
+                    try self.detectEspBootloaderPort()
+                }
                 DispatchQueue.main.async {
+                    self.espSerialProbeInFlight = false
                     self.espBootloaderConnected = (port != nil)
                     self.espBootloaderPort = port
                     if port != nil {
@@ -245,6 +261,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 }
             } catch {
                 DispatchQueue.main.async {
+                    self.espSerialProbeInFlight = false
                     self.espBootloaderConnected = false
                     self.espBootloaderPort = nil
                 }
@@ -258,7 +275,9 @@ final class FirmwareUpdateManager: ObservableObject {
         if dfuPollTimer != nil { return }
         dfuPollTimer = Timer.scheduledTimer(withTimeInterval: 0.9, repeats: true) { [weak self] _ in
             DispatchQueue.main.async {
-                self?.refreshDfuPresence()
+                guard let self else { return }
+                let includeEspSerialProbe = self.isPresented && (self.espSerialPollingEnabled || Self.isEspBoardType(self.presentedBoardType))
+                self.refreshDfuPresence(includeEspSerialProbe: includeEspSerialProbe)
             }
         }
     }
@@ -481,9 +500,16 @@ final class FirmwareUpdateManager: ObservableObject {
             appendLog("Run Mode remains separate from flashing; using serial port discovery.")
         }
 
-        let port = try resolveEspFlashPort()
+        isFlashing = true
+        progressPct = 0
+
+        let port = try espSerialQueue.sync {
+            try resolveEspFlashPort()
+        }
         appendLog("ESP flash port: \(port)")
-        let chip = try detectEspFlashChip(port: port)
+        let chip = try espSerialQueue.sync {
+            try detectEspFlashChip(port: port)
+        }
         appendLog("ESP chip target: \(chip)")
         try runEspFlash(port: port, chip: chip)
     }
