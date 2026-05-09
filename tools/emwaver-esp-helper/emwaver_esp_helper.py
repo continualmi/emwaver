@@ -13,11 +13,7 @@ CHIP_FEATURE_EMB_FLASH = 1 << 0
 CHIP_FEATURE_WIFI_BGN = 1 << 1
 CHIP_FEATURE_BLE = 1 << 4
 CHIP_FEATURE_EMB_PSRAM = 1 << 7
-
-CHIP_MODELS = {
-    "esp32-s2": 5,
-    "esp32-s3": 9,
-}
+CHIP_ESP32S3 = 9
 
 
 def _run_esptool(argv: list[str]) -> int:
@@ -42,7 +38,7 @@ def cmd_list_ports(_: argparse.Namespace) -> int:
 
 
 def cmd_chip_id(args: argparse.Namespace) -> int:
-    argv = ["--chip", "auto", "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
+    argv = ["--chip", "esp32s3", "--port", args.port, "--before", "no_reset", "--after", "no_reset"]
     if args.baud:
         argv.extend(["--baud", str(args.baud)])
     if args.no_stub:
@@ -52,10 +48,7 @@ def cmd_chip_id(args: argparse.Namespace) -> int:
 
 
 def _feature_mask_for_chip(esp: object) -> int:
-    chip_name = str(getattr(esp, "CHIP_NAME", "")).lower()
-    features = CHIP_FEATURE_WIFI_BGN
-    if chip_name != "esp32-s2":
-        features |= CHIP_FEATURE_BLE
+    features = CHIP_FEATURE_WIFI_BGN | CHIP_FEATURE_BLE
 
     get_flash_cap = getattr(esp, "get_flash_cap", None)
     if callable(get_flash_cap):
@@ -95,12 +88,9 @@ def cmd_read_identity(args: argparse.Namespace) -> int:
         cores = int(getattr(esp, "CHIP_CORES", 2))
         features = _feature_mask_for_chip(esp)
 
-        chip_name = str(esp.CHIP_NAME)
-        normalized_chip_name = chip_name.lower()
-
-        print(f"CHIP_NAME={chip_name}")
+        print(f"CHIP_NAME={esp.CHIP_NAME}")
         print(f"MAC={':'.join(f'{b:02X}' for b in mac)}")
-        print(f"CHIP_MODEL={CHIP_MODELS.get(normalized_chip_name, 0)}")
+        print(f"CHIP_MODEL={CHIP_ESP32S3}")
         print(f"CHIP_REVISION={revision}")
         print(f"FEATURES=0x{features:04X}")
         print(f"CORES={cores}")
@@ -133,7 +123,7 @@ def cmd_flash(args: argparse.Namespace) -> int:
     app = _require_file(args.app, "app")
 
     argv = [
-        "--chip", args.chip,
+        "--chip", "esp32s3",
         "--port", args.port,
         "--baud", str(args.baud),
         "--before", args.before,
@@ -173,7 +163,6 @@ def build_parser() -> argparse.ArgumentParser:
     read_identity.set_defaults(func=cmd_read_identity)
 
     flash = sub.add_parser("flash")
-    flash.add_argument("--chip", choices=["auto", "esp32s2", "esp32s3"], default="auto")
     flash.add_argument("--port", required=True)
     flash.add_argument("--bootloader", required=True)
     flash.add_argument("--partition-table", required=True)

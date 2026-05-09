@@ -8,14 +8,6 @@ import UniformTypeIdentifiers
 #endif
 
 final class FirmwareUpdateManager: ObservableObject {
-    private struct EspFirmwareAssets {
-        let chip: String
-        let bootloader: URL
-        let partitionTable: URL
-        let otaData: URL
-        let app: URL
-    }
-
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
     @Published var espBootloaderConnected: Bool = false
@@ -355,9 +347,7 @@ final class FirmwareUpdateManager: ObservableObject {
         return nil
     }
 
-    private func espFirmwareURLs(for chip: String) throws -> EspFirmwareAssets {
-        let normalizedChip = try normalizedEspFlashChip(chip)
-
+    private func espFirmwareURLs() throws -> (bootloader: URL, partitionTable: URL, otaData: URL, app: URL) {
         func require(_ name: String) throws -> URL {
             if let url = Bundle.main.url(forResource: name, withExtension: "bin") {
                 return url
@@ -369,28 +359,12 @@ final class FirmwareUpdateManager: ObservableObject {
             )
         }
 
-        return EspFirmwareAssets(
-            chip: normalizedChip,
-            bootloader: try require("emwaver-\(normalizedChip)-bootloader"),
-            partitionTable: try require("emwaver-\(normalizedChip)-partition-table"),
-            otaData: try require("emwaver-\(normalizedChip)-ota-data"),
-            app: try require("emwaver-\(normalizedChip)-app")
+        return (
+            bootloader: try require("emwaver-esp32s3-bootloader"),
+            partitionTable: try require("emwaver-esp32s3-partition-table"),
+            otaData: try require("emwaver-esp32s3-ota-data"),
+            app: try require("emwaver-esp32s3-app")
         )
-    }
-
-    private func normalizedEspFlashChip(_ value: String?) throws -> String {
-        switch (value ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
-        case "esp32s2", "esp32-s2":
-            return "esp32s2"
-        case "esp32s3", "esp32-s3":
-            return "esp32s3"
-        default:
-            throw NSError(
-                domain: "FirmwareUpdateManager",
-                code: 19,
-                userInfo: [NSLocalizedDescriptionKey: "Could not identify the ESP chip target. Reconnect the board in bootloader mode, then retry."]
-            )
-        }
     }
 
     private func espFlashPortCandidates() throws -> [String] {
@@ -448,30 +422,6 @@ final class FirmwareUpdateManager: ObservableObject {
         return nil
     }
 
-    private func detectEspFlashChip(port: String) throws -> String {
-        let (code, stdout, stderr) = try runEspHelperAndWait(arguments: ["read-identity", "--port", port, "--baud", "115200"])
-        if code != 0 {
-            let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
-            throw NSError(
-                domain: "FirmwareUpdateManager",
-                code: Int(code),
-                userInfo: [NSLocalizedDescriptionKey: msg.isEmpty ? "Could not read ESP chip identity." : msg]
-            )
-        }
-
-        for line in stdout.split(separator: "\n") {
-            let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
-            guard parts.count == 2, parts[0] == "CHIP_NAME" else { continue }
-            return try normalizedEspFlashChip(parts[1])
-        }
-
-        throw NSError(
-            domain: "FirmwareUpdateManager",
-            code: 20,
-            userInfo: [NSLocalizedDescriptionKey: "ESP chip identity did not include a supported chip name."]
-        )
-    }
-
     private func startEspSerialUpdate(device: MacUSBManager) throws {
         progressMessage = "Preparing ESP serial update..."
         completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
@@ -483,9 +433,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         let port = try resolveEspFlashPort()
         appendLog("ESP flash port: \(port)")
-        let chip = try detectEspFlashChip(port: port)
-        appendLog("ESP chip target: \(chip)")
-        try runEspFlash(port: port, chip: chip)
+        try runEspFlash(port: port)
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
@@ -508,12 +456,12 @@ final class FirmwareUpdateManager: ObservableObject {
         return (process.terminationStatus, stdoutStr, stderrStr)
     }
 
-    private func runEspFlash(port: String, chip: String) throws {
+    private func runEspFlash(port: String) throws {
         if flashProcess != nil {
             return
         }
 
-        let assets = try espFirmwareURLs(for: chip)
+        let assets = try espFirmwareURLs()
         appendLog("ESP bootloader: \(assets.bootloader.lastPathComponent)")
         appendLog("ESP partition table: \(assets.partitionTable.lastPathComponent)")
         appendLog("ESP OTA data: \(assets.otaData.lastPathComponent)")
@@ -527,7 +475,6 @@ final class FirmwareUpdateManager: ObservableObject {
         process.executableURL = try espHelperURL()
         process.arguments = [
             "flash",
-            "--chip", assets.chip,
             "--port", port,
             "--baud", "115200",
             "--before", "no_reset",
