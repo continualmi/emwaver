@@ -10,10 +10,6 @@ struct DeviceConnectionSheet: View {
         var hasUIDError: Bool
         var transports: [LocalDeviceDescriptor]
 
-        var isActive: Bool {
-            transports.contains { $0.isActive }
-        }
-
         var detailText: String {
             var parts = [LocalDeviceLabelFormatter.boardDisplayName(boardType)]
             if let uidText {
@@ -266,24 +262,14 @@ struct DeviceConnectionSheet: View {
                 VStack(spacing: 8) {
                     ForEach(groupedLocalDevices) { group in
                         HStack(spacing: 12) {
-                            Image(systemName: group.isActive ? activeTransportIcon(for: group) : "cpu")
-                                .foregroundStyle(group.isActive ? Color.green : .secondary)
+                            Image(systemName: preferredTransportIcon(for: group))
+                                .foregroundStyle(.secondary)
                                 .frame(width: 20)
 
                             VStack(alignment: .leading, spacing: 3) {
-                                HStack(spacing: 8) {
-                                    Text(group.title)
-                                        .font(.subheadline.weight(.medium))
-                                        .lineLimit(1)
-                                    if group.isActive {
-                                        Text("Active")
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(.green)
-                                            .padding(.horizontal, 6)
-                                            .padding(.vertical, 2)
-                                            .background(Capsule().fill(Color.green.opacity(0.12)))
-                                    }
-                                }
+                                Text(group.title)
+                                    .font(.subheadline.weight(.medium))
+                                    .lineLimit(1)
                                 Text(group.detailText)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
@@ -292,8 +278,8 @@ struct DeviceConnectionSheet: View {
 
                             Spacer(minLength: 0)
 
-                            HStack(spacing: 8) {
-                                ForEach(group.transports) { item in
+                            if let item = preferredTransport(for: group) {
+                                HStack(spacing: 8) {
                                     Button(transportActionTitle(for: item)) {
                                         device.connectDevice(id: item.id)
                                     }
@@ -348,7 +334,6 @@ struct DeviceConnectionSheet: View {
             return copy
         }
         .sorted { lhs, rhs in
-            if lhs.isActive != rhs.isActive { return lhs.isActive && !rhs.isActive }
             return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
         }
     }
@@ -547,7 +532,6 @@ struct DeviceConnectionSheet: View {
 
     private func transportActionTitle(for item: LocalDeviceDescriptor) -> String {
         let prefix = item.transport.rawValue
-        if item.isActive { return "\(prefix) Active" }
         if item.lastErrorText == "Pairing required" { return "Pair \(prefix)" }
         if item.connectionState == .connected { return "Use \(prefix)" }
         if item.connectionState == .connecting { return "\(prefix) Connecting" }
@@ -555,14 +539,17 @@ struct DeviceConnectionSheet: View {
     }
 
     private func isTransportActionDisabled(_ item: LocalDeviceDescriptor) -> Bool {
-        item.isActive || item.connectionState == .connecting || item.lastErrorText == "Pairing required"
+        item.connectionState == .connecting || item.lastErrorText == "Pairing required"
     }
 
-    private func activeTransportIcon(for group: LocalDeviceGroup) -> String {
-        if let active = group.transports.first(where: { $0.isActive }) {
-            return transportIcon(for: active.transport)
-        }
-        return group.transports.first.map { transportIcon(for: $0.transport) } ?? "cpu"
+    private func preferredTransport(for group: LocalDeviceGroup) -> LocalDeviceDescriptor? {
+        group.transports.sorted { lhs, rhs in
+            transportSortKey(lhs.transport) < transportSortKey(rhs.transport)
+        }.first
+    }
+
+    private func preferredTransportIcon(for group: LocalDeviceGroup) -> String {
+        preferredTransport(for: group).map { transportIcon(for: $0.transport) } ?? "cpu"
     }
 
     private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {
