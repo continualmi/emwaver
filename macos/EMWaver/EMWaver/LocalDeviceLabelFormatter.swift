@@ -3,6 +3,9 @@ import Foundation
 enum LocalDeviceLabelFormatter {
     static func label(for descriptor: LocalDeviceDescriptor) -> String {
         let board = boardDisplayName(descriptor.boardType)
+        if let uid = hardwareUID(from: descriptor.identifierText) {
+            return "\(board) / \(uid)"
+        }
         if let module = descriptor.moduleLabel, !module.isEmpty {
             return "\(board) / \(module)"
         }
@@ -29,7 +32,7 @@ enum LocalDeviceLabelFormatter {
 
     private static func shortIdentifier(for id: String) -> String? {
         if id.hasPrefix("uid:") {
-            return tail(String(id.dropFirst("uid:".count)))
+            return cleanIdentifier(String(id.dropFirst("uid:".count)))?.uppercased()
         }
         if id.hasPrefix("ble:") {
             return tail(String(id.dropFirst("ble:".count)).replacingOccurrences(of: "-", with: ""))
@@ -38,6 +41,16 @@ enum LocalDeviceLabelFormatter {
             return String(id.dropFirst("wifi:".count))
         }
         return nil
+    }
+
+    private static func hardwareUID(from identifierText: String?) -> String? {
+        guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
+        return cleanIdentifier(String(identifierText.dropFirst("UID ".count)))
+    }
+
+    private static func cleanIdentifier(_ value: String) -> String? {
+        let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return clean.isEmpty ? nil : clean
     }
 
     private static func tail(_ value: String) -> String? {
