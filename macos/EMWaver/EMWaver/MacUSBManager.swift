@@ -1175,7 +1175,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .ble,
                 boardType: "esp32s3",
                 moduleLabel: nil,
-                identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" } ?? "BLE \(Self.shortDeviceIdentifier(uuid.uuidString))",
+                identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: nil,
                 isActive: isActive
