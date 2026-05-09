@@ -559,7 +559,8 @@ struct DeviceConnectionSheet: View {
 
     private func deviceDetailText(for item: LocalDeviceDescriptor) -> String {
         let pairingText = item.lastErrorText == "Pairing required" ? " · pairing required" : ""
-        return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(pairingText)"
+        let identifierText = item.identifierText.map { " · \($0)" } ?? ""
+        return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(identifierText)\(pairingText)"
     }
 
     private var bleStatusText: String {

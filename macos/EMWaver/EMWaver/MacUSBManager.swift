@@ -31,6 +31,7 @@ struct LocalDeviceDescriptor: Identifiable, Equatable {
     var transport: TransportKind
     var boardType: String?
     var moduleLabel: String?
+    var identifierText: String?
     var connectionState: ConnectionState
     var lastErrorText: String?
     var isActive: Bool
@@ -804,13 +805,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func autoConnectIfNeededInternal() {
         guard autoConnectEnabled else { return }
+        if bleCentral?.state == .poweredOn {
+            startBleScanInternal()
+        }
         guard !isTransportConnectedInternal() else { return }
         connectToFirstPortInternal()
         if connectToFirstPairedWiFiInternal() {
             return
-        }
-        if !isTransportConnectedInternal() {
-            startBleScanInternal()
         }
     }
 
@@ -1155,6 +1156,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .usbMidi,
                 boardType: inferBoardType(portName: port),
                 moduleLabel: nil,
+                identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
                 connectionState: isActive ? .connected : .discovered,
                 lastErrorText: nil,
                 isActive: isActive
@@ -1173,6 +1175,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .ble,
                 boardType: "esp32s3",
                 moduleLabel: nil,
+                identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" } ?? "BLE \(Self.shortDeviceIdentifier(uuid.uuidString))",
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: nil,
                 isActive: isActive
@@ -1197,6 +1200,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .wifi,
                 boardType: record.boardType ?? "esp32",
                 moduleLabel: detail,
+                identifierText: nil,
                 connectionState: connectionState,
                 lastErrorText: record.isPaired ? nil : "Pairing required",
                 isActive: isActive
@@ -1213,6 +1217,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if a.contains(b) { return a }
         if b.contains(a) { return b }
         return "\(a) / \(b)"
+    }
+
+    private static func shortDeviceIdentifier(_ value: String) -> String {
+        let clean = value.replacingOccurrences(of: "-", with: "")
+        return String(clean.suffix(min(8, clean.count))).uppercased()
     }
 
     private func strongestConnectionState(_ a: LocalDeviceDescriptor.ConnectionState, _ b: LocalDeviceDescriptor.ConnectionState) -> LocalDeviceDescriptor.ConnectionState {
