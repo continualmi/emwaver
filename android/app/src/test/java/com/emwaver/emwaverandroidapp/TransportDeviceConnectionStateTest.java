@@ -44,6 +44,20 @@ public class TransportDeviceConnectionStateTest {
         assertFalse(state.matchesDeviceId("ble:board"));
     }
 
+    @Test
+    public void retainsConnectionsByDeviceIdForFutureMultiDeviceRouting() {
+        TransportDeviceConnectionState<String> state = new TransportDeviceConnectionState<>("none");
+        FakeConnection first = new FakeConnection("usb:board-1", "USB Board 1");
+        FakeConnection second = new FakeConnection("ble:board-2", "BLE Board 2");
+
+        state.setConnection(first);
+        state.setConnection(second);
+
+        assertSame(first, state.connection(" USB:BOARD-1 "));
+        assertSame(second, state.connection("ble:board-2"));
+        assertSame(second, state.connection());
+    }
+
     private static final class FakeConnection implements TransportDeviceConnection {
         private final String sessionId;
         private final String displayName;

@@ -146,6 +146,7 @@ Current first step:
 - Android USB MIDI and BLE connection objects now receive the same registry-owned `TransportDeviceSession` selected for the active target, so the shared connection contract owns the live script-facing session instead of a parallel session object.
 - Android now keeps the active connection behind the shared `TransportDeviceConnection` contract for script target identity and connection labeling, reducing service dependence on concrete USB/BLE connection fields.
 - Android active target/connection ownership now lives in a small `TransportDeviceConnectionState` helper with focused JVM coverage, keeping this parity boundary testable outside Android service lifecycle.
+- Android `TransportDeviceConnectionState` can now retain transport connections by normalized device-session id, giving future multi-device script routing a connection lookup instead of a single active-only pointer.
 - Android has an `ActiveDeviceTargetTest` suite covering active-target device-id normalization and transport matching.
 
 Remaining isolation work:
@@ -263,6 +264,7 @@ Remaining isolation work:
 - [x] Android USB MIDI and BLE connection values are wired to the registry-owned `TransportDeviceSession` selected for the active script target.
 - [x] Android active script target identity and connection labels are read through the shared `TransportDeviceConnection` contract.
 - [x] Android active connection state has focused JVM coverage for connection-owned script target identity and transport-scoped clearing.
+- [x] Android active connection state can retain multiple connections by normalized device-session id for future multi-device routing.
 - [x] Android USB MIDI live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE live handles are grouped behind a transport-owned connection object.
 - [x] Android BLE pending connection state is grouped behind a transport-owned pending value.
