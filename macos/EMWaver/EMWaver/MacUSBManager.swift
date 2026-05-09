@@ -773,7 +773,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             DispatchQueue.main.async {
                 self.autoConnectEnabled = true
             }
-            guard !self.isTransportConnectedInternal() else { return }
             self.startBleScanInternal(allowWhenAutoConnectDisabled: true)
         }
     }
