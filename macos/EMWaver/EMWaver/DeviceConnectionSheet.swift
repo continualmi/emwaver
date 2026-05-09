@@ -458,9 +458,9 @@ struct DeviceConnectionSheet: View {
     }
 
     private func deviceDetailText(for item: LocalDeviceDescriptor) -> String {
-        let pairingText = item.lastErrorText == "Pairing required" ? " · pairing required" : ""
+        let errorText = item.lastErrorText.map { " · \($0.lowercased())" } ?? ""
         let identifierText = item.identifierText.map { " · \($0)" } ?? ""
-        return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(identifierText)\(pairingText)"
+        return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(identifierText)\(errorText)"
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

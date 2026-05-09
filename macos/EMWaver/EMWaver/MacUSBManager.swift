@@ -1169,17 +1169,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let isActive = activeTransport == .ble && blePeripheral?.identifier == uuid && isTransportConnectedInternal()
             let isConnected = peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
             let isConnecting = peripheral.state == .connecting
+            let hardwareUID = hardwareUIDByDeviceID[id]
             appendOrMerge(LocalDeviceDescriptor(
-                id: hardwareUIDByDeviceID[id].map { "uid:\($0)" } ?? id,
+                id: hardwareUID.map { "uid:\($0)" } ?? id,
                 displayName: name,
                 transport: .ble,
                 boardType: "esp32s3",
                 moduleLabel: nil,
-                identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
+                identifierText: hardwareUID.map { "UID \($0)" },
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
-                lastErrorText: nil,
+                lastErrorText: hardwareUID == nil ? "UID unavailable" : nil,
                 isActive: isActive
-            ), hardwareUID: hardwareUIDByDeviceID[id])
+            ), hardwareUID: hardwareUID)
         }
 
         let connectingWiFiID = wifiManager?.connectingDeviceID
@@ -1194,15 +1195,21 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             )
             let endpoint = "\(record.host):\(record.port)"
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
+            let identifierText = record.localIdentifier.map { "UID \($0)" }
+            let errorText: String? = {
+                if !record.isPaired { return "Pairing required" }
+                if identifierText == nil { return "UID unavailable" }
+                return nil
+            }()
             appendOrMerge(LocalDeviceDescriptor(
                 id: record.id,
                 displayName: record.displayName,
                 transport: .wifi,
                 boardType: record.boardType ?? "esp32",
                 moduleLabel: detail,
-                identifierText: record.localIdentifier.map { "UID \($0)" },
+                identifierText: identifierText,
                 connectionState: connectionState,
-                lastErrorText: record.isPaired ? nil : "Pairing required",
+                lastErrorText: errorText,
                 isActive: isActive
             ), hardwareUID: nil)
         }

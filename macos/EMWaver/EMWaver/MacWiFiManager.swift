@@ -384,10 +384,7 @@ final class MacWiFiManager {
                 .trimmingCharacters(in: CharacterSet(charactersIn: "."))
             let id = Self.deviceID(host: host, port: Self.defaultPort)
             advertisedIDs.insert(id)
-            var metadata = Self.bonjourMetadata(from: result.metadata)
-            if metadata.localIdentifier == nil {
-                metadata.localIdentifier = Self.localIdentifier(fromServiceName: name)
-            }
+            let metadata = Self.bonjourMetadata(from: result.metadata)
             migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
@@ -798,18 +795,6 @@ final class MacWiFiManager {
             protocolVersion: nonEmpty(dictionary["proto"]),
             capabilities: capabilities(dictionary["cap"])
         )
-    }
-
-    private static func localIdentifier(fromServiceName name: String) -> String? {
-        let tokens = name.split(separator: " ")
-        guard let suffix = tokens.last else { return nil }
-        let value = suffix.trimmingCharacters(in: CharacterSet(charactersIn: ".:-_"))
-        guard value.count >= 4,
-              value.count <= 16,
-              value.allSatisfy({ $0.isHexDigit }) else {
-            return nil
-        }
-        return value.uppercased()
     }
 
     static func normalizedBoardType(_ value: String?) -> String? {
