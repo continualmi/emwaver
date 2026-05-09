@@ -4,6 +4,8 @@ This plan defines the Wi-Fi transport path for ESP32-S3 class EMWaver boards.
 
 The goal is to let an ESP32 board be controlled over a trusted local network, including through a user-owned VPN into that network, while preserving EMWaver's local-first product direction.
 
+Current completion evidence is tracked in `docs/ESP32_WIFI_TRANSPORT_AUDIT.md`.
+
 ## Product Goal
 
 Add a first-class ESP32 Wi-Fi transport that can run the same `.emw` hardware-control protocol used by USB and BLE.
