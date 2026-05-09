@@ -2817,6 +2817,12 @@ mod tests {
     }
 
     #[test]
+    fn wifi_probe_error_classifies_busy_text_response() {
+        let err = anyhow::anyhow!("Wi-Fi device is busy with another session");
+        assert!(classify_wifi_probe_error(&err).contains("device is busy with another session"));
+    }
+
+    #[test]
     fn wifi_probe_error_classifies_pairing_secret_mismatch() {
         let err = anyhow::anyhow!("Wi-Fi authentication failed: auth fail");
         assert!(classify_wifi_probe_error(&err)

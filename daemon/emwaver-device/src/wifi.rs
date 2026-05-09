@@ -306,6 +306,9 @@ fn authenticate(socket: &mut WiFiSocket, secret: &str) -> Result<()> {
         Message::Text(text) => text,
         other => anyhow::bail!("expected Wi-Fi auth challenge, got {other:?}"),
     };
+    if challenge_text.trim().eq_ignore_ascii_case("busy") {
+        anyhow::bail!("Wi-Fi device is busy with another session");
+    }
     let challenge_json: Value =
         serde_json::from_str(&challenge_text).context("invalid Wi-Fi challenge JSON")?;
     let challenge = challenge_json
