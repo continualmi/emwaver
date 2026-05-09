@@ -314,6 +314,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var wifiManager: MacWiFiManager?
     private var pendingAutoConnectWiFiID: String?
     private var suppressedAutoConnectWiFiIDs: Set<String> = []
+    private var wifiConnectionErrorsByID: [String: String] = [:]
 
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
@@ -349,6 +350,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             },
             onError: { [weak self] message in
                 self?.midiQueue.async {
+                    self?.recordWiFiConnectionErrorIfNeeded(message)
                     self?.suppressPendingAutoConnectWiFiIfNeeded(errorMessage: message)
                     self?.setError(message)
                 }
@@ -757,6 +759,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
             if id.hasPrefix("wifi:"), let record = self.wifiDevices.first(where: { $0.id == id }) {
+                self.wifiConnectionErrorsByID.removeValue(forKey: record.id)
+                self.publishDiscoveredDevices()
                 self.wifiManager?.connect(record: record)
                 return
             }
@@ -1197,6 +1201,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
             let identifierText = record.localIdentifier.map { "UID \($0)" }
             let errorText: String? = {
+                if let error = wifiConnectionErrorsByID[record.id] { return error }
                 if !record.isPaired { return "Pairing required" }
                 if identifierText == nil { return "UID unavailable" }
                 return nil
@@ -1312,8 +1317,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return false
         }
         pendingAutoConnectWiFiID = record.id
+        wifiConnectionErrorsByID.removeValue(forKey: record.id)
+        publishDiscoveredDevices()
         wifiManager?.connect(record: record)
         return true
+    }
+
+    private func recordWiFiConnectionErrorIfNeeded(_ message: String) {
+        let targetID = wifiManager?.connectingDeviceID ?? pendingAutoConnectWiFiID ?? (activeTransport == .wifi ? activeDeviceID : nil)
+        guard let targetID, targetID.hasPrefix("wifi:") else { return }
+        wifiConnectionErrorsByID[targetID] = message
+        publishDiscoveredDevices()
     }
 
     private func suppressPendingAutoConnectWiFiIfNeeded(errorMessage: String) {
@@ -1658,6 +1672,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         activeDeviceID = record.id
         pendingAutoConnectWiFiID = nil
         suppressedAutoConnectWiFiIDs.remove(record.id)
+        wifiConnectionErrorsByID.removeValue(forKey: record.id)
         ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
 
         DispatchQueue.main.async {
