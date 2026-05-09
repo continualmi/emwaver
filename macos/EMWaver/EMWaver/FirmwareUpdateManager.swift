@@ -40,6 +40,7 @@ final class FirmwareUpdateManager: ObservableObject {
     private var flashStdoutBuffer = Data()
     private var flashStderrBuffer = Data()
     private var flashOutputBuffer = Data()
+    private var espFlashRetry: (port: String, chip: String, attemptsRemaining: Int)? = nil
 
     init() {
         startDfuPolling()
@@ -511,7 +512,7 @@ final class FirmwareUpdateManager: ObservableObject {
             try detectEspFlashChip(port: port)
         }
         appendLog("ESP chip target: \(chip)")
-        try runEspFlash(port: port, chip: chip)
+        try runEspFlash(port: port, chip: chip, attemptsRemaining: 2)
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
@@ -534,7 +535,7 @@ final class FirmwareUpdateManager: ObservableObject {
         return (process.terminationStatus, stdoutStr, stderrStr)
     }
 
-    private func runEspFlash(port: String, chip: String) throws {
+    private func runEspFlash(port: String, chip: String, attemptsRemaining: Int = 0) throws {
         if flashProcess != nil {
             return
         }
@@ -574,6 +575,7 @@ final class FirmwareUpdateManager: ObservableObject {
         flashStderrBuffer = Data()
         flashOutputBuffer = Data()
         flashProcess = process
+        espFlashRetry = (port: port, chip: chip, attemptsRemaining: attemptsRemaining)
 
         stdout.fileHandleForReading.readabilityHandler = { [weak self] fh in
             guard let self else { return }
@@ -604,6 +606,7 @@ final class FirmwareUpdateManager: ObservableObject {
                 self.isFlashing = false
 
                 if proc.terminationStatus == 0 {
+                    self.espFlashRetry = nil
                     self.progressPct = 100
                     self.progressMessage = ""
                     self.updateDone = true
@@ -611,6 +614,24 @@ final class FirmwareUpdateManager: ObservableObject {
                 } else {
                     let err = String(data: self.flashStderrBuffer, encoding: .utf8) ?? ""
                     let msg = err.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if self.shouldRetryEspFlashAfterBusy(message: msg),
+                       let retry = self.espFlashRetry,
+                       retry.attemptsRemaining > 0 {
+                        self.appendLog("ESP serial port was busy; retrying flash...")
+                        self.progressMessage = "Waiting for ESP serial port..."
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                            do {
+                                try self.runEspFlash(port: retry.port, chip: retry.chip, attemptsRemaining: retry.attemptsRemaining - 1)
+                            } catch {
+                                self.espFlashRetry = nil
+                                self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                                self.progressMessage = ""
+                                self.appendLog(self.updateError ?? "ESP firmware update failed")
+                            }
+                        }
+                        return
+                    }
+                    self.espFlashRetry = nil
                     self.updateError = msg.isEmpty ? "ESP firmware update failed (exit code: \(proc.terminationStatus))." : msg
                     self.progressMessage = ""
                     self.appendLog(self.updateError ?? "ESP firmware update failed")
@@ -618,7 +639,23 @@ final class FirmwareUpdateManager: ObservableObject {
             }
         }
 
-        try process.run()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            do {
+                try process.run()
+            } catch {
+                self.flashProcess = nil
+                self.isFlashing = false
+                self.espFlashRetry = nil
+                self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                self.progressMessage = ""
+                self.appendLog(self.updateError ?? "ESP firmware update failed")
+            }
+        }
+    }
+
+    private func shouldRetryEspFlashAfterBusy(message: String) -> Bool {
+        let lower = message.lowercased()
+        return lower.contains("resource busy") || lower.contains("port is busy")
     }
 
     private func firmwareURL() throws -> URL {
