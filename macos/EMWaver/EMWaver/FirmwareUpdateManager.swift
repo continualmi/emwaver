@@ -528,6 +528,8 @@ final class FirmwareUpdateManager: ObservableObject {
                     self.progressPct = 100
                     self.progressMessage = ""
                     self.updateDone = true
+                    self.espBootloaderConnected = false
+                    self.espBootloaderPort = nil
                     self.appendLog(self.completionMessage)
                 } else {
                     let err = String(data: self.flashStderrBuffer, encoding: .utf8) ?? ""

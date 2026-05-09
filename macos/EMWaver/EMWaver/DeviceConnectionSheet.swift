@@ -27,7 +27,7 @@ struct DeviceConnectionSheet: View {
             }
             return ("Connected", "cable.connector")
         }
-        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+        if espBootloaderAvailable {
             return ("ESP Bootloader", "cpu")
         }
         if firmwareUpdater.dfuConnected {
@@ -41,7 +41,7 @@ struct DeviceConnectionSheet: View {
         if let port = device.connectedPortName, !port.isEmpty {
             items.append((device.connectedTransportKind == "BLE" ? "Device" : "Port", port))
         }
-        if let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
+        if espBootloaderAvailable, let port = firmwareUpdater.espBootloaderPort, !port.isEmpty {
             items.append(("Flash port", port))
         }
         if device.isConnected, let version = device.deviceEmwaverVersion, !version.isEmpty {
@@ -53,7 +53,7 @@ struct DeviceConnectionSheet: View {
         if device.isConnected, let transport = device.connectedTransportKind, !transport.isEmpty {
             items.append(("Transport", transport))
         }
-        if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
+        if isEspBoard && espBootloaderAvailable {
             items.append(("MCU", currentBoardDisplayName))
         } else if device.isConnected {
             items.append(("MCU", currentBoardDisplayName))
@@ -62,10 +62,17 @@ struct DeviceConnectionSheet: View {
     }
 
     private var currentBoardType: String {
-        if firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil {
+        if let connected = device.connectedBoardType {
+            return connected
+        }
+        if espBootloaderAvailable {
             return "esp32"
         }
-        return device.connectedBoardType ?? device.lastDetectedBoardType ?? "stm32f042"
+        return device.lastDetectedBoardType ?? "stm32f042"
+    }
+
+    private var espBootloaderAvailable: Bool {
+        !device.isConnected && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil)
     }
 
     private var isEspBoard: Bool {
@@ -173,7 +180,7 @@ struct DeviceConnectionSheet: View {
                     dismiss()
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !firmwareUpdater.espBootloaderConnected && firmwareUpdater.espBootloaderPort == nil)
+                .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !espBootloaderAvailable)
 
                 Button("Disconnect") {
                     device.disconnect()
@@ -511,7 +518,7 @@ struct DeviceConnectionSheet: View {
         if needsFirmwareInstall {
             return "This device can be updated with managed EMWaver firmware for the best local runtime compatibility."
         }
-        if isEspBoard && (firmwareUpdater.espBootloaderConnected || firmwareUpdater.espBootloaderPort != nil) {
+        if isEspBoard && espBootloaderAvailable {
             return "This ESP32 board is in bootloader mode and can be flashed with the latest bundled EMWaver firmware."
         }
         return "This device is ready for local scripts and hardware control."
