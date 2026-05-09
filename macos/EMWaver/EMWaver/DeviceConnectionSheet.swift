@@ -2,6 +2,12 @@ import Security
 import SwiftUI
 
 struct DeviceConnectionSheet: View {
+    private static let wifiSSIDDefaultsKey = "emwaver.wifi.setup.ssid"
+    private static let wifiHostDefaultsKey = "emwaver.wifi.manual.host"
+    private static let wifiPortDefaultsKey = "emwaver.wifi.manual.port"
+    private static let wifiHostnameDefaultsKey = "emwaver.wifi.setup.hostname"
+    private static let wifiPasswordKeychainAccount = "emwaver.wifi.setup.password"
+
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @Environment(\.dismiss) private var dismiss
@@ -124,6 +130,7 @@ struct DeviceConnectionSheet: View {
         }
         .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
         .onAppear {
+            loadWiFiFormState()
             if wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 wifiPairingSecret = Self.generatePairingSecret()
             }
@@ -131,6 +138,44 @@ struct DeviceConnectionSheet: View {
                 wifiHostname = MacUSBManager.generatedWiFiHostname()
             }
             firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
+        }
+        .onDisappear {
+            saveWiFiFormState()
+        }
+        .onChange(of: wifiSSID) { _ in
+            saveWiFiFormState()
+        }
+        .onChange(of: wifiPassword) { _ in
+            saveWiFiFormState()
+        }
+        .onChange(of: wifiHostname) { _ in
+            saveWiFiFormState()
+        }
+        .onChange(of: wifiHost) { _ in
+            saveWiFiFormState()
+        }
+        .onChange(of: wifiPort) { _ in
+            saveWiFiFormState()
+        }
+    }
+
+    private func loadWiFiFormState() {
+        wifiSSID = UserDefaults.standard.string(forKey: Self.wifiSSIDDefaultsKey) ?? wifiSSID
+        wifiHost = UserDefaults.standard.string(forKey: Self.wifiHostDefaultsKey) ?? wifiHost
+        wifiPort = UserDefaults.standard.string(forKey: Self.wifiPortDefaultsKey) ?? wifiPort
+        wifiHostname = UserDefaults.standard.string(forKey: Self.wifiHostnameDefaultsKey) ?? wifiHostname
+        wifiPassword = (try? KeychainStore.getString(account: Self.wifiPasswordKeychainAccount)) ?? wifiPassword
+    }
+
+    private func saveWiFiFormState() {
+        UserDefaults.standard.set(wifiSSID, forKey: Self.wifiSSIDDefaultsKey)
+        UserDefaults.standard.set(wifiHost, forKey: Self.wifiHostDefaultsKey)
+        UserDefaults.standard.set(wifiPort, forKey: Self.wifiPortDefaultsKey)
+        UserDefaults.standard.set(wifiHostname, forKey: Self.wifiHostnameDefaultsKey)
+        do {
+            try KeychainStore.setString(wifiPassword, account: Self.wifiPasswordKeychainAccount)
+        } catch {
+            // Form persistence is a convenience; provisioning should still work if Keychain is unavailable.
         }
     }
 
@@ -305,6 +350,7 @@ struct DeviceConnectionSheet: View {
 
                     HStack(spacing: 10) {
                         Button(device.isWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup") {
+                            saveWiFiFormState()
                             device.provisionWiFi(
                                 ssid: wifiSSID,
                                 password: wifiPassword,
@@ -382,6 +428,7 @@ struct DeviceConnectionSheet: View {
             HStack(spacing: 10) {
                 Button("Connect Wi-Fi") {
                     guard let parsedWiFiPort else { return }
+                    saveWiFiFormState()
                     device.connectWiFi(
                         host: wifiHost,
                         port: parsedWiFiPort,
