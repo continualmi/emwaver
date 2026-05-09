@@ -149,11 +149,12 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 ### Local
 
-- Script targets: `blink.emw`, `pwm.emw`, `sampler.emw`, `cc1101.emw`, and a small ADC/GPIO diagnostic script.
+- Script targets: `assets/default-scripts/blink.emw`, `assets/default-scripts/gpio.emw`, `assets/default-scripts/adc.emw`, `assets/default-scripts/pwm.emw`, `assets/default-scripts/sampler.emw`, and `assets/default-scripts/cc1101.emw`.
 - Setup: flash the current ESP32-S3 firmware payload; provision Wi-Fi and the local pairing secret over USB or BLE; keep USB available for recovery; attach LED, ADC/GPIO loopback, PWM/servo, CC1101 SPI, and sampler/retransmit fixtures as available.
-- Steps: discover the board through `_emwaver._tcp`; run `emwaver devices`; run `emwaver run --direct --wifi <mdns-host> --wifi-secret <local-secret> blink.emw`; repeat by direct IP; verify the macOS native app manual connect/discovery path; connect multiple same-LAN ESP32 boards on port `3922`; attempt wrong-secret and no-secret connections; drop Wi-Fi during a running script; clear/reprovision Wi-Fi over USB or BLE.
+- Steps: discover the board through `_emwaver._tcp`; run `emwaver devices`; run `emwaver run assets/default-scripts/blink.emw --direct --wifi <mdns-host> --wifi-secret <local-secret>`; repeat by direct IP; verify the macOS native app manual connect/discovery path; connect multiple same-LAN ESP32 boards on port `3922`; attempt wrong-secret and no-secret connections; drop Wi-Fi during a running script; clear/reprovision Wi-Fi over USB or BLE.
 - Tests: same-LAN mDNS discovery, same-LAN manual IP, authenticated WebSocket command transport, per-endpoint single-session ownership, multiple same-LAN board selection, command rejection without the correct pairing secret, disconnect reporting/recovery, and USB/BLE recovery after bad Wi-Fi configuration.
 - Expected: CLI and macOS app can run scripts through Wi-Fi without accounts, cloud relay, or hosted activation; unauthenticated clients are rejected; Wi-Fi drops leave the runtime recoverable; USB/BLE provisioning remains available.
+- Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, provisioning transport used, SSID/network shape, mDNS hostname, direct IP, exact CLI commands and exit results, macOS app version/build, observed script behavior for each hardware fixture, wrong/no-secret rejection result, Wi-Fi drop/reconnect result, USB/BLE recovery result, date, and tester.
 
 ### Hardware Coverage
 
@@ -168,8 +169,9 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 ### Local
 
-- Script targets: `blink.emw`, plus one representative hardware script from `008`.
+- Script targets: `assets/default-scripts/blink.emw`, plus one representative hardware script from `008`.
 - Setup: put an ESP32-S3 board on a home/lab LAN; provision Wi-Fi and the local pairing secret locally; connect the controller machine through a user-owned VPN, SSH tunnel, Tailscale subnet route, or equivalent routed private network. Do not use an EMWaver-hosted relay.
-- Steps: run `emwaver run --direct --wifi <private-ip> --wifi-secret <local-secret> blink.emw` from outside the LAN; repeat with mDNS unavailable; verify the manual IP path in the gateway and macOS app where available; attempt wrong-secret and no-secret connections; stop/reset the script and reconnect after a transient network drop.
+- Steps: run `emwaver run assets/default-scripts/blink.emw --direct --wifi <private-ip> --wifi-secret <local-secret>` from outside the LAN; repeat with mDNS unavailable; verify the manual IP path in the gateway and macOS app where available; attempt wrong-secret and no-secret connections; stop/reset the script and reconnect after a transient network drop.
 - Tests: VPN-by-IP direct execution, manual endpoint entry when mDNS does not cross the tunnel, authenticated command rejection, routed-network latency tolerance, reconnect behavior, and local-first remote posture.
 - Expected: scripts run through a user-owned routed path by private IP with the same pairing-secret requirement as same-LAN Wi-Fi; no hosted relay, cloud account, subscription check, or backend device ownership check is involved.
+- Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, user-owned routed path type, controller network location, private IP tested, exact CLI commands and exit results, gateway/macOS manual IP result where tested, wrong/no-secret rejection result, transient network drop/reconnect result, confirmation that no EMWaver-hosted relay/account path was used, date, and tester.
