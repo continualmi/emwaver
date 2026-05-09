@@ -120,6 +120,14 @@ struct ContentView: View {
 
     private var selectedLocalDevice: LocalDeviceDescriptor? {
         guard let id = scriptSessions.selectedDeviceID else { return nil }
+        if let selectedChoice = toolbarDeviceChoices.first(where: { $0.id == id }) {
+            return selectedChoice
+        }
+        if let selectedDescriptor = device.discoveredDevices.first(where: { $0.id == id }),
+           let selectedUID = hardwareUID(from: selectedDescriptor.identifierText),
+           let preferredChoice = toolbarDeviceChoices.first(where: { hardwareUID(from: $0.identifierText) == selectedUID }) {
+            return preferredChoice
+        }
         return device.discoveredDevices.first(where: { $0.id == id })
     }
 
@@ -411,12 +419,24 @@ struct ContentView: View {
     }
 
     private func preferredToolbarChoice(_ lhs: LocalDeviceDescriptor, _ rhs: LocalDeviceDescriptor) -> LocalDeviceDescriptor {
-        if lhs.isActive != rhs.isActive { return lhs.isActive ? lhs : rhs }
+        let lhsPriority = toolbarTransportPriority(lhs.transport)
+        let rhsPriority = toolbarTransportPriority(rhs.transport)
+        if lhsPriority != rhsPriority { return lhsPriority < rhsPriority ? lhs : rhs }
         if lhs.connectionState == .connected && rhs.connectionState != .connected { return lhs }
         if rhs.connectionState == .connected && lhs.connectionState != .connected { return rhs }
-        if lhs.transport == .wifi && rhs.transport != .wifi { return lhs }
-        if rhs.transport == .wifi && lhs.transport != .wifi { return rhs }
+        if lhs.isActive != rhs.isActive { return lhs.isActive ? lhs : rhs }
         return lhs
+    }
+
+    private func toolbarTransportPriority(_ transport: LocalDeviceDescriptor.TransportKind) -> Int {
+        switch transport {
+        case .usbMidi:
+            return 0
+        case .ble:
+            return 1
+        case .wifi:
+            return 2
+        }
     }
 
     private func hardwareUID(from identifierText: String?) -> String? {

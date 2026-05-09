@@ -214,19 +214,11 @@ struct DeviceConnectionSheet: View {
                 }
 
                 if !deviceMetadata.isEmpty {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 132), spacing: 14)], alignment: .leading, spacing: 8) {
-                        ForEach(deviceMetadata, id: \.label) { item in
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(item.label)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.secondary)
-                                Text(item.value)
-                                    .font(.caption.weight(.medium))
-                                    .lineLimit(1)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
+                    HStack(alignment: .top, spacing: 42) {
+                        deviceMetadataColumn(deviceMetadataLeftColumn)
+                        deviceMetadataColumn(deviceMetadataRightColumn)
                     }
+                    .frame(maxWidth: 520, alignment: .leading)
                 }
             }
 
@@ -235,6 +227,37 @@ struct DeviceConnectionSheet: View {
             Button("Close") { dismiss() }
                 .buttonStyle(.bordered)
         }
+    }
+
+    private var deviceMetadataLeftColumn: [(label: String, value: String)] {
+        metadataItems(for: ["Device", "Port", "Hardware UID"])
+    }
+
+    private var deviceMetadataRightColumn: [(label: String, value: String)] {
+        metadataItems(for: ["Firmware", "Transport", "MCU"])
+    }
+
+    private func metadataItems(for labels: [String]) -> [(label: String, value: String)] {
+        labels.compactMap { label in
+            deviceMetadata.first { $0.label == label }
+        }
+    }
+
+    private func deviceMetadataColumn(_ items: [(label: String, value: String)]) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(items, id: \.label) { item in
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.label)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Text(item.value)
+                        .font(.caption.weight(.medium))
+                        .lineLimit(1)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var deviceListCard: some View {
@@ -278,16 +301,7 @@ struct DeviceConnectionSheet: View {
 
                             Spacer(minLength: 0)
 
-                            if let item = preferredTransport(for: group) {
-                                HStack(spacing: 8) {
-                                    Button(transportActionTitle(for: item)) {
-                                        device.connectDevice(id: item.id)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .disabled(isTransportActionDisabled(item))
-                                    .help(deviceDetailText(for: item))
-                                }
-                            }
+                            transportControl(for: group)
                         }
                         .padding(10)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.06)))
@@ -540,6 +554,46 @@ struct DeviceConnectionSheet: View {
 
     private func isTransportActionDisabled(_ item: LocalDeviceDescriptor) -> Bool {
         item.connectionState == .connecting || item.lastErrorText == "Pairing required"
+    }
+
+    @ViewBuilder
+    private func transportControl(for group: LocalDeviceGroup) -> some View {
+        if group.transports.count > 1 {
+            Picker("Transport", selection: Binding(
+                get: { selectedTransportID(for: group) },
+                set: { selectedID in
+                    guard let item = group.transports.first(where: { $0.id == selectedID }),
+                          !isTransportActionDisabled(item) else { return }
+                    device.connectDevice(id: selectedID)
+                }
+            )) {
+                ForEach(group.transports) { item in
+                    Text(item.transport.rawValue)
+                        .tag(item.id)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.segmented)
+            .frame(width: max(150, CGFloat(group.transports.count) * 74))
+            .help("Switch transport for this device")
+        } else if let item = preferredTransport(for: group) {
+            Button(transportActionTitle(for: item)) {
+                device.connectDevice(id: item.id)
+            }
+            .buttonStyle(.bordered)
+            .disabled(isTransportActionDisabled(item))
+            .help(deviceDetailText(for: item))
+        }
+    }
+
+    private func selectedTransportID(for group: LocalDeviceGroup) -> String {
+        if let active = group.transports.first(where: { $0.isActive }) {
+            return active.id
+        }
+        if let connected = group.transports.first(where: { $0.connectionState == .connected }) {
+            return connected.id
+        }
+        return preferredTransport(for: group)?.id ?? group.transports.first?.id ?? group.id
     }
 
     private func preferredTransport(for group: LocalDeviceGroup) -> LocalDeviceDescriptor? {
