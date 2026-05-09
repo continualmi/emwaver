@@ -119,7 +119,7 @@ For headless hosts, direct mode runs the extracted Rust runtime in-process:
 emwaver run scripts/blink.emw --direct
 emwaver run scripts/blink.emw --direct --device 0
 emwaver run scripts/blink.emw --direct --ble
-emwaver run scripts/blink.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver run ../assets/default-scripts/blink.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
 emwaver run scripts/ui-only.emw --direct --no-device
 emwaver run scripts/blink.emw --direct --sim-device
 ```

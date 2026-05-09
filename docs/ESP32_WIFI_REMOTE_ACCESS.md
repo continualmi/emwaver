@@ -42,7 +42,7 @@ Resetting pairing keeps the ESP32's existing SSID, password, and hostname. Clear
 Direct runtime over a same-LAN or VPN-routed IP:
 
 ```bash
-emwaver run scripts/blink.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver run assets/default-scripts/blink.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
 ```
 
 Start the local daemon with a Wi-Fi ESP32 transport:
