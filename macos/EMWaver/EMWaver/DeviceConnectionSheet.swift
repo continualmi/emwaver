@@ -11,7 +11,6 @@ struct DeviceConnectionSheet: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.openURL) private var openURL
     @State private var wifiHost: String = ""
     @State private var wifiPort: String = "3922"
     @State private var wifiPairingSecret: String = ""
@@ -90,6 +89,10 @@ struct DeviceConnectionSheet: View {
         }
     }
 
+    private var shouldShowWiFiCard: Bool {
+        isEspBoard && device.connectedTransportKind != "Wi-Fi"
+    }
+
     private var currentBoardDisplayName: String {
         switch currentBoardType.lowercased() {
         case "esp32":
@@ -105,10 +108,6 @@ struct DeviceConnectionSheet: View {
         }
     }
 
-    private var needsFirmwareInstall: Bool {
-        false
-    }
-
     private static func generatePairingSecret() -> String {
         var bytes = [UInt8](repeating: 0, count: 24)
         if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
@@ -121,10 +120,11 @@ struct DeviceConnectionSheet: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
-                overviewCard
                 deviceListCard
-                wifiCard
-                bleCard
+                if shouldShowWiFiCard {
+                    wifiCard
+                }
+                firmwareCard
             }
             .padding(24)
         }
@@ -214,31 +214,6 @@ struct DeviceConnectionSheet: View {
         }
     }
 
-    private var overviewCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(deviceStatusText)
-                .foregroundStyle(.secondary)
-
-            HStack(spacing: 10) {
-                Button(isEspBoard ? "Flash firmware" : "Update firmware") {
-                    firmwareUpdater.present(boardType: currentBoardType)
-                    dismiss()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !espBootloaderAvailable)
-
-                Button("Disconnect") {
-                    device.disconnect()
-                }
-                .buttonStyle(.bordered)
-                .disabled(!device.isConnected)
-            }
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
-    }
-
     private var deviceListCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
@@ -310,109 +285,62 @@ struct DeviceConnectionSheet: View {
     private var wifiCard: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Label("Wi-Fi", systemImage: "wifi")
+                Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
                     .font(.headline)
 
                 Spacer()
 
-                Text(device.connectedTransportKind == "Wi-Fi" ? "Connected" : "LAN or VPN")
+                Text("USB or BLE")
                     .font(.caption.weight(.medium))
-                    .foregroundStyle(device.connectedTransportKind == "Wi-Fi" ? Color.green : .secondary)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Capsule().fill(Color.secondary.opacity(0.12)))
             }
 
-            if isEspBoard && device.connectedTransportKind != "Wi-Fi" {
-                VStack(alignment: .leading, spacing: 10) {
-                    Text("Provision ESP32 Wi-Fi")
-                        .font(.subheadline.weight(.semibold))
+            VStack(alignment: .leading, spacing: 10) {
+                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                    GridRow {
+                        TextField("SSID", text: $wifiSSID)
+                            .textFieldStyle(.roundedBorder)
+                            .frame(minWidth: 250)
 
-                    Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-                        GridRow {
-                            TextField("SSID", text: $wifiSSID)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(minWidth: 250)
-
-                            TextField("Hostname", text: $wifiHostname)
-                                .textFieldStyle(.roundedBorder)
-                                .frame(minWidth: 180)
-                        }
-
-                        GridRow {
-                            SecureField("Wi-Fi password", text: $wifiPassword)
-                                .textFieldStyle(.roundedBorder)
-
-                            SecureField("Pairing secret", text: $wifiPairingSecret)
-                                .textFieldStyle(.roundedBorder)
-                        }
+                        TextField("Hostname", text: $wifiHostname)
+                            .textFieldStyle(.roundedBorder)
                     }
 
-                    ViewThatFits(in: .horizontal) {
-                        wifiProvisioningActions
-                        VStack(alignment: .leading, spacing: 10) {
-                            HStack(spacing: 10) {
-                                wifiSendSetupButton
-                                wifiClearSetupButton
-                            }
-                            HStack(spacing: 10) {
-                                wifiResetPairingButton
-                                wifiStatusButton
-                            }
+                    GridRow {
+                        SecureField("Wi-Fi password", text: $wifiPassword)
+                            .textFieldStyle(.roundedBorder)
+
+                        SecureField("Pairing secret", text: $wifiPairingSecret)
+                            .textFieldStyle(.roundedBorder)
+                    }
+                }
+
+                ViewThatFits(in: .horizontal) {
+                    wifiProvisioningActions
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(spacing: 10) {
+                            wifiSendSetupButton
+                            wifiClearSetupButton
+                        }
+                        HStack(spacing: 10) {
+                            wifiResetPairingButton
+                            wifiStatusButton
                         }
                     }
-
-                    if let status = device.wifiProvisioningStatus, !status.isEmpty {
-                        Text(status)
-                            .font(.caption)
-                            .foregroundStyle(device.isWiFiProvisioningError ? Color.orange : .secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-
-            Divider()
-
-            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-                GridRow {
-                    TextField("Host or IP", text: $wifiHost)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(minWidth: 250)
-
-                    TextField("Port", text: $wifiPort)
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 82)
                 }
 
-                GridRow {
-                    SecureField("Pairing secret", text: $wifiPairingSecret)
-                        .textFieldStyle(.roundedBorder)
-                        .gridCellColumns(2)
+                if let status = device.wifiProvisioningStatus, !status.isEmpty {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(device.isWiFiProvisioningError ? Color.orange : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-
-            HStack(spacing: 10) {
-                Button("Connect Wi-Fi") {
-                    guard let parsedWiFiPort else { return }
-                    saveWiFiFormState()
-                    device.connectWiFi(
-                        host: wifiHost,
-                        port: parsedWiFiPort,
-                        pairingSecret: wifiPairingSecret
-                    )
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(wifiHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          parsedWiFiPort == nil)
-
-                Text("Manual IP works when mDNS does not cross a user-owned VPN.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            .padding(.bottom, 4)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -481,60 +409,19 @@ struct DeviceConnectionSheet: View {
                   device.connectedTransportKind == "Wi-Fi")
     }
 
-    private var bleCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("Bluetooth LE", systemImage: "antenna.radiowaves.left.and.right")
-                    .font(.headline)
+    private var firmwareCard: some View {
+        HStack {
+            Spacer()
 
-                Spacer()
-
-                Text(bleStatusText)
-                    .font(.caption.weight(.medium))
-                    .foregroundStyle(device.isBleScanning ? Color.green : .secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(Color.secondary.opacity(0.12)))
+            Button(isEspBoard ? "Flash firmware" : "Update firmware") {
+                firmwareUpdater.present(boardType: currentBoardType)
+                dismiss()
             }
-
-            if showsBluetoothUnavailableNotice {
-                HStack(alignment: .center, spacing: 12) {
-                    Label(bluetoothUnavailableText, systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.orange)
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(Color.orange.opacity(0.12))
-                )
-            }
-
-            HStack(spacing: 10) {
-                if device.bluetoothStateText == "On" {
-                    Button(device.isBleScanning ? "Stop scan" : "Start scan") {
-                        if device.isBleScanning {
-                            device.stopBleScan()
-                        } else {
-                            device.startBleScan()
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    Button("Open Bluetooth Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.BluetoothSettings") {
-                            openURL(url)
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-
-                Toggle("Auto connect", isOn: $device.autoConnectEnabled)
-                    .toggleStyle(.checkbox)
-            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !espBootloaderAvailable)
         }
         .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .trailing)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
@@ -561,46 +448,6 @@ struct DeviceConnectionSheet: View {
         let pairingText = item.lastErrorText == "Pairing required" ? " · pairing required" : ""
         let identifierText = item.identifierText.map { " · \($0)" } ?? ""
         return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(identifierText)\(pairingText)"
-    }
-
-    private var bleStatusText: String {
-        if device.connectedTransportKind == "BLE" {
-            return "Connected"
-        }
-        if device.bluetoothStateText != "On" {
-            return "Bluetooth \(device.bluetoothStateText.lowercased())"
-        }
-        if device.isBleScanning {
-            return "Scanning"
-        }
-        return "Idle"
-    }
-
-    private var showsBluetoothUnavailableNotice: Bool {
-        !device.isConnected && device.bluetoothStateText != "On" && device.bluetoothStateText != "Starting"
-    }
-
-    private var bluetoothUnavailableText: String {
-        switch device.bluetoothStateText {
-        case "Off":
-            return "Bluetooth is off. Turn it on to discover ESP32 BLE devices."
-        case "Not authorized":
-            return "Bluetooth access is not authorized for EMWaver."
-        case "Unsupported":
-            return "Bluetooth LE is not available on this Mac."
-        default:
-            return "Bluetooth is not ready, so EMWaver cannot scan for BLE devices."
-        }
-    }
-
-    private var deviceStatusText: String {
-        if needsFirmwareInstall {
-            return "This device can be updated with managed EMWaver firmware for the best local runtime compatibility."
-        }
-        if isEspBoard && espBootloaderAvailable {
-            return "This ESP32 board is in bootloader mode and can be flashed with the latest bundled EMWaver firmware."
-        }
-        return "This device is ready for local scripts and hardware control."
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

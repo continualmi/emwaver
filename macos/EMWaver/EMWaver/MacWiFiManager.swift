@@ -14,6 +14,7 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var displayName: String
     var host: String
     var port: Int
+    var localIdentifier: String?
     var boardType: String?
     var firmwareVersion: String?
     var protocolVersion: String?
@@ -36,6 +37,7 @@ final class MacWiFiManager {
     }
 
     private struct BonjourMetadata {
+        var localIdentifier: String?
         var boardType: String?
         var firmwareVersion: String?
         var protocolVersion: String?
@@ -161,6 +163,7 @@ final class MacWiFiManager {
                 displayName: trimmedHost,
                 host: trimmedHost,
                 port: safePort,
+                localIdentifier: nil,
                 boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
@@ -209,6 +212,7 @@ final class MacWiFiManager {
                 displayName: visibleName,
                 host: trimmedHost,
                 port: safePort,
+                localIdentifier: nil,
                 boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
@@ -386,6 +390,7 @@ final class MacWiFiManager {
                 displayName: name.isEmpty ? host : name,
                 host: host,
                 port: Self.defaultPort,
+                localIdentifier: metadata.localIdentifier,
                 boardType: metadata.boardType ?? "esp32",
                 firmwareVersion: metadata.firmwareVersion,
                 protocolVersion: metadata.protocolVersion,
@@ -406,6 +411,7 @@ final class MacWiFiManager {
                 displayName: paired.displayName,
                 host: paired.host,
                 port: paired.port,
+                localIdentifier: nil,
                 boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
@@ -652,6 +658,7 @@ final class MacWiFiManager {
                 displayName: record.displayName,
                 host: record.host,
                 port: record.port,
+                localIdentifier: nil,
                 boardType: "esp32",
                 firmwareVersion: nil,
                 protocolVersion: "1",
@@ -749,6 +756,7 @@ final class MacWiFiManager {
         }
         let dictionary = txtRecord.dictionary
         return BonjourMetadata(
+            localIdentifier: nonEmpty(dictionary["id"]),
             boardType: normalizedBoardType(dictionary["board"]),
             firmwareVersion: nonEmpty(dictionary["fw"]),
             protocolVersion: nonEmpty(dictionary["proto"]),

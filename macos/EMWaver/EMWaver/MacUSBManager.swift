@@ -1200,7 +1200,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 transport: .wifi,
                 boardType: record.boardType ?? "esp32",
                 moduleLabel: detail,
-                identifierText: nil,
+                identifierText: record.localIdentifier.map { "mDNS \($0)" },
                 connectionState: connectionState,
                 lastErrorText: record.isPaired ? nil : "Pairing required",
                 isActive: isActive
