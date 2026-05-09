@@ -13,7 +13,7 @@
 #include "esp_log.h"
 
 static const char *TAG = "TRANSPORT";
-static volatile bool s_transport_debug_enabled;
+static volatile bool s_transport_debug_enabled = true;
 
 static void debug_transport_command(const char *mode);
 static const char *source_name(uint8_t source);

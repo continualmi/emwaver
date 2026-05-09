@@ -2,9 +2,11 @@ import SwiftUI
 
 /// App-level settings hub.
 struct SettingsView: View {
+    @ObservedObject var device: MacUSBManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
     @AppStorage(RemoteControlHostService.localGatewayEnabledKey) private var localGatewayEnabled = false
+    @AppStorage(MacUSBManager.transportDebugLoggingEnabledDefaultsKey) private var transportDebugLoggingEnabled = true
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
 
@@ -27,6 +29,14 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                Section("Device diagnostics") {
+                    Toggle("Log transport packets on ESP serial", isOn: $transportDebugLoggingEnabled)
+
+                    Text("When enabled, ESP32-S3 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor. If disabled, the app turns firmware transport logging off after it finishes connection metadata checks.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
                 Section("Local browser control") {
                     Toggle("Allow localhost gateway control", isOn: $localGatewayEnabled)
 
@@ -42,11 +52,14 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+            .onChange(of: transportDebugLoggingEnabled) { _ in
+                device.applyTransportDebugPreference()
+            }
             .frame(minWidth: 720, minHeight: 520)
         }
     }
 }
 
 #Preview {
-    SettingsView()
+    SettingsView(device: MacUSBManager())
 }

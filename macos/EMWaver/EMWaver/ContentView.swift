@@ -304,7 +304,7 @@ struct ContentView: View {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
         }
         .sheet(isPresented: $showingSettings) {
-            SettingsView()
+            SettingsView(device: device)
         }
         // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.

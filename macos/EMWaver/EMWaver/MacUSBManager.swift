@@ -208,6 +208,8 @@ private final class MacTransportDeviceSession {
 /// This is intentionally minimal: enough to power Scripts execution.
 /// It implements `ScriptDevice` for the shared Script runtime.
 final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
+    static let transportDebugLoggingEnabledDefaultsKey = "emwaver.transportDebugLoggingEnabled"
+
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
@@ -251,6 +253,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let wifiFieldPassword: UInt8 = 0x01
         static let wifiFieldSecret: UInt8 = 0x02
         static let wifiFieldHostname: UInt8 = 0x03
+    }
+
+    private var transportDebugLoggingEnabled: Bool {
+        if UserDefaults.standard.object(forKey: Self.transportDebugLoggingEnabledDefaultsKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: Self.transportDebugLoggingEnabledDefaultsKey)
     }
 
     @Published var isConnected: Bool = false
@@ -967,6 +976,26 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         )
     }
 
+    func applyTransportDebugPreference() {
+        let deviceID = midiQueue.sync { self.activeDeviceID }
+        guard let deviceID else { return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.applyTransportDebugPreference(deviceID: deviceID)
+        }
+    }
+
+    private func applyTransportDebugPreference(deviceID: String) {
+        setTransportDebugLogging(transportDebugLoggingEnabled, deviceID: deviceID)
+    }
+
+    private func setTransportDebugLogging(_ enabled: Bool, deviceID: String) {
+        let mode = enabled ? "1" : "0"
+        guard let command = "debug transport \(mode)".data(using: .utf8) else { return }
+        withMidiQueueSync {
+            self.sendPacketNow(command, deviceID: deviceID)
+        }
+    }
+
     private func finishWiFiProvisioning(message: String, isError: Bool) {
         if isError {
             setError(message)
@@ -1380,12 +1409,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         // Query only local runtime metadata needed for display and update guidance.
         DispatchQueue.global(qos: .userInitiated).async {
+            if self.transportDebugLoggingEnabled {
+                self.setTransportDebugLogging(true, deviceID: deviceID)
+            }
             var v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             if v == nil {
                 Thread.sleep(forTimeInterval: 0.25)
                 v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             }
             let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
+            if !self.transportDebugLoggingEnabled {
+                self.setTransportDebugLogging(false, deviceID: deviceID)
+            }
             let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
 
             DispatchQueue.main.async {
@@ -1692,8 +1727,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         publishDiscoveredDevices()
 
         DispatchQueue.global(qos: .userInitiated).async {
+            if self.transportDebugLoggingEnabled {
+                self.setTransportDebugLogging(true, deviceID: record.id)
+            }
             let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: record.id)
             let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: record.id)
+            if !self.transportDebugLoggingEnabled {
+                self.setTransportDebugLogging(false, deviceID: record.id)
+            }
 
             DispatchQueue.main.async {
                 if shouldBecomeActive {
@@ -2057,8 +2098,14 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         if bleCommandCharacteristicsByID[peripheral.identifier] != nil {
             let deviceID = "ble:\(peripheral.identifier.uuidString)"
             DispatchQueue.global(qos: .userInitiated).async {
+                if self.transportDebugLoggingEnabled {
+                    self.setTransportDebugLogging(true, deviceID: deviceID)
+                }
                 let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: deviceID)
                 let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: deviceID)
+                if !self.transportDebugLoggingEnabled {
+                    self.setTransportDebugLogging(false, deviceID: deviceID)
+                }
                 DispatchQueue.main.async {
                     if self.activeDeviceID == deviceID {
                         self.isConnected = true
