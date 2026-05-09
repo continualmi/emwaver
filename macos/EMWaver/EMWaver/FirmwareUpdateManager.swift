@@ -16,6 +16,11 @@ final class FirmwareUpdateManager: ObservableObject {
         let app: URL
     }
 
+    private struct EspBootloaderIdentity {
+        let port: String
+        let chip: String
+    }
+
     @Published var isPresented: Bool = false
     @Published var dfuConnected: Bool = false
     @Published var espBootloaderConnected: Bool = false
@@ -426,42 +431,43 @@ final class FirmwareUpdateManager: ObservableObject {
         return ports
     }
 
-    private func resolveEspFlashPort() throws -> String {
-        if let detected = try detectEspBootloaderPort() {
-            return detected
-        }
-
-        let ports = try espFlashPortCandidates()
+    private func preferredEspFlashPorts(from ports: [String]) -> [String] {
         let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
-        if preferred.count == 1, let port = preferred.first {
-            return port
-        }
-        if ports.count == 1, let port = ports.first {
-            return port
-        }
-        throw NSError(
-            domain: "FirmwareUpdateManager",
-            code: 18,
-            userInfo: [NSLocalizedDescriptionKey: "Could not choose a unique ESP serial port. Connect only the ESP flash port, then retry."]
-        )
+        return preferred.isEmpty ? ports : preferred
     }
 
     private func detectEspBootloaderPort() throws -> String? {
+        try detectEspBootloaderIdentity()?.port
+    }
+
+    private func resolveEspBootloaderIdentity() throws -> EspBootloaderIdentity {
+        if let identity = try detectEspBootloaderIdentity() {
+            return identity
+        }
+
+        throw NSError(
+            domain: "FirmwareUpdateManager",
+            code: 18,
+            userInfo: [NSLocalizedDescriptionKey: "Could not identify an ESP bootloader serial port. Put the board in bootloader mode, then retry."]
+        )
+    }
+
+    private func detectEspBootloaderIdentity() throws -> EspBootloaderIdentity? {
         let ports = try espFlashPortCandidates()
-        let preferred = ports.filter { $0.contains("usbmodem") || $0.contains("usbserial") || $0.contains("SLAB_USBtoUART") }
-        let candidates = preferred.isEmpty ? ports : preferred
+        let candidates = preferredEspFlashPorts(from: ports)
 
         for port in candidates {
-            let (code, _, _) = try runEspHelperAndWait(arguments: ["read-identity", "--port", port, "--baud", "115200"])
-            if code == 0 {
-                return port
+            do {
+                return try readEspBootloaderIdentity(port: port)
+            } catch {
+                continue
             }
         }
 
         return nil
     }
 
-    private func detectEspFlashChip(port: String) throws -> String {
+    private func readEspBootloaderIdentity(port: String) throws -> EspBootloaderIdentity {
         let (code, stdout, stderr) = try runEspHelperAndWait(arguments: ["read-identity", "--port", port, "--baud", "115200"])
         if code != 0 {
             let msg = stderr.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -472,12 +478,15 @@ final class FirmwareUpdateManager: ObservableObject {
             )
         }
 
+        return EspBootloaderIdentity(port: port, chip: try chipFromEspIdentity(stdout: stdout))
+    }
+
+    private func chipFromEspIdentity(stdout: String) throws -> String {
         for line in stdout.split(separator: "\n") {
             let parts = line.split(separator: "=", maxSplits: 1).map(String.init)
             guard parts.count == 2, parts[0] == "CHIP_NAME" else { continue }
             return try normalizedEspFlashChip(parts[1])
         }
-
         throw NSError(
             domain: "FirmwareUpdateManager",
             code: 20,
@@ -500,13 +509,12 @@ final class FirmwareUpdateManager: ObservableObject {
         espSerialQueue.async { [weak self] in
             guard let self else { return }
             do {
-                let port = try self.resolveEspFlashPort()
-                let chip = try self.detectEspFlashChip(port: port)
+                let identity = try self.resolveEspBootloaderIdentity()
                 DispatchQueue.main.async {
-                    self.appendLog("ESP flash port: \(port)")
-                    self.appendLog("ESP chip target: \(chip)")
+                    self.appendLog("ESP flash port: \(identity.port)")
+                    self.appendLog("ESP chip target: \(identity.chip)")
                     do {
-                        try self.runEspFlash(port: port, chip: chip, attemptsRemaining: 2)
+                        try self.runEspFlash(port: identity.port, chip: identity.chip, attemptsRemaining: 2)
                     } catch {
                         self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
                         self.progressMessage = ""
