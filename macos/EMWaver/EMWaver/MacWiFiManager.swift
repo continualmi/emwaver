@@ -385,6 +385,7 @@ final class MacWiFiManager {
             let id = Self.deviceID(host: host, port: Self.defaultPort)
             advertisedIDs.insert(id)
             let metadata = Self.bonjourMetadata(from: result.metadata)
+            migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
@@ -423,6 +424,38 @@ final class MacWiFiManager {
         }
 
         publishDevices()
+    }
+
+    private func migrateSingleSavedPairingIfNeeded(
+        to advertisedID: String,
+        host: String,
+        displayName: String,
+        metadata: BonjourMetadata
+    ) {
+        guard pairedDevicesByID[advertisedID] == nil else { return }
+        let candidates = pairedDevicesByID.keys.filter { pairedID in
+            pairedID != advertisedID && discoveredDevicesByID[pairedID]?.isAdvertised != true
+        }
+        guard candidates.count == 1,
+              let oldID = candidates.first,
+              let oldPairing = pairedDevicesByID[oldID],
+              let secret = pairedSecret(id: oldID, paired: oldPairing),
+              !secret.isEmpty else {
+            return
+        }
+
+        _ = Self.savePairingSecret(secret, id: advertisedID)
+        Self.deletePairingSecret(id: oldID)
+        pairedDevicesByID.removeValue(forKey: oldID)
+        discoveredDevicesByID.removeValue(forKey: oldID)
+        pairedDevicesByID[advertisedID] = PairedWiFiDevice(
+            host: host,
+            port: Self.defaultPort,
+            displayName: displayName.isEmpty ? host : displayName,
+            secret: nil,
+            lastSeen: Date()
+        )
+        savePairedDevices()
     }
 
     private func sendHello(socket: URLSessionWebSocketTask, secret: String, challenge: String) {

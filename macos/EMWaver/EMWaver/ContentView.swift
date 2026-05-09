@@ -262,27 +262,10 @@ struct ContentView: View {
                     .transition(.opacity)
                 }
 
-                if appRouter.isDeviceSheetPresented {
-                    Color.black.opacity(0.28)
-                        .ignoresSafeArea()
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            appRouter.isDeviceSheetPresented = false
-                        }
-
-                    DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
-                        .frame(maxWidth: 720, maxHeight: 720)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                        .shadow(color: Color.black.opacity(0.28), radius: 24, x: 0, y: 12)
-                        .padding(32)
-                        .transition(.scale(scale: 0.98).combined(with: .opacity))
-                }
             }
             .overlay(alignment: .top) {
                 Divider()
             }
-            .animation(.easeOut(duration: 0.16), value: appRouter.isDeviceSheetPresented)
         }
         .toolbar {
             ToolbarItemGroup(placement: .automatic) {
@@ -313,6 +296,9 @@ struct ContentView: View {
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
                 .environmentObject(auth)
+        }
+        .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
+            DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
         }
         .sheet(isPresented: $firmwareUpdater.isPresented) {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)

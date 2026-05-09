@@ -410,8 +410,21 @@ struct DeviceConnectionSheet: View {
     }
 
     private var firmwareCard: some View {
-        HStack {
-            Spacer()
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: "arrow.triangle.2.circlepath")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Firmware")
+                    .font(.subheadline.weight(.semibold))
+                Text(isEspBoard ? "Flash the bundled ESP32 firmware." : "Update the connected board firmware.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 12)
 
             Button(isEspBoard ? "Flash firmware" : "Update firmware") {
                 firmwareUpdater.present(boardType: currentBoardType)
@@ -421,7 +434,7 @@ struct DeviceConnectionSheet: View {
             .disabled(!device.isConnected && !firmwareUpdater.dfuConnected && !espBootloaderAvailable)
         }
         .padding(18)
-        .frame(maxWidth: .infinity, alignment: .trailing)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
