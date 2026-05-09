@@ -17,6 +17,7 @@ struct DeviceConnectionSheet: View {
     @State private var wifiSSID: String = ""
     @State private var wifiPassword: String = ""
     @State private var wifiHostname: String = ""
+    @State private var isWiFiSetupPresented: Bool = false
 
     private var parsedWiFiPort: Int? {
         Self.parsedWiFiPort(wifiPort)
@@ -157,6 +158,9 @@ struct DeviceConnectionSheet: View {
         .onChange(of: wifiPort) { _ in
             saveWiFiFormState()
         }
+        .sheet(isPresented: $isWiFiSetupPresented) {
+            wifiSetupSheet
+        }
     }
 
     private func loadWiFiFormState() {
@@ -283,54 +287,18 @@ struct DeviceConnectionSheet: View {
     }
 
     private var wifiCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
-                    .font(.headline)
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: "wifi")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
 
-                Spacer()
-
-                Text("USB or BLE")
-                    .font(.caption.weight(.medium))
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Wi-Fi Setup")
+                    .font(.subheadline.weight(.semibold))
+                Text("Provision this ESP32 for local network control.")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(Color.secondary.opacity(0.12)))
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
-                    GridRow {
-                        TextField("SSID", text: $wifiSSID)
-                            .textFieldStyle(.roundedBorder)
-                            .frame(minWidth: 250)
-
-                        TextField("Hostname", text: $wifiHostname)
-                            .textFieldStyle(.roundedBorder)
-                    }
-
-                    GridRow {
-                        SecureField("Wi-Fi password", text: $wifiPassword)
-                            .textFieldStyle(.roundedBorder)
-
-                        SecureField("Pairing secret", text: $wifiPairingSecret)
-                            .textFieldStyle(.roundedBorder)
-                    }
-                }
-
-                ViewThatFits(in: .horizontal) {
-                    wifiProvisioningActions
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack(spacing: 10) {
-                            wifiSendSetupButton
-                            wifiClearSetupButton
-                        }
-                        HStack(spacing: 10) {
-                            wifiResetPairingButton
-                            wifiStatusButton
-                        }
-                    }
-                }
 
                 if let status = device.wifiProvisioningStatus, !status.isEmpty {
                     Text(status)
@@ -340,11 +308,83 @@ struct DeviceConnectionSheet: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.bottom, 4)
+
+            Spacer(minLength: 12)
+
+            Button("Set Up Wi-Fi") {
+                isWiFiSetupPresented = true
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(!device.isConnected || device.connectedTransportKind == "Wi-Fi")
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var wifiSetupSheet: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
+                        .font(.headline)
+                    Text("Send network credentials and the local pairing secret over the current USB or BLE connection.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                Button("Close") {
+                    isWiFiSetupPresented = false
+                }
+                .buttonStyle(.bordered)
+            }
+
+            Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 10) {
+                GridRow {
+                    TextField("SSID", text: $wifiSSID)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(minWidth: 250)
+
+                    TextField("Hostname", text: $wifiHostname)
+                        .textFieldStyle(.roundedBorder)
+                }
+
+                GridRow {
+                    SecureField("Wi-Fi password", text: $wifiPassword)
+                        .textFieldStyle(.roundedBorder)
+
+                    SecureField("Pairing secret", text: $wifiPairingSecret)
+                        .textFieldStyle(.roundedBorder)
+                }
+            }
+
+            ViewThatFits(in: .horizontal) {
+                wifiProvisioningActions
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        wifiSendSetupButton
+                        wifiClearSetupButton
+                    }
+                    HStack(spacing: 10) {
+                        wifiResetPairingButton
+                        wifiStatusButton
+                    }
+                }
+            }
+
+            if let status = device.wifiProvisioningStatus, !status.isEmpty {
+                Text(status)
+                    .font(.caption)
+                    .foregroundStyle(device.isWiFiProvisioningError ? Color.orange : .secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(24)
+        .frame(minWidth: 560, idealWidth: 620)
     }
 
     private var wifiProvisioningActions: some View {
