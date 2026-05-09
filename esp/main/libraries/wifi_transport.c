@@ -115,6 +115,7 @@ static bool auth_message_matches(const uint8_t *data, size_t len);
 static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence);
 static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_t sequence, const uint8_t *payload, size_t payload_len);
 static bool auth_challenge_expired(void);
+static void auth_challenge_task(void *arg);
 static void auth_timeout_task(void *arg);
 static void generate_auth_challenge(void);
 static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
@@ -771,7 +772,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
 {
     const int current_fd = httpd_req_to_sockfd(req);
     if (req->method == HTTP_GET) {
+        ESP_LOGI(TAG, "Wi-Fi WebSocket session opened fd=%d", current_fd);
         if (s_active_fd >= 0 && s_active_fd != current_fd) {
+            ESP_LOGW(TAG, "Wi-Fi WebSocket busy; rejecting fd=%d active=%d", current_fd, s_active_fd);
             httpd_ws_frame_t reply = {
                 .final = true,
                 .fragmented = false,
@@ -786,24 +789,16 @@ static esp_err_t ws_handler(httpd_req_t *req)
         s_authenticated = false;
         s_use_envelope = false;
         generate_auth_challenge();
+        const uint32_t generation = s_auth_generation;
         if (xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL) != pdPASS) {
             ESP_LOGW(TAG, "failed to start Wi-Fi auth timeout task");
             close_active_session(current_fd);
             return ESP_ERR_NO_MEM;
         }
-        char challenge_json[72];
-        snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
-        httpd_ws_frame_t challenge = {
-            .final = true,
-            .fragmented = false,
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t *)challenge_json,
-            .len = strlen(challenge_json),
-        };
-        esp_err_t err = httpd_ws_send_frame(req, &challenge);
-        if (err != ESP_OK) {
+        if (xTaskCreate(auth_challenge_task, "wifi_auth_challenge", 3072, (void *)(uintptr_t)generation, 4, NULL) != pdPASS) {
+            ESP_LOGW(TAG, "failed to start Wi-Fi auth challenge task");
             close_active_session(current_fd);
-            return err;
+            return ESP_ERR_NO_MEM;
         }
         return ESP_OK;
     }
@@ -812,6 +807,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     frame.type = HTTPD_WS_TYPE_BINARY;
     esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
     if (err != ESP_OK || frame.len == 0 || frame.len > 256) {
+        ESP_LOGW(TAG, "Wi-Fi WebSocket frame header failed fd=%d err=%s len=%u", current_fd, esp_err_to_name(err), (unsigned)frame.len);
         close_active_session(current_fd);
         return err == ESP_OK ? ESP_FAIL : err;
     }
@@ -820,6 +816,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     frame.payload = data;
     err = httpd_ws_recv_frame(req, &frame, sizeof(data));
     if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Wi-Fi WebSocket frame read failed fd=%d err=%s", current_fd, esp_err_to_name(err));
         close_active_session(current_fd);
         return err;
     }
@@ -841,6 +838,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             s_active_fd = current_fd;
             s_authenticated = true;
             s_auth_challenge[0] = '\0';
+            ESP_LOGI(TAG, "Wi-Fi WebSocket authenticated fd=%d", current_fd);
             httpd_ws_frame_t reply = {
                 .final = true,
                 .fragmented = false,
@@ -850,6 +848,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
             };
             return httpd_ws_send_frame(req, &reply);
         }
+        ESP_LOGW(TAG, "Wi-Fi WebSocket auth failed fd=%d", current_fd);
         httpd_ws_frame_t reply = {
             .final = true,
             .fragmented = false,
@@ -976,12 +975,39 @@ static bool auth_challenge_expired(void)
     return (int32_t)(xTaskGetTickCount() - s_auth_deadline_ticks) >= 0;
 }
 
+static void auth_challenge_task(void *arg)
+{
+    const uint32_t generation = (uint32_t)(uintptr_t)arg;
+    vTaskDelay(pdMS_TO_TICKS(1));
+    if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
+        const int fd = s_active_fd;
+        char challenge_json[72];
+        snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
+        httpd_ws_frame_t challenge = {
+            .final = true,
+            .fragmented = false,
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t *)challenge_json,
+            .len = strlen(challenge_json),
+        };
+        const esp_err_t err = httpd_ws_send_data(s_httpd, fd, &challenge);
+        if (err == ESP_OK) {
+            ESP_LOGI(TAG, "Wi-Fi WebSocket auth challenge sent fd=%d", fd);
+        } else {
+            ESP_LOGW(TAG, "Wi-Fi WebSocket auth challenge send failed fd=%d err=%s", fd, esp_err_to_name(err));
+            close_active_session(fd);
+        }
+    }
+    vTaskDelete(NULL);
+}
+
 static void auth_timeout_task(void *arg)
 {
     const uint32_t generation = (uint32_t)(uintptr_t)arg;
     vTaskDelay(pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS));
     if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
         const int fd = s_active_fd;
+        ESP_LOGW(TAG, "Wi-Fi WebSocket auth timed out fd=%d", fd);
         httpd_ws_frame_t reply = {
             .final = true,
             .fragmented = false,
