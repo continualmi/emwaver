@@ -11,13 +11,17 @@ struct DeviceConnectionSheet: View {
         var transports: [LocalDeviceDescriptor]
 
         var detailText: String {
-            var parts = [LocalDeviceLabelFormatter.boardDisplayName(boardType)]
             if let uidText {
-                parts.append(uidText)
-            } else if hasUIDError {
-                parts.append("uid unavailable")
+                return uidText
             }
-            return parts.joined(separator: " · ")
+            if hasUIDError {
+                return "uid unavailable"
+            }
+            return ""
+        }
+
+        var boardText: String {
+            LocalDeviceLabelFormatter.boardDisplayName(boardType)
         }
     }
 
@@ -29,6 +33,7 @@ struct DeviceConnectionSheet: View {
 
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
+    @Binding var selectedDeviceID: String?
     @Environment(\.dismiss) private var dismiss
     @State private var wifiHost: String = ""
     @State private var wifiPort: String = "3922"
@@ -293,13 +298,21 @@ struct DeviceConnectionSheet: View {
                                 Text(group.title)
                                     .font(.subheadline.weight(.medium))
                                     .lineLimit(1)
-                                Text(group.detailText)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
+                                if !group.detailText.isEmpty {
+                                    Text(group.detailText)
+                                        .font(.caption.weight(.medium))
+                                        .foregroundStyle(.secondary)
+                                        .lineLimit(1)
+                                }
                             }
 
                             Spacer(minLength: 0)
+
+                            Text(group.boardText)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .frame(minWidth: 72, alignment: .trailing)
 
                             transportControl(for: group)
                         }
@@ -564,6 +577,7 @@ struct DeviceConnectionSheet: View {
                 set: { selectedID in
                     guard let item = group.transports.first(where: { $0.id == selectedID }),
                           !isTransportActionDisabled(item) else { return }
+                    selectedDeviceID = selectedID
                     device.connectDevice(id: selectedID)
                 }
             )) {
@@ -577,11 +591,12 @@ struct DeviceConnectionSheet: View {
             .frame(width: max(150, CGFloat(group.transports.count) * 74))
             .help("Switch transport for this device")
         } else if let item = preferredTransport(for: group) {
-            Button(transportActionTitle(for: item)) {
-                device.connectDevice(id: item.id)
-            }
-            .buttonStyle(.bordered)
-            .disabled(isTransportActionDisabled(item))
+            Text(item.transport.rawValue)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 6)
+                .background(Capsule().fill(Color.secondary.opacity(0.12)))
             .help(deviceDetailText(for: item))
         }
     }

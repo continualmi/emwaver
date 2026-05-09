@@ -306,7 +306,11 @@ struct ContentView: View {
                 .environmentObject(auth)
         }
         .sheet(isPresented: $appRouter.isDeviceSheetPresented) {
-            DeviceConnectionSheet(device: device, firmwareUpdater: firmwareUpdater)
+            DeviceConnectionSheet(
+                device: device,
+                firmwareUpdater: firmwareUpdater,
+                selectedDeviceID: $scriptSessions.selectedDeviceID
+            )
         }
         .sheet(isPresented: $firmwareUpdater.isPresented) {
             FirmwareUpdateSheet(device: device, updater: firmwareUpdater)
