@@ -398,14 +398,13 @@ final class MacWiFiManager {
         for result in results {
             guard case let .service(name, type, domain, _) = result.endpoint,
                   type == Self.serviceType else { continue }
-            let host = "\(name).\(domain)"
-                .replacingOccurrences(of: "..", with: ".")
-                .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+            let metadata = Self.bonjourMetadata(from: result.metadata)
+            let host = Self.bonjourHost(name: name, domain: domain, metadata: metadata)
             let id = Self.deviceID(host: host, port: Self.defaultPort)
             advertisedIDs.insert(id)
-            let metadata = Self.bonjourMetadata(from: result.metadata)
             migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
-            Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(metadata.capabilities.joined(separator: ",")) paired=\(pairedDevicesByID[id] != nil)")
+            let capabilities = metadata.capabilities.isEmpty ? ["wifi"] : metadata.capabilities
+            Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ",")) paired=\(pairedDevicesByID[id] != nil)")
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
@@ -414,8 +413,8 @@ final class MacWiFiManager {
                 localIdentifier: metadata.localIdentifier,
                 boardType: metadata.boardType ?? "esp32",
                 firmwareVersion: metadata.firmwareVersion,
-                protocolVersion: metadata.protocolVersion,
-                capabilities: metadata.capabilities,
+                protocolVersion: metadata.protocolVersion ?? "1",
+                capabilities: capabilities,
                 isPaired: pairedDevicesByID[id] != nil,
                 isAdvertised: true,
                 lastSeen: Date()
@@ -849,6 +848,34 @@ final class MacWiFiManager {
         guard isValidManualHost(host), isValidPort(port) else { return nil }
         let urlHost = host.contains(":") ? "[\(host)]" : host
         return URL(string: "ws://\(urlHost):\(port)/v1/ws")
+    }
+
+    private static func bonjourHost(name: String, domain: String, metadata: BonjourMetadata) -> String {
+        if let localIdentifier = metadata.localIdentifier,
+           let host = hostFromLocalIdentifier(localIdentifier) {
+            return host
+        }
+        if let host = hostFromServiceName(name) {
+            return host
+        }
+        return "\(name).\(domain)"
+            .replacingOccurrences(of: "..", with: ".")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+    }
+
+    private static func hostFromServiceName(_ name: String) -> String? {
+        let parts = name.split(separator: " ")
+        guard let suffix = parts.last else { return nil }
+        return hostFromLocalIdentifier(String(suffix))
+    }
+
+    private static func hostFromLocalIdentifier(_ value: String) -> String? {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              trimmed.range(of: #"^[0-9A-Fa-f]{4,8}$"#, options: .regularExpression) != nil else {
+            return nil
+        }
+        return "emwaver-\(trimmed.lowercased()).local"
     }
 
     private static func isValidIPv6Literal(_ host: String) -> Bool {
