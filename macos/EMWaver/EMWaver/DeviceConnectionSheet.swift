@@ -348,58 +348,26 @@ struct DeviceConnectionSheet: View {
                         }
                     }
 
-                    HStack(spacing: 10) {
-                        Button(device.isWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup") {
-                            saveWiFiFormState()
-                            device.provisionWiFi(
-                                ssid: wifiSSID,
-                                password: wifiPassword,
-                                pairingSecret: wifiPairingSecret,
-                                hostname: wifiHostname
-                            )
+                    ViewThatFits(in: .horizontal) {
+                        wifiProvisioningActions
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                wifiSendSetupButton
+                                wifiClearSetupButton
+                            }
+                            HStack(spacing: 10) {
+                                wifiResetPairingButton
+                                wifiStatusButton
+                            }
                         }
-                        .buttonStyle(.bordered)
-                        .disabled(device.isWiFiProvisioning ||
-                                  !device.isConnected ||
-                                  device.connectedTransportKind == "Wi-Fi" ||
-                                  wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
 
-                        Button("Clear Setup") {
-                            device.clearWiFiProvisioning(hostname: wifiHostname)
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(device.isWiFiProvisioning ||
-                                  !device.isConnected ||
-                                  device.connectedTransportKind == "Wi-Fi")
-
-                        Button("Reset Pairing") {
-                            device.resetWiFiPairing(
-                                pairingSecret: wifiPairingSecret,
-                                hostname: wifiHostname,
-                                pairingHost: wifiHost
-                            )
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(device.isWiFiProvisioning ||
-                                  !device.isConnected ||
-                                  device.connectedTransportKind == "Wi-Fi" ||
-                                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-
-                        Button("Status") {
-                            device.refreshWiFiProvisioningStatus()
-                        }
-                        .buttonStyle(.bordered)
-                        .disabled(device.isWiFiProvisioning ||
-                                  !device.isConnected ||
-                                  device.connectedTransportKind == "Wi-Fi")
-
-                        if let status = device.wifiProvisioningStatus, !status.isEmpty {
-                            Text(status)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
+                    if let status = device.wifiProvisioningStatus, !status.isEmpty {
+                        Text(status)
+                            .font(.caption)
+                            .foregroundStyle(device.isWiFiProvisioningError ? Color.orange : .secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
                 .padding(.bottom, 4)
@@ -443,11 +411,74 @@ struct DeviceConnectionSheet: View {
                 Text("Manual IP works when mDNS does not cross a user-owned VPN.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var wifiProvisioningActions: some View {
+        HStack(spacing: 10) {
+            wifiSendSetupButton
+            wifiClearSetupButton
+            wifiResetPairingButton
+            wifiStatusButton
+        }
+    }
+
+    private var wifiSendSetupButton: some View {
+        Button(device.isWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup") {
+            saveWiFiFormState()
+            device.provisionWiFi(
+                ssid: wifiSSID,
+                password: wifiPassword,
+                pairingSecret: wifiPairingSecret,
+                hostname: wifiHostname
+            )
+        }
+        .buttonStyle(.bordered)
+        .disabled(device.isWiFiProvisioning ||
+                  !device.isConnected ||
+                  device.connectedTransportKind == "Wi-Fi" ||
+                  wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private var wifiClearSetupButton: some View {
+        Button("Clear Setup") {
+            device.clearWiFiProvisioning(hostname: wifiHostname)
+        }
+        .buttonStyle(.bordered)
+        .disabled(device.isWiFiProvisioning ||
+                  !device.isConnected ||
+                  device.connectedTransportKind == "Wi-Fi")
+    }
+
+    private var wifiResetPairingButton: some View {
+        Button("Reset Pairing") {
+            device.resetWiFiPairing(
+                pairingSecret: wifiPairingSecret,
+                hostname: wifiHostname,
+                pairingHost: wifiHost
+            )
+        }
+        .buttonStyle(.bordered)
+        .disabled(device.isWiFiProvisioning ||
+                  !device.isConnected ||
+                  device.connectedTransportKind == "Wi-Fi" ||
+                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    }
+
+    private var wifiStatusButton: some View {
+        Button("Status") {
+            device.refreshWiFiProvisioningStatus()
+        }
+        .buttonStyle(.bordered)
+        .disabled(device.isWiFiProvisioning ||
+                  !device.isConnected ||
+                  device.connectedTransportKind == "Wi-Fi")
     }
 
     private var bleCard: some View {

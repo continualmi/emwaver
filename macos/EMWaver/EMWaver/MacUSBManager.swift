@@ -278,6 +278,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var isBleScanning: Bool = false
     @Published var bluetoothStateText: String = "Starting"
     @Published var wifiProvisioningStatus: String? = nil
+    @Published var isWiFiProvisioningError: Bool = false
     @Published var isWiFiProvisioning: Bool = false
 
     private enum ActiveTransport {
@@ -514,6 +515,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
+            self.isWiFiProvisioningError = false
             self.wifiProvisioningStatus = "Sending Wi-Fi setup"
         }
 
@@ -584,6 +586,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
+            self.isWiFiProvisioningError = false
             self.wifiProvisioningStatus = "Clearing Wi-Fi setup"
         }
 
@@ -636,6 +639,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
+            self.isWiFiProvisioningError = false
             self.wifiProvisioningStatus = "Resetting Wi-Fi pairing"
         }
 
@@ -689,6 +693,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     func refreshWiFiProvisioningStatus() {
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
+            self.isWiFiProvisioningError = false
             self.wifiProvisioningStatus = "Checking Wi-Fi status"
         }
 
@@ -946,6 +951,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         DispatchQueue.main.async {
             self.isWiFiProvisioning = false
+            self.isWiFiProvisioningError = isError
             self.wifiProvisioningStatus = message
         }
     }
