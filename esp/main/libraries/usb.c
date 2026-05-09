@@ -272,7 +272,9 @@ static void usb_midi_rx_task(void *arg)
     for (;;) {
         s_usb_ready = tud_ready();
 
+        bool had_work = false;
         while (tud_midi_available()) {
+            had_work = true;
             if (!tud_midi_packet_read(packet)) {
                 break;
             }
@@ -297,7 +299,7 @@ static void usb_midi_rx_task(void *arg)
         }
 
         usb_poll_tx();
-        vTaskDelay(pdMS_TO_TICKS(1));
+        vTaskDelay(pdMS_TO_TICKS(had_work ? 1 : 10));
     }
 }
 
