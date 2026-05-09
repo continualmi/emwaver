@@ -811,6 +811,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     frame.type = HTTPD_WS_TYPE_BINARY;
     esp_err_t err = httpd_ws_recv_frame(req, &frame, 0);
     if (err != ESP_OK || frame.len == 0 || frame.len > 256) {
+        close_active_session(current_fd);
         return err;
     }
 
@@ -818,6 +819,7 @@ static esp_err_t ws_handler(httpd_req_t *req)
     frame.payload = data;
     err = httpd_ws_recv_frame(req, &frame, sizeof(data));
     if (err != ESP_OK) {
+        close_active_session(current_fd);
         return err;
     }
 
@@ -870,6 +872,9 @@ static esp_err_t ws_handler(httpd_req_t *req)
         enveloped = has_sysex;
     }
     if (!has_sysex || !enqueue_sysex(sysex, sequence, enveloped)) {
+        if (!has_sysex) {
+            close_active_session(current_fd);
+        }
         return ESP_FAIL;
     }
     return ESP_OK;
