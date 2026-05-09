@@ -86,14 +86,7 @@ final class FirmwareUpdateManager: ObservableObject {
 
         let boardType = effectiveBoardType(for: device)
         if Self.isEspBoardType(boardType) || espBootloaderConnected || espBootloaderPort != nil {
-            do {
-                try startEspSerialUpdate(device: device)
-            } catch {
-                updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                progressMessage = ""
-                isFlashing = false
-                appendLog(updateError ?? "ESP update failed")
-            }
+            startEspSerialUpdate(device: device)
             return
         }
 
@@ -492,7 +485,7 @@ final class FirmwareUpdateManager: ObservableObject {
         )
     }
 
-    private func startEspSerialUpdate(device: MacUSBManager) throws {
+    private func startEspSerialUpdate(device: MacUSBManager) {
         progressMessage = "Preparing ESP serial update..."
         completionMessage = "ESP firmware update complete. Reconnect the device in Run Mode."
         appendLog("ESP32 update selected")
@@ -504,15 +497,32 @@ final class FirmwareUpdateManager: ObservableObject {
         isFlashing = true
         progressPct = 0
 
-        let port = try espSerialQueue.sync {
-            try resolveEspFlashPort()
+        espSerialQueue.async { [weak self] in
+            guard let self else { return }
+            do {
+                let port = try self.resolveEspFlashPort()
+                let chip = try self.detectEspFlashChip(port: port)
+                DispatchQueue.main.async {
+                    self.appendLog("ESP flash port: \(port)")
+                    self.appendLog("ESP chip target: \(chip)")
+                    do {
+                        try self.runEspFlash(port: port, chip: chip, attemptsRemaining: 2)
+                    } catch {
+                        self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                        self.progressMessage = ""
+                        self.isFlashing = false
+                        self.appendLog(self.updateError ?? "ESP update failed")
+                    }
+                }
+            } catch {
+                DispatchQueue.main.async {
+                    self.updateError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                    self.progressMessage = ""
+                    self.isFlashing = false
+                    self.appendLog(self.updateError ?? "ESP update failed")
+                }
+            }
         }
-        appendLog("ESP flash port: \(port)")
-        let chip = try espSerialQueue.sync {
-            try detectEspFlashChip(port: port)
-        }
-        appendLog("ESP chip target: \(chip)")
-        try runEspFlash(port: port, chip: chip, attemptsRemaining: 2)
     }
 
     private func runEspHelperAndWait(arguments: [String]) throws -> (terminationStatus: Int32, stdout: String, stderr: String) {
