@@ -2,6 +2,29 @@ import Security
 import SwiftUI
 
 struct DeviceConnectionSheet: View {
+    private struct LocalDeviceGroup: Identifiable {
+        let id: String
+        var title: String
+        var boardType: String?
+        var uidText: String?
+        var hasUIDError: Bool
+        var transports: [LocalDeviceDescriptor]
+
+        var isActive: Bool {
+            transports.contains { $0.isActive }
+        }
+
+        var detailText: String {
+            var parts = [LocalDeviceLabelFormatter.boardDisplayName(boardType)]
+            if let uidText {
+                parts.append(uidText)
+            } else if hasUIDError {
+                parts.append("uid unavailable")
+            }
+            return parts.joined(separator: " · ")
+        }
+    }
+
     private static let wifiSSIDDefaultsKey = "emwaver.wifi.setup.ssid"
     private static let wifiHostDefaultsKey = "emwaver.wifi.manual.host"
     private static let wifiPortDefaultsKey = "emwaver.wifi.manual.port"
@@ -241,18 +264,18 @@ struct DeviceConnectionSheet: View {
                     .foregroundStyle(.secondary)
             } else {
                 VStack(spacing: 8) {
-                    ForEach(device.discoveredDevices) { item in
+                    ForEach(groupedLocalDevices) { group in
                         HStack(spacing: 12) {
-                            Image(systemName: transportIcon(for: item.transport))
-                                .foregroundStyle(item.isActive ? Color.green : .secondary)
+                            Image(systemName: group.isActive ? activeTransportIcon(for: group) : "cpu")
+                                .foregroundStyle(group.isActive ? Color.green : .secondary)
                                 .frame(width: 20)
 
                             VStack(alignment: .leading, spacing: 3) {
                                 HStack(spacing: 8) {
-                                    Text(item.moduleLabel?.isEmpty == false ? item.moduleLabel! : item.displayName)
+                                    Text(group.title)
                                         .font(.subheadline.weight(.medium))
                                         .lineLimit(1)
-                                    if item.isActive {
+                                    if group.isActive {
                                         Text("Active")
                                             .font(.caption2.weight(.semibold))
                                             .foregroundStyle(.green)
@@ -261,7 +284,7 @@ struct DeviceConnectionSheet: View {
                                             .background(Capsule().fill(Color.green.opacity(0.12)))
                                     }
                                 }
-                                Text(deviceDetailText(for: item))
+                                Text(group.detailText)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                                     .lineLimit(1)
@@ -269,11 +292,16 @@ struct DeviceConnectionSheet: View {
 
                             Spacer(minLength: 0)
 
-                            Button(deviceActionTitle(for: item)) {
-                                device.connectDevice(id: item.id)
+                            HStack(spacing: 8) {
+                                ForEach(group.transports) { item in
+                                    Button(transportActionTitle(for: item)) {
+                                        device.connectDevice(id: item.id)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .disabled(isTransportActionDisabled(item))
+                                    .help(deviceDetailText(for: item))
+                                }
                             }
-                            .buttonStyle(.bordered)
-                            .disabled(item.isActive || item.connectionState == .connecting || item.lastErrorText == "Pairing required")
                         }
                         .padding(10)
                         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Color.secondary.opacity(0.06)))
@@ -284,6 +312,45 @@ struct DeviceConnectionSheet: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
+    private var groupedLocalDevices: [LocalDeviceGroup] {
+        var groups: [LocalDeviceGroup] = []
+        var indexByKey: [String: Int] = [:]
+
+        for item in device.discoveredDevices {
+            let uid = hardwareUID(from: item.identifierText)
+            let key = uid.map { "uid:\($0)" } ?? item.id
+            if let idx = indexByKey[key] {
+                groups[idx].transports.append(item)
+                groups[idx].title = preferredGroupTitle(current: groups[idx].title, candidate: groupTitleCandidate(for: item))
+                groups[idx].boardType = groups[idx].boardType ?? item.boardType
+                groups[idx].uidText = groups[idx].uidText ?? item.identifierText
+                groups[idx].hasUIDError = groups[idx].hasUIDError || item.lastErrorText == "UID unavailable"
+            } else {
+                indexByKey[key] = groups.count
+                groups.append(LocalDeviceGroup(
+                    id: key,
+                    title: groupTitleCandidate(for: item),
+                    boardType: item.boardType,
+                    uidText: item.identifierText,
+                    hasUIDError: item.lastErrorText == "UID unavailable",
+                    transports: [item]
+                ))
+            }
+        }
+
+        return groups.map { group in
+            var copy = group
+            copy.transports.sort { lhs, rhs in
+                transportSortKey(lhs.transport) < transportSortKey(rhs.transport)
+            }
+            return copy
+        }
+        .sorted { lhs, rhs in
+            if lhs.isActive != rhs.isActive { return lhs.isActive && !rhs.isActive }
+            return lhs.title.localizedStandardCompare(rhs.title) == .orderedAscending
+        }
     }
 
     private var wifiCard: some View {
@@ -478,12 +545,24 @@ struct DeviceConnectionSheet: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
-    private func deviceActionTitle(for item: LocalDeviceDescriptor) -> String {
-        if item.isActive { return "Active" }
-        if item.lastErrorText == "Pairing required" { return "Pair" }
-        if item.connectionState == .connected { return "Select" }
-        if item.connectionState == .connecting { return "Connecting" }
-        return "Connect"
+    private func transportActionTitle(for item: LocalDeviceDescriptor) -> String {
+        let prefix = item.transport.rawValue
+        if item.isActive { return "\(prefix) Active" }
+        if item.lastErrorText == "Pairing required" { return "Pair \(prefix)" }
+        if item.connectionState == .connected { return "Use \(prefix)" }
+        if item.connectionState == .connecting { return "\(prefix) Connecting" }
+        return "Use \(prefix)"
+    }
+
+    private func isTransportActionDisabled(_ item: LocalDeviceDescriptor) -> Bool {
+        item.isActive || item.connectionState == .connecting || item.lastErrorText == "Pairing required"
+    }
+
+    private func activeTransportIcon(for group: LocalDeviceGroup) -> String {
+        if let active = group.transports.first(where: { $0.isActive }) {
+            return transportIcon(for: active.transport)
+        }
+        return group.transports.first.map { transportIcon(for: $0.transport) } ?? "cpu"
     }
 
     private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {
@@ -501,6 +580,46 @@ struct DeviceConnectionSheet: View {
         let errorText = item.lastErrorText.map { " · \($0.lowercased())" } ?? ""
         let identifierText = item.identifierText.map { " · \($0)" } ?? ""
         return "\(item.transport.rawValue) · \(item.boardType ?? "Unknown") · \(item.connectionState.rawValue)\(identifierText)\(errorText)"
+    }
+
+    private func hardwareUID(from identifierText: String?) -> String? {
+        guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
+        let uid = String(identifierText.dropFirst("UID ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        return uid.isEmpty ? nil : uid
+    }
+
+    private func groupTitleCandidate(for item: LocalDeviceDescriptor) -> String {
+        if let module = item.moduleLabel, !module.isEmpty, item.transport == .wifi {
+            return item.displayName
+        }
+        if let module = item.moduleLabel, !module.isEmpty {
+            return module
+        }
+        return item.displayName.isEmpty ? LocalDeviceLabelFormatter.boardDisplayName(item.boardType) : item.displayName
+    }
+
+    private func preferredGroupTitle(current: String, candidate: String) -> String {
+        if current.isEmpty { return candidate }
+        if candidate.isEmpty { return current }
+        if current == candidate { return current }
+        if current.localizedCaseInsensitiveContains("EMWaver") && !candidate.localizedCaseInsensitiveContains("EMWaver") {
+            return current
+        }
+        if candidate.localizedCaseInsensitiveContains("EMWaver") && !current.localizedCaseInsensitiveContains("EMWaver") {
+            return candidate
+        }
+        return current.count <= candidate.count ? current : candidate
+    }
+
+    private func transportSortKey(_ transport: LocalDeviceDescriptor.TransportKind) -> Int {
+        switch transport {
+        case .usbMidi:
+            return 0
+        case .ble:
+            return 1
+        case .wifi:
+            return 2
+        }
     }
 
     private func detailSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {

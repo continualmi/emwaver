@@ -1129,33 +1129,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func publishDiscoveredDevices(ports: [String]? = nil) {
         let portNames = ports ?? Array(portCandidatesByDisplayName.keys).sorted()
         var devices: [LocalDeviceDescriptor] = []
-        var indexByHardwareUID: [String: Int] = [:]
-
-        func appendOrMerge(_ descriptor: LocalDeviceDescriptor, hardwareUID: String?) {
-            guard let hardwareUID, !hardwareUID.isEmpty else {
-                devices.append(descriptor)
-                return
-            }
-            if let idx = indexByHardwareUID[hardwareUID] {
-                var existing = devices[idx]
-                existing.displayName = mergeDisplayNames(existing.displayName, descriptor.displayName)
-                existing.connectionState = strongestConnectionState(existing.connectionState, descriptor.connectionState)
-                existing.isActive = existing.isActive || descriptor.isActive
-                if existing.transport != descriptor.transport {
-                    existing.transport = .usbMidi
-                }
-                devices[idx] = existing
-            } else {
-                indexByHardwareUID[hardwareUID] = devices.count
-                devices.append(descriptor)
-            }
-        }
 
         for port in portNames.sorted() {
             let id = "midi:\(port)"
             let isActive = activeTransport == .usbMidi && connectedPortName == port && isTransportConnectedInternal()
-            appendOrMerge(LocalDeviceDescriptor(
-                id: hardwareUIDByDeviceID[id].map { "uid:\($0)" } ?? id,
+            devices.append(LocalDeviceDescriptor(
+                id: id,
                 displayName: port,
                 transport: .usbMidi,
                 boardType: inferBoardType(portName: port),
@@ -1164,7 +1143,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 connectionState: isActive ? .connected : .discovered,
                 lastErrorText: nil,
                 isActive: isActive
-            ), hardwareUID: hardwareUIDByDeviceID[id])
+            ))
         }
 
         for (uuid, peripheral) in bleDiscoveredPeripheralsByID.sorted(by: { $0.key.uuidString < $1.key.uuidString }) {
@@ -1174,8 +1153,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let isConnected = peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
             let isConnecting = peripheral.state == .connecting
             let hardwareUID = hardwareUIDByDeviceID[id]
-            appendOrMerge(LocalDeviceDescriptor(
-                id: hardwareUID.map { "uid:\($0)" } ?? id,
+            devices.append(LocalDeviceDescriptor(
+                id: id,
                 displayName: name,
                 transport: .ble,
                 boardType: "esp32s3",
@@ -1184,7 +1163,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
                 lastErrorText: hardwareUID == nil ? "UID unavailable" : nil,
                 isActive: isActive
-            ), hardwareUID: hardwareUID)
+            ))
         }
 
         let connectingWiFiID = wifiManager?.connectingDeviceID
@@ -1206,7 +1185,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 if identifierText == nil { return "UID unavailable" }
                 return nil
             }()
-            appendOrMerge(LocalDeviceDescriptor(
+            devices.append(LocalDeviceDescriptor(
                 id: record.id,
                 displayName: record.displayName,
                 transport: .wifi,
@@ -1216,31 +1195,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 connectionState: connectionState,
                 lastErrorText: errorText,
                 isActive: isActive
-            ), hardwareUID: nil)
+            ))
         }
 
         DispatchQueue.main.async {
             self.discoveredDevices = devices
         }
-    }
-
-    private func mergeDisplayNames(_ a: String, _ b: String) -> String {
-        if a == b { return a }
-        if a.contains(b) { return a }
-        if b.contains(a) { return b }
-        return "\(a) / \(b)"
-    }
-
-    private static func shortDeviceIdentifier(_ value: String) -> String {
-        let clean = value.replacingOccurrences(of: "-", with: "")
-        return String(clean.suffix(min(8, clean.count))).uppercased()
-    }
-
-    private func strongestConnectionState(_ a: LocalDeviceDescriptor.ConnectionState, _ b: LocalDeviceDescriptor.ConnectionState) -> LocalDeviceDescriptor.ConnectionState {
-        if a == .connected || b == .connected { return .connected }
-        if a == .connecting || b == .connecting { return .connecting }
-        if a == .disconnected || b == .disconnected { return .disconnected }
-        return .discovered
     }
 
     static func wiFiConnectionState(
