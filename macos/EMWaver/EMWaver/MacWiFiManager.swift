@@ -101,6 +101,7 @@ final class MacWiFiManager {
     }
 
     func startDiscovery() {
+        Self.log("starting Bonjour discovery type=\(Self.serviceType)")
         let browser = NWBrowser(
             for: .bonjour(type: Self.serviceType, domain: nil),
             using: .tcp
@@ -111,6 +112,7 @@ final class MacWiFiManager {
             }
         }
         browser.stateUpdateHandler = { [weak self] state in
+            Self.log("discovery state=\(Self.describeBrowserState(state))")
             if case .failed(let error) = state {
                 self?.onError("Wi-Fi discovery failed: \(error.localizedDescription)")
             }
@@ -246,27 +248,33 @@ final class MacWiFiManager {
 
     func connect(record: MacWiFiDeviceRecord) {
         queue.async {
+            Self.log("connect requested id=\(record.id) host=\(record.host) port=\(record.port) paired=\(record.isPaired) advertised=\(record.isAdvertised)")
             guard let paired = self.pairedDevicesByID[record.id],
                   let secret = self.pairedSecret(id: record.id, paired: paired),
                   !secret.isEmpty else {
+                Self.log("connect rejected: missing pairing secret id=\(record.id)")
                 self.onError("Pair this Wi-Fi device locally before connecting")
                 return
             }
             guard record.protocolVersion == "1" else {
+                Self.log("connect rejected: unsupported protocol=\(record.protocolVersion ?? "nil") id=\(record.id)")
                 self.onError("Firmware does not support this Wi-Fi transport protocol")
                 return
             }
             guard Self.advertisesWiFiCapability(record.capabilities) else {
+                Self.log("connect rejected: missing wifi capability caps=\(record.capabilities.joined(separator: ",")) id=\(record.id)")
                 self.onError("Firmware does not advertise Wi-Fi transport support")
                 return
             }
             guard let url = Self.webSocketURL(host: record.host, port: record.port) else {
+                Self.log("connect rejected: invalid address host=\(record.host) port=\(record.port)")
                 self.onError("Invalid Wi-Fi device address")
                 return
             }
 
             self.disconnect(notify: false)
 
+            Self.log("opening websocket url=\(url.absoluteString)")
             let socket = URLSession.shared.webSocketTask(with: url)
             self.socket = socket
             self.connectedDeviceID = nil
@@ -283,6 +291,7 @@ final class MacWiFiManager {
     func send(_ data: Data, sequence: UInt16? = nil) {
         queue.async {
             guard let socket = self.socket, self.connectedDeviceID != nil else {
+                Self.log("send rejected: socket not authenticated bytes=\(data.count)")
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
@@ -291,8 +300,10 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi write failed: Payload too large")
                 return
             }
+            Self.log("send seq=\(envelopeSequence) bytes=\(data.count) payload=\(Self.hexPreview(data))")
             socket.send(.data(frame)) { [weak self] error in
                 if let error {
+                    Self.log("send failed seq=\(envelopeSequence) error=\(error.localizedDescription)")
                     self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
                 }
             }
@@ -309,6 +320,7 @@ final class MacWiFiManager {
         let sequence = queue.sync {
             let sequence = self.nextSequence()
             self.pendingResponses[sequence] = pending
+            Self.log("command queued seq=\(sequence) bytes=\(data.count) payload=\(Self.hexPreview(data))")
             return sequence
         }
 
@@ -325,8 +337,10 @@ final class MacWiFiManager {
                 pending.semaphore.signal()
                 return
             }
+            Self.log("command send seq=\(sequence) bytes=\(data.count)")
             socket.send(.data(frame)) { [weak self] error in
                 if let error {
+                    Self.log("command send failed seq=\(sequence) error=\(error.localizedDescription)")
                     self?.queue.async {
                         self?.pendingResponses.removeValue(forKey: sequence)
                         self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
@@ -340,6 +354,7 @@ final class MacWiFiManager {
         if waitResult == .timedOut {
             queue.async {
                 self.pendingResponses.removeValue(forKey: sequence)
+                Self.log("command timed out seq=\(sequence)")
                 self.onError("Wi-Fi command timed out")
             }
             return nil
@@ -356,6 +371,9 @@ final class MacWiFiManager {
     private func disconnect(notify: Bool) {
         let oldID = connectedDeviceID
         let wasAuthenticated = connectedDeviceID != nil
+        if socket != nil || connectedDeviceID != nil || pendingAuthRecord != nil {
+            Self.log("disconnect notify=\(notify) authenticated=\(wasAuthenticated) id=\(oldID ?? pendingAuthRecord?.id ?? "nil")")
+        }
         authTimeoutWorkItem?.cancel()
         authTimeoutWorkItem = nil
         if !wasAuthenticated {
@@ -375,6 +393,7 @@ final class MacWiFiManager {
     }
 
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
+        Self.log("Bonjour results count=\(results.count)")
         var advertisedIDs = Set<String>()
         for result in results {
             guard case let .service(name, type, domain, _) = result.endpoint,
@@ -386,6 +405,7 @@ final class MacWiFiManager {
             advertisedIDs.insert(id)
             let metadata = Self.bonjourMetadata(from: result.metadata)
             migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
+            Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(metadata.capabilities.joined(separator: ",")) paired=\(pairedDevicesByID[id] != nil)")
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
@@ -403,10 +423,12 @@ final class MacWiFiManager {
         }
 
         for id in discoveredDevicesByID.keys where !advertisedIDs.contains(id) && pairedDevicesByID[id] == nil {
+            Self.log("removing stale unpaired discovery id=\(id)")
             discoveredDevicesByID.removeValue(forKey: id)
         }
 
         for (id, paired) in pairedDevicesByID where discoveredDevicesByID[id] == nil {
+            Self.log("showing saved paired device id=\(id) host=\(paired.host) port=\(paired.port) advertised=false")
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: paired.displayName,
@@ -469,8 +491,10 @@ final class MacWiFiManager {
             "response": response,
         ]
         guard let data = try? JSONSerialization.data(withJSONObject: hello) else { return }
+        Self.log("sending auth response challengeBytes=\(challenge.count)")
         socket.send(.data(data)) { [weak self] error in
             if let error {
+                Self.log("auth send failed error=\(error.localizedDescription)")
                 self?.onError("Wi-Fi authentication failed: \(error.localizedDescription)")
             }
         }
@@ -485,6 +509,7 @@ final class MacWiFiManager {
                   self.connectedDeviceID == nil else {
                 return
             }
+            Self.log("auth timed out id=\(self.pendingAuthRecord?.id ?? "nil")")
             self.onError("Wi-Fi authentication timed out")
             self.rollbackPendingPairing()
             self.disconnect(notify: true)
@@ -501,22 +526,27 @@ final class MacWiFiManager {
                 switch message {
                 case .data(let data):
                     if let envelope = Self.unwrapEnvelope(data) {
+                        Self.log("receive envelope seq=\(envelope.sequence) bytes=\(envelope.payload.count) payload=\(Self.hexPreview(envelope.payload))")
                         if self.completePendingResponse(sequence: envelope.sequence, payload: envelope.payload) {
                             break
                         }
                         self.onData(envelope.payload, self.connectedDeviceID)
                     } else {
+                        Self.log("receive raw data bytes=\(data.count) payload=\(Self.hexPreview(data))")
                         self.onData(data, self.connectedDeviceID)
                     }
                 case .string(let text):
+                    Self.log("receive text=\(Self.redactedAuthText(text))")
                     if let challenge = Self.challengeValue(from: text),
                        let secret = self.pendingAuthSecret {
+                        Self.log("auth challenge received bytes=\(challenge.count)")
                         self.sendHello(socket: socket, secret: secret, challenge: challenge)
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("ok"),
                               let record = self.pendingAuthRecord {
                         self.queue.async {
                             guard self.socket === socket else { return }
+                            Self.log("authenticated id=\(record.id)")
                             let now = Date()
                             var connectedRecord = record
                             connectedRecord.lastSeen = now
@@ -538,6 +568,7 @@ final class MacWiFiManager {
                         }
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("fail") {
+                        Self.log("auth failed")
                         self.onError("Wi-Fi pairing secret rejected")
                         self.queue.async {
                             if self.socket === socket {
@@ -547,6 +578,7 @@ final class MacWiFiManager {
                         }
                     } else if text.localizedCaseInsensitiveContains("auth") &&
                                 text.localizedCaseInsensitiveContains("timeout") {
+                        Self.log("auth timeout response")
                         self.onError("Wi-Fi authentication timed out")
                         self.queue.async {
                             if self.socket === socket {
@@ -555,6 +587,7 @@ final class MacWiFiManager {
                             }
                         }
                     } else if text.localizedCaseInsensitiveContains("busy") {
+                        Self.log("device busy")
                         self.onError("Wi-Fi device is busy with another session")
                         self.queue.async {
                             if self.socket === socket {
@@ -568,6 +601,7 @@ final class MacWiFiManager {
                 }
                 self.receiveLoop(socket: socket)
             case .failure(let error):
+                Self.log("receive failed error=\(error.localizedDescription)")
                 self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
                 self.queue.async {
                     if self.socket === socket {
@@ -732,6 +766,45 @@ final class MacWiFiManager {
             return inlineSecret
         }
         return nil
+    }
+
+    private static func log(_ message: String) {
+        print("[Wi-Fi] \(message)")
+    }
+
+    private static func describeBrowserState(_ state: NWBrowser.State) -> String {
+        switch state {
+        case .setup:
+            return "setup"
+        case .ready:
+            return "ready"
+        case .cancelled:
+            return "cancelled"
+        case .waiting(let error):
+            return "waiting(\(error.localizedDescription))"
+        case .failed(let error):
+            return "failed(\(error.localizedDescription))"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
+    private static func hexPreview(_ data: Data, limit: Int = 24) -> String {
+        let bytes = data.prefix(limit).map { String(format: "%02x", $0) }.joined(separator: " ")
+        if data.count > limit {
+            return "\(bytes) ..."
+        }
+        return bytes
+    }
+
+    private static func redactedAuthText(_ text: String) -> String {
+        if text.localizedCaseInsensitiveContains("challenge") {
+            return "auth challenge"
+        }
+        if text.localizedCaseInsensitiveContains("response") {
+            return "auth response"
+        }
+        return text
     }
 
     private static func savePairingSecret(_ secret: String, id: String) -> Bool {

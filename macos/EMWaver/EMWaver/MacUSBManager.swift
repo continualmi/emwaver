@@ -1700,6 +1700,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func handleWiFiConnected(_ record: MacWiFiDeviceRecord) {
+        print("[Wi-Fi] connected id=\(record.id) host=\(record.host) port=\(record.port)")
         let shouldBecomeActive = activeTransport == .none || pendingAutoConnectWiFiID != record.id
         if shouldBecomeActive {
             activeTransport = .wifi
@@ -1728,11 +1729,16 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         DispatchQueue.global(qos: .userInitiated).async {
             if self.transportDebugLoggingEnabled {
+                print("[Wi-Fi] enabling ESP transport packet logging id=\(record.id)")
                 self.setTransportDebugLogging(true, deviceID: record.id)
             }
+            print("[Wi-Fi] probing version id=\(record.id)")
             let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: record.id)
+            print("[Wi-Fi] probing uid id=\(record.id)")
             let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: record.id)
+            print("[Wi-Fi] probe result id=\(record.id) version=\(version ?? "nil") uid=\(uid ?? "nil")")
             if !self.transportDebugLoggingEnabled {
+                print("[Wi-Fi] disabling ESP transport packet logging id=\(record.id)")
                 self.setTransportDebugLogging(false, deviceID: record.id)
             }
 
