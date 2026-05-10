@@ -25,8 +25,8 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
 final class MacWiFiManager {
     static let defaultPort = 3922
     static let serviceType = "_emwaver._tcp"
-    private static let livenessPingInterval: DispatchTimeInterval = .seconds(2)
-    private static let livenessPingTimeout: DispatchTimeInterval = .seconds(3)
+    private static let livenessProbeInterval: DispatchTimeInterval = .seconds(2)
+    private static let livenessProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let hardwareUIDCommand = Data([0x08])
@@ -59,13 +59,13 @@ final class MacWiFiManager {
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
-    private var livenessPingID: UInt64 = 0
-    private var pendingLivenessPingID: UInt64?
+    private var pendingLivenessSequence: UInt16?
     private var txSequence: UInt16 = 1
 
     private final class PendingResponse {
         let semaphore = DispatchSemaphore(value: 0)
         var payload: Data?
+        var completion: ((Data?) -> Void)?
     }
 
     init(
@@ -233,8 +233,8 @@ final class MacWiFiManager {
             self.pendingConnectionRecord = record
 
             socket.resume()
-            self.sendLivenessPing(socket: socket, record: record, markConnectedOnSuccess: true)
             self.receiveLoop(socket: socket)
+            self.sendLivenessProbe(socket: socket, record: record, markConnectedOnSuccess: true)
             self.publishDevices()
         }
     }
@@ -329,7 +329,7 @@ final class MacWiFiManager {
         socket = nil
         connectedDeviceID = nil
         cancelLivenessTimer()
-        pendingLivenessPingID = nil
+        pendingLivenessSequence = nil
         failPendingResponses()
         txSequence = 1
         pendingConnectionRecord = nil
@@ -392,8 +392,8 @@ final class MacWiFiManager {
                 record.isAdvertised = false
                 discoveredDevicesByID[id] = record
                 if let activeSocket = socket {
-                    Self.log("advertisement disappeared for connected id=\(id); checking websocket liveness")
-                    sendLivenessPing(socket: activeSocket, record: record, markConnectedOnSuccess: false)
+                    Self.log("advertisement disappeared for connected id=\(id); checking UID liveness")
+                    sendLivenessProbe(socket: activeSocket, record: record, markConnectedOnSuccess: false)
                 }
             } else {
                 Self.log("removing stale discovery id=\(id)")
@@ -531,12 +531,12 @@ final class MacWiFiManager {
         cancelLivenessTimer()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
-            deadline: .now() + Self.livenessPingInterval,
-            repeating: Self.livenessPingInterval
+            deadline: .now() + Self.livenessProbeInterval,
+            repeating: Self.livenessProbeInterval
         )
         timer.setEventHandler { [weak self, weak socket] in
             guard let self, let socket, self.socket === socket else { return }
-            self.sendLivenessPing(socket: socket, record: record, markConnectedOnSuccess: false)
+            self.sendLivenessProbe(socket: socket, record: record, markConnectedOnSuccess: false)
         }
         livenessTimer = timer
         timer.resume()
@@ -548,43 +548,61 @@ final class MacWiFiManager {
         livenessTimer = nil
     }
 
-    private func sendLivenessPing(
+    private func sendLivenessProbe(
         socket: URLSessionWebSocketTask,
         record: MacWiFiDeviceRecord,
         markConnectedOnSuccess: Bool
     ) {
-        guard pendingLivenessPingID == nil else { return }
-        livenessPingID &+= 1
-        let pingID = livenessPingID == 0 ? 1 : livenessPingID
-        livenessPingID = pingID
-        pendingLivenessPingID = pingID
-        Self.log("ping id=\(record.id) pingID=\(pingID) initial=\(markConnectedOnSuccess)")
-        queue.asyncAfter(deadline: .now() + Self.livenessPingTimeout) { [weak self, weak socket] in
-            guard let self, let socket else { return }
-            guard self.socket === socket, self.pendingLivenessPingID == pingID else { return }
-            Self.log("ping timed out id=\(record.id) pingID=\(pingID)")
-            self.onError("Wi-Fi disconnected: WebSocket ping timed out")
-            self.disconnect(notify: true)
-        }
-        socket.sendPing { [weak self, weak socket] error in
+        guard pendingLivenessSequence == nil else { return }
+        let sequence = nextSequence()
+        guard let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: Self.hardwareUIDCommand) else { return }
+        let pending = PendingResponse()
+        pendingLivenessSequence = sequence
+        pendingResponses[sequence] = pending
+        pending.completion = { [weak self, weak socket] payload in
             guard let self, let socket else { return }
             self.queue.async {
-                guard self.socket === socket else { return }
-                guard self.pendingLivenessPingID == pingID else { return }
-                self.pendingLivenessPingID = nil
-                if let error {
-                    Self.log("ping failed id=\(record.id) pingID=\(pingID) error=\(error.localizedDescription)")
-                    self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
+                guard self.socket === socket, self.pendingLivenessSequence == sequence else { return }
+                self.pendingLivenessSequence = nil
+                guard let payload, let uid = Self.hardwareUID(from: payload) else {
+                    Self.log("UID liveness returned invalid response id=\(record.id) seq=\(sequence)")
+                    self.onError("Wi-Fi disconnected: UID probe failed")
                     self.disconnect(notify: true)
                     return
                 }
-                Self.log("pong id=\(record.id) pingID=\(pingID)")
+                Self.log("UID liveness ok id=\(record.id) seq=\(sequence) uid=\(uid)")
                 if markConnectedOnSuccess {
-                    self.markConnected(record: record, socket: socket)
+                    var connectedRecord = record
+                    connectedRecord.localIdentifier = uid
+                    self.markConnected(record: connectedRecord, socket: socket)
                 } else if var current = self.discoveredDevicesByID[record.id] {
+                    current.localIdentifier = uid
                     current.lastSeen = Date()
                     self.discoveredDevicesByID[record.id] = current
                     self.publishDevices()
+                }
+            }
+        }
+        Self.log("UID liveness probe id=\(record.id) seq=\(sequence) initial=\(markConnectedOnSuccess)")
+        queue.asyncAfter(deadline: .now() + Self.livenessProbeTimeout) { [weak self, weak socket] in
+            guard let self, let socket else { return }
+            guard self.socket === socket, self.pendingLivenessSequence == sequence else { return }
+            Self.log("UID liveness timed out id=\(record.id) seq=\(sequence)")
+            self.pendingLivenessSequence = nil
+            self.pendingResponses.removeValue(forKey: sequence)
+            self.onError("Wi-Fi disconnected: UID probe timed out")
+            self.disconnect(notify: true)
+        }
+        socket.send(.data(frame)) { [weak self] error in
+            guard let self else { return }
+            self.queue.async {
+                if let error {
+                    guard self.pendingLivenessSequence == sequence else { return }
+                    Self.log("UID liveness send failed id=\(record.id) seq=\(sequence) error=\(error.localizedDescription)")
+                    self.pendingLivenessSequence = nil
+                    self.pendingResponses.removeValue(forKey: sequence)
+                    self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
+                    self.disconnect(notify: true)
                 }
             }
         }
@@ -641,6 +659,7 @@ final class MacWiFiManager {
         }
         guard let pending else { return false }
         pending.payload = payload
+        pending.completion?(payload)
         pending.semaphore.signal()
         return true
     }
@@ -649,6 +668,7 @@ final class MacWiFiManager {
         let pending = pendingResponses.values
         pendingResponses.removeAll()
         for response in pending {
+            response.completion?(nil)
             response.semaphore.signal()
         }
     }
