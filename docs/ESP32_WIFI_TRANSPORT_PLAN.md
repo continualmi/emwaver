@@ -94,7 +94,7 @@ Preferred connection options:
 2. DHCP-reserved LAN IP.
 3. Manual IP entry in app/CLI/gateway.
 
-Multiple ESP32 boards should use the same control port. The host distinguishes boards by mDNS service instance, hostname/IP endpoint, local paired-device record, and known local hardware UID when available. A bench with several boards should look like:
+Multiple ESP32 boards should use the same control port. The host distinguishes boards by mDNS service instance, hostname/IP endpoint, and known local hardware UID when available. A bench with several boards should look like:
 
 ```text
 emwaver-a1b2.local:3922
@@ -211,10 +211,9 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - fixed control port,
   - board type,
   - firmware version,
-  - paired/unpaired state,
+  - hardware UID when available,
   - last seen time.
 - Add manual connect by IP/port.
-- Add paired-device storage in local app/daemon state.
 - Support multiple Wi-Fi devices by keeping one network session per selected endpoint/device record.
 
 ### CLI/Daemon
@@ -237,7 +236,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
   - connection refused,
   - mDNS unavailable,
   - reachable/busy/connection failed.
-- Current daemon progress: `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery and prints discovered ESP32 Wi-Fi endpoints with TXT board/firmware metadata; `emwaver devices --json` exposes the same inventory to the gateway. The daemon Wi-Fi runtime adapter still needs the same raw-SysEx simplification now applied to macOS and firmware.
+- Current daemon progress: `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, validates Wi-Fi endpoints with a fresh hardware UID command, and prints live ESP32 Wi-Fi endpoints with TXT board/firmware metadata and UID when available; `emwaver devices --json` exposes the same inventory to the gateway. The daemon Wi-Fi runtime adapter now uses the same raw-SysEx WebSocket frames as macOS and firmware.
 - Current daemon progress: `emwaver doctor --wifi <host-or-ip>` probes Wi-Fi reachability and classifies common route, connection-refused, mDNS/DNS, and device-busy failures.
 
 ### Gateway
@@ -247,12 +246,12 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
 - Show transport as `Wi-Fi` with LAN/VPN-neutral language.
 - Keep gateway bound to localhost by default.
 - Do not turn the gateway into a hosted relay.
-- Current gateway progress: the browser runtime panel can start the local daemon with a manual ESP32 Wi-Fi host/IP and port through `POST /v1/daemon/start`; the server validates the request and forwards `--wifi`, `--wifi-port`, to the CLI daemon start path. `GET /v1/devices` runs `emwaver devices --json`, and the panel can use a discovered Wi-Fi endpoint to fill the manual host/port fields. When a daemon is connected, the panel displays the daemon's selected transport and best-effort `_emwaver._tcp` Wi-Fi discoveries from daemon `device.status`.
+- Current gateway progress: the browser runtime panel can start the local daemon with a manual ESP32 Wi-Fi host/IP and port through `POST /v1/daemon/start`; the server validates the request and forwards `--wifi`, `--wifi-port`, to the CLI daemon start path. `GET /v1/devices` runs `emwaver devices --json`, and the panel can use a UID-validated discovered Wi-Fi endpoint to fill the manual host/port fields. When a daemon is connected, the panel displays the daemon's selected transport and UID-validated `_emwaver._tcp` Wi-Fi discoveries from daemon `device.status`.
 
 ### Native Apps
 
 - Add Wi-Fi device discovery and manual connection surfaces.
-- Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3. Manual macOS host/IP entry accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL, and local pairing persistence rejects malformed host strings before saving fallback records. macOS rejects discovered Wi-Fi records that do not advertise protocol `1` or a Wi-Fi capability, with capability matching kept tolerant of TXT-record case/whitespace differences. macOS update UI now also keeps ESP32/ESP32-S2/ESP32-S3 board metadata on the ESP serial-flashing path instead of falling through to STM32 DFU prompts.
+- Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3. Manual macOS host/IP entry accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL. macOS rejects discovered Wi-Fi records that do not advertise protocol `1` or a Wi-Fi capability, with capability matching kept tolerant of TXT-record case/whitespace differences. macOS update UI now also keeps ESP32/ESP32-S2/ESP32-S3 board metadata on the ESP serial-flashing path instead of falling through to STM32 DFU prompts.
 - Current macOS validation: `xcodebuild build-for-testing -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO` compiles the Wi-Fi metadata, SysEx, and host-validation tests. A targeted `xcodebuild test -only-testing` run for the new metadata tests was interrupted after hanging in the test runner, so it is not counted as a passing test result.
 - Current macOS auto-connect progress: advertised Wi-Fi endpoints are attempted automatically when no wired runtime is active, so a provisioned same-LAN board can reconnect. macOS sends only SSID/password during Wi-Fi setup. The ESP32 owns its default hostname and advertises it through mDNS; macOS displays firmware-reported station IP when available for manual LAN/VPN fallback.
 - Current Android/default-script progress: Android USB metadata inference distinguishes ESP32-S2, ESP32-S3, and generic ESP32 product/manufacturer strings, Android update UI keeps ESP boards out of the STM32 DFU flow without S3-only assumptions, and the bundled GPIO/ADC/PWM/blink/sampler/CC1101/I2C/UART examples treat ESP32-S2 as an ESP runtime target instead of falling back to STM32 pin defaults.
@@ -288,7 +287,7 @@ Keep the payload binary-safe. Hardware command packets use binary WebSocket fram
 - Direct IP entry must exist because VPN mDNS is unreliable.
 - Error messages should distinguish:
   - device not reachable,
-  - device reachable but not paired,
+  - device reachable but not speaking the EMWaver runtime protocol,
   - device busy,
   - firmware does not support Wi-Fi transport,
   - device is busy with another session.
@@ -307,7 +306,6 @@ Minimum validation:
 | VPN by IP | CLI/app can run blink script through routed home subnet |
 | VPN without mDNS | Manual IP still works |
 | Second simultaneous client | Receives `busy` |
-| No pairing | Commands are rejected |
 | Wi-Fi drop during script | Runtime reports disconnect and recovers cleanly |
 | USB recovery after bad Wi-Fi config | User can clear/reprovision Wi-Fi |
 | BLE remains available | Nearby direct workflows still work |
@@ -343,10 +341,10 @@ Resolved v1 decisions:
 2. Add ESP32 station-mode connection manager behind a feature gate.
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add LAN-trust Wi-Fi server carrying EMWaver frames.
-5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring accept `--wifi <host-or-ip>`, but the daemon adapter still needs to be updated to the raw-SysEx WebSocket transport shape.
-6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, and `emwaver devices --wifi <host-or-ip>` can manually probe a paired endpoint.
+5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring accept `--wifi <host-or-ip>`, and the daemon adapter now uses raw SysEx WebSocket frames.
+6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery with UID validation, and `emwaver devices --wifi <host-or-ip>` can manually probe a reachable endpoint.
 7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel, gateway-side `emwaver devices --json` discovery can fill host/port from discovered endpoints, daemon-reported Wi-Fi discoveries appear in the runtime device list, and bare IPv6 literals are accepted by the daemon adapter; Wi-Fi control uses LAN/VPN reachability as the trust boundary.
-8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and paired Wi-Fi auto-connect are wired.
+8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and Wi-Fi auto-connect are wired.
 9. Validate LAN script execution on real ESP32-S3 hardware. Tracked as `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` in `docs/TESTS.md`.
 10. Validate VPN-by-IP execution. Tracked as `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` in `docs/TESTS.md`.
 11. Add docs for user-owned VPN remote access. Current docs progress: `docs/ESP32_WIFI_REMOTE_ACCESS.md` covers same-LAN, VPN-by-IP, SSH/port-forwarding, CLI examples, and troubleshooting without introducing an EMWaver-hosted relay.

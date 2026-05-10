@@ -1,7 +1,4 @@
 use anyhow::{Context, Result};
-use hmac::{Hmac, Mac};
-use serde_json::{json, Value};
-use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::{Ipv4Addr, Ipv6Addr, SocketAddrV4, TcpStream, UdpSocket};
 use std::sync::{Arc, Mutex};
@@ -11,19 +8,16 @@ use tungstenite::stream::MaybeTlsStream;
 use tungstenite::{connect, Message, WebSocket};
 use url::Url;
 
+use crate::commands::DeviceCommandSender;
 use crate::protocol::{
     decode_sysex_to_superframe, encode_superframe, make_superframe, LANE_SIZE, SUPERFRAME_SIZE,
 };
 
 const DEFAULT_WIFI_PORT: u16 = 3922;
 const WIFI_WS_PATH: &str = "/v1/ws";
-const ENVELOPE_HEADER_BYTES: usize = 10;
-const ENVELOPE_VERSION: u8 = 1;
-const ENVELOPE_KIND_SYSEX: u8 = 1;
 const MDNS_ADDR: SocketAddrV4 = SocketAddrV4::new(Ipv4Addr::new(224, 0, 0, 251), 5353);
 const MDNS_SERVICE_NAME: &str = "_emwaver._tcp.local";
 
-type HmacSha256 = Hmac<Sha256>;
 type WiFiSocket = WebSocket<MaybeTlsStream<TcpStream>>;
 
 #[derive(Debug, Clone)]
@@ -38,23 +32,18 @@ pub struct WiFiDeviceInfo {
 
 struct WiFiState {
     capture_buffer: Vec<u8>,
-    pending: HashMap<u16, PendingResponse>,
-    next_sequence: u16,
+    waiting_for_response: bool,
+    response_data: Option<Vec<u8>>,
 }
 
 impl Default for WiFiState {
     fn default() -> Self {
         Self {
             capture_buffer: Vec::new(),
-            pending: HashMap::new(),
-            next_sequence: 1,
+            waiting_for_response: false,
+            response_data: None,
         }
     }
-}
-
-#[derive(Default)]
-struct PendingResponse {
-    response_data: Option<Vec<u8>>,
 }
 
 pub struct WiFiDevice {
@@ -97,19 +86,13 @@ pub fn list_wifi_devices(timeout_ms: u64) -> Result<Vec<WiFiDeviceInfo>> {
 }
 
 impl WiFiDevice {
-    pub fn connect_host(host: &str, secret: &str) -> Result<Arc<Self>> {
-        Self::connect(host, DEFAULT_WIFI_PORT, secret)
+    pub fn connect_host(host: &str) -> Result<Arc<Self>> {
+        Self::connect(host, DEFAULT_WIFI_PORT)
     }
 
-    pub fn connect(host: &str, port: u16, secret: &str) -> Result<Arc<Self>> {
-        let secret = secret.trim();
-        if secret.is_empty() {
-            anyhow::bail!("Wi-Fi pairing secret is required");
-        }
-
+    pub fn connect(host: &str, port: u16) -> Result<Arc<Self>> {
         let url = wifi_websocket_url(host, port)?;
-        let (mut socket, _) = connect(url.as_str()).context("failed to connect Wi-Fi WebSocket")?;
-        authenticate(&mut socket, secret)?;
+        let (socket, _) = connect(url.as_str()).context("failed to connect Wi-Fi WebSocket")?;
 
         Ok(Arc::new(Self {
             socket: Mutex::new(socket),
@@ -140,7 +123,7 @@ impl WiFiDevice {
             let end = (idx + LANE_SIZE).min(data.len());
             let chunk = &data[idx..end];
             let sf = make_superframe(None, Some(chunk));
-            self.send_superframe(&sf, 0)?;
+            self.send_superframe(&sf)?;
             idx = end;
             std::thread::sleep(Duration::from_millis(1));
         }
@@ -149,36 +132,28 @@ impl WiFiDevice {
     }
 
     pub fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
-        let sequence = {
+        {
             let mut st = self.state.lock().unwrap();
-            let sequence = st.next_sequence;
-            st.next_sequence = st.next_sequence.wrapping_add(1).max(1);
-            st.pending.insert(sequence, PendingResponse::default());
-            sequence
-        };
+            st.waiting_for_response = true;
+            st.response_data = None;
+        }
 
         let sf = make_superframe(Some(cmd_lane), None);
-        self.send_superframe(&sf, sequence)?;
+        self.send_superframe(&sf)?;
 
         let deadline = Instant::now() + Duration::from_millis(timeout_ms.max(1));
         loop {
             {
                 let mut st = self.state.lock().unwrap();
-                if let Some(pending) = st.pending.get(&sequence) {
-                    if pending.response_data.is_some() {
-                        return Ok(st
-                            .pending
-                            .remove(&sequence)
-                            .and_then(|pending| pending.response_data));
-                    }
-                } else {
-                    return Ok(None);
+                if st.response_data.is_some() {
+                    st.waiting_for_response = false;
+                    return Ok(st.response_data.take());
                 }
             }
 
             let now = Instant::now();
             if now >= deadline {
-                self.state.lock().unwrap().pending.remove(&sequence);
+                self.state.lock().unwrap().waiting_for_response = false;
                 return Ok(None);
             }
             let remaining = deadline.saturating_duration_since(now);
@@ -195,22 +170,21 @@ impl WiFiDevice {
                         warn!("Wi-Fi frame decode error: {err:#}");
                     }
                 }
+                Ok(Message::Text(text)) if text.trim().eq_ignore_ascii_case("busy") => {
+                    self.state.lock().unwrap().waiting_for_response = false;
+                    anyhow::bail!("Wi-Fi device is busy with another session");
+                }
                 Ok(Message::Close(_)) => {
-                    self.state.lock().unwrap().pending.remove(&sequence);
+                    self.state.lock().unwrap().waiting_for_response = false;
                     return Ok(None);
                 }
                 Ok(_) => {}
                 Err(err) => {
                     let mut st = self.state.lock().unwrap();
-                    if let Some(pending) = st.pending.get(&sequence) {
-                        if pending.response_data.is_some() {
-                            return Ok(st
-                                .pending
-                                .remove(&sequence)
-                                .and_then(|pending| pending.response_data));
-                        }
+                    st.waiting_for_response = false;
+                    if st.response_data.is_some() {
+                        return Ok(st.response_data.take());
                     }
-                    st.pending.remove(&sequence);
                     warn!("Wi-Fi receive failed: {err:#}");
                     return Ok(None);
                 }
@@ -218,26 +192,30 @@ impl WiFiDevice {
         }
     }
 
-    fn send_superframe(&self, superframe: &[u8; SUPERFRAME_SIZE], sequence: u16) -> Result<()> {
+    fn send_superframe(&self, superframe: &[u8; SUPERFRAME_SIZE]) -> Result<()> {
         let sysex = encode_superframe(superframe);
-        let frame = build_envelope(sequence, &sysex);
         self.socket
             .lock()
             .unwrap()
-            .send(Message::Binary(frame))
+            .send(Message::Binary(sysex))
             .context("Wi-Fi WebSocket send failed")
     }
 
     fn handle_binary_frame(&self, data: &[u8]) -> Result<()> {
-        let (sequence, sysex) = unwrap_envelope(data).context("invalid Wi-Fi envelope")?;
-        let sf = decode_sysex_to_superframe(sysex)?;
+        let sf = decode_sysex_to_superframe(data)?;
         let mut st = self.state.lock().unwrap();
-        apply_received_superframe(&mut st, sequence, &sf);
+        apply_received_superframe(&mut st, &sf);
         Ok(())
     }
 }
 
-fn apply_received_superframe(st: &mut WiFiState, sequence: u16, sf: &[u8; SUPERFRAME_SIZE]) {
+impl DeviceCommandSender for WiFiDevice {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        WiFiDevice::send_command(self, cmd_lane, timeout_ms)
+    }
+}
+
+fn apply_received_superframe(st: &mut WiFiState, sf: &[u8; SUPERFRAME_SIZE]) {
     let cmd_lane = &sf[0..LANE_SIZE];
     let stream_lane = &sf[LANE_SIZE..LANE_SIZE * 2];
 
@@ -245,20 +223,19 @@ fn apply_received_superframe(st: &mut WiFiState, sequence: u16, sf: &[u8; SUPERF
     let stream_empty = stream_lane.iter().all(|&b| b == 0);
 
     if !cmd_empty {
-        if let Some(pending) = st.pending.get_mut(&sequence) {
-            pending.response_data = Some(cmd_lane.to_vec());
+        if st.waiting_for_response && st.response_data.is_none() {
+            st.response_data = Some(cmd_lane.to_vec());
         } else {
             st.capture_buffer.extend_from_slice(cmd_lane);
         }
     }
-    if !stream_empty && !is_sequence_zero_buffer_status(sequence, stream_lane) {
+    if !stream_empty && !is_buffer_status_lane(stream_lane) {
         st.capture_buffer.extend_from_slice(stream_lane);
     }
 }
 
-fn is_sequence_zero_buffer_status(sequence: u16, stream_lane: &[u8]) -> bool {
-    sequence == 0
-        && stream_lane.len() == LANE_SIZE
+fn is_buffer_status_lane(stream_lane: &[u8]) -> bool {
+    stream_lane.len() == LANE_SIZE
         && stream_lane.starts_with(b"BS")
         && stream_lane[4..].iter().all(|&byte| byte == 0)
 }
@@ -298,51 +275,6 @@ fn wifi_websocket_url(host: &str, port: u16) -> Result<String> {
     let url = format!("ws://{url_host}:{port}{WIFI_WS_PATH}");
     Url::parse(&url).with_context(|| format!("invalid Wi-Fi device URL for {host}:{port}"))?;
     Ok(url)
-}
-
-fn authenticate(socket: &mut WiFiSocket, secret: &str) -> Result<()> {
-    set_read_timeout(socket.get_mut(), Some(Duration::from_secs(8)));
-    let challenge_text = match socket.read().context("failed to read Wi-Fi challenge")? {
-        Message::Text(text) => text,
-        other => anyhow::bail!("expected Wi-Fi auth challenge, got {other:?}"),
-    };
-    if challenge_text.trim().eq_ignore_ascii_case("busy") {
-        anyhow::bail!("Wi-Fi device is busy with another session");
-    }
-    let challenge_json: Value =
-        serde_json::from_str(&challenge_text).context("invalid Wi-Fi challenge JSON")?;
-    let challenge = challenge_json
-        .get("challenge")
-        .and_then(Value::as_str)
-        .context("Wi-Fi challenge missing challenge string")?;
-    let response = hmac_sha256_hex(secret, challenge);
-    let auth = json!({
-        "type": "auth",
-        "client": "emwaver-daemon",
-        "protocolVersion": 1,
-        "envelopeVersion": 1,
-        "challenge": challenge,
-        "response": response,
-    });
-    socket
-        .send(Message::Binary(auth.to_string().into_bytes()))
-        .context("failed to send Wi-Fi auth response")?;
-
-    match socket.read().context("failed to read Wi-Fi auth result")? {
-        Message::Text(text) if text.to_ascii_lowercase().contains("auth ok") => Ok(()),
-        Message::Text(text) => anyhow::bail!("Wi-Fi authentication failed: {text}"),
-        other => anyhow::bail!("Wi-Fi authentication failed: unexpected {other:?}"),
-    }
-}
-
-fn hmac_sha256_hex(secret: &str, message: &str) -> String {
-    let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts any key size");
-    mac.update(message.as_bytes());
-    mac.finalize()
-        .into_bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect()
 }
 
 #[derive(Default)]
@@ -573,62 +505,20 @@ fn read_dns_name(packet: &[u8], mut offset: usize) -> Result<(String, usize)> {
     }
 }
 
-fn build_envelope(sequence: u16, payload: &[u8]) -> Vec<u8> {
-    let mut out = Vec::with_capacity(ENVELOPE_HEADER_BYTES + payload.len());
-    out.extend_from_slice(b"EMW");
-    out.push(ENVELOPE_VERSION);
-    out.push(ENVELOPE_KIND_SYSEX);
-    out.push((sequence & 0xff) as u8);
-    out.push((sequence >> 8) as u8);
-    out.push(0);
-    out.push((payload.len() & 0xff) as u8);
-    out.push(((payload.len() >> 8) & 0xff) as u8);
-    out.extend_from_slice(payload);
-    out
-}
-
-fn unwrap_envelope(data: &[u8]) -> Result<(u16, &[u8])> {
-    if data.len() < ENVELOPE_HEADER_BYTES {
-        anyhow::bail!("envelope too short");
-    }
-    if &data[0..3] != b"EMW" || data[3] != ENVELOPE_VERSION || data[4] != ENVELOPE_KIND_SYSEX {
-        anyhow::bail!("unsupported envelope");
-    }
-    let sequence = u16::from(data[5]) | (u16::from(data[6]) << 8);
-    let payload_len = usize::from(data[8]) | (usize::from(data[9]) << 8);
-    if data.len() != ENVELOPE_HEADER_BYTES + payload_len {
-        anyhow::bail!("envelope length mismatch");
-    }
-    Ok((sequence, &data[ENVELOPE_HEADER_BYTES..]))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn wifi_envelope_round_trips_sequence_and_payload() {
-        let payload = b"payload";
-        let envelope = build_envelope(0x1234, payload);
-        let (sequence, decoded) = unwrap_envelope(&envelope).expect("unwrap envelope");
-
-        assert_eq!(sequence, 0x1234);
-        assert_eq!(decoded, payload);
-    }
-
-    #[test]
-    fn wifi_superframe_routes_matching_command_response_to_pending_request() {
+    fn wifi_superframe_routes_command_response_to_pending_request() {
         let mut state = WiFiState::default();
-        state.pending.insert(7, PendingResponse::default());
+        state.waiting_for_response = true;
         let response = b"OK";
         let sf = make_superframe(Some(response), Some(b"sample"));
 
-        apply_received_superframe(&mut state, 7, &sf);
+        apply_received_superframe(&mut state, &sf);
 
-        assert_eq!(
-            state.pending.get(&7).and_then(|p| p.response_data.as_deref()),
-            Some(&sf[0..LANE_SIZE])
-        );
+        assert_eq!(state.response_data.as_deref(), Some(&sf[0..LANE_SIZE]));
         assert_eq!(&state.capture_buffer[..6], b"sample");
     }
 
@@ -637,38 +527,29 @@ mod tests {
         let mut state = WiFiState::default();
         let sf = make_superframe(None, Some(b"sample"));
 
-        apply_received_superframe(&mut state, 0, &sf);
+        apply_received_superframe(&mut state, &sf);
 
         assert_eq!(&state.capture_buffer[..6], b"sample");
     }
 
     #[test]
-    fn wifi_superframe_ignores_sequence_zero_buffer_status_frame() {
+    fn wifi_superframe_ignores_exact_buffer_status_frame() {
         let mut state = WiFiState::default();
         let sf = make_superframe(None, Some(&[b'B', b'S', 0x12, 0x34]));
 
-        apply_received_superframe(&mut state, 0, &sf);
+        apply_received_superframe(&mut state, &sf);
 
         assert!(state.capture_buffer.is_empty());
     }
 
     #[test]
-    fn wifi_superframe_keeps_sequence_zero_stream_data_that_starts_with_bs() {
+    fn wifi_superframe_keeps_stream_data_that_starts_with_bs() {
         let mut state = WiFiState::default();
         let sf = make_superframe(None, Some(b"BSdata"));
 
-        apply_received_superframe(&mut state, 0, &sf);
+        apply_received_superframe(&mut state, &sf);
 
         assert_eq!(&state.capture_buffer[..6], b"BSdata");
-    }
-
-    #[test]
-    fn hmac_matches_known_sha256_vector() {
-        let digest = hmac_sha256_hex("key", "The quick brown fox jumps over the lazy dog");
-        assert_eq!(
-            digest,
-            "f7bc83f430538424b13298e6aa6fb143ef4d59a14946175997479dbc2d1a3cd8"
-        );
     }
 
     #[test]

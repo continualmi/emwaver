@@ -19,16 +19,16 @@ Implement the ESP32 Wi-Fi transport on macOS and ESP32 firmware so an ESP32 boar
 | LAN-trust WebSocket server runs at `/v1/ws` on port `3922` | `WIFI_CONTROL_PORT`, `WIFI_WS_PATH`, `ws_handler` in `wifi_transport.c` | `[x]` |
 | Firmware accepts command sessions immediately after WebSocket open and rejects concurrent clients as busy | `ws_handler`, `close_active_session` in `wifi_transport.c` | `[x]` |
 | Wi-Fi WebSocket frames carry the same raw 48-byte EMWaver SysEx payload used by USB/BLE | `ws_handler`, `enqueue_sysex`, `send_superframe` in firmware; `MacWiFiManager.send`, `sendCommand`, and UID probing | `[x]` |
-| Wi-Fi has no transport envelope or sequence layer in macOS/firmware | removed firmware envelope helpers and `wifi_sequence`; removed macOS `makeEnvelope`/`unwrapEnvelope` and sequence helpers | `[x]` |
+| Wi-Fi has no transport envelope or sequence layer in macOS/firmware/daemon | removed firmware wrapping helpers, macOS wrapping helpers, and daemon auth/wrapping helpers | `[x]` |
 | Sampler/retransmit lanes can use Wi-Fi through the same SysEx superframe shape | `sampler.c`, `wifi_transport_send_stream_lane`, `wifi_transport_send_buffer_status`; macOS routes received SysEx into the same device session parser | `[x]` |
 | mDNS advertises `_emwaver._tcp` after WebSocket handler readiness | `start_server`, `publish_mdns` in `wifi_transport.c` | `[x]` |
 | mDNS TXT includes protocol, board, firmware, capability, and local id metadata | `publish_mdns` in `wifi_transport.c` | `[x]` |
 | Manual IP/hostname fallback exists for LAN/VPN paths | macOS `MacWiFiManager.webSocketURL`; daemon `wifi_websocket_url`; gateway manual daemon start | `[x]` |
 | macOS discovers, filters, and connects Wi-Fi devices | `MacWiFiManager.swift`, `MacUSBManager.swift`, `DeviceConnectionSheet.swift` | `[x]` |
-| macOS connects discovered/manual Wi-Fi endpoints without local Wi-Fi pairing metadata or Keychain-backed Wi-Fi secrets | `MacWiFiManager.swift`, `macos/README.md` | `[x]` |
+| macOS connects discovered/manual Wi-Fi endpoints without additional local transport credentials | `MacWiFiManager.swift`, `macos/README.md` | `[x]` |
 | macOS validates manual host and port input before connection | `MacWiFiManager.isValidManualHost`, `DeviceConnectionSheet.parsedWiFiPort`, `EMWaverTests.swift` | `[x]` |
-| Daemon supports discovery, direct run, doctor, and gateway fallback over raw-SysEx Wi-Fi | `daemon/emwaver-device/src/wifi.rs` still needs the same raw-SysEx simplification now applied to macOS/firmware | `[ ]` |
-| Gateway can list discovered Wi-Fi endpoints and start daemon with manual Wi-Fi args | `gateway/src/server.ts`, gateway runtime panel code, `gateway/README.md`; daemon raw-SysEx update still pending | `[ ]` |
+| Daemon supports discovery, direct run, doctor, and gateway fallback over raw-SysEx Wi-Fi | `daemon/emwaver-device/src/wifi.rs`, `daemon/emwaver/src/main.rs` | `[x]` |
+| Gateway can list UID-validated Wi-Fi endpoints and start daemon with manual Wi-Fi args | `gateway/src/server.ts`, gateway runtime panel code, `gateway/README.md` | `[x]` |
 | OTA SoftAP does not leave station-mode runtime listener active | `esp/main/libraries/ota_wifi.c`, `wifi_transport_suspend_runtime`, `wifi_transport_resume_runtime` | `[x]` |
 | User-owned LAN/VPN remote-access docs exist | `docs/ESP32_WIFI_REMOTE_ACCESS.md`; root `README.md` doc index | `[x]` |
 | Manual hardware test gates exist | `docs/TESTS.md` codes `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` and `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` | `[x]` |
@@ -40,6 +40,6 @@ Implement the ESP32 Wi-Fi transport on macOS and ESP32 firmware so an ESP32 boar
 
 ## Completion Result
 
-The implementation is not complete. The macOS app and ESP32 firmware use raw SysEx over Wi-Fi, but the daemon/gateway Wi-Fi adapter still needs the same simplification. The objective also requires real ESP32-S3 hardware validation for same-LAN script execution and VPN-by-IP execution.
+The implementation is code-complete for macOS/firmware/daemon/gateway raw-SysEx Wi-Fi parity. Remaining completion gates require real ESP32-S3 hardware validation for same-LAN script execution and VPN-by-IP execution.
 
 Do not mark `docs/ESP32_WIFI_TRANSPORT_PLAN.md` complete until `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` and `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` pass and are recorded in `docs/TESTS.md`.

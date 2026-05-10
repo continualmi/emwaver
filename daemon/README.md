@@ -68,7 +68,7 @@ This starts the localhost browser gateway from `gateway/`. It is a bridge toward
 
 `--daemon-fallback` starts the headless daemon underneath the gateway. If a native app connects to the same gateway as `role=app`, the gateway prefers that native app; otherwise it forwards scripts and UI events to the daemon connected as `role=host`.
 
-The gateway UI can also start the daemon after the browser is already open. Its local `POST /v1/daemon/start` endpoint calls the same `emwaver daemon start --port <gateway-port>` lifecycle through the installed CLI, or through `daemon/dev` in repo development. Use `EMWAVER_GATEWAY_DAEMON_ARGS` to pass transport flags such as `--ble`, `--wifi 192.168.1.44 --wifi-secret <local-secret>`, `--device 0`, `--no-device`, or `--sim-device`.
+The gateway UI can also start the daemon after the browser is already open. Its local `POST /v1/daemon/start` endpoint calls the same `emwaver daemon start --port <gateway-port>` lifecycle through the installed CLI, or through `daemon/dev` in repo development. Use `EMWAVER_GATEWAY_DAEMON_ARGS` to pass transport flags such as `--ble`, `--wifi 192.168.1.44`, `--device 0`, `--no-device`, or `--sim-device`.
 
 For headless or CLI-first deployments, including macOS development hosts and Linux boxes, the preferred one-command local stack is:
 
@@ -96,13 +96,13 @@ emwaver start --sim-device
 emwaver start --no-device
 emwaver start --device 0
 emwaver start --ble
-emwaver start --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver start --wifi 192.168.1.44
 emwaver gateway --daemon-fallback --ble
-emwaver gateway --daemon-fallback --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver gateway --daemon-fallback --wifi 192.168.1.44
 emwaver daemon serve --port 3921 --sim-device
 emwaver daemon start --port 3921 --device 0
 emwaver daemon start --port 3921 --ble
-emwaver daemon start --port 3921 --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver daemon start --port 3921 --wifi 192.168.1.44
 ```
 
 The local-first direction also adds:
@@ -119,15 +119,26 @@ For headless hosts, direct mode runs the extracted Rust runtime in-process:
 emwaver run scripts/blink.emw --direct
 emwaver run scripts/blink.emw --direct --device 0
 emwaver run scripts/blink.emw --direct --ble
-emwaver run ../assets/default-scripts/blink.emw --direct --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver run ../assets/default-scripts/blink.emw --direct --wifi 192.168.1.44
 emwaver run scripts/ui-only.emw --direct --no-device
 emwaver run scripts/blink.emw --direct --sim-device
 ```
 
-Direct mode uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects a USB MIDI input id from `emwaver devices`. `--ble` selects the ESP32 BLE GATT transport and uses the same SysEx/superframe envelope as USB MIDI. `--wifi <host-or-ip> --wifi-secret <local-secret>` selects the authenticated ESP32 Wi-Fi WebSocket transport on port `3922`; override the port with `--wifi-port <port>`. Manual Wi-Fi hosts must be entered without a URL scheme, path, or port; bare IPv6 literals are accepted and bracketed internally when the WebSocket URL is built.
+Direct mode uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--no-device` is set for UI-only scripts. `--device <id>` selects a USB MIDI input id from `emwaver devices`. `--ble` selects the ESP32 BLE GATT transport and uses the same SysEx/superframe payload as USB MIDI. `--wifi <host-or-ip>` selects the ESP32 Wi-Fi WebSocket transport on port `3922`; override the port with `--wifi-port <port>`. Wi-Fi sends raw EMWaver SysEx frames to `/v1/ws` and uses LAN/VPN reachability as the trust boundary. Manual Wi-Fi hosts must be entered without a URL scheme, path, or port; bare IPv6 literals are accepted and bracketed internally when the WebSocket URL is built.
 `--sim-device` uses the shared mock EMWaver device simulator so hardware-touching scripts can be smoke-tested without a connected board.
 
-`emwaver devices` performs best-effort mDNS discovery for ESP32 Wi-Fi endpoints advertising `_emwaver._tcp` and prints each endpoint's service id, instance name, address, port, board, and firmware TXT metadata. `emwaver devices --json` emits the same USB/BLE/Wi-Fi inventory as structured JSON for the localhost gateway. `emwaver devices --wifi <host-or-ip> --wifi-secret <local-secret>` additionally performs a manual authenticated Wi-Fi probe and prints the endpoint if the pairing handshake succeeds.
+`emwaver devices` performs best-effort mDNS discovery for ESP32 Wi-Fi endpoints advertising `_emwaver._tcp`, validates reachable Wi-Fi endpoints with a fresh hardware UID command, and prints each live endpoint's service id, instance name, address, port, board, firmware metadata, and UID when available. `emwaver devices --json` emits the same USB/BLE/Wi-Fi inventory as structured JSON for the localhost gateway. `emwaver devices --wifi <host-or-ip>` additionally performs a manual Wi-Fi UID probe and prints the endpoint if it responds.
+
+ESP32 Wi-Fi setup uses the same local command lane over USB MIDI, BLE, or an already reachable Wi-Fi session:
+
+```bash
+emwaver wifi provision --ssid "Lab Wi-Fi" --password "..." --device 0
+emwaver wifi provision --ssid "Lab Wi-Fi" --ble
+emwaver wifi status --wifi 192.168.1.44
+emwaver wifi clear --device 0
+```
+
+`wifi provision` chunks SSID/password with the firmware limits used by the native app: 32 bytes for SSID, 64 bytes for password, and 13-byte field chunks.
 
 Useful flags:
 
@@ -146,7 +157,7 @@ Local setup can be checked with:
 emwaver doctor
 ```
 
-`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility. `emwaver doctor --wifi <host-or-ip> --wifi-secret <local-secret>` also performs an authenticated Wi-Fi probe and classifies common route, connection-refused, mDNS/DNS, paired-secret, and device-busy failures.
+`doctor` checks the repo gateway package, `node`, `npm`, `cargo`, `rustc`, MIDI device visibility, and best-effort EMWaver BLE scan visibility. `emwaver doctor --wifi <host-or-ip>` also performs a Wi-Fi UID probe and classifies common route, connection-refused, mDNS/DNS, and device-busy failures.
 It also reports the current OS/architecture, local state directory, pidfile, logfile, and non-invasive autostart status so local installs can be debugged without a cloud account.
 
 Agent help is optional and paid. It never gates local hardware control:
@@ -162,7 +173,7 @@ emwaver agent --script scripts/blink.emw --mode debug "explain this error"
 
 The old `emwaver-host` backend heartbeat/WebSocket wrapper has been removed from the workspace. It has been replaced by a local-only daemon host.
 
-`emwaver daemon serve` is the foreground host process. It connects to the localhost gateway, owns the `.emw` runtime, and uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--ble`, `--wifi`, `--no-device`, or `--sim-device` is selected. The BLE path scans for the EMWaver ESP32 service UUID and writes the same SysEx/superframe payload to the command characteristic while listening on the notify characteristic. The Wi-Fi path connects to the paired ESP32 WebSocket endpoint, authenticates with the local pairing secret, and uses the same SysEx/superframe command model inside the Wi-Fi envelope. Daemon `device.status` messages include the selected transport and best-effort `_emwaver._tcp` Wi-Fi discoveries so the gateway runtime panel can list LAN Wi-Fi endpoints without owning hardware discovery directly.
+`emwaver daemon serve` is the foreground host process. It connects to the localhost gateway, owns the `.emw` runtime, and uses `emwaver-device` for USB MIDI/SysEx hardware access unless `--ble`, `--wifi`, `--no-device`, or `--sim-device` is selected. The BLE path scans for the EMWaver ESP32 service UUID and writes the same SysEx/superframe payload to the command characteristic while listening on the notify characteristic. The Wi-Fi path connects to the ESP32 WebSocket endpoint at `/v1/ws` and sends the same raw EMWaver SysEx frames as USB/BLE. Daemon `device.status` messages include the selected transport, connection state, endpoint, board type, firmware version, hardware UID when available, and UID-validated `_emwaver._tcp` Wi-Fi discoveries so the gateway runtime panel can list LAN Wi-Fi endpoints without owning hardware discovery directly.
 
 `emwaver daemon start` spawns that same host in the background and writes the pid/log paths under the per-user EMWaver state directory. `emwaver daemon stop` sends SIGTERM to the recorded pid.
 
@@ -175,10 +186,10 @@ Linux always-on hosts can install the daemon as a systemd user service:
 ```bash
 emwaver service install --device 0
 emwaver service install --ble
-emwaver service install --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver service install --wifi 192.168.1.44
 emwaver service install --sim-device --now
 emwaver service print-unit --ble
-emwaver service print-unit --wifi 192.168.1.44 --wifi-secret <local-secret>
+emwaver service print-unit --wifi 192.168.1.44
 emwaver service status
 emwaver service stop
 emwaver service uninstall
@@ -209,7 +220,7 @@ EMWAVER_VALIDATE_SYSTEMD=1 scripts/rebirth-linux-validation.sh
 - stores latest UI tree and metadata,
 - dispatches UI events by handler token.
 
-`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol envelope. `emwaver-device/src/wifi.rs` owns the reusable ESP32 Wi-Fi path: it performs best-effort `_emwaver._tcp` mDNS discovery for device listing, runs the local HMAC pairing-secret auth handshake, opts into binary envelope version `1`, sends SysEx/superframe command payloads over WebSocket, correlates command responses by sequence id, keeps received stream lanes in the local buffer, and filters sequence-`0` `BS` pacing frames out of script capture data.
+`emwaver-device/src/device.rs` owns the reusable USB MIDI/SysEx transport used by direct local execution. `emwaver-device/src/ble.rs` owns the reusable ESP32 BLE transport using the same protocol payload. `emwaver-device/src/wifi.rs` owns the reusable ESP32 Wi-Fi path: it performs best-effort `_emwaver._tcp` mDNS discovery for device listing, opens `ws://<host>:<port>/v1/ws`, sends raw EMWaver SysEx frames as binary WebSocket messages, keeps received stream lanes in the local buffer, treats text `busy` as a busy-session error, and filters exact padded `BS` pacing frames out of script capture data.
 
 This is model-1 parity behavior: headless host still owns authoritative UI state machine.
 
@@ -237,12 +248,12 @@ Snapshots are sent when tree changes (revision increments).
 
 ## 5) Device/transport ownership
 
-Daemon-side transport is local USB MIDI/SysEx by default, with ESP32 BLE available through `--ble` and ESP32 Wi-Fi available through `--wifi <host-or-ip> --wifi-secret <local-secret>`.
+Daemon-side transport is local USB MIDI/SysEx by default, with ESP32 BLE available through `--ble` and ESP32 Wi-Fi available through `--wifi <host-or-ip>`.
 
 - Device detection/listing uses MIDI port enumeration and a short EMWaver BLE scan.
 - `emwaver daemon start --device <id>` pins the host to a listed USB MIDI input id.
 - `emwaver daemon start --ble` uses ESP32 BLE service discovery instead of USB MIDI.
-- `emwaver daemon start --wifi <host-or-ip> --wifi-secret <local-secret>` uses the authenticated ESP32 Wi-Fi WebSocket transport instead of USB MIDI/BLE.
+- `emwaver daemon start --wifi <host-or-ip>` uses the ESP32 Wi-Fi WebSocket transport instead of USB MIDI/BLE.
 - Device command path routes through the local USB, BLE, or Wi-Fi command bridge and shared packet send/response semantics.
 - Remote side never directly owns USB/BLE — only forwards commands/events through daemon session.
 

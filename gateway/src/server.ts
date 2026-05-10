@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { createReadStream, existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { isIP } from "node:net";
 import { extname, join, resolve } from "node:path";
 import { spawn } from "node:child_process";
 import { WebSocketServer, type RawData, type WebSocket } from "ws";
@@ -90,23 +91,31 @@ function cliCommand(args: string[]): { command: string; args: string[] } {
 function daemonStartArgs(payload: JsonObject): string[] {
   const args: string[] = [];
   const wifi = typeof payload.wifi === "string" ? payload.wifi.trim() : "";
-  const wifiSecret = typeof payload.wifiSecret === "string" ? payload.wifiSecret.trim() : "";
   const wifiPortRaw = typeof payload.wifiPort === "number" || typeof payload.wifiPort === "string" ? String(payload.wifiPort).trim() : "";
 
-  if (wifi || wifiSecret || wifiPortRaw) {
+  if (wifi || wifiPortRaw) {
     if (!wifi) throw new DaemonStartInputError("Wi-Fi host or IP is required.");
-    if (wifi.includes("://") || /[/\\?#@]/.test(wifi) || /\s/.test(wifi) || wifi.includes(":")) {
+    if (!isValidWifiHost(wifi)) {
       throw new DaemonStartInputError("Wi-Fi host must be a bare hostname or IP address.");
     }
-    if (!wifiSecret) throw new DaemonStartInputError("Wi-Fi pairing secret is required.");
     const wifiPort = wifiPortRaw ? Number(wifiPortRaw) : 3922;
     if (!Number.isInteger(wifiPort) || wifiPort < 1 || wifiPort > 65535) {
       throw new DaemonStartInputError("Wi-Fi port must be between 1 and 65535.");
     }
-    args.push("--wifi", wifi, "--wifi-port", String(wifiPort), "--wifi-secret", wifiSecret);
+    args.push("--wifi", wifi, "--wifi-port", String(wifiPort));
   }
 
   return args;
+}
+
+function isValidWifiHost(host: string): boolean {
+  if (!host || host.includes("://") || /[/\\?#@\s]/.test(host) || host.startsWith("[") || host.endsWith("]")) {
+    return false;
+  }
+  if (host.includes(":")) {
+    return isIP(host) === 6;
+  }
+  return true;
 }
 
 function loadBundledExamples(): Array<{ name: string; source: string }> {

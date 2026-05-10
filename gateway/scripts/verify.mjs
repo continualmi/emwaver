@@ -118,7 +118,6 @@ async function verifyIndexHtml() {
     "Local Runtime",
     "Start daemon",
     "Start Wi-Fi daemon",
-    "Pairing secret",
     "Ask agent",
     "plot.data",
     "textField",
@@ -364,7 +363,6 @@ try {
   }
   const wifiDaemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {
     wifi: "192.168.1.44",
-    wifiSecret: "local-secret",
     wifiPort: "3923",
   });
   if (
@@ -375,17 +373,22 @@ try {
     !wifiDaemonStart.body.args.includes("192.168.1.44") ||
     !wifiDaemonStart.body.args.includes("--wifi-port") ||
     !wifiDaemonStart.body.args.includes("3923") ||
-    !wifiDaemonStart.body.args.includes("--wifi-secret") ||
-    !wifiDaemonStart.body.args.includes("local-secret")
+    wifiDaemonStart.body.args.some((arg) => String(arg).toLowerCase().includes("secret"))
   ) {
     throw new Error(`unexpected wifi daemon-start response: ${JSON.stringify(wifiDaemonStart)}`);
   }
   const badWifiDaemonStart = await postJson(`${baseUrl}/v1/daemon/start`, {
     wifi: "http://192.168.1.44/path",
-    wifiSecret: "local-secret",
   });
   if (badWifiDaemonStart.status !== 400 || badWifiDaemonStart.body?.ok !== false) {
     throw new Error(`unexpected bad wifi daemon-start response: ${JSON.stringify(badWifiDaemonStart)}`);
+  }
+  const badWifiPortStart = await postJson(`${baseUrl}/v1/daemon/start`, {
+    wifi: "192.168.1.44",
+    wifiPort: "99999",
+  });
+  if (badWifiPortStart.status !== 400 || badWifiPortStart.body?.ok !== false) {
+    throw new Error(`unexpected bad wifi port response: ${JSON.stringify(badWifiPortStart)}`);
   }
   const devices = await getJson(`${baseUrl}/v1/devices`);
   if (devices.status !== 500 || devices.body?.error !== "devices_invalid_json") {

@@ -1,7 +1,11 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
-use emwaver_device::{list_ble_devices, list_wifi_devices, BleDevice, Device, WiFiDevice};
+use emwaver_device::{
+    list_ble_devices, list_wifi_devices, query_hardware_uid, query_version, wifi_clear,
+    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, Device,
+    DeviceCommandSender, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
+};
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::Pid;
@@ -12,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::Arc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tracing::info;
 use tungstenite::{connect, stream::MaybeTlsStream, Message};
 use url::Url;
@@ -25,6 +29,13 @@ struct DaemonTransportStatus {
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
+    hardware_uid: Option<String>,
+    firmware_version: Option<String>,
+}
+
+struct CommandBridgeHandle {
+    bridge: Arc<dyn CommandBridge>,
+    command_sender: Option<Arc<dyn DeviceCommandSender>>,
 }
 
 #[derive(Parser, Debug)]
@@ -53,10 +64,6 @@ enum Commands {
         /// Use ESP32 Wi-Fi transport by hostname or IP for daemon hardware mode.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
 
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
@@ -90,7 +97,7 @@ enum Commands {
     /// Terminal UI for daemon + device status.
     Tui,
 
-    /// List local devices and optionally probe a paired Wi-Fi endpoint.
+    /// List local devices and optionally probe a Wi-Fi endpoint.
     Devices {
         /// Print structured JSON instead of human-readable device lines.
         #[arg(long)]
@@ -99,11 +106,6 @@ enum Commands {
         /// Probe an ESP32 Wi-Fi device by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret for the Wi-Fi probe.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port for the Wi-Fi probe.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -114,11 +116,6 @@ enum Commands {
         /// Probe an ESP32 Wi-Fi device by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret for the Wi-Fi probe.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port for the Wi-Fi probe.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -164,11 +161,6 @@ enum Commands {
         /// Use ESP32 Wi-Fi transport by hostname or IP for direct mode.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -207,11 +199,6 @@ enum Commands {
         /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -250,11 +237,6 @@ enum Commands {
         /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -295,6 +277,12 @@ enum Commands {
         endpoint: Option<String>,
     },
 
+    /// Provision, inspect, or clear ESP32 Wi-Fi setup over USB, BLE, or Wi-Fi.
+    Wifi {
+        #[command(subcommand)]
+        cmd: WifiCmd,
+    },
+
     /// Show where emwaver stores state/logs.
     Paths,
 }
@@ -322,11 +310,6 @@ enum DaemonCmd {
         /// Use ESP32 Wi-Fi transport by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -365,11 +348,6 @@ enum DaemonCmd {
         /// Use ESP32 Wi-Fi transport by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -416,11 +394,6 @@ enum ServiceCmd {
         /// Use ESP32 Wi-Fi transport by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -462,11 +435,6 @@ enum ServiceCmd {
         /// Use ESP32 Wi-Fi transport by hostname or IP.
         #[arg(long)]
         wifi: Option<String>,
-
-        /// Local ESP32 Wi-Fi pairing secret.
-        #[arg(long)]
-        wifi_secret: Option<String>,
-
         /// ESP32 Wi-Fi control port.
         #[arg(long, default_value_t = 3922)]
         wifi_port: u16,
@@ -492,6 +460,74 @@ enum ServiceCmd {
 
     /// Show user service status.
     Status,
+}
+
+#[derive(Subcommand, Debug)]
+enum WifiCmd {
+    /// Send Wi-Fi credentials to a Wi-Fi-capable ESP32 board.
+    Provision {
+        /// Wi-Fi network SSID.
+        #[arg(long)]
+        ssid: String,
+
+        /// Wi-Fi network password. Omit for an open network.
+        #[arg(long)]
+        password: Option<String>,
+
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+    },
+
+    /// Query ESP32 Wi-Fi provisioning/runtime status.
+    Status {
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+    },
+
+    /// Clear stored ESP32 Wi-Fi credentials.
+    Clear {
+        /// MIDI input port id from `emwaver devices`.
+        #[arg(long)]
+        device: Option<String>,
+
+        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        #[arg(long)]
+        ble: bool,
+
+        /// Use ESP32 Wi-Fi transport by hostname or IP.
+        #[arg(long)]
+        wifi: Option<String>,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        wifi_port: u16,
+    },
 }
 
 fn project_dirs() -> Result<ProjectDirs> {
@@ -579,7 +615,6 @@ fn daemon_start(
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -619,9 +654,6 @@ fn daemon_start(
         cmd.arg("--wifi").arg(wifi);
         cmd.arg("--wifi-port").arg(wifi_port.to_string());
     }
-    if let Some(wifi_secret) = wifi_secret {
-        cmd.arg("--wifi-secret").arg(wifi_secret);
-    }
     if no_device {
         cmd.arg("--no-device");
     }
@@ -651,7 +683,6 @@ fn start_local_stack(
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -664,7 +695,6 @@ fn start_local_stack(
         device,
         ble,
         wifi,
-        wifi_secret,
         wifi_port,
         no_device,
         sim_device,
@@ -776,7 +806,6 @@ fn validate_service_transport_flags(
     device: Option<&str>,
     ble: bool,
     wifi: Option<&str>,
-    wifi_secret: Option<&str>,
     no_device: bool,
     sim_device: bool,
 ) -> Result<()> {
@@ -801,12 +830,6 @@ fn validate_service_transport_flags(
     if wifi.is_some() && sim_device {
         anyhow::bail!("--wifi cannot be combined with --sim-device");
     }
-    if wifi.is_some() && wifi_secret.unwrap_or("").trim().is_empty() {
-        anyhow::bail!("--wifi-secret is required with --wifi");
-    }
-    if wifi.is_none() && wifi_secret.is_some() {
-        anyhow::bail!("--wifi-secret requires --wifi");
-    }
     if no_device && sim_device {
         anyhow::bail!("--no-device cannot be combined with --sim-device");
     }
@@ -825,7 +848,6 @@ fn service_unit(
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -835,7 +857,6 @@ fn service_unit(
         device.as_deref(),
         ble,
         wifi.as_deref(),
-        wifi_secret.as_deref(),
         no_device,
         sim_device,
     )?;
@@ -861,10 +882,6 @@ fn service_unit(
         exec_args.push(shell_escape(&wifi));
         exec_args.push("--wifi-port".to_string());
         exec_args.push(wifi_port.to_string());
-    }
-    if let Some(wifi_secret) = wifi_secret {
-        exec_args.push("--wifi-secret".to_string());
-        exec_args.push(shell_escape(&wifi_secret));
     }
     if no_device {
         exec_args.push("--no-device".to_string());
@@ -901,7 +918,6 @@ fn service_install(
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -915,7 +931,6 @@ fn service_install(
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -943,7 +958,6 @@ fn service_install(
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -1003,11 +1017,14 @@ fn shell_escape(value: &str) -> String {
     }
 }
 
-fn list_devices_lines(
-    wifi: Option<String>,
-    wifi_secret: Option<String>,
-    wifi_port: u16,
-) -> Result<Vec<String>> {
+#[derive(Debug, Clone)]
+struct ValidatedWiFiDevice {
+    info: WiFiDeviceInfo,
+    hardware_uid: String,
+    version: Option<String>,
+}
+
+fn list_devices_lines(wifi: Option<String>, wifi_port: u16) -> Result<Vec<String>> {
     let devices = emwaver_device::list_devices()?;
     let mut out: Vec<String> = Vec::new();
     if devices.is_empty() {
@@ -1038,7 +1055,7 @@ fn list_devices_lines(
         Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
     }
 
-    match list_wifi_devices(1_500) {
+    match validated_wifi_devices(1_500) {
         Ok(devices) if devices.is_empty() => {
             out.push("No EMWaver Wi-Fi devices found.".to_string())
         }
@@ -1046,56 +1063,59 @@ fn list_devices_lines(
             out.push("Wi-Fi devices:".to_string());
             for device in devices {
                 let board = device
+                    .info
                     .txt
                     .get("board")
                     .map(String::as_str)
                     .unwrap_or("unknown board");
                 let firmware = device
-                    .txt
-                    .get("fw")
-                    .map(String::as_str)
+                    .version
+                    .as_deref()
+                    .or_else(|| device.info.txt.get("fw").map(String::as_str))
                     .unwrap_or("unknown fw");
-                let addresses = if device.addresses.is_empty() {
-                    device.host.clone()
+                let addresses = if device.info.addresses.is_empty() {
+                    device.info.host.clone()
                 } else {
-                    device.addresses.join(", ")
+                    device.info.addresses.join(", ")
                 };
                 out.push(format!(
-                    "  {}: {} at {}:{} ({board}, {firmware})",
-                    device.id, device.name, addresses, device.port
+                    "  {}: {} at {}:{} ({board}, {firmware}, UID {})",
+                    device.info.id,
+                    device.info.name,
+                    addresses,
+                    device.info.port,
+                    device.hardware_uid
                 ));
             }
         }
         Err(err) => out.push(format!("Wi-Fi discovery unavailable: {err:#}")),
     }
 
-    let (wifi_lines, _wifi_ok) = wifi_probe_lines(wifi, wifi_secret, wifi_port)?;
+    let (wifi_lines, _wifi_ok) = wifi_probe_lines(wifi, wifi_port)?;
     out.extend(wifi_lines);
 
     Ok(out)
 }
 
-fn wifi_probe_lines(
-    wifi: Option<String>,
-    wifi_secret: Option<String>,
-    wifi_port: u16,
-) -> Result<(Vec<String>, bool)> {
-    if wifi.is_none() && wifi_secret.is_none() {
+fn wifi_probe_lines(wifi: Option<String>, wifi_port: u16) -> Result<(Vec<String>, bool)> {
+    if wifi.is_none() {
         return Ok((Vec::new(), true));
     }
 
     let Some(host) = wifi else {
-        anyhow::bail!("--wifi-secret requires --wifi");
-    };
-    let Some(secret) = wifi_secret else {
-        anyhow::bail!("--wifi-secret is required with --wifi");
+        return Ok((Vec::new(), true));
     };
 
-    match WiFiDevice::connect(&host, wifi_port, &secret) {
-        Ok(_) => Ok((
-            vec![format!("Wi-Fi device: {host}:{wifi_port} authenticated")],
-            true,
-        )),
+    match probe_wifi_endpoint(&host, wifi_port) {
+        Ok((uid, version)) => {
+            let version = version.unwrap_or_else(|| "unknown fw".to_string());
+            Ok((
+                vec![format!(
+                    "Wi-Fi device: {host}:{wifi_port} live (UID {uid}, {version})"
+                )],
+                true,
+            ))
+        }
         Err(err) => Ok((
             vec![format!(
                 "Wi-Fi probe failed for {host}:{wifi_port}: {}",
@@ -1111,8 +1131,6 @@ fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
     let lower = text.to_ascii_lowercase();
     if lower.contains("busy") {
         format!("device is busy with another session ({text})")
-    } else if lower.contains("auth") || lower.contains("secret") {
-        format!("authentication failure or paired secret mismatch ({text})")
     } else if lower.contains("connection refused") || lower.contains("refused") {
         format!(
             "connection refused; the device may be offline or the control port is closed ({text})"
@@ -1135,30 +1153,21 @@ fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
     }
 }
 
-fn list_devices(
-    json: bool,
-    wifi: Option<String>,
-    wifi_secret: Option<String>,
-    wifi_port: u16,
-) -> Result<()> {
+fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16) -> Result<()> {
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_secret, wifi_port)?)?
+            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_port)?)?
         );
         return Ok(());
     }
-    for line in list_devices_lines(wifi, wifi_secret, wifi_port)? {
+    for line in list_devices_lines(wifi, wifi_port)? {
         println!("{line}");
     }
     Ok(())
 }
 
-fn list_devices_json(
-    wifi: Option<String>,
-    wifi_secret: Option<String>,
-    wifi_port: u16,
-) -> Result<serde_json::Value> {
+fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json::Value> {
     let mut devices = Vec::new();
     for device in emwaver_device::list_devices()? {
         devices.push(serde_json::json!({
@@ -1185,24 +1194,26 @@ fn list_devices_json(
         Err(err) => Some(format!("BLE scan unavailable: {err:#}")),
     };
 
-    let wifi_discovery_error = match list_wifi_devices(1_500) {
+    let wifi_discovery_error = match validated_wifi_devices(1_500) {
         Ok(wifi_devices) => {
             for device in wifi_devices {
                 let board = device
+                    .info
                     .txt
                     .get("board")
                     .cloned()
                     .unwrap_or_else(|| "esp32".to_string());
                 devices.push(serde_json::json!({
-                    "id": format!("wifi:{}:{}", device.host, device.port),
-                    "name": device.name,
+                    "id": format!("wifi:{}:{}", device.info.host, device.info.port),
+                    "name": device.info.name,
                     "transport": "Wi-Fi",
                     "boardType": board,
-                    "firmwareVersion": device.txt.get("fw").cloned(),
-                    "host": device.host,
-                    "port": device.port,
-                    "endpoint": format!("{}:{}", device.host, device.port),
-                    "addresses": device.addresses,
+                    "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
+                    "hardwareUid": device.hardware_uid,
+                    "host": device.info.host,
+                    "port": device.info.port,
+                    "endpoint": format!("{}:{}", device.info.host, device.info.port),
+                    "addresses": device.info.addresses,
                 }));
             }
             None
@@ -1210,7 +1221,29 @@ fn list_devices_json(
         Err(err) => Some(format!("Wi-Fi discovery unavailable: {err:#}")),
     };
 
-    let (wifi_probe_lines, wifi_ok) = wifi_probe_lines(wifi, wifi_secret, wifi_port)?;
+    if let Some(host) = wifi.as_deref() {
+        if let Ok((hardware_uid, version)) = probe_wifi_endpoint(host, wifi_port) {
+            let id = format!("wifi:{host}:{wifi_port}");
+            if !devices.iter().any(|device| {
+                device.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str())
+            }) {
+                devices.push(serde_json::json!({
+                    "id": id,
+                    "name": format!("ESP32 Wi-Fi {host}:{wifi_port}"),
+                    "transport": "Wi-Fi",
+                    "boardType": "esp32",
+                    "firmwareVersion": version,
+                    "hardwareUid": hardware_uid,
+                    "host": host,
+                    "port": wifi_port,
+                    "endpoint": format!("{host}:{wifi_port}"),
+                    "addresses": [host],
+                }));
+            }
+        }
+    }
+
+    let (wifi_probe_lines, wifi_ok) = wifi_probe_lines(wifi, wifi_port)?;
     Ok(serde_json::json!({
         "ok": ble_error.is_none() && wifi_discovery_error.is_none(),
         "devices": devices,
@@ -1223,6 +1256,54 @@ fn list_devices_json(
     }))
 }
 
+fn validated_wifi_devices(timeout_ms: u64) -> Result<Vec<ValidatedWiFiDevice>> {
+    let devices = list_wifi_devices(timeout_ms)?;
+    let mut out = Vec::new();
+    for device in devices
+        .into_iter()
+        .filter(wifi_record_advertises_supported_runtime)
+    {
+        match probe_wifi_endpoint(&device.host, device.port) {
+            Ok((hardware_uid, version)) => out.push(ValidatedWiFiDevice {
+                info: device,
+                hardware_uid,
+                version,
+            }),
+            Err(err) => info!(
+                "Wi-Fi endpoint {}:{} failed UID validation: {err:#}",
+                device.host, device.port
+            ),
+        }
+    }
+    Ok(out)
+}
+
+fn probe_wifi_endpoint(host: &str, port: u16) -> Result<(String, Option<String>)> {
+    let device = WiFiDevice::connect(host, port)?;
+    let uid = query_hardware_uid(device.as_ref(), 1_500)?.with_context(|| {
+        format!("Wi-Fi endpoint {host}:{port} did not return a valid hardware UID")
+    })?;
+    let version = query_version(device.as_ref(), 1_000).unwrap_or(None);
+    Ok((uid, version))
+}
+
+fn wifi_record_advertises_supported_runtime(device: &WiFiDeviceInfo) -> bool {
+    let proto_ok = device
+        .txt
+        .get("proto")
+        .map(|proto| proto.trim() == "1")
+        .unwrap_or(true);
+    let caps_ok = device
+        .txt
+        .get("cap")
+        .map(|cap| {
+            cap.split(',')
+                .any(|item| item.trim().eq_ignore_ascii_case("wifi"))
+        })
+        .unwrap_or(true);
+    proto_ok && caps_ok
+}
+
 fn command_available(name: &str) -> bool {
     Command::new(name)
         .arg("--version")
@@ -1233,7 +1314,7 @@ fn command_available(name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn doctor(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> Result<()> {
+fn doctor(wifi: Option<String>, wifi_port: u16) -> Result<()> {
     let mut issues = 0usize;
     let allow_midi_unavailable =
         env_trim("EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE").as_deref() == Some("1");
@@ -1288,7 +1369,7 @@ fn doctor(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> 
         println!("missing: rustc");
     }
 
-    match list_devices_lines(None, None, 3922) {
+    match list_devices_lines(None, 3922) {
         Ok(lines) => {
             for line in lines {
                 println!("{line}");
@@ -1304,7 +1385,7 @@ fn doctor(wifi: Option<String>, wifi_secret: Option<String>, wifi_port: u16) -> 
         }
     }
 
-    match wifi_probe_lines(wifi, wifi_secret, wifi_port) {
+    match wifi_probe_lines(wifi, wifi_port) {
         Ok((lines, true)) => {
             for line in lines {
                 println!("{line}");
@@ -1396,6 +1477,12 @@ impl CommandBridge for DeviceCommandBridge {
     }
 }
 
+impl DeviceCommandSender for DeviceCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
+}
+
 struct BleCommandBridge {
     device: Arc<BleDevice>,
 }
@@ -1419,6 +1506,12 @@ impl CommandBridge for BleCommandBridge {
 
     fn transmit_buffer(&self) -> Result<()> {
         self.device.transmit_buffer()
+    }
+}
+
+impl DeviceCommandSender for BleCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
     }
 }
 
@@ -1448,6 +1541,12 @@ impl CommandBridge for WiFiCommandBridge {
     }
 }
 
+impl DeviceCommandSender for WiFiCommandBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.device.send_command(cmd_lane, timeout_ms)
+    }
+}
+
 struct NoDeviceCommandBridge;
 
 impl CommandBridge for NoDeviceCommandBridge {
@@ -1467,7 +1566,6 @@ fn run_script(
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -1487,7 +1585,6 @@ fn run_script(
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -1500,8 +1597,8 @@ fn run_script(
     if sim_device {
         anyhow::bail!("--sim-device is only supported with --direct");
     }
-    if wifi.is_some() || wifi_secret.is_some() {
-        anyhow::bail!("--wifi and --wifi-secret are only supported with --direct");
+    if wifi.is_some() {
+        anyhow::bail!("--wifi is only supported with --direct");
     }
     if bootstrap_path.is_some() {
         anyhow::bail!("--bootstrap-path is only supported with --direct");
@@ -1589,7 +1686,6 @@ fn run_script_direct(
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -1609,17 +1705,9 @@ fn run_script_direct(
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
 
-    let bridge = make_command_bridge(
-        device_id,
-        ble,
-        wifi,
-        wifi_secret,
-        wifi_port,
-        no_device,
-        sim_device,
-    )?;
+    let bridge = make_command_bridge(device_id, ble, wifi, wifi_port, no_device, sim_device)?;
 
-    let engine = Engine::new(&bootstrap, bridge)?;
+    let engine = Engine::new(&bootstrap, bridge.bridge)?;
     engine.run_script(&source)?;
 
     println!("ran {name} directly");
@@ -1640,33 +1728,44 @@ fn make_command_bridge(
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
-) -> Result<Arc<dyn CommandBridge>> {
+) -> Result<CommandBridgeHandle> {
     validate_service_transport_flags(
         device_id.as_deref(),
         ble,
         wifi.as_deref(),
-        wifi_secret.as_deref(),
         no_device,
         sim_device,
     )?;
 
     if no_device {
-        Ok(Arc::new(NoDeviceCommandBridge))
+        Ok(CommandBridgeHandle {
+            bridge: Arc::new(NoDeviceCommandBridge),
+            command_sender: None,
+        })
     } else if sim_device {
-        Ok(Arc::new(SimulatorCommandBridge::basic_board()?))
+        Ok(CommandBridgeHandle {
+            bridge: Arc::new(SimulatorCommandBridge::basic_board()?),
+            command_sender: None,
+        })
     } else if ble {
-        Ok(Arc::new(BleCommandBridge {
+        let bridge = Arc::new(BleCommandBridge {
             device: BleDevice::connect_auto(5_000)?,
-        }))
+        });
+        Ok(CommandBridgeHandle {
+            bridge: bridge.clone(),
+            command_sender: Some(bridge),
+        })
     } else if let Some(wifi) = wifi {
-        let secret = wifi_secret.unwrap_or_default();
-        Ok(Arc::new(WiFiCommandBridge {
-            device: WiFiDevice::connect(&wifi, wifi_port, &secret)?,
-        }))
+        let bridge = Arc::new(WiFiCommandBridge {
+            device: WiFiDevice::connect(&wifi, wifi_port)?,
+        });
+        Ok(CommandBridgeHandle {
+            bridge: bridge.clone(),
+            command_sender: Some(bridge),
+        })
     } else {
         let device = Device::new();
         if let Some(device_id) = device_id {
@@ -1674,8 +1773,150 @@ fn make_command_bridge(
         } else {
             device.connect_auto()?;
         }
-        Ok(Arc::new(DeviceCommandBridge { device }))
+        let bridge = Arc::new(DeviceCommandBridge { device });
+        Ok(CommandBridgeHandle {
+            bridge: bridge.clone(),
+            command_sender: Some(bridge),
+        })
     }
+}
+
+fn make_device_command_sender(
+    device_id: Option<String>,
+    ble: bool,
+    wifi: Option<String>,
+    wifi_port: u16,
+) -> Result<Arc<dyn DeviceCommandSender>> {
+    validate_service_transport_flags(device_id.as_deref(), ble, wifi.as_deref(), false, false)?;
+
+    if ble {
+        Ok(BleDevice::connect_auto(5_000)?)
+    } else if let Some(wifi) = wifi {
+        Ok(WiFiDevice::connect(&wifi, wifi_port)?)
+    } else {
+        let device = Device::new();
+        if let Some(device_id) = device_id {
+            device.connect_by_id(&device_id)?;
+        } else {
+            device.connect_auto()?;
+        }
+        Ok(device)
+    }
+}
+
+fn bridge_for_gateway_device_id(
+    device_id: Option<&str>,
+    default_bridge: &Arc<dyn CommandBridge>,
+) -> Result<Arc<dyn CommandBridge>> {
+    let Some(device_id) = device_id.map(str::trim).filter(|id| !id.is_empty()) else {
+        return Ok(default_bridge.clone());
+    };
+    if let Some(midi_id) = device_id.strip_prefix("midi:") {
+        return Ok(make_command_bridge(
+            Some(midi_id.to_string()),
+            false,
+            None,
+            3922,
+            false,
+            false,
+        )?
+        .bridge);
+    }
+    if device_id.starts_with("ble:") {
+        return Ok(make_command_bridge(None, true, None, 3922, false, false)?.bridge);
+    }
+    if let Some(rest) = device_id.strip_prefix("wifi:") {
+        let (host, port) = parse_wifi_device_id(rest)?;
+        return Ok(make_command_bridge(None, false, Some(host), port, false, false)?.bridge);
+    }
+    if device_id.starts_with("uid:") {
+        return Ok(default_bridge.clone());
+    }
+    anyhow::bail!("unsupported daemon device id: {device_id}")
+}
+
+fn parse_wifi_device_id(value: &str) -> Result<(String, u16)> {
+    let (host, port) = value
+        .rsplit_once(':')
+        .context("Wi-Fi device id must be wifi:<host>:<port>")?;
+    let port = port
+        .parse::<u16>()
+        .with_context(|| format!("invalid Wi-Fi device port: {port}"))?;
+    if host.is_empty() {
+        anyhow::bail!("Wi-Fi device id is missing host");
+    }
+    Ok((host.to_string(), port))
+}
+
+fn run_wifi_provision(
+    ssid: String,
+    password: Option<String>,
+    device_id: Option<String>,
+    ble: bool,
+    wifi: Option<String>,
+    wifi_port: u16,
+) -> Result<()> {
+    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
+    wifi_provision(sender.as_ref(), &ssid, password.as_deref(), 2_000)?;
+    println!("Wi-Fi setup sent");
+    Ok(())
+}
+
+fn run_wifi_status(
+    device_id: Option<String>,
+    ble: bool,
+    wifi: Option<String>,
+    wifi_port: u16,
+) -> Result<()> {
+    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
+    let status = wifi_status(sender.as_ref(), 2_000)?;
+    println!("{}", format_wifi_status(&status));
+    Ok(())
+}
+
+fn run_wifi_clear(
+    device_id: Option<String>,
+    ble: bool,
+    wifi: Option<String>,
+    wifi_port: u16,
+) -> Result<()> {
+    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
+    wifi_clear(sender.as_ref(), 2_000)?;
+    println!("Wi-Fi setup cleared");
+    Ok(())
+}
+
+fn format_wifi_status(status: &WiFiStatus) -> String {
+    let provisioned = if status.provisioned {
+        "provisioned"
+    } else {
+        "unprovisioned"
+    };
+    let socket = if status.socket_connected {
+        "connected"
+    } else {
+        "idle"
+    };
+    let station = status
+        .station_online
+        .map(|online| if online { "online" } else { "offline" })
+        .unwrap_or("unknown");
+    let retrying = status
+        .retrying
+        .map(|retrying| if retrying { "retrying" } else { "idle" })
+        .unwrap_or("unknown");
+    let reason = status
+        .disconnect_reason
+        .map(|reason| format!("{reason} ({})", wifi_disconnect_reason_text(reason)))
+        .unwrap_or_else(|| "unknown".to_string());
+    let ip = status.station_ip.as_deref().unwrap_or("none");
+    let runtime = status
+        .runtime_active
+        .map(|active| if active { "running" } else { "idle" })
+        .unwrap_or("unknown");
+    format!(
+        "Wi-Fi is {provisioned}; socket is {socket}; station is {station}; retrying is {retrying}; disconnect reason is {reason}; station IP is {ip}; runtime is {runtime}."
+    )
 }
 
 fn daemon_serve(
@@ -1684,7 +1925,6 @@ fn daemon_serve(
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
-    wifi_secret: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
@@ -1698,6 +1938,24 @@ fn daemon_serve(
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
+    let bridge = make_command_bridge(
+        device_id.clone(),
+        ble,
+        wifi.clone(),
+        wifi_port,
+        no_device,
+        sim_device,
+    )?;
+    let (hardware_uid, firmware_version) = bridge
+        .command_sender
+        .as_ref()
+        .map(|sender| {
+            (
+                query_hardware_uid(sender.as_ref(), 1_500).unwrap_or(None),
+                query_version(sender.as_ref(), 1_000).unwrap_or(None),
+            )
+        })
+        .unwrap_or((None, None));
     let transport_status = DaemonTransportStatus {
         device_id: device_id.clone(),
         ble,
@@ -1705,16 +1963,9 @@ fn daemon_serve(
         wifi_port,
         no_device,
         sim_device,
+        hardware_uid,
+        firmware_version,
     };
-    let bridge = make_command_bridge(
-        device_id,
-        ble,
-        wifi,
-        wifi_secret,
-        wifi_port,
-        no_device,
-        sim_device,
-    )?;
     let url = gateway_ws_url(port, gateway_url)?;
 
     println!("daemon host connecting to {url}");
@@ -1722,7 +1973,8 @@ fn daemon_serve(
         match daemon_host_session(
             url.as_str(),
             &bootstrap,
-            bridge.clone(),
+            bridge.bridge.clone(),
+            bridge.command_sender.clone(),
             transport_status.clone(),
         ) {
             Ok(()) => println!("gateway session ended; reconnecting"),
@@ -1736,7 +1988,8 @@ fn daemon_host_session(
     url: &str,
     bootstrap: &str,
     bridge: Arc<dyn CommandBridge>,
-    transport_status: DaemonTransportStatus,
+    command_sender: Option<Arc<dyn DeviceCommandSender>>,
+    mut transport_status: DaemonTransportStatus,
 ) -> Result<()> {
     let (mut ws, _response) =
         connect(url).with_context(|| format!("failed to connect to local gateway at {url}"))?;
@@ -1761,6 +2014,7 @@ fn daemon_host_session(
     let mut active_engine: Option<Engine> = None;
     let mut active_script_id: Option<String> = None;
     let mut rev: u64 = 0;
+    let mut last_status = Instant::now();
 
     loop {
         let msg = match ws.read() {
@@ -1774,6 +2028,11 @@ fn daemon_host_session(
                     if pump_engine_timers(&mut ws, engine, script_id, &mut rev)? > 0 {
                         continue;
                     }
+                }
+                if last_status.elapsed() >= Duration::from_secs(5) {
+                    refresh_transport_liveness(&mut transport_status, command_sender.as_deref());
+                    send_host_device_status(&mut ws, true, &transport_status)?;
+                    last_status = Instant::now();
                 }
                 continue;
             }
@@ -1798,6 +2057,11 @@ fn daemon_host_session(
                     .and_then(|v| v.as_str())
                     .unwrap_or("script.emw")
                     .to_string();
+                let requested_device_id = value
+                    .get("deviceId")
+                    .and_then(|v| v.as_str())
+                    .filter(|id| !id.trim().is_empty())
+                    .map(str::to_string);
                 let script_id = format!("local-{}", std::process::id());
                 active_engine = None;
                 active_script_id = Some(script_id.clone());
@@ -1807,7 +2071,9 @@ fn daemon_host_session(
                     if source.trim().is_empty() {
                         anyhow::bail!("script source is empty");
                     }
-                    let engine = Engine::new(bootstrap, bridge.clone())?;
+                    let script_bridge =
+                        bridge_for_gateway_device_id(requested_device_id.as_deref(), &bridge)?;
+                    let engine = Engine::new(bootstrap, script_bridge)?;
                     engine.run_script(&source)?;
                     Ok(engine)
                 })();
@@ -1820,6 +2086,7 @@ fn daemon_host_session(
                                 "hostSessionId": "local",
                                 "scriptInstanceId": script_id,
                                 "name": name,
+                                "deviceId": requested_device_id,
                             })
                             .to_string(),
                         ))?;
@@ -1909,6 +2176,26 @@ fn pump_engine_timers(
     Ok(ran)
 }
 
+fn refresh_transport_liveness(
+    transport_status: &mut DaemonTransportStatus,
+    command_sender: Option<&dyn DeviceCommandSender>,
+) {
+    let Some(sender) = command_sender else {
+        return;
+    };
+    match query_hardware_uid(sender, 1_500) {
+        Ok(Some(uid)) => {
+            transport_status.hardware_uid = Some(uid);
+            if transport_status.firmware_version.is_none() {
+                transport_status.firmware_version = query_version(sender, 1_000).unwrap_or(None);
+            }
+        }
+        Ok(None) | Err(_) => {
+            transport_status.hardware_uid = None;
+        }
+    }
+}
+
 fn send_host_device_status(
     ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
     connected: bool,
@@ -1939,24 +2226,27 @@ fn daemon_status_devices(
         .map(str::to_string);
 
     if !transport_status.no_device && !transport_status.sim_device {
-        if let Ok(wifi_devices) = list_wifi_devices(750) {
+        if let Ok(wifi_devices) = validated_wifi_devices(750) {
             for device in wifi_devices {
-                let id = format!("wifi:{}:{}", device.host, device.port);
+                let id = format!("wifi:{}:{}", device.info.host, device.info.port);
                 if selected_id.as_deref() == Some(id.as_str()) {
                     continue;
                 }
                 let board = device
+                    .info
                     .txt
                     .get("board")
                     .cloned()
                     .unwrap_or_else(|| "esp32".to_string());
                 devices.push(serde_json::json!({
                     "id": id,
-                    "name": device.name,
+                    "name": device.info.name,
                     "transport": "Wi-Fi",
                     "boardType": board,
+                    "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
+                    "hardwareUid": device.hardware_uid,
                     "connected": false,
-                    "endpoint": format!("{}:{}", device.host, device.port),
+                    "endpoint": format!("{}:{}", device.info.host, device.info.port),
                 }));
             }
         }
@@ -1993,6 +2283,8 @@ fn selected_daemon_device(
             "transport": "BLE",
             "boardType": "esp32s3",
             "connected": connected,
+            "firmwareVersion": transport_status.firmware_version.clone(),
+            "hardwareUid": transport_status.hardware_uid.clone(),
         });
     }
     if let Some(host) = transport_status.wifi.as_deref() {
@@ -2003,6 +2295,8 @@ fn selected_daemon_device(
             "boardType": "esp32",
             "connected": connected,
             "endpoint": format!("{host}:{}", transport_status.wifi_port),
+            "firmwareVersion": transport_status.firmware_version.clone(),
+            "hardwareUid": transport_status.hardware_uid.clone(),
         });
     }
 
@@ -2016,6 +2310,8 @@ fn selected_daemon_device(
         "name": if selected_id == "auto" { "USB MIDI auto".to_string() } else { format!("USB MIDI {selected_id}") },
         "transport": "USB",
         "connected": connected,
+        "firmwareVersion": transport_status.firmware_version.clone(),
+        "hardwareUid": transport_status.hardware_uid.clone(),
     })
 }
 
@@ -2436,7 +2732,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2446,7 +2741,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2459,7 +2753,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2470,7 +2763,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2482,7 +2774,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2493,7 +2784,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2519,7 +2809,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2530,7 +2819,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2543,7 +2831,6 @@ fn main() -> Result<()> {
                 device,
                 ble,
                 wifi,
-                wifi_secret,
                 wifi_port,
                 no_device,
                 sim_device,
@@ -2559,7 +2846,6 @@ fn main() -> Result<()> {
                         device,
                         ble,
                         wifi,
-                        wifi_secret,
                         wifi_port,
                         no_device,
                         sim_device,
@@ -2576,14 +2862,9 @@ fn main() -> Result<()> {
         Commands::Devices {
             json,
             wifi,
-            wifi_secret,
             wifi_port,
-        } => list_devices(json, wifi, wifi_secret, wifi_port),
-        Commands::Doctor {
-            wifi,
-            wifi_secret,
-            wifi_port,
-        } => doctor(wifi, wifi_secret, wifi_port),
+        } => list_devices(json, wifi, wifi_port),
+        Commands::Doctor { wifi, wifi_port } => doctor(wifi, wifi_port),
         Commands::Run {
             script,
             name,
@@ -2595,7 +2876,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2611,7 +2891,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2623,7 +2902,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2635,7 +2913,6 @@ fn main() -> Result<()> {
             device,
             ble,
             wifi,
-            wifi_secret,
             wifi_port,
             no_device,
             sim_device,
@@ -2647,7 +2924,6 @@ fn main() -> Result<()> {
                     device,
                     ble,
                     wifi,
-                    wifi_secret,
                     wifi_port,
                     no_device,
                     sim_device,
@@ -2657,7 +2933,6 @@ fn main() -> Result<()> {
                 if device.is_some()
                     || ble
                     || wifi.is_some()
-                    || wifi_secret.is_some()
                     || no_device
                     || sim_device
                     || bootstrap_path.is_some()
@@ -2674,6 +2949,28 @@ fn main() -> Result<()> {
             error,
             endpoint,
         } => run_agent(prompt, script, mode, error, endpoint),
+        Commands::Wifi { cmd } => match cmd {
+            WifiCmd::Provision {
+                ssid,
+                password,
+                device,
+                ble,
+                wifi,
+                wifi_port,
+            } => run_wifi_provision(ssid, password, device, ble, wifi, wifi_port),
+            WifiCmd::Status {
+                device,
+                ble,
+                wifi,
+                wifi_port,
+            } => run_wifi_status(device, ble, wifi, wifi_port),
+            WifiCmd::Clear {
+                device,
+                ble,
+                wifi,
+                wifi_port,
+            } => run_wifi_clear(device, ble, wifi, wifi_port),
+        },
         Commands::Paths => print_paths(),
     }
 }
@@ -2706,7 +3003,7 @@ fn run_tui() -> Result<()> {
                 None => "not running".to_string(),
             };
             let autostart = autostart_status()?;
-            let devices = list_devices_lines(None, None, 3922)?;
+            let devices = list_devices_lines(None, 3922)?;
 
             terminal.draw(|f| {
                 let size = f.size();
@@ -2749,7 +3046,7 @@ fn run_tui() -> Result<()> {
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
                             let _ = daemon_start(
-                                None, None, None, false, None, None, 3922, false, false, None,
+                                None, None, None, false, None, 3922, false, false, None,
                             );
                         }
                         KeyCode::Char('t') => {
@@ -2812,7 +3109,7 @@ mod tests {
 
     #[test]
     fn wifi_probe_error_classifies_busy_device() {
-        let err = anyhow::anyhow!("expected Wi-Fi auth challenge, got Text(\"busy\")");
+        let err = anyhow::anyhow!("received text frame: busy");
         assert!(classify_wifi_probe_error(&err).contains("device is busy with another session"));
     }
 
@@ -2820,12 +3117,5 @@ mod tests {
     fn wifi_probe_error_classifies_busy_text_response() {
         let err = anyhow::anyhow!("Wi-Fi device is busy with another session");
         assert!(classify_wifi_probe_error(&err).contains("device is busy with another session"));
-    }
-
-    #[test]
-    fn wifi_probe_error_classifies_pairing_secret_mismatch() {
-        let err = anyhow::anyhow!("Wi-Fi authentication failed: auth fail");
-        assert!(classify_wifi_probe_error(&err)
-            .contains("authentication failure or paired secret mismatch"));
     }
 }

@@ -53,6 +53,7 @@ function deviceDetail(device: NonNullable<RemoteDeviceStatus["devices"]>[number]
     device.transport,
     device.boardType,
     device.endpoint,
+    device.hardwareUid ? `UID ${device.hardwareUid}` : "",
     runtimeLabel(runtimeOwner),
   ].filter(Boolean);
   return parts.join(" · ");
@@ -100,7 +101,6 @@ export function GatewayApp() {
   const [daemonAction, setDaemonAction] = useState("");
   const [daemonBusy, setDaemonBusy] = useState(false);
   const [daemonWifiHost, setDaemonWifiHost] = useState("");
-  const [daemonWifiSecret, setDaemonWifiSecret] = useState("");
   const [daemonWifiPort, setDaemonWifiPort] = useState("3922");
   const [gatewayDevices, setGatewayDevices] = useState<GatewayDevice[]>([]);
   const [gatewayDevicesBusy, setGatewayDevicesBusy] = useState(false);
@@ -332,14 +332,14 @@ export function GatewayApp() {
     }
   }
 
-  async function startDaemon(options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) {
+  async function startDaemon(options?: { wifi?: string; wifiPort?: string }) {
     if (daemonBusy) return;
     setDaemonBusy(true);
     setDaemonAction(options?.wifi ? "Starting Wi-Fi daemon…" : "Starting daemon…");
     setUiError(null);
     try {
       const payload = options?.wifi
-        ? { wifi: options.wifi, wifiSecret: options.wifiSecret || "", wifiPort: options.wifiPort || "3922" }
+        ? { wifi: options.wifi, wifiPort: options.wifiPort || "3922" }
         : {};
       const response = await fetch("/v1/daemon/start", {
         method: "POST",
@@ -428,8 +428,6 @@ export function GatewayApp() {
           daemonAction={daemonAction}
           daemonWifiHost={daemonWifiHost}
           setDaemonWifiHost={setDaemonWifiHost}
-          daemonWifiSecret={daemonWifiSecret}
-          setDaemonWifiSecret={setDaemonWifiSecret}
           daemonWifiPort={daemonWifiPort}
           setDaemonWifiPort={setDaemonWifiPort}
           gatewayDevices={gatewayDevices}
@@ -675,13 +673,11 @@ function SidePanel(props: {
   saveLocal: () => void;
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: (options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) => void;
+  startDaemon: (options?: { wifi?: string; wifiPort?: string }) => void;
   daemonBusy: boolean;
   daemonAction: string;
   daemonWifiHost: string;
   setDaemonWifiHost: (v: string) => void;
-  daemonWifiSecret: string;
-  setDaemonWifiSecret: (v: string) => void;
   daemonWifiPort: string;
   setDaemonWifiPort: (v: string) => void;
   gatewayDevices: GatewayDevice[];
@@ -827,13 +823,11 @@ function LibraryPanel(props: {
 function RuntimePanel(props: {
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: (options?: { wifi?: string; wifiSecret?: string; wifiPort?: string }) => void;
+  startDaemon: (options?: { wifi?: string; wifiPort?: string }) => void;
   daemonBusy: boolean;
   daemonAction: string;
   daemonWifiHost: string;
   setDaemonWifiHost: (v: string) => void;
-  daemonWifiSecret: string;
-  setDaemonWifiSecret: (v: string) => void;
   daemonWifiPort: string;
   setDaemonWifiPort: (v: string) => void;
   gatewayDevices: GatewayDevice[];
@@ -849,8 +843,6 @@ function RuntimePanel(props: {
     daemonAction,
     daemonWifiHost,
     setDaemonWifiHost,
-    daemonWifiSecret,
-    setDaemonWifiSecret,
     daemonWifiPort,
     setDaemonWifiPort,
     gatewayDevices,
@@ -858,7 +850,7 @@ function RuntimePanel(props: {
     refreshGatewayDevices,
     useGatewayWifiDevice,
   } = props;
-  const canStartWifi = daemonWifiHost.trim() && daemonWifiSecret.trim() && !connected && !daemonBusy;
+  const canStartWifi = daemonWifiHost.trim() && !connected && !daemonBusy;
   const wifiDevices = gatewayDevices.filter((device) => device.transport === "Wi-Fi" && (device.host || device.endpoint));
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -970,20 +962,11 @@ function RuntimePanel(props: {
             className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
           />
         </div>
-        <input
-          value={daemonWifiSecret}
-          onChange={(event) => setDaemonWifiSecret(event.target.value)}
-          placeholder="Pairing secret"
-          type="password"
-          disabled={connected || daemonBusy}
-          className="mt-2 h-9 w-full rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
-        />
         <button
           type="button"
           onClick={() =>
             startDaemon({
               wifi: daemonWifiHost.trim(),
-              wifiSecret: daemonWifiSecret.trim(),
               wifiPort: daemonWifiPort.trim() || "3922",
             })
           }

@@ -4,6 +4,7 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 use tracing::{info, warn};
 
+use crate::commands::DeviceCommandSender;
 use crate::protocol::{
     decode_sysex_to_superframe, encode_superframe, make_superframe, LANE_SIZE, SUPERFRAME_SIZE,
 };
@@ -405,6 +406,12 @@ impl Device {
             st.response_data = Some(lane.to_vec());
             self.cv.notify_all();
         }
+    }
+}
+
+impl DeviceCommandSender for Device {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        Device::send_command(self, cmd_lane, timeout_ms)
     }
 }
 
