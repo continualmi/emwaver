@@ -210,11 +210,15 @@ private final class MacTransportDeviceSession {
 final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     static let transportDebugLoggingEnabledDefaultsKey = "emwaver.transportDebugLoggingEnabled"
     static let connectionPollIntervalSeconds: TimeInterval = 5.0
+    private static let transportSessionHeartbeatIntervalSeconds: TimeInterval = 2.0
     private static let bleDiscoveryStaleIntervalSeconds: TimeInterval = 8.0
 
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
     private static let superframeSizeBytes: Int = 36
+    private static let responseOK: UInt8 = 0x80
+    private static let responseErr: UInt8 = 0x81
+    private static let responseBusy: UInt8 = 0x82
 
     static func isBufferStatusLane(_ lane: Data) -> Bool {
         guard lane.count == laneSizeBytes,
@@ -229,7 +233,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
         static let hardwareUID: UInt8 = 0x08
+        static let board: UInt8 = 0x09
         static let wifiConfig: UInt8 = 0x0A
+        static let transportSession: UInt8 = 0x0B
         static let sample: UInt8 = 0x60
 
         static let sampleStart: UInt8 = 0x00
@@ -242,6 +248,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let wifiStatus: UInt8 = 0x04
         static let wifiFieldSSID: UInt8 = 0x00
         static let wifiFieldPassword: UInt8 = 0x01
+
+        static let transportSessionStatus: UInt8 = 0x00
+        static let transportSessionConnect: UInt8 = 0x01
+        static let transportSessionDisconnect: UInt8 = 0x02
+        static let transportSessionHeartbeat: UInt8 = 0x03
+        static let transportSourceUSB: UInt8 = 0x01
+        static let transportSourceBLE: UInt8 = 0x02
+        static let transportSourceWiFi: UInt8 = 0x03
     }
 
     private var transportDebugLoggingEnabled: Bool {
@@ -288,6 +302,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         case wifi
     }
 
+    private struct TransportSessionClaim {
+        let source: UInt8
+        let hardwareUID: String?
+        let heartbeatTimer: DispatchSourceTimer
+    }
+
     private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleCommandUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleNotifyUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
@@ -307,6 +327,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private var portCandidatesByDisplayName: [String: PortCandidate] = [:]
     private var hardwareUIDByDeviceID: [String: String] = [:]
+    private var boardTypeByDeviceID: [String: String] = [:]
+    private var transportSessionClaimsByDeviceID: [String: TransportSessionClaim] = [:]
     private var bleDiscoveredPeripheralsByID: [UUID: CBPeripheral] = [:]
     private var deviceSessionsByID: [String: MacTransportDeviceSession] = [:]
     private var activeDeviceID: String?
@@ -523,9 +545,33 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     func connectWiFi(host: String, port: Int = MacWiFiManager.defaultPort) {
         midiQueue.async {
+            let targetID = MacWiFiManager.deviceID(
+                host: host.trimmingCharacters(in: .whitespacesAndNewlines),
+                port: port
+            )
+            guard self.canActivateTransportInternal(targetID) else { return }
             self.pendingAutoConnectWiFiID = nil
+            self.wifiManager?.connect(host: host, port: port)
         }
-        wifiManager?.connect(host: host, port: port)
+    }
+
+    func reportLocalError(_ message: String) {
+        setError(message)
+    }
+
+    func beginScriptTransportSession(deviceID: String?) -> Bool {
+        if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
+            return beginScriptTransportSessionInternal(deviceID: deviceID)
+        }
+        return midiQueue.sync {
+            self.beginScriptTransportSessionInternal(deviceID: deviceID)
+        }
+    }
+
+    func endScriptTransportSession(deviceID: String?) {
+        midiQueue.async {
+            self.endScriptTransportSessionInternal(deviceID: deviceID)
+        }
     }
 
     func provisionWiFi(ssid: String, password: String) {
@@ -678,23 +724,34 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func connectDeviceInternal(transportID id: String) {
-            if id.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(id) {
-                self.connectInternal(portName: displayName)
-                return
-            }
-            if id.hasPrefix("ble:"),
-               let uuid = UUID(uuidString: String(id.dropFirst("ble:".count))),
-               let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
-                self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid], makeActive: true)
-                return
-            }
-            if id.hasPrefix("wifi:"), let record = self.wifiDevices.first(where: { $0.id == id }) {
-                self.wifiConnectionErrorsByID.removeValue(forKey: record.id)
-                self.publishDiscoveredDevices()
-                self.wifiManager?.connect(record: record)
-                return
-            }
-            self.setError("No matching device: \(id)")
+        let targetID: String
+        if id.hasPrefix("uid:"),
+           let transportID = self.hardwareUIDByDeviceID.first(where: { $0.value == String(id.dropFirst("uid:".count)) })?.key {
+            targetID = transportID
+        } else {
+            targetID = id
+        }
+
+        guard self.canActivateTransportInternal(targetID) else {
+            return
+        }
+        if targetID.hasPrefix("midi:"), let displayName = self.displayNameFromDeviceID(targetID) {
+            self.connectInternal(portName: displayName)
+            return
+        }
+        if targetID.hasPrefix("ble:"),
+           let uuid = UUID(uuidString: String(targetID.dropFirst("ble:".count))),
+           let peripheral = self.bleDiscoveredPeripheralsByID[uuid] {
+            self.connectBleInternal(peripheral, name: self.bleDiscoveredNamesByID[uuid], makeActive: true)
+            return
+        }
+        if targetID.hasPrefix("wifi:"), let record = self.wifiDevices.first(where: { $0.id == targetID }) {
+            self.wifiConnectionErrorsByID.removeValue(forKey: record.id)
+            self.publishDiscoveredDevices()
+            self.wifiManager?.connect(record: record)
+            return
+        }
+        self.setError("No matching device: \(id)")
     }
 
     func disconnect() {
@@ -900,9 +957,232 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             data,
             timeout: 2000,
             responsePredicate: { lane in
-                lane.first == 0x80 || lane.first == 0x81
+                lane.first == Self.responseOK || lane.first == Self.responseErr
             }
         )
+    }
+
+    private func beginScriptTransportSessionInternal(deviceID: String?) -> Bool {
+        guard let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID else {
+            setError("Cannot run script: No selected device")
+            return false
+        }
+        guard isTransportConnectedInternal(deviceID: targetID) else {
+            setError("Cannot run script: Selected device is not connected")
+            return false
+        }
+        guard requiresTransportSessionInternal(deviceID: targetID) else {
+            return true
+        }
+        guard transportSessionClaimsByDeviceID[targetID] == nil else {
+            setError("Device is already running a script on the selected transport")
+            return false
+        }
+        guard let source = transportSessionSource(for: targetID) else {
+            setError("Cannot run script: Unsupported transport")
+            return false
+        }
+        guard sendTransportSessionCommandInternal(
+            subcommand: EmwOpcode.transportSessionConnect,
+            source: source,
+            deviceID: targetID,
+            timeoutMs: 1500,
+            reportErrors: true
+        ) else {
+            return false
+        }
+        setTransportDebugLogging(transportDebugLoggingEnabled, deviceID: targetID)
+        startTransportSessionHeartbeatInternal(deviceID: targetID, source: source)
+        return true
+    }
+
+    private func endScriptTransportSessionInternal(deviceID: String?) {
+        guard let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID,
+              let claim = transportSessionClaimsByDeviceID.removeValue(forKey: targetID) else {
+            return
+        }
+        claim.heartbeatTimer.setEventHandler {}
+        claim.heartbeatTimer.cancel()
+        guard isTransportConnectedInternal(deviceID: targetID) else {
+            return
+        }
+        _ = sendTransportSessionCommandInternal(
+            subcommand: EmwOpcode.transportSessionDisconnect,
+            source: claim.source,
+            deviceID: targetID,
+            timeoutMs: 1000,
+            reportErrors: false
+        )
+    }
+
+    private func clearTransportSessionClaimsInternal(sendDisconnect: Bool) {
+        let claims = transportSessionClaimsByDeviceID
+        transportSessionClaimsByDeviceID.removeAll()
+        for (deviceID, claim) in claims {
+            claim.heartbeatTimer.setEventHandler {}
+            claim.heartbeatTimer.cancel()
+            guard sendDisconnect, isTransportConnectedInternal(deviceID: deviceID) else {
+                continue
+            }
+            _ = sendTransportSessionCommandInternal(
+                subcommand: EmwOpcode.transportSessionDisconnect,
+                source: claim.source,
+                deviceID: deviceID,
+                timeoutMs: 1000,
+                reportErrors: false
+            )
+        }
+    }
+
+    private func canActivateTransportInternal(_ deviceID: String) -> Bool {
+        let targetID = resolvedTransportID(for: deviceID) ?? deviceID
+        guard !transportSessionClaimsByDeviceID.isEmpty,
+              transportSessionClaimsByDeviceID[targetID] == nil else {
+            return true
+        }
+        if let targetUID = hardwareUIDForDeviceIDInternal(targetID) {
+            let sameDeviceClaimed = transportSessionClaimsByDeviceID.values.contains { claim in
+                claim.hardwareUID?.caseInsensitiveCompare(targetUID) == .orderedSame
+            }
+            if !sameDeviceClaimed {
+                return true
+            }
+        }
+        setError("Stop the running script before switching transport")
+        publishDiscoveredDevices()
+        return false
+    }
+
+    private func startTransportSessionHeartbeatInternal(deviceID: String, source: UInt8) {
+        let timer = DispatchSource.makeTimerSource(queue: midiQueue)
+        timer.schedule(
+            deadline: .now() + Self.transportSessionHeartbeatIntervalSeconds,
+            repeating: Self.transportSessionHeartbeatIntervalSeconds
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            guard self.transportSessionClaimsByDeviceID[deviceID]?.source == source else {
+                return
+            }
+            let ok = self.sendTransportSessionCommandInternal(
+                subcommand: EmwOpcode.transportSessionHeartbeat,
+                source: source,
+                deviceID: deviceID,
+                timeoutMs: 1000,
+                reportErrors: false
+            )
+            if !ok {
+                if let claim = self.transportSessionClaimsByDeviceID.removeValue(forKey: deviceID) {
+                    claim.heartbeatTimer.setEventHandler {}
+                    claim.heartbeatTimer.cancel()
+                }
+                self.setError("Transport session ended for selected device")
+            }
+        }
+        transportSessionClaimsByDeviceID[deviceID] = TransportSessionClaim(
+            source: source,
+            hardwareUID: hardwareUIDForDeviceIDInternal(deviceID),
+            heartbeatTimer: timer
+        )
+        timer.resume()
+    }
+
+    private func sendTransportSessionCommandInternal(
+        subcommand: UInt8,
+        source: UInt8,
+        deviceID: String,
+        timeoutMs: Int,
+        reportErrors: Bool
+    ) -> Bool {
+        guard isTransportConnectedInternal(deviceID: deviceID) else {
+            if reportErrors {
+                setError("Transport session failed: selected device is not connected")
+            }
+            return false
+        }
+
+        let response = sendCommandInternal(
+            Data([EmwOpcode.transportSession, subcommand, source]),
+            timeout: timeoutMs,
+            responsePredicate: { lane in
+                guard let first = lane.first else { return false }
+                return first == Self.responseOK || first == Self.responseErr || first == Self.responseBusy
+            },
+            deviceID: deviceID
+        )
+        guard let status = response?.first else {
+            if reportErrors {
+                setError("Transport session command timed out")
+            }
+            return false
+        }
+        switch status {
+        case Self.responseOK:
+            return true
+        case Self.responseBusy:
+            if reportErrors {
+                setError("Device is busy with another transport session")
+            }
+            return false
+        default:
+            if reportErrors {
+                setError("Device rejected transport session command")
+            }
+            return false
+        }
+    }
+
+    private func requiresTransportSessionInternal(deviceID: String) -> Bool {
+        if deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
+            return true
+        }
+        return boardTypeForDeviceIDInternal(deviceID)?
+            .lowercased()
+            .hasPrefix("esp32") == true
+    }
+
+    private func boardTypeForDeviceIDInternal(_ deviceID: String) -> String? {
+        let targetID = resolvedTransportID(for: deviceID) ?? deviceID
+        if let known = boardTypeByDeviceID[targetID] {
+            return known
+        }
+        if targetID.hasPrefix("wifi:") {
+            return wifiDevices.first(where: { $0.id == targetID })?.boardType ?? "esp32"
+        }
+        if targetID.hasPrefix("ble:") {
+            return "esp32s3"
+        }
+        if targetID.hasPrefix("midi:") {
+            return displayNameFromDeviceID(targetID).map { inferBoardType(portName: $0) }
+        }
+        return nil
+    }
+
+    private func hardwareUIDForDeviceIDInternal(_ deviceID: String) -> String? {
+        let targetID = resolvedTransportID(for: deviceID) ?? deviceID
+        if let uid = hardwareUIDByDeviceID[targetID] {
+            return uid
+        }
+        if targetID.hasPrefix("wifi:"),
+           let uid = wifiDevices.first(where: { $0.id == targetID })?.localIdentifier,
+           Self.isFullHardwareUID(uid) {
+            return uid
+        }
+        return nil
+    }
+
+    private func transportSessionSource(for deviceID: String) -> UInt8? {
+        let targetID = resolvedTransportID(for: deviceID) ?? deviceID
+        if targetID.hasPrefix("midi:") {
+            return EmwOpcode.transportSourceUSB
+        }
+        if targetID.hasPrefix("ble:") {
+            return EmwOpcode.transportSourceBLE
+        }
+        if targetID.hasPrefix("wifi:") {
+            return EmwOpcode.transportSourceWiFi
+        }
+        return nil
     }
 
     func applyTransportDebugPreference() {
@@ -920,9 +1200,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func setTransportDebugLogging(_ enabled: Bool, deviceID: String) {
         let mode = enabled ? "1" : "0"
         guard let command = "debug transport \(mode)".data(using: .utf8) else { return }
-        withMidiQueueSync {
-            self.sendPacketNow(command, deviceID: deviceID)
-        }
+        _ = sendCommandInternal(
+            command,
+            timeout: 1000,
+            responsePredicate: { lane in
+                guard let first = lane.first else { return false }
+                return first == Self.responseOK || first == Self.responseErr || first == Self.responseBusy
+            },
+            deviceID: deviceID
+        )
     }
 
     private func finishWiFiProvisioning(message: String, isError: Bool) {
@@ -1088,7 +1374,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: id,
                 displayName: port,
                 transport: .usbMidi,
-                boardType: inferBoardType(portName: port),
+                boardType: boardTypeByDeviceID[id] ?? inferBoardType(portName: port),
                 moduleLabel: nil,
                 identifierText: hardwareUIDByDeviceID[id].map { "UID \($0)" },
                 connectionState: isActive ? .connected : .discovered,
@@ -1108,7 +1394,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 id: id,
                 displayName: name,
                 transport: .ble,
-                boardType: "esp32s3",
+                boardType: boardTypeByDeviceID[id] ?? "esp32s3",
                 moduleLabel: nil,
                 identifierText: hardwareUID.map { "UID \($0)" },
                 connectionState: isConnected ? .connected : (isConnecting ? .connecting : .discovered),
@@ -1240,6 +1526,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         pendingAutoConnectWiFiID = record.id
         wifiConnectionErrorsByID.removeValue(forKey: record.id)
         publishDiscoveredDevices()
+        guard canActivateTransportInternal(record.id) else {
+            pendingAutoConnectWiFiID = nil
+            return false
+        }
         wifiManager?.connect(record: record)
         return true
     }
@@ -1419,12 +1709,15 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func connectInternal(candidate: PortCandidate, displayName: String?) {
+        let deviceID = "midi:\(displayName ?? candidate.name)"
+        guard canActivateTransportInternal(deviceID) else {
+            return
+        }
         disconnectMidiOnlyInternal()
 
         connectedSource = candidate.source
         connectedDestination = candidate.destination
         activeTransport = .usbMidi
-        let deviceID = "midi:\(displayName ?? candidate.name)"
         activeDeviceID = deviceID
         ensureDeviceSessionInternal(deviceID: deviceID).resetParserAndBuffers()
 
@@ -1448,19 +1741,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
         // Query only local runtime metadata needed for display and update guidance.
         DispatchQueue.global(qos: .userInitiated).async {
-            if self.transportDebugLoggingEnabled {
-                self.setTransportDebugLogging(true, deviceID: deviceID)
-            }
             var v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             if v == nil {
                 Thread.sleep(forTimeInterval: 0.25)
                 v = self.queryDeviceVersion(timeoutMs: 1500, deviceID: deviceID)
             }
             let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
-            if !self.transportDebugLoggingEnabled {
-                self.setTransportDebugLogging(false, deviceID: deviceID)
-            }
-            let boardType = self.inferBoardType(portName: displayName ?? candidate.name)
+            let reportedBoardType = self.queryBoardType(timeoutMs: 1500, deviceID: deviceID)
+            let boardType = reportedBoardType ?? self.inferBoardType(portName: displayName ?? candidate.name)
 
             DispatchQueue.main.async {
                 self.deviceEmwaverVersion = v
@@ -1470,12 +1758,14 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             self.midiQueue.async {
                 if let uid { self.hardwareUIDByDeviceID[deviceID] = uid }
+                self.boardTypeByDeviceID[deviceID] = boardType
                 self.publishDiscoveredDevices()
             }
         }
     }
 
     private func disconnectInternal() {
+        clearTransportSessionClaimsInternal(sendDisconnect: true)
         if connectedSource != 0 {
             _ = MIDIPortDisconnectSource(inPort, connectedSource)
         }
@@ -1547,6 +1837,21 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if resp[0] != 0x80 { return nil }
         if resp.dropFirst(4).contains(where: { $0 != 0 }) { return nil }
         return "\(resp[1]).\(resp[2])"
+    }
+
+    private func queryBoardType(timeoutMs: Int, deviceID: String? = nil) -> String? {
+        let resp = sendCommandInternal(
+            Data([EmwOpcode.board]),
+            timeout: timeoutMs,
+            responsePredicate: { lane in
+                lane.first == Self.responseOK || lane.first == Self.responseErr
+            },
+            deviceID: deviceID
+        )
+        guard let resp, resp.first == Self.responseOK else { return nil }
+        let bytes = resp.dropFirst().prefix { $0 != 0 }
+        guard !bytes.isEmpty else { return nil }
+        return String(data: Data(bytes), encoding: .utf8)
     }
 
     private func listPortCandidatesInternal() -> [PortCandidate] {
@@ -1753,6 +2058,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         pendingAutoConnectWiFiID = nil
         suppressedAutoConnectWiFiIDs.remove(record.id)
         wifiConnectionErrorsByID.removeValue(forKey: record.id)
+        boardTypeByDeviceID[record.id] = record.boardType ?? "esp32"
         ensureDeviceSessionInternal(deviceID: record.id).resetParserAndBuffers()
 
         DispatchQueue.main.async {
@@ -1772,17 +2078,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         publishDiscoveredDevices()
 
         DispatchQueue.global(qos: .userInitiated).async {
-            if self.transportDebugLoggingEnabled {
-                print("[Wi-Fi] enabling ESP transport packet logging id=\(record.id)")
-                self.setTransportDebugLogging(true, deviceID: record.id)
-            }
             print("[Wi-Fi] probing version id=\(record.id)")
             let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: record.id)
             print("[Wi-Fi] probe result id=\(record.id) version=\(version ?? "nil") uid=\(currentUID ?? "nil")")
-            if !self.transportDebugLoggingEnabled {
-                print("[Wi-Fi] disabling ESP transport packet logging id=\(record.id)")
-                self.setTransportDebugLogging(false, deviceID: record.id)
-            }
 
             DispatchQueue.main.async {
                 if shouldBecomeActive {
@@ -1832,7 +2130,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func connectBleInternal(_ peripheral: CBPeripheral, name: String?, makeActive: Bool = true) {
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
+        boardTypeByDeviceID[deviceID] = "esp32s3"
         if makeActive {
+            guard canActivateTransportInternal(deviceID) else {
+                return
+            }
             disconnectMidiOnlyInternal()
             bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
             blePeripheral = peripheral
@@ -2053,6 +2355,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         bleConnectedPeripheralsByID[peripheral.identifier] = peripheral
         let deviceID = "ble:\(peripheral.identifier.uuidString)"
+        boardTypeByDeviceID[deviceID] = "esp32s3"
         ensureDeviceSessionInternal(deviceID: deviceID)
         let shouldBecomeActive = !bleIdentityProbePeripheralIDs.contains(peripheral.identifier) &&
             (blePeripheral == nil || blePeripheral == peripheral)
@@ -2158,14 +2461,8 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         if bleCommandCharacteristicsByID[peripheral.identifier] != nil {
             let deviceID = "ble:\(peripheral.identifier.uuidString)"
             DispatchQueue.global(qos: .userInitiated).async {
-                if self.transportDebugLoggingEnabled {
-                    self.setTransportDebugLogging(true, deviceID: deviceID)
-                }
                 let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: deviceID)
                 let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: deviceID)
-                if !self.transportDebugLoggingEnabled {
-                    self.setTransportDebugLogging(false, deviceID: deviceID)
-                }
                 DispatchQueue.main.async {
                     if self.activeDeviceID == deviceID {
                         self.isConnected = true

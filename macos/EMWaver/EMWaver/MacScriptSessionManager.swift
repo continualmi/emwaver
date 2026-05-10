@@ -38,14 +38,26 @@ private final class MacScriptSession {
     let scriptName: String
     let deviceID: String?
     let deviceLabel: String
+    let hardwareUID: String?
+    let transportSessionClaimed: Bool
     var cancellable: AnyCancellable?
 
-    init(manager: ScriptPreviewManager, scriptId: String, scriptName: String, deviceID: String?, deviceLabel: String) {
+    init(
+        manager: ScriptPreviewManager,
+        scriptId: String,
+        scriptName: String,
+        deviceID: String?,
+        deviceLabel: String,
+        hardwareUID: String?,
+        transportSessionClaimed: Bool
+    ) {
         self.manager = manager
         self.scriptId = scriptId
         self.scriptName = scriptName
         self.deviceID = deviceID
         self.deviceLabel = deviceLabel
+        self.hardwareUID = hardwareUID
+        self.transportSessionClaimed = transportSessionClaimed
     }
 }
 
@@ -165,6 +177,16 @@ final class MacScriptSessionManager: ObservableObject {
         guard let device else { return nil }
 
         let targetID = selectedDeviceID
+        let targetUID = targetID.flatMap { devicesByID[$0] }.flatMap { Self.hardwareUID(from: $0.identifierText) }
+        if let existing = activeSession(forDeviceID: targetID, hardwareUID: targetUID) {
+            device.reportLocalError("Device is already running \(existing.scriptName) on \(existing.deviceLabel)")
+            return nil
+        }
+
+        guard device.beginScriptTransportSession(deviceID: targetID) else {
+            return nil
+        }
+
         let manager = ScriptPreviewManager()
         manager.attach(device: LocalTargetedScriptDevice(base: device, deviceID: targetID))
 
@@ -173,7 +195,9 @@ final class MacScriptSessionManager: ObservableObject {
             scriptId: request.scriptId,
             scriptName: request.name,
             deviceID: targetID,
-            deviceLabel: label(for: targetID)
+            deviceLabel: label(for: targetID),
+            hardwareUID: targetUID,
+            transportSessionClaimed: true
         )
         session.cancellable = manager.objectWillChange
             .receive(on: DispatchQueue.main)
@@ -182,7 +206,10 @@ final class MacScriptSessionManager: ObservableObject {
             }
 
         manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
-        guard let scriptInstanceId = manager.activeScriptInstanceId else { return nil }
+        guard let scriptInstanceId = manager.activeScriptInstanceId else {
+            device.endScriptTransportSession(deviceID: targetID)
+            return nil
+        }
 
         sessionsByID[scriptInstanceId] = session
         selectedSessionID = scriptInstanceId
@@ -209,6 +236,9 @@ final class MacScriptSessionManager: ObservableObject {
     func stopSession(_ id: String) {
         guard let session = sessionsByID[id] else { return }
         session.manager.exitPreview()
+        if session.transportSessionClaimed {
+            device?.endScriptTransportSession(deviceID: session.deviceID)
+        }
         sessionsByID.removeValue(forKey: id)
         if selectedSessionID == id {
             selectedSessionID = sessionsByID.keys.sorted().first
@@ -230,6 +260,18 @@ final class MacScriptSessionManager: ObservableObject {
             }
             .sorted { $0.scriptName.localizedCaseInsensitiveCompare($1.scriptName) == .orderedAscending }
         objectWillChange.send()
+    }
+
+    private func activeSession(forDeviceID deviceID: String?, hardwareUID: String?) -> MacScriptSession? {
+        sessionsByID.values.first { session in
+            if let deviceID, session.deviceID == deviceID {
+                return true
+            }
+            guard let hardwareUID, let sessionUID = session.hardwareUID else {
+                return false
+            }
+            return sessionUID.caseInsensitiveCompare(hardwareUID) == .orderedSame
+        }
     }
 
     private func label(for deviceID: String?) -> String {

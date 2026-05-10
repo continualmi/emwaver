@@ -182,4 +182,44 @@ struct EMWaverTests {
         #expect(LocalDeviceLabelFormatter.label(for: unprobedDevice) == "ESP32-S3 / EMWaver")
     }
 
+    @MainActor
+    @Test func espWiFiTransportSessionClaimIntegration() async throws {
+        let env = ProcessInfo.processInfo.environment
+        let markerPath = env["EMWAVER_MACOS_WIFI_CLAIM_TEST_FILE"] ?? "/tmp/emwaver-macos-wifi-claim-test"
+        let markerConfig = try? String(contentsOfFile: markerPath, encoding: .utf8)
+        guard env["EMWAVER_MACOS_WIFI_CLAIM_TEST"] == "1" || markerConfig != nil else {
+            return
+        }
+
+        let markerValues = (markerConfig ?? "")
+            .split(whereSeparator: \.isWhitespace)
+            .map(String.init)
+        let host = env["EMWAVER_MACOS_WIFI_HOST"] ?? markerValues.first ?? "192.168.1.138"
+        let portText = env["EMWAVER_MACOS_WIFI_PORT"] ?? markerValues.dropFirst().first ?? ""
+        let port = Int(portText) ?? MacWiFiManager.defaultPort
+        let manager = MacUSBManager()
+        manager.connectWiFi(host: host, port: port)
+
+        let deadline = Date().addingTimeInterval(12)
+        var wifiDeviceID: String?
+        while Date() < deadline {
+            if let device = manager.discoveredDevices.first(where: {
+                $0.id.hasPrefix("wifi:") &&
+                    $0.connectionState == .connected &&
+                    $0.identifierText?.hasPrefix("UID ") == true
+            }) {
+                wifiDeviceID = device.id
+                break
+            }
+            try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        let deviceID = try #require(wifiDeviceID)
+        #expect(manager.beginScriptTransportSession(deviceID: deviceID))
+        try await Task.sleep(nanoseconds: 2_500_000_000)
+        manager.endScriptTransportSession(deviceID: deviceID)
+        try await Task.sleep(nanoseconds: 500_000_000)
+        manager.disconnect()
+    }
+
 }

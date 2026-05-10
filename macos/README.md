@@ -78,6 +78,8 @@ Transport behavior:
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
 - Manual Wi-Fi connection supports bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
 - The local device selector is the preferred transport for the next script run only, and it only lists transports after a real hardware UID has been read. Discovery and UID checks continue across transports; automatic script-target selection ranks USB, then BLE, then Wi-Fi unless the user explicitly selects a transport.
+- ESP32 script runs claim the selected USB/BLE/Wi-Fi transport before script control starts, keep that claim alive with a heartbeat, and release it when the script stops. Discovery and UID/status probes may continue on other transports, but control traffic stays locked to the selected transport during the script session.
+- If a script is already running for a hardware UID, macOS rejects another local script run or active transport switch for that same device until the running script stops.
 - The ESP32 firmware owns the default local hostname and advertises it through mDNS.
 - The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI, BLE, or Wi-Fi. It sends SSID and password over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
 - The same USB/BLE local setup surface can clear ESP32 Wi-Fi provisioning for recovery after a bad network setup.
