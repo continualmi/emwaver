@@ -9,20 +9,20 @@ and app-managed local control.
 
 ## Visual Identification
 
-Catalog photos show a compact black board inside a clear case. The visible top
+Photos show a compact black board inside a clear case. The visible top
 side includes an E07 radio module, a Rainsun 433 MHz antenna, a 2x4 module
 header, status LEDs, IR parts, USB-C, and a small board-to-phone USB-C plug.
 Workflow photos show the board connected directly to a phone and running the
 EMWaver shell over USB.
 
-Representative catalog images:
+Images:
 
 - [clear-case top-side photo](catalog/images/IMG_0149.webp)
 - [phone USB shell workflow](catalog/images/IMG_0184.webp)
 - [gallery detail photo](catalog/images/IMG_0153.webp)
-- [catalog render](catalog/images/emwaver-link.png)
+- [render](catalog/images/emwaver-link.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -30,9 +30,8 @@ Representative catalog images:
 | [PCB_PCB_EMWAVER_LINK_2026-03-26.pdf](PCB_PCB_EMWAVER_LINK_2026-03-26.pdf) | board layout export |
 | [Gerber_EMWAVER_LINK_PCB_EMWAVER_LINK_2026-03-26.zip](Gerber_EMWAVER_LINK_PCB_EMWAVER_LINK_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_EMWAVER_LINK_2026-03-26.csv](BOM_EMWAVER_LINK_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_LINK_2026-03-26.csv) | assembly placement file |
 | [EMWAVER_LINK_CASE.stl](EMWAVER_LINK_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
 ## Major Components
 
@@ -104,22 +103,7 @@ so external add-on use must account for those conflicts.
 8. Test receive-only at 433 MHz, then low-duty transmit.
 9. Validate final range and thermal behavior inside the case.
 
-## Firmware Development
+## Firmware
 
-Normal users should not build or flash firmware manually. Internal STM32
-development lives in [`../../stm`](../../stm). App updaters consume `.bin`
-payloads generated from the CubeIDE build.
-
-## Images
-
-- `catalog/images/IMG_0149.webp` and neighboring `IMG_*.webp` files contain
-  current board, case, and phone-workflow gallery photos.
-- `catalog/images/emwaver-link.png`, `emwaver-link.webp`, and
-  `emwaver-link-all.png` are catalog render/marketing images.
-
-## Documentation Gaps To Close
-
-- Add an annotated top-down board image with connector/part labels.
-- Add measured board dimensions and mounting-hole positions.
-- Add confirmed antenna keepout notes from RF validation.
-- Add a revisioned production test checklist once a manufacturing run is locked.
+Normal users should not build or flash firmware manually. EMWaver apps should
+handle setup and updates for supported firmware builds.

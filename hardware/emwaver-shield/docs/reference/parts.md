@@ -8,8 +8,6 @@ This is the current starting checklist for an EMWaver Shield build.
 - RFM69HW module
 - Helical antenna
 
-These three items come directly from the current shield catalog metadata in [../../catalog/device.json](../../catalog/device.json).
-
 ## Likely additional components
 
 Based on the current shield description, expect to also need:
@@ -20,7 +18,7 @@ Based on the current shield description, expect to also need:
 - pin headers / socket headers for the carrier layout
 - standard passives and support components defined by the design files
 
-Exact quantities and reference designators should be filled in once the BOM export is added to this repo.
+Use the BOM for exact quantities, values, and reference designators.
 
 ## Suggested tools
 
@@ -33,4 +31,5 @@ Exact quantities and reference designators should be filled in once the BOM expo
 
 ## Cost note
 
-The mirrored catalog metadata currently lists a reproduction cost of `32 USD` for `5` units. Treat that as a rough catalog estimate rather than a finalized build quote.
+Parts and assembly pricing changes frequently. Treat any old estimate as a
+rough planning number, not a quote.

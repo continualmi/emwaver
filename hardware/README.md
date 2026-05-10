@@ -1,128 +1,48 @@
 # EMWaver Hardware
 
-This folder is the hardware package index for the EMWaver family. Each board
-folder is intended to be usable on its own: the README should explain the board,
-list build assets, document pinouts and connectors, and describe the bring-up
-path without requiring someone to reverse-engineer the schematic first.
+EMWaver hardware turns supported MCU boards into local, scriptable electronics
+tools. The normal path is simple: connect a supported board, let the EMWaver app
+manage firmware setup, and run scripts locally.
 
-Current board folders:
+## Boards
 
-```text
-hardware/
-  emwaver-air/
-  emwaver-carrier/
-  emwaver-core/
-  emwaver-link/
-  emwaver-shield/
-  gpio-waver/
-  infrared-waver/
-  ism-waver/
-  rfid-waver/
-```
+| Board | Controller | Best for | Radio / peripheral |
+| --- | --- | --- | --- |
+| [EMWaver Air](emwaver-air/README.md) | ESP32-S3-MINI-1-N8 | all-in-one wireless board | CC1101 433 MHz, IR RX/TX, expansion |
+| [EMWaver Carrier](emwaver-carrier/README.md) | ESP32-S3 DevKit carrier | modular ESP32-S3 builds | CC1101 module, IR RX/TX, expansion |
+| [EMWaver Core](emwaver-core/README.md) | STM32F042G6U6 | compact USB control | IR RX/TX, GPIO blocks |
+| [EMWaver Link](emwaver-link/README.md) | STM32F042G6U6 | integrated USB radio | E07 / CC1101-class 433 MHz, IR RX/TX |
+| [EMWaver Shield](emwaver-shield/README.md) | ESP32-S3 DevKit carrier | shield-style prototyping | RFM69HW 433 MHz, IR RX/TX, 44-pin shield header |
+| [GPIO Waver](gpio-waver/README.md) | STM32F042G6U6 | GPIO prototyping | GPIO, SPI, UART, I2C headers |
+| [Infrared Waver](infrared-waver/README.md) | STM32F042G6U6 | IR capture and replay | IR receiver and IR LED driver |
+| [ISM Waver](ism-waver/README.md) | STM32F042G6U6 | sub-GHz ISM work | CC1101, 315 MHz and 433 MHz RF paths |
+| [RFID Waver](rfid-waver/README.md) | MFRC522 add-on | 13.56 MHz RFID workflows | RFID front end for GPIO Waver |
 
-## Current Board Matrix
+## Build Files
 
-| Folder | MCU / controller | Main feature | Radio / peripheral | Normal app path |
-| --- | --- | --- | --- | --- |
-| `emwaver-air` | ESP32-S3-MINI-1-N8 | all-in-one wireless board | CC1101 433 MHz, IR RX/TX, expansion | Android, iOS, desktop |
-| `emwaver-carrier` | bring-your-own ESP32-S3 DevKit | modular ESP32-S3 carrier | CC1101 module, IR RX/TX, expansion | Android, iOS, desktop |
-| `emwaver-core` | STM32F042G6U6 | compact USB board | IR RX/TX, GPIO blocks | Android, iOS, desktop |
-| `emwaver-link` | STM32F042G6U6 | integrated USB radio board | E07-400M10S / CC1101-class 433 MHz, IR RX/TX | Android, iOS, desktop |
-| `emwaver-shield` | ESP32-S3 DevKit carrier | shield-style ESP32-S3 carrier | RFM69HW 433 MHz, IR RX/TX, 44-pin shield header | Android, iOS, desktop |
-| `gpio-waver` | STM32F042G6U6 | low-cost GPIO prototyping | GPIO/SPI/UART/I2C headers | Android, desktop |
-| `infrared-waver` | STM32F042G6U6 | infrared capture/replay | IR receiver and IR LED driver | Android, desktop |
-| `ism-waver` | STM32F042G6U6 | dual-band sub-GHz work | CC1101, 315 MHz and 433 MHz RF paths | Android, desktop |
-| `rfid-waver` | MFRC522 | RFID add-on module | 13.56 MHz RFID front end | Android, desktop with GPIO Waver |
+Board pages link the files normally needed to review or reproduce the hardware:
 
-## Build Asset Convention
+- schematic PDF for electrical review,
+- PCB PDF for placement and routing review,
+- Gerber ZIP for PCB fabrication when available,
+- BOM CSV and pick-and-place CSV for assembly,
+- printable case STL files where available.
 
-Most board folders now include the same JLCPCB-style manufacturing package:
+If a pinout table says the physical orientation still needs confirmation, use
+the PCB PDF or an annotated board photo before making a cable or daughterboard.
 
-- `Schematic_*.pdf` - schematic export used for review and pinout checks.
-- `PCB_*.pdf` - board-layout PDF export.
-- `Gerber_*.zip` - fabrication archive to upload for PCB ordering.
-- `BOM_*.csv` - assembly bill of materials.
-- `PickAndPlace_*.csv` - CPL / pick-and-place data.
-- `*.stl` - printable case files where available.
-- `catalog/device.json` - website/catalog metadata mirrored into the hardware repo.
+## Ordering
 
-If a board README says a pinout needs physical verification, that means the
-schematic identifies the nets but the committed package does not yet include a
-clear annotated connector-orientation drawing. Do not treat those tables as a
-replacement for a production assembly drawing.
+1. Open the board page and confirm the exact files for that board.
+2. Upload the Gerber ZIP to the PCB manufacturer.
+3. If ordering assembly, upload the matching BOM and pick-and-place CSV.
+4. Review component orientation, connector direction, substitutions, antenna
+   keepouts, and case clearance before placing the order.
+5. On arrival, inspect for shorts, verify power rails, connect over USB, and use
+   the EMWaver app-managed setup/update flow.
 
-## General JLCPCB Flow
+## Firmware
 
-1. Open the board README and confirm the exact build assets for that board.
-2. Upload the `Gerber_*.zip` file to JLCPCB.
-3. Select board options that match the Gerber defaults unless the README calls
-   out a board-specific requirement.
-4. For assembly, upload the matching `BOM_*.csv` and `PickAndPlace_*.csv`.
-5. Review part availability, polarity, connector orientation, USB connector
-   placement, antenna keepout, and any substitutions before placing the order.
-6. On arrival, inspect for shorts, verify `VBUS` and `3V3` rails, connect over
-   USB, and then use the EMWaver app-managed firmware/update flow.
-
-## Firmware Rule
-
-EMWaver hardware is local-first. Normal users should not need an account, cloud
-activation, or manual firmware build to control local hardware.
-
-For internal firmware development:
-
-- STM32F042 boards use the workspace under `../stm/`.
-- ESP32-S3 boards use the ESP-IDF workspace under `../esp/`.
-- App-bundled firmware payloads live under `../firmware/` and platform bundle
-  folders.
-
-## Layout Policy
-
-Each imported hardware repository keeps its original repo name directly under
-`hardware/`. Do not add extra `boards/`, `modules/`, or other grouping folders
-above the imported repos.
-
-## Import Policy
-
-- Preserve useful git history with `git subtree`, `git filter-repo`, or an equivalent history-preserving import.
-- Keep imported hardware repos under `hardware/`; do not add imported files to the repo root.
-- Keep app/runtime/platform source in the existing platform folders.
-- Keep bundled app-consumed firmware payloads under `firmware/`.
-- Keep manufacturing and board-specific documentation inside each hardware subfolder.
-- Curate large generated manufacturing outputs carefully.
-- Use Git LFS only if large binary assets become unavoidable.
-
-## Current Status
-
-The nine primary hardware repositories are imported with history preserved:
-
-```text
-hardware/emwaver-air/
-hardware/emwaver-carrier/
-hardware/emwaver-core/
-hardware/emwaver-link/
-hardware/emwaver-shield/
-hardware/gpio-waver/
-hardware/infrared-waver/
-hardware/ism-waver/
-hardware/rfid-waver/
-```
-
-See `hardware/IMPORT_INVENTORY.md` for the current source inventory and target prefix map.
-
-## Import Script
-
-`hardware/import-subtrees.sh` contains the repeatable history-preserving import commands.
-
-The script refuses to run in a dirty worktree because `git subtree add` creates merge commits.
-
-Trial import:
-
-```bash
-./hardware/import-subtrees.sh gpio-waver
-```
-
-Full import:
-
-```bash
-./hardware/import-subtrees.sh all
-```
+EMWaver hardware is local-first. Local hardware control should not require an
+account, cloud activation, or manual firmware build. Normal users should use the
+managed firmware/update flow in the EMWaver apps.

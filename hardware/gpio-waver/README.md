@@ -7,19 +7,19 @@ prototyping. It is also the base board for add-ons such as RFID Waver.
 
 ## Visual Identification
 
-Catalog photos show a narrow white/black USB-C board meant to dock along the
+Photos show a narrow white/black USB-C board meant to dock along the
 bottom edge of a phone. Two long black header blocks sit on either side of the
 USB-C connector, and usage photos show clearly printed pin labels facing outward
 while the EMWaver app runs on the phone.
 
-Representative catalog images:
+Images:
 
 - [side/front board photo](catalog/images/IMG_0080.jpg)
 - [phone-docked workflow photo](catalog/images/IMG_0083.jpg)
 - [case reference](catalog/images/GPIO_WAVER_CASING.png)
-- [catalog render](catalog/images/GPIO_WAVER.png)
+- [render](catalog/images/GPIO_WAVER.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -27,11 +27,10 @@ Representative catalog images:
 | [PCB_PCB_GPIO_WAVER_2026-03-26.pdf](PCB_PCB_GPIO_WAVER_2026-03-26.pdf) | board layout export |
 | [Gerber_GPIO_WAVER_PCB_GPIO_WAVER_2026-03-26.zip](Gerber_GPIO_WAVER_PCB_GPIO_WAVER_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_GPIO_WAVER_2026-03-26.csv](BOM_GPIO_WAVER_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv](PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv](PickAndPlace_PCB_GPIO_WAVER_2026-03-26.csv) | assembly placement file |
 | [GPIO_WAVER_CASE.stl](GPIO_WAVER_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
-Catalog estimate: 5 units for about 48 USD.
+Rough historical estimate: 5 units for about 48 USD.
 
 ## Major Components
 
@@ -91,7 +90,7 @@ Header footprints in the BOM:
 5. Test GPIO read/write, ADC on `PA0`-`PA7`, PWM on `PA0`-`PA3`, SPI, UART, and
    I2C as needed.
 
-## Firmware Development
+## Firmware
 
-Internal STM32 development lives in [`../../stm`](../../stm). Normal users
-should use app-managed firmware and should not need STM32CubeIDE.
+Normal users should use app-managed firmware and should not need STM32CubeIDE or
+manual flashing.

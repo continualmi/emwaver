@@ -8,19 +8,19 @@ receive/transmit, and GPIO/module headers.
 
 ## Visual Identification
 
-Catalog photos show a small blue board designed to sit at the bottom edge of a
+Photos show a small blue board designed to sit at the bottom edge of a
 phone over USB-C. The rear silkscreen exposes labeled header groups for `VCC`,
 `GND`, `MOSI`, `MISO`, `SCK`, `NSS`, `A3`, and related GPIO/module pins, while
 app photos show sampler and script workflows running with the board attached.
 
-Representative catalog images:
+Images:
 
 - [phone sampler workflow](catalog/images/IMG_0201.jpg)
 - [labeled rear pin view](catalog/images/IMG_0209.jpg)
 - [assembled board detail](catalog/images/IMG_0202.jpg)
-- [catalog render](catalog/images/EMWAVER.png)
+- [render](catalog/images/EMWAVER.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -28,10 +28,9 @@ Representative catalog images:
 | [PCB_PCB_EMWAVER_CORE_2026-03-26.pdf](PCB_PCB_EMWAVER_CORE_2026-03-26.pdf) | board layout export |
 | [Gerber_EMWAVER_CORE_PCB_EMWAVER_CORE_2026-03-26.zip](Gerber_EMWAVER_CORE_PCB_EMWAVER_CORE_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_EMWAVER_CORE_2026-03-26.csv](BOM_EMWAVER_CORE_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_EMWAVER_CORE_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_CORE_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_EMWAVER_CORE_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_CORE_2026-03-26.csv) | assembly placement file |
 | [EMWAVER_CORE_CASE_FRONT.stl](EMWAVER_CORE_CASE_FRONT.stl) | front case shell |
 | [EMWAVER_CORE_CASE_BACK.stl](EMWAVER_CORE_CASE_BACK.stl) | back case shell |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
 ## Major Components
 
@@ -92,8 +91,7 @@ Known connector intent from firmware docs:
 5. Test IR receive, IR transmit, SPI add-on access, GPIO read/write, ADC, and
    PWM.
 
-## Firmware Development
+## Firmware
 
-Normal users should not build firmware manually. Internal STM32 development
-lives in [`../../stm`](../../stm). App updaters consume `.bin` payloads, not the
-CubeIDE `.elf` directly.
+Normal users should not build firmware manually. EMWaver apps should handle
+setup and updates for supported firmware builds.

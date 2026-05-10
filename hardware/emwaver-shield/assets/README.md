@@ -1,11 +1,9 @@
 # Assets
 
-This folder is for non-catalog presentation material.
+Presentation assets for EMWaver Shield live here.
 
-Use it for:
+Use this area for:
 
 - diagrams,
-- marketing-safe visuals,
-- future presentation assets that are not part of the mirrored hardware-catalog package.
-
-The current shield photos and render mirrored from the EMWaver catalog live in `../catalog/images/`.
+- polished board visuals,
+- future presentation images.

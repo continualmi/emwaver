@@ -8,19 +8,19 @@ EMWaver app where supported by the tag/card type.
 
 ## Visual Identification
 
-Catalog photos show a square black RFID add-on with a printed contactless-symbol
+Photos show a square black RFID add-on with a printed contactless-symbol
 antenna area, a USB-C-facing dock position when paired with GPIO Waver, and
 through-hole header rows along the edges. Phone workflow photos show the RFID UI
 open with read/write block controls while the board is docked below the phone.
 
-Representative catalog images:
+Images:
 
 - [RFID antenna board photo](catalog/images/IMG_0062.jpg)
 - [phone RFID workflow](catalog/images/IMG_0049.jpg)
 - [case reference](catalog/images/RFID_WAVER_CASING.png)
-- [catalog render](catalog/images/RFID_WAVER.png)
+- [render](catalog/images/RFID_WAVER.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -28,11 +28,10 @@ Representative catalog images:
 | [PCB_PCB_RFID_WAVER_2026-03-26.pdf](PCB_PCB_RFID_WAVER_2026-03-26.pdf) | board layout export |
 | [Gerber_RFID_WAVER_PCB_RFID_WAVER_2026-03-26.zip](Gerber_RFID_WAVER_PCB_RFID_WAVER_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_RFID_WAVER_2026-03-26.csv](BOM_RFID_WAVER_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv](PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv](PickAndPlace_PCB_RFID_WAVER_2026-03-26.csv) | assembly placement file |
 | [RFID_WAVER_CASE.stl](RFID_WAVER_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
-Catalog estimate: 5 units for about 45 USD.
+Rough historical estimate: 5 units for about 45 USD.
 
 ## Major Components
 
@@ -82,8 +81,7 @@ as a cable-build drawing.
 5. Validate read/write workflows only on cards and tags you are authorized to
    use.
 
-## Firmware Development
+## Firmware
 
-RFID Waver is a passive add-on from the firmware perspective. Host MCU firmware
-support lives in [`../../stm`](../../stm), including MFRC522 command/register
-definitions used by the STM32 runtime.
+RFID Waver is a passive add-on from the firmware perspective. Use it through a
+supported EMWaver host board and app-managed firmware.

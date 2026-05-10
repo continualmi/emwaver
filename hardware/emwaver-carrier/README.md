@@ -8,20 +8,20 @@ an ESP32-S3 DevKit-class module.
 
 ## Visual Identification
 
-Catalog photos show a pale square carrier PCB with rounded corners, long parallel
+Photos show a pale square carrier PCB with rounded corners, long parallel
 female sockets for the ESP32-S3 DevKit footprint, two smaller 2x4 module sockets,
 two IR parts near the top edge, and a USB-C connector on the lower edge. Assembled
 photos show a blue ESP32-S3 DevKit and antenna/radio module plugged into the
 carrier above a black EMWaver-branded lower face.
 
-Representative catalog images:
+Images:
 
 - [bare carrier top](catalog/images/IMG_0093.jpg)
 - [assembled carrier with modules](catalog/images/IMG_0087.jpg)
 - [case / enclosure reference](catalog/images/EMWAVER_DIY_CASING.png)
-- [catalog render](catalog/images/EMWAVER_DIY.png)
+- [render](catalog/images/EMWAVER_DIY.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -29,11 +29,10 @@ Representative catalog images:
 | [PCB_PCB_EMWAVER_CARRIER_2026-03-26.pdf](PCB_PCB_EMWAVER_CARRIER_2026-03-26.pdf) | board layout export |
 | [Gerber_EMWAVER_CARRIER_PCB_EMWAVER_CARRIER_2026-03-26.zip](Gerber_EMWAVER_CARRIER_PCB_EMWAVER_CARRIER_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_EMWAVER_CARRIER_2026-03-26.csv](BOM_EMWAVER_CARRIER_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_CARRIER_2026-03-26.csv) | assembly placement file |
 | [EMWAVER_CARRIER_CASE.stl](EMWAVER_CARRIER_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata and source links |
 
-Catalog estimate: 2 units for about 38 USD.
+Rough historical estimate: 2 units for about 38 USD.
 
 ## Required External Parts
 
@@ -75,7 +74,7 @@ those defaults or update firmware configuration intentionally.
 ## Manufacturing With JLCPCB
 
 1. Upload `Gerber_EMWAVER_CARRIER_PCB_EMWAVER_CARRIER_2026-03-26.zip`.
-2. Upload the matching BOM and CPL if ordering assembly.
+2. Upload the matching BOM and pick-and-place file if ordering assembly.
 3. Check DevKit socket/header placement, CC1101 header orientation, USB-C
    connector direction, and IR component polarity.
 4. Do not substitute the CC1101 module footprint without checking RF and header
@@ -90,7 +89,7 @@ those defaults or update firmware configuration intentionally.
 5. Use the EMWaver app-managed setup/update flow for normal use.
 6. Test USB, IR RX/TX, SPI module access, and GPIO expansion.
 
-## Firmware Development
+## Firmware
 
-Normal users should not build firmware manually. Internal ESP32-S3 development
-lives in [`../../esp`](../../esp).
+Normal users should not build firmware manually. EMWaver apps should handle
+setup and updates for supported firmware builds.

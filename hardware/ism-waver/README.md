@@ -7,19 +7,19 @@ It targets common 315 MHz and 433 MHz ISM workflows with native USB control.
 
 ## Visual Identification
 
-Catalog photos show a slim black board in a clear shell with a forked dual-antenna
+Photos show a slim black board in a clear shell with a forked dual-antenna
 shape at the far end: one branch is marked `433` and the other `315`. A USB-C
 connector sits at the opposite edge, with the CC1101/RF circuitry between the
 USB and antenna branches.
 
-Representative catalog images:
+Images:
 
 - [angled dual-antenna photo](catalog/images/IMG_0059.jpg)
 - [top dual-band photo](catalog/images/IMG_0060.jpg)
 - [case reference](catalog/images/ISM_WAVER_CASING.png)
-- [catalog render](catalog/images/ISM_WAVER_DUAL.png)
+- [render](catalog/images/ISM_WAVER_DUAL.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -27,11 +27,10 @@ Representative catalog images:
 | [PCB_PCB_ISM_WAVER_2026-03-26.pdf](PCB_PCB_ISM_WAVER_2026-03-26.pdf) | board layout export |
 | [Gerber_ISM_WAVER_PCB_ISM_WAVER_2026-03-26.zip](Gerber_ISM_WAVER_PCB_ISM_WAVER_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_ISM_WAVER_2026-03-26.csv](BOM_ISM_WAVER_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_ISM_WAVER_2026-03-26.csv](PickAndPlace_PCB_ISM_WAVER_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_ISM_WAVER_2026-03-26.csv](PickAndPlace_PCB_ISM_WAVER_2026-03-26.csv) | assembly placement file |
 | [ISM_WAVER_CASE.stl](ISM_WAVER_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
-Catalog estimate: 5 units for about 50 USD.
+Rough historical estimate: 5 units for about 50 USD.
 
 ## Major Components
 
@@ -83,7 +82,7 @@ after any PCB, antenna, case, or part substitution.
 5. Test low-duty transmit and verify frequency/output behavior.
 6. Validate range and thermal behavior in the final case.
 
-## Firmware Development
+## Firmware
 
-Internal STM32 development lives in [`../../stm`](../../stm). Normal users
-should use app-managed firmware and should not need manual flashing.
+Normal users should use app-managed firmware and should not need manual
+flashing.

@@ -9,20 +9,20 @@ expansion header on one board.
 
 ## Visual Identification
 
-Catalog photos show a compact black square board with rounded corners, a
+Photos show a compact black square board with rounded corners, a
 USB-C receptacle on one edge, a second USB-C/serial-programming connector on the
 adjacent edge, a shielded ESP32-S3 module, an E07 radio module, two visible IR
 emitters, and silkscreened add-on header labels. Case photos show it docking to
 a phone with the EMWaver GPIO control screen open.
 
-Representative catalog images:
+Images:
 
 - [top-side board photo](catalog/images/IMG_0068.jpg)
 - [angled board photo](catalog/images/IMG_0069.jpg)
 - [case / phone workflow photo](catalog/images/IMG_0074.jpg)
-- [catalog render](catalog/images/emwaver.png)
+- [render](catalog/images/emwaver.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -30,12 +30,10 @@ Representative catalog images:
 | [PCB_PCB_EMWAVER_AIR_2026-03-26.pdf](PCB_PCB_EMWAVER_AIR_2026-03-26.pdf) | board layout export |
 | [Gerber_EMWAVER_AIR_PCB_EMWAVER_AIR_2026-03-26.zip](Gerber_EMWAVER_AIR_PCB_EMWAVER_AIR_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_EMWAVER_AIR_2026-03-26.csv](BOM_EMWAVER_AIR_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_EMWAVER_AIR_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_AIR_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_EMWAVER_AIR_2026-03-26.csv](PickAndPlace_PCB_EMWAVER_AIR_2026-03-26.csv) | assembly placement file |
 | [EMWAVER_AIR_CASE.stl](EMWAVER_AIR_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata and source links |
 
-Catalog estimate: 2 units for about 60 USD. Treat this as a rough historical
-estimate, not a guaranteed current quote.
+Rough historical estimate: 2 units for about 60 USD.
 
 ## Major Components
 
@@ -94,8 +92,7 @@ firmware pin defaults.
 5. Test USB protocol, IR transmit/receive, radio receive, radio transmit, and
    exposed GPIO in that order.
 
-## Firmware Development
+## Firmware
 
-Normal users should not build firmware manually. Internal ESP32-S3 development
-lives in [`../../esp`](../../esp); that workspace targets ESP-IDF v5.5.1 and
-documents build/flash commands.
+Normal users should not build firmware manually. EMWaver apps should handle
+setup and updates for supported firmware builds.

@@ -8,19 +8,19 @@ same app-managed EMWaver firmware path as the other STM32 boards.
 
 ## Visual Identification
 
-Catalog photos show a small cased USB-C board with a front window exposing two
+Photos show a small cased USB-C board with a front window exposing two
 clear IR emitters and a black IR receiver. Phone workflow photos show the board
 docked at the bottom of a phone while the EMWaver sampler records and retransmits
 IR waveforms.
 
-Representative catalog images:
+Images:
 
 - [front IR window photo](catalog/images/IMG_0061.jpg)
 - [phone sampler workflow](catalog/images/IMG_0053.jpg)
 - [case reference](catalog/images/INFRARED_WAVER_CASING.png)
-- [catalog render](catalog/images/INFRARED_WAVER.png)
+- [render](catalog/images/INFRARED_WAVER.png)
 
-## Build Assets
+## Build Files
 
 | File | Purpose |
 | --- | --- |
@@ -28,11 +28,10 @@ Representative catalog images:
 | [PCB_PCB_INFRARED_WAVER_2026-03-26.pdf](PCB_PCB_INFRARED_WAVER_2026-03-26.pdf) | board layout export |
 | [Gerber_INFRARED_WAVER_PCB_INFRARED_WAVER_2026-03-26.zip](Gerber_INFRARED_WAVER_PCB_INFRARED_WAVER_2026-03-26.zip) | PCB fabrication upload |
 | [BOM_INFRARED_WAVER_2026-03-26.csv](BOM_INFRARED_WAVER_2026-03-26.csv) | assembly BOM |
-| [PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv](PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv) | CPL / pick-and-place |
+| [PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv](PickAndPlace_PCB_INFRARED_WAVER_2026-03-26.csv) | assembly placement file |
 | [INFRARED_WAVER_CASE.stl](INFRARED_WAVER_CASE.stl) | printable case |
-| [catalog/device.json](catalog/device.json) | catalog metadata |
 
-Catalog estimate: 5 units for about 36 USD.
+Rough historical estimate: 5 units for about 36 USD.
 
 ## Major Components
 
@@ -77,7 +76,7 @@ as a purpose-built IR device.
 5. Test IR receive with a known remote.
 6. Test IR transmit at low duty first, then validate range and thermal behavior.
 
-## Firmware Development
+## Firmware
 
-Internal STM32 development lives in [`../../stm`](../../stm). Normal users
-should not need STM32CubeIDE or manual flashing.
+Normal users should use app-managed firmware and should not need STM32CubeIDE or
+manual flashing.
