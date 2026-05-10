@@ -177,17 +177,20 @@ final class MacScriptSessionManager: ObservableObject {
     }
 
     func run(_ request: ScriptsRootView.ScriptRunRequest) -> ScriptsRootView.ScriptRunResult? {
-        guard let device else { return nil }
+        guard let device else {
+            return runFailure("Cannot run script: No device manager is attached", request: request)
+        }
 
         let targetID = selectedDeviceID
         let targetUID = targetID.flatMap { devicesByID[$0] }.flatMap { Self.hardwareUID(from: $0.identifierText) }
         if let existing = activeSession(forDeviceID: targetID, hardwareUID: targetUID) {
-            device.reportLocalError("Device is already running \(existing.scriptName) on \(existing.deviceLabel)")
-            return nil
+            let message = "Device is already running \(existing.scriptName) on \(existing.deviceLabel)"
+            device.reportLocalError(message)
+            return runFailure(message, request: request)
         }
 
         guard device.beginScriptTransportSession(deviceID: targetID) else {
-            return nil
+            return runFailure(device.lastErrorText ?? "Cannot run script: transport claim failed", request: request)
         }
 
         let manager = ScriptPreviewManager()
@@ -213,7 +216,7 @@ final class MacScriptSessionManager: ObservableObject {
         manager.render(script: request.source, name: request.name, moduleSources: request.moduleSources)
         guard let scriptInstanceId = manager.activeScriptInstanceId else {
             device.endScriptTransportSession(deviceID: targetID)
-            return nil
+            return runFailure(manager.scriptError ?? "Cannot run script: render did not start", request: request)
         }
 
         sessionsByID[scriptInstanceId] = session
@@ -224,6 +227,15 @@ final class MacScriptSessionManager: ObservableObject {
             scriptInstanceId: scriptInstanceId,
             name: request.name,
             running: true
+        )
+    }
+
+    private func runFailure(_ message: String, request: ScriptsRootView.ScriptRunRequest) -> ScriptsRootView.ScriptRunResult {
+        ScriptsRootView.ScriptRunResult(
+            scriptInstanceId: "",
+            name: request.name,
+            running: false,
+            errorMessage: message
         )
     }
 

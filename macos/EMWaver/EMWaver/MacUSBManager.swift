@@ -308,6 +308,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         let heartbeatTimer: DispatchSourceTimer
     }
 
+    private struct TransportSessionBeginRequest {
+        let targetID: String
+        let source: UInt8?
+        let requiresSession: Bool
+    }
+
     private static let bleServiceUUID = CBUUID(string: "45C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleCommandUUID = CBUUID(string: "46C7158E-0C3B-4E90-A847-452A15B14191")
     private static let bleNotifyUUID = CBUUID(string: "47C7158E-0C3B-4E90-A847-452A15B14191")
@@ -560,17 +566,48 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     func beginScriptTransportSession(deviceID: String?) -> Bool {
-        if DispatchQueue.getSpecific(key: midiQueueKey) != nil {
-            return beginScriptTransportSessionInternal(deviceID: deviceID)
+        let request = midiQueue.sync {
+            self.prepareBeginScriptTransportSessionInternal(deviceID: deviceID)
         }
-        return midiQueue.sync {
-            self.beginScriptTransportSessionInternal(deviceID: deviceID)
+        guard let request else { return false }
+        guard request.requiresSession else { return true }
+        guard let source = request.source else {
+            setError("Cannot run script: Unsupported transport")
+            return false
         }
+
+        guard sendTransportSessionCommandInternal(
+            subcommand: EmwOpcode.transportSessionConnect,
+            source: source,
+            deviceID: request.targetID,
+            timeoutMs: 1500,
+            reportErrors: true
+        ) else {
+            return false
+        }
+        setTransportDebugLogging(transportDebugLoggingEnabled, deviceID: request.targetID)
+        midiQueue.async {
+            guard self.transportSessionClaimsByDeviceID[request.targetID] == nil else { return }
+            self.startTransportSessionHeartbeatInternal(deviceID: request.targetID, source: source)
+        }
+        return true
     }
 
     func endScriptTransportSession(deviceID: String?) {
-        midiQueue.async {
-            self.endScriptTransportSessionInternal(deviceID: deviceID)
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard let (targetID, claim) = self.takeTransportSessionClaim(deviceID: deviceID) else {
+                return
+            }
+            guard self.isTransportConnectedInternal(deviceID: targetID) else {
+                return
+            }
+            _ = self.sendTransportSessionCommandInternal(
+                subcommand: EmwOpcode.transportSessionDisconnect,
+                source: claim.source,
+                deviceID: targetID,
+                timeoutMs: 1000,
+                reportErrors: false
+            )
         }
     }
 
@@ -962,57 +999,39 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         )
     }
 
-    private func beginScriptTransportSessionInternal(deviceID: String?) -> Bool {
+    private func prepareBeginScriptTransportSessionInternal(deviceID: String?) -> TransportSessionBeginRequest? {
         guard let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID else {
             setError("Cannot run script: No selected device")
-            return false
+            return nil
         }
         guard isTransportConnectedInternal(deviceID: targetID) else {
             setError("Cannot run script: Selected device is not connected")
-            return false
+            return nil
         }
         guard requiresTransportSessionInternal(deviceID: targetID) else {
-            return true
+            return TransportSessionBeginRequest(targetID: targetID, source: nil, requiresSession: false)
         }
         guard transportSessionClaimsByDeviceID[targetID] == nil else {
             setError("Device is already running a script on the selected transport")
-            return false
+            return nil
         }
         guard let source = transportSessionSource(for: targetID) else {
             setError("Cannot run script: Unsupported transport")
-            return false
+            return nil
         }
-        guard sendTransportSessionCommandInternal(
-            subcommand: EmwOpcode.transportSessionConnect,
-            source: source,
-            deviceID: targetID,
-            timeoutMs: 1500,
-            reportErrors: true
-        ) else {
-            return false
-        }
-        setTransportDebugLogging(transportDebugLoggingEnabled, deviceID: targetID)
-        startTransportSessionHeartbeatInternal(deviceID: targetID, source: source)
-        return true
+        return TransportSessionBeginRequest(targetID: targetID, source: source, requiresSession: true)
     }
 
-    private func endScriptTransportSessionInternal(deviceID: String?) {
-        guard let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID,
-              let claim = transportSessionClaimsByDeviceID.removeValue(forKey: targetID) else {
-            return
+    private func takeTransportSessionClaim(deviceID: String?) -> (String, TransportSessionClaim)? {
+        midiQueue.sync {
+            guard let targetID = resolvedTransportID(for: deviceID) ?? activeDeviceID,
+                  let claim = transportSessionClaimsByDeviceID.removeValue(forKey: targetID) else {
+                return nil
+            }
+            claim.heartbeatTimer.setEventHandler {}
+            claim.heartbeatTimer.cancel()
+            return (targetID, claim)
         }
-        claim.heartbeatTimer.setEventHandler {}
-        claim.heartbeatTimer.cancel()
-        guard isTransportConnectedInternal(deviceID: targetID) else {
-            return
-        }
-        _ = sendTransportSessionCommandInternal(
-            subcommand: EmwOpcode.transportSessionDisconnect,
-            source: claim.source,
-            deviceID: targetID,
-            timeoutMs: 1000,
-            reportErrors: false
-        )
     }
 
     private func clearTransportSessionClaimsInternal(sendDisconnect: Bool) {
@@ -1064,19 +1083,25 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             guard self.transportSessionClaimsByDeviceID[deviceID]?.source == source else {
                 return
             }
-            let ok = self.sendTransportSessionCommandInternal(
-                subcommand: EmwOpcode.transportSessionHeartbeat,
-                source: source,
-                deviceID: deviceID,
-                timeoutMs: 1000,
-                reportErrors: false
-            )
-            if !ok {
-                if let claim = self.transportSessionClaimsByDeviceID.removeValue(forKey: deviceID) {
-                    claim.heartbeatTimer.setEventHandler {}
-                    claim.heartbeatTimer.cancel()
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self else { return }
+                let ok = self.sendTransportSessionCommandInternal(
+                    subcommand: EmwOpcode.transportSessionHeartbeat,
+                    source: source,
+                    deviceID: deviceID,
+                    timeoutMs: 1000,
+                    reportErrors: false
+                )
+                if !ok {
+                    self.midiQueue.async {
+                        if let claim = self.transportSessionClaimsByDeviceID.removeValue(forKey: deviceID),
+                           claim.source == source {
+                            claim.heartbeatTimer.setEventHandler {}
+                            claim.heartbeatTimer.cancel()
+                        }
+                        self.setError("Transport session ended for selected device")
+                    }
                 }
-                self.setError("Transport session ended for selected device")
             }
         }
         transportSessionClaimsByDeviceID[deviceID] = TransportSessionClaim(
@@ -2242,6 +2267,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func setError(_ msg: String) {
+        NSLog("EMWaver transport error: %@", msg)
         DispatchQueue.main.async {
             self.lastErrorText = msg
         }

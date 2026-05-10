@@ -35,11 +35,13 @@ public struct ScriptsRootView: View {
         public let scriptInstanceId: String
         public let name: String
         public let running: Bool
+        public let errorMessage: String?
 
-        public init(scriptInstanceId: String, name: String, running: Bool) {
+        public init(scriptInstanceId: String, name: String, running: Bool, errorMessage: String? = nil) {
             self.scriptInstanceId = scriptInstanceId
             self.name = name
             self.running = running
+            self.errorMessage = errorMessage
         }
     }
 
@@ -611,7 +613,15 @@ public struct ScriptsRootView: View {
         Task {
             let request = ScriptRunRequest(scriptId: scriptId, name: name, source: script, moduleSources: moduleSources)
             if let result = await onRunScript(request) {
-                hostStatusSink?(result.running, result.name)
+                if result.running {
+                    hostStatusSink?(true, result.name)
+                } else {
+                    previewManager.scriptError = result.errorMessage ?? "Script did not start."
+                    hostStatusSink?(false, result.name)
+                }
+            } else {
+                previewManager.scriptError = "Script did not start."
+                hostStatusSink?(false, name)
             }
         }
     }
