@@ -5,10 +5,10 @@ import { createRequire } from "node:module";
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
-const { WebSocket } = require(path.join(repoRoot, "gateway", "node_modules", "ws"));
+const { WebSocket } = require(path.join(repoRoot, "gateway", "frontend", "node_modules", "ws"));
 
 const port = process.argv[2] || "3921";
-const expectedRuntimeOwner = process.argv[3] || "emwaver-daemon";
+const expectedRuntimeOwner = process.argv[3] || "emwaver-gateway";
 const sourcePath = process.argv[4] || "";
 const eventTargetId = process.argv[5] || "packaged.tap";
 const timeoutMs = Number(process.env.EMWAVER_GATEWAY_RENDER_TIMEOUT_MS || "30000");
@@ -20,7 +20,7 @@ digitalWrite(13, HIGH);
 function render() {
   UI.render(UI.column({
     children: [
-      UI.text({ text: "Packaged daemon render" }),
+      UI.text({ text: "Packaged Gateway render" }),
       UI.text({ text: String(analogRead(0)) }),
       UI.button({ id: "packaged.tap", label: "Tap", onTap: function () {
         clicks += 1;
@@ -32,7 +32,7 @@ function render() {
 render();
 `;
 const source = sourcePath ? readFileSync(sourcePath, "utf8") : defaultSource;
-const scriptName = sourcePath ? path.basename(sourcePath) : "packaged-daemon-render.emw";
+const scriptName = sourcePath ? path.basename(sourcePath) : "packaged-gateway-render.emw";
 
 function findNodeById(node, id) {
   if (!node || typeof node !== "object") {
@@ -60,7 +60,7 @@ let sentRun = false;
 let sawRuntimeOwner = false;
 
 const timeout = setTimeout(() => {
-  console.error(`timeout waiting for gateway daemon render after ${timeoutMs}ms`);
+  console.error(`timeout waiting for gateway render after ${timeoutMs}ms`);
   console.error(JSON.stringify({ sawRuntimeOwner, sentRun, scriptId, snapshots }));
   process.exit(1);
 }, timeoutMs);
@@ -105,7 +105,7 @@ ws.on("message", (raw) => {
       return;
     }
     clearTimeout(timeout);
-    console.log(`gateway daemon render passed (${expectedRuntimeOwner})`);
+    console.log(`gateway render passed (${expectedRuntimeOwner})`);
     ws.close();
   }
 });

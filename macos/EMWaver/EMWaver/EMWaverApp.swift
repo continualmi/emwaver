@@ -23,20 +23,17 @@ struct EMWaverApp: App {
     @StateObject private var firmwareUpdater = FirmwareUpdateManager()
     @StateObject private var auth = AuthenticationManager()
     @StateObject private var hostSessions = HostSessionManager()
-    @StateObject private var remoteControlHost = RemoteControlHostService()
     @StateObject private var previewManager = ScriptPreviewManager()
     @StateObject private var scriptSessions = MacScriptSessionManager()
     @StateObject private var appRouter = AppRouter()
 
     var body: some Scene {
         WindowGroup {
-            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, remoteControlHost: remoteControlHost, scriptSessions: scriptSessions, previewManager: previewManager)
+            ContentView(device: device, firmwareUpdater: firmwareUpdater, hostSessions: hostSessions, scriptSessions: scriptSessions, previewManager: previewManager)
                 .environmentObject(auth)
                 .environmentObject(appRouter)
                 .task {
                     await auth.waitForInitialRestore()
-
-                    remoteControlHost.start(auth: auth, device: device, hostSessions: hostSessions, previewManager: previewManager)
                 }
                 .onAppear {
                     activateAppIfNeeded()

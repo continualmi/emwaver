@@ -70,10 +70,11 @@ Initial coverage should include:
 - minimal SPI/I2C/UART transfer stubs,
 - explicit unsupported-command errors.
 
-The first implementation exposes this fixture through Rust as `SimulatorCommandBridge`, which can be used by `emwaver-runtime` tests and by:
+The first implementation exposes this fixture through Rust as `SimulatorCommandBridge`, which can be used by `emwaver-runtime` tests and by starting Gateway in simulator mode:
 
 ```bash
-emwaver run path/to/script.emw --direct --sim-device
+emwaver gateway serve --sim-device
+emwaver run path/to/script.emw
 ```
 
 The Apple shared package also exposes `SimulatorScriptDevice`, a Swift `ScriptDevice` implementation that reads the same fixture JSON for iOS/macOS runtime tests.

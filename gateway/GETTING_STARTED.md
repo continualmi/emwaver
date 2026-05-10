@@ -1,17 +1,24 @@
 # Gateway Getting Started
 
-The EMWaver gateway is the localhost browser control surface for local `.emw` hardware control.
+The EMWaver Gateway is the localhost backend and browser UI for terminal/browser `.emw` workflows. It is not a separate broker in front of native apps. The Rust Gateway owns transports, runtime execution, HTTP routes, and `/v1/ws`; the React app is the browser UI served by that backend.
 
-Current status: restored local dashboard. It serves a React script-control UI, exposes `/v1/ws`, and can preview simple script UI without cloud auth. Real hardware execution uses whichever local runtime owner is connected: the native app as `role=app`, or the Rust daemon as `role=host`.
+Native macOS, Windows, iOS, and Android apps stay self-contained. They do not attach to Gateway as runtime owners.
 
-## Run In Development
+## Development Setup
 
-From the repo root:
+Build the frontend assets:
 
 ```bash
-cd gateway
+cd gateway/frontend
 npm ci
-npm run dev
+npm run build
+```
+
+Run the Gateway from the Rust workspace:
+
+```bash
+cd ../backend
+cargo run -p emwaver -- gateway serve --sim-device
 ```
 
 Open:
@@ -20,27 +27,33 @@ Open:
 http://127.0.0.1:3921
 ```
 
-## Port Override
+## CLI Flow
+
+`emwaver run` talks to a running Gateway. It does not run scripts in-process.
 
 ```bash
-EMWAVER_GATEWAY_PORT=3930 npm run dev
+cd gateway/backend
+cargo run -p emwaver -- gateway serve --sim-device
 ```
 
-The Rust CLI wrapper is intended to support:
+In another terminal:
 
 ```bash
-emwaver gateway --port 3930
-emwaver gateway --port 3930 --daemon-fallback
-emwaver start --port 3930
+cd gateway/backend
+cargo run -p emwaver -- run ../../assets/default-scripts/blink.emw
 ```
 
-On machines with Rust/Cargo available, the development wrapper should eventually be:
+Useful Gateway startup modes:
 
 ```bash
-./daemon/dev gateway --port 3930
+emwaver gateway serve --sim-device
+emwaver gateway serve --no-device
+emwaver gateway serve --device 0
+emwaver gateway serve --ble
+emwaver gateway serve --wifi 192.168.1.44 --wifi-port 3922
 ```
 
-## Current WebSocket Flow
+## WebSocket Flow
 
 Connect to:
 
@@ -73,78 +86,42 @@ Expected messages:
 
 ## Bundled Examples
 
-The gateway serves bundled scripts from:
+Gateway serves bundled scripts from:
 
 ```text
 assets/default-scripts/
 ```
 
-The local UI loads them through:
+The browser UI loads them through:
 
 ```text
 GET /v1/examples
 ```
 
-This keeps the localhost control surface aligned with the repo's canonical `.emw` examples instead of maintaining a separate gateway-only script list.
-
 ## Browser UI
 
-The gateway UI restores the useful parts of the old web script dashboard:
+The browser UI includes:
 
 - bundled example list,
-- local runtime status for native app or daemon,
-- Start Daemon action when no runtime is connected,
+- local Gateway/device status,
 - `.emw` editor,
 - editor/preview switch,
 - Run/Stop controls,
 - live `ui.snapshot` rendering,
 - `ui.event` dispatch,
-- `plot.data` rendering,
-- optional Agent panel.
+- `plot.data` rendering.
 
-It intentionally omits EMWaver sign-in, Pro gates, cloud files, hosted host selectors, hosted relay assumptions, and subscription checks.
+Agent UI and related tooling should be implemented in TypeScript/client code. Rust should remain focused on local backend communication with EMWaver devices.
 
-## Account-Free Behavior
+## Local-First Behavior
 
-The gateway must not require:
+Gateway must not require:
 
 - Continual MI sign-in,
 - cloud activation,
 - subscription checks,
 - hosted relay,
-- hosted host/session discovery.
+- hosted host/session discovery,
+- cloud script storage.
 
-Agent features may require an API key later, but missing Agent configuration must not block local script control.
-
-## Optional Agent
-
-The local gateway includes an Agent panel. It is optional and does not affect local script execution.
-
-To enable it against a Continual MI Agent endpoint:
-
-```bash
-EMWAVER_AGENT_API_KEY=... EMWAVER_AGENT_ENDPOINT=https://... npm run dev
-```
-
-Without those variables, `/v1/agent` returns `agent_not_configured` and the rest of the gateway continues to work.
-
-The gateway Agent proxy matches the macOS endpoint shape: it sends `model`, `universe`, and `userInput` to the configured Agent responses endpoint. If no `EMWAVER_AGENT_UNIVERSE` or `CONTINUAL_AGENT_UNIVERSE` is set, the gateway first creates a local persistent Agent universe from stored prompt `emwaver-prompt`. The browser Agent panel includes the current script, runtime owner, device status, UI revision, and UI snapshot summary inside `userInput`; local scripts and hardware control still work without Agent configuration.
-
-## Local Daemon
-
-The browser UI can start the daemon through:
-
-```text
-POST /v1/daemon/start
-```
-
-In repo development this uses `daemon/dev daemon start --port <gateway-port>`. Installed builds can set `EMWAVER_CLI_BIN` to the installed `emwaver` binary. Pass daemon transport flags with `EMWAVER_GATEWAY_DAEMON_ARGS`, for example:
-
-```bash
-EMWAVER_GATEWAY_DAEMON_ARGS="--ble" npm run dev
-```
-
-## Current Limitations
-
-- Preview mode uses a small browser UI evaluator for `UI.render` shape only.
-- The gateway is still a local bridge and renderer; hardware execution remains in the native app or daemon runtime owner.
+Remote use should be user-owned infrastructure around the local tool, such as SSH, VPN, Tailscale, or explicit port forwarding.

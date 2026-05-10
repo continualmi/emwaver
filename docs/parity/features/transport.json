@@ -3,7 +3,7 @@
   "features": [
     {
       "id": "transport.ble_runtime",
-      "description": "BLE runtime transport exists where native apps own device control.",
+      "description": "BLE runtime transport exists where the current surface owns device control.",
       "parity": "all_required",
       "platforms": {
         "macos": {
@@ -22,18 +22,18 @@
           "status": "required",
           "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java", "contains": "BluetoothLeScanner|BluetoothGatt[\\s\\S]*EMW_BLE_SERVICE_UUID" }]
         },
-        "cli": {
+        "gateway": {
           "status": "required",
           "evidence": [
-            { "file": "daemon/emwaver-device/src/ble.rs", "contains": "EMW_BLE_SERVICE_UUID[\\s\\S]*EMW_BLE_COMMAND_UUID[\\s\\S]*EMW_BLE_NOTIFY_UUID" },
-            { "file": "daemon/emwaver/src/main.rs", "contains": "--ble|list_ble_devices|BleDevice" }
+            { "file": "gateway/backend/emwaver-device/src/ble.rs", "contains": "EMW_BLE_SERVICE_UUID[\\s\\S]*EMW_BLE_COMMAND_UUID[\\s\\S]*EMW_BLE_NOTIFY_UUID" },
+            { "file": "gateway/backend/emwaver/src/main.rs", "contains": "--ble|list_ble_devices|BleDevice" }
           ]
         }
       }
     },
     {
       "id": "transport.usb_midi_runtime",
-      "description": "USB MIDI runtime transport exists on native device-control apps.",
+      "description": "USB MIDI runtime transport exists on native device-control apps and Gateway.",
       "parity": "all_required",
       "platforms": {
         "macos": {
@@ -55,11 +55,11 @@
           "status": "required",
           "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java", "contains": "MidiDevice|UsbMidiSysex|MIDI" }]
         },
-        "cli": {
+        "gateway": {
           "status": "required",
           "evidence": [
-            { "file": "daemon/emwaver-device/src/device.rs", "contains": "MidiInput[\\s\\S]*MidiOutput[\\s\\S]*SysEx|midi" },
-            { "file": "daemon/README.md", "contains": "USB MIDI/SysEx|MIDI input" }
+            { "file": "gateway/backend/emwaver-device/src/device.rs", "contains": "MidiInput[\\s\\S]*MidiOutput[\\s\\S]*SysEx|midi" },
+            { "file": "gateway/backend/README.md", "contains": "USB MIDI/SysEx|MIDI input" }
           ]
         }
       }

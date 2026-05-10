@@ -167,9 +167,6 @@ public sealed partial class ScriptsPage : Page
     {
         InitializeComponent();
 
-        // Remote control host delegate (so this page can run scripts + publish UI snapshots).
-        AppServices.RemoteControlHost.Delegate = new RemoteControlDelegate(this);
-
         // Grouped list (Examples / Your Scripts / Signals)
         var cvs = new Microsoft.UI.Xaml.Data.CollectionViewSource
         {
@@ -792,9 +789,6 @@ public sealed partial class ScriptsPage : Page
     {
         _lastRenderedTree = tree;
 
-        // Keep remote controller state live even when user switches back to code mode locally.
-        AppServices.RemoteControlHost.PublishUiSnapshotIfRemoteControlled();
-
         if (_isPreviewMode && generation == _activeRenderGeneration)
         {
             RenderPreview(tree);
@@ -941,8 +935,6 @@ public sealed partial class ScriptsPage : Page
         PreviewHost.Children.Add(_scriptRenderer.Render(tree));
         PreviewHint.Visibility = Visibility.Collapsed;
 
-        // Mirror to remote controller (snapshot-only v1).
-        RenderPreviewWithRemoteMirror(tree);
     }
 
     private void UpdateCommandStates()

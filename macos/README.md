@@ -2,7 +2,7 @@
 
 Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
-This is the desktop Apple host app for local USB workflows, localhost gateway control, Agent client UI, and firmware/update UX on macOS.
+This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, Agent client UI, and firmware/update UX on macOS.
 
 The local-first rule is that connected supported boards can run local `.emw` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
@@ -51,11 +51,10 @@ Core files include:
 - `MacUSBManager.swift`
 - `MacWiFiManager.swift`
 - `HostSessionManager.swift`
-- `RemoteControlHostService.swift`
 
 Responsibilities:
 - local USB and BLE host operation,
-- localhost gateway app-role integration,
+- native local script/runtime integration,
 - firmware update tooling for first-party setup on macOS without gating local script execution on account ownership.
 
 Transport behavior:
@@ -91,18 +90,13 @@ Transport behavior:
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS tries advertised Wi-Fi endpoints, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
-- Gateway-controlled runs can now include a `deviceId`; the macOS app creates a separate remote script runtime per `script.run` request and routes `Device.sendPacket` / `Device.sendCommand` through a targeted device bridge. This enables the initial automation-bench shape of one connected device = one remote script session. Shared capture buffers and mixed USB/BLE concurrent ownership still need hardening before treating every script API as fully isolated.
 - The app queries `EMW_OP_HARDWARE_UID_GET` after USB/BLE connection, refreshes connected USB/BLE UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
-Local-first gateway behavior:
-- `RemoteControlHostService` can connect directly to the localhost gateway as `role=app`.
-- Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
-- Override with `EMWAVER_LOCAL_GATEWAY_URL`.
-- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
-- Local gateway app-role control is opt-in from Settings by default; set `EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT=1` for development sessions that should connect automatically.
-- When enabled and the gateway is not running, reconnect attempts use capped exponential backoff to avoid noisy fixed polling.
-- In local gateway mode, the macOS app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages.
+Gateway boundary:
+- The macOS app is self-contained and does not connect to the Gateway as a runtime owner.
+- Browser and CLI control use the Rust Gateway backend.
+- macOS keeps its own native script UI, local transport managers, and firmware/update flows.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.
 

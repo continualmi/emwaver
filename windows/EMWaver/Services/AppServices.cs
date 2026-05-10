@@ -15,5 +15,4 @@ internal static class AppServices
     internal static readonly AgentApiKeyStore AgentKeys = new();
     internal static readonly AgentChatStore AgentChats = new();
     internal static readonly HostSessionManager HostSession = new();
-    internal static readonly RemoteControlHostService RemoteControlHost = new();
 }

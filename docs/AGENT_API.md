@@ -2,7 +2,7 @@
 
 This document defines the first paid Agent service direction for the local-first EMWaver rebirth.
 
-The open-source runtime, gateway, CLI, firmware payloads, scripts, and local hardware control should work without an Agent key. The Agent is optional paid assistance for writing, debugging, explaining, and improving `.emw` scripts.
+The open-source runtime, Gateway, CLI, firmware payloads, scripts, and local hardware control should work without an Agent key. The Agent is optional paid assistance for writing, debugging, explaining, and improving `.emw` scripts.
 
 ## Product Contract
 
@@ -17,15 +17,14 @@ The Agent helps with:
 
 The Agent must not be required for local hardware access.
 
-Each app should keep an Agent runtime/interface:
+Each UI app should keep an Agent runtime/interface:
 
-- gateway Agent panel,
-- CLI `emwaver agent`,
+- browser Gateway Agent panel implemented in TypeScript,
 - macOS/iOS Agent chat surfaces,
 - Windows Agent chat surface,
 - Android Agent chat surface.
 
-Those app runtimes are clients. They collect local script/device/UI/error context, manage chat UX, and call the Agent endpoint. They must not embed production system prompts or private Agent instructions.
+Those app runtimes are clients. They collect local script/device/UI/error context, manage chat UX, and call the Agent endpoint. They must not embed production system prompts or private Agent instructions. Rust Gateway code should stay focused on local device/backend communication.
 
 ## Authentication
 
@@ -38,12 +37,12 @@ EMWAVER_AGENT_API_KEY
 EMWAVER_AGENT_ENDPOINT
 ```
 
-Future persisted local configuration can use an app-local EMWaver config file or platform keychain/credential store, but the environment variables are sufficient for the first CLI/gateway integration. This key is for Agent inference only; it is not an EMWaver account.
+Future persisted local configuration can use an app-local EMWaver config file or platform keychain/credential store. This key is for Agent inference only; it is not an EMWaver account.
 
 Missing key behavior:
 
-- CLI: print a setup message and exit non-zero for Agent commands.
-- Gateway UI: show an Agent setup state while leaving local script control available.
+- UI clients: show an Agent setup state while leaving local script control available.
+- CLI: local hardware commands keep working without any Agent key. A future TypeScript Agent helper may add terminal Agent workflows outside the Rust device backend.
 
 ## MGPT Endpoint Shape
 
@@ -56,14 +55,6 @@ POST /backend-api/mgpt/responses
 Authorization: Bearer <agent_api_key>
 Content-Type: application/json
 ```
-
-The local gateway proxy endpoint is:
-
-```http
-POST /v1/agent
-```
-
-It forwards to `EMWAVER_AGENT_ENDPOINT` with `EMWAVER_AGENT_API_KEY`. If either value is missing, it returns `agent_not_configured` and local hardware control remains available.
 
 Request:
 
@@ -123,22 +114,14 @@ Prompt secrecy is not the full moat. The real moat is the maintained Agent servi
 
 ## Client Integrations
 
-Gateway:
+Gateway browser UI:
 
 - add an Agent panel,
 - send only `universe` and `userInput` to the MGPT-facing endpoint,
 - fold any user-approved local context into `userInput` before the boundary when needed,
 - let users intentionally apply returned code or patch.
 
-CLI:
-
-```bash
-EMWAVER_AGENT_UNIVERSE=... emwaver agent "write a script for a CC1101 433.92 MHz ASK receiver"
-emwaver agent "write a script for a CC1101 433.92 MHz ASK receiver"
-emwaver agent --script scripts/cc1101.emw "debug this"
-```
-
-The CLI uses `EMWAVER_AGENT_API_KEY` and `EMWAVER_AGENT_ENDPOINT` initially. `CONTINUAL_AGENT_ENDPOINT` is accepted as an endpoint fallback. `EMWAVER_AGENT_UNIVERSE` and `CONTINUAL_AGENT_UNIVERSE` bind the local client to a persistent MGPT universe when set.
+Terminal Agent tooling should be implemented in TypeScript or another client layer outside the Rust device backend.
 
 ## Non-Goals
 

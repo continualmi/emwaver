@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Validate the Rust toolchain needed for EMWaver daemon/CLI/runtime work.
+# Validate the Rust toolchain needed for EMWaver Gateway backend/CLI/runtime work.
 #
 # This script intentionally does not install Rust. It reports the exact blocker
 # so runtime extraction and CLI work can fail fast on machines without Cargo.
@@ -26,7 +26,7 @@ if [[ "$missing" -ne 0 ]]; then
   cat >&2 <<'EOF'
 
 Rust toolchain is required for:
-- daemon/emwaver CLI build
+- gateway/backend/emwaver CLI build
 - emwaver-runtime extraction
 - emwaver-device extraction
 - emwaver run
@@ -35,7 +35,7 @@ Rust toolchain is required for:
 Install Rust with rustup or the platform package manager, then rerun:
 
   ./scripts/check-rust-toolchain.sh
-  cd daemon && cargo build -p emwaver
+  cd gateway/backend && cargo build -p emwaver
 
 EOF
   exit 1

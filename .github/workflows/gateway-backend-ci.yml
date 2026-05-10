@@ -1,0 +1,108 @@
+name: Gateway Backend CI
+
+on:
+  pull_request:
+    paths:
+      - "gateway/backend/**"
+      - "gateway/**"
+      - "assets/default-scripts/**"
+      - "simulator/**"
+      - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-sim-validation.sh"
+      - "scripts/verify-gateway-render.mjs"
+      - "scripts/rebirth-install-smoke.sh"
+      - ".github/workflows/gateway-backend-ci.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "gateway/backend/**"
+      - "gateway/**"
+      - "assets/default-scripts/**"
+      - "simulator/**"
+      - "scripts/check-rust-toolchain.sh"
+      - "scripts/rebirth-gateway-sim-validation.sh"
+      - "scripts/verify-gateway-render.mjs"
+      - "scripts/rebirth-install-smoke.sh"
+      - ".github/workflows/gateway-backend-ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux MIDI build dependencies
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdbus-1-dev pkg-config
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: gateway/frontend/package-lock.json
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: gateway/backend
+
+      - name: Rust preflight
+        run: scripts/check-rust-toolchain.sh
+
+      - name: Test extracted runtime and device crates
+        working-directory: gateway/backend
+        run: cargo test -p emwaver-runtime -p emwaver-device
+
+      - name: Build host and CLI
+        working-directory: gateway/backend
+        run: cargo build -p emwaver
+
+      - name: Smoke test CLI run through Gateway
+        working-directory: gateway/backend
+        run: |
+          set -euo pipefail
+          port=3924
+          state_dir="$(mktemp -d)"
+          tmp="$(mktemp /tmp/emwaver-ci.XXXXXX)"
+          export EMWAVER_STATE_DIR="$state_dir"
+          trap 'kill "$pid" >/dev/null 2>&1 || true; wait "$pid" >/dev/null 2>&1 || true; rm -f "$tmp"; rm -rf "$state_dir"' EXIT
+          printf 'UI.render(UI.text({ text: "ci" }));\n' > "$tmp"
+          cargo run -q -p emwaver -- gateway serve --port "$port" --sim-device >/tmp/emwaver-gateway-ci.log 2>&1 &
+          pid="$!"
+          for _ in $(seq 1 40); do
+            if curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+              break
+            fi
+            sleep 0.25
+          done
+          cargo run -q -p emwaver -- run "$tmp" --port "$port"
+
+      - name: Smoke test systemd user unit generation
+        working-directory: gateway/backend
+        run: |
+          set -euo pipefail
+          cargo run -q -p emwaver -- service print-unit --ble --port 3921 > /tmp/emwaver-gateway.service
+          grep -F "ExecStart=" /tmp/emwaver-gateway.service
+          grep -F "gateway serve" /tmp/emwaver-gateway.service
+          grep -F -- "--ble" /tmp/emwaver-gateway.service
+          grep -F "WantedBy=default.target" /tmp/emwaver-gateway.service
+
+      - name: Smoke test Gateway simulator
+        run: |
+          cd gateway/frontend
+          npm ci
+          cd ../..
+          scripts/rebirth-gateway-sim-validation.sh
+
+      - name: Smoke test development install package
+        run: scripts/rebirth-install-smoke.sh

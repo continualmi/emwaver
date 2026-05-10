@@ -35,7 +35,7 @@ This is the foundation for validating EMWaver capabilities directly from a termi
 - `isConnected`, `connectedPortName`, `connectedTransportKind`, and `connectedBoardType` describe one selected connection.
 - auto-connect prefers USB MIDI first, then scans BLE when no wired device is connected.
 - the script runtime receives one `ScriptDevice` and sends packets to that active transport.
-- the local gateway app-role path forwards script control to the macOS app, which owns the single runtime/device session.
+- the macOS app owns its own runtime/device session; Gateway terminal/browser workflows are separate.
 - only one script preview/runtime is currently active at a time.
 
 That is enough for one board, but not enough for a bench with CC1101 and RFM69HW connected at the same time.
@@ -45,7 +45,7 @@ That is enough for one board, but not enough for a bench with CC1101 and RFM69HW
 Introduce a multi-device host layer above the existing transport code.
 
 ```text
-Scripts UI / gateway / agent commands
+Scripts UI / local Agent commands
         |
         v
 Selected Device Context
@@ -163,7 +163,7 @@ Goal: let terminal agents choose the target device/session through the gateway.
 
 Tasks:
 
-- Extend gateway/native app status with a real device list instead of only `local-native-app`.
+- Extend Gateway/native app status with a real device list instead of only a single local app placeholder.
 - Add device fields to status messages:
   - `id`, `name`, `transport`, `boardType`, `moduleLabel`, `connected`, `active`.
 - Add control messages for active-device/session selection, e.g. `device.select` and `script.session.select`.

@@ -35,8 +35,8 @@ MGPT loads the universe from server-side cache/storage, composes private prompts
 
 ## Current Implementation Prep
 
-- Gateway `/v1/agent` forwards `userInput` and injects `EMWAVER_AGENT_UNIVERSE` or `CONTINUAL_AGENT_UNIVERSE` when configured.
-- CLI `emwaver agent` sends `userInput` and the configured universe id.
+- Browser Gateway Agent tooling should be implemented in TypeScript and send `userInput` plus the configured universe id when it is reintroduced.
+- Terminal Agent tooling should live outside the Rust device backend.
 - Windows Agent API sends `userInput` and the configured universe id.
 - Android Agent API sends `userInput` and the configured universe id.
 

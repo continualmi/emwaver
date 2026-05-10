@@ -47,8 +47,6 @@ public sealed partial class MainWindow : Window
         ContentFrame.Navigate(typeof(Pages.ScriptsPage));
         _ = BootstrapAsync();
 
-        // Remote control host WS (web can attach + drive scripts/UI).
-        AppServices.RemoteControlHost.Start();
         // Initial UI state.
         RunOnUi(() =>
         {

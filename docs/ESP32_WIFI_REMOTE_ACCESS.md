@@ -9,7 +9,7 @@ EMWaver does not provide a hosted relay, cloud device registry, account gate, de
 Use the ESP32 Wi-Fi transport when the host running EMWaver can route to the board's LAN address:
 
 ```text
-EMWaver app/CLI/gateway
+EMWaver app or Gateway
   -> local or VPN-routed network
   -> ws://<esp32-host-or-ip>:3922/v1/ws
   -> ESP32 Wi-Fi transport
@@ -32,22 +32,16 @@ Wi-Fi setup sends only SSID and password over the current USB or BLE connection.
 
 ## CLI Examples
 
-Direct runtime over a same-LAN or VPN-routed IP:
+Start Gateway with a Wi-Fi ESP32 transport:
 
 ```bash
-emwaver run assets/default-scripts/blink.emw --direct --wifi 192.168.1.44
+emwaver gateway serve --wifi 192.168.1.44 --wifi-port 3922
 ```
 
-Start the local daemon with a Wi-Fi ESP32 transport:
+Run a script through the running Gateway:
 
 ```bash
-emwaver daemon start --wifi 192.168.1.44
-```
-
-Start the localhost gateway and let it launch the daemon fallback over Wi-Fi:
-
-```bash
-emwaver gateway --daemon-fallback --wifi 192.168.1.44
+emwaver run assets/default-scripts/blink.emw
 ```
 
 Diagnose a Wi-Fi endpoint:
@@ -56,11 +50,18 @@ Diagnose a Wi-Fi endpoint:
 emwaver doctor --wifi 192.168.1.44
 ```
 
+List discovered and manually probed devices:
+
+```bash
+emwaver devices
+emwaver devices --wifi 192.168.1.44
+```
+
 ## Troubleshooting
 
 - `device not reachable`: check VPN route, LAN subnet access, board power, and firewall rules.
 - `connection refused`: confirm the ESP32 is provisioned, online, and listening on port `3922`.
 - `mDNS unavailable`: use direct IP; many VPNs do not route mDNS.
-- `device is busy`: close the other EMWaver app/daemon session connected to that ESP32.
+- `device is busy`: close the other EMWaver app or Gateway session connected to that ESP32.
 
 Do not expose the ESP32 control port directly to the public internet as the default path. Use a private LAN, user-owned VPN, or SSH tunnel.

@@ -11,7 +11,7 @@ Target: Windows 11 only.
 This folder contains the full Windows client:
 - USB/BLE transport integration,
 - script runtime UI and tooling pages,
-- local gateway/app-host control views,
+- native local script/runtime views,
 - firmware update flow integration,
 - Agent client surfaces.
 
@@ -72,17 +72,9 @@ Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` 
 
 `EMWaver.Tests` contains the hosted-CI simulator smoke for Windows. It runs a hardware-touching `.emw` script through the real Windows `ScriptEngine` and `SimulatorCommandBridge`, then asserts the rendered UI includes values from `simulator/fixtures/basic-board.json`.
 
-## 3.3 Local gateway app role
+## 3.3 Gateway boundary
 
-The Windows app can expose its local script/device runtime to the localhost gateway:
-- `Services/RemoteControlHostService.cs` connects directly to the local gateway as `role=app`.
-- Default local gateway URL is `ws://127.0.0.1:3921/v1/ws`.
-- Override with `EMWAVER_LOCAL_GATEWAY_URL`.
-- Disable local gateway connection with `EMWAVER_LOCAL_GATEWAY_DISABLED=1`.
-- Local gateway app-role control is opt-in from Settings by default; set `EMWAVER_LOCAL_GATEWAY_AUTO_CONNECT=1` for development sessions that should connect automatically.
-- When enabled and the gateway is not running, reconnect attempts use capped exponential backoff instead of fixed polling.
-
-The Windows app owns `.emw` execution and USB/device transport; the gateway only forwards browser/CLI control messages on the same machine unless the user deliberately tunnels localhost through their own network tooling.
+The Windows app is self-contained and does not connect to the Gateway as a runtime owner. Browser and CLI control use the Rust Gateway backend; Windows keeps its own native script UI, local transport managers, and firmware/update flows.
 
 ## 3.4 Firmware update path
 
@@ -258,7 +250,7 @@ Hosted CI uses:
 scripts/rebirth-windows-validation.ps1 -Ci
 ```
 
-That command restores/builds the Windows solution and runs `EMWaver.Tests`. It does not validate attached USB/MIDI hardware or interactive local gateway control.
+That command restores/builds the Windows solution and runs `EMWaver.Tests`. It does not validate attached USB/MIDI hardware.
 It also does not validate attached ESP32 BLE hardware.
 
 ---
@@ -278,4 +270,4 @@ Expected workflow:
 
 When changing page structure or service responsibilities in Windows app:
 - update this README in the same PR,
-- include any protocol-impact changes also in backend/daemon/frontend docs where relevant.
+- include any protocol-impact changes also in Gateway/backend/frontend docs where relevant.

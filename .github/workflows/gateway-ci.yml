@@ -29,12 +29,12 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: gateway/package-lock.json
+          cache-dependency-path: gateway/frontend/package-lock.json
 
       - name: Install gateway dependencies
-        working-directory: gateway
+        working-directory: gateway/frontend
         run: npm ci
 
       - name: Verify gateway
-        working-directory: gateway
+        working-directory: gateway/frontend
         run: npm run verify

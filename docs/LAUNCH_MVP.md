@@ -5,7 +5,7 @@ This checklist defines the minimum useful local-first EMWaver launch.
 The MVP should prove:
 
 - open-source local core,
-- localhost browser gateway,
+- localhost browser Gateway,
 - CLI `.emw` execution path,
 - supported-board hardware flow,
 - paid Agent positioning without gating hardware access.
@@ -17,9 +17,9 @@ The MVP should prove:
 - `gateway/` exists and is documented.
 - `emwaver gateway` starts a localhost server.
 - Browser opens local control UI at `127.0.0.1`.
-- Local WebSocket supports browser and native-app roles plus `hello`, `script.run`, `script.started`, `script.error`, `ui.snapshot`, and `ui.event`.
-- Local gateway does not require account auth, cloud activation, subscription checks, or hosted relay.
-- Native app gateway control is same-machine localhost by default; hosted macOS/Windows remote control is not core MVP scope.
+- Local WebSocket supports browser clients plus `hello`, `script.run`, `script.started`, `script.error`, `ui.snapshot`, and `ui.event`.
+- Local Gateway does not require account auth, cloud activation, subscription checks, or hosted relay.
+- Native apps are self-contained and are not Gateway backends.
 
 Backlog coverage:
 
@@ -35,10 +35,10 @@ Backlog coverage:
 
 ## Runtime And Device
 
-- Shared `.emw` runtime exists outside cloud daemon loop.
+- Shared `.emw` runtime exists outside hosted/cloud control loops.
 - Shared device discovery/transport layer exists.
-- Gateway bridges to the native app that owns runtime/device execution.
-- CLI uses the shared runtime/device layer.
+- Gateway owns runtime/device execution for terminal/browser workflows.
+- CLI uses the Gateway runtime/device layer.
 - Runtime can execute scripts and emit UI snapshots.
 - Device command bridge can reach connected hardware.
 - Shared mock device simulator goal is defined so hardware-touching scripts can be tested without a physical board.
@@ -55,7 +55,7 @@ Backlog coverage:
 ## CLI
 
 - `emwaver devices` lists local devices.
-- `emwaver run path/to/script.emw` sends a script to the localhost gateway/native-app bridge.
+- `emwaver run path/to/script.emw` sends a script to the running localhost Gateway.
 - `emwaver doctor` reports common setup/permission problems.
 - SSH remote usage is documented.
 
@@ -69,9 +69,9 @@ Backlog coverage:
 ## Web Split
 
 - Current `web/` control UI is inventoried.
-- Local control UI is moved/shared into gateway.
+- Local control UI is served by Gateway.
 - Gateway UI has no sign-in or Pro gate for local hardware control.
-- Cloud file/session assumptions are absent from gateway local mode.
+- Cloud file/session assumptions are absent from Gateway local mode.
 
 Backlog coverage:
 
@@ -88,7 +88,8 @@ Backlog coverage:
 - Agent API-key flow is defined.
 - Agent endpoint contract is defined.
 - Private Agent instructions remain server-side.
-- Gateway and/or CLI can call the Agent when a key is configured.
+- Native apps and the browser UI can call the Agent when a key is configured.
+- Agent UI/tooling belongs in TypeScript/client code, not the Rust device backend.
 - Missing Agent key does not block local hardware control.
 
 Backlog coverage:
@@ -118,7 +119,7 @@ Backlog coverage:
 - `AGENTS.md` reflects local-first/open-source strategy.
 - `README.md` points to rebirth plan and issues.
 - `PLANNING.md` reflects current rebirth priorities.
-- Local gateway getting-started docs exist.
+- Local Gateway getting-started docs exist.
 - Launch MVP checklist exists.
 
 Backlog coverage:
@@ -131,8 +132,8 @@ Backlog coverage:
 
 ## Packaging And Validation
 
-- CLI/gateway packaging direction is decided for macOS, Linux, and Windows.
-- Local dev command exists for gateway.
+- CLI/Gateway packaging direction is decided for macOS, Linux, and Windows.
+- Local dev command exists for Gateway.
 - Device access validation is documented per desktop platform.
 - Device simulator work is tracked separately from real hardware validation.
 
@@ -149,7 +150,7 @@ Backlog coverage:
 - Cloud file sync.
 - Team/classroom management.
 - Hosted remote fleet control.
-- Continual-hosted native-app remote control as a core cross-platform feature.
+- Continual-hosted native app remote control as a core cross-platform feature.
 - Account-gated device activation.
 - Hardware sales.
 

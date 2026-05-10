@@ -7,17 +7,12 @@
 
 import SwiftUI
 import EMWaverScriptsUI
-import EMWaverScriptSwiftUI
-import EMWaverScriptModel
 import EMWaverScriptRuntime
-
-// Remote overlay UI renders ScriptTree using ScriptRenderView
 
 struct ContentView: View {
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
     @ObservedObject var hostSessions: HostSessionManager
-    @ObservedObject var remoteControlHost: RemoteControlHostService
     @ObservedObject var scriptSessions: MacScriptSessionManager
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var appRouter: AppRouter
@@ -29,9 +24,6 @@ struct ContentView: View {
     @State private var autoFirmwarePromptKey: String? = nil
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
-
-    // When remote control is active, show the remote script UI *in-app* (not as a modal sheet).
-    @State private var showingRemoteOverlay: Bool = false
 
     private var toolbarDeviceStatus: (icon: String, text: String) {
         if device.isConnected {
@@ -172,97 +164,6 @@ struct ContentView: View {
                 )
                 .id(scriptDeviceAttachmentKey)
 
-                if showingRemoteOverlay {
-                    VStack(spacing: 0) {
-                        HStack {
-                            Label("Local Script Sessions", systemImage: "antenna.radiowaves.left.and.right")
-                                .font(.headline)
-
-                            Spacer()
-
-                            if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
-                                Text(n)
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-
-                            Button("Done") {
-                                showingRemoteOverlay = false
-                            }
-                            .keyboardShortcut(.escape, modifiers: [])
-                        }
-                        .padding(.horizontal, 14)
-                        .padding(.vertical, 10)
-                        .background(.ultraThinMaterial)
-
-                        Divider()
-
-                        HStack(spacing: 0) {
-                            List(selection: Binding(
-                                get: { remoteControlHost.selectedRemoteScriptInstanceId },
-                                set: { id in if let id { remoteControlHost.selectRemoteSession(id) } }
-                            )) {
-                                ForEach(remoteControlHost.remoteScriptSessions) { session in
-                                    HStack(alignment: .top, spacing: 8) {
-                                        VStack(alignment: .leading, spacing: 3) {
-                                            Text(session.name)
-                                                .font(.subheadline.weight(.semibold))
-                                                .lineLimit(1)
-                                            if let deviceID = session.deviceID, !deviceID.isEmpty {
-                                                Text(deviceID)
-                                                    .font(.caption2.monospaced())
-                                                    .foregroundStyle(.secondary)
-                                                    .lineLimit(1)
-                                            } else {
-                                                Text("Active device")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                        Spacer(minLength: 4)
-                                        Button {
-                                            remoteControlHost.stopRemoteSession(session.id)
-                                        } label: {
-                                            Image(systemName: "stop.fill")
-                                        }
-                                        .buttonStyle(.borderless)
-                                        .foregroundStyle(.red)
-                                        .help("Stop this script")
-                                    }
-                                    .tag(session.id)
-                                    .contextMenu {
-                                        Button("Stop Script", role: .destructive) {
-                                            remoteControlHost.stopRemoteSession(session.id)
-                                        }
-                                    }
-                                }
-                            }
-                            .frame(width: 260)
-
-                            Divider()
-
-                            if let tree = remoteControlHost.remoteScriptTree {
-                                ScriptRenderView(tree: tree) { token, args in
-                                    remoteControlHost.invokeRemoteHandler(token: token, arguments: args)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                                .background(Color.black.opacity(0.12))
-                            } else {
-                                VStack(spacing: 10) {
-                                    ProgressView()
-                                    Text("Local script session is active, waiting for UI…")
-                                        .foregroundStyle(.secondary)
-                                }
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            }
-                        }
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(.thinMaterial)
-                    .transition(.opacity)
-                }
-
             }
             .overlay(alignment: .top) {
                 Divider()
@@ -273,26 +174,6 @@ struct ContentView: View {
                 localDevicePicker
             }
 
-            ToolbarItem(placement: .automatic) {
-                if remoteControlHost.isRemoteControlled || !remoteControlHost.remoteScriptSessions.isEmpty {
-                    Button {
-                        showingRemoteOverlay = true
-                    } label: {
-                        HStack(spacing: 8) {
-                            Label("Sessions", systemImage: "square.stack.3d.up")
-                            if !remoteControlHost.remoteScriptSessions.isEmpty {
-                                Text("\(remoteControlHost.remoteScriptSessions.count)")
-                                    .foregroundStyle(.secondary)
-                            } else if let n = remoteControlHost.remoteActiveScriptName, !n.isEmpty {
-                                Text(n)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                        }
-                    }
-                    .help("Local script sessions are running. Click to view and switch between them.")
-                }
-            }
         }
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
@@ -314,7 +195,6 @@ struct ContentView: View {
         .sheet(isPresented: $showingSettings) {
             SettingsView(device: device)
         }
-        // Remote UI is shown in-app via an overlay (no sheet).
         // Agent lives in the right-side drawer (ScriptsRootView) on macOS.
         .task {
             scriptSessions.attach(device: device)
@@ -517,7 +397,6 @@ struct ContentView: View {
         device: MacUSBManager(),
         firmwareUpdater: FirmwareUpdateManager(),
         hostSessions: HostSessionManager(),
-        remoteControlHost: RemoteControlHostService(),
         scriptSessions: MacScriptSessionManager(),
         previewManager: ScriptPreviewManager()
     )

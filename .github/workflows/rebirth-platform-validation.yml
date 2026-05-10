@@ -3,30 +3,30 @@ name: Rebirth Platform Validation
 on:
   pull_request:
     paths:
-      - "daemon/**"
+      - "gateway/backend/**"
       - "windows/**"
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
-      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/rebirth-gateway-sim-validation.sh"
       - "scripts/rebirth-hardware-validation.sh"
       - "scripts/rebirth-linux-validation.sh"
-      - "scripts/verify-gateway-daemon-render.mjs"
+      - "scripts/verify-gateway-render.mjs"
       - "scripts/rebirth-windows-validation.ps1"
       - ".github/workflows/rebirth-platform-validation.yml"
   push:
     branches:
       - main
     paths:
-      - "daemon/**"
+      - "gateway/backend/**"
       - "windows/**"
       - "assets/default-scripts/**"
       - "simulator/**"
       - "scripts/check-rust-toolchain.sh"
-      - "scripts/rebirth-gateway-daemon-sim-validation.sh"
+      - "scripts/rebirth-gateway-sim-validation.sh"
       - "scripts/rebirth-hardware-validation.sh"
       - "scripts/rebirth-linux-validation.sh"
-      - "scripts/verify-gateway-daemon-render.mjs"
+      - "scripts/verify-gateway-render.mjs"
       - "scripts/rebirth-windows-validation.ps1"
       - ".github/workflows/rebirth-platform-validation.yml"
   workflow_dispatch:
@@ -80,12 +80,12 @@ jobs:
         with:
           node-version: "22"
           cache: "npm"
-          cache-dependency-path: gateway/package-lock.json
+          cache-dependency-path: gateway/frontend/package-lock.json
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
         with:
-          workspaces: daemon
+          workspaces: gateway/backend
 
       - name: Run Linux rebirth validation
         env:

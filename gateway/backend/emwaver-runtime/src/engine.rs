@@ -1369,7 +1369,7 @@ mod tests {
     fn bootstrap_every_reschedules_with_timer_pump() {
         let bridge = Arc::new(RecordingBridge::new(None));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
 
         engine
@@ -1397,7 +1397,7 @@ mod tests {
     fn bootstrap_fs_api_reads_writes_and_renames_local_files() {
         let bridge = Arc::new(RecordingBridge::new(None));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
         let base =
             std::env::temp_dir().join(format!("emwaver-runtime-fs-test-{}", std::process::id()));
@@ -1440,7 +1440,7 @@ mod tests {
             .unwrap()
             .extend((0..130).map(|v| (v & 0xff) as u8));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
 
         engine
@@ -1469,7 +1469,7 @@ mod tests {
     fn bootstrap_sampler_desktop_api_sets_saves_and_transmits_buffer() {
         let bridge = Arc::new(RecordingBridge::new(Some(vec![0x80])));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
         let base = std::env::temp_dir().join(format!(
             "emwaver-runtime-sampler-test-{}",
@@ -1509,7 +1509,7 @@ mod tests {
     fn bootstrap_ui_buffer_registers_plot_buffer() {
         let bridge = Arc::new(RecordingBridge::new(None));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
 
         engine
@@ -1536,7 +1536,7 @@ mod tests {
     fn bootstrap_signal_and_device_event_surface_is_available() {
         let bridge = Arc::new(RecordingBridge::new(None));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
-        let bootstrap = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
 
         engine

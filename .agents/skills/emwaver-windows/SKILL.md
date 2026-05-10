@@ -1,6 +1,6 @@
 ---
 name: emwaver-windows
-description: Use when working on the EMWaver Windows 11 app, including WinUI pages, USB and device services, board-aware firmware update flows, local gateway app-role control, Agent API key UI, or macOS parity work for local-first behavior.
+description: Use when working on the EMWaver Windows 11 app, including WinUI pages, USB and device services, board-aware firmware update flows, self-contained local runtime behavior, Agent API key UI, or macOS parity work for local-first behavior.
 ---
 
 # EMWaver Windows
@@ -18,14 +18,14 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/windows`](/Use
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Program.cs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Program.cs), [`/Users/luisml/continualmi/emwaver/windows/EMWaver/App.xaml`](/Users/luisml/continualmi/emwaver/windows/EMWaver/App.xaml), and [`/Users/luisml/continualmi/emwaver/windows/EMWaver/MainWindow.xaml`](/Users/luisml/continualmi/emwaver/windows/EMWaver/MainWindow.xaml): app entry and shell
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Pages): main UI pages
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Dialogs): dialog surfaces including firmware flows
-- [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services): transport, device lifecycle, firmware update, app services, local gateway/app-role bridge, and legacy cloud surfaces
+- [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Services`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Services): transport, device lifecycle, firmware update, app services, and legacy cloud surfaces
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Scripting): script engine and plot/runtime support
 - [`/Users/luisml/continualmi/emwaver/windows/EMWaver/Assets/Firmware`](/Users/luisml/continualmi/emwaver/windows/EMWaver/Assets/Firmware): packaged firmware assets
 
 ## Core behaviors to preserve
 
 - Windows targets Windows 11 only.
-- Windows is intended to track macOS parity for local device control, localhost gateway app-role behavior, and board-aware firmware updates.
+- Windows is intended to track macOS parity for local device control and board-aware firmware updates.
 - Local scripts, local device control, and firmware update flows must not require accounts, activation, hardware UID reads, minting, claiming, device limits, or hosted relay.
 - STM32 and ESP32-S3 use different update paths; keep the app board-aware.
 - Avoid Pro/account language in user-facing core UI. Optional Agent inference should be described as an Agent API key.

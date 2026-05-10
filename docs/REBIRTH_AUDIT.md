@@ -1,194 +1,63 @@
-# Rebirth Completion Audit
+# EMWaver Rebirth Audit
 
-This audit tracks the active objective: do the EMWaver rebirth work captured in `REBIRTH.md` and `REBIRTH_ISSUES.md`.
+This audit tracks the current local-first rebirth objective.
 
-The objective is not complete yet.
+## Current Objective
 
-## Success Criteria
+Make `gateway/` the single owner of EMWaver's local backend, CLI, runtime, transports, and browser frontend for terminal/browser workflows.
 
-The rebirth is complete only when:
-
-- local gateway is a real account-free browser control surface for the native app,
-- shared `.emw` runtime/device layers are extracted and verified,
-- CLI can run `.emw` scripts locally,
-- local gateway bridges directly to the native app over localhost WebSocket,
-- local hardware control has no cloud/auth/subscription gate,
-- paid Agent API-key flow works from gateway and CLI,
-- hardware monorepo imports are completed under `hardware/`,
-- docs and validation prove the above.
-
-## Prompt-To-Artifact Checklist
-
-| Requirement | Artifact/Evidence | Status |
-| --- | --- | --- |
-| Create rebirth plan | `REBIRTH.md` | done |
-| Create issue backlog | `REBIRTH_ISSUES.md` | done |
-| Local gateway folder | `gateway/README.md`, `gateway/package.json`, `gateway/src/server.ts` | done |
-| Localhost browser UI | `gateway/src/server.ts` serves examples, editor, browser-local open/save, bundled-script UI nodes, SVG plot rendering, Agent, protocol log, and local native-app/device status | local control parity done; browser polish still separate |
-| Bundled script loading | `/v1/examples` reads `assets/default-scripts/*.emw` | done |
-| Local WebSocket protocol | `/v1/ws` supports `hello`, `script.run`, `script.stop`, `ui.event`, `ui.snapshot`, `plot.viewport`, and `plot.data` relay | prototype done |
-| Gateway account-free | no sign-in/token required by gateway; verified by `npm run verify` | done |
-| Gateway cloud-free | no hosted relay/session discovery required by gateway | done |
-| Gateway Agent panel | `gateway/src/server.ts` Agent panel and `/v1/agent` proxy | done |
-| Agent missing-key behavior | `gateway/scripts/verify.mjs` checks `agent_not_configured` | done |
-| Agent configured forwarding | `gateway/scripts/verify.mjs` checks mock endpoint forwarding and auth header | done |
-| Agent CLI | `daemon/emwaver/src/main.rs` adds `emwaver agent` using `EMWAVER_AGENT_API_KEY` and endpoint env | missing-key and configured mock paths passed |
-| Runtime extraction | `daemon/emwaver-runtime/` owns `Engine`, `UiNode`, and `CommandBridge`; the CLI consumes it through direct local execution | done for CLI/daemon reuse |
-| Device transport extraction | `daemon/emwaver-device/` owns USB MIDI/SysEx `Device`, ESP32 BLE `BleDevice`, selected input connection, EMWaver BLE service discovery, and protocol helpers | API/build done; selected-device and BLE flag error paths verified by build/help; hardware validation pending |
-| Shared device simulator | `SIMULATOR.md`, `simulator/fixtures/basic-board.json`, `simulator/VIRTUAL_TRANSPORT.md`, `emwaver-runtime::SimulatorCommandBridge`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, Android `SimulatorScriptDeviceBridge`, `REBIRTH-045` through `REBIRTH-049` | shared fixture plus Rust, Apple, Windows, and Android adapters added; virtual MIDI/USB evaluated and kept out of the portable baseline |
-| `emwaver run` | `daemon/emwaver/src/main.rs` reads a `.emw` file and sends `script.run` to the localhost gateway/native-app/daemon bridge by default; `--direct` runs the extracted Rust runtime | gateway/macOS app integration passed; gateway/headless daemon simulator integration passed; direct UI-only runtime passed; hardware-backed direct validation pending |
-| `emwaver doctor` | `daemon/emwaver/src/main.rs` checks platform, local state paths, autostart status, gateway package, Node/npm, Rust, and MIDI device visibility | build verified; command passed |
-| `emwaver devices` through shared layer | CLI calls `emwaver_device::list_devices()` | done |
-| `emwaver gateway` CLI wrapper | source edited in `daemon/emwaver/src/main.rs`; installs gateway dependencies with `npm ci` when needed, builds gateway assets when missing, starts the built gateway with Node, and supports `--daemon-fallback` | built gateway smoke verified; daemon-fallback lifecycle covered by `emwaver start` smoke path |
-| `emwaver start` CLI stack | `daemon/emwaver/src/main.rs` starts the daemon host in the background, then starts the gateway in the foreground, and stops the daemon it created when the gateway exits | build verified; split gateway + `daemon serve --sim-device` WebSocket smoke passed; macOS BLE gateway smoke passed; `emwaver start --sim-device` lifecycle smoke passed; full Linux validation pending |
-| Linux user service | `daemon/emwaver/src/main.rs` implements `emwaver service install|uninstall|print-unit|start|stop|status`; `daemon/install/install.sh` can install the service from a development checkout | build/help verified on macOS; service unit generation is CI-covered with `print-unit`; shell syntax verified; real Linux systemd user-service validation pending |
-| Daemon as gateway runtime owner | `daemon/emwaver/src/main.rs` implements `daemon serve` as local `role=host`: handles `script.run`, `script.stop`, `ui.event`, emits `device.status`, `script.started`, `script.stopped`, `script.error`, and `ui.snapshot`; supports USB MIDI/SysEx by default and ESP32 BLE with `--ble`; gateway prefers native `role=app` over daemon `role=host` | simulator-backed gateway smoke passed, including UI event dispatch and updated snapshot; USB/BLE build passed; macOS BLE hardware gateway smoke passed with ESP32; Linux hardware validation pending |
-| Gateway controls native app | `gateway/src/server.ts` accepts `web` and `app`/`host` WebSocket roles; macOS and Windows host services connect to localhost gateway as `role=app`; gateway forwards control to the local native app instead of using a third-party core service | macOS gateway integration passed for UI-only script; Windows build blocked by missing local dotnet/Windows toolchain; real hardware validation pending |
-| Local runtime account/activation gate | macOS `ContentView` passes connected USB device to `ScriptsRootView` without claimed-device cache membership; Windows `ScriptsPage` uses `AppServices.Device` directly | macOS build passed; Windows source reviewed, build blocked by missing Windows toolchain |
-| Native remote-control scope | `REBIRTH.md`, `REBIRTH-050`, `LAUNCH_MVP.md`, macOS/Windows/iOS/Android host-control code | same-machine localhost gateway control is now the core posture; native hosted relay/directory code has been removed from the primary app surfaces; macOS Debug build passed, Android Java compile passed, iOS simulator build passed, Windows build blocked by missing `dotnet` |
-| Hardware repo inventory | `hardware/IMPORT_INVENTORY.md` | done |
-| Hardware import script | `hardware/import-subtrees.sh` | done |
-| Trial hardware import | `hardware/gpio-waver/` imported with history in `4f45903a` and flattened afterward | done |
-| Full hardware import | all nine primary hardware repos imported under flat `hardware/<repo-name>/` paths | done |
-| AGENTS source of truth updated | `AGENTS.md` | done |
-| README/planning updated | `README.md`, `README.txt`, `PLANNING.md` | done |
-| Launch MVP defined | `LAUNCH_MVP.md` | done |
-| Packaging direction defined | `PACKAGING.md` | done |
-| Rebirth validation tracker | `TESTS_REBIRTH.md` | done |
-| Gateway CI | `.github/workflows/gateway-ci.yml` | done |
-| Daemon/runtime CI | `.github/workflows/daemon-ci.yml`, `scripts/rebirth-gateway-daemon-sim-validation.sh` | hosted Ubuntu run `25430732067` validates runtime/device tests, CLI build, UI-only direct run, simulator-backed direct run, built gateway-to-daemon simulator render/event flow, and CLI `gateway --daemon-fallback --sim-device` render/event flow |
-| Install smoke CI | `scripts/rebirth-install-smoke.sh`, `.github/workflows/daemon-ci.yml`, `scripts/verify-gateway-daemon-render.mjs` | hosted Ubuntu validates development install prefix, installed CLI, packaged gateway assets under `share/emwaver/gateway`, default script/bootstrap assets under `share/emwaver/assets/default-scripts`, installed `emwaver gateway`, and installed `emwaver gateway --daemon-fallback --sim-device` rendering a script plus UI event round-trip through the daemon runtime |
-| CLI/gateway preview packages | `.github/workflows/cli-gateway-release.yml`, `scripts/verify-gateway-daemon-render.mjs` | run `25430201233` passed the Linux x64 and macOS CLI matrix, published `EMWaver-linux-x64.tar.gz` and `EMWaver-macos-cli.tar.gz` to `emwaver-preview`, and smoke-tested packaged gateway health plus packaged daemon fallback script rendering and UI event round-trip |
-| Rust toolchain preflight | `scripts/check-rust-toolchain.sh` | done |
-| Hardware validation helper | `scripts/rebirth-hardware-validation.sh` | tool passes UI-only path and now includes simulator-backed direct runtime; real hardware skipped until `EMWAVER_DEVICE_ID` and board are available |
-| Linux validation runbook | `scripts/rebirth-linux-validation.sh`, `scripts/rebirth-hardware-validation.sh`, `scripts/verify-gateway-daemon-render.mjs` | supports USB via `EMWAVER_DEVICE_ID` and BLE via `EMWAVER_HARDWARE_TRANSPORT=ble`; always runs gateway-daemon simulator fallback; verifies systemd user unit generation; can opt into real systemd user-service install/start/render/uninstall validation with `EMWAVER_VALIDATE_SYSTEMD=1`; can run hardware-backed `emwaver gateway --daemon-fallback` render/event validation when hardware env is provided; execution on real Linux host with ALSA/BlueZ and hardware still pending |
-| Windows validation runbook | `scripts/rebirth-windows-validation.ps1` | added; execution blocked until Windows workstation with .NET/WinUI SDK and hardware |
-| Hosted platform validation CI | `.github/workflows/rebirth-platform-validation.yml`, `windows/EMWaver.Tests` | run `25430732056` passed hosted Ubuntu Linux validation and hosted Windows restore/build plus simulator script-engine tests; hardware jobs remain dispatch-only on self-hosted runners |
-
-## Verification Evidence
-
-Recent verified commands:
-
-```bash
-cd gateway
-npm ci
-npm run verify
-
-cd daemon
-cargo test -p emwaver-device -p emwaver-runtime
-cargo build -p emwaver
-cargo run -q -p emwaver -- daemon start --help
-cargo run -q -p emwaver -- devices
-cargo run -q -p emwaver -- doctor
-cargo run -q -p emwaver -- run <temp>.emw --direct --no-device
-cargo run -q -p emwaver -- agent "write blink"
-EMWAVER_AGENT_API_KEY=test-agent-key EMWAVER_AGENT_ENDPOINT=http://127.0.0.1:<mock>/agent cargo run -q -p emwaver -- agent --script <temp>.emw --mode debug "debug this"
-scripts/rebirth-hardware-validation.sh
-```
-
-Latest result:
+The desired runtime model is:
 
 ```text
-gateway verify passed: hello.ack, device.status, script.started, ui.snapshot, plot.data, ui.event.ack
-gateway agent proxy verify passed
+CLI -> Gateway -> device
+browser -> Gateway -> device
+native apps -> self-contained native runtime -> device
 ```
 
-This verifies:
+## Completed Code Work
 
-- TypeScript typecheck,
-- macOS Debug app build,
-- macOS local gateway app-role integration for a UI-only `.emw` script,
-- Rust daemon workspace build,
-- initial `emwaver-runtime` and `emwaver-device` crate extraction,
-- runtime render, packet bridge, script error, UI callback dispatch, and unknown-handler tests,
-- selected-device direct runtime CLI help,
-- `emwaver doctor`,
-- `emwaver run --direct --no-device` through the extracted Rust runtime,
-- direct `emwaver run` script-error reporting,
-- `emwaver run` against local gateway plus built macOS app,
-- `emwaver gateway --port` clean-checkout dependency install/start smoke,
-- gateway `/health`,
-- gateway index guard for local Open/Save/native-app/Agent UI and no hosted auth/cloud file route markers,
-- gateway `/v1/examples` loading canonical default scripts,
-- gateway local native-app/device status UI,
-- gateway browser-local `.emw` open/save controls,
-- missing Agent config response,
-- configured mock Agent forwarding,
-- CLI Agent missing-key and configured mock behavior,
-- local WebSocket script run to app-produced UI snapshot,
-- local WebSocket UI event forwarding to mock native app.
-- local WebSocket script run to Rust daemon-produced UI snapshot with `--sim-device`.
-- local WebSocket UI event dispatch through Rust daemon and updated UI snapshot with `--sim-device`.
-- `scripts/rebirth-gateway-daemon-sim-validation.sh` starts the built gateway plus daemon `--sim-device`, drives `/v1/ws` as a browser client, renders a script, dispatches a UI event, and receives the updated snapshot.
-- The same simulator validation runs in fallback mode to cover `emwaver gateway --daemon-fallback --sim-device`.
-- `scripts/rebirth-install-smoke.sh` installs a packaged CLI/gateway layout, starts the installed gateway, then starts installed `emwaver gateway --daemon-fallback --sim-device` and verifies daemon-backed script rendering plus UI event dispatch with `scripts/verify-gateway-daemon-render.mjs`.
-- `.github/workflows/cli-gateway-release.yml` performs the same daemon-backed render check against the packaged Linux and macOS CLI/gateway tarball layouts.
-- `scripts/rebirth-linux-validation.sh` now includes the gateway daemon simulator fallback validation, systemd user unit generation validation, optional systemd user-service render validation through `EMWAVER_VALIDATE_SYSTEMD=1`, and, when `EMWAVER_DEVICE_ID` or `EMWAVER_HARDWARE_TRANSPORT=ble` is set, starts hardware-backed `emwaver gateway --daemon-fallback` and drives a real `.emw` script through the gateway WebSocket.
-- Rust daemon BLE transport builds with the shared `emwaver-device` protocol envelope and `btleplug` scan/connect/notify/write path.
-- Rust daemon BLE scan saw a powered ESP32 as `EMWaver`.
-- `cargo run -q -p emwaver -- run ../assets/default-scripts/blink.emw --direct --ble` rendered the Blink UI snapshot through real BLE.
-- Gateway + `cargo run -q -p emwaver -- daemon serve --port 3921 --ble` rendered `blink.emw` through the localhost gateway and real BLE transport.
-- `emwaver service install --help` verifies Linux service CLI surface builds.
-- `bash -n daemon/install/install.sh scripts/rebirth-linux-validation.sh` verifies installer/runbook shell syntax.
-- local verifier coverage is also wired into `.github/workflows/gateway-ci.yml`.
-- daemon/runtime verifier coverage is wired into `.github/workflows/daemon-ci.yml`.
-- Daemon CI run `25430732067` passed on hosted Ubuntu after validating the gateway daemon simulator, CLI daemon fallback, and packaged install smoke paths.
-- Rebirth Platform Validation run `25430732056` passed hosted Ubuntu Linux validation plus hosted Windows simulator validation.
-- CLI Gateway Release run `25430201233` passed for Linux x64 and macOS CLI packages and published the preview tarballs to `emwaver-preview`.
+- `gateway/backend/` now contains the Rust Gateway backend workspace, CLI, runtime crate, transport crate, and install/service helper.
+- `gateway/frontend/` now contains the React browser UI, Vite build, verification script, and frontend assets.
+- `emwaver gateway serve` runs the localhost webserver and runtime owner in one Rust process.
+- `emwaver run` sends `script.run` to a running Gateway over localhost WebSocket.
+- Direct/local CLI script execution was removed from the public CLI.
+- Native macOS and Windows Gateway host services and settings were removed.
+- Rust Agent CLI/backend routes were removed. Agent UI/tooling belongs in TypeScript/client code and native Agent surfaces.
+- Packaging scripts and Gateway validation scripts use the consolidated Gateway path.
 
-It does not verify:
+## Validation Evidence
 
-- real hardware access,
-- native app hardware-backed runtime integration,
-- Linux daemon hardware-backed gateway runtime integration,
-- Linux daemon ESP32 BLE runtime validation against a real board,
-- Linux systemd user-service install/start validation on a real Linux host,
-- Windows app build,
-- selected-device hardware behavior.
+Latest local validation for this migration is tracked in `TESTS_REBIRTH.md`.
 
-## Blockers
-
-## Rust Toolchain
-
-The Rust toolchain was installed with Homebrew and now passes preflight:
+Required final reruns before closing the objective:
 
 ```bash
-./scripts/check-rust-toolchain.sh
+cd gateway/backend
+cargo fmt --check
+cargo build -q -p emwaver
+cargo test -q -p emwaver-runtime -p emwaver-device
+
+cd ../frontend
+npm run typecheck
+npm run build
+npm run verify
+
+cd ../..
+bash -n gateway/backend/install/install.sh scripts/*.sh
+scripts/rebirth-gateway-sim-validation.sh
+scripts/rebirth-install-smoke.sh
 ```
 
-Verified build:
+macOS native validation should use compact logs, for example:
 
 ```bash
-cd daemon
-cargo build -p emwaver
+xcodebuild -quiet -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -configuration Debug build
 ```
 
-Remaining Rust-side work:
+Windows native validation requires a Windows workstation with the required .NET/WinUI SDK.
 
-- daemon refactor.
+## Remaining Gaps
 
-## Hardware Imports
-
-`git subtree add` creates merge commits. The import script intentionally refuses to run in a dirty worktree.
-
-Completed imports:
-
-- `hardware/emwaver-air/`
-- `hardware/emwaver-carrier/`
-- `hardware/emwaver-core/`
-- `hardware/emwaver-link/`
-- `hardware/emwaver-shield/`
-- `hardware/gpio-waver/`
-- `hardware/infrared-waver/`
-- `hardware/ism-waver/`
-- `hardware/rfid-waver/`
-
-## Remaining P0 Work
-
-- Verify Windows app local gateway WebSocket on a Windows 11 workstation.
-- Validate macOS local gateway script execution on real hardware.
-- Validate Linux `emwaver start --device <id>` gateway/daemon script execution on real hardware.
-- Validate Linux `emwaver start --ble` gateway/daemon script execution on real ESP32 BLE hardware.
-- Validate local hardware script execution on at least one supported board.
-
-Do not mark the active goal complete until those items are implemented and verified.
+- Finish the active-doc cleanup so user-facing docs do not describe removed command surfaces or native app Gateway host behavior.
+- Run the final local validation pass after docs and script changes settle.
+- Run real hardware validation for USB/MIDI, BLE, and ESP32 Wi-Fi Gateway transports.

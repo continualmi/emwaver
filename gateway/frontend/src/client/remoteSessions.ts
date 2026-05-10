@@ -1,4 +1,4 @@
-export type RemoteHelloAck = { type: "hello.ack"; role: "web" | "host" | "app"; hostSessionId?: string };
+export type RemoteHelloAck = { type: "hello.ack"; role: "web"; hostSessionId?: string };
 export type RemoteHostError = { type: "host.error"; hostSessionId?: string; error: string };
 
 export type RemoteDeviceStatus = {

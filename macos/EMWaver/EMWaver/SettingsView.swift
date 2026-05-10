@@ -5,7 +5,6 @@ struct SettingsView: View {
     @ObservedObject var device: MacUSBManager
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
-    @AppStorage(RemoteControlHostService.localGatewayEnabledKey) private var localGatewayEnabled = false
     @AppStorage(MacUSBManager.transportDebugLoggingEnabledDefaultsKey) private var transportDebugLoggingEnabled = true
 
     private let mgptApiURL = URL(string: "https://mdl.continualmi.com/mgpt-api")!
@@ -37,13 +36,6 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Section("Local browser control") {
-                    Toggle("Allow localhost gateway control", isOn: $localGatewayEnabled)
-
-                    Text("When enabled, this app accepts script and UI control from the local EMWaver gateway on this Mac. Leave it off unless you are using the browser control surface.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
             }
             .formStyle(.grouped)
             .navigationTitle("Settings")

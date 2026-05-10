@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+GATEWAY_BACKEND_DIR="$ROOT/gateway/backend"
+GATEWAY_FRONTEND_DIR="$ROOT/gateway/frontend"
 PREFIX="${EMWAVER_INSTALL_PREFIX:-$HOME/.local}"
 BIN_DIR="$PREFIX/bin"
 SHARE_DIR="$PREFIX/share/emwaver"
@@ -18,7 +20,7 @@ fi
 
 if ! command -v node >/dev/null 2>&1; then
   echo "missing: node" >&2
-  echo "Install Node.js so the local gateway can run." >&2
+  echo "Install Node.js so the Gateway frontend assets can be built." >&2
   exit 1
 fi
 
@@ -34,32 +36,31 @@ echo "prefix: $PREFIX"
 
 echo
 echo "== Build CLI =="
-cargo build --manifest-path "$ROOT/daemon/Cargo.toml" -p emwaver --release
+cargo build --manifest-path "$GATEWAY_BACKEND_DIR/Cargo.toml" -p emwaver --release
 
 mkdir -p "$BIN_DIR"
-cp -f "$ROOT/daemon/target/release/emwaver" "$BIN_DIR/emwaver"
+cp -f "$GATEWAY_BACKEND_DIR/target/release/emwaver" "$BIN_DIR/emwaver"
 chmod +x "$BIN_DIR/emwaver"
 echo "installed: $BIN_DIR/emwaver"
 
 echo
 echo "== Prepare gateway dependencies =="
-if [[ -f "$ROOT/gateway/package-lock.json" ]]; then
-  (cd "$ROOT/gateway" && npm ci)
+if [[ -f "$GATEWAY_FRONTEND_DIR/package-lock.json" ]]; then
+  (cd "$GATEWAY_FRONTEND_DIR" && npm ci)
 else
-  (cd "$ROOT/gateway" && npm install)
+  (cd "$GATEWAY_FRONTEND_DIR" && npm install)
 fi
-(cd "$ROOT/gateway" && npm run build)
+(cd "$GATEWAY_FRONTEND_DIR" && npm run build)
 
 echo
 echo "== Install gateway assets =="
 rm -rf "$GATEWAY_SHARE_DIR"
 mkdir -p "$GATEWAY_SHARE_DIR"
-cp -f "$ROOT/gateway/package.json" "$GATEWAY_SHARE_DIR/package.json"
-if [[ -f "$ROOT/gateway/package-lock.json" ]]; then
-  cp -f "$ROOT/gateway/package-lock.json" "$GATEWAY_SHARE_DIR/package-lock.json"
+cp -f "$GATEWAY_FRONTEND_DIR/package.json" "$GATEWAY_SHARE_DIR/package.json"
+if [[ -f "$GATEWAY_FRONTEND_DIR/package-lock.json" ]]; then
+  cp -f "$GATEWAY_FRONTEND_DIR/package-lock.json" "$GATEWAY_SHARE_DIR/package-lock.json"
 fi
-cp -R "$ROOT/gateway/dist" "$GATEWAY_SHARE_DIR/dist"
-(cd "$GATEWAY_SHARE_DIR" && npm install --omit=dev --ignore-scripts)
+cp -R "$GATEWAY_FRONTEND_DIR/dist" "$GATEWAY_SHARE_DIR/dist"
 echo "installed gateway: $GATEWAY_SHARE_DIR"
 
 echo
@@ -88,9 +89,9 @@ Done.
 
 Try:
   $BIN_DIR/emwaver doctor
-  $BIN_DIR/emwaver start --sim-device
+  $BIN_DIR/emwaver gateway serve --sim-device
 
 For hardware:
-  $BIN_DIR/emwaver start --device 0
-  $BIN_DIR/emwaver start --ble
+  $BIN_DIR/emwaver gateway serve --device 0
+  $BIN_DIR/emwaver gateway serve --ble
 EOF

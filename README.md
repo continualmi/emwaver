@@ -31,7 +31,7 @@ The core hardware-control path is open and local-first: no EMWaver account, no c
 - A script-first electronics platform for running `.emw` scripts against real hardware.
 - A managed multi-transport runtime where USB is first-class, with BLE and Wi-Fi available for board classes designed around them.
 - Native client surfaces for Android, iOS, macOS, and Windows.
-- A localhost gateway direction for browser-based control of the local app/runtime.
+- A local Gateway direction for browser and CLI control of the local hardware runtime.
 - A software-first platform where users bring a supported board and EMWaver manages the runtime and firmware setup where practical.
 - A Continual MI project with optional paid Agent API usage as the business model, not paid local hardware access.
 
@@ -51,8 +51,7 @@ apple/                   Shared Swift package used by iOS and macOS
 ios/                     iPhone and iPad app
 macos/                   macOS app
 windows/                 Windows 11 app
-gateway/                 Localhost browser control gateway
-daemon/                  Headless CLI/runtime/device work
+gateway/                 Local Gateway backend, CLI/runtime/transports, and browser frontend
 stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 firmware/                Bundled firmware payloads consumed by apps
@@ -86,8 +85,7 @@ cd emwaver
 
 Then use the README for the subsystem you are changing:
 
-- [gateway/README.md](gateway/README.md) for localhost gateway work.
-- [daemon/README.md](daemon/README.md) for CLI, runtime, and headless host work.
+- [gateway/README.md](gateway/README.md) and [gateway/MIGRATION.md](gateway/MIGRATION.md) for local Gateway work.
 - [android/README.md](android/README.md), [ios/README.md](ios/README.md), [macos/README.md](macos/README.md), or [windows/README.md](windows/README.md) for app-specific work.
 - [stm/README.md](stm/README.md) and [esp/README.md](esp/README.md) for firmware work.
 - [hardware/README.md](hardware/README.md) for imported hardware repositories.
@@ -116,6 +114,7 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 ## Release Trackers
 
 - [REBIRTH.md](docs/REBIRTH.md) captures the local-first open-source product pivot.
+- [gateway/MIGRATION.md](gateway/MIGRATION.md) controls the Gateway consolidation into one local backend, CLI, runtime, transport, and browser frontend owner.
 - [LAUNCH_MVP.md](docs/LAUNCH_MVP.md) defines the minimum launch checklist.
 - [REBIRTH_ISSUES.md](docs/REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
 - [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.

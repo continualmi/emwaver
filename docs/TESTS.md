@@ -6,7 +6,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 ## Automation Bench Goal
 
-The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI, localhost gateway, and either the native app or daemon, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/logs, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
+The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI and localhost Gateway, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/logs, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
 
 ## Test Code Index
 
@@ -24,10 +24,8 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 ## Remote Case Matrix
 
-- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Frontend web controller, `L`=Linux headless host.
-- Controller -> host cases used by all remote variants: `MW`, `MI`, `MA`, `ML`, `WM`, `WI`, `WA`, `WL`, `IM`, `IW`, `IA`, `IL`, `AM`, `AW`, `AI`, `AL`, `FM`, `FW`, `FI`, `FA`, `FL`.
-- Rule: frontend is controller-only (never host).
-- Rule: Linux is host-only (never controller).
+- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Gateway browser UI, `L`=Linux headless Gateway host.
+- Remote variants cover user-owned network paths only. Native apps are self-contained local surfaces; terminal/browser workflows use Gateway.
 
 | Case | Controller | Host | `001R` | `002R` | `003R` | `004R` | `005R` |
 | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -130,9 +128,9 @@ The hardware test suite should move toward an agent-driven local automation benc
 ### Local
 
 - Script target: custom `.emw` file created outside `assets/default-scripts`.
-- Setup: run localhost gateway and connect either the native app (`role=app`) or daemon (`role=host`) to a real board.
-- Steps: from the terminal/agent, create or edit a local `.emw` script; run it with `emw run`; wait for `script.started`; capture the latest `ui.snapshot`; send at least one `ui.event`; verify a changed snapshot or hardware effect; stop the script; confirm no stale active script remains.
-- Tests: terminal-first agent workflow, gateway forwarding, custom local script loading, UI snapshot inspection, UI event dispatch, stop/reset behavior, and hardware command execution.
+- Setup: run localhost Gateway against a real board.
+- Steps: from the terminal/agent, create or edit a local `.emw` script; run it with `emwaver run`; wait for `script.started`; capture the latest `ui.snapshot`; send at least one `ui.event`; verify a changed snapshot or hardware effect; stop the script; confirm no stale active script remains.
+- Tests: terminal-first agent workflow, Gateway execution, custom local script loading, UI snapshot inspection, UI event dispatch, stop/reset behavior, and hardware command execution.
 - Expected: the agent can iterate on a custom script without using the app UI manually, and the hardware ends in a known safe state after stop/reset.
 
 ## `007_MULTI_DEVICE_AGENT_BENCH`
@@ -151,7 +149,7 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 - Script targets: `assets/default-scripts/blink.emw`, `assets/default-scripts/gpio.emw`, `assets/default-scripts/adc.emw`, `assets/default-scripts/pwm.emw`, `assets/default-scripts/sampler.emw`, and `assets/default-scripts/cc1101.emw`.
 - Setup: flash the current ESP32-S3 firmware payload; provision Wi-Fi with SSID/password only over USB or BLE; keep USB available for recovery; attach LED, ADC/GPIO loopback, PWM/servo, CC1101 SPI, and sampler/retransmit fixtures as available.
-- Steps: discover the board through `_emwaver._tcp`; run `emwaver devices`; run `emwaver run assets/default-scripts/blink.emw --direct --wifi <mdns-host>`; repeat by direct IP; verify the macOS native app manual connect/discovery path; connect multiple same-LAN ESP32 boards on port `3922`; attempt a second simultaneous client and confirm `busy`; drop Wi-Fi during a running script; clear/reprovision Wi-Fi over USB or BLE.
+- Steps: discover the board through `_emwaver._tcp`; run `emwaver devices`; start `emwaver gateway serve --wifi <mdns-host>`; run `emwaver run assets/default-scripts/blink.emw`; repeat by direct IP; verify the macOS native app manual connect/discovery path; connect multiple same-LAN ESP32 boards on port `3922`; attempt a second simultaneous client and confirm `busy`; drop Wi-Fi during a running script; clear/reprovision Wi-Fi over USB or BLE.
 - Tests: same-LAN mDNS discovery, same-LAN manual IP, LAN-trust WebSocket command transport, per-endpoint single-session ownership, multiple same-LAN board selection, disconnect reporting/recovery, and USB/BLE recovery after bad Wi-Fi configuration.
 - Expected: CLI and macOS app can run scripts through Wi-Fi without accounts, cloud relay, hosted activation, or extra transport credentials; second simultaneous clients are rejected as busy; Wi-Fi drops leave the runtime recoverable; USB/BLE provisioning remains available.
 - Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, provisioning transport used, SSID/network shape, mDNS hostname, direct IP, exact CLI commands and exit results, macOS app version/build, observed script behavior for each hardware fixture, second-client busy result, Wi-Fi drop/reconnect result, USB/BLE recovery result, date, and tester.
@@ -171,7 +169,7 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 - Script targets: `assets/default-scripts/blink.emw`, plus one representative hardware script from `008`.
 - Setup: put an ESP32-S3 board on a home/lab LAN; provision Wi-Fi locally; connect the controller machine through a user-owned VPN, SSH tunnel, Tailscale subnet route, or equivalent routed private network. Do not use an EMWaver-hosted relay.
-- Steps: run `emwaver run assets/default-scripts/blink.emw --direct --wifi <private-ip>` from outside the LAN; repeat with mDNS unavailable; verify the manual IP path in the gateway and macOS app where available; attempt a second simultaneous client and confirm `busy`; stop/reset the script and reconnect after a transient network drop.
+- Steps: start `emwaver gateway serve --wifi <private-ip>` from outside the LAN; run `emwaver run assets/default-scripts/blink.emw`; repeat with mDNS unavailable; verify the manual IP path in Gateway and macOS app where available; attempt a second simultaneous client and confirm `busy`; stop/reset the script and reconnect after a transient network drop.
 - Tests: VPN-by-IP direct execution, manual endpoint entry when mDNS does not cross the tunnel, routed-network latency tolerance, busy handling, reconnect behavior, and local-first remote posture.
 - Expected: scripts run through a user-owned routed path by private IP with LAN/VPN reachability as the trust boundary; no hosted relay, cloud account, subscription check, or backend device ownership check is involved.
 - Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, user-owned routed path type, controller network location, private IP tested, exact CLI commands and exit results, gateway/macOS manual IP result where tested, second-client busy result, transient network drop/reconnect result, confirmation that no EMWaver-hosted relay/account path was used, date, and tester.

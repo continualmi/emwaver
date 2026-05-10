@@ -59,19 +59,17 @@ if ($Ci) {
 }
 
 Write-Host ""
-Write-Host "== Local gateway app-role validation =="
-Write-Host "1. Start the EMWaver Windows app from Visual Studio or the Debug build output."
-Write-Host "2. In a separate shell from repo root, start the gateway:"
-Write-Host "   emwaver gateway --port $GatewayPort"
-Write-Host "3. Confirm the Windows app connects to ws://127.0.0.1:$GatewayPort/v1/ws as role=app."
-Write-Host "4. Open http://127.0.0.1:$GatewayPort and run $ScriptName."
-Write-Host "5. Confirm the gateway receives hello.ack, device.status, script.started, and ui.snapshot."
+Write-Host "== Local Gateway validation =="
+Write-Host "1. From repo root, start the Gateway backend:"
+Write-Host "   emwaver gateway serve --port $GatewayPort --sim-device"
+Write-Host "2. Open http://127.0.0.1:$GatewayPort and run $ScriptName."
+Write-Host "3. Confirm the browser receives hello.ack, device.status, script.started, and ui.snapshot."
 
 Write-Host ""
 Write-Host "== Hardware validation =="
 Write-Host "1. Connect a supported EMWaver board over USB."
 Write-Host "2. Confirm the Windows app Device page shows the board without requiring account sign-in."
-Write-Host "3. Run $ScriptName from the gateway and verify the board performs the expected hardware action."
+Write-Host "3. Run $ScriptName from the Windows app and verify the board performs the expected hardware action."
 Write-Host "4. Record the result in docs/TESTS_REBIRTH.md under Platform Device Access."
 
 Write-Host ""

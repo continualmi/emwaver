@@ -1096,7 +1096,7 @@ public struct ScriptsRootView: View {
         let manager = activePreviewManager
         return AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
             "connected": .bool(device != nil),
-            "runtimeOwner": .string("macos-native-app"),
+            "runtimeOwner": .string("macos"),
             "activeScriptName": .string(manager.activeScriptName ?? ""),
             "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
             "isRendering": .bool(manager.isRendering),

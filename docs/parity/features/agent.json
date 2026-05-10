@@ -3,7 +3,7 @@
   "features": [
     {
       "id": "agent.api_key.local_storage",
-      "description": "Agent API keys are stored locally on every app surface and do not represent an EMWaver account.",
+      "description": "Agent API keys are stored locally on app surfaces and do not represent an EMWaver account.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -34,19 +34,19 @@
             { "file": "android/app/src/main/res/layout/dialog_sign_in.xml", "contains": "Agent API key" }
           ]
         },
-        "cli": {
+        "gateway_frontend": {
           "status": "planned",
-          "reason": "CLI Agent currently uses EMWAVER_AGENT_API_KEY/EMWAVER_AGENT_ENDPOINT environment variables instead of persisted local key storage.",
-          "evidence": [
-            { "file": "daemon/emwaver/src/main.rs", "contains": "EMWAVER_AGENT_API_KEY[\\s\\S]*EMWAVER_AGENT_ENDPOINT" },
-            { "file": "docs/AGENT_API.md", "contains": "CLI uses `EMWAVER_AGENT_API_KEY`" }
-          ]
+          "reason": "Gateway Agent tooling should be implemented in TypeScript/client code, not in the Rust device backend."
+        },
+        "cli": {
+          "status": "not_applicable",
+          "reason": "Rust CLI does not expose Agent commands; terminal Agent tooling should live outside the Rust device backend."
         }
       }
     },
     {
       "id": "agent.chat.local_sqlite",
-      "description": "Agent chat conversations and messages are local SQLite-backed state.",
+      "description": "Native Agent chat conversations and messages are local SQLite-backed state where chat UI exists.",
       "parity": "documented_exceptions",
       "platforms": {
         "macos": {
@@ -58,7 +58,6 @@
         "ios": {
           "status": "required",
           "evidence": [
-            { "file": "ios/EMWaver/Views/ScriptsContainerView.swift", "contains": "ScriptsRootView" },
             { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatStore.swift", "contains": "SQLite3" }
           ]
         },
@@ -73,13 +72,6 @@
           "evidence": [
             { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentChatStore.java", "contains": "SQLiteOpenHelper[\\s\\S]*agent_conversations[\\s\\S]*agent_messages" }
           ]
-        },
-        "cli": {
-          "status": "not_applicable",
-          "reason": "CLI Agent is a single-command helper and does not expose a local chat UI or chat history surface.",
-          "evidence": [
-            { "file": "daemon/README.md", "contains": "emwaver agent" }
-          ]
         }
       }
     },
@@ -88,16 +80,10 @@
       "description": "Agent clients send bearer-authenticated MGPT-style universe/userInput requests.",
       "parity": "all_required",
       "platforms": {
-        "macos": {
+        "macos_ios": {
           "status": "required",
           "evidence": [
             { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentEndpointAPI.swift", "contains": ["Authorization[\\s\\S]*Bearer", "userInput"] }
-          ]
-        },
-        "ios": {
-          "status": "required",
-          "evidence": [
-            { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentEndpointAPI.swift", "contains": "universe[\\s\\S]*userInput" }
           ]
         },
         "windows": {
@@ -110,13 +96,6 @@
           "status": "required",
           "evidence": [
             { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApi.java", "contains": "Authorization[\\s\\S]*Bearer[\\s\\S]*userInput" }
-          ]
-        },
-        "cli": {
-          "status": "required",
-          "evidence": [
-            { "file": "daemon/emwaver/src/main.rs", "contains": "Authorization[\\s\\S]*Bearer|bearer_auth" },
-            { "file": "daemon/emwaver/src/main.rs", "contains": "userInput|user_input|EMWAVER_AGENT_UNIVERSE" }
           ]
         }
       }

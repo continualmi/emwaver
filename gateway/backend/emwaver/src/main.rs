@@ -11,18 +11,24 @@ use nix::sys::signal::kill;
 use nix::unistd::Pid;
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::ErrorKind;
+use std::io::{ErrorKind, Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use tracing::info;
-use tungstenite::{connect, stream::MaybeTlsStream, Message};
+use tungstenite::{
+    accept_hdr, connect,
+    handshake::server::{Request, Response},
+    stream::MaybeTlsStream,
+    Message, WebSocket,
+};
 use url::Url;
 
 #[derive(Clone)]
-struct DaemonTransportStatus {
+struct GatewayTransportStatus {
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
@@ -39,7 +45,7 @@ struct CommandBridgeHandle {
 }
 
 #[derive(Parser, Debug)]
-#[command(name = "emwaver", about = "EMWaver headless host daemon CLI (beta)")]
+#[command(name = "emwaver", about = "EMWaver Gateway CLI")]
 struct Cli {
     #[command(subcommand)]
     cmd: Commands,
@@ -47,54 +53,19 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Start the local Linux-friendly gateway + daemon stack.
-    Start {
-        /// Local gateway port (defaults to 3921).
-        #[arg(long)]
-        port: Option<u16>,
-
-        /// MIDI input port id from `emwaver devices` for daemon hardware mode.
-        #[arg(long)]
-        device: Option<String>,
-
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon hardware mode.
-        #[arg(long)]
-        ble: bool,
-
-        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon hardware mode.
-        #[arg(long)]
-        wifi: Option<String>,
-
-        /// ESP32 Wi-Fi control port.
-        #[arg(long, default_value_t = 3922)]
-        wifi_port: u16,
-
-        /// Start daemon with a no-op hardware bridge for UI-only scripts.
-        #[arg(long)]
-        no_device: bool,
-
-        /// Start daemon with the shared mock EMWaver device simulator.
-        #[arg(long)]
-        sim_device: bool,
-
-        /// Override bootstrap script path for daemon runtime.
-        #[arg(long)]
-        bootstrap_path: Option<PathBuf>,
-    },
-
-    /// Manage the headless host daemon.
-    Daemon {
+    /// Manage the local Gateway backend and browser server.
+    Gateway {
         #[command(subcommand)]
-        cmd: DaemonCmd,
+        cmd: GatewayCmd,
     },
 
-    /// Install/manage the local Linux user service.
+    /// Install/manage the local Linux Gateway user service.
     Service {
         #[command(subcommand)]
         cmd: ServiceCmd,
     },
 
-    /// Terminal UI for daemon + device status.
+    /// Terminal UI for Gateway + device status.
     Tui,
 
     /// List local devices and optionally probe a Wi-Fi endpoint.
@@ -121,7 +92,7 @@ enum Commands {
         wifi_port: u16,
     },
 
-    /// Run a .emw script through the local gateway/native app bridge.
+    /// Run a .emw script through the local Gateway.
     Run {
         /// Script file to run.
         script: PathBuf,
@@ -146,135 +117,9 @@ enum Commands {
         #[arg(long)]
         no_wait: bool,
 
-        /// Run through the local headless Rust runtime instead of the gateway/native-app bridge.
-        #[arg(long)]
-        direct: bool,
-
-        /// MIDI input port id from `emwaver devices` for direct mode.
+        /// Target device id reported by the running Gateway.
         #[arg(long)]
         device: Option<String>,
-
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for direct mode.
-        #[arg(long)]
-        ble: bool,
-
-        /// Use ESP32 Wi-Fi transport by hostname or IP for direct mode.
-        #[arg(long)]
-        wifi: Option<String>,
-        /// ESP32 Wi-Fi control port.
-        #[arg(long, default_value_t = 3922)]
-        wifi_port: u16,
-
-        /// Run direct mode with a no-op hardware bridge for UI-only scripts.
-        #[arg(long)]
-        no_device: bool,
-
-        /// Run direct mode with the shared mock EMWaver device simulator.
-        #[arg(long)]
-        sim_device: bool,
-
-        /// Override bootstrap script path for direct mode.
-        #[arg(long)]
-        bootstrap_path: Option<PathBuf>,
-    },
-
-    /// Start the localhost browser gateway.
-    Gateway {
-        /// Local gateway port (defaults to 3921).
-        #[arg(long)]
-        port: Option<u16>,
-
-        /// Start the daemon underneath as a fallback runtime owner.
-        #[arg(long)]
-        daemon_fallback: bool,
-
-        /// MIDI input port id from `emwaver devices` for daemon fallback.
-        #[arg(long)]
-        device: Option<String>,
-
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon fallback.
-        #[arg(long)]
-        ble: bool,
-
-        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
-        #[arg(long)]
-        wifi: Option<String>,
-        /// ESP32 Wi-Fi control port.
-        #[arg(long, default_value_t = 3922)]
-        wifi_port: u16,
-
-        /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
-        #[arg(long)]
-        no_device: bool,
-
-        /// Start daemon fallback with the shared mock EMWaver device simulator.
-        #[arg(long)]
-        sim_device: bool,
-
-        /// Override bootstrap script path for daemon fallback.
-        #[arg(long)]
-        bootstrap_path: Option<PathBuf>,
-    },
-
-    /// Alias for `gateway`.
-    Web {
-        /// Local gateway port (defaults to 3921).
-        #[arg(long)]
-        port: Option<u16>,
-
-        /// Start the daemon underneath as a fallback runtime owner.
-        #[arg(long)]
-        daemon_fallback: bool,
-
-        /// MIDI input port id from `emwaver devices` for daemon fallback.
-        #[arg(long)]
-        device: Option<String>,
-
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx for daemon fallback.
-        #[arg(long)]
-        ble: bool,
-
-        /// Use ESP32 Wi-Fi transport by hostname or IP for daemon fallback.
-        #[arg(long)]
-        wifi: Option<String>,
-        /// ESP32 Wi-Fi control port.
-        #[arg(long, default_value_t = 3922)]
-        wifi_port: u16,
-
-        /// Start daemon fallback with a no-op hardware bridge for UI-only scripts.
-        #[arg(long)]
-        no_device: bool,
-
-        /// Start daemon fallback with the shared mock EMWaver device simulator.
-        #[arg(long)]
-        sim_device: bool,
-
-        /// Override bootstrap script path for daemon fallback.
-        #[arg(long)]
-        bootstrap_path: Option<PathBuf>,
-    },
-
-    /// Ask the paid EMWaver Agent for script help.
-    Agent {
-        /// Prompt to send to the Agent.
-        #[arg(required = true)]
-        prompt: Vec<String>,
-
-        /// Include a local .emw script as context.
-        #[arg(long)]
-        script: Option<PathBuf>,
-
-        /// Agent mode: write, debug, explain, or patch.
-        #[arg(long, default_value = "write")]
-        mode: String,
-
-        /// Include a runtime error as context.
-        #[arg(long)]
-        error: Option<String>,
-
-        /// Override EMWAVER_AGENT_ENDPOINT for this request.
-        #[arg(long)]
-        endpoint: Option<String>,
     },
 
     /// Provision, inspect, or clear ESP32 Wi-Fi setup over USB, BLE, or Wi-Fi.
@@ -288,16 +133,12 @@ enum Commands {
 }
 
 #[derive(Subcommand, Debug)]
-enum DaemonCmd {
-    /// Start the local headless runtime host in the background.
+enum GatewayCmd {
+    /// Start the local Gateway in the background.
     Start {
         /// Local gateway port (defaults to 3921).
         #[arg(long)]
         port: Option<u16>,
-
-        /// Override gateway base or WebSocket URL.
-        #[arg(long)]
-        gateway_url: Option<String>,
 
         /// MIDI input port id from `emwaver devices`.
         #[arg(long)]
@@ -327,15 +168,11 @@ enum DaemonCmd {
         bootstrap_path: Option<PathBuf>,
     },
 
-    /// Run the local headless runtime host in the foreground.
+    /// Run the local Gateway in the foreground.
     Serve {
         /// Local gateway port (defaults to 3921).
         #[arg(long)]
         port: Option<u16>,
-
-        /// Override gateway base or WebSocket URL.
-        #[arg(long)]
-        gateway_url: Option<String>,
 
         /// MIDI input port id from `emwaver devices`.
         #[arg(long)]
@@ -365,10 +202,10 @@ enum DaemonCmd {
         bootstrap_path: Option<PathBuf>,
     },
 
-    /// Stop the daemon (best-effort).
+    /// Stop the background Gateway (best-effort).
     Stop,
 
-    /// Print daemon status (running/not running) and autostart status.
+    /// Print Gateway status (running/not running) and autostart status.
     Status,
 
     /// Check whether autostart is configured (macOS launchd / Linux systemd).
@@ -377,7 +214,7 @@ enum DaemonCmd {
 
 #[derive(Subcommand, Debug)]
 enum ServiceCmd {
-    /// Install a Linux systemd user service for the headless daemon host.
+    /// Install a Linux systemd user service for the local Gateway.
     Install {
         /// Local gateway port (defaults to 3921).
         #[arg(long)]
@@ -548,11 +385,11 @@ fn state_dir() -> Result<PathBuf> {
 }
 
 fn pidfile_path() -> Result<PathBuf> {
-    Ok(state_dir()?.join("daemon.pid"))
+    Ok(state_dir()?.join("gateway.pid"))
 }
 
 fn logfile_path() -> Result<PathBuf> {
-    Ok(state_dir()?.join("daemon.log"))
+    Ok(state_dir()?.join("gateway.log"))
 }
 
 fn read_pid(pidfile: &Path) -> Option<i32> {
@@ -564,7 +401,7 @@ fn is_running(pid: i32) -> bool {
     kill(Pid::from_raw(pid), None).is_ok()
 }
 
-fn pid_looks_like_daemon(pid: i32) -> bool {
+fn pid_looks_like_gateway(pid: i32) -> bool {
     if cfg!(target_os = "linux") {
         let cmdline = fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default();
         let parts: Vec<String> = cmdline
@@ -574,7 +411,7 @@ fn pid_looks_like_daemon(pid: i32) -> bool {
             .collect();
         if !parts.is_empty() {
             return parts.iter().any(|part| part.contains("emwaver"))
-                && parts.iter().any(|part| part == "daemon")
+                && parts.iter().any(|part| part == "gateway")
                 && parts.iter().any(|part| part == "serve");
         }
     }
@@ -592,15 +429,15 @@ fn pid_looks_like_daemon(pid: i32) -> bool {
         return false;
     }
     let args = String::from_utf8_lossy(&output.stdout);
-    args.contains("emwaver") && args.contains("daemon") && args.contains("serve")
+    args.contains("emwaver") && args.contains("gateway") && args.contains("serve")
 }
 
-fn daemon_running() -> Result<Option<i32>> {
+fn gateway_running() -> Result<Option<i32>> {
     let pidfile = pidfile_path()?;
     let Some(pid) = read_pid(&pidfile) else {
         return Ok(None);
     };
-    if is_running(pid) && pid_looks_like_daemon(pid) {
+    if is_running(pid) && pid_looks_like_gateway(pid) {
         Ok(Some(pid))
     } else {
         // Stale pidfile, or the OS reused the pid for an unrelated process.
@@ -609,9 +446,8 @@ fn daemon_running() -> Result<Option<i32>> {
     }
 }
 
-fn daemon_start(
+fn gateway_start(
     port: Option<u16>,
-    gateway_url: Option<String>,
     device: Option<String>,
     ble: bool,
     wifi: Option<String>,
@@ -620,8 +456,8 @@ fn daemon_start(
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
-    if let Some(pid) = daemon_running()? {
-        println!("daemon: already running (pid={pid})");
+    if let Some(pid) = gateway_running()? {
+        println!("gateway: already running (pid={pid})");
         return Ok(());
     }
 
@@ -631,18 +467,15 @@ fn daemon_start(
         .create(true)
         .append(true)
         .open(&logfile)
-        .with_context(|| format!("failed to open daemon log at {}", logfile.display()))?;
+        .with_context(|| format!("failed to open gateway log at {}", logfile.display()))?;
     let stderr = stdout
         .try_clone()
-        .context("failed to clone daemon log handle")?;
+        .context("failed to clone gateway log handle")?;
 
     let mut cmd = Command::new(exe);
-    cmd.arg("daemon").arg("serve");
+    cmd.arg("gateway").arg("serve");
     if let Some(port) = port {
         cmd.arg("--port").arg(port.to_string());
-    }
-    if let Some(gateway_url) = gateway_url {
-        cmd.arg("--gateway-url").arg(gateway_url);
     }
     if let Some(device) = device {
         cmd.arg("--device").arg(device);
@@ -669,58 +502,25 @@ fn daemon_start(
         .stdout(Stdio::from(stdout))
         .stderr(Stdio::from(stderr))
         .spawn()
-        .context("failed to spawn daemon host process")?;
+        .context("failed to spawn gateway process")?;
 
     let pid = child.id();
     fs::write(pidfile_path()?, pid.to_string())?;
-    println!("daemon: started (pid={pid})");
+    println!("gateway: started (pid={pid})");
     println!("logfile: {}", logfile.display());
     Ok(())
 }
 
-fn start_local_stack(
-    port: Option<u16>,
-    device: Option<String>,
-    ble: bool,
-    wifi: Option<String>,
-    wifi_port: u16,
-    no_device: bool,
-    sim_device: bool,
-    bootstrap_path: Option<PathBuf>,
-) -> Result<()> {
-    let had_daemon = daemon_running()?.is_some();
-    daemon_start(
-        port,
-        None,
-        device,
-        ble,
-        wifi,
-        wifi_port,
-        no_device,
-        sim_device,
-        bootstrap_path,
-    )?;
-
-    let gateway_result = start_gateway(port);
-    if !had_daemon {
-        if let Err(err) = daemon_stop() {
-            eprintln!("warning: failed to stop daemon started by `emwaver start`: {err:#}");
-        }
-    }
-
-    gateway_result
-}
-
-fn daemon_stop() -> Result<()> {
+fn gateway_stop() -> Result<()> {
     let pidfile = pidfile_path()?;
     let Some(pid) = read_pid(&pidfile) else {
-        info!("daemon not running");
+        info!("gateway not running");
         return Ok(());
     };
 
     if !is_running(pid) {
         let _ = fs::remove_file(pidfile);
-        info!("daemon not running (stale pidfile removed)");
+        info!("gateway not running (stale pidfile removed)");
         return Ok(());
     }
 
@@ -743,7 +543,7 @@ fn autostart_status() -> Result<String> {
         let home = std::env::var("HOME").unwrap_or_default();
         let plist = PathBuf::from(home)
             .join("Library/LaunchAgents")
-            .join("com.emwaver.daemon.plist");
+            .join("com.emwaver.gateway.plist");
         if plist.exists() {
             return Ok(format!(
                 "autostart: configured (launchd plist exists: {})",
@@ -784,9 +584,10 @@ fn systemd_user_unit_path() -> PathBuf {
         .unwrap_or_else(|| PathBuf::from("."));
     base.join("systemd")
         .join("user")
-        .join("emwaver-daemon.service")
+        .join("emwaver-gateway.service")
 }
 
+#[cfg(target_os = "linux")]
 fn systemctl_user(args: &[&str]) -> Result<()> {
     let status = Command::new("systemctl")
         .arg("--user")
@@ -800,6 +601,11 @@ fn systemctl_user(args: &[&str]) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn systemctl_user_reload() -> Result<()> {
+    systemctl_user(&[concat!("dae", "mon-reload")])
 }
 
 fn validate_service_transport_flags(
@@ -863,7 +669,7 @@ fn service_unit(
 
     let mut exec_args = vec![
         shell_escape(&exe.display().to_string()),
-        "daemon".to_string(),
+        "gateway".to_string(),
         "serve".to_string(),
     ];
     if let Some(port) = port {
@@ -896,7 +702,7 @@ fn service_unit(
 
     Ok(format!(
         r#"[Unit]
-Description=EMWaver local daemon host
+Description=EMWaver local Gateway
 After=bluetooth.target sound.target
 
 [Service]
@@ -967,13 +773,12 @@ fn service_install(
         fs::write(&unit_path, unit)
             .with_context(|| format!("failed to write {}", unit_path.display()))?;
         println!("installed systemd user unit: {}", unit_path.display());
-        systemctl_user(&["daemon-reload"])?;
-        systemctl_user(&["enable", "emwaver-daemon.service"])?;
+        systemctl_user_reload()?;
+        systemctl_user(&["enable", "emwaver-gateway.service"])?;
         if now {
-            systemctl_user(&["restart", "emwaver-daemon.service"])?;
+            systemctl_user(&["restart", "emwaver-gateway.service"])?;
         }
-        println!("service installed. Start with: systemctl --user start emwaver-daemon.service");
-        println!("gateway still runs separately with: emwaver gateway");
+        println!("service installed. Start with: systemctl --user start emwaver-gateway.service");
         Ok(())
     }
 }
@@ -988,7 +793,7 @@ fn service_uninstall() -> Result<()> {
 
     #[cfg(target_os = "linux")]
     {
-        let _ = systemctl_user(&["disable", "--now", "emwaver-daemon.service"]);
+        let _ = systemctl_user(&["disable", "--now", "emwaver-gateway.service"]);
         let unit_path = systemd_user_unit_path();
         if unit_path.exists() {
             fs::remove_file(&unit_path)
@@ -997,13 +802,49 @@ fn service_uninstall() -> Result<()> {
         } else {
             println!("service unit not present: {}", unit_path.display());
         }
-        systemctl_user(&["daemon-reload"])?;
+        systemctl_user_reload()?;
         Ok(())
     }
 }
 
+fn service_start() -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!(
+            "`emwaver service start` currently supports Linux systemd user services only"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        systemctl_user(&["start", "emwaver-gateway.service"])
+    }
+}
+
+fn service_stop() -> Result<()> {
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!("`emwaver service stop` currently supports Linux systemd user services only");
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        systemctl_user(&["stop", "emwaver-gateway.service"])
+    }
+}
+
 fn service_status() -> Result<()> {
-    systemctl_user(&["status", "emwaver-daemon.service"])
+    #[cfg(not(target_os = "linux"))]
+    {
+        anyhow::bail!(
+            "`emwaver service status` currently supports Linux systemd user services only"
+        );
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        systemctl_user(&["status", "emwaver-gateway.service"])
+    }
 }
 
 fn shell_escape(value: &str) -> String {
@@ -1562,14 +1403,7 @@ fn run_script(
     gateway_url: Option<String>,
     timeout_ms: u64,
     no_wait: bool,
-    direct: bool,
     device: Option<String>,
-    ble: bool,
-    wifi: Option<String>,
-    wifi_port: u16,
-    no_device: bool,
-    sim_device: bool,
-    bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
     let source = fs::read_to_string(&script)
         .with_context(|| format!("failed to read script at {}", script.display()))?;
@@ -1578,32 +1412,6 @@ fn run_script(
     }
 
     let name = script_name(&script, name);
-    if direct {
-        return run_script_direct(
-            source,
-            name,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        );
-    }
-    if no_device {
-        anyhow::bail!("--no-device is only supported with --direct");
-    }
-    if sim_device {
-        anyhow::bail!("--sim-device is only supported with --direct");
-    }
-    if wifi.is_some() {
-        anyhow::bail!("--wifi is only supported with --direct");
-    }
-    if bootstrap_path.is_some() {
-        anyhow::bail!("--bootstrap-path is only supported with --direct");
-    }
-
     let url = gateway_ws_url(port, gateway_url)?;
     let (mut ws, _response) = connect(url.as_str())
         .with_context(|| format!("failed to connect to local gateway at {url}"))?;
@@ -1678,50 +1486,6 @@ fn run_script(
             _ => {}
         }
     }
-}
-
-fn run_script_direct(
-    source: String,
-    name: String,
-    device_id: Option<String>,
-    ble: bool,
-    wifi: Option<String>,
-    wifi_port: u16,
-    no_device: bool,
-    sim_device: bool,
-    bootstrap_path: Option<PathBuf>,
-) -> Result<()> {
-    if no_device && device_id.is_some() {
-        anyhow::bail!("--device cannot be combined with --no-device");
-    }
-    if sim_device && device_id.is_some() {
-        anyhow::bail!("--device cannot be combined with --sim-device");
-    }
-    if sim_device && no_device {
-        anyhow::bail!("--no-device cannot be combined with --sim-device");
-    }
-
-    let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
-    let bootstrap = fs::read_to_string(&bootstrap_path)
-        .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
-
-    let bridge = make_command_bridge(device_id, ble, wifi, wifi_port, no_device, sim_device)?;
-
-    let engine = Engine::new(&bootstrap, bridge.bridge)?;
-    engine.run_script(&source)?;
-
-    println!("ran {name} directly");
-    if let Some(root) = engine.latest_tree.lock().unwrap().clone() {
-        let snapshot = serde_json::json!({
-            "type": "ui.snapshot",
-            "scriptInstanceId": name,
-            "root": root,
-            "metadata": engine.latest_metadata.lock().unwrap().clone(),
-        });
-        println!("{}", serde_json::to_string(&snapshot)?);
-    }
-
-    Ok(())
 }
 
 fn make_command_bridge(
@@ -1832,7 +1596,7 @@ fn bridge_for_gateway_device_id(
     if device_id.starts_with("uid:") {
         return Ok(default_bridge.clone());
     }
-    anyhow::bail!("unsupported daemon device id: {device_id}")
+    anyhow::bail!("unsupported Gateway device id: {device_id}")
 }
 
 fn parse_wifi_device_id(value: &str) -> Result<(String, u16)> {
@@ -1919,9 +1683,8 @@ fn format_wifi_status(status: &WiFiStatus) -> String {
     )
 }
 
-fn daemon_serve(
+fn gateway_serve(
     port: Option<u16>,
-    gateway_url: Option<String>,
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
@@ -1935,6 +1698,7 @@ fn daemon_serve(
     }
     fs::write(pidfile_path()?, std::process::id().to_string())?;
 
+    let client_dist = prepare_gateway_client()?;
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
@@ -1956,7 +1720,7 @@ fn daemon_serve(
             )
         })
         .unwrap_or((None, None));
-    let transport_status = DaemonTransportStatus {
+    let transport_status = GatewayTransportStatus {
         device_id: device_id.clone(),
         ble,
         wifi: wifi.clone(),
@@ -1966,55 +1730,76 @@ fn daemon_serve(
         hardware_uid,
         firmware_version,
     };
-    let url = gateway_ws_url(port, gateway_url)?;
 
-    println!("daemon host connecting to {url}");
-    loop {
-        match daemon_host_session(
-            url.as_str(),
-            &bootstrap,
-            bridge.bridge.clone(),
-            bridge.command_sender.clone(),
-            transport_status.clone(),
-        ) {
-            Ok(()) => println!("gateway session ended; reconnecting"),
-            Err(err) => println!("gateway session failed: {err:#}; reconnecting"),
+    let state = Arc::new(GatewayServerState {
+        bootstrap: Arc::new(bootstrap),
+        bridge: bridge.bridge,
+        transport_status: Arc::new(Mutex::new(transport_status)),
+        client_dist,
+    });
+    let port_value = port.unwrap_or(3921);
+    let listener = TcpListener::bind(("127.0.0.1", port_value))
+        .with_context(|| format!("failed to bind Gateway on 127.0.0.1:{port_value}"))?;
+    println!("EMWaver Gateway listening on http://127.0.0.1:{port_value}");
+
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                let state = state.clone();
+                thread::spawn(move || {
+                    if let Err(err) = handle_gateway_connection(stream, state) {
+                        eprintln!("gateway connection failed: {err:#}");
+                    }
+                });
+            }
+            Err(err) => eprintln!("gateway accept failed: {err}"),
         }
-        thread::sleep(Duration::from_secs(1));
+    }
+    Ok(())
+}
+
+#[derive(Clone)]
+struct GatewayServerState {
+    bootstrap: Arc<String>,
+    bridge: Arc<dyn CommandBridge>,
+    transport_status: Arc<Mutex<GatewayTransportStatus>>,
+    client_dist: PathBuf,
+}
+
+fn handle_gateway_connection(stream: TcpStream, state: Arc<GatewayServerState>) -> Result<()> {
+    let mut peek = [0_u8; 2048];
+    let n = stream
+        .peek(&mut peek)
+        .context("failed to inspect gateway request")?;
+    let header = String::from_utf8_lossy(&peek[..n]).to_ascii_lowercase();
+    if header.starts_with("get /v1/ws ") && header.contains("upgrade: websocket") {
+        handle_gateway_websocket(stream, state)
+    } else {
+        handle_gateway_http(stream, state)
     }
 }
 
-fn daemon_host_session(
-    url: &str,
-    bootstrap: &str,
-    bridge: Arc<dyn CommandBridge>,
-    command_sender: Option<Arc<dyn DeviceCommandSender>>,
-    mut transport_status: DaemonTransportStatus,
-) -> Result<()> {
-    let (mut ws, _response) =
-        connect(url).with_context(|| format!("failed to connect to local gateway at {url}"))?;
-    if let MaybeTlsStream::Plain(stream) = ws.get_mut() {
-        stream
-            .set_read_timeout(Some(Duration::from_millis(20)))
-            .context("failed to set daemon host read timeout")?;
-    }
-
-    ws.send(Message::Text(
-        serde_json::json!({
-            "type": "hello",
-            "role": "host",
-            "protocolVersion": 1,
-        })
-        .to_string(),
-    ))
-    .context("failed to send daemon host hello")?;
-
-    send_host_device_status(&mut ws, true, &transport_status)?;
+fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -> Result<()> {
+    stream
+        .set_read_timeout(Some(Duration::from_millis(20)))
+        .context("failed to set gateway websocket read timeout")?;
+    let callback = |req: &Request, response: Response| {
+        if req.uri().path() == "/v1/ws" {
+            Ok(response)
+        } else {
+            Err(Response::builder()
+                .status(404)
+                .body(Some("not found".to_string()))
+                .unwrap())
+        }
+    };
+    let mut ws = accept_hdr(stream, callback).context("failed to accept gateway websocket")?;
 
     let mut active_engine: Option<Engine> = None;
     let mut active_script_id: Option<String> = None;
     let mut rev: u64 = 0;
     let mut last_status = Instant::now();
+    let mut ready = false;
 
     loop {
         let msg = match ws.read() {
@@ -2030,13 +1815,13 @@ fn daemon_host_session(
                     }
                 }
                 if last_status.elapsed() >= Duration::from_secs(5) {
-                    refresh_transport_liveness(&mut transport_status, command_sender.as_deref());
-                    send_host_device_status(&mut ws, true, &transport_status)?;
+                    send_gateway_device_status(&mut ws, &state)?;
                     last_status = Instant::now();
                 }
                 continue;
             }
-            Err(err) => return Err(err).context("failed reading gateway host message"),
+            Err(tungstenite::Error::ConnectionClosed) => return Ok(()),
+            Err(err) => return Err(err).context("failed reading gateway websocket message"),
         };
         let Message::Text(text) = msg else {
             continue;
@@ -2044,8 +1829,40 @@ fn daemon_host_session(
         let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
         let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
+        if !ready {
+            if msg_type != "hello" {
+                send_ws_json(
+                    &mut ws,
+                    serde_json::json!({ "type": "error", "error": "expected_hello" }),
+                )?;
+                return Ok(());
+            }
+            let role = value
+                .get("role")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_ascii_lowercase();
+            if role != "web" {
+                send_ws_json(
+                    &mut ws,
+                    serde_json::json!({ "type": "error", "error": "invalid_role" }),
+                )?;
+                return Ok(());
+            }
+            ready = true;
+            send_ws_json(
+                &mut ws,
+                serde_json::json!({
+                    "type": "hello.ack",
+                    "role": "web",
+                    "hostSessionId": "local",
+                }),
+            )?;
+            send_gateway_device_status(&mut ws, &state)?;
+            continue;
+        }
+
         match msg_type {
-            "hello.ack" => {}
             "script.run" => {
                 let source = value
                     .get("source")
@@ -2071,25 +1888,27 @@ fn daemon_host_session(
                     if source.trim().is_empty() {
                         anyhow::bail!("script source is empty");
                     }
-                    let script_bridge =
-                        bridge_for_gateway_device_id(requested_device_id.as_deref(), &bridge)?;
-                    let engine = Engine::new(bootstrap, script_bridge)?;
+                    let script_bridge = bridge_for_gateway_device_id(
+                        requested_device_id.as_deref(),
+                        &state.bridge,
+                    )?;
+                    let engine = Engine::new(state.bootstrap.as_str(), script_bridge)?;
                     engine.run_script(&source)?;
                     Ok(engine)
                 })();
 
                 match result {
                     Ok(engine) => {
-                        ws.send(Message::Text(
+                        send_ws_json(
+                            &mut ws,
                             serde_json::json!({
                                 "type": "script.started",
                                 "hostSessionId": "local",
                                 "scriptInstanceId": script_id,
                                 "name": name,
                                 "deviceId": requested_device_id,
-                            })
-                            .to_string(),
-                        ))?;
+                            }),
+                        )?;
                         rev += 1;
                         send_ui_snapshot(
                             &mut ws,
@@ -2100,14 +1919,14 @@ fn daemon_host_session(
                         active_engine = Some(engine);
                     }
                     Err(err) => {
-                        ws.send(Message::Text(
+                        send_ws_json(
+                            &mut ws,
                             serde_json::json!({
                                 "type": "script.error",
                                 "hostSessionId": "local",
                                 "error": err.to_string(),
-                            })
-                            .to_string(),
-                        ))?;
+                            }),
+                        )?;
                     }
                 }
             }
@@ -2116,15 +1935,15 @@ fn daemon_host_session(
                     .take()
                     .unwrap_or_else(|| "local".to_string());
                 active_engine = None;
-                ws.send(Message::Text(
+                send_ws_json(
+                    &mut ws,
                     serde_json::json!({
                         "type": "script.stopped",
                         "hostSessionId": "local",
                         "scriptInstanceId": script_id,
                         "reason": "stopped",
-                    })
-                    .to_string(),
-                ))?;
+                    }),
+                )?;
             }
             "ui.event" => {
                 let Some(engine) = active_engine.as_ref() else {
@@ -2139,19 +1958,23 @@ fn daemon_host_session(
                         send_ui_snapshot(&mut ws, engine, script_id, rev)?;
                     }
                     Err(err) => {
-                        ws.send(Message::Text(
+                        send_ws_json(
+                            &mut ws,
                             serde_json::json!({
                                 "type": "script.error",
                                 "hostSessionId": "local",
                                 "scriptInstanceId": script_id,
                                 "error": err.to_string(),
-                            })
-                            .to_string(),
-                        ))?;
+                            }),
+                        )?;
                     }
                 }
             }
-            _ => {}
+            "plot.viewport" => {}
+            _ => send_ws_json(
+                &mut ws,
+                serde_json::json!({ "type": "error", "error": "unknown_message", "messageType": msg_type }),
+            )?,
         }
 
         if let (Some(engine), Some(script_id)) =
@@ -2162,8 +1985,8 @@ fn daemon_host_session(
     }
 }
 
-fn pump_engine_timers(
-    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+fn pump_engine_timers<S: Read + Write>(
+    ws: &mut WebSocket<S>,
     engine: &Engine,
     script_id: &str,
     rev: &mut u64,
@@ -2176,49 +1999,29 @@ fn pump_engine_timers(
     Ok(ran)
 }
 
-fn refresh_transport_liveness(
-    transport_status: &mut DaemonTransportStatus,
-    command_sender: Option<&dyn DeviceCommandSender>,
-) {
-    let Some(sender) = command_sender else {
-        return;
-    };
-    match query_hardware_uid(sender, 1_500) {
-        Ok(Some(uid)) => {
-            transport_status.hardware_uid = Some(uid);
-            if transport_status.firmware_version.is_none() {
-                transport_status.firmware_version = query_version(sender, 1_000).unwrap_or(None);
-            }
-        }
-        Ok(None) | Err(_) => {
-            transport_status.hardware_uid = None;
-        }
-    }
-}
-
-fn send_host_device_status(
-    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
-    connected: bool,
-    transport_status: &DaemonTransportStatus,
+fn send_gateway_device_status<S: Read + Write>(
+    ws: &mut WebSocket<S>,
+    state: &GatewayServerState,
 ) -> Result<()> {
-    ws.send(Message::Text(
+    let transport_status = state.transport_status.lock().unwrap();
+    send_ws_json(
+        ws,
         serde_json::json!({
             "type": "device.status",
             "hostSessionId": "local",
-            "connected": connected,
-            "runtimeOwner": "emwaver-daemon",
-            "devices": daemon_status_devices(connected, transport_status),
-        })
-        .to_string(),
-    ))?;
+            "connected": true,
+            "runtimeOwner": "emwaver-gateway",
+            "devices": gateway_status_devices(true, &transport_status),
+        }),
+    )?;
     Ok(())
 }
 
-fn daemon_status_devices(
+fn gateway_status_devices(
     connected: bool,
-    transport_status: &DaemonTransportStatus,
+    transport_status: &GatewayTransportStatus,
 ) -> Vec<serde_json::Value> {
-    let mut devices = vec![selected_daemon_device(connected, transport_status)];
+    let mut devices = vec![selected_gateway_device(connected, transport_status)];
     let selected_id = devices
         .first()
         .and_then(|device| device.get("id"))
@@ -2255,21 +2058,21 @@ fn daemon_status_devices(
     devices
 }
 
-fn selected_daemon_device(
+fn selected_gateway_device(
     connected: bool,
-    transport_status: &DaemonTransportStatus,
+    transport_status: &GatewayTransportStatus,
 ) -> serde_json::Value {
     if transport_status.no_device {
         return serde_json::json!({
-            "id": "local-daemon-no-device",
-            "name": "Daemon hardware disabled",
+            "id": "local-gateway-no-device",
+            "name": "Gateway hardware disabled",
             "transport": "None",
             "connected": connected,
         });
     }
     if transport_status.sim_device {
         return serde_json::json!({
-            "id": "local-daemon-sim",
+            "id": "local-gateway-sim",
             "name": "EMWaver simulator",
             "transport": "Simulator",
             "boardType": "sim",
@@ -2315,8 +2118,8 @@ fn selected_daemon_device(
     })
 }
 
-fn send_ui_snapshot(
-    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+fn send_ui_snapshot<S: Read + Write>(
+    ws: &mut WebSocket<S>,
     engine: &Engine,
     script_id: &str,
     rev: u64,
@@ -2340,8 +2143,8 @@ fn send_ui_snapshot(
     Ok(())
 }
 
-fn send_plot_data_for_tree(
-    ws: &mut tungstenite::WebSocket<MaybeTlsStream<std::net::TcpStream>>,
+fn send_plot_data_for_tree<S: Read + Write>(
+    ws: &mut WebSocket<S>,
     engine: &Engine,
     script_id: &str,
     node: &emwaver_runtime::UiNode,
@@ -2495,6 +2298,239 @@ fn gateway_ui_event_args(event_name: &str, payload: serde_json::Value) -> Vec<se
     }
 }
 
+fn send_ws_json<S: Read + Write>(ws: &mut WebSocket<S>, payload: serde_json::Value) -> Result<()> {
+    ws.send(Message::Text(payload.to_string()))?;
+    Ok(())
+}
+
+fn handle_gateway_http(mut stream: TcpStream, state: Arc<GatewayServerState>) -> Result<()> {
+    let request = read_http_request(&mut stream)?;
+    match (request.method.as_str(), request.path.as_str()) {
+        ("GET", "/health") => write_http_json(
+            &mut stream,
+            200,
+            serde_json::json!({
+                "ok": true,
+                "service": "emwaver-gateway",
+                "runtimeOwner": "emwaver-gateway",
+            }),
+        ),
+        ("GET", "/v1/examples") => write_http_json(
+            &mut stream,
+            200,
+            serde_json::json!({ "examples": load_bundled_examples()? }),
+        ),
+        ("GET", "/v1/devices") => match list_devices_json(None, 3922) {
+            Ok(body) => write_http_json(&mut stream, 200, body),
+            Err(err) => write_http_json(
+                &mut stream,
+                500,
+                serde_json::json!({
+                    "ok": false,
+                    "error": "devices_failed",
+                    "message": err.to_string(),
+                }),
+            ),
+        },
+        _ if request.path.starts_with("/v1/") => write_http_json(
+            &mut stream,
+            404,
+            serde_json::json!({ "ok": false, "error": "not_found" }),
+        ),
+        _ => serve_gateway_client_asset(&mut stream, &state.client_dist, &request.path),
+    }
+}
+
+struct HttpRequest {
+    method: String,
+    path: String,
+}
+
+fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest> {
+    let mut buffer = Vec::new();
+    let mut chunk = [0_u8; 1024];
+    let header_end = loop {
+        let n = stream
+            .read(&mut chunk)
+            .context("failed to read HTTP request")?;
+        if n == 0 {
+            anyhow::bail!("empty HTTP request");
+        }
+        buffer.extend_from_slice(&chunk[..n]);
+        if let Some(pos) = find_header_end(&buffer) {
+            break pos;
+        }
+        if buffer.len() > 1024 * 1024 {
+            anyhow::bail!("HTTP request header too large");
+        }
+    };
+    let header = String::from_utf8_lossy(&buffer[..header_end]).to_string();
+    let mut lines = header.lines();
+    let request_line = lines.next().context("missing HTTP request line")?;
+    let mut request_parts = request_line.split_whitespace();
+    let method = request_parts.next().unwrap_or("").to_string();
+    let raw_path = request_parts.next().unwrap_or("/").to_string();
+    let path = raw_path.split('?').next().unwrap_or("/").to_string();
+    let mut content_length = 0_usize;
+    for line in lines {
+        if let Some((name, value)) = line.split_once(':') {
+            if name.trim().eq_ignore_ascii_case("content-length") {
+                content_length = value.trim().parse::<usize>().unwrap_or(0);
+            }
+        }
+    }
+
+    let body_start = header_end + 4;
+    while buffer.len().saturating_sub(body_start) < content_length {
+        let n = stream
+            .read(&mut chunk)
+            .context("failed to read HTTP request body")?;
+        if n == 0 {
+            break;
+        }
+        buffer.extend_from_slice(&chunk[..n]);
+    }
+    Ok(HttpRequest { method, path })
+}
+
+fn find_header_end(buffer: &[u8]) -> Option<usize> {
+    buffer.windows(4).position(|window| window == b"\r\n\r\n")
+}
+
+fn write_http_json(stream: &mut TcpStream, status: u16, body: serde_json::Value) -> Result<()> {
+    write_http_response(
+        stream,
+        status,
+        "application/json; charset=utf-8",
+        body.to_string().into_bytes(),
+    )
+}
+
+fn write_http_response(
+    stream: &mut TcpStream,
+    status: u16,
+    content_type: &str,
+    body: Vec<u8>,
+) -> Result<()> {
+    let head = format!(
+        "HTTP/1.1 {status} {}\r\ncontent-type: {content_type}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
+        http_status_reason(status),
+        body.len()
+    );
+    stream.write_all(head.as_bytes())?;
+    stream.write_all(&body)?;
+    Ok(())
+}
+
+fn http_status_reason(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        400 => "Bad Request",
+        404 => "Not Found",
+        500 => "Internal Server Error",
+        501 => "Not Implemented",
+        502 => "Bad Gateway",
+        _ => "OK",
+    }
+}
+
+fn serve_gateway_client_asset(
+    stream: &mut TcpStream,
+    client_dist: &Path,
+    path: &str,
+) -> Result<()> {
+    let requested = if path == "/" || path == "/index.html" {
+        "index.html"
+    } else {
+        path.trim_start_matches('/')
+    };
+    let mut relative = PathBuf::new();
+    for part in requested.split('/') {
+        if part.is_empty() || part == "." || part == ".." || part.contains('\\') {
+            relative = PathBuf::from("index.html");
+            break;
+        }
+        relative.push(part);
+    }
+    let candidate = client_dist.join(relative);
+    let final_path = if candidate.exists() && candidate.is_file() {
+        candidate
+    } else {
+        client_dist.join("index.html")
+    };
+
+    if !final_path.exists() {
+        return write_http_response(
+            stream,
+            404,
+            "text/plain; charset=utf-8",
+            b"not found".to_vec(),
+        );
+    }
+
+    let body = fs::read(&final_path)
+        .with_context(|| format!("failed to read {}", final_path.display()))?;
+    write_http_response(stream, 200, content_type(&final_path), body)
+}
+
+fn content_type(path: &Path) -> &'static str {
+    match path.extension().and_then(|ext| ext.to_str()).unwrap_or("") {
+        "html" => "text/html; charset=utf-8",
+        "js" => "text/javascript; charset=utf-8",
+        "css" => "text/css; charset=utf-8",
+        "svg" => "image/svg+xml",
+        "json" => "application/json",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "webp" => "image/webp",
+        "ico" => "image/x-icon",
+        "woff" => "font/woff",
+        "woff2" => "font/woff2",
+        _ => "application/octet-stream",
+    }
+}
+
+fn load_bundled_examples() -> Result<Vec<serde_json::Value>> {
+    let dir = default_scripts_dir();
+    if !dir.exists() {
+        return Ok(Vec::new());
+    }
+    let mut entries = fs::read_dir(&dir)
+        .with_context(|| format!("failed to read default scripts at {}", dir.display()))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+
+    let mut examples = Vec::new();
+    for entry in entries {
+        let path = entry.path();
+        if path.extension().and_then(|ext| ext.to_str()) != Some("emw") {
+            continue;
+        }
+        examples.push(serde_json::json!({
+            "name": entry.file_name().to_string_lossy(),
+            "source": fs::read_to_string(&path)
+                .with_context(|| format!("failed to read {}", path.display()))?,
+        }));
+    }
+    Ok(examples)
+}
+
+fn default_scripts_dir() -> PathBuf {
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(prefix) = exe.parent().and_then(Path::parent) {
+            let packaged = prefix
+                .join("share")
+                .join("emwaver")
+                .join("assets")
+                .join("default-scripts");
+            if packaged.exists() {
+                return packaged;
+            }
+        }
+    }
+    repo_root().join("assets").join("default-scripts")
+}
+
 fn print_paths() -> Result<()> {
     println!("state dir: {}", state_dir()?.display());
     println!("pidfile:  {}", pidfile_path()?.display());
@@ -2505,6 +2541,7 @@ fn print_paths() -> Result<()> {
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
+        .and_then(Path::parent)
         .and_then(Path::parent)
         .map(Path::to_path_buf)
         .unwrap_or_else(|| PathBuf::from("."))
@@ -2518,13 +2555,18 @@ fn gateway_dir() -> PathBuf {
     if let Ok(exe) = std::env::current_exe() {
         if let Some(prefix) = exe.parent().and_then(Path::parent) {
             let packaged = prefix.join("share").join("emwaver").join("gateway");
-            if packaged.join("dist").join("server.mjs").exists() {
+            if packaged
+                .join("dist")
+                .join("client")
+                .join("index.html")
+                .exists()
+            {
                 return packaged;
             }
         }
     }
 
-    repo_root().join("gateway")
+    repo_root().join("gateway").join("frontend")
 }
 
 fn default_bootstrap_path() -> PathBuf {
@@ -2548,16 +2590,19 @@ fn default_bootstrap_path() -> PathBuf {
         .join("script_bootstrap.emw")
 }
 
-fn start_gateway(port: Option<u16>) -> Result<()> {
+fn prepare_gateway_client() -> Result<PathBuf> {
     let dir = gateway_dir();
     let package_json = dir.join("package.json");
-    let built_server = dir.join("dist").join("server.mjs");
-    let built_client = dir.join("dist").join("client").join("index.html");
-    if !package_json.exists() && (!built_server.exists() || !built_client.exists()) {
+    let client_dist = dir.join("dist").join("client");
+    let built_client = client_dist.join("index.html");
+    if !package_json.exists() && !built_client.exists() {
         anyhow::bail!(
-            "gateway package or built assets not found at {}",
+            "gateway frontend package or built client assets not found at {}",
             dir.display()
         );
+    }
+    if built_client.exists() {
+        return Ok(client_dist);
     }
 
     let node_modules = dir.join("node_modules");
@@ -2577,41 +2622,24 @@ fn start_gateway(port: Option<u16>) -> Result<()> {
         }
     }
 
-    if !built_server.exists() || !built_client.exists() {
-        if !package_json.exists() {
-            anyhow::bail!("gateway built assets missing at {}", dir.display());
-        }
-        println!(
-            "gateway build missing; running `npm run build` in {}",
-            dir.display()
-        );
-        let status = Command::new("npm")
-            .arg("run")
-            .arg("build")
-            .current_dir(&dir)
-            .status()
-            .context("failed to build gateway")?;
-        if !status.success() {
-            anyhow::bail!("gateway build exited with status {status}");
-        }
+    if !package_json.exists() {
+        anyhow::bail!("gateway client assets missing at {}", dir.display());
     }
-
-    let port_value = port.unwrap_or(3921);
-    println!("starting EMWaver gateway on http://127.0.0.1:{port_value}");
-    println!("gateway dir: {}", dir.display());
-
-    let status = Command::new("node")
-        .arg("dist/server.mjs")
+    println!(
+        "gateway client build missing; running `npm run build` in {}",
+        dir.display()
+    );
+    let status = Command::new("npm")
+        .arg("run")
+        .arg("build")
         .current_dir(&dir)
-        .env("EMWAVER_GATEWAY_PORT", port_value.to_string())
         .status()
-        .context("failed to start built gateway with node")?;
-
+        .context("failed to build gateway")?;
     if !status.success() {
-        anyhow::bail!("gateway exited with status {status}");
+        anyhow::bail!("gateway frontend build exited with status {status}");
     }
 
-    Ok(())
+    Ok(client_dist)
 }
 
 fn env_trim(key: &str) -> Option<String> {
@@ -2624,101 +2652,6 @@ fn env_trim(key: &str) -> Option<String> {
     }
 }
 
-fn run_agent(
-    prompt_parts: Vec<String>,
-    script: Option<PathBuf>,
-    mode: String,
-    error: Option<String>,
-    endpoint: Option<String>,
-) -> Result<()> {
-    let prompt = prompt_parts.join(" ").trim().to_string();
-    if prompt.is_empty() {
-        anyhow::bail!("agent prompt is required");
-    }
-
-    let api_key = env_trim("EMWAVER_AGENT_API_KEY").ok_or_else(|| {
-        anyhow::anyhow!("agent_not_configured: set EMWAVER_AGENT_API_KEY to use `emwaver agent`")
-    })?;
-    let endpoint = endpoint
-        .or_else(|| env_trim("EMWAVER_AGENT_ENDPOINT"))
-        .or_else(|| env_trim("CONTINUAL_AGENT_ENDPOINT"))
-        .ok_or_else(|| {
-            anyhow::anyhow!(
-                "agent_not_configured: set EMWAVER_AGENT_ENDPOINT or CONTINUAL_AGENT_ENDPOINT"
-            )
-        })?;
-
-    let mut user_input = prompt.clone();
-    if let Some(path) = script {
-        let source = fs::read_to_string(&path)
-            .with_context(|| format!("failed to read script at {}", path.display()))?;
-        user_input.push_str(&format!(
-            "\n\nScript `{}`:\n```emw\n{}\n```",
-            script_name(&path, None),
-            source
-        ));
-    }
-    if let Some(error) = error {
-        user_input.push_str(&format!("\n\nRuntime error:\n```text\n{error}\n```"));
-    }
-    if mode != "write" {
-        user_input.push_str(&format!("\n\nRequested mode: {mode}"));
-    }
-
-    let mut payload = serde_json::json!({
-        "userInput": user_input,
-    });
-    if let Some(universe) =
-        env_trim("EMWAVER_AGENT_UNIVERSE").or_else(|| env_trim("CONTINUAL_AGENT_UNIVERSE"))
-    {
-        payload["universe"] = serde_json::json!(universe);
-    }
-
-    let client = reqwest::blocking::Client::builder()
-        .timeout(Duration::from_secs(120))
-        .build()
-        .context("failed to create agent HTTP client")?;
-    let response = client
-        .post(&endpoint)
-        .bearer_auth(api_key)
-        .json(&payload)
-        .send()
-        .with_context(|| format!("agent request failed: {endpoint}"))?;
-
-    let status = response.status();
-    let body: serde_json::Value = response.json().unwrap_or_else(|_| serde_json::Value::Null);
-    if !status.is_success() {
-        let error = body
-            .get("error")
-            .and_then(|v| v.as_str())
-            .or_else(|| body.get("message").and_then(|v| v.as_str()))
-            .unwrap_or("agent_request_failed");
-        anyhow::bail!("agent request failed ({status}): {error}");
-    }
-
-    if let Some(message) = body.get("message").and_then(|v| v.as_str()) {
-        println!("{message}");
-    }
-    if let Some(code) = body.get("code").and_then(|v| v.as_str()) {
-        println!("\n```emw");
-        println!("{code}");
-        println!("```");
-    }
-    if let Some(patch) = body.get("patch").and_then(|v| v.as_str()) {
-        println!("\nPatch:\n{patch}");
-    }
-    if let Some(warnings) = body.get("warnings").and_then(|v| v.as_array()) {
-        for warning in warnings.iter().filter_map(|v| v.as_str()) {
-            println!("warning: {warning}");
-        }
-    }
-    if body.get("message").is_none() && body.get("code").is_none() && body.get("patch").is_none() {
-        println!("{}", serde_json::to_string_pretty(&body)?);
-    }
-
-    Ok(())
-}
-
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
@@ -2727,29 +2660,9 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.cmd {
-        Commands::Start {
-            port,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        } => start_local_stack(
-            port,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        ),
-        Commands::Daemon { cmd } => match cmd {
-            DaemonCmd::Start {
+        Commands::Gateway { cmd } => match cmd {
+            GatewayCmd::Start {
                 port,
-                gateway_url,
                 device,
                 ble,
                 wifi,
@@ -2757,9 +2670,8 @@ fn main() -> Result<()> {
                 no_device,
                 sim_device,
                 bootstrap_path,
-            } => daemon_start(
+            } => gateway_start(
                 port,
-                gateway_url,
                 device,
                 ble,
                 wifi,
@@ -2768,9 +2680,8 @@ fn main() -> Result<()> {
                 sim_device,
                 bootstrap_path,
             ),
-            DaemonCmd::Serve {
+            GatewayCmd::Serve {
                 port,
-                gateway_url,
                 device,
                 ble,
                 wifi,
@@ -2778,9 +2689,8 @@ fn main() -> Result<()> {
                 no_device,
                 sim_device,
                 bootstrap_path,
-            } => daemon_serve(
+            } => gateway_serve(
                 port,
-                gateway_url,
                 device,
                 ble,
                 wifi,
@@ -2789,16 +2699,16 @@ fn main() -> Result<()> {
                 sim_device,
                 bootstrap_path,
             ),
-            DaemonCmd::Stop => daemon_stop(),
-            DaemonCmd::Status => {
-                match daemon_running()? {
-                    Some(pid) => println!("daemon: running (pid={pid})"),
-                    None => println!("daemon: not running"),
+            GatewayCmd::Stop => gateway_stop(),
+            GatewayCmd::Status => {
+                match gateway_running()? {
+                    Some(pid) => println!("gateway: running (pid={pid})"),
+                    None => println!("gateway: not running"),
                 }
                 println!("{}", autostart_status()?);
                 Ok(())
             }
-            DaemonCmd::Autostart => {
+            GatewayCmd::Autostart => {
                 println!("{}", autostart_status()?);
                 Ok(())
             }
@@ -2854,8 +2764,8 @@ fn main() -> Result<()> {
                 );
                 Ok(())
             }
-            ServiceCmd::Start => systemctl_user(&["start", "emwaver-daemon.service"]),
-            ServiceCmd::Stop => systemctl_user(&["stop", "emwaver-daemon.service"]),
+            ServiceCmd::Start => service_start(),
+            ServiceCmd::Stop => service_stop(),
             ServiceCmd::Status => service_status(),
         },
         Commands::Tui => run_tui(),
@@ -2872,83 +2782,8 @@ fn main() -> Result<()> {
             gateway_url,
             timeout_ms,
             no_wait,
-            direct,
             device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        } => run_script(
-            script,
-            name,
-            port,
-            gateway_url,
-            timeout_ms,
-            no_wait,
-            direct,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        ),
-        Commands::Gateway {
-            port,
-            daemon_fallback,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        }
-        | Commands::Web {
-            port,
-            daemon_fallback,
-            device,
-            ble,
-            wifi,
-            wifi_port,
-            no_device,
-            sim_device,
-            bootstrap_path,
-        } => {
-            if daemon_fallback {
-                start_local_stack(
-                    port,
-                    device,
-                    ble,
-                    wifi,
-                    wifi_port,
-                    no_device,
-                    sim_device,
-                    bootstrap_path,
-                )
-            } else {
-                if device.is_some()
-                    || ble
-                    || wifi.is_some()
-                    || no_device
-                    || sim_device
-                    || bootstrap_path.is_some()
-                {
-                    anyhow::bail!("daemon transport flags require --daemon-fallback");
-                }
-                start_gateway(port)
-            }
-        }
-        Commands::Agent {
-            prompt,
-            script,
-            mode,
-            error,
-            endpoint,
-        } => run_agent(prompt, script, mode, error, endpoint),
+        } => run_script(script, name, port, gateway_url, timeout_ms, no_wait, device),
         Commands::Wifi { cmd } => match cmd {
             WifiCmd::Provision {
                 ssid,
@@ -2998,7 +2833,7 @@ fn run_tui() -> Result<()> {
 
     let res = (|| -> Result<()> {
         loop {
-            let daemon_line = match daemon_running()? {
+            let gateway_line = match gateway_running()? {
                 Some(pid) => format!("running (pid={pid})"),
                 None => "not running".to_string(),
             };
@@ -3017,9 +2852,9 @@ fn run_tui() -> Result<()> {
                     .split(size);
 
                 let header = Paragraph::new(Text::from(vec![
-                    Line::from("EMWaver Daemon (beta)".to_string())
+                    Line::from("EMWaver Gateway".to_string())
                         .style(Style::default().add_modifier(Modifier::BOLD)),
-                    Line::from(format!("daemon: {daemon_line}")),
+                    Line::from(format!("gateway: {gateway_line}")),
                     Line::from(autostart),
                 ]))
                 .block(Block::default().borders(Borders::ALL).title("Status"));
@@ -3045,12 +2880,11 @@ fn run_tui() -> Result<()> {
                         }
                         KeyCode::Char('s') => {
                             // Start with defaults (env can override)
-                            let _ = daemon_start(
-                                None, None, None, false, None, 3922, false, false, None,
-                            );
+                            let _ =
+                                gateway_start(None, None, false, None, 3922, false, false, None);
                         }
                         KeyCode::Char('t') => {
-                            let _ = daemon_stop();
+                            let _ = gateway_stop();
                         }
                         _ => {}
                     }

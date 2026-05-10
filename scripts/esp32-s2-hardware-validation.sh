@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DAEMON_DIR="$ROOT/daemon"
+GATEWAY_BACKEND_DIR="$ROOT/gateway/backend"
+EMWAVER_BIN="$GATEWAY_BACKEND_DIR/target/debug/emwaver"
 ESP_DIR="$ROOT/esp"
 ESP_DEPENDENCIES_LOCK="$ESP_DIR/dependencies.lock"
 PORT="${EMWAVER_ESP32_S2_PORT:-}"
@@ -18,6 +19,34 @@ BOARD_CHECK=""
 WIFI_CHECK=""
 S3_BOARD_CHECK=""
 TEMP_PATHS=()
+
+run_gateway_script() {
+  local port="$1"
+  local script="$2"
+  local device_id="$3"
+  local log_path
+  log_path="$(mktemp /tmp/emwaver-esp32-gateway.XXXXXX.log)"
+  local state_dir
+  state_dir="$(mktemp -d /tmp/emwaver-esp32-gateway-state.XXXXXX)"
+  EMWAVER_STATE_DIR="$state_dir" "$EMWAVER_BIN" gateway serve --port "$port" --device "$device_id" >"$log_path" 2>&1 &
+  local pid="$!"
+  cleanup_gateway_script() {
+    set +e
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    rm -f "$log_path"
+    rm -rf "$state_dir"
+  }
+  trap cleanup_gateway_script RETURN
+  for _ in $(seq 1 40); do
+    if curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+  curl -fsS "http://127.0.0.1:$port/health" >/dev/null
+  "$EMWAVER_BIN" run "$script" --port "$port"
+}
 
 if [[ -n "${EMWAVER_ESP_BUILD_DIR:-}" ]]; then
   ESP_BUILD_DIR="$EMWAVER_ESP_BUILD_DIR"
@@ -142,11 +171,11 @@ fi
 
 echo
 echo "== Build EMWaver CLI =="
-(cd "$DAEMON_DIR" && cargo build -p emwaver)
+(cd "$GATEWAY_BACKEND_DIR" && cargo build -p emwaver)
 
 echo
 echo "== EMWaver device listing =="
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- devices)
+(cd "$GATEWAY_BACKEND_DIR" && cargo run -q -p emwaver -- devices)
 
 if [[ -z "$DEVICE_ID" ]]; then
   cat <<'EOF'
@@ -173,7 +202,7 @@ EOF
 
 echo
 echo "== Board identity over USB =="
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$BOARD_CHECK" --direct --device "$DEVICE_ID")
+run_gateway_script 3961 "$BOARD_CHECK" "$DEVICE_ID"
 
 cat >"$S3_BOARD_CHECK" <<'EOF'
 var board = String(device.boardType({ refresh: true, timeout: 2500 }) || '').trim().toLowerCase();
@@ -186,7 +215,7 @@ EOF
 if [[ -n "$S3_DEVICE_ID" ]]; then
   echo
   echo "== ESP32-S3 board identity regression over USB =="
-  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$S3_BOARD_CHECK" --direct --device "$S3_DEVICE_ID")
+  run_gateway_script 3962 "$S3_BOARD_CHECK" "$S3_DEVICE_ID"
 else
   cat <<'EOF'
 
@@ -250,7 +279,7 @@ EOF
 
   echo
   echo "== Wi-Fi provisioning over USB =="
-  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$WIFI_CHECK" --direct --device "$DEVICE_ID")
+  run_gateway_script 3963 "$WIFI_CHECK" "$DEVICE_ID"
 else
   cat <<'EOF'
 

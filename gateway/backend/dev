@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# One-command dev runner (npm run dev equivalent) for the daemon CLI.
+# One-command dev runner for the Gateway CLI/backend.
 # - Builds emwaver
 # - Runs the emwaver CLI with your args
 
@@ -12,11 +12,11 @@ cargo build -q -p emwaver
 
 # Run CLI
 if [[ $# -eq 0 ]]; then
-  echo "Usage: ./daemon/dev <emwaver-args>"
+  echo "Usage: ./gateway/backend/dev <emwaver-args>"
   echo "Examples:"
-  echo "  ./daemon/dev devices"
-  echo "  ./daemon/dev gateway"
-  echo "  ./daemon/dev daemon status"
+  echo "  ./gateway/backend/dev devices"
+  echo "  ./gateway/backend/dev gateway"
+  echo "  ./gateway/backend/dev gateway status"
   exit 0
 fi
 

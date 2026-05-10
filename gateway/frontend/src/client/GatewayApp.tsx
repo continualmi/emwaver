@@ -14,7 +14,7 @@ import {
 type ExampleScript = { name: string; source: string };
 type GatewayDevice = NonNullable<RemoteDeviceStatus["devices"]>[number];
 type WsStatus = "connecting" | "open" | "closed" | "error";
-type ActivityId = "library" | "runtime" | "agent" | "log";
+type ActivityId = "library" | "runtime" | "log";
 
 function isEmw(name: string | null) {
   return String(name || "").toLowerCase().endsWith(".emw");
@@ -29,8 +29,7 @@ function statusLabel(status: WsStatus, deviceStatus: RemoteDeviceStatus | null) 
   if (status === "error") return "connection error";
   if (status === "closed") return "gateway closed";
   if (!deviceStatus?.connected) return "waiting for runtime";
-  if (deviceStatus.runtimeOwner === "native-app") return "native app connected";
-  if (deviceStatus.runtimeOwner === "emwaver-daemon") return "daemon connected";
+  if (deviceStatus.runtimeOwner === "emwaver-gateway") return "gateway connected";
   return "runtime connected";
 }
 
@@ -42,8 +41,7 @@ function statusTone(status: WsStatus, deviceStatus: RemoteDeviceStatus | null): 
 }
 
 function runtimeLabel(runtimeOwner?: string) {
-  if (runtimeOwner === "native-app") return "Native App";
-  if (runtimeOwner === "emwaver-daemon") return "Daemon";
+  if (runtimeOwner === "emwaver-gateway") return "Gateway";
   return "Local Runtime";
 }
 
@@ -95,17 +93,11 @@ export function GatewayApp() {
   const [plotDataByNodeId, setPlotDataByNodeId] = useState<Record<string, RemotePlotData>>({});
   const [uiError, setUiError] = useState<string | null>(null);
   const [log, setLog] = useState<LogEntry[]>([]);
-  const [agentPrompt, setAgentPrompt] = useState("");
-  const [agentOutput, setAgentOutput] = useState("");
-  const [agentBusy, setAgentBusy] = useState(false);
-  const [daemonAction, setDaemonAction] = useState("");
-  const [daemonBusy, setDaemonBusy] = useState(false);
-  const [daemonWifiHost, setDaemonWifiHost] = useState("");
-  const [daemonWifiPort, setDaemonWifiPort] = useState("3922");
+  const [manualWifiHost, setManualWifiHost] = useState("");
+  const [manualWifiPort, setManualWifiPort] = useState("3922");
   const [gatewayDevices, setGatewayDevices] = useState<GatewayDevice[]>([]);
   const [gatewayDevicesBusy, setGatewayDevicesBusy] = useState(false);
   const [activity, setActivity] = useState<ActivityId | null>("library");
-  const [unreadAgent, setUnreadAgent] = useState(false);
   const [unreadLog, setUnreadLog] = useState(0);
   const wsRef = useRef<WebSocket | null>(null);
   const activeSessionRef = useRef("");
@@ -232,7 +224,6 @@ export function GatewayApp() {
       activityRef.current = resolved;
       return resolved;
     });
-    if (next === "agent") setUnreadAgent(false);
     if (next === "log") setUnreadLog(0);
   }
 
@@ -282,84 +273,6 @@ export function GatewayApp() {
     URL.revokeObjectURL(url);
   }
 
-  async function askAgent() {
-    if (!agentPrompt.trim() || agentBusy) return;
-    setAgentBusy(true);
-    setAgentOutput("Asking…");
-    try {
-      const runtimeOwner = runtimeLabel(deviceStatus?.runtimeOwner);
-      const userInput = [
-        agentPrompt,
-        "",
-        "Local EMWaver context:",
-        JSON.stringify(
-          {
-            script: { name: selected || "script.emw", source },
-            runtime: {
-              owner: deviceStatus?.runtimeOwner || "none",
-              label: runtimeOwner,
-              connected,
-              uiRev,
-              scriptInstanceId: scriptInstanceId || null,
-              uiSnapshot: summarizeUiNode(remoteUiRoot),
-            },
-            hardware: {
-              runtimeOwner: deviceStatus?.runtimeOwner || "none",
-              devices: deviceStatus?.devices || [],
-            },
-          },
-          null,
-          2,
-        ),
-      ].join("\n");
-      const response = await fetch("/v1/agent", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ userInput }),
-      });
-      const body = await response.json();
-      const text = body.message || body.code || body.error || JSON.stringify(body, null, 2);
-      setAgentOutput(text);
-      if (body.code) {
-        setSource(String(body.code));
-        setMode("editor");
-      }
-      if (activity !== "agent") setUnreadAgent(true);
-    } catch (error) {
-      setAgentOutput(formatError(error));
-    } finally {
-      setAgentBusy(false);
-    }
-  }
-
-  async function startDaemon(options?: { wifi?: string; wifiPort?: string }) {
-    if (daemonBusy) return;
-    setDaemonBusy(true);
-    setDaemonAction(options?.wifi ? "Starting Wi-Fi daemon…" : "Starting daemon…");
-    setUiError(null);
-    try {
-      const payload = options?.wifi
-        ? { wifi: options.wifi, wifiPort: options.wifiPort || "3922" }
-        : {};
-      const response = await fetch("/v1/daemon/start", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      const body = await response.json();
-      if (!response.ok || body?.ok === false) {
-        throw new Error(body?.message || body?.error || "daemon_start_failed");
-      }
-      setDaemonAction(body?.alreadyRunning ? "Runtime already connected." : "Daemon start requested.");
-    } catch (error) {
-      const message = formatError(error);
-      setDaemonAction(message);
-      setUiError(message);
-    } finally {
-      setDaemonBusy(false);
-    }
-  }
-
   async function refreshGatewayDevices() {
     setGatewayDevicesBusy(true);
     try {
@@ -379,9 +292,18 @@ export function GatewayApp() {
   function useGatewayWifiDevice(device: GatewayDevice) {
     const host = String(device.host || String(device.endpoint || "").split(":")[0] || "").trim();
     if (!host) return;
-    setDaemonWifiHost(host);
-    setDaemonWifiPort(String(device.port || String(device.endpoint || "").split(":")[1] || "3922"));
+    const port = String(device.port || String(device.endpoint || "").split(":")[1] || "3922");
+    setManualWifiHost(host);
+    setManualWifiPort(port);
+    setSelectedDeviceId(device.id || `wifi:${host}:${port}`);
     setActivity("runtime");
+  }
+
+  function useManualWifiTarget() {
+    const host = manualWifiHost.trim();
+    const port = manualWifiPort.trim() || "3922";
+    if (!host) return;
+    setSelectedDeviceId(`wifi:${host}:${port}`);
   }
 
   const canPreview = !!(selected && isEmw(selected));
@@ -408,7 +330,6 @@ export function GatewayApp() {
         <ActivityRail
           active={activity}
           onSelect={selectActivity}
-          unreadAgent={unreadAgent}
           unreadLog={unreadLog}
           runtimeOnline={connected}
           runtimeWarn={tone !== "online"}
@@ -423,22 +344,16 @@ export function GatewayApp() {
           saveLocal={saveLocalFile}
           deviceStatus={deviceStatus}
           connected={connected}
-          startDaemon={startDaemon}
-          daemonBusy={daemonBusy}
-          daemonAction={daemonAction}
-          daemonWifiHost={daemonWifiHost}
-          setDaemonWifiHost={setDaemonWifiHost}
-          daemonWifiPort={daemonWifiPort}
-          setDaemonWifiPort={setDaemonWifiPort}
+          selectedDeviceId={selectedDeviceId}
+          manualWifiHost={manualWifiHost}
+          setManualWifiHost={setManualWifiHost}
+          manualWifiPort={manualWifiPort}
+          setManualWifiPort={setManualWifiPort}
           gatewayDevices={gatewayDevices}
           gatewayDevicesBusy={gatewayDevicesBusy}
           refreshGatewayDevices={refreshGatewayDevices}
           useGatewayWifiDevice={useGatewayWifiDevice}
-          agentPrompt={agentPrompt}
-          setAgentPrompt={setAgentPrompt}
-          agentOutput={agentOutput}
-          agentBusy={agentBusy}
-          onAsk={askAgent}
+          useManualWifiTarget={useManualWifiTarget}
           log={log}
           onClearLog={() => {
             setLog([]);
@@ -568,12 +483,11 @@ function BrandHeader({ status, tone }: { status: string; tone: "online" | "warn"
 function ActivityRail(props: {
   active: ActivityId | null;
   onSelect: (id: ActivityId) => void;
-  unreadAgent: boolean;
   unreadLog: number;
   runtimeOnline: boolean;
   runtimeWarn: boolean;
 }) {
-  const { active, onSelect, unreadAgent, unreadLog, runtimeOnline, runtimeWarn } = props;
+  const { active, onSelect, unreadLog, runtimeOnline, runtimeWarn } = props;
   return (
     <nav
       aria-label="Gateway sections"
@@ -593,14 +507,6 @@ function ActivityRail(props: {
         onClick={() => onSelect("runtime")}
         icon={<RuntimeIcon />}
         dot={runtimeOnline ? "online" : runtimeWarn ? "warn" : null}
-      />
-      <RailButton
-        id="agent"
-        active={active === "agent"}
-        label="Agent"
-        onClick={() => onSelect("agent")}
-        icon={<AgentIcon />}
-        dot={unreadAgent ? "info" : null}
       />
       <RailButton
         id="log"
@@ -673,22 +579,16 @@ function SidePanel(props: {
   saveLocal: () => void;
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: (options?: { wifi?: string; wifiPort?: string }) => void;
-  daemonBusy: boolean;
-  daemonAction: string;
-  daemonWifiHost: string;
-  setDaemonWifiHost: (v: string) => void;
-  daemonWifiPort: string;
-  setDaemonWifiPort: (v: string) => void;
+  selectedDeviceId: string;
+  manualWifiHost: string;
+  setManualWifiHost: (v: string) => void;
+  manualWifiPort: string;
+  setManualWifiPort: (v: string) => void;
   gatewayDevices: GatewayDevice[];
   gatewayDevicesBusy: boolean;
   refreshGatewayDevices: () => void;
   useGatewayWifiDevice: (device: GatewayDevice) => void;
-  agentPrompt: string;
-  setAgentPrompt: (v: string) => void;
-  agentOutput: string;
-  agentBusy: boolean;
-  onAsk: () => void;
+  useManualWifiTarget: () => void;
   log: LogEntry[];
   onClearLog: () => void;
 }) {
@@ -718,7 +618,6 @@ function SidePanel(props: {
       <div className="min-h-0 flex-1 overflow-auto">
         {activity === "library" ? <LibraryPanel {...props} /> : null}
         {activity === "runtime" ? <RuntimePanel {...props} /> : null}
-        {activity === "agent" ? <AgentPanel {...props} /> : null}
         {activity === "log" ? <LogPanel log={props.log} /> : null}
       </div>
     </aside>
@@ -728,7 +627,6 @@ function SidePanel(props: {
 function titleFor(id: ActivityId): string {
   if (id === "library") return "Library";
   if (id === "runtime") return "Runtime";
-  if (id === "agent") return "Agent";
   return "Log";
 }
 
@@ -823,34 +721,32 @@ function LibraryPanel(props: {
 function RuntimePanel(props: {
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
-  startDaemon: (options?: { wifi?: string; wifiPort?: string }) => void;
-  daemonBusy: boolean;
-  daemonAction: string;
-  daemonWifiHost: string;
-  setDaemonWifiHost: (v: string) => void;
-  daemonWifiPort: string;
-  setDaemonWifiPort: (v: string) => void;
+  selectedDeviceId: string;
+  manualWifiHost: string;
+  setManualWifiHost: (v: string) => void;
+  manualWifiPort: string;
+  setManualWifiPort: (v: string) => void;
   gatewayDevices: GatewayDevice[];
   gatewayDevicesBusy: boolean;
   refreshGatewayDevices: () => void;
   useGatewayWifiDevice: (device: GatewayDevice) => void;
+  useManualWifiTarget: () => void;
 }) {
   const {
     deviceStatus,
     connected,
-    startDaemon,
-    daemonBusy,
-    daemonAction,
-    daemonWifiHost,
-    setDaemonWifiHost,
-    daemonWifiPort,
-    setDaemonWifiPort,
+    selectedDeviceId,
+    manualWifiHost,
+    setManualWifiHost,
+    manualWifiPort,
+    setManualWifiPort,
     gatewayDevices,
     gatewayDevicesBusy,
     refreshGatewayDevices,
     useGatewayWifiDevice,
+    useManualWifiTarget,
   } = props;
-  const canStartWifi = daemonWifiHost.trim() && !connected && !daemonBusy;
+  const canUseWifi = !!manualWifiHost.trim();
   const wifiDevices = gatewayDevices.filter((device) => device.transport === "Wi-Fi" && (device.host || device.endpoint));
   return (
     <div className="flex flex-col gap-4 p-4">
@@ -862,9 +758,7 @@ function RuntimePanel(props: {
           {connected ? runtimeLabel(deviceStatus?.runtimeOwner) : "No runtime"}
         </div>
         <div className="mt-1 text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          {connected
-            ? "A runtime is connected to the gateway and ready to run scripts."
-            : "Start the local daemon, or open the native EMWaver app on this machine."}
+          {connected ? "Gateway is ready to run scripts." : "Waiting for the local Gateway runtime."}
         </div>
       </div>
 
@@ -895,20 +789,6 @@ function RuntimePanel(props: {
         )}
       </div>
 
-      <div>
-        <button
-          type="button"
-          onClick={() => startDaemon()}
-          disabled={connected || daemonBusy}
-          className="inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {daemonBusy ? "Starting…" : connected ? "Runtime active" : "Start daemon"}
-        </button>
-        <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          {daemonAction || "Falls back to the CLI runtime when no native app is connected."}
-        </p>
-      </div>
-
       <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3">
         <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
           Wi-Fi
@@ -920,7 +800,7 @@ function RuntimePanel(props: {
           <button
             type="button"
             onClick={refreshGatewayDevices}
-            disabled={gatewayDevicesBusy || daemonBusy}
+            disabled={gatewayDevicesBusy}
             className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
           >
             {gatewayDevicesBusy ? "Scanning" : "Scan"}
@@ -937,7 +817,6 @@ function RuntimePanel(props: {
                 <button
                   type="button"
                   onClick={() => useGatewayWifiDevice(device)}
-                  disabled={connected || daemonBusy}
                   className="rounded-md border border-[color:var(--line)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
                 >
                   Use
@@ -948,35 +827,28 @@ function RuntimePanel(props: {
         ) : null}
         <div className="mt-3 grid grid-cols-[1fr_72px] gap-2">
           <input
-            value={daemonWifiHost}
-            onChange={(event) => setDaemonWifiHost(event.target.value)}
+            value={manualWifiHost}
+            onChange={(event) => setManualWifiHost(event.target.value)}
             placeholder="Host or IP"
-            disabled={connected || daemonBusy}
             className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
           />
           <input
-            value={daemonWifiPort}
-            onChange={(event) => setDaemonWifiPort(event.target.value)}
+            value={manualWifiPort}
+            onChange={(event) => setManualWifiPort(event.target.value)}
             placeholder="3922"
-            disabled={connected || daemonBusy}
             className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
           />
         </div>
         <button
           type="button"
-          onClick={() =>
-            startDaemon({
-              wifi: daemonWifiHost.trim(),
-              wifiPort: daemonWifiPort.trim() || "3922",
-            })
-          }
-          disabled={!canStartWifi}
+          onClick={useManualWifiTarget}
+          disabled={!canUseWifi}
           className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Start Wi-Fi daemon
+          Use Wi-Fi target
         </button>
         <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          Manual IP works when mDNS does not cross a LAN or user-owned VPN.
+          {selectedDeviceId ? `Selected: ${selectedDeviceId}` : "No explicit target selected."}
         </p>
       </div>
     </div>

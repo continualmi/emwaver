@@ -3,16 +3,12 @@
   "features": [
     {
       "id": "scripting.default_scripts_packaged",
-      "description": "Native app builds package the canonical default .emw script assets.",
+      "description": "Native app and Gateway packages include the canonical default .emw script assets.",
       "parity": "all_required",
       "platforms": {
-        "macos": {
+        "macos_ios": {
           "status": "required",
           "evidence": [{ "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/FileService.swift", "contains": "DefaultScripts|default-scripts|script_bootstrap" }]
-        },
-        "ios": {
-          "status": "required",
-          "evidence": [{ "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/FileService.swift", "contains": "DefaultScripts|script_bootstrap" }]
         },
         "windows": {
           "status": "required",
@@ -22,11 +18,11 @@
           "status": "required",
           "evidence": [{ "file": "android/app/build.gradle", "contains": "syncScriptAssets|DefaultScripts|script_bootstrap" }]
         },
-        "cli": {
+        "gateway": {
           "status": "required",
           "evidence": [
-            { "file": "daemon/emwaver-runtime/src/simulator.rs", "contains": "script_bootstrap\\.emw" },
-            { "file": "daemon/README.md", "contains": "bootstrap-path|script_bootstrap\\.emw" }
+            { "file": "gateway/backend/emwaver-runtime/src/simulator.rs", "contains": "script_bootstrap\\.emw" },
+            { "file": "gateway/backend/README.md", "contains": "bootstrap-path|script_bootstrap\\.emw" }
           ]
         }
       }
@@ -36,16 +32,6 @@
       "description": "Platform script/runtime tests can run against the shared simulator fixture without physical hardware.",
       "parity": "documented_exceptions",
       "platforms": {
-        "macos": {
-          "status": "planned",
-          "reason": "macOS has app tests, but the shared simulator fixture test is not yet wired into the macOS target.",
-          "evidence": [{ "file": "macos/EMWaver/EMWaverTests/EMWaverTests.swift", "contains": "import Testing|@Test" }]
-        },
-        "ios": {
-          "status": "planned",
-          "reason": "iOS has transport/runtime tests, but the shared simulator fixture test is not yet wired into the iOS target.",
-          "evidence": [{ "file": "ios/EMWaverTests/EMWaverTests.swift", "contains": "import Testing|@Test" }]
-        },
         "windows": {
           "status": "required",
           "evidence": [{ "file": "windows/EMWaver.Tests/SimulatorScriptEngineTests.cs", "contains": ["SimulatorCommandBridge", "basic-board\\.json"] }]
@@ -55,10 +41,10 @@
           "reason": "Android has SimulatorScriptDeviceBridge, but no checked-in JUnit fixture test yet.",
           "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java", "contains": "basic-board|fixture|Simulator" }]
         },
-        "cli": {
+        "gateway": {
           "status": "required",
           "evidence": [
-            { "file": "daemon/emwaver-runtime/src/simulator.rs", "contains": "SimulatorCommandBridge|basic-board|fixture" },
+            { "file": "gateway/backend/emwaver-runtime/src/simulator.rs", "contains": "SimulatorCommandBridge|basic-board|fixture" },
             { "file": "scripts/rebirth-linux-validation.sh", "contains": "--sim-device|sim-device" }
           ]
         }

@@ -2,7 +2,8 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DAEMON_DIR="$ROOT/daemon"
+GATEWAY_BACKEND_DIR="$ROOT/gateway/backend"
+EMWAVER_BIN="$GATEWAY_BACKEND_DIR/target/debug/emwaver"
 SCRIPT_PATH="${EMWAVER_TEST_SCRIPT:-$ROOT/assets/default-scripts/blink.emw}"
 if [[ "$SCRIPT_PATH" != /* ]]; then
   SCRIPT_PATH="$ROOT/$SCRIPT_PATH"
@@ -19,15 +20,43 @@ echo
 
 echo
 echo "== Build CLI =="
-(cd "$DAEMON_DIR" && cargo build -p emwaver)
+(cd "$GATEWAY_BACKEND_DIR" && cargo build -p emwaver)
+
+run_gateway_script() {
+  local port="$1"
+  local script="$2"
+  shift 2
+  local log_path
+  log_path="$(mktemp /tmp/emwaver-gateway-hardware.XXXXXX.log)"
+  local state_dir
+  state_dir="$(mktemp -d /tmp/emwaver-gateway-hardware-state.XXXXXX)"
+  EMWAVER_STATE_DIR="$state_dir" "$EMWAVER_BIN" gateway serve --port "$port" "$@" >"$log_path" 2>&1 &
+  local pid="$!"
+  cleanup_gateway_script() {
+    set +e
+    kill "$pid" >/dev/null 2>&1 || true
+    wait "$pid" >/dev/null 2>&1 || true
+    rm -f "$log_path"
+    rm -rf "$state_dir"
+  }
+  trap cleanup_gateway_script RETURN
+  for _ in $(seq 1 40); do
+    if curl -fsS "http://127.0.0.1:$port/health" >/dev/null 2>&1; then
+      break
+    fi
+    sleep 0.25
+  done
+  curl -fsS "http://127.0.0.1:$port/health" >/dev/null
+  "$EMWAVER_BIN" run "$script" --port "$port"
+}
 
 echo
 echo "== Doctor =="
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- doctor)
+(cd "$GATEWAY_BACKEND_DIR" && cargo run -q -p emwaver -- doctor)
 
 echo
 echo "== Devices =="
-if ! (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- devices); then
+if ! (cd "$GATEWAY_BACKEND_DIR" && cargo run -q -p emwaver -- devices); then
   if [[ "${EMWAVER_DOCTOR_ALLOW_MIDI_UNAVAILABLE:-}" == "1" ]]; then
     echo "device listing skipped: MIDI support unavailable in this hosted environment"
   else
@@ -36,15 +65,15 @@ if ! (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- devices); then
 fi
 
 echo
-echo "== UI-only direct runtime =="
+echo "== UI-only Gateway runtime =="
 tmp="$(mktemp /tmp/emwaver-rebirth-ui.XXXXXX)"
 sim_tmp="$(mktemp /tmp/emwaver-rebirth-sim.XXXXXX)"
 trap 'rm -f "$tmp" "$sim_tmp"' EXIT
 printf 'UI.render(UI.text({ text: "rebirth validation" }));\n' > "$tmp"
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$tmp" --direct --no-device)
+run_gateway_script 3951 "$tmp" --no-device
 
 echo
-echo "== Simulator-backed direct runtime =="
+echo "== Simulator-backed Gateway runtime =="
 {
   printf 'pinMode(13, OUTPUT);\n'
   printf 'digitalWrite(13, HIGH);\n'
@@ -52,21 +81,21 @@ echo "== Simulator-backed direct runtime =="
   printf 'var value = analogRead(0);\n'
   printf 'UI.render(UI.column({ children: [UI.text({ text: board }), UI.text({ text: String(value) })] }));\n'
 } > "$sim_tmp"
-(cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$sim_tmp" --direct --sim-device)
+run_gateway_script 3952 "$sim_tmp" --sim-device
 
 if [[ "$HARDWARE_TRANSPORT" == "ble" ]]; then
   echo
-  echo "== Hardware direct runtime (BLE) =="
-  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$SCRIPT_PATH" --direct --ble)
+  echo "== Hardware Gateway runtime (BLE) =="
+  run_gateway_script 3953 "$SCRIPT_PATH" --ble
 elif [[ "$HARDWARE_TRANSPORT" == "usb" && -n "${EMWAVER_DEVICE_ID:-}" ]]; then
   echo
-  echo "== Hardware direct runtime (USB MIDI/SysEx) =="
+  echo "== Hardware Gateway runtime (USB MIDI/SysEx) =="
   echo "device id: $EMWAVER_DEVICE_ID"
-  (cd "$DAEMON_DIR" && cargo run -q -p emwaver -- run "$SCRIPT_PATH" --direct --device "$EMWAVER_DEVICE_ID")
+  run_gateway_script 3953 "$SCRIPT_PATH" --device "$EMWAVER_DEVICE_ID"
 else
   cat <<'EOF'
 
-== Hardware direct runtime skipped ==
+== Hardware Gateway runtime skipped ==
 Set EMWAVER_DEVICE_ID to the id shown by `emwaver devices`, then rerun:
 
   EMWAVER_DEVICE_ID=0 scripts/rebirth-hardware-validation.sh
@@ -83,18 +112,12 @@ fi
 
 cat <<'EOF'
 
-== Local gateway hardware validation ==
-Gateway-backed hardware validation is handled by scripts/rebirth-linux-validation.sh.
-For Linux daemon fallback:
+== Local Gateway hardware validation ==
+Gateway-backed hardware validation is also handled by scripts/rebirth-linux-validation.sh.
+For Linux Gateway validation:
 
   EMWAVER_DEVICE_ID=0 scripts/rebirth-linux-validation.sh
   EMWAVER_HARDWARE_TRANSPORT=ble scripts/rebirth-linux-validation.sh
 
-Native app gateway validation is still separate:
-
-1. Start the native macOS or Windows app with the board connected.
-2. In another terminal, run `emwaver gateway --port 3921`.
-3. Open `http://127.0.0.1:3921`.
-4. Run a hardware-backed script such as `blink.emw`.
-5. Confirm the native app executes the script against the board and the gateway receives `script.started` plus live `ui.snapshot`/plot updates when applicable.
+Native apps are self-contained and are no longer Gateway runtime owners.
 EOF

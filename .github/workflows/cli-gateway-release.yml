@@ -49,14 +49,14 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: gateway/package-lock.json
+          cache-dependency-path: gateway/frontend/package-lock.json
 
       - name: Build CLI
-        working-directory: daemon
+        working-directory: gateway/backend
         run: cargo build -p emwaver --release
 
       - name: Build gateway assets
-        working-directory: gateway
+        working-directory: gateway/frontend
         run: |
           npm ci
           npm run build
@@ -66,12 +66,11 @@ jobs:
           set -euo pipefail
           package_root="dist/${{ matrix.package_name }}"
           mkdir -p "$package_root/bin" "$package_root/share/emwaver/gateway" "$package_root/share/emwaver/assets/default-scripts"
-          cp "daemon/target/release/${{ matrix.binary_name }}" "$package_root/bin/${{ matrix.binary_name }}"
-          cp gateway/package.json "$package_root/share/emwaver/gateway/package.json"
-          cp gateway/package-lock.json "$package_root/share/emwaver/gateway/package-lock.json"
-          cp -R gateway/dist "$package_root/share/emwaver/gateway/dist"
+          cp "gateway/backend/target/release/${{ matrix.binary_name }}" "$package_root/bin/${{ matrix.binary_name }}"
+          cp gateway/frontend/package.json "$package_root/share/emwaver/gateway/package.json"
+          cp gateway/frontend/package-lock.json "$package_root/share/emwaver/gateway/package-lock.json"
+          cp -R gateway/frontend/dist "$package_root/share/emwaver/gateway/dist"
           cp -R assets/default-scripts/. "$package_root/share/emwaver/assets/default-scripts/"
-          (cd "$package_root/share/emwaver/gateway" && npm install --omit=dev --ignore-scripts)
           tar -C dist -czf "dist/${{ matrix.package_name }}.tar.gz" "${{ matrix.package_name }}"
 
       - name: Smoke test packaged gateway
@@ -81,13 +80,13 @@ jobs:
           state_dir="$(mktemp -d)"
           export EMWAVER_STATE_DIR="$state_dir"
           tar -C "$tmp" -xzf "dist/${{ matrix.package_name }}.tar.gz"
-          "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway --port "${{ matrix.smoke_port }}" > "/tmp/${{ matrix.package_name }}-gateway.log" 2>&1 &
+          "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway serve --port "${{ matrix.smoke_port }}" --sim-device > "/tmp/${{ matrix.package_name }}-gateway.log" 2>&1 &
           pid="$!"
           cleanup() {
             pkill -TERM -P "$pid" >/dev/null 2>&1 || true
             kill "$pid" >/dev/null 2>&1 || true
             wait "$pid" >/dev/null 2>&1 || true
-            "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" daemon stop >/dev/null 2>&1 || true
+            "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway stop >/dev/null 2>&1 || true
             rm -rf "$state_dir"
             rm -rf "$tmp"
           }
@@ -99,39 +98,10 @@ jobs:
             sleep 0.25
           done
           curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health"
-
-      - name: Smoke test packaged daemon fallback
-        run: |
-          set -euo pipefail
-          tmp="$(mktemp -d)"
-          state_dir="$(mktemp -d)"
-          tar -C "$tmp" -xzf "dist/${{ matrix.package_name }}.tar.gz"
-          export EMWAVER_STATE_DIR="$state_dir"
-          "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" gateway --port "${{ matrix.smoke_port }}" --daemon-fallback --sim-device > "/tmp/${{ matrix.package_name }}-fallback.log" 2>&1 &
-          pid="$!"
-          cleanup() {
-            "$tmp/${{ matrix.package_name }}/bin/${{ matrix.binary_name }}" daemon stop >/dev/null 2>&1 || true
-            pkill -TERM -P "$pid" >/dev/null 2>&1 || true
-            kill "$pid" >/dev/null 2>&1 || true
-            wait "$pid" >/dev/null 2>&1 || true
-            rm -rf "$state_dir"
-            rm -rf "$tmp"
-          }
-          trap cleanup EXIT
-          for _ in $(seq 1 40); do
-            if curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health" >/dev/null 2>&1; then
-              break
-            fi
-            sleep 0.25
-          done
-          curl -fsS "http://127.0.0.1:${{ matrix.smoke_port }}/health"
-          if ! node scripts/verify-gateway-daemon-render.mjs "${{ matrix.smoke_port }}" emwaver-daemon; then
+          if ! node scripts/verify-gateway-render.mjs "${{ matrix.smoke_port }}" emwaver-gateway; then
             echo
-            echo "== Gateway fallback log =="
-            cat "/tmp/${{ matrix.package_name }}-fallback.log" || true
-            echo
-            echo "== Daemon log =="
-            cat "$state_dir/daemon.log" || true
+            echo "== Gateway log =="
+            cat "/tmp/${{ matrix.package_name }}-gateway.log" || true
             exit 1
           fi
 

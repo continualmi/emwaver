@@ -1,6 +1,6 @@
 ---
 name: emwaver-macos
-description: Use when working on the native EMWaver macOS app, especially local gateway app-role control, host management, board-aware update flows, Agent API key UI, or the boundary between /macos and the shared /apple package.
+description: Use when working on the native EMWaver macOS app, especially self-contained local runtime behavior, board-aware update flows, Agent API key UI, or the boundary between /macos and the shared /apple package.
 ---
 
 # EMWaver macOS
@@ -23,13 +23,13 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/macos`](/Users
 
 ## Core behaviors to preserve
 
-- macOS is a local-first desktop app and localhost gateway app-role target.
+- macOS is a local-first desktop app with its own self-contained native runtime.
 - Local scripts, local device control, and firmware update flows must not require accounts, activation, hardware UID reads, minting, claiming, device limits, or hosted relay.
 - Agent API key entry may remain available before a device is connected, but it is only for optional Agent inference.
 - Avoid user-facing product-strategy wording; app UI should be neutral and local-first.
 - STM32 and ESP32-S3 have different update flows. Do not collapse them into one transport or one helper path.
 - `MacUSBManager.swift`, `FirmwareUpdateManager.swift`, and `DeviceConnectionSheet.swift` are the first files to inspect for local transport and update behavior.
-- `HostSessionManager.swift`, `HostDirectory.swift`, and `RemoteControl*` are the first files to inspect for local gateway/app-role control or legacy hosted host behavior.
+- `HostSessionManager.swift`, `HostDirectory.swift`, and `RemoteControl*` are legacy host-control surfaces to avoid reintroducing into the core local path.
 
 ## Board-specific rules
 

@@ -30,8 +30,8 @@ Core direction:
 - **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
 - **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
-- **Gateway:** the browser control surface should move toward a localhost gateway model under `gateway/`, acting as a host controller for the local macOS/Windows app and reusing the existing script/control protocol without requiring cloud infrastructure.
-- **Remote control posture:** native apps should not be positioned as Continual-hosted remote-control hosts for the open-source core. macOS/Windows gateway control is same-machine localhost by default; remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
+- **Gateway:** the local Gateway direction is being consolidated under `gateway/` as the owner of the local backend, CLI, runtime, transports, and browser frontend for terminal/browser workflows. See `gateway/MIGRATION.md`.
+- **Remote control posture:** native apps should not be positioned as Continual-hosted or Gateway-controlled remote-control hosts for the open-source core. CLI/browser workflows should use the local Gateway; native apps stay self-contained. Remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
@@ -58,7 +58,7 @@ We intentionally give up:
 - dependency on hardware sales for revenue or launch,
 - paid gating for local hardware control,
 - mandatory hosted relay/cloud paths for core use,
-- Continual-hosted native-app remote control as a core cross-platform feature,
+- Continual-hosted native app remote control as a core cross-platform feature,
 - single-board hardware monopoly,
 - end-user firmware build/flash customization loops,
 - "MCU toolchain as required user workflow."
@@ -171,11 +171,11 @@ Use the local README first when working in a folder:
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
+- `gateway/MIGRATION.md` — controlling plan for moving local backend, CLI, runtime, transports, and browser frontend ownership into `gateway/`
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
 - `gateway/README.md` — localhost hardware control gateway direction
-- `daemon/README.md` — headless host daemon CLI/runtime/protocol behavior
 - `hardware/README.md` — imported hardware design monorepo index and policy
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
@@ -192,10 +192,9 @@ If a folder has a README, detailed documentation should live there.
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
 - Public website/docs/downloads surface — owned by `../society` under `/emwaver`; this repo no longer carries a standalone `web/` app. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of an EMWaver cloud runtime.
-- `gateway/` — localhost browser control gateway for account-free local `.emw` hardware control and the migrated script rendering/control UI.
+- `gateway/` — local Gateway consolidation target for account-free local `.emw` hardware control, CLI/backend/runtime/transport ownership, and the browser frontend.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
-- `daemon/` — headless host runtime (beta scope).
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
 - `videos/` — video planning metadata, clip backlog, creative direction, and promo writing.
 - `hardware/` — target location for imported EMWaver hardware design repositories.

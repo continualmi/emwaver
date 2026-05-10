@@ -3,14 +3,14 @@
   "features": [
     {
       "id": "local_first.no_hosted_account_gate",
-      "description": "Native app source does not keep Firebase/Google sign-in or hosted cloud account gates.",
+      "description": "Local hardware control does not require hosted account gates.",
       "parity": "all_required",
       "forbidden": [
         { "path": "android/app/src/main", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In|sign_in_google", "reason": "Android must not retain hosted account sign-in gates." },
         { "path": "ios/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "iOS must not retain hosted account sign-in gates." },
         { "path": "macos/EMWaver/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "macOS must not retain hosted account sign-in gates." },
         { "path": "windows/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "Windows must not retain hosted account sign-in gates." },
-        { "path": "daemon", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "CLI must stay local-first and must not introduce hosted account gates." }
+        { "path": "gateway/backend", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "Gateway CLI/backend must stay local-first and must not introduce hosted account gates." }
       ],
       "platforms": {
         "macos": {
@@ -29,11 +29,11 @@
           "status": "required",
           "evidence": [{ "file": "android/README.md", "contains": "Do not require an EMWaver account" }]
         },
-        "cli": {
+        "gateway": {
           "status": "required",
           "evidence": [
-            { "file": "daemon/README.md", "contains": "does not provide an EMWaver-hosted relay|does not heartbeat to a hosted backend" },
-            { "file": "daemon/emwaver/src/main.rs", "contains": "localhost|local gateway|local" }
+            { "file": "gateway/backend/README.md", "contains": "does not provide an EMWaver-hosted relay|does not heartbeat to a hosted backend" },
+            { "file": "gateway/backend/emwaver/src/main.rs", "contains": "localhost|Gateway|local" }
           ]
         }
       }

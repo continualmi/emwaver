@@ -144,7 +144,9 @@ impl SimulatorFixture {
     }
 
     pub fn basic_board() -> Result<Self> {
-        Self::from_json(include_str!("../../../simulator/fixtures/basic-board.json"))
+        Self::from_json(include_str!(
+            "../../../../simulator/fixtures/basic-board.json"
+        ))
     }
 }
 
@@ -389,7 +391,7 @@ mod tests {
     use crate::Engine;
     use std::sync::Arc;
 
-    const BOOTSTRAP: &str = include_str!("../../../assets/default-scripts/script_bootstrap.emw");
+    const BOOTSTRAP: &str = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
 
     #[test]
     fn basic_fixture_parses() {
