@@ -37,6 +37,8 @@ use url::Url;
 
 const DEFAULT_GATEWAY_PORT: u16 = 3921;
 const GATEWAY_UID_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const GATEWAY_BLE_SCAN_MS: u64 = 5_000;
+const GATEWAY_BLE_STALE_TTL: Duration = Duration::from_secs(20);
 const GATEWAY_TRANSPORT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 const TRANSPORT_SOURCE_USB: u8 = 1;
 const TRANSPORT_SOURCE_BLE: u8 = 2;
@@ -130,7 +132,7 @@ enum Commands {
         gateway_url: Option<String>,
 
         /// Wait this long for gateway hello/script.started handshakes.
-        #[arg(long, default_value_t = 5000)]
+        #[arg(long, default_value_t = 20000)]
         timeout_ms: u64,
 
         /// Target device id reported by the running Gateway.
@@ -1032,9 +1034,27 @@ fn gateway_start(
 
     let pid = child.id();
     fs::write(pidfile_path()?, pid.to_string())?;
+    let port_value = port.unwrap_or(DEFAULT_GATEWAY_PORT);
+    wait_for_gateway_http(pid as i32, port_value)?;
     println!("gateway: started (pid={pid})");
     println!("logfile: {}", logfile.display());
     Ok(())
+}
+
+fn wait_for_gateway_http(pid: i32, port: u16) -> Result<()> {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        if gateway_http_json(port, "/health").is_ok() {
+            return Ok(());
+        }
+        if !is_running(pid) {
+            anyhow::bail!("gateway exited before localhost HTTP became ready");
+        }
+        if Instant::now() >= deadline {
+            anyhow::bail!("timed out waiting for Gateway HTTP on 127.0.0.1:{port}");
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn gateway_stop() -> Result<()> {
@@ -1400,6 +1420,7 @@ struct GatewayDeviceEntry {
     addresses: Vec<String>,
     claimable: bool,
     requires_session: bool,
+    last_seen: Instant,
     bridge: Option<Arc<dyn CommandBridge>>,
 }
 
@@ -1515,6 +1536,7 @@ impl GatewayDeviceRegistry {
         }
 
         if self.no_device {
+            let now = Instant::now();
             *self.devices.lock().unwrap() = vec![GatewayDeviceEntry {
                 transport_id: "local-gateway-no-device".to_string(),
                 name: "Gateway hardware disabled".to_string(),
@@ -1530,12 +1552,14 @@ impl GatewayDeviceRegistry {
                 addresses: Vec::new(),
                 claimable: true,
                 requires_session: false,
+                last_seen: now,
                 bridge: Some(Arc::new(NoDeviceCommandBridge)),
             }];
             return Ok(());
         }
 
         if self.sim_device {
+            let now = Instant::now();
             *self.devices.lock().unwrap() = vec![GatewayDeviceEntry {
                 transport_id: "local-gateway-sim".to_string(),
                 name: "EMWaver simulator".to_string(),
@@ -1551,6 +1575,7 @@ impl GatewayDeviceRegistry {
                 addresses: Vec::new(),
                 claimable: true,
                 requires_session: false,
+                last_seen: now,
                 bridge: Some(Arc::new(SimulatorCommandBridge::basic_board()?)),
             }];
             return Ok(());
@@ -1835,6 +1860,7 @@ fn refresh_gateway_midi_devices(
             addresses: Vec::new(),
             claimable: true,
             requires_session: identity.requires_session,
+            last_seen: Instant::now(),
             bridge: None,
         });
     }
@@ -1845,24 +1871,43 @@ fn refresh_gateway_ble_devices(
     previous: &mut HashMap<String, GatewayDeviceEntry>,
     active_claims: &[GatewayActiveClaim],
 ) {
-    let Ok(devices) = list_ble_devices(1_500) else {
-        return;
+    let now = Instant::now();
+    let devices = match list_ble_devices(GATEWAY_BLE_SCAN_MS) {
+        Ok(devices) => devices,
+        Err(err) => {
+            info!("Gateway BLE scan failed: {err:#}");
+            retain_recent_ble_entries(out, previous, active_claims, now);
+            return;
+        }
     };
     for info in devices {
         let transport_id = format!("ble:{}", info.id);
         if is_active_transport(active_claims, &transport_id) {
             if let Some(mut entry) = previous.remove(&transport_id) {
                 entry.claimable = true;
+                entry.last_seen = now;
                 entry.bridge = None;
                 out.push(entry);
                 continue;
             }
         }
 
-        let _ = previous.remove(&transport_id);
-
-        let Ok(device) = BleDevice::connect_by_id(&info.id, 3_000) else {
+        if let Some(mut entry) = previous.remove(&transport_id) {
+            entry.name = info.name;
+            entry.address = Some(info.address);
+            entry.claimable = true;
+            entry.last_seen = now;
+            entry.bridge = None;
+            out.push(entry);
             continue;
+        }
+
+        let device = match BleDevice::connect_by_id(&info.id, GATEWAY_BLE_SCAN_MS) {
+            Ok(device) => device,
+            Err(err) => {
+                info!("Gateway BLE connect failed for {}: {err:#}", info.name);
+                continue;
+            }
         };
         let sender: Arc<dyn DeviceCommandSender> = device;
         let Some(identity) = query_gateway_identity(sender.as_ref(), Some("esp32s3")) else {
@@ -1886,10 +1931,20 @@ fn refresh_gateway_ble_devices(
             addresses: Vec::new(),
             claimable: true,
             requires_session: identity.requires_session,
+            last_seen: now,
             bridge: None,
         });
     }
 
+    retain_recent_ble_entries(out, previous, active_claims, now);
+}
+
+fn retain_recent_ble_entries(
+    out: &mut Vec<GatewayDeviceEntry>,
+    previous: &mut HashMap<String, GatewayDeviceEntry>,
+    active_claims: &[GatewayActiveClaim],
+    now: Instant,
+) {
     let remaining_ble_ids: Vec<String> = previous
         .keys()
         .filter(|transport_id| transport_id.starts_with("ble:"))
@@ -1897,10 +1952,22 @@ fn refresh_gateway_ble_devices(
         .collect();
     for transport_id in remaining_ble_ids {
         if let Some(entry) = previous.remove(&transport_id) {
-            if is_active_transport(active_claims, &transport_id) {
-                out.push(entry);
-            }
+            retain_recent_ble_entry(out, entry, active_claims, now);
         }
+    }
+}
+
+fn retain_recent_ble_entry(
+    out: &mut Vec<GatewayDeviceEntry>,
+    mut entry: GatewayDeviceEntry,
+    active_claims: &[GatewayActiveClaim],
+    now: Instant,
+) {
+    let is_active = is_active_transport(active_claims, &entry.transport_id);
+    let is_recent = now.duration_since(entry.last_seen) <= GATEWAY_BLE_STALE_TTL;
+    if is_active || is_recent {
+        entry.bridge = None;
+        out.push(entry);
     }
 }
 
@@ -1976,6 +2043,7 @@ fn refresh_gateway_wifi_devices(
             addresses: info.addresses,
             claimable: true,
             requires_session: identity.requires_session,
+            last_seen: Instant::now(),
             bridge: None,
         });
     }
@@ -2083,7 +2151,7 @@ fn open_gateway_transport(
     }
 
     if let Some(id) = entry.transport_id.strip_prefix("ble:") {
-        let device = BleDevice::connect_by_id(id, 3_000)?;
+        let device = BleDevice::connect_by_id(id, GATEWAY_BLE_SCAN_MS)?;
         let bridge = Arc::new(BleCommandBridge { device });
         let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
         return Ok((bridge, sender, TRANSPORT_SOURCE_BLE));
@@ -2168,6 +2236,7 @@ impl CommandBridge for ClaimedGatewayBridge {
         if self.requires_session {
             let _ = transport_session_disconnect(self.sender.as_ref(), self.source, 1_000);
         }
+        self.inner.close();
         self.registry
             .release_claim(&self.hardware_uid, &self.transport_id);
     }
@@ -2191,7 +2260,7 @@ fn infer_gateway_board_type(name: &str, likely_emwaver: bool) -> String {
 fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
     let mut stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("failed to connect to Gateway HTTP on 127.0.0.1:{port}"))?;
-    let timeout = Duration::from_millis(1_500);
+    let timeout = Duration::from_millis(5_000);
     stream
         .set_read_timeout(Some(timeout))
         .context("failed to set Gateway HTTP read timeout")?;
@@ -2206,10 +2275,7 @@ fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
         .write_all(request.as_bytes())
         .context("failed to send Gateway HTTP request")?;
 
-    let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .context("failed to read Gateway HTTP response")?;
+    let response = read_gateway_http_response(&mut stream)?;
     let response = String::from_utf8_lossy(&response);
     let (head, body) = response
         .split_once("\r\n\r\n")
@@ -2219,6 +2285,57 @@ fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
         anyhow::bail!("Gateway HTTP request failed: {status}");
     }
     serde_json::from_str(body).context("failed to parse Gateway JSON response")
+}
+
+fn read_gateway_http_response(stream: &mut TcpStream) -> Result<Vec<u8>> {
+    let mut response = Vec::new();
+    let mut buf = [0u8; 4096];
+    loop {
+        match stream.read(&mut buf) {
+            Ok(0) => break,
+            Ok(n) => {
+                response.extend_from_slice(&buf[..n]);
+                if gateway_http_response_complete(&response) {
+                    break;
+                }
+            }
+            Err(err) if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                if !response.is_empty() {
+                    break;
+                }
+                return Err(err).context("failed to read Gateway HTTP response");
+            }
+            Err(err) => return Err(err).context("failed to read Gateway HTTP response"),
+        }
+    }
+    if response.is_empty() {
+        anyhow::bail!("Gateway HTTP response was empty");
+    }
+    Ok(response)
+}
+
+fn gateway_http_response_complete(response: &[u8]) -> bool {
+    let Some(body_start) = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .map(|idx| idx + 4)
+    else {
+        return false;
+    };
+    let Ok(head) = std::str::from_utf8(&response[..body_start - 4]) else {
+        return false;
+    };
+    let Some(content_length) = head.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            value.trim().parse::<usize>().ok()
+        } else {
+            None
+        }
+    }) else {
+        return false;
+    };
+    response.len().saturating_sub(body_start) >= content_length
 }
 
 fn gateway_devices_json_if_running(port: u16) -> Result<Option<serde_json::Value>> {
@@ -2615,6 +2732,10 @@ impl CommandBridge for BleCommandBridge {
 
     fn transmit_buffer(&self) -> Result<()> {
         self.device.transmit_buffer()
+    }
+
+    fn close(&self) {
+        self.device.disconnect();
     }
 }
 
@@ -3195,15 +3316,17 @@ fn gateway_serve(
         ble || default_ble_discovery_enabled(),
         startup_wifi_targets,
     )?);
-    if let Err(err) = device_registry.refresh() {
-        info!("initial Gateway device refresh failed: {err:#}");
-    }
     {
         let device_registry = device_registry.clone();
-        thread::spawn(move || loop {
-            thread::sleep(GATEWAY_UID_POLL_INTERVAL);
+        thread::spawn(move || {
             if let Err(err) = device_registry.refresh() {
-                info!("Gateway device refresh failed: {err:#}");
+                info!("initial Gateway device refresh failed: {err:#}");
+            }
+            loop {
+                thread::sleep(GATEWAY_UID_POLL_INTERVAL);
+                if let Err(err) = device_registry.refresh() {
+                    info!("Gateway device refresh failed: {err:#}");
+                }
             }
         });
     }
@@ -4857,5 +4980,21 @@ mod tests {
     fn wifi_probe_error_classifies_busy_text_response() {
         let err = anyhow::anyhow!("Wi-Fi device is busy with another session");
         assert!(classify_wifi_probe_error(&err).contains("device is busy with another session"));
+    }
+
+    #[test]
+    fn gateway_http_response_complete_uses_content_length() {
+        let complete = b"HTTP/1.1 200 OK\r\ncontent-length: 11\r\n\r\n{\"ok\":true}";
+        let partial = b"HTTP/1.1 200 OK\r\ncontent-length: 11\r\n\r\n{\"ok\"";
+        assert!(gateway_http_response_complete(complete));
+        assert!(!gateway_http_response_complete(partial));
+    }
+
+    #[test]
+    fn gateway_http_response_complete_requires_headers() {
+        assert!(!gateway_http_response_complete(b"{\"ok\":true}"));
+        assert!(!gateway_http_response_complete(
+            b"HTTP/1.1 200 OK\r\n\r\n{\"ok\":true}"
+        ));
     }
 }

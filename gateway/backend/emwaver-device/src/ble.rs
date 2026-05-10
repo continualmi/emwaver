@@ -57,6 +57,12 @@ pub struct BleDevice {
     shared: Arc<SharedBleState>,
 }
 
+impl Drop for BleDevice {
+    fn drop(&mut self) {
+        disconnect_ble_peripheral(self.peripheral.clone());
+    }
+}
+
 pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
     let rt = Runtime::new().context("failed to create BLE runtime")?;
     rt.block_on(async move {
@@ -135,6 +141,10 @@ impl BleDevice {
         });
         device.start_notifications(notify_characteristic)?;
         Ok(device)
+    }
+
+    pub fn disconnect(&self) {
+        disconnect_ble_peripheral(self.peripheral.clone());
     }
 
     pub fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
@@ -248,6 +258,20 @@ impl BleDevice {
             Ok::<(), anyhow::Error>(())
         })
     }
+}
+
+fn disconnect_ble_peripheral(peripheral: Peripheral) {
+    let _ = std::thread::spawn(move || {
+        let Ok(rt) = Runtime::new() else {
+            return;
+        };
+        let _ = rt.block_on(async move {
+            if peripheral.is_connected().await.unwrap_or(false) {
+                let _ = peripheral.disconnect().await;
+            }
+        });
+    })
+    .join();
 }
 
 impl DeviceCommandSender for BleDevice {
