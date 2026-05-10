@@ -27,6 +27,7 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
 final class MacWiFiManager {
     static let defaultPort = 3922
     static let serviceType = "_emwaver._tcp"
+    private static let savedFallbackVisibilityInterval: TimeInterval = 30
 
     private struct PairedWiFiDevice: Codable {
         var host: String
@@ -425,12 +426,28 @@ final class MacWiFiManager {
             )
         }
 
-        for id in discoveredDevicesByID.keys where !advertisedIDs.contains(id) && pairedDevicesByID[id] == nil {
+        for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) && pairedDevicesByID[id] == nil {
             Self.log("removing stale unpaired discovery id=\(id)")
             discoveredDevicesByID.removeValue(forKey: id)
         }
 
-        for (id, paired) in pairedDevicesByID where discoveredDevicesByID[id] == nil {
+        for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) && pairedDevicesByID[id] != nil {
+            guard var record = discoveredDevicesByID[id],
+                  let paired = pairedDevicesByID[id],
+                  record.isAdvertised else {
+                continue
+            }
+            if connectedDeviceID == id || Self.shouldShowSavedFallback(paired) {
+                record.isAdvertised = false
+                record.lastSeen = paired.lastSeen
+                discoveredDevicesByID[id] = record
+            } else {
+                Self.log("hiding stale paired fallback id=\(id)")
+                discoveredDevicesByID.removeValue(forKey: id)
+            }
+        }
+
+        for (id, paired) in pairedDevicesByID where discoveredDevicesByID[id] == nil && Self.shouldShowSavedFallback(paired) {
             Self.log("showing saved paired device id=\(id) host=\(paired.host) port=\(paired.port) advertised=false")
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
@@ -449,6 +466,10 @@ final class MacWiFiManager {
         }
 
         publishDevices()
+    }
+
+    private static func shouldShowSavedFallback(_ paired: PairedWiFiDevice) -> Bool {
+        Date().timeIntervalSince(paired.lastSeen) <= savedFallbackVisibilityInterval
     }
 
     private func migrateSingleSavedPairingIfNeeded(
@@ -723,20 +744,22 @@ final class MacWiFiManager {
                 pairedDevicesByID[id]?.secret = nil
                 migrated = true
             }
-            discoveredDevicesByID[id] = MacWiFiDeviceRecord(
-                id: id,
-                displayName: record.displayName,
-                host: record.host,
-                port: record.port,
-                localIdentifier: nil,
-                boardType: "esp32",
-                firmwareVersion: nil,
-                protocolVersion: "1",
-                capabilities: ["wifi"],
-                isPaired: true,
-                isAdvertised: false,
-                lastSeen: record.lastSeen
-            )
+            if Self.shouldShowSavedFallback(record) {
+                discoveredDevicesByID[id] = MacWiFiDeviceRecord(
+                    id: id,
+                    displayName: record.displayName,
+                    host: record.host,
+                    port: record.port,
+                    localIdentifier: nil,
+                    boardType: "esp32",
+                    firmwareVersion: nil,
+                    protocolVersion: "1",
+                    capabilities: ["wifi"],
+                    isPaired: true,
+                    isAdvertised: false,
+                    lastSeen: record.lastSeen
+                )
+            }
         }
         if migrated {
             savePairedDevices()

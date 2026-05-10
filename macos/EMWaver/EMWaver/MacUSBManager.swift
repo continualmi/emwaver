@@ -209,6 +209,8 @@ private final class MacTransportDeviceSession {
 /// It implements `ScriptDevice` for the shared Script runtime.
 final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     static let transportDebugLoggingEnabledDefaultsKey = "emwaver.transportDebugLoggingEnabled"
+    static let connectionPollIntervalSeconds: TimeInterval = 5.0
+    private static let bleDiscoveryStaleIntervalSeconds: TimeInterval = 8.0
 
     // Mini-frame: 18B cmd lane + 18B stream lane.
     private static let laneSizeBytes: Int = 18
@@ -305,6 +307,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private let midiQueue = DispatchQueue(label: "com.emwaver.macos.midi", qos: .userInitiated)
 
     private let midiQueueKey = DispatchSpecificKey<Void>()
+    private var connectionPollTimer: DispatchSourceTimer?
 
     private var client: MIDIClientRef = 0
     private var inPort: MIDIPortRef = 0
@@ -333,6 +336,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var bleCommandCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleNotifyCharacteristicsByID: [UUID: CBCharacteristic] = [:]
     private var bleDiscoveredNamesByID: [UUID: String] = [:]
+    private var bleLastSeenByID: [UUID: Date] = [:]
     private var bleIdentityProbePeripheralIDs: Set<UUID> = []
 
     override init() {
@@ -380,7 +384,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         midiQueue.async {
             self.refreshPortsInternal()
             self.autoConnectIfNeededInternal()
+            self.startConnectionPollingInternal()
         }
+    }
+
+    deinit {
+        connectionPollTimer?.cancel()
+        connectionPollTimer = nil
     }
 
     private func withMidiQueueSync(_ block: () -> Void) {
@@ -494,8 +504,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         midiQueue.async {
             self.suppressedAutoConnectWiFiIDs.removeAll()
             self.ensureClient()
-            self.refreshPortsInternal()
-            self.autoConnectIfNeededInternal()
+            self.pollConnectionsInternal(resetWiFiSuppression: true)
         }
     }
 
@@ -844,6 +853,32 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             connectToFirstPortInternal()
         }
         _ = connectToFirstPairedWiFiInternal()
+    }
+
+    private func startConnectionPollingInternal() {
+        guard connectionPollTimer == nil else { return }
+        let timer = DispatchSource.makeTimerSource(queue: midiQueue)
+        timer.schedule(
+            deadline: .now() + Self.connectionPollIntervalSeconds,
+            repeating: Self.connectionPollIntervalSeconds
+        )
+        timer.setEventHandler { [weak self] in
+            self?.pollConnectionsInternal()
+        }
+        connectionPollTimer = timer
+        timer.resume()
+    }
+
+    private func pollConnectionsInternal(resetWiFiSuppression: Bool = false) {
+        if resetWiFiSuppression {
+            suppressedAutoConnectWiFiIDs.removeAll()
+        }
+        ensureClient()
+        pruneStaleBleDiscoveriesInternal()
+        reconcileActiveTransportInternal()
+        refreshPortsInternal()
+        publishDiscoveredDevices()
+        autoConnectIfNeededInternal()
     }
 
     // MARK: - ScriptDevice (TX/RX)
@@ -1347,6 +1382,107 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return true
     }
 
+    private func pruneStaleBleDiscoveriesInternal(now: Date = Date()) {
+        let staleIDs = bleDiscoveredPeripheralsByID.compactMap { uuid, peripheral -> UUID? in
+            if peripheral.state == .connected || peripheral.state == .connecting {
+                return nil
+            }
+            guard let lastSeen = bleLastSeenByID[uuid] else {
+                return uuid
+            }
+            return now.timeIntervalSince(lastSeen) > Self.bleDiscoveryStaleIntervalSeconds ? uuid : nil
+        }
+        for uuid in staleIDs {
+            bleDiscoveredPeripheralsByID.removeValue(forKey: uuid)
+            bleDiscoveredNamesByID.removeValue(forKey: uuid)
+            bleLastSeenByID.removeValue(forKey: uuid)
+            hardwareUIDByDeviceID.removeValue(forKey: "ble:\(uuid.uuidString)")
+        }
+    }
+
+    private func reconcileActiveTransportInternal() {
+        switch activeTransport {
+        case .usbMidi:
+            var disconnected = false
+            if connectedSource == 0 || connectedDestination == 0 {
+                disconnected = true
+            }
+            if connectedSource != 0, isOffline(MIDIObjectRef(connectedSource)) {
+                disconnected = true
+            }
+            if connectedDestination != 0, isOffline(MIDIObjectRef(connectedDestination)) {
+                disconnected = true
+            }
+            if disconnected {
+                disconnectMidiOnlyInternal()
+                activeTransport = .none
+                activeDeviceID = nil
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+            }
+        case .ble:
+            guard let peripheral = blePeripheral else {
+                activeTransport = .none
+                activeDeviceID = nil
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+                return
+            }
+            let uuid = peripheral.identifier
+            let ready = peripheral.state == .connected && bleCommandCharacteristicsByID[uuid] != nil
+            if !ready && peripheral.state != .connecting {
+                blePeripheral = nil
+                bleCommandCharacteristic = nil
+                bleNotifyCharacteristic = nil
+                activeTransport = .none
+                activeDeviceID = nil
+                bleConnectedPeripheralsByID.removeValue(forKey: uuid)
+                bleCommandCharacteristicsByID.removeValue(forKey: uuid)
+                bleNotifyCharacteristicsByID.removeValue(forKey: uuid)
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.isConnected = ready
+                }
+            }
+        case .wifi:
+            guard wifiManager?.isConnected == true else {
+                activeTransport = .none
+                activeDeviceID = nil
+                DispatchQueue.main.async {
+                    self.isConnected = false
+                    self.connectedPortName = nil
+                    self.deviceEmwaverVersion = nil
+                    self.connectedHardwareUID = nil
+                    self.connectedBoardType = nil
+                    self.connectedTransportKind = nil
+                }
+                return
+            }
+        case .none:
+            break
+        }
+    }
+
     private func recordWiFiConnectionErrorIfNeeded(_ message: String) {
         let targetID = wifiManager?.connectingDeviceID ?? pendingAutoConnectWiFiID ?? (activeTransport == .wifi ? activeDeviceID : nil)
         guard let targetID, targetID.hasPrefix("wifi:") else { return }
@@ -1452,6 +1588,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         bleCommandCharacteristicsByID.removeAll()
         bleNotifyCharacteristicsByID.removeAll()
         bleIdentityProbePeripheralIDs.removeAll()
+        bleDiscoveredPeripheralsByID.removeAll()
+        bleDiscoveredNamesByID.removeAll()
+        bleLastSeenByID.removeAll()
         blePeripheral = nil
         bleCommandCharacteristic = nil
         bleNotifyCharacteristic = nil
@@ -1685,7 +1824,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         bleCentral?.scanForPeripherals(
             withServices: nil,
-            options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
+            options: [CBCentralManagerScanOptionAllowDuplicatesKey: true]
         )
         DispatchQueue.main.async {
             self.isBleScanning = true
@@ -1996,6 +2135,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         let name = localName ?? peripheral.name ?? "EMWaver BLE"
         bleDiscoveredNamesByID[peripheral.identifier] = name
         bleDiscoveredPeripheralsByID[peripheral.identifier] = peripheral
+        bleLastSeenByID[peripheral.identifier] = Date()
         publishDiscoveredDevices()
         guard autoConnectEnabled, peripheral.state != .connected, peripheral.state != .connecting else { return }
         NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
@@ -2038,6 +2178,9 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
+        bleDiscoveredPeripheralsByID.removeValue(forKey: peripheral.identifier)
+        bleDiscoveredNamesByID.removeValue(forKey: peripheral.identifier)
+        bleLastSeenByID.removeValue(forKey: peripheral.identifier)
         setError(error?.localizedDescription ?? "BLE connection failed")
         publishDiscoveredDevices()
         autoConnectIfNeededInternal()
@@ -2048,6 +2191,9 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         bleCommandCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleNotifyCharacteristicsByID.removeValue(forKey: peripheral.identifier)
         bleIdentityProbePeripheralIDs.remove(peripheral.identifier)
+        bleDiscoveredPeripheralsByID.removeValue(forKey: peripheral.identifier)
+        bleDiscoveredNamesByID.removeValue(forKey: peripheral.identifier)
+        bleLastSeenByID.removeValue(forKey: peripheral.identifier)
         if blePeripheral == peripheral {
             blePeripheral = nil
             bleCommandCharacteristic = nil
