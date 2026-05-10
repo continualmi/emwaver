@@ -57,6 +57,13 @@ struct EMWaverTests {
         #expect(envelope.payload == payload)
     }
 
+    @Test func wifiHardwareUIDParsesCommandResponse() {
+        let response = Data([0x80, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c, 0x00, 0x00])
+        #expect(MacWiFiManager.hardwareUID(from: response) == "d83bdaa4ec7c")
+        #expect(MacWiFiManager.hardwareUID(from: Data([0x80, 0, 0, 0, 0, 0, 0])) == nil)
+        #expect(MacWiFiManager.hardwareUID(from: Data([0x81, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c])) == nil)
+    }
+
     @Test func wifiEnvelopeRejectsOversizedPayloads() {
         let payload = Data(repeating: 0, count: Int(UInt16.max) + 1)
         #expect(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload) == nil)

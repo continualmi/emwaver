@@ -28,7 +28,8 @@ final class MacWiFiManager {
     private static let livenessPingInterval: DispatchTimeInterval = .seconds(2)
     private static let livenessPingTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
-    private static let discoveryConnectTimeout: DispatchTimeInterval = .seconds(3)
+    private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
+    private static let hardwareUIDCommand = Data([0x08])
 
     private struct BonjourMetadata {
         var localIdentifier: String?
@@ -54,7 +55,7 @@ final class MacWiFiManager {
     private var advertisedDeviceIDs: Set<String> = []
     private var advertisedRecordsByID: [String: MacWiFiDeviceRecord] = [:]
     private var validatingAdvertisedDeviceIDs: Set<String> = []
-    private var advertisedValidationConnections: [String: NWConnection] = [:]
+    private var advertisedValidationSockets: [String: URLSessionWebSocketTask] = [:]
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
@@ -434,59 +435,72 @@ final class MacWiFiManager {
     }
 
     private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool = false) {
-        guard let port = NWEndpoint.Port(rawValue: UInt16(record.port)) else { return }
+        guard let url = Self.webSocketURL(host: record.host, port: record.port),
+              let frame = Self.makeEnvelope(kind: 1, sequence: 1, payload: Self.hardwareUIDCommand) else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
-        Self.log("validating advertised tcp id=\(record.id)")
-        let connection = NWConnection(
-            host: NWEndpoint.Host(record.host),
-            port: port,
-            using: .tcp
-        )
-        advertisedValidationConnections[record.id] = connection
-        connection.stateUpdateHandler = { [weak self] state in
+        Self.log("validating advertised uid id=\(record.id)")
+        let validationSocket = URLSession.shared.webSocketTask(with: url)
+        advertisedValidationSockets[record.id] = validationSocket
+        validationSocket.resume()
+        validationSocket.send(.data(frame)) { [weak self] error in
             guard let self else { return }
             self.queue.async {
                 guard self.validatingAdvertisedDeviceIDs.contains(record.id),
-                      let connection = self.advertisedValidationConnections[record.id] else { return }
-                switch state {
-                case .ready:
-                    Self.log("advertised validation passed id=\(record.id)")
-                    self.validatingAdvertisedDeviceIDs.remove(record.id)
-                    self.advertisedValidationConnections.removeValue(forKey: record.id)
-                    connection.cancel()
-                    guard self.advertisedDeviceIDs.contains(record.id) else { return }
-                    var validatedRecord = record
-                    validatedRecord.lastSeen = Date()
-                    self.discoveredDevicesByID[record.id] = validatedRecord
-                    self.publishDevices()
-                case .failed(let error):
-                    Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
-                    self.validatingAdvertisedDeviceIDs.remove(record.id)
-                    self.advertisedValidationConnections.removeValue(forKey: record.id)
-                    connection.cancel()
-                    if removeOnFailure {
-                        self.removeUnreachableAdvertisedRecord(record.id)
-                    }
-                case .cancelled:
-                    self.validatingAdvertisedDeviceIDs.remove(record.id)
-                    self.advertisedValidationConnections.removeValue(forKey: record.id)
-                default:
-                    break
+                      self.advertisedValidationSockets[record.id] === validationSocket else { return }
+                if let error {
+                    Self.log("advertised UID probe send failed id=\(record.id) error=\(error.localizedDescription)")
+                    self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
                 }
             }
         }
-        connection.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + Self.discoveryConnectTimeout) { [weak self] in
+        validationSocket.receive { [weak self] result in
+            guard let self else { return }
+            self.queue.async {
+                guard self.validatingAdvertisedDeviceIDs.contains(record.id),
+                      self.advertisedValidationSockets[record.id] === validationSocket else { return }
+                switch result {
+                case .success(let message):
+                    guard case .data(let data) = message,
+                          let envelope = Self.unwrapEnvelope(data),
+                          envelope.sequence == 1,
+                          let uid = Self.hardwareUID(from: envelope.payload) else {
+                        Self.log("advertised UID probe returned invalid response id=\(record.id)")
+                        self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+                        return
+                    }
+                    Self.log("advertised validation passed id=\(record.id) uid=\(uid)")
+                    self.finishAdvertisedValidationSuccess(record, uid: uid)
+                case .failure(let error):
+                    Self.log("advertised UID probe failed id=\(record.id) error=\(error.localizedDescription)")
+                    self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+                }
+            }
+        }
+        queue.asyncAfter(deadline: .now() + Self.discoveryProbeTimeout) { [weak self] in
             guard let self else { return }
             guard self.validatingAdvertisedDeviceIDs.contains(record.id),
-                  let connection = self.advertisedValidationConnections[record.id] else { return }
+                  self.advertisedValidationSockets[record.id] === validationSocket else { return }
             Self.log("advertised validation timed out id=\(record.id)")
-            self.validatingAdvertisedDeviceIDs.remove(record.id)
-            self.advertisedValidationConnections.removeValue(forKey: record.id)
-            connection.cancel()
-            if removeOnFailure {
-                self.removeUnreachableAdvertisedRecord(record.id)
-            }
+            self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+        }
+    }
+
+    private func finishAdvertisedValidationSuccess(_ record: MacWiFiDeviceRecord, uid: String) {
+        validatingAdvertisedDeviceIDs.remove(record.id)
+        advertisedValidationSockets.removeValue(forKey: record.id)?.cancel(with: .goingAway, reason: nil)
+        guard advertisedDeviceIDs.contains(record.id) else { return }
+        var validatedRecord = record
+        validatedRecord.localIdentifier = uid
+        validatedRecord.lastSeen = Date()
+        discoveredDevicesByID[record.id] = validatedRecord
+        publishDevices()
+    }
+
+    private func finishAdvertisedValidationFailure(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool) {
+        validatingAdvertisedDeviceIDs.remove(record.id)
+        advertisedValidationSockets.removeValue(forKey: record.id)?.cancel(with: .goingAway, reason: nil)
+        if removeOnFailure {
+            removeUnreachableAdvertisedRecord(record.id)
         }
     }
 
@@ -683,6 +697,15 @@ final class MacWiFiManager {
         }
         let sequence = UInt16(data[5]) | (UInt16(data[6]) << 8)
         return (data.subdata(in: 10..<data.count), sequence)
+    }
+
+    static func hardwareUID(from response: Data) -> String? {
+        guard response.count >= 7, response[0] == 0x80 else { return nil }
+        let payload = response.dropFirst(1)
+        let significantLength = payload.lastIndex(where: { $0 != 0 })
+            .map { payload.distance(from: payload.startIndex, to: $0) + 1 } ?? 0
+        guard significantLength > 0 else { return nil }
+        return payload.prefix(significantLength).map { String(format: "%02x", $0) }.joined()
     }
 
     private static func log(_ message: String) {
