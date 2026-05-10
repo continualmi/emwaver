@@ -5,12 +5,6 @@ on:
     paths:
       - "gateway/**"
       - ".github/workflows/gateway-ci.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "gateway/**"
-      - ".github/workflows/gateway-ci.yml"
   workflow_dispatch:
 
 permissions:

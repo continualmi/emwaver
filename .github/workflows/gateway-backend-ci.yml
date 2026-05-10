@@ -12,19 +12,6 @@ on:
       - "scripts/verify-gateway-render.mjs"
       - "scripts/rebirth-install-smoke.sh"
       - ".github/workflows/gateway-backend-ci.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "gateway/backend/**"
-      - "gateway/**"
-      - "assets/default-scripts/**"
-      - "simulator/**"
-      - "scripts/check-rust-toolchain.sh"
-      - "scripts/rebirth-gateway-sim-validation.sh"
-      - "scripts/verify-gateway-render.mjs"
-      - "scripts/rebirth-install-smoke.sh"
-      - ".github/workflows/gateway-backend-ci.yml"
   workflow_dispatch:
 
 permissions:

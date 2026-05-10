@@ -11,18 +11,6 @@ on:
       - "docs/parity/**"
       - "scripts/parity/**"
       - ".github/workflows/platform-parity.yml"
-  push:
-    branches:
-      - main
-    paths:
-      - "android/**"
-      - "apple/**"
-      - "ios/**"
-      - "macos/**"
-      - "windows/**"
-      - "docs/parity/**"
-      - "scripts/parity/**"
-      - ".github/workflows/platform-parity.yml"
   workflow_dispatch:
 
 permissions:
