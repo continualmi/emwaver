@@ -53,6 +53,7 @@ final class MacWiFiManager {
     private var pendingConnectionRecord: MacWiFiDeviceRecord?
     private var advertisedDeviceIDs: Set<String> = []
     private var validatingAdvertisedDeviceIDs: Set<String> = []
+    private var advertisedValidationConnections: [String: NWConnection] = [:]
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
@@ -437,14 +438,17 @@ final class MacWiFiManager {
             port: port,
             using: .tcp
         )
-        connection.stateUpdateHandler = { [weak self, weak connection] state in
-            guard let self, let connection else { return }
+        advertisedValidationConnections[record.id] = connection
+        connection.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
             self.queue.async {
-                guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
+                guard self.validatingAdvertisedDeviceIDs.contains(record.id),
+                      let connection = self.advertisedValidationConnections[record.id] else { return }
                 switch state {
                 case .ready:
                     Self.log("advertised validation passed id=\(record.id)")
                     self.validatingAdvertisedDeviceIDs.remove(record.id)
+                    self.advertisedValidationConnections.removeValue(forKey: record.id)
                     connection.cancel()
                     guard self.advertisedDeviceIDs.contains(record.id) else { return }
                     var validatedRecord = record
@@ -454,23 +458,27 @@ final class MacWiFiManager {
                 case .failed(let error):
                     Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
                     self.validatingAdvertisedDeviceIDs.remove(record.id)
+                    self.advertisedValidationConnections.removeValue(forKey: record.id)
                     connection.cancel()
                     if removeOnFailure {
                         self.removeUnreachableAdvertisedRecord(record.id)
                     }
                 case .cancelled:
                     self.validatingAdvertisedDeviceIDs.remove(record.id)
+                    self.advertisedValidationConnections.removeValue(forKey: record.id)
                 default:
                     break
                 }
             }
         }
         connection.start(queue: queue)
-        queue.asyncAfter(deadline: .now() + Self.discoveryConnectTimeout) { [weak self, weak connection] in
-            guard let self, let connection else { return }
-            guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
+        queue.asyncAfter(deadline: .now() + Self.discoveryConnectTimeout) { [weak self] in
+            guard let self else { return }
+            guard self.validatingAdvertisedDeviceIDs.contains(record.id),
+                  let connection = self.advertisedValidationConnections[record.id] else { return }
             Self.log("advertised validation timed out id=\(record.id)")
             self.validatingAdvertisedDeviceIDs.remove(record.id)
+            self.advertisedValidationConnections.removeValue(forKey: record.id)
             connection.cancel()
             if removeOnFailure {
                 self.removeUnreachableAdvertisedRecord(record.id)
