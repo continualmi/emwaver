@@ -76,19 +76,27 @@ daughterboards.
 | RFM69 IRQ/control nets | radio interrupt/control lines routed through the shield |
 | `+5V`, `VCC`, `GND` | USB 5 V, 3.3 V logic, ground |
 
-Current ESP32 firmware defaults:
+Current ESP32-S3 shield signal map:
 
-| Firmware default | GPIO |
-| --- | --- |
-| SPI `MOSI` | `GPIO11` |
-| SPI `SCK` | `GPIO12` |
-| SPI `MISO` | `GPIO13` |
-| default IR transmit | `GPIO4` |
-| shield-compatible IR transmit | `GPIO37` |
-| IR LED guard | `GPIO5` |
+| Shield signal | ESP32-S3 GPIO | Notes |
+| --- | --- | --- |
+| RFM69 `NSS` / CS | `GPIO36` | RFM69HW chip select |
+| RFM69 `MOSI` | `GPIO11` | SPI data bus |
+| RFM69 `SCK` | `GPIO12` | SPI data bus |
+| RFM69 `MISO` | `GPIO13` | SPI data bus |
+| RFM69 `DIO0` | `GPIO1` | RFM69 IRQ/control |
+| RFM69 `DIO1` | `GPIO2` | RFM69 IRQ/control |
+| RFM69 `DIO2` | `GPIO42` | RFM69 IRQ/control |
+| RFM69 `DIO3` | `GPIO41` | RFM69 IRQ/control |
+| RFM69 `DIO4` | `GPIO40` | RFM69 IRQ/control |
+| RFM69 `DIO5` | `GPIO39` | RFM69 IRQ/control |
+| `IR_TX` | `GPIO37` | IR LED driver input |
+| `IR_RX` | `GPIO38` | IR receiver output |
+| default IR transmit | `GPIO4` | firmware fallback / non-shield default |
+| IR LED guard | `GPIO5` | firmware guard output |
 
-Update the firmware mapping only after confirming the selected ESP32-S3 DevKit
-pinout and shield routing.
+Generic SPI examples may use `GPIO10` as a default chip select, but the
+RFM69HW on this shield uses `GPIO36` for `NSS` / CS.
 
 ## Manufacturing With JLCPCB
 
