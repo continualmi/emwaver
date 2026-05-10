@@ -133,10 +133,6 @@ export function GatewayApp() {
   }, []);
 
   useEffect(() => {
-    void refreshGatewayDevices();
-  }, []);
-
-  useEffect(() => {
     const ws = new WebSocket(localGatewayWsUrl());
     wsRef.current = ws;
     setWsStatus("connecting");

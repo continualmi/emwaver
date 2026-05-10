@@ -100,7 +100,30 @@ impl BleDevice {
         let (peripheral, command_characteristic, notify_characteristic) =
             rt.block_on(async move {
                 let adapter = first_adapter().await?;
-                scan_for_emwaver(&adapter, scan_ms).await
+                scan_for_emwaver(&adapter, scan_ms, None).await
+            })?;
+
+        let shared = Arc::new(SharedBleState::default());
+        let device = Arc::new(Self {
+            rt,
+            peripheral,
+            command_characteristic,
+            shared,
+        });
+        device.start_notifications(notify_characteristic)?;
+        Ok(device)
+    }
+
+    pub fn connect_by_id(id: &str, scan_ms: u64) -> Result<Arc<Self>> {
+        let selected_id = id
+            .trim()
+            .parse::<usize>()
+            .with_context(|| format!("invalid BLE device id: {id}"))?;
+        let rt = Runtime::new().context("failed to create BLE runtime")?;
+        let (peripheral, command_characteristic, notify_characteristic) =
+            rt.block_on(async move {
+                let adapter = first_adapter().await?;
+                scan_for_emwaver(&adapter, scan_ms, Some(selected_id)).await
             })?;
 
         let shared = Arc::new(SharedBleState::default());
@@ -247,6 +270,7 @@ async fn first_adapter() -> Result<Adapter> {
 async fn scan_for_emwaver(
     adapter: &Adapter,
     scan_ms: u64,
+    selected_id: Option<usize>,
 ) -> Result<(
     Peripheral,
     btleplug::api::Characteristic,
@@ -262,7 +286,10 @@ async fn scan_for_emwaver(
         .peripherals()
         .await
         .context("failed to list BLE peripherals")?;
-    for peripheral in peripherals {
+    for (index, peripheral) in peripherals.into_iter().enumerate() {
+        if selected_id.is_some_and(|id| id != index) {
+            continue;
+        }
         if !is_emwaver_peripheral(&peripheral).await {
             continue;
         }

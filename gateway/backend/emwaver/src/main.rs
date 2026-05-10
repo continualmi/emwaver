@@ -3,16 +3,18 @@ use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use emwaver_device::{
     list_ble_devices, list_wifi_devices, query_hardware_uid, query_version, wifi_clear,
-    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, Device,
-    DeviceCommandSender, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
+    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, BleDeviceInfo, Device,
+    DeviceCommandSender, DeviceInfo, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
 };
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
-use nix::unistd::Pid;
+use nix::unistd::{setsid, Pid};
 use std::fs;
 use std::fs::OpenOptions;
 use std::io::{ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -497,6 +499,15 @@ fn gateway_start(
         cmd.arg("--bootstrap-path").arg(bootstrap_path);
     }
 
+    #[cfg(unix)]
+    unsafe {
+        cmd.pre_exec(|| {
+            setsid()
+                .map(|_| ())
+                .map_err(|err| std::io::Error::new(ErrorKind::Other, err.to_string()))
+        });
+    }
+
     let child = cmd
         .stdin(Stdio::null())
         .stdout(Stdio::from(stdout))
@@ -859,6 +870,20 @@ fn shell_escape(value: &str) -> String {
 }
 
 #[derive(Debug, Clone)]
+struct ValidatedMidiDevice {
+    info: DeviceInfo,
+    hardware_uid: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct ValidatedBleDevice {
+    info: BleDeviceInfo,
+    hardware_uid: String,
+    version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 struct ValidatedWiFiDevice {
     info: WiFiDeviceInfo,
     hardware_uid: String,
@@ -866,30 +891,36 @@ struct ValidatedWiFiDevice {
 }
 
 fn list_devices_lines(wifi: Option<String>, wifi_port: u16) -> Result<Vec<String>> {
-    let devices = emwaver_device::list_devices()?;
     let mut out: Vec<String> = Vec::new();
-    if devices.is_empty() {
-        out.push("No MIDI input ports found.".to_string());
-    } else {
-        out.push("MIDI input ports:".to_string());
-        for device in devices {
-            let hint = if device.likely_emwaver {
-                "  <— likely EMWaver"
-            } else {
-                ""
-            };
-            out.push(format!("  {}: {}{hint}", device.id, device.name));
+
+    match validated_midi_devices(1_500, false) {
+        Ok(devices) if devices.is_empty() => {
+            out.push("No UID-validated EMWaver USB devices found.".to_string())
         }
+        Ok(devices) => {
+            out.push("USB devices:".to_string());
+            for device in devices {
+                let version = device.version.as_deref().unwrap_or("unknown fw");
+                out.push(format!(
+                    "  {}: {} ({version}, UID {})",
+                    device.info.id, device.info.name, device.hardware_uid
+                ));
+            }
+        }
+        Err(err) => out.push(format!("USB scan unavailable: {err:#}")),
     }
 
-    match list_ble_devices(1_500) {
-        Ok(devices) if devices.is_empty() => out.push("No EMWaver BLE devices found.".to_string()),
+    match validated_ble_devices(1_500, false) {
+        Ok(devices) if devices.is_empty() => {
+            out.push("No UID-validated EMWaver BLE devices found.".to_string())
+        }
         Ok(devices) => {
             out.push("BLE devices:".to_string());
             for device in devices {
+                let version = device.version.as_deref().unwrap_or("unknown fw");
                 out.push(format!(
-                    "  {}: {} ({})",
-                    device.id, device.name, device.address
+                    "  {}: {} ({}, {version}, UID {})",
+                    device.info.id, device.info.name, device.info.address, device.hardware_uid
                 ));
             }
         }
@@ -898,7 +929,7 @@ fn list_devices_lines(wifi: Option<String>, wifi_port: u16) -> Result<Vec<String
 
     match validated_wifi_devices(1_500) {
         Ok(devices) if devices.is_empty() => {
-            out.push("No EMWaver Wi-Fi devices found.".to_string())
+            out.push("No UID-validated EMWaver Wi-Fi devices found.".to_string())
         }
         Ok(devices) => {
             out.push("Wi-Fi devices:".to_string());
@@ -998,7 +1029,7 @@ fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16) -> Result<()> 
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_port)?)?
+            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_port, None)?)?
         );
         return Ok(());
     }
@@ -1008,27 +1039,72 @@ fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16) -> Result<()> 
     Ok(())
 }
 
-fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json::Value> {
+fn list_devices_json(
+    wifi: Option<String>,
+    wifi_port: u16,
+    gateway_status: Option<&GatewayTransportStatus>,
+) -> Result<serde_json::Value> {
     let mut devices = Vec::new();
-    for device in emwaver_device::list_devices()? {
-        devices.push(serde_json::json!({
-            "id": format!("midi:{}", device.id),
-            "name": device.name,
-            "transport": "USB",
-            "likelyEmwaver": device.likely_emwaver,
+
+    if let Some(status) = gateway_status {
+        let selected = selected_gateway_device(true, status);
+        if status.no_device
+            || status.sim_device
+            || selected
+                .get("hardwareUid")
+                .and_then(serde_json::Value::as_str)
+                .is_some_and(|uid| !uid.trim().is_empty())
+        {
+            push_unique_device(&mut devices, selected);
+        }
+        return Ok(serde_json::json!({
+            "ok": true,
+            "devices": devices,
+            "usbError": null,
+            "bleError": null,
+            "wifiDiscoveryError": null,
+            "wifiProbe": {
+                "ok": true,
+                "lines": [],
+            },
         }));
     }
 
-    let ble_error = match list_ble_devices(1_500) {
+    let usb_error = match validated_midi_devices(1_500, false) {
+        Ok(midi_devices) => {
+            for device in midi_devices {
+                push_unique_device(
+                    &mut devices,
+                    serde_json::json!({
+                        "id": format!("midi:{}", device.info.id),
+                        "name": device.info.name,
+                        "transport": "USB",
+                        "boardType": if device.info.likely_emwaver { "emwaver" } else { "unknown" },
+                        "firmwareVersion": device.version,
+                        "hardwareUid": device.hardware_uid,
+                    }),
+                );
+            }
+            None
+        }
+        Err(err) => Some(format!("USB scan unavailable: {err:#}")),
+    };
+
+    let ble_error = match validated_ble_devices(1_500, false) {
         Ok(ble_devices) => {
             for device in ble_devices {
-                devices.push(serde_json::json!({
-                    "id": format!("ble:{}", device.id),
-                    "name": device.name,
-                    "transport": "BLE",
-                    "boardType": "esp32s3",
-                    "address": device.address,
-                }));
+                push_unique_device(
+                    &mut devices,
+                    serde_json::json!({
+                        "id": format!("ble:{}", device.info.id),
+                        "name": device.info.name,
+                        "transport": "BLE",
+                        "boardType": "esp32s3",
+                        "address": device.info.address,
+                        "firmwareVersion": device.version,
+                        "hardwareUid": device.hardware_uid,
+                    }),
+                );
             }
             None
         }
@@ -1044,18 +1120,21 @@ fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json:
                     .get("board")
                     .cloned()
                     .unwrap_or_else(|| "esp32".to_string());
-                devices.push(serde_json::json!({
-                    "id": format!("wifi:{}:{}", device.info.host, device.info.port),
-                    "name": device.info.name,
-                    "transport": "Wi-Fi",
-                    "boardType": board,
-                    "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
-                    "hardwareUid": device.hardware_uid,
-                    "host": device.info.host,
-                    "port": device.info.port,
-                    "endpoint": format!("{}:{}", device.info.host, device.info.port),
-                    "addresses": device.info.addresses,
-                }));
+                push_unique_device(
+                    &mut devices,
+                    serde_json::json!({
+                        "id": format!("wifi:{}:{}", device.info.host, device.info.port),
+                        "name": device.info.name,
+                        "transport": "Wi-Fi",
+                        "boardType": board,
+                        "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
+                        "hardwareUid": device.hardware_uid,
+                        "host": device.info.host,
+                        "port": device.info.port,
+                        "endpoint": format!("{}:{}", device.info.host, device.info.port),
+                        "addresses": device.info.addresses,
+                    }),
+                );
             }
             None
         }
@@ -1064,12 +1143,10 @@ fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json:
 
     if let Some(host) = wifi.as_deref() {
         if let Ok((hardware_uid, version)) = probe_wifi_endpoint(host, wifi_port) {
-            let id = format!("wifi:{host}:{wifi_port}");
-            if !devices.iter().any(|device| {
-                device.get("id").and_then(serde_json::Value::as_str) == Some(id.as_str())
-            }) {
-                devices.push(serde_json::json!({
-                    "id": id,
+            push_unique_device(
+                &mut devices,
+                serde_json::json!({
+                    "id": format!("wifi:{host}:{wifi_port}"),
                     "name": format!("ESP32 Wi-Fi {host}:{wifi_port}"),
                     "transport": "Wi-Fi",
                     "boardType": "esp32",
@@ -1079,15 +1156,16 @@ fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json:
                     "port": wifi_port,
                     "endpoint": format!("{host}:{wifi_port}"),
                     "addresses": [host],
-                }));
-            }
+                }),
+            );
         }
     }
 
     let (wifi_probe_lines, wifi_ok) = wifi_probe_lines(wifi, wifi_port)?;
     Ok(serde_json::json!({
-        "ok": ble_error.is_none() && wifi_discovery_error.is_none(),
+        "ok": usb_error.is_none() && ble_error.is_none() && wifi_discovery_error.is_none(),
         "devices": devices,
+        "usbError": usb_error,
         "bleError": ble_error,
         "wifiDiscoveryError": wifi_discovery_error,
         "wifiProbe": {
@@ -1095,6 +1173,100 @@ fn list_devices_json(wifi: Option<String>, wifi_port: u16) -> Result<serde_json:
             "lines": wifi_probe_lines,
         },
     }))
+}
+
+fn push_unique_device(devices: &mut Vec<serde_json::Value>, device: serde_json::Value) {
+    let id = device
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    if let Some(id) = id.as_deref() {
+        if devices
+            .iter()
+            .any(|existing| existing.get("id").and_then(serde_json::Value::as_str) == Some(id))
+        {
+            return;
+        }
+    }
+    devices.push(device);
+}
+
+fn validated_midi_devices(timeout_ms: u64, skip_all: bool) -> Result<Vec<ValidatedMidiDevice>> {
+    if skip_all {
+        return Ok(Vec::new());
+    }
+
+    let devices = emwaver_device::list_devices()?;
+    let mut out = Vec::new();
+    for device_info in devices {
+        let device = Device::new();
+        if let Err(err) = device.connect_by_id(&device_info.id) {
+            info!(
+                "USB MIDI device {} failed connection validation: {err:#}",
+                device_info.name
+            );
+            continue;
+        }
+        match query_hardware_uid(device.as_ref(), timeout_ms) {
+            Ok(Some(hardware_uid)) => {
+                let version = query_version(device.as_ref(), 1_000).unwrap_or(None);
+                out.push(ValidatedMidiDevice {
+                    info: device_info,
+                    hardware_uid,
+                    version,
+                });
+            }
+            Ok(None) => info!(
+                "USB MIDI device {} did not return a valid hardware UID",
+                device_info.name
+            ),
+            Err(err) => info!(
+                "USB MIDI device {} failed UID validation: {err:#}",
+                device_info.name
+            ),
+        }
+    }
+    Ok(out)
+}
+
+fn validated_ble_devices(timeout_ms: u64, skip_all: bool) -> Result<Vec<ValidatedBleDevice>> {
+    if skip_all {
+        return Ok(Vec::new());
+    }
+
+    let devices = list_ble_devices(timeout_ms)?;
+    let mut out = Vec::new();
+    for device_info in devices {
+        let device = match BleDevice::connect_by_id(&device_info.id, timeout_ms) {
+            Ok(device) => device,
+            Err(err) => {
+                info!(
+                    "BLE device {} failed connection validation: {err:#}",
+                    device_info.name
+                );
+                continue;
+            }
+        };
+        match query_hardware_uid(device.as_ref(), timeout_ms) {
+            Ok(Some(hardware_uid)) => {
+                let version = query_version(device.as_ref(), 1_000).unwrap_or(None);
+                out.push(ValidatedBleDevice {
+                    info: device_info,
+                    hardware_uid,
+                    version,
+                });
+            }
+            Ok(None) => info!(
+                "BLE device {} did not return a valid hardware UID",
+                device_info.name
+            ),
+            Err(err) => info!(
+                "BLE device {} failed UID validation: {err:#}",
+                device_info.name
+            ),
+        }
+    }
+    Ok(out)
 }
 
 fn validated_wifi_devices(timeout_ms: u64) -> Result<Vec<ValidatedWiFiDevice>> {
@@ -1426,7 +1598,7 @@ fn run_script(
     ws.send(Message::Text(
         serde_json::json!({
             "type": "hello",
-            "role": "web",
+            "role": "cli",
             "protocolVersion": 1,
         })
         .to_string(),
@@ -1842,7 +2014,7 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_ascii_lowercase();
-            if role != "web" {
+            if role != "web" && role != "cli" {
                 send_ws_json(
                     &mut ws,
                     serde_json::json!({ "type": "error", "error": "invalid_role" }),
@@ -1854,7 +2026,7 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                 &mut ws,
                 serde_json::json!({
                     "type": "hello.ack",
-                    "role": "web",
+                    "role": role,
                     "hostSessionId": "local",
                 }),
             )?;
@@ -2021,41 +2193,7 @@ fn gateway_status_devices(
     connected: bool,
     transport_status: &GatewayTransportStatus,
 ) -> Vec<serde_json::Value> {
-    let mut devices = vec![selected_gateway_device(connected, transport_status)];
-    let selected_id = devices
-        .first()
-        .and_then(|device| device.get("id"))
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string);
-
-    if !transport_status.no_device && !transport_status.sim_device {
-        if let Ok(wifi_devices) = validated_wifi_devices(750) {
-            for device in wifi_devices {
-                let id = format!("wifi:{}:{}", device.info.host, device.info.port);
-                if selected_id.as_deref() == Some(id.as_str()) {
-                    continue;
-                }
-                let board = device
-                    .info
-                    .txt
-                    .get("board")
-                    .cloned()
-                    .unwrap_or_else(|| "esp32".to_string());
-                devices.push(serde_json::json!({
-                    "id": id,
-                    "name": device.info.name,
-                    "transport": "Wi-Fi",
-                    "boardType": board,
-                    "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
-                    "hardwareUid": device.hardware_uid,
-                    "connected": false,
-                    "endpoint": format!("{}:{}", device.info.host, device.info.port),
-                }));
-            }
-        }
-    }
-
-    devices
+    vec![selected_gateway_device(connected, transport_status)]
 }
 
 fn selected_gateway_device(
@@ -2320,18 +2458,21 @@ fn handle_gateway_http(mut stream: TcpStream, state: Arc<GatewayServerState>) ->
             200,
             serde_json::json!({ "examples": load_bundled_examples()? }),
         ),
-        ("GET", "/v1/devices") => match list_devices_json(None, 3922) {
-            Ok(body) => write_http_json(&mut stream, 200, body),
-            Err(err) => write_http_json(
-                &mut stream,
-                500,
-                serde_json::json!({
-                    "ok": false,
-                    "error": "devices_failed",
-                    "message": err.to_string(),
-                }),
-            ),
-        },
+        ("GET", "/v1/devices") => {
+            let transport_status = state.transport_status.lock().unwrap().clone();
+            match list_devices_json(None, 3922, Some(&transport_status)) {
+                Ok(body) => write_http_json(&mut stream, 200, body),
+                Err(err) => write_http_json(
+                    &mut stream,
+                    500,
+                    serde_json::json!({
+                        "ok": false,
+                        "error": "devices_failed",
+                        "message": err.to_string(),
+                    }),
+                ),
+            }
+        }
         _ if request.path.starts_with("/v1/") => write_http_json(
             &mut stream,
             404,

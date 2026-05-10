@@ -37,6 +37,8 @@ cargo run -p emwaver -- gateway serve --ble
 cargo run -p emwaver -- gateway serve --wifi 192.168.1.44
 ```
 
+Device discovery is active only for standalone scans such as `emwaver devices`. The scan returns physical devices only after a successful hardware UID read. When the browser talks to a running Gateway, device status and `/v1/devices` report the Gateway-owned transport from backend state instead of probing USB, BLE, or Wi-Fi again.
+
 Install a Linux user service:
 
 ```sh
