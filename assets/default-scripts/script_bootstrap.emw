@@ -8,6 +8,7 @@
 // - _scriptRegisterCallback(token: string, fn: Function): void
 //
 // Device operations are performed by the standard library via:
+// - _scriptLog(level: string, message: string): void
 // - _scriptSendPacket(bytes: Uint8Array, timeoutMs: number): Uint8Array
 //
 // Hosts may optionally provide:
@@ -27,6 +28,7 @@ var __scriptGlobal = (function () {
 // Note: This file runs in different JS environments (desktop backend, desktop frontend fallback,
 // mobile). Some environments expose these as true globals (not function parameters).
 var __host_scriptSendPacket = typeof _scriptSendPacket === 'function' ? _scriptSendPacket : null;
+var __host_scriptLog = typeof _scriptLog === 'function' ? _scriptLog : null;
 
 
 var __scriptClock = (function () {
@@ -59,8 +61,25 @@ function _scriptJoinArgs(args) {
   return parts.join(' ');
 }
 
-// NOTE: No Console / print stream.
-// Scripts are expected to communicate exclusively via the UI tree (UI.* + UI.render).
+function __scriptLog(level, args) {
+  if (typeof __host_scriptLog !== 'function') return;
+  var text = _scriptJoinArgs(args);
+  __host_scriptLog(String(level || 'log'), text);
+}
+
+var console = {
+  log: function () {
+    __scriptLog('log', arguments);
+  },
+};
+
+if (typeof print !== 'function') {
+  var print = function () {
+    console.log.apply(console, arguments);
+  };
+}
+
+__scriptGlobal.console = console;
 
 function __scriptIsShim(obj) {
   return !!obj && obj.__scriptShim === true;

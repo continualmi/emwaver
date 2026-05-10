@@ -76,6 +76,7 @@ Outbound:
 hello.ack
 device.status
 script.started
+script.log
 script.stopped
 script.error
 ui.snapshot

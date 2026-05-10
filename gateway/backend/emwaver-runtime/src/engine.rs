@@ -6,7 +6,7 @@ use boa_engine::{
     Context as BoaContext, JsValue, NativeFunction, Source,
 };
 use serde_json::Value as JsonValue;
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -37,6 +37,7 @@ pub struct Engine {
     callbacks: Arc<Mutex<HashMap<String, JsValue>>>,
     timeouts: Arc<Mutex<TimerRegistry>>,
     plot_buffers: Arc<Mutex<PlotBufferRegistry>>,
+    script_logs: Arc<Mutex<ScriptLogQueue>>,
 
     pub latest_tree: Arc<Mutex<Option<UiNode>>>,
     pub latest_metadata: Arc<Mutex<JsonValue>>,
@@ -61,6 +62,40 @@ struct PlotBufferRegistry {
     buffers: HashMap<String, Vec<u8>>,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ScriptLogEvent {
+    pub level: String,
+    pub message: String,
+    pub seq: u64,
+    pub ts: u64,
+}
+
+#[derive(Default)]
+struct ScriptLogQueue {
+    next_seq: u64,
+    events: VecDeque<ScriptLogEvent>,
+}
+
+impl ScriptLogQueue {
+    fn push(&mut self, level: String, message: String) {
+        self.next_seq = self.next_seq.saturating_add(1);
+        let ts = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|stamp| stamp.as_millis() as u64)
+            .unwrap_or(0);
+        self.events.push_back(ScriptLogEvent {
+            level,
+            message,
+            seq: self.next_seq,
+            ts,
+        });
+    }
+
+    fn drain(&mut self) -> Vec<ScriptLogEvent> {
+        self.events.drain(..).collect()
+    }
+}
+
 impl Engine {
     pub fn new(bootstrap_source: &str, bridge: Arc<dyn CommandBridge>) -> Result<Self> {
         let mut ctx = BoaContext::default();
@@ -69,6 +104,7 @@ impl Engine {
         let timeouts: Arc<Mutex<TimerRegistry>> = Arc::new(Mutex::new(TimerRegistry::default()));
         let plot_buffers: Arc<Mutex<PlotBufferRegistry>> =
             Arc::new(Mutex::new(PlotBufferRegistry::default()));
+        let script_logs: Arc<Mutex<ScriptLogQueue>> = Arc::new(Mutex::new(ScriptLogQueue::default()));
         let latest_tree: Arc<Mutex<Option<UiNode>>> = Arc::new(Mutex::new(None));
         let latest_metadata: Arc<Mutex<JsonValue>> =
             Arc::new(Mutex::new(JsonValue::Object(Default::default())));
@@ -273,6 +309,34 @@ impl Engine {
                 .context("register _scriptSendPacket")?;
         }
 
+        // _scriptLog(level: string, message: string)
+        {
+            let log_events = script_logs.clone();
+            let func = FunctionObjectBuilder::new(ctx.realm(), unsafe {
+                NativeFunction::from_closure(move |_this, args, _ctx| {
+                    let level = args
+                        .get(0)
+                        .and_then(|v| v.as_string())
+                        .map(|s| s.to_std_string().unwrap_or_else(|_| "log".to_string()))
+                        .unwrap_or_else(|| "log".to_string());
+                    let message = args
+                        .get(1)
+                        .and_then(|v| v.as_string())
+                        .map(|v| v.to_std_string().unwrap_or_default())
+                        .unwrap_or_default();
+                    log_events.lock().unwrap().push(level, message);
+                    Ok(JsValue::undefined())
+                })
+            })
+            .name("_scriptLog")
+            .length(2)
+            .build();
+
+            ctx.register_global_property(js_string!("_scriptLog"), func, Attribute::all())
+                .map_err(map_js_err)
+                .context("register _scriptLog")?;
+        }
+
         // Load bootstrap.
         ctx.eval(Source::from_bytes(bootstrap_source))
             .map_err(map_js_err)
@@ -283,6 +347,7 @@ impl Engine {
             callbacks,
             timeouts,
             plot_buffers,
+            script_logs,
             latest_tree,
             latest_metadata,
             _bridge: bridge,
@@ -326,6 +391,10 @@ impl Engine {
 
     pub fn pending_timeout_count(&self) -> usize {
         self.timeouts.lock().unwrap().timers.len()
+    }
+
+    pub fn drain_log_events(&self) -> Vec<ScriptLogEvent> {
+        self.script_logs.lock().unwrap().drain()
     }
 
     pub fn next_timer_due_in(&self) -> Option<Duration> {
@@ -1257,6 +1326,58 @@ mod tests {
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].0, vec![1, 2, 255]);
         assert_eq!(calls[0].1, 25);
+    }
+
+    #[test]
+    fn console_log_records_joined_messages() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script("console.log('hello', {x: 1}, [1, 2]);")
+            .expect("run script");
+
+        let logs = engine.drain_log_events();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].level, "log");
+        assert_eq!(logs[0].message, r#"hello {"x":1} [1,2]"#);
+    }
+
+    #[test]
+    fn print_alias_maps_to_console_log() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script("print('value', {ok: true});")
+            .expect("run script");
+
+        let logs = engine.drain_log_events();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(logs[0].level, "log");
+        assert_eq!(logs[0].message, r#"value {"ok":true}"#);
+    }
+
+    #[test]
+    fn drain_log_events_is_fifo() {
+        let bridge = Arc::new(RecordingBridge::new(None));
+        let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
+        let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
+        let engine = Engine::new(bootstrap, command_bridge).expect("engine");
+
+        engine
+            .run_script("console.log('one'); console.log('two');")
+            .expect("run script");
+
+        let logs = engine.drain_log_events();
+        assert_eq!(logs.len(), 2);
+        assert_eq!(logs[0].message, "one");
+        assert_eq!(logs[1].message, "two");
+        assert!(engine.drain_log_events().is_empty());
     }
 
     #[test]

@@ -19,7 +19,10 @@ use std::net::{TcpListener, TcpStream};
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 use tracing::info;
@@ -121,7 +124,7 @@ enum Commands {
         #[arg(long)]
         gateway_url: Option<String>,
 
-        /// Wait this long for script.started, script.error, or host.error.
+        /// Wait this long for gateway hello/script.started handshakes.
         #[arg(long, default_value_t = 5000)]
         timeout_ms: u64,
 
@@ -2290,8 +2293,20 @@ fn run_script(
     ))
     .context("failed to send gateway hello")?;
 
+    let hello_deadline = Instant::now() + timeout;
     loop {
-        let msg = ws.read().context("failed waiting for gateway hello.ack")?;
+        let msg = match ws.read() {
+            Ok(msg) => msg,
+            Err(tungstenite::Error::Io(err))
+                if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                if Instant::now() >= hello_deadline {
+                    anyhow::bail!("timed out waiting for gateway hello.ack");
+                }
+                continue;
+            }
+            Err(err) => return Err(err).context("failed waiting for gateway hello.ack"),
+        };
         let Message::Text(text) = msg else {
             continue;
         };
@@ -2318,10 +2333,57 @@ fn run_script(
         return Ok(());
     }
 
+    let interrupted = Arc::new(AtomicBool::new(false));
+    let interrupt_flag = interrupted.clone();
+    ctrlc::set_handler(move || {
+        interrupt_flag.store(true, Ordering::SeqCst);
+    })
+    .context("failed to install Ctrl-C handler")?;
+
+    if let MaybeTlsStream::Plain(stream) = ws.get_mut() {
+        stream
+            .set_read_timeout(Some(Duration::from_millis(250)))
+            .context("failed to set streaming read timeout")?;
+    }
+
+    let started_deadline = Instant::now() + timeout;
+    let mut script_started = false;
+    let mut active_script_id = None::<String>;
+
     loop {
+        if interrupted.swap(false, Ordering::SeqCst) {
+            let id = active_script_id
+                .as_deref()
+                .unwrap_or("local");
+            let _ = ws.send(Message::Text(
+                serde_json::json!({
+                    "type": "script.stop",
+                    "hostSessionId": "local",
+                    "scriptInstanceId": id,
+                })
+                .to_string(),
+            ));
+            println!("interrupt: stop requested");
+            return Ok(());
+        }
+
         let msg = match ws.read() {
             Ok(msg) => msg,
-            Err(err) => anyhow::bail!("timed out waiting for script result from gateway: {err}"),
+            Err(tungstenite::Error::Io(err))
+                if matches!(err.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+            {
+                if !script_started && Instant::now() >= started_deadline {
+                    anyhow::bail!("timed out waiting for script.started from gateway");
+                }
+                continue;
+            }
+            Err(tungstenite::Error::ConnectionClosed) => {
+                if script_started {
+                    anyhow::bail!("gateway disconnected while script was running");
+                }
+                anyhow::bail!("gateway disconnected before script started");
+            }
+            Err(err) => return Err(err).context("failed waiting for script result from gateway"),
         };
         let Message::Text(text) = msg else {
             continue;
@@ -2329,13 +2391,39 @@ fn run_script(
         let value: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
         let msg_type = value.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
+        let script_instance_id = value
+            .get("scriptInstanceId")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !script_instance_id.is_empty() {
+            active_script_id = Some(script_instance_id.to_string());
+        }
+
         match msg_type {
             "script.started" => {
+                if !script_started {
+                    script_started = true;
+                    if let Some(id) = &active_script_id {
+                        println!("running script {id}");
+                    }
+                    println!("started {name}");
+                }
                 if let Some(warning) = value.get("warning").and_then(|v| v.as_str()) {
                     println!("warning: {warning}");
                 }
-                println!("started {name}");
-                return Ok(());
+            }
+            "script.log" => {
+                let level = value.get("level").and_then(|v| v.as_str()).unwrap_or("log");
+                let message = value
+                    .get("message")
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+                    .unwrap_or_else(|| value.get("message").map_or_else(|| "".to_string(), |v| v.to_string()));
+                if level == "log" {
+                    println!("{message}");
+                } else {
+                    println!("[{level}] {message}");
+                }
             }
             "script.error" | "host.error" => {
                 let error = value
@@ -2343,6 +2431,16 @@ fn run_script(
                     .and_then(|v| v.as_str())
                     .unwrap_or("unknown_error");
                 anyhow::bail!("{msg_type}: {error}");
+            }
+            "script.stopped" => {
+                if script_started {
+                    if let Some(reason) = value.get("reason").and_then(|v| v.as_str()) {
+                        println!("stopped ({reason})");
+                    } else {
+                        println!("stopped");
+                    }
+                    return Ok(());
+                }
             }
             _ => {}
         }
@@ -2567,9 +2665,11 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                 if let (Some(engine), Some(script_id)) =
                     (active_engine.as_ref(), active_script_id.as_deref())
                 {
+                    send_script_log_events(&mut ws, engine, script_id)?;
                     if pump_engine_timers(&mut ws, engine, script_id, &mut rev)? > 0 {
                         continue;
                     }
+                    send_script_log_events(&mut ws, engine, script_id)?;
                 }
                 if last_status.elapsed() >= GATEWAY_UID_POLL_INTERVAL {
                     send_gateway_device_status(&mut ws, &state)?;
@@ -2693,6 +2793,7 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                             active_script_id.as_deref().unwrap(),
                             rev,
                         )?;
+                        send_script_log_events(&mut ws, &engine, &script_id)?;
                         active_engine = Some(engine);
                     }
                     Err(err) => {
@@ -2711,6 +2812,9 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                 let script_id = active_script_id
                     .take()
                     .unwrap_or_else(|| "local".to_string());
+                if let Some(engine) = active_engine.as_ref() {
+                    send_script_log_events(&mut ws, engine, &script_id)?;
+                }
                 active_engine = None;
                 send_ws_json(
                     &mut ws,
@@ -2733,6 +2837,7 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                     Ok(()) => {
                         rev += 1;
                         send_ui_snapshot(&mut ws, engine, script_id, rev)?;
+                        send_script_log_events(&mut ws, engine, script_id)?;
                     }
                     Err(err) => {
                         send_ws_json(
@@ -2757,9 +2862,32 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
         if let (Some(engine), Some(script_id)) =
             (active_engine.as_ref(), active_script_id.as_deref())
         {
+            send_script_log_events(&mut ws, engine, script_id)?;
             pump_engine_timers(&mut ws, engine, script_id, &mut rev)?;
         }
     }
+}
+
+fn send_script_log_events<S: Read + Write>(
+    ws: &mut WebSocket<S>,
+    engine: &Engine,
+    script_id: &str,
+) -> Result<()> {
+    for event in engine.drain_log_events() {
+        send_ws_json(
+            ws,
+            serde_json::json!({
+                "type": "script.log",
+                "hostSessionId": "local",
+                "scriptInstanceId": script_id,
+                "level": event.level,
+                "message": event.message,
+                "ts": event.ts,
+                "seq": event.seq,
+            }),
+        )?;
+    }
+    Ok(())
 }
 
 fn pump_engine_timers<S: Read + Write>(
