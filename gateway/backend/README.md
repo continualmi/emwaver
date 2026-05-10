@@ -33,7 +33,9 @@ cargo run -p emwaver -- run ../../assets/default-scripts/hello.emw --no-wait # r
 `emwaver run` now streams `script.log` events to the terminal by default. Use
 `--no-wait` to send the script and return as soon as the Gateway accepts
 the request. Without `--no-wait`, the CLI stays connected and exits when it sees
-`script.stopped`, or on terminal/error/disconnect.
+`script.stopped`, or on terminal/error/disconnect. Run lifecycle lines
+(`running script`, `started`, `stopped`, `warning`, interrupt notices) are shown
+with `--verbose-run`.
 
 Hardware transports are selected when the Gateway starts:
 

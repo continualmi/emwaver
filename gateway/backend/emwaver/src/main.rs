@@ -132,6 +132,10 @@ enum Commands {
         #[arg(long)]
         no_wait: bool,
 
+        /// Print run lifecycle events in addition to script logs.
+        #[arg(long)]
+        verbose_run: bool,
+
         /// Target device id reported by the running Gateway.
         #[arg(long)]
         device: Option<String>,
@@ -2262,6 +2266,7 @@ fn run_script(
     gateway_url: Option<String>,
     timeout_ms: u64,
     no_wait: bool,
+    verbose_run: bool,
     device: Option<String>,
     transport: Option<String>,
 ) -> Result<()> {
@@ -2363,7 +2368,9 @@ fn run_script(
                 })
                 .to_string(),
             ));
-            println!("interrupt: stop requested");
+            if verbose_run {
+                println!("interrupt: stop requested");
+            }
             return Ok(());
         }
 
@@ -2404,12 +2411,18 @@ fn run_script(
                 if !script_started {
                     script_started = true;
                     if let Some(id) = &active_script_id {
-                        println!("running script {id}");
+                        if verbose_run {
+                            println!("running script {id}");
+                        }
                     }
-                    println!("started {name}");
+                    if verbose_run {
+                        println!("started {name}");
+                    }
                 }
-                if let Some(warning) = value.get("warning").and_then(|v| v.as_str()) {
-                    println!("warning: {warning}");
+                if verbose_run {
+                    if let Some(warning) = value.get("warning").and_then(|v| v.as_str()) {
+                        println!("warning: {warning}");
+                    }
                 }
             }
             "script.log" => {
@@ -2435,8 +2448,10 @@ fn run_script(
             "script.stopped" => {
                 if script_started {
                     if let Some(reason) = value.get("reason").and_then(|v| v.as_str()) {
-                        println!("stopped ({reason})");
-                    } else {
+                        if verbose_run {
+                            println!("stopped ({reason})");
+                        }
+                    } else if verbose_run {
                         println!("stopped");
                     }
                     return Ok(());
@@ -3647,6 +3662,7 @@ fn main() -> Result<()> {
             gateway_url,
             timeout_ms,
             no_wait,
+            verbose_run,
             device,
             transport,
         } => run_script(
@@ -3656,6 +3672,7 @@ fn main() -> Result<()> {
             gateway_url,
             timeout_ms,
             no_wait,
+            verbose_run,
             device,
             transport,
         ),
