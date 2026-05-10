@@ -27,6 +27,7 @@ final class MacWiFiManager {
     static let serviceType = "_emwaver._tcp"
     private static let livenessPingInterval: DispatchTimeInterval = .seconds(2)
     private static let livenessPingTimeout: DispatchTimeInterval = .seconds(3)
+    private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryConnectTimeout: DispatchTimeInterval = .seconds(3)
 
     private struct BonjourMetadata {
@@ -53,6 +54,7 @@ final class MacWiFiManager {
     private var advertisedDeviceIDs: Set<String> = []
     private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var pendingResponses: [UInt16: PendingResponse] = [:]
+    private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
     private var livenessPingID: UInt64 = 0
     private var pendingLivenessPingID: UInt64?
@@ -110,6 +112,7 @@ final class MacWiFiManager {
         }
         self.browser = browser
         browser.start(queue: queue)
+        startDiscoveryReachabilityTimer()
         publishDevices()
     }
 
@@ -400,7 +403,32 @@ final class MacWiFiManager {
         publishDevices()
     }
 
-    private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord) {
+    private func startDiscoveryReachabilityTimer() {
+        discoveryReachabilityTimer?.setEventHandler {}
+        discoveryReachabilityTimer?.cancel()
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(
+            deadline: .now() + Self.discoveryReachabilityInterval,
+            repeating: Self.discoveryReachabilityInterval
+        )
+        timer.setEventHandler { [weak self] in
+            self?.validatePublishedAdvertisedRecords()
+        }
+        discoveryReachabilityTimer = timer
+        timer.resume()
+    }
+
+    private func validatePublishedAdvertisedRecords() {
+        for record in discoveredDevicesByID.values where record.isAdvertised && connectedDeviceID != record.id {
+            guard advertisedDeviceIDs.contains(record.id),
+                  !validatingAdvertisedDeviceIDs.contains(record.id) else {
+                continue
+            }
+            validateAdvertisedRecord(record, removeOnFailure: true)
+        }
+    }
+
+    private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool = false) {
         guard let port = NWEndpoint.Port(rawValue: UInt16(record.port)) else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
         Self.log("validating advertised tcp id=\(record.id)")
@@ -427,6 +455,9 @@ final class MacWiFiManager {
                     Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
                     self.validatingAdvertisedDeviceIDs.remove(record.id)
                     connection.cancel()
+                    if removeOnFailure {
+                        self.removeUnreachableAdvertisedRecord(record.id)
+                    }
                 case .cancelled:
                     self.validatingAdvertisedDeviceIDs.remove(record.id)
                 default:
@@ -441,7 +472,20 @@ final class MacWiFiManager {
             Self.log("advertised validation timed out id=\(record.id)")
             self.validatingAdvertisedDeviceIDs.remove(record.id)
             connection.cancel()
+            if removeOnFailure {
+                self.removeUnreachableAdvertisedRecord(record.id)
+            }
         }
+    }
+
+    private func removeUnreachableAdvertisedRecord(_ id: String) {
+        guard connectedDeviceID != id,
+              discoveredDevicesByID[id]?.isAdvertised == true else {
+            return
+        }
+        Self.log("removing unreachable advertised discovery id=\(id)")
+        discoveredDevicesByID.removeValue(forKey: id)
+        publishDevices()
     }
 
     private func markConnected(record: MacWiFiDeviceRecord, socket: URLSessionWebSocketTask) {
