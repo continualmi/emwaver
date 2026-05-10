@@ -26,6 +26,8 @@ export type RemoteDeviceStatus = {
     addresses?: string[];
     connected?: boolean;
     connectionState?: string;
+    claimable?: boolean;
+    requiresSession?: boolean;
     isActive?: boolean;
     isSelected?: boolean;
     hardwareUid?: string;

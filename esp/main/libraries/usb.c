@@ -30,6 +30,7 @@
 #include "freertos/task.h"
 #include "tinyusb.h"
 #include "transport_debug.h"
+#include "transport_session.h"
 #include "tusb.h"
 
 static const char *TAG = "USB";
@@ -322,7 +323,8 @@ static void process_sysex_frame(const uint8_t *sysex)
     }
 
     const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
-    if (s_buffer_type == EMW_BUFFER_CIRCULAR) {
+    if (s_buffer_type == EMW_BUFFER_CIRCULAR &&
+        transport_session_allows_stream(EMW_COMMAND_SOURCE_USB)) {
         uint16_t bytes_available = 0;
         if (usb_ingest_stream_lane(stream_lane, &bytes_available)) {
             usb_queue_status_packet(bytes_available);

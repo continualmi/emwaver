@@ -157,13 +157,14 @@ Current reintegration status:
 - Station-mode Wi-Fi reconnect uses capped exponential backoff so bad credentials or poor signal do not create a tight reconnect loop. If the reconnect task cannot be created, firmware clears the pending flag and attempts an immediate reconnect instead of leaving status stuck in a reconnecting state.
 - On station disconnect, the firmware clears active Wi-Fi session state and stops the WebSocket/mDNS service until a new IP address is acquired.
 - Reprovisioning Wi-Fi while station mode is already running clears the active WebSocket/mDNS listener state and reconnects with the new credentials instead of relying on a cold-start station event.
-- Initial Wi-Fi provisioning is available through the shared binary command lane (`EMW_OP_WIFI_CONFIG`) so USB MIDI and BLE can chunk SSID/password into NVS. The firmware owns the stable default hostname, derived from the device MAC suffix. The binary lane requires `EMW_WIFI_CFG_BEGIN` before staged field/apply operations and clears staged credentials after successful apply or clear. The same binary status command reports provisioned, connected socket state, station online/offline, reconnecting state, the last ESP-IDF station disconnect reason, the current station IPv4 address when online, and whether sampler/transmit runtime work is active. The older text command path also accepts `wifi provision --ssid=<ssid> --password=<password>`, plus `wifi status` and `wifi clear` for diagnostics/recovery; text `wifi status` mirrors the reconnecting state, runtime-active state, and last disconnect reason and includes the advertised hostname and station IP for local USB/BLE debugging.
+- Initial Wi-Fi provisioning is available through the shared binary command lane (`EMW_OP_WIFI_CONFIG`) so USB MIDI and BLE can chunk SSID/password into NVS. The firmware owns the stable default hostname, derived from the device MAC suffix. The binary lane requires `EMW_WIFI_CFG_BEGIN` before staged field/apply operations and clears staged credentials after successful apply or clear. The same binary status command reports provisioned, connected socket state, station online/offline, reconnecting state, the last ESP-IDF station disconnect reason, the current station IPv4 address when online, and whether sampler/transmit runtime work is active. The older text command path also accepts `wifi provision --ssid=<ssid> --password=<password>`, plus `wifi status` and `wifi clear` after a transport-session claim for diagnostics/recovery; text `wifi status` mirrors the reconnecting state, runtime-active state, and last disconnect reason and includes the advertised hostname and station IP for local USB/BLE debugging.
 - Wi-Fi provisioning rejects overlong SSID and password values instead of truncating them before NVS storage.
 - Firmware-generated Wi-Fi hostnames fit the ESP32 mDNS hostname contract and fall back to `emwaver-esp32` if the MAC suffix is unavailable.
 - Clearing Wi-Fi setup over the binary command lane or text command erases the NVS Wi-Fi namespace, stops the WebSocket/mDNS service, clears socket state, and stops station mode so recovery does not leave a stale command listener running.
 - Wi-Fi WebSocket command sessions are accepted immediately after the socket opens. LAN/VPN reachability is the trust boundary; keep the control port on trusted private networks only.
 - Wi-Fi WebSocket binary frames carry the existing 48-byte EMWaver SysEx packet directly. There is no Wi-Fi-specific envelope or sequence layer; the firmware runtime command model is the same one used by USB MIDI and BLE.
 - The Wi-Fi WebSocket server keeps a single active socket and rejects another concurrent client as busy instead of letting a second app silently replace the active command owner. When the active WebSocket closes, receives a rejected command frame, or hits a frame receive error, firmware clears the owner state so the next local client can connect.
+- ESP multi-transport runtime control now uses an explicit transport session opcode (`EMW_OP_TRANSPORT_SESSION`). USB/BLE/Wi-Fi remain available for UID/version/board/status discovery, but GPIO/SPI/sampler/PWM/transmit and other runtime control commands require a prior claim on exactly one transport. Non-selected transports return busy for runtime/control traffic until the active session disconnects or times out.
 - The previous HID/BadUSB experiment is preserved in `main/libraries/usb_hid_legacy.c` but is not part of the active build.
 - macOS now auto-connects to ESP32-S3 over USB MIDI first when present, then scans for the EMWaver BLE service and uses BLE for local scripts when no wired runtime is connected.
 - `EMW_OP_ENTER_DFU` is intentionally still unsupported on ESP bring-up; update mode is treated as a separate ESP-native flashing path rather than as STM32 DFU parity.
@@ -186,12 +187,13 @@ See `../docs/ESP32_S2_SUPPORT_PLAN.md` for the implementation plan and validatio
 
 ## Recommended transport architecture
 
-EMWaver should keep **all three transports** in scope for ESP32-S3, but the firmware and apps should still speak **one EMWaver device protocol**.
+EMWaver should keep **all three transports** in scope for ESP32-S3 discovery, but the firmware and apps should still speak **one EMWaver device protocol** and claim only one active control transport at a time.
 
 Recommended rule:
 - Keep **USB first** for wired ESP32-S3 sessions because it is deterministic and easy to recover.
 - Mirror the existing STM32 EMWaver request/response behavior on ESP32, including superframe command/response semantics.
 - Reuse the same **SysEx packet protocol across USB and BLE**, with transport-specific GATT/MIDI framing only at the edge.
+- Treat UID/version/board/status as discovery operations and require an explicit transport-session claim before runtime control.
 - Treat OTA/update paths as a separate concern from the steady-state control/runtime protocol.
 
 This keeps app complexity under control:

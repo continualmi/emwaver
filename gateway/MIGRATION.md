@@ -143,7 +143,7 @@ script state channel for CLI/browser/Agent automation.
 - [x] macOS and Windows no longer start or expose Gateway host control.
 - [x] Gateway browser status is non-invasive: it reports cached Gateway-owned transport state and does not open competing device probe sessions.
 - [x] Gateway device lists expose physical devices only after a successful local hardware UID read.
-- [x] Gateway polls USB MIDI, BLE, and Wi-Fi together; selected device/transport settings are persisted locally.
+- [x] Gateway discovers USB MIDI, BLE, and Wi-Fi together; selected device/transport settings are persisted locally, and ESP multi-transport boards claim exactly one control transport per script session.
 
 ## Current Status
 
@@ -155,9 +155,9 @@ Completed so far:
 - Browser frontend package moved to `gateway/frontend/`.
 - The old top-level runtime workspace directory was removed.
 - Rust Gateway serves frontend assets, HTTP endpoints, WebSocket protocol, and runtime ownership in one process.
-- Browser status and `/v1/devices` use Gateway-owned multi-transport state while the Gateway is running, avoiding extra browser-triggered USB/BLE/Wi-Fi probe sessions.
+- Browser status and `/v1/devices` use Gateway-owned multi-transport discovery state while the Gateway is running, avoiding extra browser-triggered USB/BLE/Wi-Fi probe sessions.
 - `emwaver devices` reads Gateway state; Gateway is required for CLI/browser device control.
-- Gateway settings persist the selected UID and transport preference. Transport auto-selection uses USB, then BLE, then Wi-Fi.
+- Gateway settings persist the selected UID and transport preference. Transport auto-selection uses USB, then BLE, then Wi-Fi; explicit transport selection no longer falls back silently when unavailable.
 - Direct CLI runtime, native app Gateway host control, Node broker runtime, and Rust Agent surfaces were removed.
 - Active docs, skills, scripts, workflows, and parity manifests now describe the Gateway-only contract.
 - `cargo fmt --check`, `cargo build -q -p emwaver`, and `cargo test -q -p emwaver-runtime -p emwaver-device` pass from `gateway/backend/`.

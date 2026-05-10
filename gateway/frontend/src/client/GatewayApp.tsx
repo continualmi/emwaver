@@ -46,8 +46,9 @@ function runtimeLabel(runtimeOwner?: string) {
 }
 
 function deviceDetail(device: NonNullable<RemoteDeviceStatus["devices"]>[number], runtimeOwner?: string) {
+  const state = device.connectionState || (device.connected ? "claimed" : "available");
   const parts = [
-    device.connected ? "connected" : "available",
+    state,
     device.transport,
     device.boardType,
     device.endpoint,

@@ -2,7 +2,13 @@ use anyhow::{Context, Result};
 
 pub const EMW_OP_VERSION: u8 = 0x01;
 pub const EMW_OP_HARDWARE_UID_GET: u8 = 0x08;
+pub const EMW_OP_BOARD_GET: u8 = 0x09;
 pub const EMW_OP_WIFI_CONFIG: u8 = 0x0a;
+pub const EMW_OP_TRANSPORT_SESSION: u8 = 0x0b;
+
+pub const EMW_RESP_STATUS_OK: u8 = 0x80;
+pub const EMW_RESP_STATUS_ERR: u8 = 0x81;
+pub const EMW_RESP_STATUS_BUSY: u8 = 0x82;
 
 const WIFI_CFG_BEGIN: u8 = 0x00;
 const WIFI_CFG_FIELD: u8 = 0x01;
@@ -15,6 +21,11 @@ const WIFI_FIELD_PASSWORD: u8 = 0x01;
 const WIFI_SSID_LIMIT: usize = 32;
 const WIFI_PASSWORD_LIMIT: usize = 64;
 const WIFI_FIELD_CHUNK: usize = 13;
+
+const TRANSPORT_SESSION_STATUS: u8 = 0x00;
+const TRANSPORT_SESSION_CONNECT: u8 = 0x01;
+const TRANSPORT_SESSION_DISCONNECT: u8 = 0x02;
+const TRANSPORT_SESSION_HEARTBEAT: u8 = 0x03;
 
 pub trait DeviceCommandSender: Send + Sync + 'static {
     fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>>;
@@ -29,6 +40,11 @@ pub struct WiFiStatus {
     pub disconnect_reason: Option<u16>,
     pub station_ip: Option<String>,
     pub runtime_active: Option<bool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TransportSessionStatus {
+    pub active_source: u8,
 }
 
 pub fn query_hardware_uid(
@@ -46,6 +62,74 @@ pub fn query_version(sender: &dyn DeviceCommandSender, timeout_ms: u64) -> Resul
         return Ok(None);
     };
     Ok(parse_version_response(&response))
+}
+
+pub fn query_board(sender: &dyn DeviceCommandSender, timeout_ms: u64) -> Result<Option<String>> {
+    let Some(response) = sender.send_command(&[EMW_OP_BOARD_GET], timeout_ms)? else {
+        return Ok(None);
+    };
+    Ok(parse_text_response(&response))
+}
+
+pub fn transport_session_status(
+    sender: &dyn DeviceCommandSender,
+    timeout_ms: u64,
+) -> Result<Option<TransportSessionStatus>> {
+    let Some(response) = sender.send_command(
+        &[EMW_OP_TRANSPORT_SESSION, TRANSPORT_SESSION_STATUS],
+        timeout_ms,
+    )?
+    else {
+        return Ok(None);
+    };
+    Ok(parse_transport_session_status_response(&response))
+}
+
+pub fn transport_session_connect(
+    sender: &dyn DeviceCommandSender,
+    source: u8,
+    timeout_ms: u64,
+) -> Result<()> {
+    send_ack(
+        sender,
+        &[EMW_OP_TRANSPORT_SESSION, TRANSPORT_SESSION_CONNECT, source],
+        timeout_ms,
+        "transport connect was rejected by the device",
+    )
+}
+
+pub fn transport_session_disconnect(
+    sender: &dyn DeviceCommandSender,
+    source: u8,
+    timeout_ms: u64,
+) -> Result<()> {
+    send_ack(
+        sender,
+        &[
+            EMW_OP_TRANSPORT_SESSION,
+            TRANSPORT_SESSION_DISCONNECT,
+            source,
+        ],
+        timeout_ms,
+        "transport disconnect was rejected by the device",
+    )
+}
+
+pub fn transport_session_heartbeat(
+    sender: &dyn DeviceCommandSender,
+    source: u8,
+    timeout_ms: u64,
+) -> Result<()> {
+    send_ack(
+        sender,
+        &[
+            EMW_OP_TRANSPORT_SESSION,
+            TRANSPORT_SESSION_HEARTBEAT,
+            source,
+        ],
+        timeout_ms,
+        "transport heartbeat was rejected by the device",
+    )
 }
 
 pub fn wifi_provision(
@@ -67,21 +151,36 @@ pub fn wifi_provision(
         anyhow::bail!("Wi-Fi password must be {WIFI_PASSWORD_LIMIT} bytes or less");
     }
 
-    send_wifi_ack(sender, &[EMW_OP_WIFI_CONFIG, WIFI_CFG_BEGIN], timeout_ms)
-        .context("Wi-Fi setup failed to start")?;
+    send_ack(
+        sender,
+        &[EMW_OP_WIFI_CONFIG, WIFI_CFG_BEGIN],
+        timeout_ms,
+        "Wi-Fi setup failed to start",
+    )
+    .context("Wi-Fi setup failed to start")?;
     send_wifi_field(sender, WIFI_FIELD_SSID, ssid_bytes, timeout_ms)
         .context("Wi-Fi setup failed while sending SSID")?;
     if !password_bytes.is_empty() {
         send_wifi_field(sender, WIFI_FIELD_PASSWORD, password_bytes, timeout_ms)
             .context("Wi-Fi setup failed while sending password")?;
     }
-    send_wifi_ack(sender, &[EMW_OP_WIFI_CONFIG, WIFI_CFG_APPLY], timeout_ms)
-        .context("Wi-Fi setup was rejected by the device")
+    send_ack(
+        sender,
+        &[EMW_OP_WIFI_CONFIG, WIFI_CFG_APPLY],
+        timeout_ms,
+        "Wi-Fi setup was rejected by the device",
+    )
+    .context("Wi-Fi setup was rejected by the device")
 }
 
 pub fn wifi_clear(sender: &dyn DeviceCommandSender, timeout_ms: u64) -> Result<()> {
-    send_wifi_ack(sender, &[EMW_OP_WIFI_CONFIG, WIFI_CFG_CLEAR], timeout_ms)
-        .context("Wi-Fi setup clear was rejected by the device")
+    send_ack(
+        sender,
+        &[EMW_OP_WIFI_CONFIG, WIFI_CFG_CLEAR],
+        timeout_ms,
+        "Wi-Fi setup clear was rejected by the device",
+    )
+    .context("Wi-Fi setup clear was rejected by the device")
 }
 
 pub fn wifi_status(sender: &dyn DeviceCommandSender, timeout_ms: u64) -> Result<WiFiStatus> {
@@ -92,7 +191,7 @@ pub fn wifi_status(sender: &dyn DeviceCommandSender, timeout_ms: u64) -> Result<
 }
 
 pub fn parse_hardware_uid_response(response: &[u8]) -> Option<String> {
-    if response.len() < 7 || response.first().copied() != Some(0x80) {
+    if response.len() < 7 || response.first().copied() != Some(EMW_RESP_STATUS_OK) {
         return None;
     }
     let payload = &response[1..];
@@ -113,7 +212,7 @@ pub fn parse_hardware_uid_response(response: &[u8]) -> Option<String> {
 }
 
 pub fn parse_version_response(response: &[u8]) -> Option<String> {
-    if response.len() < 4 || response.first().copied() != Some(0x80) {
+    if response.len() < 4 || response.first().copied() != Some(EMW_RESP_STATUS_OK) {
         return None;
     }
     if response[4..].iter().any(|byte| *byte != 0) {
@@ -122,8 +221,23 @@ pub fn parse_version_response(response: &[u8]) -> Option<String> {
     Some(format!("{}.{}", response[1], response[2]))
 }
 
+pub fn parse_text_response(response: &[u8]) -> Option<String> {
+    if response.first().copied() != Some(EMW_RESP_STATUS_OK) {
+        return None;
+    }
+    let bytes = response[1..]
+        .iter()
+        .copied()
+        .take_while(|byte| *byte != 0)
+        .collect::<Vec<_>>();
+    if bytes.is_empty() {
+        return None;
+    }
+    String::from_utf8(bytes).ok()
+}
+
 pub fn parse_wifi_status_response(response: &[u8]) -> Option<WiFiStatus> {
-    if response.len() < 3 || response.first().copied() != Some(0x80) {
+    if response.len() < 3 || response.first().copied() != Some(EMW_RESP_STATUS_OK) {
         return None;
     }
     let station_online = response.get(3).map(|value| *value != 0);
@@ -153,14 +267,28 @@ pub fn parse_wifi_status_response(response: &[u8]) -> Option<WiFiStatus> {
     })
 }
 
-fn send_wifi_ack(sender: &dyn DeviceCommandSender, command: &[u8], timeout_ms: u64) -> Result<()> {
+pub fn parse_transport_session_status_response(response: &[u8]) -> Option<TransportSessionStatus> {
+    if response.len() < 2 || response.first().copied() != Some(EMW_RESP_STATUS_OK) {
+        return None;
+    }
+    Some(TransportSessionStatus {
+        active_source: response[1],
+    })
+}
+
+fn send_ack(
+    sender: &dyn DeviceCommandSender,
+    command: &[u8],
+    timeout_ms: u64,
+    rejected_message: &str,
+) -> Result<()> {
     let response = sender
         .send_command(command, timeout_ms)?
         .context("command timed out")?;
-    if response.first().copied() == Some(0x80) {
-        Ok(())
-    } else {
-        anyhow::bail!("device returned negative Wi-Fi config response")
+    match response.first().copied() {
+        Some(EMW_RESP_STATUS_OK) => Ok(()),
+        Some(EMW_RESP_STATUS_BUSY) => anyhow::bail!("device is busy with another transport"),
+        _ => anyhow::bail!("{rejected_message}"),
     }
 }
 
@@ -182,7 +310,12 @@ fn send_wifi_field(
             count as u8,
         ]);
         command.extend_from_slice(&bytes[offset..offset + count]);
-        send_wifi_ack(sender, &command, timeout_ms)?;
+        send_ack(
+            sender,
+            &command,
+            timeout_ms,
+            "Wi-Fi setup field was rejected by the device",
+        )?;
         offset += count;
     }
     Ok(())
@@ -235,7 +368,7 @@ mod tests {
 
     #[test]
     fn parses_six_byte_hardware_uid() {
-        let response = [0x80, 1, 2, 3, 0xab, 0xcd, 0xef, 0, 0];
+        let response = [EMW_RESP_STATUS_OK, 1, 2, 3, 0xab, 0xcd, 0xef, 0, 0];
         assert_eq!(
             parse_hardware_uid_response(&response).as_deref(),
             Some("010203abcdef")
@@ -244,13 +377,66 @@ mod tests {
 
     #[test]
     fn rejects_non_six_byte_hardware_uid() {
-        assert_eq!(parse_hardware_uid_response(&[0x80, 1, 2, 0, 0, 0, 0]), None);
+        assert_eq!(
+            parse_hardware_uid_response(&[EMW_RESP_STATUS_OK, 1, 2, 0, 0, 0, 0]),
+            None
+        );
+    }
+
+    #[test]
+    fn parses_board_text_response() {
+        let response = [
+            EMW_RESP_STATUS_OK,
+            b'e',
+            b's',
+            b'p',
+            b'3',
+            b'2',
+            b's',
+            b'3',
+            0,
+            0,
+        ];
+        assert_eq!(parse_text_response(&response).as_deref(), Some("esp32s3"));
+    }
+
+    #[test]
+    fn parses_transport_session_status() {
+        let response = [EMW_RESP_STATUS_OK, 2, 0, 0];
+        assert_eq!(
+            parse_transport_session_status_response(&response),
+            Some(TransportSessionStatus { active_source: 2 })
+        );
+    }
+
+    #[test]
+    fn transport_connect_reports_busy() {
+        let sender = FakeSender::new(vec![vec![EMW_RESP_STATUS_BUSY]]);
+        let err = transport_session_connect(&sender, 1, 10).expect_err("busy");
+        assert!(err.to_string().contains("busy"));
     }
 
     #[test]
     fn parses_wifi_status_payload() {
         let status = parse_wifi_status_response(&[
-            0x80, 1, 0, 1, 1, 201, 0, 1, 192, 168, 1, 44, 1, 0, 0, 0, 0, 0,
+            EMW_RESP_STATUS_OK,
+            1,
+            0,
+            1,
+            1,
+            201,
+            0,
+            1,
+            192,
+            168,
+            1,
+            44,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
         ])
         .expect("status");
         assert!(status.provisioned);
@@ -264,7 +450,7 @@ mod tests {
 
     #[test]
     fn wifi_provision_chunks_fields_like_macos() {
-        let sender = FakeSender::new(vec![vec![0x80]; 6]);
+        let sender = FakeSender::new(vec![vec![EMW_RESP_STATUS_OK]; 6]);
         wifi_provision(
             &sender,
             "abcdefghijklmnopqrstuvwxyz123456",

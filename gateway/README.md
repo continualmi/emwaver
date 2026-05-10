@@ -26,9 +26,10 @@ Native apps keep their own local runtime, transports, firmware update flows, Wi-
 - `gateway/frontend/` contains the React browser UI package and frontend build scripts.
 - `emw gateway serve` runs the localhost webserver and runtime owner in one process.
 - `emw run` requires a running Gateway and sends `script.run` over localhost WebSocket. `emwaver` remains the full binary name; `emw` is the intended shortcut.
-- Gateway polls USB MIDI, BLE, and Wi-Fi in one backend process. Device listing is UID-backed: physical devices are exposed only after the backend can read a hardware UID.
+- Gateway discovers USB MIDI, BLE, and Wi-Fi in one backend process. Device listing is UID-backed: physical devices are exposed only after the backend can read a hardware UID.
 - Browser status, `/v1/devices`, and `emw devices` report cached Gateway-owned transport state. CLI/browser commands do not open competing probe sessions.
 - Gateway persists the selected device UID and transport preference in local settings. Commands default to that state; when transport is `auto`, routing priority is USB, then BLE, then Wi-Fi.
+- ESP multi-transport boards stay discoverable on all available transports, but a running script claims one transport and other transports answer only identity/status until disconnect.
 
 Useful target commands:
 

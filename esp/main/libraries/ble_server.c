@@ -28,6 +28,7 @@
 #include "command_registry.h"
 #include "emw_proto.h"
 #include "transport_debug.h"
+#include "transport_session.h"
 
 #ifndef EMWAVER_ENABLE_OTA
 #define EMWAVER_ENABLE_OTA 1
@@ -289,6 +290,10 @@ static int gatt_svr_chr_access(uint16_t conn_handle, uint16_t attr_handle,
                     
                     // If in transmitter mode, add data to circular buffer instead of command queue
                     if (ble_transmitter_mode) {
+                        if (!transport_session_allows_stream(EMW_COMMAND_SOURCE_BLE)) {
+                            return BLE_ATT_ERR_UNLIKELY;
+                        }
+
                         // Allow an emergency stop command even while in transmitter mode.
                         // Transmit payloads are streamed in larger-than-64B chunks, while
                         // commands are fixed 64B ASCII packets (zero padded).

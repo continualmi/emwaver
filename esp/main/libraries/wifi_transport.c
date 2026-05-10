@@ -26,6 +26,7 @@
 #include "sampler.h"
 #include "sdkconfig.h"
 #include "transport_debug.h"
+#include "transport_session.h"
 #include "usb.h"
 
 #ifndef EMWAVER_ENABLE_WIFI_TRANSPORT
@@ -777,7 +778,8 @@ static bool enqueue_sysex(const uint8_t *sysex)
             break;
         }
     }
-    if (stream_any || !cmd_any) {
+    if ((stream_any || !cmd_any) &&
+        transport_session_allows_stream(EMW_COMMAND_SOURCE_WIFI)) {
         uint16_t bytes_available = 0;
         if (usb_ingest_stream_lane(stream_lane, &bytes_available)) {
             (void)wifi_transport_send_buffer_status(bytes_available, true);

@@ -2,9 +2,10 @@ use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use emwaver_device::{
-    list_ble_devices, list_wifi_devices, query_hardware_uid, query_version, wifi_clear,
-    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, Device,
-    DeviceCommandSender, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
+    list_ble_devices, list_wifi_devices, query_board, query_hardware_uid, query_version,
+    transport_session_connect, transport_session_disconnect, transport_session_heartbeat,
+    transport_session_status, wifi_clear, wifi_disconnect_reason_text, wifi_provision, wifi_status,
+    BleDevice, Device, DeviceCommandSender, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
 };
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
@@ -36,6 +37,10 @@ use url::Url;
 
 const DEFAULT_GATEWAY_PORT: u16 = 3921;
 const GATEWAY_UID_POLL_INTERVAL: Duration = Duration::from_secs(5);
+const GATEWAY_TRANSPORT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
+const TRANSPORT_SOURCE_USB: u8 = 1;
+const TRANSPORT_SOURCE_BLE: u8 = 2;
+const TRANSPORT_SOURCE_WIFI: u8 = 3;
 
 #[derive(Parser, Debug)]
 #[command(name = "emwaver", about = "EMWaver Gateway CLI")]
@@ -1393,9 +1398,9 @@ struct GatewayDeviceEntry {
     host: Option<String>,
     port: Option<u16>,
     addresses: Vec<String>,
-    connected: bool,
-    bridge: Arc<dyn CommandBridge>,
-    sender: Option<Arc<dyn DeviceCommandSender>>,
+    claimable: bool,
+    requires_session: bool,
+    bridge: Option<Arc<dyn CommandBridge>>,
 }
 
 impl GatewayDeviceEntry {
@@ -1410,9 +1415,26 @@ impl GatewayDeviceEntry {
     fn to_json(
         &self,
         settings: &GatewaySettings,
-        active_transport_id: Option<&str>,
+        active_claims: &[GatewayActiveClaim],
     ) -> serde_json::Value {
         let device_key = self.device_key();
+        let active_for_uid = self.hardware_uid.as_deref().and_then(|uid| {
+            active_claims
+                .iter()
+                .find(|claim| uid.eq_ignore_ascii_case(&claim.hardware_uid))
+        });
+        let is_claimed =
+            active_for_uid.is_some_and(|claim| claim.transport_id == self.transport_id);
+        let is_busy = active_for_uid.is_some_and(|claim| claim.transport_id != self.transport_id);
+        let connection_state = if is_claimed {
+            "claimed"
+        } else if is_busy {
+            "busy"
+        } else if self.claimable {
+            "available"
+        } else {
+            "unavailable"
+        };
         let selected_uid = settings.selected_device_uid.as_deref();
         let selected_transport = settings.selected_transport.as_deref().unwrap_or("auto");
         let is_selected_device = selected_uid
@@ -1434,17 +1456,27 @@ impl GatewayDeviceEntry {
             "host": self.host,
             "port": self.port,
             "addresses": self.addresses,
-            "connected": self.connected,
-            "connectionState": if self.connected { "connected" } else { "disconnected" },
-            "isActive": active_transport_id == Some(self.transport_id.as_str()),
+            "connected": is_claimed,
+            "connectionState": connection_state,
+            "claimable": self.claimable,
+            "requiresSession": self.requires_session,
+            "isActive": is_claimed,
             "isSelected": is_selected_device && is_selected_transport,
         })
     }
 }
 
+#[derive(Clone)]
+struct GatewayActiveClaim {
+    hardware_uid: String,
+    transport_id: String,
+    transport: String,
+}
+
 struct GatewayDeviceRegistry {
     devices: Mutex<Vec<GatewayDeviceEntry>>,
     settings: Mutex<GatewaySettings>,
+    active_claims: Mutex<HashMap<String, GatewayActiveClaim>>,
     no_device: bool,
     sim_device: bool,
     startup_wifi_targets: Vec<ManualWiFiTarget>,
@@ -1467,6 +1499,7 @@ impl GatewayDeviceRegistry {
         Ok(Self {
             devices: Mutex::new(Vec::new()),
             settings: Mutex::new(settings),
+            active_claims: Mutex::new(HashMap::new()),
             no_device,
             sim_device,
             startup_wifi_targets,
@@ -1492,9 +1525,9 @@ impl GatewayDeviceRegistry {
                 host: None,
                 port: None,
                 addresses: Vec::new(),
-                connected: true,
-                bridge: Arc::new(NoDeviceCommandBridge),
-                sender: None,
+                claimable: true,
+                requires_session: false,
+                bridge: Some(Arc::new(NoDeviceCommandBridge)),
             }];
             return Ok(());
         }
@@ -1513,9 +1546,9 @@ impl GatewayDeviceRegistry {
                 host: None,
                 port: None,
                 addresses: Vec::new(),
-                connected: true,
-                bridge: Arc::new(SimulatorCommandBridge::basic_board()?),
-                sender: None,
+                claimable: true,
+                requires_session: false,
+                bridge: Some(Arc::new(SimulatorCommandBridge::basic_board()?)),
             }];
             return Ok(());
         }
@@ -1525,14 +1558,16 @@ impl GatewayDeviceRegistry {
             .into_iter()
             .map(|entry| (entry.transport_id.clone(), entry))
             .collect();
+        let active_claims = self.active_claims();
         let mut refreshed = Vec::new();
-        refresh_gateway_midi_devices(&mut refreshed, &mut previous_by_transport);
-        refresh_gateway_ble_devices(&mut refreshed, &mut previous_by_transport);
+        refresh_gateway_midi_devices(&mut refreshed, &mut previous_by_transport, &active_claims);
+        refresh_gateway_ble_devices(&mut refreshed, &mut previous_by_transport, &active_claims);
         refresh_gateway_wifi_devices(
             &mut refreshed,
             &mut previous_by_transport,
             &self.settings.lock().unwrap(),
             &self.startup_wifi_targets,
+            &active_claims,
         );
         refreshed.sort_by(|a, b| {
             a.priority
@@ -1553,6 +1588,47 @@ impl GatewayDeviceRegistry {
         self.settings.lock().unwrap().clone()
     }
 
+    fn active_claims(&self) -> Vec<GatewayActiveClaim> {
+        self.active_claims
+            .lock()
+            .unwrap()
+            .values()
+            .cloned()
+            .collect()
+    }
+
+    fn reserve_claim(&self, hardware_uid: &str, transport_id: &str, transport: &str) -> Result<()> {
+        let key = hardware_uid.to_ascii_lowercase();
+        let mut active = self.active_claims.lock().unwrap();
+        if let Some(claim) = active.get(&key) {
+            anyhow::bail!(
+                "device uid:{hardware_uid} is already claimed by {} ({})",
+                claim.transport,
+                claim.transport_id
+            );
+        }
+        active.insert(
+            key,
+            GatewayActiveClaim {
+                hardware_uid: hardware_uid.to_string(),
+                transport_id: transport_id.to_string(),
+                transport: transport.to_string(),
+            },
+        );
+        Ok(())
+    }
+
+    fn release_claim(&self, hardware_uid: &str, transport_id: &str) {
+        let key = hardware_uid.to_ascii_lowercase();
+        let mut active = self.active_claims.lock().unwrap();
+        if active
+            .get(&key)
+            .is_some_and(|claim| claim.transport_id == transport_id)
+        {
+            active.remove(&key);
+        }
+    }
+
     fn replace_settings(&self, settings: GatewaySettings) -> Result<()> {
         save_gateway_settings(&settings)?;
         *self.settings.lock().unwrap() = load_gateway_settings()?;
@@ -1561,18 +1637,15 @@ impl GatewayDeviceRegistry {
 
     fn devices_json(&self) -> Vec<serde_json::Value> {
         let settings = self.settings();
-        let resolved = self.resolve(None, None).ok();
-        let active_transport_id = resolved
-            .as_ref()
-            .and_then(|resolved| resolved.transport_id.as_deref());
+        let active_claims = self.active_claims();
         self.snapshot()
             .into_iter()
-            .map(|entry| entry.to_json(&settings, active_transport_id))
+            .map(|entry| entry.to_json(&settings, &active_claims))
             .collect()
     }
 
-    fn resolve(
-        &self,
+    fn claim(
+        self: &Arc<Self>,
         requested_device_id: Option<&str>,
         requested_transport: Option<&str>,
     ) -> Result<ResolvedGatewayBridge> {
@@ -1590,12 +1663,7 @@ impl GatewayDeviceRegistry {
                 .iter()
                 .find(|entry| entry.transport_id == transport_id)
                 .with_context(|| format!("Gateway transport is unavailable: {transport_id}"))?;
-            return Ok(ResolvedGatewayBridge {
-                bridge: entry.bridge.clone(),
-                device_id: entry.device_key(),
-                transport_id: Some(entry.transport_id.clone()),
-                warning: None,
-            });
+            return self.claim_entry((*entry).clone());
         }
 
         let requested_uid = requested_device_id
@@ -1610,7 +1678,7 @@ impl GatewayDeviceRegistry {
 
         let mut candidates: Vec<&GatewayDeviceEntry> = devices
             .iter()
-            .filter(|entry| entry.connected)
+            .filter(|entry| entry.claimable)
             .filter(|entry| {
                 requested_uid
                     .as_deref()
@@ -1640,26 +1708,59 @@ impl GatewayDeviceRegistry {
                 .copied()
                 .find(|entry| transport_setting_name(&entry.transport) == transport)
         };
-        let selected = exact.unwrap_or(candidates[0]);
-        let warning = if transport != "auto" && exact.is_none() {
-            Some(format!(
-                "selected {transport} transport is unavailable; using {} for {}",
-                selected.transport,
-                selected
-                    .hardware_uid
-                    .as_deref()
-                    .map(|uid| format!("uid:{uid}"))
-                    .unwrap_or_else(|| selected.transport_id.clone())
-            ))
+        let selected = if transport == "auto" {
+            candidates[0]
+        } else if let Some(exact) = exact {
+            exact
         } else {
-            None
+            let target = requested_uid
+                .as_deref()
+                .map(|uid| format!("uid:{uid}"))
+                .unwrap_or_else(|| "selected device".to_string());
+            anyhow::bail!("selected {transport} transport is unavailable for {target}");
         };
 
+        self.claim_entry((*selected).clone())
+    }
+
+    fn claim_entry(
+        self: &Arc<Self>,
+        selected: GatewayDeviceEntry,
+    ) -> Result<ResolvedGatewayBridge> {
+        if !selected.claimable {
+            anyhow::bail!(
+                "Gateway transport is not claimable: {}",
+                selected.transport_id
+            );
+        }
+        if let Some(bridge) = selected.bridge.clone() {
+            return Ok(ResolvedGatewayBridge {
+                bridge,
+                device_id: selected.device_key(),
+                transport_id: Some(selected.transport_id.clone()),
+                warning: None,
+            });
+        }
+
+        let hardware_uid = selected.hardware_uid.clone().with_context(|| {
+            format!(
+                "Gateway transport has no hardware UID: {}",
+                selected.transport_id
+            )
+        })?;
+        self.reserve_claim(&hardware_uid, &selected.transport_id, &selected.transport)?;
+        let claimed = match open_claimed_gateway_bridge(self.clone(), &selected, &hardware_uid) {
+            Ok(bridge) => bridge,
+            Err(err) => {
+                self.release_claim(&hardware_uid, &selected.transport_id);
+                return Err(err);
+            }
+        };
         Ok(ResolvedGatewayBridge {
-            bridge: selected.bridge.clone(),
+            bridge: claimed,
             device_id: selected.device_key(),
             transport_id: Some(selected.transport_id.clone()),
-            warning,
+            warning: None,
         })
     }
 }
@@ -1677,17 +1778,26 @@ fn transport_setting_name(transport: &str) -> &'static str {
     }
 }
 
+fn is_active_transport(active_claims: &[GatewayActiveClaim], transport_id: &str) -> bool {
+    active_claims
+        .iter()
+        .any(|claim| claim.transport_id == transport_id)
+}
+
 fn refresh_gateway_midi_devices(
     out: &mut Vec<GatewayDeviceEntry>,
     previous: &mut HashMap<String, GatewayDeviceEntry>,
+    active_claims: &[GatewayActiveClaim],
 ) {
     let Ok(devices) = emwaver_device::list_devices() else {
         return;
     };
     for info in devices {
         let transport_id = format!("midi:{}", info.id);
-        if let Some(entry) = previous.remove(&transport_id) {
-            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+        if is_active_transport(active_claims, &transport_id) {
+            if let Some(mut entry) = previous.remove(&transport_id) {
+                entry.claimable = true;
+                entry.bridge = None;
                 out.push(entry);
                 continue;
             }
@@ -1697,27 +1807,30 @@ fn refresh_gateway_midi_devices(
         if device.connect_by_id(&info.id).is_err() {
             continue;
         }
-        let bridge = Arc::new(DeviceCommandBridge { device });
-        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
-        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
+        let sender: Arc<dyn DeviceCommandSender> = device;
+        let fallback_board = infer_gateway_board_type(&info.name, info.likely_emwaver);
+        let Some(identity) = query_gateway_identity(sender.as_ref(), Some(&fallback_board)) else {
             continue;
         };
+        if !identity.claimable {
+            continue;
+        }
         out.push(GatewayDeviceEntry {
             transport_id,
             name: info.name.clone(),
             transport: "USB".to_string(),
             priority: 0,
-            board_type: infer_gateway_board_type(&info.name, info.likely_emwaver),
-            firmware_version,
-            hardware_uid: Some(hardware_uid),
+            board_type: identity.board_type,
+            firmware_version: identity.firmware_version,
+            hardware_uid: Some(identity.hardware_uid),
             endpoint: None,
             address: None,
             host: None,
             port: None,
             addresses: Vec::new(),
-            connected: true,
-            bridge,
-            sender: Some(sender),
+            claimable: true,
+            requires_session: identity.requires_session,
+            bridge: None,
         });
     }
 }
@@ -1725,41 +1838,50 @@ fn refresh_gateway_midi_devices(
 fn refresh_gateway_ble_devices(
     out: &mut Vec<GatewayDeviceEntry>,
     previous: &mut HashMap<String, GatewayDeviceEntry>,
+    active_claims: &[GatewayActiveClaim],
 ) {
     let Ok(devices) = list_ble_devices(1_500) else {
         return;
     };
     for info in devices {
         let transport_id = format!("ble:{}", info.id);
-        if let Some(entry) = previous.remove(&transport_id) {
-            out.push(entry);
-            continue;
+        if is_active_transport(active_claims, &transport_id) {
+            if let Some(mut entry) = previous.remove(&transport_id) {
+                entry.claimable = true;
+                entry.bridge = None;
+                out.push(entry);
+                continue;
+            }
         }
+
+        let _ = previous.remove(&transport_id);
 
         let Ok(device) = BleDevice::connect_by_id(&info.id, 3_000) else {
             continue;
         };
-        let bridge = Arc::new(BleCommandBridge { device });
-        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
-        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
+        let sender: Arc<dyn DeviceCommandSender> = device;
+        let Some(identity) = query_gateway_identity(sender.as_ref(), Some("esp32s3")) else {
             continue;
         };
+        if !identity.claimable {
+            continue;
+        }
         out.push(GatewayDeviceEntry {
             transport_id,
             name: info.name,
             transport: "BLE".to_string(),
             priority: 1,
-            board_type: "esp32s3".to_string(),
-            firmware_version,
-            hardware_uid: Some(hardware_uid),
+            board_type: identity.board_type,
+            firmware_version: identity.firmware_version,
+            hardware_uid: Some(identity.hardware_uid),
             endpoint: None,
             address: Some(info.address),
             host: None,
             port: None,
             addresses: Vec::new(),
-            connected: true,
-            bridge,
-            sender: Some(sender),
+            claimable: true,
+            requires_session: identity.requires_session,
+            bridge: None,
         });
     }
 
@@ -1770,7 +1892,7 @@ fn refresh_gateway_ble_devices(
         .collect();
     for transport_id in remaining_ble_ids {
         if let Some(entry) = previous.remove(&transport_id) {
-            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+            if is_active_transport(active_claims, &transport_id) {
                 out.push(entry);
             }
         }
@@ -1782,6 +1904,7 @@ fn refresh_gateway_wifi_devices(
     previous: &mut HashMap<String, GatewayDeviceEntry>,
     settings: &GatewaySettings,
     startup_targets: &[ManualWiFiTarget],
+    active_claims: &[GatewayActiveClaim],
 ) {
     let mut infos = list_wifi_devices(1_500).unwrap_or_default();
     for target in settings.wifi_targets.iter().chain(startup_targets.iter()) {
@@ -1806,8 +1929,10 @@ fn refresh_gateway_wifi_devices(
         .filter(wifi_record_advertises_supported_runtime)
     {
         let transport_id = format!("wifi:{}:{}", info.host, info.port);
-        if let Some(entry) = previous.remove(&transport_id) {
-            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+        if is_active_transport(active_claims, &transport_id) {
+            if let Some(mut entry) = previous.remove(&transport_id) {
+                entry.claimable = true;
+                entry.bridge = None;
                 out.push(entry);
                 continue;
             }
@@ -1816,33 +1941,37 @@ fn refresh_gateway_wifi_devices(
         let Ok(device) = WiFiDevice::connect(&info.host, info.port) else {
             continue;
         };
-        let bridge = Arc::new(WiFiCommandBridge { device });
-        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
-        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
-            continue;
-        };
-        let board_type = info
+        let sender: Arc<dyn DeviceCommandSender> = device;
+        let fallback_board = info
             .txt
             .get("board")
             .cloned()
             .unwrap_or_else(|| "esp32".to_string());
-        let firmware_version = firmware_version.or_else(|| info.txt.get("fw").cloned());
+        let Some(identity) = query_gateway_identity(sender.as_ref(), Some(&fallback_board)) else {
+            continue;
+        };
+        if !identity.claimable {
+            continue;
+        }
+        let firmware_version = identity
+            .firmware_version
+            .or_else(|| info.txt.get("fw").cloned());
         out.push(GatewayDeviceEntry {
             transport_id,
             name: info.name,
             transport: "Wi-Fi".to_string(),
             priority: 2,
-            board_type,
+            board_type: identity.board_type,
             firmware_version,
-            hardware_uid: Some(hardware_uid),
+            hardware_uid: Some(identity.hardware_uid),
             endpoint: Some(format!("{}:{}", info.host, info.port)),
             address: None,
             host: Some(info.host),
             port: Some(info.port),
             addresses: info.addresses,
-            connected: true,
-            bridge,
-            sender: Some(sender),
+            claimable: true,
+            requires_session: identity.requires_session,
+            bridge: None,
         });
     }
 
@@ -1850,27 +1979,173 @@ fn refresh_gateway_wifi_devices(
         .drain()
         .filter(|(transport_id, _)| transport_id.starts_with("wifi:"))
     {
-        if let Some(entry) = refresh_existing_gateway_entry(entry) {
+        if is_active_transport(active_claims, &entry.transport_id) {
             out.push(entry);
         }
     }
 }
 
-fn refresh_existing_gateway_entry(mut entry: GatewayDeviceEntry) -> Option<GatewayDeviceEntry> {
-    let sender = entry.sender.as_ref()?;
-    let (hardware_uid, firmware_version) = query_gateway_identity(sender.as_ref())?;
-    entry.hardware_uid = Some(hardware_uid);
-    if firmware_version.is_some() {
-        entry.firmware_version = firmware_version;
-    }
-    entry.connected = true;
-    Some(entry)
+struct GatewayIdentity {
+    hardware_uid: String,
+    firmware_version: Option<String>,
+    board_type: String,
+    requires_session: bool,
+    claimable: bool,
 }
 
-fn query_gateway_identity(sender: &dyn DeviceCommandSender) -> Option<(String, Option<String>)> {
+fn query_gateway_identity(
+    sender: &dyn DeviceCommandSender,
+    fallback_board: Option<&str>,
+) -> Option<GatewayIdentity> {
     let uid = query_hardware_uid(sender, 1_500).ok().flatten()?;
     let version = query_version(sender, 1_000).unwrap_or(None);
-    Some((uid, version))
+    let board_type = query_board(sender, 1_000)
+        .ok()
+        .flatten()
+        .or_else(|| fallback_board.map(ToString::to_string))
+        .unwrap_or_else(|| "unknown".to_string());
+    let requires_session = board_type.starts_with("esp32");
+    let supports_session = transport_session_status(sender, 1_000)
+        .ok()
+        .flatten()
+        .is_some();
+    let claimable = !requires_session || supports_session;
+    Some(GatewayIdentity {
+        hardware_uid: uid,
+        firmware_version: version,
+        board_type,
+        requires_session,
+        claimable,
+    })
+}
+
+fn open_claimed_gateway_bridge(
+    registry: Arc<GatewayDeviceRegistry>,
+    entry: &GatewayDeviceEntry,
+    hardware_uid: &str,
+) -> Result<Arc<dyn CommandBridge>> {
+    let (bridge, sender, source) = open_gateway_transport(entry)?;
+    if entry.requires_session {
+        transport_session_connect(sender.as_ref(), source, 1_500).with_context(|| {
+            format!(
+                "failed to claim {} transport for uid:{}",
+                transport_setting_name(&entry.transport),
+                hardware_uid
+            )
+        })?;
+    }
+
+    let (heartbeat_stop_tx, heartbeat_thread) = if entry.requires_session {
+        let heartbeat_sender = sender.clone();
+        let (stop_tx, stop_rx) = mpsc::channel();
+        let handle = thread::spawn(move || loop {
+            match stop_rx.recv_timeout(GATEWAY_TRANSPORT_HEARTBEAT_INTERVAL) {
+                Ok(()) | Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                Err(mpsc::RecvTimeoutError::Timeout) => {}
+            }
+            if transport_session_heartbeat(heartbeat_sender.as_ref(), source, 1_000).is_err() {
+                break;
+            }
+        });
+        (Some(stop_tx), Some(handle))
+    } else {
+        (None, None)
+    };
+
+    Ok(Arc::new(ClaimedGatewayBridge {
+        inner: bridge,
+        sender,
+        registry,
+        hardware_uid: hardware_uid.to_string(),
+        transport_id: entry.transport_id.clone(),
+        source,
+        requires_session: entry.requires_session,
+        heartbeat_stop_tx,
+        heartbeat_thread: Mutex::new(heartbeat_thread),
+    }))
+}
+
+fn open_gateway_transport(
+    entry: &GatewayDeviceEntry,
+) -> Result<(Arc<dyn CommandBridge>, Arc<dyn DeviceCommandSender>, u8)> {
+    if let Some(id) = entry.transport_id.strip_prefix("midi:") {
+        let device = Device::new();
+        device.connect_by_id(id)?;
+        let bridge = Arc::new(DeviceCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        return Ok((bridge, sender, TRANSPORT_SOURCE_USB));
+    }
+
+    if let Some(id) = entry.transport_id.strip_prefix("ble:") {
+        let device = BleDevice::connect_by_id(id, 3_000)?;
+        let bridge = Arc::new(BleCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        return Ok((bridge, sender, TRANSPORT_SOURCE_BLE));
+    }
+
+    if entry.transport_id.starts_with("wifi:") {
+        let host = entry
+            .host
+            .as_deref()
+            .context("Wi-Fi Gateway entry is missing host")?;
+        let port = entry.port.context("Wi-Fi Gateway entry is missing port")?;
+        let device = WiFiDevice::connect(host, port)?;
+        let bridge = Arc::new(WiFiCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        return Ok((bridge, sender, TRANSPORT_SOURCE_WIFI));
+    }
+
+    anyhow::bail!("unsupported Gateway transport id: {}", entry.transport_id)
+}
+
+struct ClaimedGatewayBridge {
+    inner: Arc<dyn CommandBridge>,
+    sender: Arc<dyn DeviceCommandSender>,
+    registry: Arc<GatewayDeviceRegistry>,
+    hardware_uid: String,
+    transport_id: String,
+    source: u8,
+    requires_session: bool,
+    heartbeat_stop_tx: Option<mpsc::Sender<()>>,
+    heartbeat_thread: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+impl Drop for ClaimedGatewayBridge {
+    fn drop(&mut self) {
+        if let Some(stop_tx) = self.heartbeat_stop_tx.take() {
+            let _ = stop_tx.send(());
+        }
+        if self.requires_session {
+            let _ = transport_session_disconnect(self.sender.as_ref(), self.source, 1_000);
+        }
+        if let Some(handle) = self.heartbeat_thread.lock().unwrap().take() {
+            let _ = handle.join();
+        }
+        self.registry
+            .release_claim(&self.hardware_uid, &self.transport_id);
+    }
+}
+
+impl CommandBridge for ClaimedGatewayBridge {
+    fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>> {
+        self.inner.send_command(cmd_lane, timeout_ms)
+    }
+
+    fn get_buffer(&self) -> Vec<u8> {
+        self.inner.get_buffer()
+    }
+
+    fn clear_buffer(&self) {
+        self.inner.clear_buffer();
+    }
+
+    fn load_buffer(&self, data: Vec<u8>) {
+        self.inner.load_buffer(data);
+    }
+
+    fn transmit_buffer(&self) -> Result<()> {
+        self.inner.transmit_buffer()
+    }
 }
 
 fn infer_gateway_board_type(name: &str, likely_emwaver: bool) -> String {
@@ -1950,18 +2225,20 @@ fn gateway_devices_lines(body: &serde_json::Value) -> Vec<String> {
         let board = json_str(&device, "boardType").unwrap_or("unknown board");
         let firmware = json_str(&device, "firmwareVersion").unwrap_or("unknown fw");
         let uid = json_str(&device, "hardwareUid").unwrap_or("no UID");
-        let connected = device
-            .get("connected")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false);
+        let state = json_str(&device, "connectionState").unwrap_or_else(|| {
+            if device
+                .get("connected")
+                .and_then(serde_json::Value::as_bool)
+                .unwrap_or(false)
+            {
+                "claimed"
+            } else {
+                "available"
+            }
+        });
         let endpoint = json_str(&device, "endpoint")
             .map(|endpoint| format!(", {endpoint}"))
             .unwrap_or_default();
-        let state = if connected {
-            "connected"
-        } else {
-            "disconnected"
-        };
         out.push(format!(
             "  {id}: {name} ({transport}, {board}, {firmware}, UID {uid}, {state}{endpoint})"
         ));
@@ -2722,18 +2999,29 @@ fn stop_script(
     Ok(())
 }
 
-fn make_device_command_sender(
+struct DirectDeviceCommandConnection {
+    sender: Arc<dyn DeviceCommandSender>,
+    source: u8,
+}
+
+fn make_device_command_connection(
     device_id: Option<String>,
     ble: bool,
     wifi: Option<String>,
     wifi_port: u16,
-) -> Result<Arc<dyn DeviceCommandSender>> {
+) -> Result<DirectDeviceCommandConnection> {
     validate_service_transport_flags(device_id.as_deref(), ble, wifi.as_deref(), false, false)?;
 
     if ble {
-        Ok(BleDevice::connect_auto(5_000)?)
+        Ok(DirectDeviceCommandConnection {
+            sender: BleDevice::connect_auto(5_000)?,
+            source: TRANSPORT_SOURCE_BLE,
+        })
     } else if let Some(wifi) = wifi {
-        Ok(WiFiDevice::connect(&wifi, wifi_port)?)
+        Ok(DirectDeviceCommandConnection {
+            sender: WiFiDevice::connect(&wifi, wifi_port)?,
+            source: TRANSPORT_SOURCE_WIFI,
+        })
     } else {
         let device = Device::new();
         if let Some(device_id) = device_id {
@@ -2741,8 +3029,18 @@ fn make_device_command_sender(
         } else {
             device.connect_auto()?;
         }
-        Ok(device)
+        Ok(DirectDeviceCommandConnection {
+            sender: device,
+            source: TRANSPORT_SOURCE_USB,
+        })
     }
+}
+
+fn direct_connection_requires_session(sender: &dyn DeviceCommandSender) -> bool {
+    query_board(sender, 1_000)
+        .ok()
+        .flatten()
+        .is_some_and(|board| board.starts_with("esp32"))
 }
 
 fn run_wifi_provision(
@@ -2753,8 +3051,21 @@ fn run_wifi_provision(
     wifi: Option<String>,
     wifi_port: u16,
 ) -> Result<()> {
-    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
-    wifi_provision(sender.as_ref(), &ssid, password.as_deref(), 2_000)?;
+    let connection = make_device_command_connection(device_id, ble, wifi, wifi_port)?;
+    let requires_session = direct_connection_requires_session(connection.sender.as_ref());
+    if requires_session {
+        transport_session_connect(connection.sender.as_ref(), connection.source, 1_500)?;
+    }
+    let result = wifi_provision(
+        connection.sender.as_ref(),
+        &ssid,
+        password.as_deref(),
+        2_000,
+    );
+    if requires_session {
+        let _ = transport_session_disconnect(connection.sender.as_ref(), connection.source, 1_000);
+    }
+    result?;
     println!("Wi-Fi setup sent");
     Ok(())
 }
@@ -2765,8 +3076,8 @@ fn run_wifi_status(
     wifi: Option<String>,
     wifi_port: u16,
 ) -> Result<()> {
-    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
-    let status = wifi_status(sender.as_ref(), 2_000)?;
+    let connection = make_device_command_connection(device_id, ble, wifi, wifi_port)?;
+    let status = wifi_status(connection.sender.as_ref(), 2_000)?;
     println!("{}", format_wifi_status(&status));
     Ok(())
 }
@@ -2777,8 +3088,16 @@ fn run_wifi_clear(
     wifi: Option<String>,
     wifi_port: u16,
 ) -> Result<()> {
-    let sender = make_device_command_sender(device_id, ble, wifi, wifi_port)?;
-    wifi_clear(sender.as_ref(), 2_000)?;
+    let connection = make_device_command_connection(device_id, ble, wifi, wifi_port)?;
+    let requires_session = direct_connection_requires_session(connection.sender.as_ref());
+    if requires_session {
+        transport_session_connect(connection.sender.as_ref(), connection.source, 1_500)?;
+    }
+    let result = wifi_clear(connection.sender.as_ref(), 2_000);
+    if requires_session {
+        let _ = transport_session_disconnect(connection.sender.as_ref(), connection.source, 1_000);
+    }
+    result?;
     println!("Wi-Fi setup cleared");
     Ok(())
 }
@@ -3029,7 +3348,7 @@ fn start_gateway_script_session(
         anyhow::bail!("script source is empty");
     }
 
-    let resolved = state.device_registry.resolve(
+    let resolved = state.device_registry.claim(
         requested_device_id.as_deref(),
         requested_transport.as_deref(),
     )?;

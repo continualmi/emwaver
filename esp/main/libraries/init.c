@@ -45,6 +45,7 @@
 #include "ble_server.h"
 #include "wifi_transport.h"
 #include "transport_debug.h"
+#include "transport_session.h"
 #include "rfm69.h"
 #include "cc1101.h"
 #include "gpio_commands.h"
@@ -79,6 +80,7 @@ static void command_task(void *pv_parameters);
 static bool handle_binary_packet(const command_t *cmd);
 static void send_binary_ok(const uint8_t *payload, size_t len);
 static void send_binary_err(void);
+static void send_binary_busy(void);
 static void restart_task(void *arg);
 static void handle_name_get(void);
 static void handle_name_set(const command_t *cmd);
@@ -92,6 +94,7 @@ static void handle_transmit_opcode(const command_t *cmd);
 static void handle_pwm_opcode(const command_t *cmd);
 static void handle_adc_opcode(const command_t *cmd);
 static void handle_wifi_config_opcode(const command_t *cmd);
+static void handle_transport_session_opcode(const command_t *cmd);
 static bool pwm_apply_output(gpio_num_t gpio, uint16_t duty_u12, uint32_t hz);
 static void register_core_commands(void);
 static void version_command(void);
@@ -185,6 +188,11 @@ static void command_task(void *pv_parameters)
             }
 
             active_command_source = cmd.source;
+            if (!transport_session_allows_command(&cmd)) {
+                send_binary_busy();
+                active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
+                continue;
+            }
             if (handle_binary_packet(&cmd)) {
                 active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
                 continue;
@@ -260,6 +268,9 @@ static bool handle_binary_packet(const command_t *cmd)
         }
         case EMW_OP_WIFI_CONFIG:
             handle_wifi_config_opcode(cmd);
+            return true;
+        case EMW_OP_TRANSPORT_SESSION:
+            handle_transport_session_opcode(cmd);
             return true;
         case EMW_OP_NAME_GET:
             handle_name_get();
@@ -398,6 +409,46 @@ static void handle_wifi_config_opcode(const command_t *cmd)
     }
 }
 
+static void handle_transport_session_opcode(const command_t *cmd)
+{
+    const uint8_t sub = cmd->data[1];
+    const uint8_t requested_source = cmd->data[2];
+    switch (sub) {
+        case EMW_TRANSPORT_SESSION_STATUS: {
+            const uint8_t active = transport_session_active_source();
+            send_binary_ok(&active, 1);
+            return;
+        }
+        case EMW_TRANSPORT_SESSION_CONNECT:
+            if (requested_source != cmd->source ||
+                !transport_session_connect(cmd->source)) {
+                send_binary_busy();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
+        case EMW_TRANSPORT_SESSION_DISCONNECT:
+            if (requested_source != cmd->source ||
+                !transport_session_disconnect(cmd->source)) {
+                send_binary_busy();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
+        case EMW_TRANSPORT_SESSION_HEARTBEAT:
+            if (requested_source != cmd->source ||
+                !transport_session_heartbeat(cmd->source)) {
+                send_binary_busy();
+                return;
+            }
+            send_binary_ok(NULL, 0);
+            return;
+        default:
+            send_binary_err();
+            return;
+    }
+}
+
 static void send_binary_ok(const uint8_t *payload, size_t len)
 {
     uint8_t lane[EMW_USB_CMD_LANE_SIZE] = {0};
@@ -452,6 +503,31 @@ static void send_binary_err(void)
 
     if (usb_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
         ESP_LOGW(TAG, "Failed to send USB ERR response");
+    }
+}
+
+static void send_binary_busy(void)
+{
+    uint8_t lane[EMW_USB_CMD_LANE_SIZE] = {0};
+    lane[0] = EMW_RESP_STATUS_BUSY;
+    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane));
+
+    if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
+        if (ble_server_send_cmd_response(EMW_RESP_STATUS_BUSY, NULL, 0) != 0) {
+            ESP_LOGW(TAG, "Failed to send BLE BUSY response");
+        }
+        return;
+    }
+
+    if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_BUSY, NULL, 0) != ESP_OK) {
+            ESP_LOGW(TAG, "Failed to send Wi-Fi BUSY response");
+        }
+        return;
+    }
+
+    if (usb_send_cmd_response(EMW_RESP_STATUS_BUSY, NULL, 0) != ESP_OK) {
+        ESP_LOGW(TAG, "Failed to send USB BUSY response");
     }
 }
 

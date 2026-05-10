@@ -40,7 +40,8 @@ starts a Gateway-owned session and returns the script instance id; terminal and
 Agent workflows inspect `ui.snapshot`, send `ui.event`, list sessions, and stop
 sessions through Gateway commands.
 
-Hardware transports are selected when the Gateway starts:
+Gateway discovers available hardware transports while it runs. Startup flags can
+seed discovery with a specific wired or Wi-Fi target:
 
 ```sh
 cargo run -p emwaver -- gateway serve --device 0
@@ -48,7 +49,12 @@ cargo run -p emwaver -- gateway serve --ble
 cargo run -p emwaver -- gateway serve --wifi 192.168.1.44
 ```
 
-Device discovery is active only when no Gateway is running. `emw devices`, browser status, and `/v1/devices` report the Gateway-owned transport from backend state when Gateway is running, and physical devices are exposed only after a successful hardware UID read.
+`emw devices`, browser status, and `/v1/devices` report Gateway-owned discovery
+state when Gateway is running. Physical devices are exposed only after a
+successful local hardware UID read. Multi-transport ESP boards stay discoverable
+over USB/BLE/Wi-Fi, but script/control traffic claims one selected transport for
+the active session; the other transports remain identity/status-only until the
+session stops.
 
 Install a Linux user service:
 

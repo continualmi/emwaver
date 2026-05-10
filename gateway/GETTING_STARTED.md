@@ -43,7 +43,7 @@ cd gateway/backend
 cargo run -p emwaver -- run ../../assets/default-scripts/blink.emw
 ```
 
-Gateway starts the local webserver and polls all supported transports. The explicit modes are for special cases:
+Gateway starts the local webserver and discovers all supported transports. The explicit modes are for special cases:
 
 ```bash
 emw gateway serve --sim-device
