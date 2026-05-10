@@ -1059,6 +1059,7 @@ function render() {
                   font: "caption",
                 }),
                 UI.button({
+                  id: "loading_cancel",
                   label: "Cancel",
                   onTap: function () {
                     abortRequested = true;
@@ -1090,10 +1091,12 @@ function render() {
                   spacing: 12,
                   children: [
                     UI.button({
+                      id: "edit_cancel",
                       label: "Cancel",
                       onTap: cancelEdit,
                     }),
                     UI.button({
+                      id: "edit_apply",
                       label: "OK",
                       onTap: applyEdit,
                     }),
@@ -1164,6 +1167,7 @@ function render() {
                       ],
                     }),
                     UI.button({
+                      id: "init_read",
                       label: "Initialize & Read",
                       onTap: startRefresh,
                     }),
@@ -1273,16 +1277,21 @@ function render() {
                       minColumnWidth: 220,
                       spacing: 12,
                       children: [
-                        UI.button({ label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
-                        UI.button({ label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
+                        UI.button({ id: "preset_init_rx", label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
+                        UI.button({ id: "preset_init_tx", label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
                       ],
                     }),
                     UI.grid({
                       minColumnWidth: 160,
                       spacing: 12,
                       children: [
-                        UI.button({ label: txCarrierOn ? "Carrier OFF" : "Carrier ON", onTap: toggleCarrier }),
                         UI.button({
+                          id: "carrier_toggle",
+                          label: txCarrierOn ? "Carrier OFF" : "Carrier ON",
+                          onTap: toggleCarrier,
+                        }),
+                        UI.button({
+                          id: "preset_idle",
                           label: "IDLE",
                           onTap: function () {
                             cc1101Idle();
@@ -1291,7 +1300,7 @@ function render() {
                             render();
                           },
                         }),
-                        UI.button({ label: "Probe PART/VERSION", onTap: probePartVersion }),
+                        UI.button({ id: "probe_part_version", label: "Probe PART/VERSION", onTap: probePartVersion }),
                       ],
                     }),
                     UI.text({ text: presetStatusText, fontWeight: "medium" }),
@@ -1311,6 +1320,7 @@ function render() {
                       spacing: 12,
                       children: [
                         UI.textField({
+                          id: "packet_cs_pin",
                           fillsWidth: true,
                           value: String(packetCsPin),
                           placeholder: "CS pin (default board mapping)",
@@ -1320,8 +1330,8 @@ function render() {
                             render();
                           },
                         }),
-                        UI.button({ label: "Init", onTap: packetInitFixed }),
-                        UI.button({ label: "Send", onTap: packetSend }),
+                        UI.button({ id: "packet_init", label: "Init", onTap: packetInitFixed }),
+                        UI.button({ id: "packet_send", label: "Send", onTap: packetSend }),
                       ],
                     }),
                     UI.grid({
@@ -1329,6 +1339,7 @@ function render() {
                       spacing: 12,
                       children: [
                         UI.textField({
+                          id: "packet_freq_mhz",
                           fillsWidth: true,
                           value: String(packetFreqMHz),
                           placeholder: "Freq MHz (433.92)",
@@ -1339,6 +1350,7 @@ function render() {
                           },
                         }),
                         UI.textField({
+                          id: "packet_data_rate_bps",
                           fillsWidth: true,
                           value: String(packetDataRateBps),
                           placeholder: "Data rate bps (100000)",
@@ -1352,6 +1364,7 @@ function render() {
                     }),
                     UI.text({ text: "Payload (hex, up to 61 bytes)", fontWeight: "medium" }),
                     UI.textEditor({
+                      id: "packet_payload_hex",
                       value: packetPayloadHex,
                       placeholder: "01 02 03 ...",
                       onChange: function (v) {
@@ -1363,6 +1376,7 @@ function render() {
                     }),
                     packetStatus ? UI.text({ text: packetStatus, font: "caption" }) : null,
                     UI.button({
+                      id: "packet_clear_log",
                       label: "Clear Log",
                       onTap: function () {
                         packetLogLines = [];
