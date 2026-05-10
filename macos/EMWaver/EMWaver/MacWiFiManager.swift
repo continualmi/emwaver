@@ -52,6 +52,7 @@ final class MacWiFiManager {
     private var connectedDeviceID: String?
     private var pendingConnectionRecord: MacWiFiDeviceRecord?
     private var advertisedDeviceIDs: Set<String> = []
+    private var advertisedRecordsByID: [String: MacWiFiDeviceRecord] = [:]
     private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var advertisedValidationConnections: [String: NWConnection] = [:]
     private var pendingResponses: [UInt16: PendingResponse] = [:]
@@ -371,6 +372,7 @@ final class MacWiFiManager {
                 isAdvertised: true,
                 lastSeen: Date()
             )
+            advertisedRecordsByID[id] = record
             if connectedDeviceID == id || discoveredDevicesByID[id]?.isAdvertised == true {
                 discoveredDevicesByID[id] = record
             } else {
@@ -378,6 +380,7 @@ final class MacWiFiManager {
             }
         }
         advertisedDeviceIDs = advertisedIDs
+        advertisedRecordsByID = advertisedRecordsByID.filter { advertisedIDs.contains($0.key) }
 
         for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) {
             guard var record = discoveredDevicesByID[id],
@@ -420,12 +423,13 @@ final class MacWiFiManager {
     }
 
     private func validatePublishedAdvertisedRecords() {
-        for record in discoveredDevicesByID.values where record.isAdvertised && connectedDeviceID != record.id {
+        let records = advertisedRecordsByID.values
+        for record in records where connectedDeviceID != record.id {
             guard advertisedDeviceIDs.contains(record.id),
                   !validatingAdvertisedDeviceIDs.contains(record.id) else {
                 continue
             }
-            validateAdvertisedRecord(record, removeOnFailure: true)
+            validateAdvertisedRecord(record, removeOnFailure: discoveredDevicesByID[record.id]?.isAdvertised == true)
         }
     }
 
