@@ -1,6 +1,6 @@
 use anyhow::{Context, Result};
 use clap::{Parser, Subcommand};
-use directories::ProjectDirs;
+use directories::{ProjectDirs, UserDirs};
 use emwaver_device::{
     list_ble_devices, list_wifi_devices, query_board, query_hardware_uid, query_version,
     transport_session_connect, transport_session_disconnect, transport_session_heartbeat,
@@ -116,8 +116,8 @@ enum Commands {
 
     /// Run a .emw script through the local Gateway.
     Run {
-        /// Script file to run.
-        script: PathBuf,
+        /// Script file, name in ~/.emwaver/scripts/, or bundled example name (e.g. hello.emw).
+        script: String,
 
         /// Display name sent with the script. Defaults to the script filename.
         #[arg(long)]
@@ -566,9 +566,16 @@ enum WifiCmd {
     },
 }
 
-fn project_dirs() -> Result<ProjectDirs> {
-    ProjectDirs::from("com", "EMWaver", "emwaver")
-        .context("failed to resolve per-user data directories")
+fn emwaver_home_dir() -> Result<PathBuf> {
+    if let Some(dir) = env_trim("EMWAVER_HOME") {
+        let d = PathBuf::from(dir);
+        fs::create_dir_all(&d)?;
+        return Ok(d);
+    }
+    let user_dirs = UserDirs::new().context("failed to resolve home directory")?;
+    let d = user_dirs.home_dir().join(".emwaver");
+    fs::create_dir_all(&d)?;
+    Ok(d)
 }
 
 fn state_dir() -> Result<PathBuf> {
@@ -577,10 +584,7 @@ fn state_dir() -> Result<PathBuf> {
         fs::create_dir_all(&d)?;
         return Ok(d);
     }
-
-    let d = project_dirs()?.data_local_dir().to_path_buf();
-    fs::create_dir_all(&d)?;
-    Ok(d)
+    emwaver_home_dir()
 }
 
 fn pidfile_path() -> Result<PathBuf> {
@@ -597,14 +601,30 @@ fn config_dir() -> Result<PathBuf> {
         fs::create_dir_all(&d)?;
         return Ok(d);
     }
-
-    let d = project_dirs()?.config_dir().to_path_buf();
-    fs::create_dir_all(&d)?;
-    Ok(d)
+    emwaver_home_dir()
 }
 
 fn settings_path() -> Result<PathBuf> {
     Ok(config_dir()?.join("gateway-settings.json"))
+}
+
+fn scripts_dir() -> Result<PathBuf> {
+    let d = emwaver_home_dir()?.join("scripts");
+    fs::create_dir_all(&d)?;
+    Ok(d)
+}
+
+/// Copy settings from the legacy platform-specific path to ~/.emwaver on first run.
+fn migrate_legacy_config() {
+    let Ok(new_settings) = settings_path() else { return };
+    if new_settings.exists() {
+        return;
+    }
+    let Some(legacy_dirs) = ProjectDirs::from("com", "EMWaver", "emwaver") else { return };
+    let legacy_settings = legacy_dirs.config_dir().join("gateway-settings.json");
+    if legacy_settings.exists() {
+        let _ = fs::copy(&legacy_settings, &new_settings);
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -2665,18 +2685,6 @@ fn gateway_ws_url(port: Option<u16>, gateway_url: Option<String>) -> Result<Url>
         .context("failed to build localhost gateway WebSocket URL")
 }
 
-fn script_name(script: &Path, explicit_name: Option<String>) -> String {
-    explicit_name
-        .filter(|s| !s.trim().is_empty())
-        .or_else(|| {
-            script
-                .file_name()
-                .and_then(|s| s.to_str())
-                .map(str::to_string)
-        })
-        .unwrap_or_else(|| "script.emw".to_string())
-}
-
 struct DeviceCommandBridge {
     device: Arc<Device>,
 }
@@ -2971,8 +2979,36 @@ fn print_ui_node_human(node: &serde_json::Value, depth: usize) {
     }
 }
 
+fn resolve_script(input: &str) -> Result<(PathBuf, String)> {
+    let path = PathBuf::from(input);
+    if path.exists() {
+        let name = path.file_name().and_then(|s| s.to_str()).unwrap_or(input).to_string();
+        return Ok((path, name));
+    }
+    // Bare name (no path separators) — check user scripts dir then bundled examples.
+    if !input.contains('/') && !input.contains('\\') {
+        let user_path = scripts_dir()?.join(input);
+        if user_path.exists() {
+            return Ok((user_path, input.to_string()));
+        }
+        let bundled_path = default_scripts_dir().join(input);
+        if bundled_path.exists() {
+            return Ok((bundled_path, input.to_string()));
+        }
+        anyhow::bail!(
+            "script not found: {input}\n  \
+            checked file path: {input}\n  \
+            checked user scripts: {}\n  \
+            checked bundled examples: {}",
+            scripts_dir().map(|d| d.join(input).display().to_string()).unwrap_or_default(),
+            default_scripts_dir().join(input).display(),
+        );
+    }
+    anyhow::bail!("script not found: {}", path.display());
+}
+
 fn run_script(
-    script: PathBuf,
+    script: String,
     name: Option<String>,
     port: Option<u16>,
     gateway_url: Option<String>,
@@ -2980,13 +3016,14 @@ fn run_script(
     device: Option<String>,
     transport: Option<String>,
 ) -> Result<()> {
-    let source = fs::read_to_string(&script)
-        .with_context(|| format!("failed to read script at {}", script.display()))?;
+    let (resolved_path, default_name) = resolve_script(&script)?;
+    let source = fs::read_to_string(&resolved_path)
+        .with_context(|| format!("failed to read script at {}", resolved_path.display()))?;
     if source.trim().is_empty() {
-        anyhow::bail!("script is empty: {}", script.display());
+        anyhow::bail!("script is empty: {}", resolved_path.display());
     }
 
-    let name = script_name(&script, name);
+    let name = name.filter(|s| !s.trim().is_empty()).unwrap_or(default_name);
     let (mut ws, _url) = connect_gateway_cli(port, gateway_url, timeout_ms)?;
 
     send_ws_json(
@@ -3487,7 +3524,7 @@ fn now_millis() -> u64 {
 }
 
 fn default_ble_discovery_enabled() -> bool {
-    !cfg!(target_os = "macos")
+    true
 }
 
 fn start_gateway_script_session(
@@ -4470,9 +4507,9 @@ fn default_scripts_dir() -> PathBuf {
 }
 
 fn print_paths() -> Result<()> {
-    println!("config dir: {}", config_dir()?.display());
-    println!("settings:   {}", settings_path()?.display());
-    println!("state dir: {}", state_dir()?.display());
+    println!("home:     {}", emwaver_home_dir()?.display());
+    println!("settings: {}", settings_path()?.display());
+    println!("scripts:  {}", scripts_dir()?.display());
     println!("pidfile:  {}", pidfile_path()?.display());
     println!("logfile:  {}", logfile_path()?.display());
     Ok(())
@@ -4599,6 +4636,8 @@ fn main() -> Result<()> {
         )
     });
     tracing_subscriber::fmt().with_env_filter(log_filter).init();
+
+    migrate_legacy_config();
 
     let cli = Cli::parse();
 

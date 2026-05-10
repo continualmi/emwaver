@@ -237,6 +237,27 @@ export function GatewayApp() {
       if (msg.type === "script.error" || msg.type === "host.error") {
         setUiError(String(msg.error || "error"));
       }
+      if (msg.type === "hello.ack") {
+        wsSend(ws, { type: "script.list" });
+      }
+      if (msg.type === "script.list") {
+        const scripts = (msg.scripts as Array<{ scriptInstanceId: string; name: string; deviceId?: string; state?: string }> | null) || [];
+        const running = scripts.filter((s) => s.state === "running");
+        if (running.length > 0) {
+          setSessions((items) => {
+            const next = { ...items };
+            for (const s of running) {
+              if (!next[s.scriptInstanceId]) {
+                next[s.scriptInstanceId] = { id: s.scriptInstanceId, name: s.name, deviceId: s.deviceId || "", root: null, rev: 0, plotDataByNodeId: {} };
+              }
+            }
+            return next;
+          });
+          for (const s of running) {
+            wsSend(ws, { type: "ui.snapshot.get", scriptInstanceId: s.scriptInstanceId });
+          }
+        }
+      }
     };
 
     return () => {
@@ -402,6 +423,7 @@ export function GatewayApp() {
           unreadLog={unreadLog}
           runtimeOnline={connected}
           runtimeWarn={tone !== "online"}
+          hasLiveSessions={liveSessions.length > 0}
         />
 
         <SidePanel
@@ -428,6 +450,9 @@ export function GatewayApp() {
             setLog([]);
             setUnreadLog(0);
           }}
+          liveSessions={liveSessions}
+          activeSessionId={scriptInstanceId}
+          onSelectSession={selectLiveSession}
         />
 
         <input
@@ -446,7 +471,7 @@ export function GatewayApp() {
           filename={selected || "Untitled"}
           subtitle={
             connected
-              ? `Local runtime connected — choose a device, run a script, and switch between running sessions below.`
+              ? `Local runtime connected — choose a device, run a script, and open a session from the sidebar.`
               : "Local-first. No cloud relay required."
           }
           canPreview={canPreview}
@@ -460,9 +485,6 @@ export function GatewayApp() {
           selectedTransport={selectedTransport}
           setSelectedDeviceId={chooseDevice}
           setSelectedTransport={chooseTransport}
-          sessions={liveSessions}
-          activeSessionId={scriptInstanceId}
-          onSelectSession={selectLiveSession}
           uiError={uiError}
           source={source}
           onSourceChange={(value) => {
@@ -557,8 +579,9 @@ function ActivityRail(props: {
   unreadLog: number;
   runtimeOnline: boolean;
   runtimeWarn: boolean;
+  hasLiveSessions: boolean;
 }) {
-  const { active, onSelect, unreadLog, runtimeOnline, runtimeWarn } = props;
+  const { active, onSelect, unreadLog, runtimeOnline, runtimeWarn, hasLiveSessions } = props;
   return (
     <nav
       aria-label="Gateway sections"
@@ -570,6 +593,7 @@ function ActivityRail(props: {
         label="Library"
         onClick={() => onSelect("library")}
         icon={<LibraryIcon />}
+        dot={hasLiveSessions ? "info" : null}
       />
       <RailButton
         id="runtime"
@@ -662,6 +686,9 @@ function SidePanel(props: {
   useManualWifiTarget: () => void;
   log: LogEntry[];
   onClearLog: () => void;
+  liveSessions: LiveSession[];
+  activeSessionId: string;
+  onSelectSession: (id: string) => void;
 }) {
   const { activity } = props;
   if (!activity) return null;
@@ -687,7 +714,7 @@ function SidePanel(props: {
       </header>
 
       <div className="min-h-0 flex-1 overflow-auto">
-        {activity === "library" ? <LibraryPanel {...props} /> : null}
+        {activity === "library" ? <LibraryPanel {...props} liveSessions={props.liveSessions} activeSessionId={props.activeSessionId} onSelectSession={props.onSelectSession} /> : null}
         {activity === "runtime" ? <RuntimePanel {...props} /> : null}
         {activity === "log" ? <LogPanel log={props.log} /> : null}
       </div>
@@ -707,10 +734,55 @@ function LibraryPanel(props: {
   openExample: (e: ExampleScript) => void;
   openLocal: () => void;
   saveLocal: () => void;
+  liveSessions: LiveSession[];
+  activeSessionId: string;
+  onSelectSession: (id: string) => void;
 }) {
-  const { examples, selected, openExample, openLocal, saveLocal } = props;
+  const { examples, selected, openExample, openLocal, saveLocal, liveSessions, activeSessionId, onSelectSession } = props;
   return (
     <div className="flex flex-col">
+      {liveSessions.length > 0 && (
+        <div className="border-b border-[color:var(--line)]">
+          <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
+            Running
+          </div>
+          <ul className="divide-y divide-[color:var(--line)]">
+            {liveSessions.map((session) => {
+              const isActive = activeSessionId === session.id;
+              return (
+                <li key={session.id}>
+                  <button
+                    type="button"
+                    onClick={() => onSelectSession(session.id)}
+                    className={
+                      "group flex w-full items-center gap-3 px-4 py-3 text-left transition " +
+                      (isActive
+                        ? "bg-[color:var(--aqua-tint-2)]"
+                        : "hover:bg-[color:var(--surface-2)]")
+                    }
+                  >
+                    <span className="h-2 w-2 shrink-0 rounded-full bg-[color:var(--aqua)] shadow-[0_0_6px_var(--aqua)]" aria-hidden />
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate font-mono text-[12px] font-semibold text-[color:var(--ink)]">
+                        {session.name}
+                      </div>
+                      {session.deviceId && (
+                        <div className="mt-0.5 truncate font-mono text-[10px] text-[color:var(--ink-dim)]">
+                          {session.deviceId}
+                        </div>
+                      )}
+                    </div>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--aqua)]">
+                      Live
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <div className="border-b border-[color:var(--line)] px-4 py-3">
         <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
           Examples
@@ -1006,9 +1078,6 @@ function Workspace(props: {
   selectedTransport: string;
   setSelectedDeviceId: (id: string) => void;
   setSelectedTransport: (transport: string) => void;
-  sessions: LiveSession[];
-  activeSessionId: string;
-  onSelectSession: (id: string) => void;
   uiError: string | null;
   source: string;
   onSourceChange: (v: string) => void;
@@ -1033,9 +1102,6 @@ function Workspace(props: {
     selectedTransport,
     setSelectedDeviceId,
     setSelectedTransport,
-    sessions,
-    activeSessionId,
-    onSelectSession,
     uiError,
     source,
     onSourceChange,
@@ -1143,28 +1209,6 @@ function Workspace(props: {
       {uiError ? (
         <div className="mx-5 mt-3 rounded-xl border border-[color:var(--danger-tint-2)] bg-[color:var(--danger-tint)] px-3 py-2 text-[12px] leading-5 text-[color:var(--danger)] whitespace-pre-wrap">
           {uiError}
-        </div>
-      ) : null}
-
-      {sessions.length ? (
-        <div className="mx-5 mt-3 flex flex-wrap gap-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-2">
-          {sessions.map((session) => (
-            <button
-              key={session.id}
-              type="button"
-              onClick={() => onSelectSession(session.id)}
-              className={`rounded-xl border px-3 py-2 text-left text-[12px] transition ${
-                activeSessionId === session.id
-                  ? "border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] text-[color:var(--aqua)]"
-                  : "border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink)] hover:border-[color:var(--sky-tint-2)]"
-              }`}
-            >
-              <div className="font-semibold">{session.name}</div>
-              <div className="mt-0.5 max-w-[260px] truncate font-mono text-[10px] opacity-70">
-                {session.deviceId || "active device"}
-              </div>
-            </button>
-          ))}
         </div>
       ) : null}
 
