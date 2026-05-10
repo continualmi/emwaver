@@ -1346,20 +1346,17 @@ mod tests {
     }
 
     #[test]
-    fn print_alias_maps_to_console_log() {
+    fn print_is_not_defined() {
         let bridge = Arc::new(RecordingBridge::new(None));
         let command_bridge: Arc<dyn CommandBridge> = bridge.clone();
         let bootstrap = include_str!("../../../../assets/default-scripts/script_bootstrap.emw");
         let engine = Engine::new(bootstrap, command_bridge).expect("engine");
 
-        engine
+        let err = engine
             .run_script("print('value', {ok: true});")
-            .expect("run script");
-
-        let logs = engine.drain_log_events();
-        assert_eq!(logs.len(), 1);
-        assert_eq!(logs[0].level, "log");
-        assert_eq!(logs[0].message, r#"value {"ok":true}"#);
+            .expect_err("script error");
+        assert!(format!("{err:#}").contains("ReferenceError"));
+        assert!(format!("{err:#}").contains("print is not defined"));
     }
 
     #[test]

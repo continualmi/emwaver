@@ -73,12 +73,6 @@ var console = {
   },
 };
 
-if (typeof print !== 'function') {
-  var print = function () {
-    console.log.apply(console, arguments);
-  };
-}
-
 __scriptGlobal.console = console;
 
 function __scriptIsShim(obj) {

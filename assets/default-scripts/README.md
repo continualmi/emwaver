@@ -7,5 +7,5 @@ This folder is the single source of truth for EMWaver’s built-in Script assets
 
 ## Minimal example
 
-- `hello.emw`: minimal script that just `print()`s.
-- `blink.emw`: blinks `GDO0` using `every()` and `print()` with a tiny UI.
+- `hello.emw`: minimal script that just `console.log()`.
+- `blink.emw`: blinks `GDO0` using `every()` and `console.log()` with a tiny UI.

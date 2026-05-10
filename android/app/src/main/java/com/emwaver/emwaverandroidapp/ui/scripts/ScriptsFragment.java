@@ -2539,8 +2539,8 @@ public class ScriptsFragment extends Fragment {
             "        spacing: 12,\n" +
             "        children: [\n" +
             "            UI.text({ text: 'Script Title', font: 'title2', fontWeight: 'semibold' }),\n" +
-            "            UI.text({ text: 'Tap a button and use print(...) to log output.', foregroundColor: '#6B7280' }),\n" +
-            "            UI.button({ label: 'Example', onTap: function () { print('hello from script'); } })\n" +
+            "            UI.text({ text: 'Tap a button and use console.log(...) to log output.', foregroundColor: '#6B7280' }),\n" +
+            "            UI.button({ label: 'Example', onTap: function () { console.log('hello from script'); } })\n" +
             "        ]\n" +
             "    }));\n" +
             "}\n";
