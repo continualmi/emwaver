@@ -130,18 +130,25 @@ struct DeviceConnectionSheet: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                header
-                deviceListCard
-                if shouldShowWiFiCard {
-                    wifiCard
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    deviceListCard
+                    if shouldShowWiFiCard {
+                        wifiCard
+                    }
+                    firmwareCard
                 }
-                firmwareCard
+                .padding(24)
             }
-            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxHeight: 520)
+
+            Divider()
+
+            footer
         }
-        .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
+        .frame(minWidth: 560, idealWidth: 620)
         .onAppear {
             loadWiFiFormState()
             firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
@@ -184,12 +191,14 @@ struct DeviceConnectionSheet: View {
         }
     }
 
-    private var header: some View {
+    private var footer: some View {
         HStack {
             Spacer(minLength: 0)
             Button("Close") { dismiss() }
                 .buttonStyle(.bordered)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 14)
     }
 
     private var deviceMetadataLeftColumn: [(label: String, value: String)] {
