@@ -27,6 +27,7 @@ final class MacWiFiManager {
     static let serviceType = "_emwaver._tcp"
     private static let livenessPingInterval: DispatchTimeInterval = .seconds(2)
     private static let livenessPingTimeout: DispatchTimeInterval = .seconds(3)
+    private static let discoveryPingTimeout: DispatchTimeInterval = .seconds(2)
 
     private struct BonjourMetadata {
         var localIdentifier: String?
@@ -49,6 +50,8 @@ final class MacWiFiManager {
     private var socket: URLSessionWebSocketTask?
     private var connectedDeviceID: String?
     private var pendingConnectionRecord: MacWiFiDeviceRecord?
+    private var advertisedDeviceIDs: Set<String> = []
+    private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var livenessTimer: DispatchSourceTimer?
     private var livenessPingID: UInt64 = 0
@@ -311,7 +314,7 @@ final class MacWiFiManager {
     }
 
     private func disconnect(notify: Bool) {
-        let oldID = connectedDeviceID
+        let oldID = connectedDeviceID ?? pendingConnectionRecord?.id
         let wasConnected = connectedDeviceID != nil
         if socket != nil || connectedDeviceID != nil || pendingConnectionRecord != nil {
             Self.log("disconnect notify=\(notify) connected=\(wasConnected) id=\(oldID ?? pendingConnectionRecord?.id ?? "nil")")
@@ -338,6 +341,7 @@ final class MacWiFiManager {
     private func handleBrowseResults(_ results: Set<NWBrowser.Result>) {
         Self.log("Bonjour results count=\(results.count)")
         var advertisedIDs = Set<String>()
+        var candidateRecords: [MacWiFiDeviceRecord] = []
         for result in results {
             guard case let .service(name, type, domain, _) = result.endpoint,
                   type == Self.serviceType else { continue }
@@ -350,7 +354,7 @@ final class MacWiFiManager {
             advertisedIDs.insert(id)
             let capabilities = metadata.capabilities.isEmpty ? ["wifi"] : metadata.capabilities
             Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ","))")
-            discoveredDevicesByID[id] = MacWiFiDeviceRecord(
+            let record = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
                 host: host,
@@ -363,7 +367,13 @@ final class MacWiFiManager {
                 isAdvertised: true,
                 lastSeen: Date()
             )
+            if connectedDeviceID == id || discoveredDevicesByID[id]?.isAdvertised == true {
+                discoveredDevicesByID[id] = record
+            } else {
+                candidateRecords.append(record)
+            }
         }
+        advertisedDeviceIDs = advertisedIDs
 
         for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) {
             guard var record = discoveredDevicesByID[id],
@@ -382,8 +392,45 @@ final class MacWiFiManager {
                 discoveredDevicesByID.removeValue(forKey: id)
             }
         }
+        validatingAdvertisedDeviceIDs.formIntersection(advertisedIDs)
+        for record in candidateRecords where !validatingAdvertisedDeviceIDs.contains(record.id) {
+            validateAdvertisedRecord(record)
+        }
 
         publishDevices()
+    }
+
+    private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord) {
+        guard let url = Self.webSocketURL(host: record.host, port: record.port) else { return }
+        validatingAdvertisedDeviceIDs.insert(record.id)
+        Self.log("validating advertised websocket id=\(record.id)")
+        let validationSocket = URLSession.shared.webSocketTask(with: url)
+        validationSocket.resume()
+        queue.asyncAfter(deadline: .now() + Self.discoveryPingTimeout) { [weak self, weak validationSocket] in
+            guard let self, let validationSocket else { return }
+            guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
+            Self.log("advertised validation timed out id=\(record.id)")
+            self.validatingAdvertisedDeviceIDs.remove(record.id)
+            validationSocket.cancel(with: .goingAway, reason: nil)
+        }
+        validationSocket.sendPing { [weak self, weak validationSocket] error in
+            guard let self, let validationSocket else { return }
+            self.queue.async {
+                guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
+                self.validatingAdvertisedDeviceIDs.remove(record.id)
+                validationSocket.cancel(with: .goingAway, reason: nil)
+                guard self.advertisedDeviceIDs.contains(record.id) else { return }
+                if let error {
+                    Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
+                    return
+                }
+                Self.log("advertised validation passed id=\(record.id)")
+                var validatedRecord = record
+                validatedRecord.lastSeen = Date()
+                self.discoveredDevicesByID[record.id] = validatedRecord
+                self.publishDevices()
+            }
+        }
     }
 
     private func markConnected(record: MacWiFiDeviceRecord, socket: URLSessionWebSocketTask) {
