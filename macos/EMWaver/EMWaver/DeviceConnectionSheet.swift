@@ -354,14 +354,6 @@ struct DeviceConnectionSheet: View {
                 Text("Provision this ESP32 for local network control.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
-
-                if let status = device.wifiProvisioningStatus, !status.isEmpty {
-                    Text(status)
-                        .font(.caption)
-                        .foregroundStyle(device.isWiFiProvisioningError ? Color.orange : .secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
 
             Spacer(minLength: 12)

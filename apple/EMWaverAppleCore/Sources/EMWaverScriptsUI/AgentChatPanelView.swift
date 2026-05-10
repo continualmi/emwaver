@@ -217,7 +217,7 @@ public struct AgentChatPanelView: View {
                     .background(composerFieldBackgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                     .overlay(
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(Color.black.opacity(0.10))
+                            .strokeBorder(messageCardBorder)
                     )
                     .foregroundStyle(.primary)
                     .tint(.accentColor)
@@ -270,6 +270,10 @@ public struct AgentChatPanelView: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
                 .background(Color.secondary.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .strokeBorder(messageCardBorder)
+                )
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
             }
@@ -531,7 +535,7 @@ private var messageCardBackground: Color {
 }
 
 private var messageCardBorder: Color {
-    Color.black.opacity(0.10)
+    Color.primary.opacity(0.13)
 }
 
 private var messageCardShadow: Color {
