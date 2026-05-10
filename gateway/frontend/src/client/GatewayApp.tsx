@@ -14,7 +14,7 @@ import {
 type ExampleScript = { name: string; source: string };
 type GatewayDevice = NonNullable<RemoteDeviceStatus["devices"]>[number];
 type WsStatus = "connecting" | "open" | "closed" | "error";
-type ActivityId = "library" | "runtime" | "log";
+type ActivityId = "library" | "runtime" | "agent" | "log";
 
 function isEmw(name: string | null) {
   return String(name || "").toLowerCase().endsWith(".emw");
@@ -40,35 +40,6 @@ function statusTone(status: WsStatus, deviceStatus: RemoteDeviceStatus | null): 
   return "online";
 }
 
-function runtimeLabel(runtimeOwner?: string) {
-  if (runtimeOwner === "emwaver-gateway") return "Gateway";
-  return "Local Runtime";
-}
-
-function deviceDetail(device: NonNullable<RemoteDeviceStatus["devices"]>[number], runtimeOwner?: string) {
-  const state = device.connectionState || (device.connected ? "claimed" : "available");
-  const parts = [
-    state,
-    device.transport,
-    device.boardType,
-    device.endpoint,
-    device.hardwareUid ? `UID ${device.hardwareUid}` : "",
-    runtimeLabel(runtimeOwner),
-  ].filter(Boolean);
-  return parts.join(" · ");
-}
-
-function summarizeUiNode(node: RemoteUiNode | null, depth = 0): unknown {
-  if (!node || depth > 3) return null;
-  return {
-    id: node.id,
-    type: node.type,
-    props: node.props || {},
-    handlers: node.handlers ? Object.keys(node.handlers) : [],
-    children: (node.children || []).slice(0, 8).map((child) => summarizeUiNode(child, depth + 1)),
-  };
-}
-
 function timeOfDay(d = new Date()) {
   const hh = String(d.getHours()).padStart(2, "0");
   const mm = String(d.getMinutes()).padStart(2, "0");
@@ -76,8 +47,36 @@ function timeOfDay(d = new Date()) {
   return `${hh}:${mm}:${ss}`;
 }
 
-type LogEntry = { type: string; at: string; raw: RemoteIncomingMessage };
+type LogSeverity = "info" | "warn" | "error";
+type LogEntry = { type: string; at: string; severity: LogSeverity; message: string; raw: RemoteIncomingMessage };
 type LiveSession = { id: string; name: string; deviceId: string; root: RemoteUiNode | null; rev: number; plotDataByNodeId: Record<string, RemotePlotData> };
+
+const HEARTBEAT_LOG_TYPES = new Set(["device.status", "ui.snapshot", "plot.data", "hello.ack"]);
+
+function summarizeMessage(msg: RemoteIncomingMessage): { severity: LogSeverity; message: string } | null {
+  const type = String(msg.type || "");
+  if (HEARTBEAT_LOG_TYPES.has(type)) return null;
+  if (type === "script.started") {
+    const name = String((msg as { name?: string }).name || "script");
+    const device = String((msg as { deviceId?: string }).deviceId || "");
+    return { severity: "info", message: device ? `Started ${name} on ${device}` : `Started ${name}` };
+  }
+  if (type === "script.stopped") {
+    const id = String((msg as { scriptInstanceId?: string }).scriptInstanceId || "");
+    const reason = String((msg as { reason?: string }).reason || "stopped");
+    return { severity: "info", message: id ? `Stopped ${id} (${reason})` : `Stopped (${reason})` };
+  }
+  if (type === "script.error" || type === "host.error" || type === "error") {
+    const err = String((msg as { error?: string }).error || "error");
+    return { severity: "error", message: err };
+  }
+  if (type === "script.list") {
+    const scripts = (msg as { scripts?: unknown[] }).scripts;
+    const count = Array.isArray(scripts) ? scripts.length : 0;
+    return { severity: "info", message: `Sessions: ${count}` };
+  }
+  return { severity: "info", message: type };
+}
 
 function normalizedTransport(value: string) {
   const lower = value.trim().toLowerCase();
@@ -129,6 +128,11 @@ export function GatewayApp() {
   const [gatewayDevicesBusy, setGatewayDevicesBusy] = useState(false);
   const [activity, setActivity] = useState<ActivityId | null>("library");
   const [unreadLog, setUnreadLog] = useState(0);
+  const [panelWidth, setPanelWidth] = useState<number>(() => {
+    if (typeof window === "undefined") return 320;
+    const saved = Number(window.localStorage.getItem("emw.panelWidth"));
+    return Number.isFinite(saved) && saved >= 220 && saved <= 600 ? saved : 320;
+  });
   const wsRef = useRef<WebSocket | null>(null);
   const activeSessionRef = useRef("");
   const openFileRef = useRef<HTMLInputElement | null>(null);
@@ -137,6 +141,14 @@ export function GatewayApp() {
   useEffect(() => {
     activeSessionRef.current = scriptInstanceId;
   }, [scriptInstanceId]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("emw.panelWidth", String(panelWidth));
+    } catch {
+      /* ignore */
+    }
+  }, [panelWidth]);
 
   const previewResult = useMemo(() => {
     if (!selected || !isEmw(selected) || mode !== "preview" || remoteUiRoot) return null;
@@ -175,9 +187,18 @@ export function GatewayApp() {
     ws.onerror = () => setWsStatus("error");
     ws.onmessage = (event) => {
       const msg = JSON.parse(String(event.data || "{}")) as RemoteIncomingMessage;
-      const entry: LogEntry = { type: String(msg.type), at: timeOfDay(), raw: msg };
-      setLog((items) => [entry, ...items].slice(0, 80));
-      setUnreadLog((n) => (activityRef.current === "log" ? 0 : Math.min(n + 1, 99)));
+      const summary = summarizeMessage(msg);
+      if (summary) {
+        const entry: LogEntry = {
+          type: String(msg.type),
+          at: timeOfDay(),
+          severity: summary.severity,
+          message: summary.message,
+          raw: msg,
+        };
+        setLog((items) => [entry, ...items].slice(0, 80));
+        setUnreadLog((n) => (activityRef.current === "log" ? 0 : Math.min(n + 1, 99)));
+      }
 
       if (msg.type === "device.status") {
         const status = msg as RemoteDeviceStatus;
@@ -279,6 +300,7 @@ export function GatewayApp() {
     setSelected(example.name);
     setSource(example.source);
     setMode("editor");
+    setScriptInstanceId("");
     setRemoteUiRoot(null);
     setUiError(null);
   }
@@ -344,6 +366,7 @@ export function GatewayApp() {
     setSelected(file.name || "script.emw");
     setSource(await file.text());
     setMode("editor");
+    setScriptInstanceId("");
     setRemoteUiRoot(null);
     setUiError(null);
   }
@@ -401,15 +424,25 @@ export function GatewayApp() {
   const tone = statusTone(wsStatus, deviceStatus);
   const liveScript = !!scriptInstanceId;
   const liveSessions = Object.values(sessions);
+  const liveSessionForSelected = useMemo(
+    () => (selected ? liveSessions.find((s) => s.name === selected) : undefined),
+    [liveSessions, selected]
+  );
 
   function selectLiveSession(id: string) {
     const session = sessions[id];
     if (!session) return;
     setScriptInstanceId(id);
+    setSelected(session.name);
     setRemoteUiRoot(session.root);
     setUiRev(session.rev);
     setPlotDataByNodeId(session.plotDataByNodeId);
     setMode("preview");
+    setUiError(null);
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      wsSend(ws, { type: "ui.snapshot.get", scriptInstanceId: id });
+    }
   }
 
   return (
@@ -453,6 +486,8 @@ export function GatewayApp() {
           liveSessions={liveSessions}
           activeSessionId={scriptInstanceId}
           onSelectSession={selectLiveSession}
+          width={panelWidth}
+          setWidth={setPanelWidth}
         />
 
         <input
@@ -494,8 +529,10 @@ export function GatewayApp() {
           remoteUiRoot={remoteUiRoot}
           plotDataByNodeId={plotDataByNodeId}
           previewResult={previewResult}
-          runtimeOwnerLabel={runtimeLabel(deviceStatus?.runtimeOwner)}
-          liveScript={liveScript}
+          liveSessionForSelectedId={liveSessionForSelected?.id}
+          onOpenLive={() => {
+            if (liveSessionForSelected) selectLiveSession(liveSessionForSelected.id);
+          }}
           onRemoteEvent={(targetId, name, payload) => {
             const ws = wsRef.current;
             if (!ws || ws.readyState !== WebSocket.OPEN || !scriptInstanceId) return;
@@ -604,6 +641,13 @@ function ActivityRail(props: {
         dot={runtimeOnline ? "online" : runtimeWarn ? "warn" : null}
       />
       <RailButton
+        id="agent"
+        active={active === "agent"}
+        label="Agent"
+        onClick={() => onSelect("agent")}
+        icon={<AgentIcon />}
+      />
+      <RailButton
         id="log"
         active={active === "log"}
         label="Log"
@@ -689,12 +733,37 @@ function SidePanel(props: {
   liveSessions: LiveSession[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
+  width: number;
+  setWidth: (n: number) => void;
 }) {
-  const { activity } = props;
+  const { activity, width, setWidth } = props;
   if (!activity) return null;
 
+  function startResize(event: React.MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = width;
+    const onMove = (ev: MouseEvent) => {
+      const next = Math.min(600, Math.max(220, startW + (ev.clientX - startX)));
+      setWidth(next);
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+  }
+
   return (
-    <aside className="flex w-[320px] shrink-0 flex-col border-r border-[color:var(--line)] bg-[color:var(--surface-3)]">
+    <aside
+      style={{ width }}
+      className="relative flex shrink-0 flex-col border-r border-[color:var(--line)] bg-[color:var(--surface-3)]"
+    >
       <header className="flex shrink-0 items-center justify-between border-b border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-3">
         <div>
           <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink-mute)]">
@@ -716,7 +785,18 @@ function SidePanel(props: {
       <div className="min-h-0 flex-1 overflow-auto">
         {activity === "library" ? <LibraryPanel {...props} liveSessions={props.liveSessions} activeSessionId={props.activeSessionId} onSelectSession={props.onSelectSession} /> : null}
         {activity === "runtime" ? <RuntimePanel {...props} /> : null}
+        {activity === "agent" ? <AgentPlaceholderPanel /> : null}
         {activity === "log" ? <LogPanel log={props.log} /> : null}
+      </div>
+
+      <div
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="Resize side panel"
+        onMouseDown={startResize}
+        className="group absolute right-0 top-0 z-10 h-full w-1 cursor-col-resize"
+      >
+        <span className="absolute right-0 top-0 h-full w-px bg-[color:var(--line)] transition group-hover:bg-[color:var(--aqua)] group-active:bg-[color:var(--aqua)]" />
       </div>
     </aside>
   );
@@ -725,7 +805,27 @@ function SidePanel(props: {
 function titleFor(id: ActivityId): string {
   if (id === "library") return "Library";
   if (id === "runtime") return "Runtime";
+  if (id === "agent") return "Agent";
   return "Log";
+}
+
+function AgentPlaceholderPanel() {
+  return (
+    <div className="flex h-full flex-col items-start gap-3 p-4">
+      <div className="rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface-3)] px-4 py-6 text-center">
+        <div className="mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink-dim)]">
+          <span className="h-4 w-4">
+            <AgentIcon />
+          </span>
+        </div>
+        <div className="text-[12px] font-semibold text-[color:var(--ink)]">Agent — coming soon</div>
+        <div className="mt-1 text-[11px] leading-5 text-[color:var(--ink-dim)]">
+          Ask Claude to write or edit .emw scripts, explain code, and walk through
+          captures. Local hardware control still works without the agent.
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function LibraryPanel(props: {
@@ -739,46 +839,37 @@ function LibraryPanel(props: {
   onSelectSession: (id: string) => void;
 }) {
   const { examples, selected, openExample, openLocal, saveLocal, liveSessions, activeSessionId, onSelectSession } = props;
+
+  const sessionByName = useMemo(() => {
+    const map = new Map<string, LiveSession>();
+    for (const session of liveSessions) map.set(session.name, session);
+    return map;
+  }, [liveSessions]);
+
+  const exampleNames = useMemo(() => new Set(examples.map((e) => e.name)), [examples]);
+  const customSessions = useMemo(
+    () => liveSessions.filter((s) => !exampleNames.has(s.name)),
+    [liveSessions, exampleNames]
+  );
+
   return (
     <div className="flex flex-col">
-      {liveSessions.length > 0 && (
+      {customSessions.length > 0 && (
         <div className="border-b border-[color:var(--line)]">
           <div className="px-4 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
-            Running
+            Custom
           </div>
           <ul className="divide-y divide-[color:var(--line)]">
-            {liveSessions.map((session) => {
-              const isActive = activeSessionId === session.id;
-              return (
-                <li key={session.id}>
-                  <button
-                    type="button"
-                    onClick={() => onSelectSession(session.id)}
-                    className={
-                      "group flex w-full items-center gap-3 px-4 py-3 text-left transition " +
-                      (isActive
-                        ? "bg-[color:var(--aqua-tint-2)]"
-                        : "hover:bg-[color:var(--surface-2)]")
-                    }
-                  >
-                    <span className="h-2 w-2 shrink-0 rounded-full bg-[color:var(--aqua)] shadow-[0_0_6px_var(--aqua)]" aria-hidden />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-mono text-[12px] font-semibold text-[color:var(--ink)]">
-                        {session.name}
-                      </div>
-                      {session.deviceId && (
-                        <div className="mt-0.5 truncate font-mono text-[10px] text-[color:var(--ink-dim)]">
-                          {session.deviceId}
-                        </div>
-                      )}
-                    </div>
-                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-[color:var(--aqua)]">
-                      Live
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
+            {customSessions.map((session) => (
+              <SessionRow
+                key={session.id}
+                name={session.name}
+                subtitle={session.deviceId}
+                live
+                active={activeSessionId === session.id}
+                onClick={() => onSelectSession(session.id)}
+              />
+            ))}
           </ul>
         </div>
       )}
@@ -788,7 +879,7 @@ function LibraryPanel(props: {
           Examples
         </div>
         <div className="text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          Bundled scripts ship with the gateway. Pick one to load it into the editor.
+          Bundled scripts ship with the gateway. Live entries are running on the gateway.
         </div>
       </div>
 
@@ -797,37 +888,18 @@ function LibraryPanel(props: {
       ) : (
         <ul className="divide-y divide-[color:var(--line)]">
           {examples.map((example) => {
-            const active = selected === example.name;
+            const session = sessionByName.get(example.name);
+            const live = !!session;
+            const active = live ? activeSessionId === session!.id : selected === example.name;
             return (
-              <li key={example.name}>
-                <button
-                  type="button"
-                  onClick={() => openExample(example)}
-                  className={
-                    "group flex w-full items-start justify-between gap-3 px-4 py-3 text-left transition " +
-                    (active
-                      ? "bg-[color:var(--aqua-tint-2)]"
-                      : "hover:bg-[color:var(--surface-2)]")
-                  }
-                >
-                  <div className="min-w-0">
-                    <div className="truncate font-mono text-[12px] font-semibold text-[color:var(--ink)]">
-                      {example.name}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-[color:var(--ink-dim)]">
-                      Bundled example
-                    </div>
-                  </div>
-                  <span
-                    className={
-                      "mt-0.5 shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] " +
-                      (active ? "text-[color:var(--aqua)]" : "text-[color:var(--ink-mute)] group-hover:text-[color:var(--ink-dim)]")
-                    }
-                  >
-                    {active ? "open" : "load"}
-                  </span>
-                </button>
-              </li>
+              <SessionRow
+                key={example.name}
+                name={example.name}
+                subtitle={live ? session!.deviceId : "Bundled example"}
+                live={live}
+                active={active}
+                onClick={() => (live ? onSelectSession(session!.id) : openExample(example))}
+              />
             );
           })}
         </ul>
@@ -861,6 +933,99 @@ function LibraryPanel(props: {
   );
 }
 
+function SessionRow(props: {
+  name: string;
+  subtitle?: string;
+  live: boolean;
+  active: boolean;
+  onClick: () => void;
+}) {
+  const { name, subtitle, live, active, onClick } = props;
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={onClick}
+        className={
+          "group flex w-full items-center gap-3 px-4 py-3 text-left transition " +
+          (active ? "bg-[color:var(--aqua-tint-2)]" : "hover:bg-[color:var(--surface-2)]")
+        }
+      >
+        {live ? (
+          <span className="relative flex h-2 w-2 shrink-0 items-center justify-center" aria-hidden>
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--aqua)] opacity-60" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[color:var(--aqua)] shadow-[0_0_6px_var(--aqua)]" />
+          </span>
+        ) : (
+          <span className="h-2 w-2 shrink-0 rounded-full bg-transparent" aria-hidden />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="truncate font-mono text-[12px] font-semibold text-[color:var(--ink)]">
+            {name}
+          </div>
+          {subtitle ? (
+            <div className="mt-0.5 truncate font-mono text-[10px] text-[color:var(--ink-dim)]">
+              {subtitle}
+            </div>
+          ) : null}
+        </div>
+      </button>
+    </li>
+  );
+}
+
+function transportTone(transport?: string): { label: string; cls: string } {
+  const t = String(transport || "").toLowerCase();
+  if (t === "ble") return { label: "BLE", cls: "text-[color:var(--sky)] border-[color:var(--sky-tint-2)] bg-[color:var(--sky-tint)]" };
+  if (t === "usb") return { label: "USB", cls: "text-[color:var(--copper)] border-[color:var(--line)] bg-[color:var(--surface-2)]" };
+  if (t === "wi-fi" || t === "wifi") return { label: "Wi-Fi", cls: "text-[color:var(--aqua)] border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)]" };
+  return { label: String(transport || "—").toUpperCase(), cls: "text-[color:var(--ink-dim)] border-[color:var(--line)] bg-[color:var(--surface-2)]" };
+}
+
+function DeviceCard({ device, selected }: { device: GatewayDevice; selected: boolean }) {
+  const tone = transportTone(device.transport);
+  const claimed = (device.connectionState || "").toLowerCase() === "claimed" || device.connected === true;
+  const uid = device.hardwareUid || device.id || "";
+  const board = device.boardType;
+  const endpoint = device.endpoint;
+  return (
+    <li
+      className={
+        "rounded-xl border px-3 py-2.5 transition " +
+        (selected
+          ? "border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)]"
+          : "border-[color:var(--line)] bg-[color:var(--surface-2)]")
+      }
+    >
+      <div className="flex items-center gap-2">
+        <span className={`inline-flex shrink-0 items-center rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${tone.cls}`}>
+          {tone.label}
+        </span>
+        <span className="min-w-0 flex-1 truncate font-mono text-[12px] font-semibold text-[color:var(--ink)]">
+          {uid || device.name || "device"}
+        </span>
+        {claimed ? (
+          <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[color:var(--aqua)]">
+            <span className="h-1 w-1 rounded-full bg-[color:var(--aqua)]" aria-hidden />
+            Claimed
+          </span>
+        ) : (
+          <span className="rounded-full border border-[color:var(--line)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[color:var(--ink-mute)]">
+            Free
+          </span>
+        )}
+      </div>
+      {(board || endpoint) && (
+        <div className="mt-1.5 flex items-center gap-2 text-[10px] text-[color:var(--ink-dim)]">
+          {board ? <span>{board}</span> : null}
+          {board && endpoint ? <span aria-hidden>·</span> : null}
+          {endpoint ? <span className="truncate font-mono">{endpoint}</span> : null}
+        </div>
+      )}
+    </li>
+  );
+}
+
 function RuntimePanel(props: {
   deviceStatus: RemoteDeviceStatus | null;
   connected: boolean;
@@ -889,152 +1054,130 @@ function RuntimePanel(props: {
     useGatewayWifiDevice,
     useManualWifiTarget,
   } = props;
+  const [wifiOpen, setWifiOpen] = useState(false);
   const canUseWifi = !!manualWifiHost.trim();
-  const wifiDevices = gatewayDevices.filter((device) => device.transport === "Wi-Fi" && (device.host || device.endpoint));
+  const devices = (connected && deviceStatus?.devices) || [];
+  const wifiDevices = gatewayDevices.filter(
+    (device) => device.transport === "Wi-Fi" && (device.host || device.endpoint)
+  );
   return (
     <div className="flex flex-col gap-4 p-4">
-      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink-mute)]">
-          Owner
-        </div>
-        <div className="mt-1 text-[14px] font-semibold text-[color:var(--ink)]">
-          {connected ? runtimeLabel(deviceStatus?.runtimeOwner) : "No runtime"}
-        </div>
-        <div className="mt-1 text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          {connected ? "Gateway is ready to run scripts." : "Waiting for the local Gateway runtime."}
-        </div>
-      </div>
-
       <div>
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
-          Devices
+        <div className="mb-2 flex items-center justify-between">
+          <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
+            Devices
+          </div>
+          <span className="text-[10px] text-[color:var(--ink-mute)]">
+            {devices.length} {devices.length === 1 ? "device" : "devices"}
+          </span>
         </div>
-        {connected && deviceStatus?.devices?.length ? (
+        {devices.length > 0 ? (
           <ul className="space-y-2">
-            {deviceStatus.devices.map((device) => (
-              <li
-                key={device.id || device.name}
-                className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2"
-              >
-                <div className="text-[13px] font-semibold text-[color:var(--ink)]">
-                  {device.name || device.id || runtimeLabel(deviceStatus.runtimeOwner)}
-                </div>
-                <div className="text-[11px] text-[color:var(--ink-dim)]">
-                  {deviceDetail(device, deviceStatus.runtimeOwner)}
-                </div>
-              </li>
+            {devices.map((device) => (
+              <DeviceCard
+                key={device.id || device.hardwareUid || device.name}
+                device={device}
+                selected={
+                  !!selectedDeviceId &&
+                  (deviceKey(device) === selectedDeviceId ||
+                    `uid:${device.hardwareUid || ""}` === selectedDeviceId)
+                }
+              />
             ))}
           </ul>
         ) : (
-          <div className="rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-3 text-[12px] text-[color:var(--ink-dim)]">
-            No devices reported.
+          <div className="rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 py-4 text-[12px] text-[color:var(--ink-dim)]">
+            {connected
+              ? "No devices yet. Plug a board over USB or pair via BLE."
+              : "Waiting for the local gateway runtime…"}
           </div>
         )}
       </div>
 
-      <div className="rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
-          Wi-Fi
-        </div>
-        <div className="mt-2 flex items-center justify-between gap-2">
-          <span className="text-[11px] text-[color:var(--ink-dim)]">
-            {wifiDevices.length ? `${wifiDevices.length} discovered` : "No discovered endpoints"}
+      <div>
+        <button
+          type="button"
+          onClick={() => setWifiOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 py-2 text-[12px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)]"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
+              Wi-Fi target
+            </span>
+            {wifiDevices.length > 0 ? (
+              <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-[color:var(--ink-dim)]">
+                {wifiDevices.length} discovered
+              </span>
+            ) : null}
           </span>
-          <button
-            type="button"
-            onClick={refreshGatewayDevices}
-            disabled={gatewayDevicesBusy}
-            className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
-          >
-            {gatewayDevicesBusy ? "Scanning" : "Scan"}
-          </button>
-        </div>
-        {wifiDevices.length ? (
-          <ul className="mt-2 space-y-1">
-            {wifiDevices.slice(0, 4).map((device) => (
-              <li key={device.id || device.endpoint || device.name} className="flex items-center gap-2 rounded-lg bg-[color:var(--surface-3)] px-2 py-1.5">
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[12px] font-semibold text-[color:var(--ink)]">{device.name || device.endpoint}</div>
-                  <div className="truncate text-[10px] text-[color:var(--ink-dim)]">{device.endpoint || device.host}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => useGatewayWifiDevice(device)}
-                  className="rounded-md border border-[color:var(--line)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
-                >
-                  Use
-                </button>
-              </li>
-            ))}
-          </ul>
+          <span className="text-[11px] text-[color:var(--ink-mute)]">{wifiOpen ? "−" : "+"}</span>
+        </button>
+
+        {wifiOpen ? (
+          <div className="mt-2 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[11px] text-[color:var(--ink-dim)]">
+                {wifiDevices.length ? `${wifiDevices.length} on the network` : "Scan for ESP32 endpoints"}
+              </span>
+              <button
+                type="button"
+                onClick={refreshGatewayDevices}
+                disabled={gatewayDevicesBusy}
+                className="rounded-md border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)] disabled:opacity-50"
+              >
+                {gatewayDevicesBusy ? "Scanning…" : "Scan"}
+              </button>
+            </div>
+            {wifiDevices.length ? (
+              <ul className="mt-2 space-y-1">
+                {wifiDevices.slice(0, 4).map((device) => (
+                  <li
+                    key={device.id || device.endpoint || device.name}
+                    className="flex items-center gap-2 rounded-lg bg-[color:var(--surface-3)] px-2 py-1.5"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-[12px] font-semibold text-[color:var(--ink)]">
+                        {device.name || device.endpoint}
+                      </div>
+                      <div className="truncate font-mono text-[10px] text-[color:var(--ink-dim)]">
+                        {device.endpoint || device.host}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => useGatewayWifiDevice(device)}
+                      className="rounded-md border border-[color:var(--line)] px-2 py-1 text-[11px] font-semibold text-[color:var(--ink-dim)] hover:text-[color:var(--ink)]"
+                    >
+                      Use
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-3 grid grid-cols-[1fr_72px] gap-2">
+              <input
+                value={manualWifiHost}
+                onChange={(event) => setManualWifiHost(event.target.value)}
+                placeholder="Host or IP"
+                className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)]"
+              />
+              <input
+                value={manualWifiPort}
+                onChange={(event) => setManualWifiPort(event.target.value)}
+                placeholder="3922"
+                className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)]"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={useManualWifiTarget}
+              disabled={!canUseWifi}
+              className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Use Wi-Fi target
+            </button>
+          </div>
         ) : null}
-        <div className="mt-3 grid grid-cols-[1fr_72px] gap-2">
-          <input
-            value={manualWifiHost}
-            onChange={(event) => setManualWifiHost(event.target.value)}
-            placeholder="Host or IP"
-            className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
-          />
-          <input
-            value={manualWifiPort}
-            onChange={(event) => setManualWifiPort(event.target.value)}
-            placeholder="3922"
-            className="h-9 rounded-lg border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 text-[13px] text-[color:var(--ink)] outline-none focus:border-[color:var(--sky)] disabled:opacity-50"
-          />
-        </div>
-        <button
-          type="button"
-          onClick={useManualWifiTarget}
-          disabled={!canUseWifi}
-          className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-3)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          Use Wi-Fi target
-        </button>
-        <p className="mt-2 text-[11px] leading-5 text-[color:var(--ink-dim)]">
-          {selectedDeviceId ? `Selected: ${selectedDeviceId}` : "No explicit target selected."}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function AgentPanel(props: {
-  agentPrompt: string;
-  setAgentPrompt: (v: string) => void;
-  agentOutput: string;
-  agentBusy: boolean;
-  onAsk: () => void;
-}) {
-  const { agentPrompt, setAgentPrompt, agentOutput, agentBusy, onAsk } = props;
-  return (
-    <div className="flex h-full flex-col">
-      <div className="border-b border-[color:var(--line)] px-4 py-3">
-        <div className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
-          Prompt
-        </div>
-        <textarea
-          value={agentPrompt}
-          onChange={(event) => setAgentPrompt(event.target.value)}
-          placeholder="Ask for a script edit, an explanation, or a debugging pass…"
-          className="mt-2 h-28 w-full resize-y rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-3 text-[12px] leading-5 text-[color:var(--ink)] outline-none focus:border-[color:var(--sky-tint-2)] focus:ring-2 focus:ring-[color:var(--sky-tint)]"
-        />
-        <button
-          type="button"
-          onClick={onAsk}
-          disabled={agentBusy || !agentPrompt.trim()}
-          className="mt-2 inline-flex h-9 w-full items-center justify-center rounded-xl border border-[color:var(--sky-tint-2)] bg-[color:var(--sky-tint)] px-3 text-[13px] font-semibold text-[color:var(--sky)] transition hover:bg-[color:var(--sky-tint-2)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {agentBusy ? "Asking…" : "Ask agent"}
-        </button>
-      </div>
-
-      <div className="flex min-h-0 flex-1 flex-col p-4">
-        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-[color:var(--ink-mute)]">
-          Response
-        </div>
-        <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap rounded-xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-3 font-mono text-[11px] leading-5 text-[color:var(--ink)]">
-          {agentOutput || "Optional Agent API key required. Local hardware control still works without it."}
-        </pre>
       </div>
     </div>
   );
@@ -1044,20 +1187,39 @@ function LogPanel({ log }: { log: LogEntry[] }) {
   if (log.length === 0) {
     return (
       <div className="p-4 text-[12px] text-[color:var(--ink-dim)]">
-        Messages from the local runtime will appear here as they arrive.
+        Meaningful events (script started, stopped, errors) will appear here. Heartbeats are filtered out.
       </div>
     );
   }
   return (
     <ul className="divide-y divide-[color:var(--line)]">
-      {log.map((entry, index) => (
-        <li key={index} className="flex items-center gap-3 px-4 py-2">
-          <span className="font-mono text-[10px] text-[color:var(--ink-mute)]">{entry.at}</span>
-          <code className="flex-1 truncate font-mono text-[11px] text-[color:var(--ink)]">
-            {entry.type}
-          </code>
-        </li>
-      ))}
+      {log.map((entry, index) => {
+        const dotClass =
+          entry.severity === "error"
+            ? "bg-[color:var(--danger)]"
+            : entry.severity === "warn"
+            ? "bg-[color:var(--copper)]"
+            : "bg-[color:var(--aqua)]";
+        const messageClass =
+          entry.severity === "error"
+            ? "text-[color:var(--danger)]"
+            : "text-[color:var(--ink)]";
+        return (
+          <li key={index} className="flex items-start gap-3 px-4 py-2.5">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${dotClass}`} aria-hidden />
+            <div className="min-w-0 flex-1">
+              <div className={`break-words font-mono text-[11px] leading-5 ${messageClass}`}>
+                {entry.message}
+              </div>
+              <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] text-[color:var(--ink-mute)]">
+                <span>{entry.at}</span>
+                <span>·</span>
+                <span>{entry.type}</span>
+              </div>
+            </div>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -1084,8 +1246,8 @@ function Workspace(props: {
   remoteUiRoot: RemoteUiNode | null;
   plotDataByNodeId: Record<string, RemotePlotData>;
   previewResult: ReturnType<typeof evalEmwUi> | null;
-  runtimeOwnerLabel: string;
-  liveScript: boolean;
+  liveSessionForSelectedId?: string;
+  onOpenLive: () => void;
   onRemoteEvent: (targetId: string, name: string, payload: unknown) => void;
 }) {
   const {
@@ -1108,8 +1270,8 @@ function Workspace(props: {
     remoteUiRoot,
     plotDataByNodeId,
     previewResult,
-    runtimeOwnerLabel,
-    liveScript,
+    liveSessionForSelectedId,
+    onOpenLive,
     onRemoteEvent,
   } = props;
 
@@ -1123,6 +1285,8 @@ function Workspace(props: {
         .filter((transport) => transport !== "auto")
     )
   ).sort((a, b) => ["usb", "ble", "wifi"].indexOf(a) - ["usb", "ble", "wifi"].indexOf(b));
+
+  const isLive = canStop && mode === "preview";
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -1138,7 +1302,7 @@ function Workspace(props: {
             <div className="truncate font-mono text-[13px] font-semibold text-[color:var(--ink)]">
               {filename}
             </div>
-            {liveScript ? (
+            {isLive ? (
               <span className="inline-flex items-center gap-1 rounded-full border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[color:var(--aqua)]">
                 <span className="h-1.5 w-1.5 rounded-full bg-[color:var(--aqua)]" aria-hidden />
                 live
@@ -1149,60 +1313,80 @@ function Workspace(props: {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {canPreview ? (
-            <div className="inline-flex overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-0.5">
-              <SegButton active={mode === "editor"} onClick={() => setMode("editor")}>
-                Editor
-              </SegButton>
-              <SegButton active={mode === "preview"} onClick={() => setMode("preview")}>
-                Preview
-              </SegButton>
-            </div>
-          ) : null}
+          {isLive ? (
+            <button
+              type="button"
+              onClick={onStop}
+              disabled={!canStop}
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--danger-tint-2)] bg-[color:var(--danger-tint)] px-3 text-[13px] font-semibold text-[color:var(--danger)] transition hover:bg-[color:var(--danger-tint-2)] disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <StopIcon />
+              Stop
+            </button>
+          ) : (
+            <>
+              {canPreview ? (
+                <div className="inline-flex overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] p-0.5">
+                  <SegButton active={mode === "editor"} onClick={() => setMode("editor")}>
+                    Editor
+                  </SegButton>
+                  <SegButton active={mode === "preview"} onClick={() => setMode("preview")}>
+                    Preview
+                  </SegButton>
+                </div>
+              ) : null}
 
-          <select
-            value={selectedDeviceId}
-            onChange={(event) => setSelectedDeviceId(event.target.value)}
-            className="h-9 max-w-[260px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
-            title="Device to run the next script on"
-          >
-            <option value="">Auto device</option>
-            {deviceOptions.map((device) => (
-              <option key={device.id} value={device.id}>
-                {device.label}
-              </option>
-            ))}
-          </select>
-          <select
-            value={selectedTransport}
-            onChange={(event) => setSelectedTransport(event.target.value)}
-            className="h-9 max-w-[150px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
-            title="Transport preference for the next script"
-          >
-            <option value="auto">Auto transport</option>
-            {transportChoices.map((transport) => (
-              <option key={transport} value={transport}>
-                {transport.toUpperCase()}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={onRun}
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-3 text-[13px] font-semibold text-[color:var(--aqua)] transition hover:bg-[color:var(--aqua-tint-2)]"
-          >
-            <RunIcon />
-            Run on device
-          </button>
-          <button
-            type="button"
-            onClick={onStop}
-            disabled={!canStop}
-            className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[13px] font-semibold text-[color:var(--ink)] transition hover:border-[color:var(--danger-tint-2)] hover:bg-[color:var(--danger-tint)] hover:text-[color:var(--danger)] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-[color:var(--surface-2)] disabled:hover:text-[color:var(--ink)]"
-          >
-            <StopIcon />
-            Stop
-          </button>
+              <select
+                value={selectedDeviceId}
+                onChange={(event) => setSelectedDeviceId(event.target.value)}
+                className="h-9 max-w-[260px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
+                title="Device to run the next script on"
+              >
+                <option value="">Auto device</option>
+                {deviceOptions.map((device) => (
+                  <option key={device.id} value={device.id}>
+                    {device.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={selectedTransport}
+                onChange={(event) => setSelectedTransport(event.target.value)}
+                className="h-9 max-w-[150px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
+                title="Transport preference for the next script"
+              >
+                <option value="auto">Auto transport</option>
+                {transportChoices.map((transport) => (
+                  <option key={transport} value={transport}>
+                    {transport.toUpperCase()}
+                  </option>
+                ))}
+              </select>
+              {liveSessionForSelectedId ? (
+                <button
+                  type="button"
+                  onClick={onOpenLive}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-3 text-[13px] font-semibold text-[color:var(--aqua)] transition hover:bg-[color:var(--aqua-tint-2)]"
+                  title="Open the running session for this script"
+                >
+                  <span className="relative flex h-2 w-2 items-center justify-center" aria-hidden>
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[color:var(--aqua)] opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-[color:var(--aqua)]" />
+                  </span>
+                  Open live
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={onRun}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-[color:var(--aqua-tint-2)] bg-[color:var(--aqua-tint)] px-3 text-[13px] font-semibold text-[color:var(--aqua)] transition hover:bg-[color:var(--aqua-tint-2)]"
+                >
+                  <RunIcon />
+                  Run on device
+                </button>
+              )}
+            </>
+          )}
         </div>
       </header>
 
@@ -1212,48 +1396,54 @@ function Workspace(props: {
         </div>
       ) : null}
 
-      <div className="flex min-h-0 flex-1 flex-col p-5">
-        {showPreview ? (
-          <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-5">
-            {remoteUiRoot ? (
-              <>
-                <RemoteEmwUi
-                  root={remoteUiRoot}
-                  plotDataByNodeId={plotDataByNodeId}
-                  onEvent={onRemoteEvent}
+      {isLive ? (
+        <div className="min-h-0 flex-1 overflow-auto px-5 py-4">
+          {remoteUiRoot ? (
+            <RemoteEmwUi
+              root={remoteUiRoot}
+              plotDataByNodeId={plotDataByNodeId}
+              onEvent={onRemoteEvent}
+            />
+          ) : (
+            <EmptyState
+              title="Loading session…"
+              hint="Restoring live UI from the gateway."
+            />
+          )}
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col p-5">
+          {showPreview ? (
+            <div className="min-h-0 flex-1 overflow-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-5">
+              {previewResult?.error ? (
+                <div className="rounded-lg border border-[color:var(--danger-tint-2)] bg-[color:var(--danger-tint)] px-3 py-2 text-[12px] text-[color:var(--danger)] whitespace-pre-wrap">
+                  {previewResult.error}
+                </div>
+              ) : previewResult?.root ? (
+                <>
+                  <EmwUiPreview root={previewResult.root} />
+                  <div className="mt-3 text-[11px] text-[color:var(--ink-dim)]">
+                    Static preview — controls are disabled and device APIs are stubbed.
+                  </div>
+                </>
+              ) : (
+                <EmptyState
+                  title="No UI to render"
+                  hint="Add a UI.render(...) call to your script, or hit Run to launch on the runtime."
                 />
-                <div className="mt-3 text-[11px] text-[color:var(--ink-dim)]">
-                  Live: UI and interactions are running on the {runtimeOwnerLabel.toLowerCase()}.
-                </div>
-              </>
-            ) : previewResult?.error ? (
-              <div className="rounded-lg border border-[color:var(--danger-tint-2)] bg-[color:var(--danger-tint)] px-3 py-2 text-[12px] text-[color:var(--danger)] whitespace-pre-wrap">
-                {previewResult.error}
-              </div>
-            ) : previewResult?.root ? (
-              <>
-                <EmwUiPreview root={previewResult.root} />
-                <div className="mt-3 text-[11px] text-[color:var(--ink-dim)]">
-                  Preview: controls are disabled and device APIs are stubbed.
-                </div>
-              </>
-            ) : (
-              <EmptyState
-                title="No UI to render"
-                hint="Add a UI.render(...) call to your script, or hit Run to launch on the runtime."
-              />
-            )}
-          </div>
-        ) : (
-          <textarea
-            value={source}
-            onChange={(event) => onSourceChange(event.target.value)}
-            spellCheck={false}
-            className="min-h-0 flex-1 w-full resize-none rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-4 font-mono text-[12px] leading-relaxed text-[color:var(--ink)] outline-none focus:border-[color:var(--sky-tint-2)] focus:ring-2 focus:ring-[color:var(--sky-tint)]"
-            placeholder="-- Write or paste an .emw script…"
-          />
-        )}
-      </div>
+              )}
+            </div>
+          ) : (
+            <textarea
+              value={source}
+              onChange={(event) => onSourceChange(event.target.value)}
+              spellCheck={false}
+              className="min-h-0 flex-1 w-full resize-none rounded-2xl border border-[color:var(--line)] bg-[color:var(--image-well)] p-4 font-mono text-[12px] leading-relaxed text-[color:var(--ink)] outline-none focus:border-[color:var(--sky-tint-2)] focus:ring-2 focus:ring-[color:var(--sky-tint)]"
+              placeholder="-- Write or paste an .emw script…"
+            />
+          )}
+        </div>
+      )}
     </section>
   );
 }
@@ -1304,40 +1494,43 @@ function StopIcon() {
 
 function LibraryIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4.5h7.5a2.5 2.5 0 0 1 2.5 2.5v9a1 1 0 0 1-1.4.92L9 14.5l-3.6 2.42A1 1 0 0 1 4 16V4.5Z" />
-      <path d="M14 7v9a1 1 0 0 0 1.4.92L17 16" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H9v16H5.5A1.5 1.5 0 0 1 4 18.5v-13Z" />
+      <path d="M9 4h4.5A1.5 1.5 0 0 1 15 5.5v13a1.5 1.5 0 0 1-1.5 1.5H9V4Z" />
+      <path d="m17.4 5.05 1.93.52a1.5 1.5 0 0 1 1.06 1.84l-3.36 12.55a1.5 1.5 0 0 1-1.84 1.06l-1.94-.52" />
     </svg>
   );
 }
 
 function RuntimeIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="4" y="6" width="12" height="9" rx="1.5" />
-      <path d="M7 4.5v1.5M13 4.5v1.5M7 15v1.5M13 15v1.5M2.5 8.5H4M2.5 11.5H4M16 8.5h1.5M16 11.5h1.5" />
-      <rect x="7.5" y="9.5" width="5" height="2" rx="0.5" />
-    </svg>
-  );
-}
-
-function AgentIcon() {
-  return (
-    <svg viewBox="0 0 20 20" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M10 2.5v2" />
-      <rect x="3.5" y="4.5" width="13" height="11" rx="2.5" />
-      <circle cx="7.5" cy="10" r="1" />
-      <circle cx="12.5" cy="10" r="1" />
-      <path d="M8 13h4" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="6" y="6" width="12" height="12" rx="2" />
+      <rect x="9.5" y="9.5" width="5" height="5" rx="0.6" />
+      <path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 9h3M3 15h3M18 9h3M18 15h3" />
     </svg>
   );
 }
 
 function LogIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3.5" y="3.5" width="13" height="13" rx="2" />
-      <path d="M6.5 7.5h7M6.5 10h7M6.5 12.5h4.5" />
+    <svg viewBox="0 0 24 24" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="4" width="18" height="16" rx="2.4" />
+      <path d="m7.5 9 3 3-3 3" />
+      <path d="M13 15h4.5" />
+    </svg>
+  );
+}
+
+function AgentIcon() {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden className="h-full w-full fill-none stroke-current" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 2.5v3" />
+      <rect x="4" y="5.5" width="16" height="12" rx="3" />
+      <circle cx="9" cy="11.5" r="1.1" />
+      <circle cx="15" cy="11.5" r="1.1" />
+      <path d="M9 14.5h6" />
+      <path d="M2 12h2M20 12h2" />
     </svg>
   );
 }
