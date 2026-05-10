@@ -68,17 +68,6 @@ let statusText = "";
 let lastAction = "";
 const SCRIPT_NAME = "pwm.emw";
 
-console.log(
-  "[" +
-    SCRIPT_NAME +
-    "] startup | board=" +
-    boardType +
-    " pin=" +
-    String(selectedPin) +
-    " hzText=" +
-    String(hzText),
-);
-
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
 }
@@ -106,18 +95,6 @@ function applyPwm() {
   const pin = Number(selectedPin) | 0;
   const hz = parsedHz();
   const valueU12 = dutyToU12(dutyPercent);
-  console.log(
-    "[" +
-      SCRIPT_NAME +
-      "] apply | pin=" +
-      String(pin) +
-      " hz=" +
-      String(hz) +
-      " duty=" +
-      String(dutyPercent) +
-      "% u12=" +
-      String(valueU12),
-  );
 
   statusText = "Writing...";
   lastAction =
@@ -136,12 +113,10 @@ function applyPwm() {
     const res = analogWrite(pin, valueU12, { hz: hz, timeout: 1500 });
     const done = function () {
       statusText = "OK: " + String(dutyPercent) + "% @ " + String(hz) + " Hz";
-      console.log("[" + SCRIPT_NAME + "] apply complete | pin=" + String(pin) + " hz=" + String(hz) + " duty=" + String(dutyPercent));
       render();
     };
     const fail = function (e) {
       statusText = "Error: " + String(e && e.message ? e.message : e);
-      console.log("[" + SCRIPT_NAME + "] apply failed | pin=" + String(pin) + " error=" + String(e && e.message ? e.message : e));
       render();
     };
     if (res && typeof res.then === "function") {
@@ -151,7 +126,6 @@ function applyPwm() {
     }
   } catch (e2) {
     statusText = "Error: " + String(e2 && e2.message ? e2.message : e2);
-    console.log("[" + SCRIPT_NAME + "] apply threw | pin=" + String(pin) + " error=" + String(e2 && e2.message ? e2.message : e2));
     render();
   }
 }
@@ -168,12 +142,10 @@ function stopPwm() {
     const res = analogWrite(pin, 0, { hz: hz, timeout: 1500 });
   const done = function () {
       statusText = "Stopped";
-      console.log("[" + SCRIPT_NAME + "] stop complete | pin=" + String(pin));
       render();
     };
     const fail = function (e) {
       statusText = "Error: " + String(e && e.message ? e.message : e);
-      console.log("[" + SCRIPT_NAME + "] stop failed | pin=" + String(pin) + " error=" + String(e && e.message ? e.message : e));
       render();
     };
     if (res && typeof res.then === "function") {
@@ -183,7 +155,6 @@ function stopPwm() {
     }
   } catch (e2) {
     statusText = "Error: " + String(e2 && e2.message ? e2.message : e2);
-    console.log("[" + SCRIPT_NAME + "] stop threw | pin=" + String(pin) + " error=" + String(e2 && e2.message ? e2.message : e2));
     render();
   }
 }

@@ -116,7 +116,6 @@ var txPin = boardType === 'esp32s2' || boardType === 'esp32s3' ? '4' : '1';
 var samplePeriodUsText = '10';
 var maxBytesText = '393216';
 var binsText = '400';
-console.log("[" + SCRIPT_NAME + "] startup | board=" + boardType + " rxPin=" + String(rxPin) + " txPin=" + String(txPin));
 
 // Retransmit (TX) settings.
 var txDutyText = '50';
@@ -237,22 +236,11 @@ function start() {
     var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
     var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
     var s = Sampler.start({ pin: Number(rxPin), clearBefore: true, periodUs: periodUs, maxBytes: maxBytes });
-    console.log(
-      "[" +
-        SCRIPT_NAME +
-        "] start | pin=" +
-        String(rxPin) +
-        " periodUs=" +
-        String(periodUs) +
-        " maxBytes=" +
-        String(maxBytes),
-    );
     recordId = s && s.id != null ? String(s.id) : null;
     recording = true;
     status = 'Recording…';
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] start failed | " + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -260,9 +248,7 @@ function start() {
 function stop() {
   try {
     Sampler.stop(recordId);
-    console.log("[" + SCRIPT_NAME + "] stop | recordId=" + String(recordId));
   } catch (e) {
-    console.log("[" + SCRIPT_NAME + "] stop failed | " + String(e && e.message ? e.message : e));
   }
   recording = false;
   recordId = null;
@@ -286,12 +272,10 @@ function retransmit() {
     var bytes = Sampler.getBytes();
     if (!bytes || !bytes.length) {
       status = 'No samples to retransmit.';
-      console.log("[" + SCRIPT_NAME + "] retransmit skipped | no samples");
       return render();
     }
 
     status = 'Retransmitting…';
-    console.log("[" + SCRIPT_NAME + "] retransmit | txPin=" + String(txPin) + " bytes=" + String(bytes.length));
     render();
 
     Sampler.transmitBufferStart(bytes, {
@@ -301,13 +285,11 @@ function retransmit() {
       tickUs: periodUs,
       onDone: function () {
         status = 'Retransmit done.';
-        console.log("[" + SCRIPT_NAME + "] retransmit done | bytes=" + String(bytes.length));
         render();
       },
     });
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] retransmit failed | " + String(e && e.message ? e.message : e));
   }
 
   render();
@@ -319,7 +301,6 @@ function clearBuffer() {
   try {
     // Clear captured data without affecting the active recording session.
     Sampler.clear();
-    console.log("[" + SCRIPT_NAME + "] clear");
 
     bufLen = 0;
     xMin = 0;
@@ -327,7 +308,6 @@ function clearBuffer() {
     status = 'Cleared';
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] clear failed | " + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -392,10 +372,8 @@ function loadSelected() {
     xMax = maxBits > 0 ? maxBits : 10000;
 
     status = 'Loaded ' + name;
-    console.log("[" + SCRIPT_NAME + "] load | name=" + String(name));
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] load failed | " + String(name) + " error=" + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -412,10 +390,8 @@ function saveRaw() {
     listFiles();
     selectedFile = name;
     status = 'Saved ' + name;
-    console.log("[" + SCRIPT_NAME + "] save raw | " + String(name));
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] save raw failed | " + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -433,10 +409,8 @@ function saveTimings() {
     listFiles();
     selectedFile = name;
     status = 'Saved ' + name;
-    console.log("[" + SCRIPT_NAME + "] save txt | " + String(name));
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] save txt failed | " + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -452,10 +426,8 @@ function removeSelected() {
     FS.remove(path);
     listFiles();
     status = 'Deleted ' + name;
-    console.log("[" + SCRIPT_NAME + "] remove | " + String(name));
   } catch (e) {
     status = String(e && e.message ? e.message : e);
-    console.log("[" + SCRIPT_NAME + "] remove failed | " + String(e && e.message ? e.message : e));
   }
   render();
 }
@@ -504,7 +476,6 @@ function render() {
             __scheduleViewport(range.min, range.max);
           },
         }),
-
 
         // Controls directly below the chart (primary workflow).
         UI.text({ text: 'Capture', fontWeight: 'semibold' }),

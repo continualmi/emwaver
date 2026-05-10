@@ -1,6 +1,7 @@
 # UI Snapshot Runtime Migration
 
-Status: planned
+Status: in progress — Gateway/CLI/default-script slice implemented; native
+runtime cleanup remains.
 
 This migration removes script-visible terminal logging from EMWaver and makes UI
 snapshots the only supported state surface for scripts, the CLI, browser flows,

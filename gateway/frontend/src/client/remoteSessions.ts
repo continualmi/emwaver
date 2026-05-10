@@ -35,15 +35,6 @@ export type RemoteDeviceStatus = {
 export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null; deviceId?: string | null; transportId?: string | null; warning?: string | null };
 export type RemoteScriptStopped = { type: "script.stopped"; hostSessionId: string; scriptInstanceId: string; deviceId?: string | null; reason?: string | null };
 export type RemoteScriptError = { type: "script.error"; hostSessionId: string; error: string; requestId?: string };
-export type RemoteScriptLog = {
-  type: "script.log";
-  hostSessionId: string;
-  scriptInstanceId: string;
-  level: string;
-  message: string;
-  ts: number;
-  seq: number;
-};
 
 export type RemoteUiSnapshot = {
   type: "ui.snapshot";
@@ -85,7 +76,6 @@ export type RemoteIncomingMessage =
   | RemoteScriptStarted
   | RemoteScriptStopped
   | RemoteScriptError
-  | RemoteScriptLog
   | RemoteUiSnapshot
   | RemotePlotData
   | { type: string; [key: string]: unknown };

@@ -147,7 +147,6 @@ function pushLog(line) {
   if (logLines.length > 200) {
     logLines = logLines.slice(logLines.length - 200);
   }
-  console.log("[" + SCRIPT_NAME + "] " + text);
 }
 
 function currentProfile() {
@@ -416,10 +415,6 @@ function withRadioAction(label, fn) {
   render();
 }
 
-console.log(
-  "[" + SCRIPT_NAME + "] startup | cs=" + String(RFM69_CS) + " dio2=" + String(RFM69_DIO2) + " profiles=" + String(PROFILES.length)
-);
-
 function actionProbe() {
   withRadioAction("Probe", function () {
     refreshProbeFields();
@@ -493,7 +488,7 @@ function render() {
     children: [
       UI.text({ text: "RFM69 Radio", font: "title2", fontWeight: "semibold" }),
       UI.text({
-        text: "Restored profile-driven RFM69/RFM69HW console. Default CS is GPIO36 and DIO2 is GPIO42.",
+        text: "Restored profile-driven RFM69/RFM69HW control panel. Default CS is GPIO36 and DIO2 is GPIO42.",
       }),
 
       UI.text({

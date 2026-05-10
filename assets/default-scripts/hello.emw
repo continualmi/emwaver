@@ -15,8 +15,6 @@ const SCRIPT_NAME = "hello.emw";
 
 var blinkTick = 0;
 
-console.log("[" + SCRIPT_NAME + "] startup | board=" + boardType + " blinkPin=" + String(blinkPin));
-
 UI.render(
   UI.column({
     padding: 16,
@@ -36,15 +34,6 @@ digitalWrite(blinkPin, level);
 every(250, function () {
   blinkTick += 1;
   if (blinkTick === 1 || blinkTick % 20 === 0) {
-    console.log(
-      "[" +
-        SCRIPT_NAME +
-        "] " +
-        "tick=" +
-        String(blinkTick) +
-        " level=" +
-        (level === HIGH ? "HIGH" : "LOW"),
-    );
   }
   level = level === LOW ? HIGH : LOW;
   digitalWrite(blinkPin, level);

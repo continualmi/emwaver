@@ -18,7 +18,7 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 
 ## Where things live
 
-- [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs): CLI command tree (`gateway`, `devices`, `doctor`, `run`, `wifi`, `settings`, `device`, `transport`, `service`)
+- [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs): CLI command tree (`gateway`, `devices`, `doctor`, `run`, `scripts`, `ui`, `script`, `wifi`, `settings`, `device`, `transport`, `service`)
 - [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-device/src`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-device/src): USB MIDI/SysEx, BLE, and Wi-Fi device probing/transport helpers
 - [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-runtime/src`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-runtime/src): `.emw` runtime and simulator bridge used by Gateway/CLI flows
 - [`/Users/luisml/continualmi/emwaver/gateway/backend/install`](/Users/luisml/continualmi/emwaver/gateway/backend/install): install/service packaging helpers
@@ -44,7 +44,8 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 
 ## Core behaviors to preserve
 
-- The CLI is Gateway-oriented: `emw run` requires a running Gateway and should not reintroduce direct/local runtime mode.
+- The CLI is Gateway-oriented: `emw run` requires a running Gateway, starts a Gateway-owned script session, and should not reintroduce direct/local runtime mode.
+- Terminal automation should use `emw scripts`, `emw ui snapshot`, `emw ui event`, and `emw script stop`; do not revive script log streaming.
 - Local hardware control must remain account-free and local-first (no activation, hosted relay, or subscription gate).
 - Keep command semantics aligned with migration decisions in `gateway/MIGRATION.md`; do not revive removed command groups/flags.
 - Keep binary naming stable: `emwaver` is primary, `emw` is a shortcut alias when installed.

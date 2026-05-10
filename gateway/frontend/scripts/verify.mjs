@@ -148,7 +148,7 @@ function verifyWebSocket() {
     const ws = new WebSocket(wsUrl);
     const seen = [];
     let scriptId = "";
-    let snapshots = 0;
+    let phase = "waiting-initial";
     const source = `
 var clicks = 0;
 function render() {
@@ -176,6 +176,12 @@ render();
     ws.on("message", (raw) => {
       const msg = JSON.parse(String(raw));
       seen.push(msg);
+      if (msg.type === "script.log") {
+        clearTimeout(timeout);
+        ws.close();
+        reject(new Error(`unexpected script.log: ${JSON.stringify(msg)}`));
+        return;
+      }
       if (msg.type === "device.status") {
         if (msg.runtimeOwner !== "emwaver-gateway" || msg.connected !== true) {
           clearTimeout(timeout);
@@ -195,8 +201,36 @@ render();
         ws.close();
         reject(new Error(`gateway websocket error: ${JSON.stringify(msg)}`));
       }
+      if (msg.type === "script.list") {
+        const scripts = Array.isArray(msg.scripts) ? msg.scripts : [];
+        const active = scripts.find((script) => script.scriptInstanceId === scriptId);
+        if (phase === "waiting-list") {
+          if (!active || active.latestSnapshotRevision < 1 || active.state !== "running") {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(`script.list missing active script: ${JSON.stringify(msg)}`));
+            return;
+          }
+          phase = "waiting-snapshot";
+          ws.send(JSON.stringify({
+            type: "ui.snapshot.get",
+            scriptInstanceId: scriptId,
+          }));
+          return;
+        }
+        if (phase === "waiting-empty-list") {
+          if (active) {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(`script.list retained stopped script: ${JSON.stringify(msg)}`));
+            return;
+          }
+          clearTimeout(timeout);
+          ws.close();
+          resolve(seen);
+        }
+      }
       if (msg.type === "ui.snapshot" && msg.scriptInstanceId === scriptId) {
-        snapshots += 1;
         const text = findNodeById(msg.root, "verify-text");
         if (!text) {
           clearTimeout(timeout);
@@ -204,7 +238,7 @@ render();
           reject(new Error(`missing verify text node: ${JSON.stringify(msg.root)}`));
           return;
         }
-        if (snapshots === 1) {
+        if (phase === "waiting-initial") {
           const button = findNodeById(msg.root, "verify-tap");
           if (!button) {
             clearTimeout(timeout);
@@ -212,6 +246,19 @@ render();
             reject(new Error(`missing verify button: ${JSON.stringify(msg.root)}`));
             return;
           }
+          phase = "waiting-list";
+          ws.send(JSON.stringify({ type: "script.list" }));
+          return;
+        }
+        if (phase === "waiting-snapshot") {
+          const button = findNodeById(msg.root, "verify-tap");
+          if (String(text.props?.text || "") !== "Clicks 0" || !button) {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(`unexpected snapshot before event: ${JSON.stringify(msg.root)}`));
+            return;
+          }
+          phase = "waiting-event";
           ws.send(JSON.stringify({
             type: "ui.event",
             scriptInstanceId: scriptId,
@@ -221,15 +268,23 @@ render();
           }));
           return;
         }
+        if (phase !== "waiting-event") return;
         if (String(text.props?.text || "") !== "Clicks 1") {
           clearTimeout(timeout);
           ws.close();
           reject(new Error(`unexpected second snapshot: ${JSON.stringify(text)}`));
           return;
         }
-        clearTimeout(timeout);
-        ws.close();
-        resolve(seen);
+        phase = "waiting-stop";
+        ws.send(JSON.stringify({
+          type: "script.stop",
+          scriptInstanceId: scriptId,
+        }));
+      }
+      if (msg.type === "script.stopped" && msg.scriptInstanceId === scriptId) {
+        if (phase !== "waiting-stop") return;
+        phase = "waiting-empty-list";
+        ws.send(JSON.stringify({ type: "script.list" }));
       }
     });
 
@@ -308,7 +363,7 @@ try {
   }
   const seen = await verifyWebSocket();
   await verifyRejectedRoles();
-  console.log(`gateway verify passed: ${seen.map((m) => m.type).join(", ")}`);
+  process.stdout.write(`gateway verify passed: ${seen.map((m) => m.type).join(", ")}\n`);
 } finally {
   child.kill("SIGTERM");
   rmSync(stateDir, { recursive: true, force: true });

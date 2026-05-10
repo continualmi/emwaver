@@ -8,7 +8,6 @@
 // - _scriptRegisterCallback(token: string, fn: Function): void
 //
 // Device operations are performed by the standard library via:
-// - _scriptLog(level: string, message: string): void
 // - _scriptSendPacket(bytes: Uint8Array, timeoutMs: number): Uint8Array
 //
 // Hosts may optionally provide:
@@ -28,8 +27,6 @@ var __scriptGlobal = (function () {
 // Note: This file runs in different JS environments (desktop backend, desktop frontend fallback,
 // mobile). Some environments expose these as true globals (not function parameters).
 var __host_scriptSendPacket = typeof _scriptSendPacket === 'function' ? _scriptSendPacket : null;
-var __host_scriptLog = typeof _scriptLog === 'function' ? _scriptLog : null;
-
 
 var __scriptClock = (function () {
   var hasPerformanceNow = typeof performance !== 'undefined' && performance && typeof performance.now === 'function';
@@ -43,37 +40,6 @@ var __scriptClock = (function () {
     },
   };
 })();
-
-function _scriptJoinArgs(args) {
-  var parts = [];
-  for (var i = 0; i < args.length; i += 1) {
-    var arg = args[i];
-    if (typeof arg === 'string') {
-      parts.push(arg);
-    } else {
-      try {
-        parts.push(JSON.stringify(arg));
-      } catch (e) {
-        parts.push(String(arg));
-      }
-    }
-  }
-  return parts.join(' ');
-}
-
-function __scriptLog(level, args) {
-  if (typeof __host_scriptLog !== 'function') return;
-  var text = _scriptJoinArgs(args);
-  __host_scriptLog(String(level || 'log'), text);
-}
-
-var console = {
-  log: function () {
-    __scriptLog('log', arguments);
-  },
-};
-
-__scriptGlobal.console = console;
 
 function __scriptIsShim(obj) {
   return !!obj && obj.__scriptShim === true;

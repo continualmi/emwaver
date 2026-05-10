@@ -27,14 +27,18 @@ Run a script through a running Gateway:
 
 ```sh
 cargo run -p emwaver -- run ../../assets/default-scripts/hello.emw
+cargo run -p emwaver -- scripts
+cargo run -p emwaver -- ui snapshot <script-instance-id> --json
+cargo run -p emwaver -- ui event <script-instance-id> --target <node-id> --name tap
+cargo run -p emwaver -- script stop <script-instance-id>
 ```
 
 The script observability direction is UI-only. The migration in
 [`../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md`](../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md)
 removes script-visible `console.*` APIs and `script.log` forwarding. `emwaver run`
-should become a session starter; terminal and Agent workflows should inspect
-`ui.snapshot`, send `ui.event`, list sessions, and stop sessions through Gateway
-commands.
+starts a Gateway-owned session and returns the script instance id; terminal and
+Agent workflows inspect `ui.snapshot`, send `ui.event`, list sessions, and stop
+sessions through Gateway commands.
 
 Hardware transports are selected when the Gateway starts:
 
