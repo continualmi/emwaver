@@ -92,8 +92,6 @@ Current ESP32-S3 shield signal map:
 | RFM69 `DIO5` | `GPIO39` | RFM69 IRQ/control |
 | `IR_TX` | `GPIO37` | IR LED driver input |
 | `IR_RX` | `GPIO38` | IR receiver output |
-| default IR transmit | `GPIO4` | firmware fallback / non-shield default |
-| IR LED guard | `GPIO5` | firmware guard output |
 
 Generic SPI examples may use `GPIO10` as a default chip select, but the
 RFM69HW on this shield uses `GPIO36` for `NSS` / CS.
