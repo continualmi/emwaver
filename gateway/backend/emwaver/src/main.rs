@@ -46,6 +46,8 @@ struct CommandBridgeHandle {
     command_sender: Option<Arc<dyn DeviceCommandSender>>,
 }
 
+const DEFAULT_GATEWAY_PORT: u16 = 3921;
+
 #[derive(Parser, Debug)]
 #[command(name = "emwaver", about = "EMWaver Gateway CLI")]
 struct Cli {
@@ -75,6 +77,10 @@ enum Commands {
         /// Print structured JSON instead of human-readable device lines.
         #[arg(long)]
         json: bool,
+
+        /// Local gateway port (defaults to 3921).
+        #[arg(long)]
+        port: Option<u16>,
 
         /// Probe an ESP32 Wi-Fi device by hostname or IP.
         #[arg(long)]
@@ -890,7 +896,103 @@ struct ValidatedWiFiDevice {
     version: Option<String>,
 }
 
-fn list_devices_lines(wifi: Option<String>, wifi_port: u16) -> Result<Vec<String>> {
+fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
+    let mut stream = TcpStream::connect(("127.0.0.1", port))
+        .with_context(|| format!("failed to connect to Gateway HTTP on 127.0.0.1:{port}"))?;
+    let timeout = Duration::from_millis(1_500);
+    stream
+        .set_read_timeout(Some(timeout))
+        .context("failed to set Gateway HTTP read timeout")?;
+    stream
+        .set_write_timeout(Some(timeout))
+        .context("failed to set Gateway HTTP write timeout")?;
+
+    let request = format!(
+        "GET {path} HTTP/1.1\r\nhost: 127.0.0.1:{port}\r\naccept: application/json\r\nconnection: close\r\n\r\n"
+    );
+    stream
+        .write_all(request.as_bytes())
+        .context("failed to send Gateway HTTP request")?;
+
+    let mut response = Vec::new();
+    stream
+        .read_to_end(&mut response)
+        .context("failed to read Gateway HTTP response")?;
+    let response = String::from_utf8_lossy(&response);
+    let (head, body) = response
+        .split_once("\r\n\r\n")
+        .context("Gateway HTTP response missing header separator")?;
+    let status = head.lines().next().unwrap_or("");
+    if !status.contains(" 200 ") {
+        anyhow::bail!("Gateway HTTP request failed: {status}");
+    }
+    serde_json::from_str(body).context("failed to parse Gateway JSON response")
+}
+
+fn gateway_devices_json_if_running(port: u16) -> Result<Option<serde_json::Value>> {
+    let Some(_pid) = gateway_running()? else {
+        return Ok(None);
+    };
+    gateway_http_json(port, "/v1/devices").map(Some)
+}
+
+fn json_str<'a>(value: &'a serde_json::Value, key: &str) -> Option<&'a str> {
+    value.get(key).and_then(serde_json::Value::as_str)
+}
+
+fn gateway_devices_lines(body: &serde_json::Value) -> Vec<String> {
+    let devices = body
+        .get("devices")
+        .and_then(serde_json::Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    if devices.is_empty() {
+        return vec!["Gateway devices: none".to_string()];
+    }
+
+    let mut out = vec!["Gateway devices:".to_string()];
+    for device in devices {
+        let id = json_str(&device, "id").unwrap_or("unknown");
+        let name = json_str(&device, "name").unwrap_or("unknown device");
+        let transport = json_str(&device, "transport").unwrap_or("unknown transport");
+        let board = json_str(&device, "boardType").unwrap_or("unknown board");
+        let firmware = json_str(&device, "firmwareVersion").unwrap_or("unknown fw");
+        let uid = json_str(&device, "hardwareUid").unwrap_or("no UID");
+        let connected = device
+            .get("connected")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false);
+        let endpoint = json_str(&device, "endpoint")
+            .map(|endpoint| format!(", {endpoint}"))
+            .unwrap_or_default();
+        let state = if connected {
+            "connected"
+        } else {
+            "disconnected"
+        };
+        out.push(format!(
+            "  {id}: {name} ({transport}, {board}, {firmware}, UID {uid}, {state}{endpoint})"
+        ));
+    }
+    out
+}
+
+fn list_devices_lines(
+    wifi: Option<String>,
+    wifi_port: u16,
+    gateway_port: u16,
+) -> Result<Vec<String>> {
+    if let Some(body) = gateway_devices_json_if_running(gateway_port)? {
+        let mut lines = gateway_devices_lines(&body);
+        if wifi.is_some() {
+            lines.push(
+                "Gateway is running; showing Gateway-owned devices instead of probing Wi-Fi directly."
+                    .to_string(),
+            );
+        }
+        return Ok(lines);
+    }
+
     let mut out: Vec<String> = Vec::new();
 
     match validated_midi_devices(1_500, false) {
@@ -1025,7 +1127,24 @@ fn classify_wifi_probe_error(err: &anyhow::Error) -> String {
     }
 }
 
-fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16) -> Result<()> {
+fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16, port: Option<u16>) -> Result<()> {
+    let gateway_port = port.unwrap_or(DEFAULT_GATEWAY_PORT);
+    if let Some(body) = gateway_devices_json_if_running(gateway_port)? {
+        if json {
+            println!("{}", serde_json::to_string_pretty(&body)?);
+        } else {
+            for line in gateway_devices_lines(&body) {
+                println!("{line}");
+            }
+            if wifi.is_some() {
+                println!(
+                    "Gateway is running; showing Gateway-owned devices instead of probing Wi-Fi directly."
+                );
+            }
+        }
+        return Ok(());
+    }
+
     if json {
         println!(
             "{}",
@@ -1033,7 +1152,7 @@ fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16) -> Result<()> 
         );
         return Ok(());
     }
-    for line in list_devices_lines(wifi, wifi_port)? {
+    for line in list_devices_lines(wifi, wifi_port, gateway_port)? {
         println!("{line}");
     }
     Ok(())
@@ -1382,7 +1501,7 @@ fn doctor(wifi: Option<String>, wifi_port: u16) -> Result<()> {
         println!("missing: rustc");
     }
 
-    match list_devices_lines(None, 3922) {
+    match list_devices_lines(None, 3922, DEFAULT_GATEWAY_PORT) {
         Ok(lines) => {
             for line in lines {
                 println!("{line}");
@@ -2218,8 +2337,10 @@ fn selected_gateway_device(
         });
     }
     if transport_status.ble {
+        let transport_id = "ble:auto".to_string();
         return serde_json::json!({
-            "id": "ble:auto",
+            "id": gateway_owned_device_id(&transport_id, transport_status),
+            "transportId": transport_id,
             "name": "ESP32 BLE",
             "transport": "BLE",
             "boardType": "esp32s3",
@@ -2229,8 +2350,10 @@ fn selected_gateway_device(
         });
     }
     if let Some(host) = transport_status.wifi.as_deref() {
+        let transport_id = format!("wifi:{host}:{}", transport_status.wifi_port);
         return serde_json::json!({
-            "id": format!("wifi:{host}:{}", transport_status.wifi_port),
+            "id": gateway_owned_device_id(&transport_id, transport_status),
+            "transportId": transport_id,
             "name": format!("ESP32 Wi-Fi {host}:{}", transport_status.wifi_port),
             "transport": "Wi-Fi",
             "boardType": "esp32",
@@ -2246,14 +2369,26 @@ fn selected_gateway_device(
         .as_deref()
         .unwrap_or("auto")
         .to_string();
+    let transport_id = format!("midi:{selected_id}");
     serde_json::json!({
-        "id": format!("midi:{selected_id}"),
+        "id": gateway_owned_device_id(&transport_id, transport_status),
+        "transportId": transport_id,
         "name": if selected_id == "auto" { "USB MIDI auto".to_string() } else { format!("USB MIDI {selected_id}") },
         "transport": "USB",
         "connected": connected,
         "firmwareVersion": transport_status.firmware_version.clone(),
         "hardwareUid": transport_status.hardware_uid.clone(),
     })
+}
+
+fn gateway_owned_device_id(fallback: &str, transport_status: &GatewayTransportStatus) -> String {
+    transport_status
+        .hardware_uid
+        .as_deref()
+        .map(str::trim)
+        .filter(|uid| !uid.is_empty())
+        .map(|uid| format!("uid:{uid}"))
+        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn send_ui_snapshot<S: Read + Write>(
@@ -2912,9 +3047,10 @@ fn main() -> Result<()> {
         Commands::Tui => run_tui(),
         Commands::Devices {
             json,
+            port,
             wifi,
             wifi_port,
-        } => list_devices(json, wifi, wifi_port),
+        } => list_devices(json, wifi, wifi_port, port),
         Commands::Doctor { wifi, wifi_port } => doctor(wifi, wifi_port),
         Commands::Run {
             script,
@@ -2979,7 +3115,7 @@ fn run_tui() -> Result<()> {
                 None => "not running".to_string(),
             };
             let autostart = autostart_status()?;
-            let devices = list_devices_lines(None, 3922)?;
+            let devices = list_devices_lines(None, 3922, DEFAULT_GATEWAY_PORT)?;
 
             terminal.draw(|f| {
                 let size = f.size();

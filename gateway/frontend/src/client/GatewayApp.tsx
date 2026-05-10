@@ -152,7 +152,11 @@ export function GatewayApp() {
       if (msg.type === "device.status") {
         const status = msg as RemoteDeviceStatus;
         setDeviceStatus(status);
-        setSelectedDeviceId((current) => current || status.devices?.find((d) => d.connected)?.id || status.devices?.[0]?.id || "");
+        setSelectedDeviceId((current) => {
+          const devices = status.devices || [];
+          if (current && devices.some((device) => device.id === current)) return current;
+          return devices.find((device) => device.connected)?.id || devices[0]?.id || "";
+        });
       }
       if (msg.type === "script.started") {
         const id = String(msg.scriptInstanceId || "");
