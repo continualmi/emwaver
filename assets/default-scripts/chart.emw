@@ -35,6 +35,9 @@ var plotBufId = '';
 var xMin = 0;
 var xMax = 10000;
 var err = '';
+const SCRIPT_NAME = "chart.emw";
+
+console.log("[" + SCRIPT_NAME + "] startup | samples=" + String(sampleCountText) + " period=" + String(periodText));
 
 var __pendingViewport = null;
 var __viewportTimer = null;
@@ -95,16 +98,19 @@ function generate() {
 
     var bitCount = clamp(i(sampleCountText, 200000), 1, 2000000);
     var period = clamp(i(periodText, 200), 2, 100000);
+    console.log("[" + SCRIPT_NAME + "] generate request | bits=" + String(bitCount) + " period=" + String(period));
     var bytes = __makeSquareWaveBytes(bitCount, period);
 
     plotBufId = String(UI.buffer(bytes) || '');
     bufLen = bytes.length;
     xMin = 0;
     xMax = Math.min(10000, bufLen * 8);
+    console.log("[" + SCRIPT_NAME + "] generated | bytes=" + String(bufLen));
   } catch (e) {
     err = String(e && e.message ? e.message : e);
     bufLen = 0;
     plotBufId = '';
+    console.log("[" + SCRIPT_NAME + "] generate failed | " + String(e && e.message ? e.message : e));
   }
 }
 
@@ -147,21 +153,23 @@ function render() {
         UI.row({
           spacing: 10,
           children: [
-            UI.button({
-              label: 'Reset view',
-              onTap: function () {
-                xMin = 0;
-                xMax = Math.min(10000, bufLen * 8);
-                render();
-              },
-            }),
-            UI.button({
-              label: 'Regenerate',
-              onTap: function () {
-                generate();
-                render();
-              },
-            }),
+                UI.button({
+                  label: 'Reset view',
+                  onTap: function () {
+                    console.log("[" + SCRIPT_NAME + "] reset view");
+                    xMin = 0;
+                    xMax = Math.min(10000, bufLen * 8);
+                    render();
+                  },
+                }),
+                UI.button({
+                  label: 'Regenerate',
+                  onTap: function () {
+                    console.log("[" + SCRIPT_NAME + "] regenerate tapped");
+                    generate();
+                    render();
+                  },
+                }),
           ],
         }),
 

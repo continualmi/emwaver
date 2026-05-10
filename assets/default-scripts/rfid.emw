@@ -54,6 +54,9 @@ let keyMode = "A";
 let keyHex = "FF FF FF FF FF FF";
 let blockText = "4";
 let writeHex = "00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00";
+var SCRIPT_NAME = "rfid";
+
+console.log("[" + SCRIPT_NAME + "] startup | cs=" + String(MFRC522_CS) + " rst=" + String(MFRC522_RST) + " irq=" + String(MFRC522_IRQ));
 
 function hexByte(value) {
   var v = Number(value) & 0xFF;
@@ -307,60 +310,81 @@ function ensureKey() {
 }
 
 function actionProbe() {
+  console.log("[" + SCRIPT_NAME + "] probe");
   try {
     mfrcInit();
     statusText = (versionText === "0x91" || versionText === "0x92") ? "MFRC522 ready" : ("Init OK, Version " + versionText);
+    console.log("[" + SCRIPT_NAME + "] probe ok | version=" + String(versionText));
   } catch (e) {
     statusText = "Probe failed: " + String(e && e.message ? e.message : e);
+    console.log("[" + SCRIPT_NAME + "] probe failed | " + statusText);
   }
   render();
 }
 
 function actionScanUid() {
+  console.log("[" + SCRIPT_NAME + "] scan uid");
   try {
     var card = detectAndSelect();
     stopCrypto1();
     halt();
     statusText = "UID read OK (ATQA " + bytesToHex(card.tagType) + ")";
+    console.log(
+      "[" + SCRIPT_NAME + "] scan uid ok | atqa=" + bytesToHex(card.tagType) + " uid=" + uidText + " sak=" + sakText
+    );
   } catch (e) {
     statusText = "Scan failed: " + String(e && e.message ? e.message : e);
+    console.log("[" + SCRIPT_NAME + "] scan uid failed | " + statusText);
   }
   render();
 }
 
 function actionReadBlock() {
+  console.log("[" + SCRIPT_NAME + "] read block");
   try {
     var block = parseBlockAddr();
     var key = ensureKey();
+    console.log(
+      "[" + SCRIPT_NAME + "] read block request | block=" +
+        String(block) + " key=" + keyMode + " keyHex=" + bytesToHex(key)
+    );
     var card = detectAndSelect();
     if (!authBlock(block, key, card.uid)) throw new Error("Auth failed with Key " + keyMode);
     var data = readBlock(block);
     if (!data) throw new Error("Read failed");
     writeHex = bytesToHex(data);
     statusText = "Read block " + String(block) + " OK";
+    console.log("[" + SCRIPT_NAME + "] read block ok | block=" + String(block) + " len=" + String(data.length));
     stopCrypto1();
     halt();
   } catch (e) {
     statusText = "Read failed: " + String(e && e.message ? e.message : e);
+    console.log("[" + SCRIPT_NAME + "] read block failed | " + statusText);
     stopCrypto1();
   }
   render();
 }
 
 function actionWriteBlock() {
+  console.log("[" + SCRIPT_NAME + "] write block");
   try {
     var block = parseBlockAddr();
     var key = ensureKey();
     var data = parseHexBytes(writeHex, 16);
     writeHex = bytesToHex(data);
+    console.log(
+      "[" + SCRIPT_NAME + "] write block request | block=" + String(block) + " key=" + keyMode + " len=" + String(data.length)
+    );
     var card = detectAndSelect();
     if (!authBlock(block, key, card.uid)) throw new Error("Auth failed with Key " + keyMode);
     if (!writeBlock(block, data)) throw new Error("Write NAK");
     statusText = "Write block " + String(block) + " OK";
+    console.log("[" + SCRIPT_NAME + "] write block ok | block=" + String(block));
     stopCrypto1();
     halt();
   } catch (e) {
     statusText = "Write failed: " + String(e && e.message ? e.message : e);
+    console.log("[" + SCRIPT_NAME + "] write block failed | " + statusText);
     stopCrypto1();
   }
   render();

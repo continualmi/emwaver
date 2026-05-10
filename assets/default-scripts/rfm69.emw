@@ -115,6 +115,7 @@ var selectedProfileIndex = 0;
 var lastConfig = null;
 var lastConfigText = "";
 var logLines = [];
+var SCRIPT_NAME = "rfm69";
 
 function toHexByte(n) {
   var v = Number(n) & 0xFF;
@@ -141,10 +142,12 @@ function formatFrequency(value) {
 }
 
 function pushLog(line) {
-  logLines.push(String(line));
+  var text = String(line);
+  logLines.push(text);
   if (logLines.length > 200) {
     logLines = logLines.slice(logLines.length - 200);
   }
+  console.log("[" + SCRIPT_NAME + "] " + text);
 }
 
 function currentProfile() {
@@ -412,6 +415,10 @@ function withRadioAction(label, fn) {
   }
   render();
 }
+
+console.log(
+  "[" + SCRIPT_NAME + "] startup | cs=" + String(RFM69_CS) + " dio2=" + String(RFM69_DIO2) + " profiles=" + String(PROFILES.length)
+);
 
 function actionProbe() {
   withRadioAction("Probe", function () {

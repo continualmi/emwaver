@@ -23,10 +23,23 @@ let writeText = "hello\n";
 let writeHex = "48 65 6C 6C 6F 0A";
 let statusText = "";
 let logLines = [];
+const SCRIPT_NAME = "uart.emw";
+
+console.log(
+  "[" +
+    SCRIPT_NAME +
+    "] startup | board=" +
+    boardType +
+    " baud=" +
+    String(baud) +
+    " mode=" +
+    writeMode,
+);
 
 function ensureSupported() {
   if (boardType === "esp32s2" || boardType === "esp32s3") {
     statusText = "UART script support is currently wired for STM32F042 only.";
+    console.log("[" + SCRIPT_NAME + "] unsupported-board | board=" + boardType);
     render();
     return false;
   }
@@ -59,6 +72,7 @@ function fmtAscii(bytes) {
 
 function openUart() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] open | requested-baud=" + String(baud));
   statusText = "Opening...";
   render();
   var b = parseInt(baud, 10);
@@ -72,17 +86,20 @@ function openUart() {
     resp.then(function () {
       pushLog("uart open --baud=" + b);
       statusText = "Opened @ " + b + " baud";
+      console.log("[" + SCRIPT_NAME + "] open | ok baud=" + String(b));
       render();
     });
   } else {
     pushLog("uart open --baud=" + b);
     statusText = "Opened @ " + b + " baud";
+    console.log("[" + SCRIPT_NAME + "] open | ok baud=" + String(b));
     render();
   }
 }
 
 function closeUart() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] close");
   statusText = "Closing...";
   render();
   var resp = Serial.end();
@@ -90,17 +107,20 @@ function closeUart() {
     resp.then(function () {
       pushLog("uart close");
       statusText = "Closed";
+      console.log("[" + SCRIPT_NAME + "] close | ok");
       render();
     });
   } else {
     pushLog("uart close");
     statusText = "Closed";
+    console.log("[" + SCRIPT_NAME + "] close | ok");
     render();
   }
 }
 
 function writeUart() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] write | mode=" + String(writeMode));
   statusText = "Writing...";
   render();
 
@@ -115,6 +135,7 @@ function writeUart() {
     var n = bytes && bytes.length ? bytes[0] : 0;
     pushLog(cmd + " -> " + String(n) + " bytes");
     statusText = "Wrote " + String(n) + " byte(s)";
+    console.log("[" + SCRIPT_NAME + "] write | result " + String(n) + " bytes");
     render();
   };
 
@@ -130,12 +151,14 @@ function readUart() {
   var b = parseInt(baud, 10);
   if (!Number.isFinite(b) || b <= 0) b = 115200;
   var n = Math.max(0, Math.min(63, Number(readLen) | 0));
+  console.log("[" + SCRIPT_NAME + "] read | requested-baud=" + String(b) + " n=" + String(n));
 
   var resp = Serial.read(n, { baud: b, timeout: 250 });
   var cmd = "uart read --n=" + n + " --baud=" + b;
 
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
+    console.log("[" + SCRIPT_NAME + "] read | " + (bytes && bytes.length ? String(bytes.length) : "0") + " byte(s)");
     if (!bytes || !bytes.length) {
       statusText = "No data";
       render();

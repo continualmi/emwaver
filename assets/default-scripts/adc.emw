@@ -42,6 +42,8 @@ const ADC_PINS_BY_BOARD = {
   esp32s3: buildEspAdcPins(),
 };
 
+const SCRIPT_NAME = "adc.emw";
+
 const INTERNAL_SOURCES = [
   { label: "VREFINT (internal reference)", value: "vrefint" },
   { label: "TEMP (die temperature sensor)", value: "temp" },
@@ -56,11 +58,25 @@ let samples = 1;
 let statusText = "";
 let lastResponse = "";
 
+console.log(
+  "[" +
+    SCRIPT_NAME +
+    "] startup | board=" +
+    boardType +
+    " mode=" +
+    mode +
+    " pin=" +
+    String(selectedPin) +
+    " samples=" +
+    String(samples),
+);
+
 function adcPins() {
   return ADC_PINS_BY_BOARD[boardType] || ADC_PINS_BY_BOARD.stm32f042;
 }
 
 function readAdc() {
+  console.log("[" + SCRIPT_NAME + "] action | read");
   statusText = "Reading...";
   lastResponse = "";
   render();
@@ -72,6 +88,7 @@ function readAdc() {
   if (mode === "internal") {
     if (boardType !== "stm32f042") {
       statusText = "Internal ADC sources are only available on STM32F042.";
+      console.log("[" + SCRIPT_NAME + "] failed | internal mode requested on board=" + String(boardType));
       render();
       return;
     }
@@ -85,14 +102,21 @@ function readAdc() {
   }
 
   const finalize = function (value) {
+    console.log("[" + SCRIPT_NAME + "] ok | read result | " + String(value) + " | " + cmd);
     statusText = "Value: " + String(value) + " (0..4095)";
     lastResponse = cmd + " -> " + String(value);
     render();
   };
 
   if (result && typeof result.then === "function") {
-    result.then(finalize);
+    console.log("[" + SCRIPT_NAME + "] action | read request | " + cmd);
+    result.then(finalize).catch(function (error) {
+      statusText = "Error: " + String(error && error.message ? error.message : error);
+      console.log("[" + SCRIPT_NAME + "] failed | " + statusText);
+      render();
+    });
   } else {
+    console.log("[" + SCRIPT_NAME + "] action | read request | " + cmd);
     finalize(result);
   }
 }

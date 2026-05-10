@@ -1,5 +1,6 @@
 // CC1101 - merged ISM register view + quick preset / packet tools.
 // Desktop scripts are sync-only; long operations are chunked via setTimeout.
+var SCRIPT_NAME = "cc1101";
 
 function normalizeBoardType(value) {
   var board = String(value || "").trim().toLowerCase();
@@ -348,15 +349,20 @@ function cc1101WriteBurstReg(addr, data) {
 
 function ensureCc1101Init() {
   // Probe VERSION register via SNOP+read.
+  console.log("[" + SCRIPT_NAME + "] probe begin");
   var response = cc1101SpiXfer([0xf1, 0x00], { rxLength: 2 });
   if (!response || response.length < 2) {
     statusMessage = "CC1101 probe failed: no response.";
+    console.log("[" + SCRIPT_NAME + "] probe failed | no response");
     return false;
   }
   var version = response[1] & 0xff;
   if (version !== 0x14) {
     // Some modules report a different VERSION code; continue if SPI reads are working.
     statusMessage = "CC1101 probe warning: VERSION=0x" + toHexByte(version) + " (expected 0x14).";
+    console.log("[" + SCRIPT_NAME + "] probe warning | version=0x" + toHexByte(version));
+  } else {
+    console.log("[" + SCRIPT_NAME + "] probe ok | version=0x" + toHexByte(version));
   }
   return true;
 }
@@ -604,6 +610,7 @@ function applyCommonAsk43392_100k() {
 }
 
 function initRxAsk433() {
+  console.log("[" + SCRIPT_NAME + "] init-rx-ask433");
   presetStatusText = "Init RX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
@@ -611,10 +618,12 @@ function initRxAsk433() {
   cc1101Strobe(CC1101_SRX);
   txCarrierOn = false;
   presetStatusText = "RX ready (GDO0 pin " + String(gdo0Pin) + " = modem out)";
+  console.log("[" + SCRIPT_NAME + "] init-rx-ask433 ok | gdo0=" + String(gdo0Pin));
   render();
 }
 
 function initTxAsk433() {
+  console.log("[" + SCRIPT_NAME + "] init-tx-ask433");
   presetStatusText = "Init TX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
@@ -623,6 +632,7 @@ function initTxAsk433() {
   txCarrierOn = false;
   cc1101Strobe(CC1101_STX);
   presetStatusText = "TX ready (GDO0 pin " + String(gdo0Pin) + " = modem in, carrier gated by GDO0)";
+  console.log("[" + SCRIPT_NAME + "] init-tx-ask433 ok | gdo0=" + String(gdo0Pin));
   render();
 }
 
@@ -634,6 +644,9 @@ function toggleCarrier() {
     txCarrierOn
       ? "Carrier: ON (GDO0 pin " + String(gdo0Pin) + "=HIGH)"
       : "Carrier: OFF (GDO0 pin " + String(gdo0Pin) + "=LOW)";
+  console.log(
+    "[" + SCRIPT_NAME + "] carrier " + (txCarrierOn ? "on" : "off") + " | gdo0=" + String(gdo0Pin)
+  );
   render();
 }
 
@@ -641,12 +654,14 @@ function probePartVersion() {
   var part = readReg(CC1101_REG_PARTNUM);
   var ver = readReg(CC1101_REG_VERSION);
   presetStatusText = "Probe: PARTNUM=0x" + toHexByte(part) + " VERSION=0x" + toHexByte(ver);
+  console.log("[" + SCRIPT_NAME + "] probe-part-version | part=0x" + toHexByte(part) + " version=0x" + toHexByte(ver));
   render();
 }
 
 function packetPushLog(line) {
   packetLogLines.push(String(line));
   if (packetLogLines.length > 400) packetLogLines = packetLogLines.slice(packetLogLines.length - 400);
+  console.log("[" + SCRIPT_NAME + "] " + String(line));
 }
 
 function parseHexBytes(text, maxLen) {
@@ -704,6 +719,12 @@ function packetSetDataRate(bps) {
 }
 
 function packetInitFixed() {
+  console.log(
+    "[" + SCRIPT_NAME + "] packet-init | cs=" +
+      String(packetCsPin) +
+      " freq=" + String(packetFreqMHz) +
+      " dr=" + String(packetDataRateBps)
+  );
   packetStatus = "Initializing...";
   render();
 
@@ -735,12 +756,14 @@ function packetInitFixed() {
 }
 
 function packetSend() {
+  console.log("[" + SCRIPT_NAME + "] packet-send request");
   packetStatus = "Sending...";
   render();
 
   var bytes = parseHexBytes(packetPayloadHex, 61);
   if (!bytes.length) {
     packetStatus = "No payload";
+    console.log("[" + SCRIPT_NAME + "] packet-send aborted | no payload");
     render();
     return;
   }
@@ -752,6 +775,7 @@ function packetSend() {
   var st = packetStrobe(CC1101_STX);
 
   packetPushLog("tx " + String(bytes.length) + "B: " + bytes.map(toHexByte).join(" ") + " (st=0x" + toHexByte(st) + ")");
+  console.log("[" + SCRIPT_NAME + "] packet-send ok | bytes=" + String(bytes.length) + " st=0x" + toHexByte(st));
   packetStatus = "TX strobe sent";
   render();
 }
@@ -786,12 +810,14 @@ var editDialog = null; // { kind, title, key, mode, allowDecimal }
 var editValue = "";
 
 function applyBoardType(nextBoardType) {
+  var previous = boardType;
   boardType = normalizeBoardType(nextBoardType);
   DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
   DEFAULT_GDO0_PIN = defaultGdo0PinForBoard(boardType);
   cc1101CsPin = DEFAULT_CC1101_CS;
   gdo0Pin = DEFAULT_GDO0_PIN;
   packetCsPin = cc1101CsPin;
+  console.log("[" + SCRIPT_NAME + "] board-change | " + previous + " -> " + boardType + " cs=" + String(cc1101CsPin));
 }
 
 function stopLoading(msg) {
@@ -805,6 +831,7 @@ function stopLoading(msg) {
 
 function startRefresh() {
   if (isLoading) return;
+  console.log("[" + SCRIPT_NAME + "] refresh start | isLoading=0");
   statusMessage = "";
   abortRequested = false;
   isLoading = true;
@@ -827,6 +854,7 @@ function runLoadAll() {
     var ok = ensureCc1101Init();
     if (!ok) {
       stopLoading(statusMessage || "CC1101 init failed.");
+      console.log("[" + SCRIPT_NAME + "] refresh aborted | " + statusMessage);
       return;
     }
 
@@ -840,6 +868,7 @@ function runLoadAll() {
       loadingProgress += 1;
       render();
     }
+    console.log("[" + SCRIPT_NAME + "] refresh section | configs=" + String(CC1101_CONFIG_REGISTERS.length));
 
     for (var j = 0; j < CC1101_STATUS_REGISTERS.length; j += 1) {
       currentCommand = "Reading " + CC1101_STATUS_REGISTERS[j] + "...";
@@ -848,6 +877,7 @@ function runLoadAll() {
       loadingProgress += 1;
       render();
     }
+    console.log("[" + SCRIPT_NAME + "] refresh section | status=" + String(CC1101_STATUS_REGISTERS.length));
 
     currentCommand = "Reading PA_TABLE...";
     render();
@@ -857,6 +887,7 @@ function runLoadAll() {
     }
     loadingProgress += CC1101_PA_TABLE_SIZE;
     render();
+    console.log("[" + SCRIPT_NAME + "] refresh section | patable=" + String(CC1101_PA_TABLE_SIZE));
 
     currentCommand = "Reading RF parameters...";
     render();
@@ -869,18 +900,22 @@ function runLoadAll() {
       txPower: cc1101GetPowerLevel(),
     };
     loadingProgress += RF_PARAMETER_STEPS;
+    console.log("[" + SCRIPT_NAME + "] refresh section | rf params");
 
     registers = nextRegs;
     rfParams = nextRf;
     isLoading = false;
     currentCommand = "";
+    console.log("[" + SCRIPT_NAME + "] refresh ok | entries=" + String(Object.keys(nextRegs).length) + " progress=" + String(loadingProgress));
     render();
   } catch (e) {
     stopLoading("Load failed: " + String(e && e.message ? e.message : e));
+    console.log("[" + SCRIPT_NAME + "] refresh failed | " + String(e && e.message ? e.message : e));
   }
 }
 
 function openRegisterEdit(name) {
+  console.log("[" + SCRIPT_NAME + "] open register edit | " + String(name));
   editDialog = {
     kind: "reg",
     title: "Edit " + String(name),
@@ -902,10 +937,12 @@ function openRfEdit(paramKey, title, allowDecimal) {
     allowDecimal: !!allowDecimal,
   };
   editValue = String(rfParams[String(paramKey)]);
+  console.log("[" + SCRIPT_NAME + "] open rf edit | " + String(paramKey));
   render();
 }
 
 function cancelEdit() {
+  console.log("[" + SCRIPT_NAME + "] edit canceled");
   editDialog = null;
   editValue = "";
   render();
@@ -958,9 +995,11 @@ function applyEdit() {
       }
       statusMessage = "";
       editDialog = null;
+      console.log("[" + SCRIPT_NAME + "] edit-register | " + key + "=" + String(parsed));
       render();
     } catch (e) {
       statusMessage = "Write failed: " + String(e && e.message ? e.message : e);
+      console.log("[" + SCRIPT_NAME + "] edit-register failed | " + statusMessage);
       render();
     }
     return;
@@ -1005,14 +1044,29 @@ function applyEdit() {
       }
       statusMessage = "";
       editDialog = null;
+      console.log("[" + SCRIPT_NAME + "] edit-rf | " + key2 + "=" + String(appliedValue));
       render();
     } catch (e2) {
       statusMessage = "Update failed: " + String(e2 && e2.message ? e2.message : e2);
+      console.log("[" + SCRIPT_NAME + "] edit-rf failed | " + statusMessage);
       render();
     }
     return;
   }
 }
+
+console.log(
+  "[" +
+    SCRIPT_NAME +
+    "] startup | board=" +
+    String(detectedBoardType) +
+    " cs=" +
+    String(DEFAULT_CC1101_CS) +
+    " gdo0=" +
+    String(DEFAULT_GDO0_PIN) +
+    " summary=" +
+    spiSummaryForBoard(boardType)
+);
 
 function formatFrequency(mhz) {
   var v = Number(mhz);
@@ -1128,6 +1182,7 @@ function render() {
                       options: BOARD_TYPE_OPTIONS,
                       onChange: function (value) {
                         applyBoardType(String(value));
+                        console.log("[" + SCRIPT_NAME + "] board-select | " + String(value));
                         render();
                       },
                     }),
@@ -1144,6 +1199,7 @@ function render() {
                             var n = parseInt(String(value), 10);
                             cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
                             packetCsPin = cc1101CsPin;
+                            console.log("[" + SCRIPT_NAME + "] set cs pin | " + String(cc1101CsPin));
                             render();
                           },
                         }),
@@ -1155,6 +1211,7 @@ function render() {
                           onChange: function (value) {
                             var n = parseInt(String(value), 10);
                             gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
+                            console.log("[" + SCRIPT_NAME + "] set gdo0 pin | " + String(gdo0Pin));
                             render();
                           },
                         }),
@@ -1233,6 +1290,7 @@ function render() {
                           return;
                         }
                         rfParams.modulation = m;
+                        console.log("[" + SCRIPT_NAME + "] set modulation | " + String(m));
                         statusMessage = "";
                         render();
                       },
@@ -1255,6 +1313,7 @@ function render() {
                           return;
                         }
                         rfParams.txPower = p;
+                        console.log("[" + SCRIPT_NAME + "] set tx power | " + String(p));
                         statusMessage = "";
                         render();
                       },
@@ -1282,6 +1341,7 @@ function render() {
                         UI.button({
                           label: "IDLE",
                           onTap: function () {
+                            console.log("[" + SCRIPT_NAME + "] idle");
                             cc1101Idle();
                             txCarrierOn = false;
                             presetStatusText = "IDLE";

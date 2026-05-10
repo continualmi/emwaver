@@ -22,10 +22,14 @@ let txHex = "";
 let rxLen = 1;
 let statusText = "";
 let logLines = [];
+const SCRIPT_NAME = "i2c.emw";
+
+console.log("[" + SCRIPT_NAME + "] startup | board=" + boardType + " hz=" + String(hz) + " rxLen=" + String(rxLen));
 
 function ensureSupported() {
   if (boardType === "esp32s2" || boardType === "esp32s3") {
     statusText = "I2C script support is currently wired for STM32F042 only.";
+    console.log("[" + SCRIPT_NAME + "] unsupported-board | board=" + boardType);
     render();
     return false;
   }
@@ -57,6 +61,7 @@ function fmtBytes(bytes) {
 
 function openI2c() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] open | hz=" + String(hz));
   statusText = "Opening...";
   render();
   var h = parseInt(hz, 10);
@@ -70,17 +75,20 @@ function openI2c() {
     resp.then(function () {
       pushLog("i2c open --hz=" + h);
       statusText = "Opened @ " + h + " Hz";
+      console.log("[" + SCRIPT_NAME + "] open | ok hz=" + String(h));
       render();
     });
   } else {
     pushLog("i2c open --hz=" + h);
     statusText = "Opened @ " + h + " Hz";
+    console.log("[" + SCRIPT_NAME + "] open | ok hz=" + String(h));
     render();
   }
 }
 
 function closeI2c() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] close");
   statusText = "Closing...";
   render();
   var resp = Wire.end();
@@ -88,17 +96,20 @@ function closeI2c() {
     resp.then(function () {
       pushLog("i2c close");
       statusText = "Closed";
+      console.log("[" + SCRIPT_NAME + "] close | ok");
       render();
     });
   } else {
     pushLog("i2c close");
     statusText = "Closed";
+    console.log("[" + SCRIPT_NAME + "] close | ok");
     render();
   }
 }
 
 function writeI2c() {
   if (!ensureSupported()) return;
+  console.log("[" + SCRIPT_NAME + "] write | addr=" + String(addrHex) + " tx=" + String(txHex));
   statusText = "Writing...";
   render();
   var h = parseInt(hz, 10);
@@ -115,6 +126,7 @@ function writeI2c() {
   var done = function () {
     pushLog(cmd);
     statusText = "Write OK";
+    console.log("[" + SCRIPT_NAME + "] write | ok cmd=" + cmd);
     render();
   };
   if (resp && typeof resp.then === "function") resp.then(done);
@@ -127,6 +139,7 @@ function readI2c() {
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) h = 100000;
+  console.log("[" + SCRIPT_NAME + "] read | addr=" + String(addrHex) + " hz=" + String(h));
   var a = parseAddr7();
   if (a < 0) {
     statusText = "Invalid addr: " + String(addrHex);
@@ -139,6 +152,7 @@ function readI2c() {
 
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
+    console.log("[" + SCRIPT_NAME + "] read | cmd=" + cmd + " result=" + (bytes && bytes.length ? String(bytes.length) : "0"));
     if (bytes && bytes.length) pushLog("rx: " + fmtBytes(bytes));
     statusText = bytes && bytes.length ? "Read " + bytes.length + " byte(s)" : "No data";
     render();
@@ -153,6 +167,7 @@ function xferI2c() {
   render();
   var h = parseInt(hz, 10);
   if (!Number.isFinite(h) || h <= 0) h = 100000;
+  console.log("[" + SCRIPT_NAME + "] xfer | addr=" + String(addrHex) + " hz=" + String(h));
   var a = parseAddr7();
   if (a < 0) {
     statusText = "Invalid addr: " + String(addrHex);
@@ -160,6 +175,7 @@ function xferI2c() {
     return;
   }
   var n = Math.max(0, Math.min(63, Number(rxLen) | 0));
+  console.log("[" + SCRIPT_NAME + "] xfer | tx=" + String(txHex) + " rx=" + String(n));
   var resp = Wire.xfer(a, txHex, n, { hz: h, timeout: 250 });
   var cmd =
     "i2c xfer --addr=0x" +
@@ -171,6 +187,7 @@ function xferI2c() {
 
   var done = function (bytes) {
     pushLog(cmd + " -> " + (bytes && bytes.length ? bytes.length : 0) + " byte(s)");
+    console.log("[" + SCRIPT_NAME + "] xfer | cmd=" + cmd + " result=" + (bytes && bytes.length ? String(bytes.length) : "0"));
     if (bytes && bytes.length) pushLog("rx: " + fmtBytes(bytes));
     statusText = bytes && bytes.length ? "OK" : "OK (no data)";
     render();
@@ -218,6 +235,7 @@ function scanI2c() {
   };
 
   pushLog("i2c scan --hz=" + h + " (0x03..0x77)");
+  console.log("[" + SCRIPT_NAME + "] scan | hz=" + String(h) + " range=0x03..0x77");
   step();
 }
 

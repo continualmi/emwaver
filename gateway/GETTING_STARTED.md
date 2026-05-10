@@ -91,7 +91,7 @@ Expected messages:
 - `hello.ack`
 - `device.status`
 - `script.started`
-- `script.log` (optional; emitted for `console.log`)
+- `script.log` (contains raw `console.log` payload text from running script)
 - `ui.snapshot`
 
 ## Bundled Examples

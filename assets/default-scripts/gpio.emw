@@ -55,19 +55,24 @@ const PINS_BY_BOARD = {
 
 const boardType = detectBoardType();
 let pin = firstPin(PINS_BY_BOARD[boardType]);
+const SCRIPT_NAME = "gpio.emw";
+
+console.log("[" + SCRIPT_NAME + "] startup | board=" + boardType + " pin=" + String(pin));
 
 function boardPins() {
     return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
 }
 
 function writeHigh() {
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, HIGH);
+  console.log("[" + SCRIPT_NAME + "] write | pin=" + String(pin) + " value=HIGH");
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, HIGH);
 }
 
 function writeLow() {
-    pinMode(pin, OUTPUT);
-    digitalWrite(pin, LOW);
+  console.log("[" + SCRIPT_NAME + "] write | pin=" + String(pin) + " value=LOW");
+  pinMode(pin, OUTPUT);
+  digitalWrite(pin, LOW);
 }
 
 function render() {

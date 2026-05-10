@@ -64,12 +64,27 @@ let periodMs = 250;
 let isBlinking = false;
 let level = LOW;
 let loopHandle = null;
+const SCRIPT_NAME = "blink.emw";
+
+console.log(
+  "[" +
+    SCRIPT_NAME +
+    "] startup | board=" +
+    boardType +
+    " pin=" +
+    String(selectedPin) +
+    " periodMs=" +
+    String(periodMs),
+);
 
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
 }
 
-function stopBlink() {
+function stopBlink(silent) {
+  if (!silent) {
+    console.log("[" + SCRIPT_NAME + "] action | blink stop");
+  }
   if (loopHandle && typeof loopHandle.stop === "function") {
     loopHandle.stop();
   }
@@ -78,8 +93,11 @@ function stopBlink() {
   render();
 }
 
-function startBlink() {
-  stopBlink();
+function startBlink(logAction) {
+  if (logAction) {
+    console.log("[" + SCRIPT_NAME + "] action | blink start");
+  }
+  stopBlink(true);
 
   const period = Math.max(1, Math.floor(Number(periodMs) || 1));
   periodMs = period;
@@ -98,10 +116,12 @@ function startBlink() {
 
 function toggleBlink() {
   if (isBlinking) {
+    console.log("[" + SCRIPT_NAME + "] action | blink toggle command=stop");
     stopBlink();
     return;
   }
-  startBlink();
+  console.log("[" + SCRIPT_NAME + "] action | blink toggle command=start");
+  startBlink(true);
 }
 
 function render() {
@@ -120,8 +140,9 @@ function render() {
           options: boardPins(),
           onChange: function (value) {
             selectedPin = String(value);
+            console.log("[" + SCRIPT_NAME + "] action | config pin=" + String(selectedPin));
             if (isBlinking) {
-              void startBlink();
+              void startBlink(false);
             } else {
               render();
             }
@@ -136,8 +157,9 @@ function render() {
           step: 1,
           onSubmit: function (value) {
             periodMs = Math.max(1, Math.floor(Number(value) || 1));
+            console.log("[" + SCRIPT_NAME + "] action | config periodMs=" + String(periodMs));
             if (isBlinking) {
-              void startBlink();
+              void startBlink(false);
             } else {
               render();
             }
