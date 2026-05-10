@@ -22,6 +22,21 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 - [`/Users/luisml/continualmi/emwaver/gateway/backend/install`](/Users/luisml/continualmi/emwaver/gateway/backend/install): install/service packaging helpers
 - [`/Users/luisml/continualmi/emwaver/emwaver.sh`](/Users/luisml/continualmi/emwaver/emwaver.sh): source-checkout helper for local dev runs and `emwaver` install
 
+## CLI invocation policy
+
+- Use `emw` as the canonical CLI command in examples and executions; treat it as the dev-equivalent entrypoint (the command we expect to behave like running the local `cargo run -p emwaver -- ...` flow).
+- If `emw` is unavailable in a source-checkout/dev environment, map to the dev helper explicitly and retry the same command via `./emwaver.sh ...`.
+- Keep command semantics identical between `emw` and the dev fallback (`./emwaver.sh`) so troubleshooting reflects installed-user behavior.
+
+### How `emw` mapping works today
+
+- **Installed path (repo-defined):** installers create `emw` as a link to `emwaver`.
+  - `emwaver.sh install` runs `cargo install ... emwaver` and then `ln -sf emwaver "$prefix/bin/emw"`.
+  - `gateway/backend/install/install.sh` copies the release `emwaver` binary and then `ln -sf emwaver "$BIN_DIR/emw"`.
+- **Dev fallback behavior (repo-defined):** `./emwaver.sh <args>` builds and executes `gateway/backend/target/debug/emwaver` directly with the same args.
+- **Current machine mapping (observed):** `emw` resolves to `~/.local/bin/emw`, which is a small shell wrapper that executes `/Users/luisml/continualmi/emwaver/gateway/backend/dev "$@"`; that `dev` helper builds and runs `target/debug/emwaver`.
+- **Why this works:** every path (`emw` symlink, local wrapper, and `./emwaver.sh`) ultimately runs the same CLI entrypoint binary (`emwaver`), so subcommands like `emw devices` and the dev equivalent stay behaviorally aligned.
+
 ## Core behaviors to preserve
 
 - The CLI is Gateway-oriented: `emw run` requires a running Gateway and should not reintroduce direct/local runtime mode.
