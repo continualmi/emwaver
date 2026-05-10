@@ -339,9 +339,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         self.wifiManager = MacWiFiManager(
             onDevicesChanged: { [weak self] records in
                 self?.midiQueue.async {
-                    self?.wifiDevices = records
-                    self?.publishDiscoveredDevices()
-                    self?.autoConnectIfNeededInternal()
+                    guard let self else { return }
+                    self.hardwareUIDByDeviceID = self.hardwareUIDByDeviceID.filter { !$0.key.hasPrefix("wifi:") }
+                    self.wifiDevices = records
+                    self.publishDiscoveredDevices()
+                    self.autoConnectIfNeededInternal()
                 }
             },
             onData: { [weak self] data, deviceID in
@@ -1121,8 +1123,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             )
             let endpoint = "\(record.host):\(record.port)"
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
-            let hardwareUID = hardwareUIDByDeviceID[record.id]
-                ?? (Self.isFullHardwareUID(record.localIdentifier) ? record.localIdentifier : nil)
+            let hardwareUID = Self.isFullHardwareUID(record.localIdentifier) ? record.localIdentifier : nil
             let identifierText = hardwareUID.map { "UID \($0)" }
             let errorText: String? = {
                 if let error = wifiConnectionErrorsByID[record.id] { return error }
@@ -1476,7 +1477,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         guard let resp, resp.count >= 7, resp[0] == 0x80 else { return nil }
         let payload = resp.dropFirst(1)
         let significantLength = payload.lastIndex(where: { $0 != 0 }).map { payload.distance(from: payload.startIndex, to: $0) + 1 } ?? 0
-        guard significantLength > 0 else { return nil }
+        guard significantLength == 6 else { return nil }
         return payload.prefix(significantLength).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -1696,6 +1697,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func handleWiFiConnected(_ record: MacWiFiDeviceRecord) {
         print("[Wi-Fi] connected id=\(record.id) host=\(record.host) port=\(record.port)")
         let shouldBecomeActive = activeTransport == .none || pendingAutoConnectWiFiID != record.id
+        let currentUID = Self.isFullHardwareUID(record.localIdentifier) ? record.localIdentifier : nil
         if shouldBecomeActive {
             activeTransport = .wifi
             activeDeviceID = record.id
@@ -1715,7 +1717,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             self.lastErrorText = nil
             if shouldBecomeActive {
                 self.deviceEmwaverVersion = nil
-                self.connectedHardwareUID = nil
+                self.connectedHardwareUID = currentUID
             }
             self.isConnected = true
         }
@@ -1728,9 +1730,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
             print("[Wi-Fi] probing version id=\(record.id)")
             let version = self.queryDeviceVersion(timeoutMs: 2000, deviceID: record.id)
-            print("[Wi-Fi] probing uid id=\(record.id)")
-            let uid = self.queryHardwareUID(timeoutMs: 2000, deviceID: record.id)
-            print("[Wi-Fi] probe result id=\(record.id) version=\(version ?? "nil") uid=\(uid ?? "nil")")
+            print("[Wi-Fi] probe result id=\(record.id) version=\(version ?? "nil") uid=\(currentUID ?? "nil")")
             if !self.transportDebugLoggingEnabled {
                 print("[Wi-Fi] disabling ESP transport packet logging id=\(record.id)")
                 self.setTransportDebugLogging(false, deviceID: record.id)
@@ -1739,11 +1739,10 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             DispatchQueue.main.async {
                 if shouldBecomeActive {
                     self.deviceEmwaverVersion = version
-                    self.connectedHardwareUID = uid
+                    self.connectedHardwareUID = currentUID
                 }
             }
             self.midiQueue.async {
-                if let uid { self.hardwareUIDByDeviceID[record.id] = uid }
                 self.publishDiscoveredDevices()
             }
         }
@@ -1760,11 +1759,17 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
         activeTransport = .none
         activeDeviceID = nil
+        if let deviceID {
+            hardwareUIDByDeviceID.removeValue(forKey: deviceID)
+            wifiConnectionErrorsByID.removeValue(forKey: deviceID)
+        }
         DispatchQueue.main.async {
             self.isConnected = false
             self.connectedPortName = nil
             self.connectedTransportKind = nil
             self.connectedBoardType = nil
+            self.deviceEmwaverVersion = nil
+            self.connectedHardwareUID = nil
         }
         publishDiscoveredDevices()
     }

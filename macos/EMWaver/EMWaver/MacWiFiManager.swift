@@ -36,7 +36,6 @@ final class MacWiFiManager: NSObject {
     private static let hardwareUIDOpcode: UInt8 = 0x08
 
     private struct BonjourMetadata {
-        var localIdentifier: String?
         var host: String?
         var boardType: String?
         var firmwareVersion: String?
@@ -59,6 +58,7 @@ final class MacWiFiManager: NSObject {
     private var pendingConnectionRecord: MacWiFiDeviceRecord?
     private var advertisedDeviceIDs: Set<String> = []
     private var advertisedRecordsByID: [String: MacWiFiDeviceRecord] = [:]
+    private var unreachableAdvertisedDeviceIDs: Set<String> = []
     private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var advertisedValidationSockets: [String: URLSessionWebSocketTask] = [:]
     private var advertisedValidationProbes: [String: AdvertisedValidationProbe] = [:]
@@ -370,7 +370,7 @@ final class MacWiFiManager: NSObject {
         pendingConnectionRecord = nil
         if let oldID,
            let record = discoveredDevicesByID[oldID],
-           !record.isAdvertised {
+           (!record.isAdvertised || unreachableAdvertisedDeviceIDs.contains(oldID)) {
             discoveredDevicesByID.removeValue(forKey: oldID)
         }
         if notify {
@@ -395,12 +395,15 @@ final class MacWiFiManager: NSObject {
             advertisedIDs.insert(id)
             let capabilities = metadata.capabilities.isEmpty ? ["wifi"] : metadata.capabilities
             Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ","))")
+            let currentUID = Self.isFullHardwareUID(discoveredDevicesByID[id]?.localIdentifier)
+                ? discoveredDevicesByID[id]?.localIdentifier
+                : nil
             let record = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
                 host: host,
                 port: Self.defaultPort,
-                localIdentifier: metadata.localIdentifier,
+                localIdentifier: currentUID,
                 boardType: metadata.boardType ?? "esp32",
                 firmwareVersion: metadata.firmwareVersion,
                 protocolVersion: metadata.protocolVersion ?? "1",
@@ -409,6 +412,9 @@ final class MacWiFiManager: NSObject {
                 lastSeen: Date()
             )
             advertisedRecordsByID[id] = record
+            if unreachableAdvertisedDeviceIDs.contains(id) {
+                continue
+            }
             if connectedDeviceID == id || discoveredDevicesByID[id]?.isAdvertised == true {
                 discoveredDevicesByID[id] = record
             } else {
@@ -416,6 +422,7 @@ final class MacWiFiManager: NSObject {
             }
         }
         advertisedDeviceIDs = advertisedIDs
+        unreachableAdvertisedDeviceIDs.formIntersection(advertisedIDs)
         advertisedRecordsByID = advertisedRecordsByID.filter { advertisedIDs.contains($0.key) }
 
         for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) {
@@ -546,6 +553,7 @@ final class MacWiFiManager: NSObject {
         advertisedValidationSockets.removeValue(forKey: record.id)
         advertisedValidationProbes.removeValue(forKey: record.id)
         guard advertisedDeviceIDs.contains(record.id) else { return }
+        unreachableAdvertisedDeviceIDs.remove(record.id)
         var validatedRecord = record
         validatedRecord.localIdentifier = uid
         validatedRecord.lastSeen = Date()
@@ -568,16 +576,14 @@ final class MacWiFiManager: NSObject {
         advertisedValidationProbes.removeValue(forKey: record.id)
         advertisedValidationSockets.removeValue(forKey: record.id)?.cancel(with: .goingAway, reason: nil)
         if removeOnFailure {
-            removeUnreachableAdvertisedRecord(record.id)
+            markAdvertisedRecordUnreachable(record.id)
         }
     }
 
-    private func removeUnreachableAdvertisedRecord(_ id: String) {
-        guard connectedDeviceID != id,
-              discoveredDevicesByID[id]?.isAdvertised == true else {
-            return
-        }
+    private func markAdvertisedRecordUnreachable(_ id: String) {
+        guard advertisedDeviceIDs.contains(id) || discoveredDevicesByID[id]?.isAdvertised == true else { return }
         Self.log("removing unreachable advertised discovery id=\(id)")
+        unreachableAdvertisedDeviceIDs.insert(id)
         discoveredDevicesByID.removeValue(forKey: id)
         publishDevices()
     }
@@ -615,6 +621,9 @@ final class MacWiFiManager: NSObject {
                 let id = self.connectedDeviceID ?? self.pendingConnectionRecord?.id ?? "nil"
                 Self.log("websocket closed id=\(id) code=\(closeCode.rawValue)")
                 self.onError("Wi-Fi disconnected")
+                if id != "nil" {
+                    self.markAdvertisedRecordUnreachable(id)
+                }
                 self.disconnect(notify: true)
                 return
             }
@@ -678,6 +687,7 @@ final class MacWiFiManager: NSObject {
                 guard let payload, let uid = Self.hardwareUID(from: payload) else {
                     Self.log("UID liveness returned invalid response id=\(record.id)")
                     self.onError("Wi-Fi disconnected: UID probe failed")
+                    self.markAdvertisedRecordUnreachable(record.id)
                     self.disconnect(notify: true)
                     return
                 }
@@ -701,6 +711,7 @@ final class MacWiFiManager: NSObject {
             Self.log("UID liveness timed out id=\(record.id)")
             self.pendingResponse = nil
             self.onError("Wi-Fi disconnected: UID probe timed out")
+            self.markAdvertisedRecordUnreachable(record.id)
             self.disconnect(notify: true)
         }
         socket.send(.data(hardwareUIDCommand)) { [weak self] error in
@@ -711,6 +722,7 @@ final class MacWiFiManager: NSObject {
                     Self.log("UID liveness send failed id=\(record.id) error=\(error.localizedDescription)")
                     self.pendingResponse = nil
                     self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
+                    self.markAdvertisedRecordUnreachable(record.id)
                     self.disconnect(notify: true)
                 }
             }
@@ -750,6 +762,9 @@ final class MacWiFiManager: NSObject {
                 self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
                 self.queue.async {
                     if self.socket === socket {
+                        if let id = self.connectedDeviceID ?? self.pendingConnectionRecord?.id {
+                            self.markAdvertisedRecordUnreachable(id)
+                        }
                         self.disconnect(notify: true)
                     }
                 }
@@ -808,8 +823,15 @@ final class MacWiFiManager: NSObject {
         let payload = response.dropFirst(1)
         let significantLength = payload.lastIndex(where: { $0 != 0 })
             .map { payload.distance(from: payload.startIndex, to: $0) + 1 } ?? 0
-        guard significantLength > 0 else { return nil }
+        guard significantLength == 6 else { return nil }
         return payload.prefix(significantLength).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private static func isFullHardwareUID(_ value: String?) -> Bool {
+        guard let value else { return false }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.count == 12 else { return false }
+        return trimmed.allSatisfy { $0.isHexDigit }
     }
 
     private static func log(_ message: String) {
@@ -908,7 +930,6 @@ final class MacWiFiManager: NSObject {
         }
         let dictionary = txtRecord.dictionary
         return BonjourMetadata(
-            localIdentifier: nonEmpty(dictionary["id"]),
             host: nonEmpty(dictionary["host"]),
             boardType: normalizedBoardType(dictionary["board"]),
             firmwareVersion: nonEmpty(dictionary["fw"]),

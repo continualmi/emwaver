@@ -49,6 +49,7 @@ struct EMWaverTests {
         let response = Data([0x80, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c, 0x00, 0x00])
         #expect(MacWiFiManager.hardwareUID(from: response) == "d83bdaa4ec7c")
         #expect(MacWiFiManager.hardwareUID(from: Data([0x80, 0, 0, 0, 0, 0, 0])) == nil)
+        #expect(MacWiFiManager.hardwareUID(from: Data([0x80, 0x01, 0, 0, 0, 0, 0])) == nil)
         #expect(MacWiFiManager.hardwareUID(from: Data([0x81, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c])) == nil)
     }
 

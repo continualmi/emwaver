@@ -71,6 +71,7 @@ Transport behavior:
 - Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.
 - Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection, with capability matching kept case/whitespace tolerant for TXT-record compatibility.
+- Wi-Fi device presence is confirmed by the hardware UID command over the WebSocket. mDNS/manual records are only addresses to try; the local device list only shows a Wi-Fi endpoint after a fresh valid 6-byte UID response, and UID liveness failure removes it.
 - Wi-Fi mDNS discovery prunes devices that stop advertising from the visible local device list unless the endpoint is currently connected.
 - The Wi-Fi UI supports manual host/IP plus port. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
 - Manual Wi-Fi connection rejects ports outside the valid TCP range before opening the WebSocket.
@@ -90,7 +91,7 @@ Transport behavior:
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
 - Gateway-controlled runs can now include a `deviceId`; the macOS app creates a separate remote script runtime per `script.run` request and routes `Device.sendPacket` / `Device.sendCommand` through a targeted device bridge. This enables the initial automation-bench shape of one connected device = one remote script session. Shared capture buffers and mixed USB/BLE concurrent ownership still need hardening before treating every script API as fully isolated.
-- The app queries `EMW_OP_HARDWARE_UID_GET` after connection and uses that local hardware UID to merge the same physical device across transports when known. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
+- The app queries `EMW_OP_HARDWARE_UID_GET` after USB/BLE connection and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
 Local-first gateway behavior:
