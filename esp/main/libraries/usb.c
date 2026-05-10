@@ -341,7 +341,7 @@ static void process_sysex_frame(const uint8_t *sysex)
         return;
     }
 
-    transport_debug_log_lane(EMW_COMMAND_SOURCE_USB, "rx", decoded, EMW_LANE_SIZE, 0);
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_USB, "rx", decoded, EMW_LANE_SIZE);
 
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;

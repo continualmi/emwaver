@@ -30,6 +30,7 @@ final class MacWiFiManager: NSObject {
     private static let livenessProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
+    private static let pendingCommandRetryDelay: DispatchTimeInterval = .milliseconds(20)
     private static let laneSizeBytes = 18
     private static let superframeSizeBytes = 36
     private static let hardwareUIDOpcode: UInt8 = 0x08
@@ -61,15 +62,13 @@ final class MacWiFiManager: NSObject {
     private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var advertisedValidationSockets: [String: URLSessionWebSocketTask] = [:]
     private var advertisedValidationProbes: [String: AdvertisedValidationProbe] = [:]
-    private var pendingResponses: [UInt16: PendingResponse] = [:]
+    private var pendingResponse: PendingResponse?
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
-    private var pendingLivenessSequence: UInt16?
-    private var txSequence: UInt16 = 1
 
     private struct AdvertisedValidationProbe {
         var record: MacWiFiDeviceRecord
-        var frame: Data
+        var sysex: Data
         var removeOnFailure: Bool
     }
 
@@ -254,22 +253,24 @@ final class MacWiFiManager: NSObject {
         }
     }
 
-    func send(_ data: Data, sequence: UInt16? = nil) {
+    func send(_ data: Data) {
         queue.async {
             guard let socket = self.socket, self.connectedDeviceID != nil else {
                 Self.log("send rejected: socket not connected bytes=\(data.count)")
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
-            let envelopeSequence = sequence ?? self.nextSequence()
-            guard let frame = Self.makeEnvelope(kind: 1, sequence: envelopeSequence, payload: data) else {
-                self.onError("Wi-Fi write failed: Payload too large")
+            if Self.hasCommandLane(data), self.pendingResponse != nil {
+                Self.log("send waiting for pending command response bytes=\(data.count)")
+                self.queue.asyncAfter(deadline: .now() + Self.pendingCommandRetryDelay) { [weak self] in
+                    self?.send(data)
+                }
                 return
             }
-            Self.log("send seq=\(envelopeSequence) bytes=\(data.count) payload=\(Self.hexPreview(data))")
-            socket.send(.data(frame)) { [weak self] error in
+            Self.log("send bytes=\(data.count) payload=\(Self.hexPreview(data))")
+            socket.send(.data(data)) { [weak self] error in
                 if let error {
-                    Self.log("send failed seq=\(envelopeSequence) error=\(error.localizedDescription)")
+                    Self.log("send failed error=\(error.localizedDescription)")
                     self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
                 }
             }
@@ -283,32 +284,30 @@ final class MacWiFiManager: NSObject {
         }
 
         let pending = PendingResponse()
-        let sequence = queue.sync {
-            let sequence = self.nextSequence()
-            self.pendingResponses[sequence] = pending
-            Self.log("command queued seq=\(sequence) bytes=\(data.count) payload=\(Self.hexPreview(data))")
-            return sequence
+        let deadline = Date().addingTimeInterval(Double(max(1, timeout)) / 1000.0)
+        guard claimPendingResponse(pending, deadline: deadline) else {
+            onError("Wi-Fi command timed out waiting for pending response")
+            return nil
         }
+        Self.log("command queued bytes=\(data.count) payload=\(Self.hexPreview(data))")
 
         queue.async {
             guard let socket = self.socket else {
-                self.pendingResponses.removeValue(forKey: sequence)
+                if self.pendingResponse === pending {
+                    self.pendingResponse = nil
+                }
                 self.onError("Wi-Fi write failed: Not connected")
                 pending.semaphore.signal()
                 return
             }
-            guard let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: data) else {
-                self.pendingResponses.removeValue(forKey: sequence)
-                self.onError("Wi-Fi write failed: Payload too large")
-                pending.semaphore.signal()
-                return
-            }
-            Self.log("command send seq=\(sequence) bytes=\(data.count)")
-            socket.send(.data(frame)) { [weak self] error in
+            Self.log("command send bytes=\(data.count)")
+            socket.send(.data(data)) { [weak self] error in
                 if let error {
-                    Self.log("command send failed seq=\(sequence) error=\(error.localizedDescription)")
+                    Self.log("command send failed error=\(error.localizedDescription)")
                     self?.queue.async {
-                        self?.pendingResponses.removeValue(forKey: sequence)
+                        if self?.pendingResponse === pending {
+                            self?.pendingResponse = nil
+                        }
                         self?.onError("Wi-Fi write failed: \(error.localizedDescription)")
                         pending.semaphore.signal()
                     }
@@ -316,16 +315,39 @@ final class MacWiFiManager: NSObject {
             }
         }
 
-        let waitResult = pending.semaphore.wait(timeout: .now() + .milliseconds(max(1, timeout)))
+        let remainingMilliseconds = max(1, Int(deadline.timeIntervalSinceNow * 1000.0))
+        let waitResult = pending.semaphore.wait(timeout: .now() + .milliseconds(remainingMilliseconds))
         if waitResult == .timedOut {
             queue.async {
-                self.pendingResponses.removeValue(forKey: sequence)
-                Self.log("command timed out seq=\(sequence)")
+                if self.pendingResponse === pending {
+                    self.pendingResponse = nil
+                }
+                Self.log("command timed out")
                 self.onError("Wi-Fi command timed out")
             }
             return nil
         }
         return pending.payload
+    }
+
+    private func claimPendingResponse(_ pending: PendingResponse, deadline: Date) -> Bool {
+        var loggedWait = false
+        while Date() < deadline {
+            let claimed = queue.sync {
+                guard self.pendingResponse == nil else { return false }
+                self.pendingResponse = pending
+                return true
+            }
+            if claimed {
+                return true
+            }
+            if !loggedWait {
+                Self.log("command waiting for pending response")
+                loggedWait = true
+            }
+            Thread.sleep(forTimeInterval: 0.01)
+        }
+        return false
     }
 
     func disconnect() {
@@ -344,9 +366,7 @@ final class MacWiFiManager: NSObject {
         socket = nil
         connectedDeviceID = nil
         cancelLivenessTimer()
-        pendingLivenessSequence = nil
-        failPendingResponses()
-        txSequence = 1
+        failPendingResponse()
         pendingConnectionRecord = nil
         if let oldID,
            let record = discoveredDevicesByID[oldID],
@@ -451,8 +471,7 @@ final class MacWiFiManager: NSObject {
 
     private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool = false) {
         guard let url = Self.webSocketURL(host: record.host, port: record.port),
-              let hardwareUIDCommand = Self.hardwareUIDCommandSysex(),
-              let frame = Self.makeEnvelope(kind: 1, sequence: 1, payload: hardwareUIDCommand) else { return }
+              let hardwareUIDCommand = Self.hardwareUIDCommandSysex() else { return }
         guard socket == nil else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
         Self.log("validating advertised uid id=\(record.id)")
@@ -460,7 +479,7 @@ final class MacWiFiManager: NSObject {
         advertisedValidationSockets[record.id] = validationSocket
         advertisedValidationProbes[record.id] = AdvertisedValidationProbe(
             record: record,
-            frame: frame,
+            sysex: hardwareUIDCommand,
             removeOnFailure: removeOnFailure
         )
         validationSocket.resume()
@@ -476,10 +495,10 @@ final class MacWiFiManager: NSObject {
     private func sendAdvertisedUIDProbe(
         record: MacWiFiDeviceRecord,
         socket validationSocket: URLSessionWebSocketTask,
-        frame: Data,
+        sysex: Data,
         removeOnFailure: Bool
     ) {
-        validationSocket.send(.data(frame)) { [weak self] error in
+        validationSocket.send(.data(sysex)) { [weak self] error in
             guard let self else { return }
             self.queue.async {
                 guard self.validatingAdvertisedDeviceIDs.contains(record.id),
@@ -507,9 +526,7 @@ final class MacWiFiManager: NSObject {
                 switch result {
                 case .success(let message):
                     guard case .data(let data) = message,
-                          let envelope = Self.unwrapEnvelope(data),
-                          envelope.sequence == 1,
-                          let uid = Self.hardwareUID(from: envelope.payload) else {
+                          let uid = Self.hardwareUID(from: data) else {
                         Self.log("advertised UID probe returned invalid response id=\(record.id)")
                         self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
                         return
@@ -542,7 +559,6 @@ final class MacWiFiManager: NSObject {
         self.socket = validationSocket
         connectedDeviceID = nil
         pendingConnectionRecord = validatedRecord
-        txSequence = 2
         receiveLoop(socket: validationSocket)
         markConnected(record: validatedRecord, socket: validationSocket)
     }
@@ -587,7 +603,7 @@ final class MacWiFiManager: NSObject {
             self.sendAdvertisedUIDProbe(
                 record: probe.record,
                 socket: openedSocket,
-                frame: probe.frame,
+                sysex: probe.sysex,
                 removeOnFailure: probe.removeOnFailure
             )
         }
@@ -651,25 +667,21 @@ final class MacWiFiManager: NSObject {
         record: MacWiFiDeviceRecord,
         markConnectedOnSuccess: Bool
     ) {
-        guard pendingLivenessSequence == nil else { return }
-        let sequence = nextSequence()
-        guard let hardwareUIDCommand = Self.hardwareUIDCommandSysex(),
-              let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: hardwareUIDCommand) else { return }
+        guard pendingResponse == nil else { return }
+        guard let hardwareUIDCommand = Self.hardwareUIDCommandSysex() else { return }
         let pending = PendingResponse()
-        pendingLivenessSequence = sequence
-        pendingResponses[sequence] = pending
+        pendingResponse = pending
         pending.completion = { [weak self, weak socket] payload in
             guard let self, let socket else { return }
             self.queue.async {
-                guard self.socket === socket, self.pendingLivenessSequence == sequence else { return }
-                self.pendingLivenessSequence = nil
+                guard self.socket === socket else { return }
                 guard let payload, let uid = Self.hardwareUID(from: payload) else {
-                    Self.log("UID liveness returned invalid response id=\(record.id) seq=\(sequence)")
+                    Self.log("UID liveness returned invalid response id=\(record.id)")
                     self.onError("Wi-Fi disconnected: UID probe failed")
                     self.disconnect(notify: true)
                     return
                 }
-                Self.log("UID liveness ok id=\(record.id) seq=\(sequence) uid=\(uid)")
+                Self.log("UID liveness ok id=\(record.id) uid=\(uid)")
                 if markConnectedOnSuccess {
                     var connectedRecord = record
                     connectedRecord.localIdentifier = uid
@@ -682,24 +694,22 @@ final class MacWiFiManager: NSObject {
                 }
             }
         }
-        Self.log("UID liveness probe id=\(record.id) seq=\(sequence) initial=\(markConnectedOnSuccess)")
+        Self.log("UID liveness probe id=\(record.id) initial=\(markConnectedOnSuccess)")
         queue.asyncAfter(deadline: .now() + Self.livenessProbeTimeout) { [weak self, weak socket] in
             guard let self, let socket else { return }
-            guard self.socket === socket, self.pendingLivenessSequence == sequence else { return }
-            Self.log("UID liveness timed out id=\(record.id) seq=\(sequence)")
-            self.pendingLivenessSequence = nil
-            self.pendingResponses.removeValue(forKey: sequence)
+            guard self.socket === socket, self.pendingResponse === pending else { return }
+            Self.log("UID liveness timed out id=\(record.id)")
+            self.pendingResponse = nil
             self.onError("Wi-Fi disconnected: UID probe timed out")
             self.disconnect(notify: true)
         }
-        socket.send(.data(frame)) { [weak self] error in
+        socket.send(.data(hardwareUIDCommand)) { [weak self] error in
             guard let self else { return }
             self.queue.async {
                 if let error {
-                    guard self.pendingLivenessSequence == sequence else { return }
-                    Self.log("UID liveness send failed id=\(record.id) seq=\(sequence) error=\(error.localizedDescription)")
-                    self.pendingLivenessSequence = nil
-                    self.pendingResponses.removeValue(forKey: sequence)
+                    guard self.pendingResponse === pending else { return }
+                    Self.log("UID liveness send failed id=\(record.id) error=\(error.localizedDescription)")
+                    self.pendingResponse = nil
                     self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
                     self.disconnect(notify: true)
                 }
@@ -714,16 +724,12 @@ final class MacWiFiManager: NSObject {
             case .success(let message):
                 switch message {
                 case .data(let data):
-                    if let envelope = Self.unwrapEnvelope(data) {
-                        Self.log("receive envelope seq=\(envelope.sequence) bytes=\(envelope.payload.count) payload=\(Self.hexPreview(envelope.payload))")
-                        if self.completePendingResponse(sequence: envelope.sequence, payload: envelope.payload) {
-                            break
-                        }
-                        self.onData(envelope.payload, self.connectedDeviceID)
-                    } else {
-                        Self.log("receive raw data bytes=\(data.count) payload=\(Self.hexPreview(data))")
-                        self.onData(data, self.connectedDeviceID)
+                    Self.log("receive bytes=\(data.count) payload=\(Self.hexPreview(data))")
+                    if Self.hasCommandLane(data),
+                       self.completePendingResponse(payload: data) {
+                        break
                     }
+                    self.onData(data, self.connectedDeviceID)
                 case .string(let text):
                     Self.log("receive text=\(Self.redactedAuthText(text))")
                     if text.localizedCaseInsensitiveContains("busy") {
@@ -751,10 +757,11 @@ final class MacWiFiManager: NSObject {
         }
     }
 
-    private func completePendingResponse(sequence: UInt16, payload: Data) -> Bool {
+    private func completePendingResponse(payload: Data) -> Bool {
         var pending: PendingResponse?
         queue.sync {
-            pending = pendingResponses.removeValue(forKey: sequence)
+            pending = pendingResponse
+            pendingResponse = nil
         }
         guard let pending else { return false }
         pending.payload = payload
@@ -763,65 +770,29 @@ final class MacWiFiManager: NSObject {
         return true
     }
 
-    private func failPendingResponses() {
-        let pending = pendingResponses.values
-        pendingResponses.removeAll()
-        for response in pending {
-            response.completion?(nil)
-            response.semaphore.signal()
-        }
+    private func failPendingResponse() {
+        let pending = pendingResponse
+        pendingResponse = nil
+        pending?.completion?(nil)
+        pending?.semaphore.signal()
     }
 
     private func publishDevices() {
         onDevicesChanged(Array(discoveredDevicesByID.values).sorted { $0.displayName < $1.displayName })
     }
 
-    private func nextSequence() -> UInt16 {
-        let sequence = txSequence
-        txSequence = Self.nextWiFiSequence(after: txSequence)
-        return sequence
-    }
-
-    static func nextWiFiSequence(after sequence: UInt16) -> UInt16 {
-        let next = sequence &+ 1
-        return next == 0 ? 1 : next
-    }
-
-    static func makeEnvelope(kind: UInt8, sequence: UInt16, payload: Data) -> Data? {
-        guard payload.count <= UInt16.max else { return nil }
-        var frame = Data()
-        frame.reserveCapacity(10 + payload.count)
-        frame.append(contentsOf: [0x45, 0x4d, 0x57, 0x01, kind])
-        frame.append(UInt8(sequence & 0xff))
-        frame.append(UInt8((sequence >> 8) & 0xff))
-        frame.append(0)
-        frame.append(UInt8(payload.count & 0xff))
-        frame.append(UInt8((payload.count >> 8) & 0xff))
-        frame.append(payload)
-        return frame
-    }
-
-    static func unwrapEnvelope(_ data: Data) -> (payload: Data, sequence: UInt16)? {
-        guard data.count >= 10,
-              data[0] == 0x45,
-              data[1] == 0x4d,
-              data[2] == 0x57,
-              data[3] == 0x01,
-              data[4] == 0x01 else {
-            return nil
-        }
-        let payloadLength = Int(data[8]) | (Int(data[9]) << 8)
-        guard data.count == 10 + payloadLength else {
-            return nil
-        }
-        let sequence = UInt16(data[5]) | (UInt16(data[6]) << 8)
-        return (data.subdata(in: 10..<data.count), sequence)
-    }
-
     static func hardwareUIDCommandSysex() -> Data? {
         var superframe = Data(repeating: 0, count: superframeSizeBytes)
         superframe[0] = hardwareUIDOpcode
         return UsbMidiSysex.encodeSuperframe(superframe)
+    }
+
+    static func hasCommandLane(_ data: Data) -> Bool {
+        guard let superframe = UsbMidiSysex.decodeSysexToSuperframe(data),
+              superframe.count >= laneSizeBytes else {
+            return false
+        }
+        return superframe.prefix(laneSizeBytes).contains { $0 != 0 }
     }
 
     static func hardwareUID(from response: Data) -> String? {

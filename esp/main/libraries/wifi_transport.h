@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 void wifi_transport_init(QueueHandle_t cmd_queue);
-esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, const uint8_t *payload, size_t payload_len);
+esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len);
 esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonblocking);
 esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking);
 esp_err_t wifi_transport_provision(const char *ssid, const char *password);

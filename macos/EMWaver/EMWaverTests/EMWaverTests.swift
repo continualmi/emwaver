@@ -45,19 +45,6 @@ struct EMWaverTests {
         #expect(url.absoluteString == "ws://emwaver-a1b2.local:3922/v1/ws")
     }
 
-    @Test func wifiCommandSequenceSkipsReservedZeroAfterWrap() {
-        #expect(MacWiFiManager.nextWiFiSequence(after: 1) == 2)
-        #expect(MacWiFiManager.nextWiFiSequence(after: UInt16.max) == 1)
-    }
-
-    @Test func wifiEnvelopeRoundTripsSequenceAndPayload() throws {
-        let payload = Data([0xf0, 0x7d, 0x45, 0x4d, 0x57, 0xf7])
-        let frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload))
-        let envelope = try #require(MacWiFiManager.unwrapEnvelope(frame))
-        #expect(envelope.sequence == 42)
-        #expect(envelope.payload == payload)
-    }
-
     @Test func wifiHardwareUIDParsesCommandResponse() {
         let response = Data([0x80, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c, 0x00, 0x00])
         #expect(MacWiFiManager.hardwareUID(from: response) == "d83bdaa4ec7c")
@@ -65,14 +52,12 @@ struct EMWaverTests {
         #expect(MacWiFiManager.hardwareUID(from: Data([0x81, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c])) == nil)
     }
 
-    @Test func wifiHardwareUIDProbeUsesSysexEnvelopePayload() throws {
+    @Test func wifiHardwareUIDProbeUsesPlainSysexPayload() throws {
         let sysex = try #require(MacWiFiManager.hardwareUIDCommandSysex())
         #expect(sysex.count == 48)
-
-        let frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 1, payload: sysex))
-        let envelope = try #require(MacWiFiManager.unwrapEnvelope(frame))
-        #expect(envelope.sequence == 1)
-        #expect(envelope.payload == sysex)
+        let superframe = try #require(UsbMidiSysex.decodeSysexToSuperframe(sysex))
+        #expect(superframe.count == 36)
+        #expect(superframe[0] == 0x08)
     }
 
     @Test func wifiHardwareUIDParsesSysexCommandResponse() throws {
@@ -82,16 +67,17 @@ struct EMWaverTests {
         #expect(MacWiFiManager.hardwareUID(from: sysex) == "d83bdaa4ec7c")
     }
 
-    @Test func wifiEnvelopeRejectsOversizedPayloads() {
-        let payload = Data(repeating: 0, count: Int(UInt16.max) + 1)
-        #expect(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload) == nil)
-    }
+    @Test func wifiCommandLaneDetectionUsesPlainSysex() throws {
+        var commandSuperframe = Data(repeating: 0, count: 36)
+        commandSuperframe[0] = 0x80
+        let commandSysex = try #require(UsbMidiSysex.encodeSuperframe(commandSuperframe))
+        #expect(MacWiFiManager.hasCommandLane(commandSysex))
 
-    @Test func wifiEnvelopeRejectsLengthMismatch() throws {
-        let payload = Data([0xf0, 0x7d, 0xf7])
-        var frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 42, payload: payload))
-        frame[8] = UInt8(payload.count + 1)
-        #expect(MacWiFiManager.unwrapEnvelope(frame) == nil)
+        var streamSuperframe = Data(repeating: 0, count: 36)
+        streamSuperframe[18] = 0x42
+        streamSuperframe[19] = 0x53
+        let streamSysex = try #require(UsbMidiSysex.encodeSuperframe(streamSuperframe))
+        #expect(!MacWiFiManager.hasCommandLane(streamSysex))
     }
 
     @Test func wifiBufferStatusLaneRequiresExactPaddedStatusShape() {
@@ -111,22 +97,6 @@ struct EMWaverTests {
         streamData[3] = 0x34
         streamData[4] = 0x56
         #expect(!MacUSBManager.isBufferStatusLane(streamData))
-    }
-
-    @Test func wifiOutgoingSequenceZeroIsReservedForStreamOnlySuperframes() {
-        var streamOnly = Data(repeating: 0, count: 36)
-        streamOnly[18] = 0x01
-        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(streamOnly) == 0)
-
-        var commandOnly = Data(repeating: 0, count: 36)
-        commandOnly[0] = 0x01
-        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(commandOnly) == nil)
-
-        var mixed = commandOnly
-        mixed[18] = 0x02
-        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(mixed) == nil)
-
-        #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(Data(repeating: 0, count: 36)) == nil)
     }
 
     @Test func wifiStatusParsesOptionalStationIP() {

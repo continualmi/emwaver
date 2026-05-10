@@ -74,7 +74,6 @@ static uint32_t pwm_freq_hz = PWM_DEFAULT_FREQ_HZ;
 static int pwm_active_pin = -1;
 static bool pwm_configured = false;
 static uint8_t active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
-static uint16_t active_command_wifi_sequence = 0;
 
 static void command_task(void *pv_parameters);
 static bool handle_binary_packet(const command_t *cmd);
@@ -186,14 +185,11 @@ static void command_task(void *pv_parameters)
             }
 
             active_command_source = cmd.source;
-            active_command_wifi_sequence = cmd.wifi_sequence;
             if (handle_binary_packet(&cmd)) {
                 active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
-                active_command_wifi_sequence = 0;
                 continue;
             }
             active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
-            active_command_wifi_sequence = 0;
 
             // Desktop/clients may send fixed 64-byte packets padded with 0x00.
             // Treat 0x00 as end-of-command, and trim trailing whitespace so the
@@ -413,7 +409,7 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
     if (payload && payload_len > 0) {
         memcpy(&lane[1], payload, payload_len);
     }
-    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane), active_command_wifi_sequence);
+    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane));
 
     if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
         if (ble_server_send_cmd_response(EMW_RESP_STATUS_OK, payload, (uint16_t)len) != 0) {
@@ -423,7 +419,7 @@ static void send_binary_ok(const uint8_t *payload, size_t len)
     }
 
     if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
-        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_OK, active_command_wifi_sequence, payload, len) != ESP_OK) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_OK, payload, len) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to send Wi-Fi OK response");
         }
         return;
@@ -438,7 +434,7 @@ static void send_binary_err(void)
 {
     uint8_t lane[EMW_USB_CMD_LANE_SIZE] = {0};
     lane[0] = EMW_RESP_STATUS_ERR;
-    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane), active_command_wifi_sequence);
+    transport_debug_log_lane(active_command_source, "tx", lane, sizeof(lane));
 
     if (active_command_source == EMW_COMMAND_SOURCE_BLE) {
         if (ble_server_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != 0) {
@@ -448,7 +444,7 @@ static void send_binary_err(void)
     }
 
     if (active_command_source == EMW_COMMAND_SOURCE_WIFI) {
-        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_ERR, active_command_wifi_sequence, NULL, 0) != ESP_OK) {
+        if (wifi_transport_send_cmd_response(EMW_RESP_STATUS_ERR, NULL, 0) != ESP_OK) {
             ESP_LOGW(TAG, "Failed to send Wi-Fi ERR response");
         }
         return;

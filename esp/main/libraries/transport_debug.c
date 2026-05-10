@@ -37,8 +37,7 @@ bool transport_debug_is_enabled(void)
 void transport_debug_log_lane(uint8_t source,
                               const char *direction,
                               const uint8_t *lane,
-                              size_t lane_len,
-                              uint16_t wifi_sequence)
+                              size_t lane_len)
 {
     if (!s_transport_debug_enabled || !direction || !lane || lane_len == 0) {
         return;
@@ -58,16 +57,6 @@ void transport_debug_log_lane(uint8_t source,
         offset += (size_t)written;
     }
     hex[offset] = '\0';
-
-    if (source == EMW_COMMAND_SOURCE_WIFI) {
-        ESP_LOGI(TAG,
-                 "[%s] %s seq=%u lane=%s",
-                 source_name(source),
-                 direction,
-                 (unsigned)wifi_sequence,
-                 hex);
-        return;
-    }
 
     ESP_LOGI(TAG,
              "[%s] %s lane=%s",

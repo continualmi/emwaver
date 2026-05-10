@@ -64,11 +64,9 @@ Transport behavior:
 - USB MIDI remains the preferred wired path when present.
 - The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
-- macOS uses Wi-Fi binary envelope version `1` after opening the WebSocket. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model; firmware echoes the request sequence id on command responses, and macOS matches synchronous command replies by that sequence.
+- macOS sends and receives the existing 48-byte EMWaver SysEx payload directly over the WebSocket. There is no Wi-Fi-specific envelope or sequence layer.
 - macOS only sends Wi-Fi command frames after WebSocket connection has completed and the selected Wi-Fi record is marked connected.
-- macOS validates Wi-Fi envelope payload lengths before sending so oversized local payloads do not wrap the 16-bit envelope length field.
 - If no matching Wi-Fi command response arrives before the caller timeout, macOS reports `Wi-Fi command timed out`.
-- macOS reserves Wi-Fi envelope sequence `0` for uncorrelated stream/status frames; stream-only retransmit frames use sequence `0`, while command requests start at sequence `1` and skip `0` after wraparound.
 - Wi-Fi retransmit buffers use firmware `BS` status frames for host-side pacing, and exact padded `BS` status frames are not appended to the script capture buffer; ordinary stream data that begins with the same bytes is preserved.
 - Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.

@@ -9,5 +9,4 @@ bool transport_debug_is_enabled(void);
 void transport_debug_log_lane(uint8_t source,
                               const char *direction,
                               const uint8_t *lane,
-                              size_t lane_len,
-                              uint16_t wifi_sequence);
+                              size_t lane_len);

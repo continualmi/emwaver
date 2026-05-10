@@ -48,9 +48,6 @@
 #define WIFI_FIRMWARE_VERSION "1.0.0"
 #define WIFI_RECONNECT_BASE_MS 1000u
 #define WIFI_RECONNECT_MAX_MS 30000u
-#define WIFI_ENVELOPE_HEADER_BYTES 10u
-#define WIFI_ENVELOPE_VERSION 1u
-#define WIFI_ENVELOPE_KIND_SYSEX 1u
 #define EMW_SYSEX_BYTES 48u
 #define EMW_ENCODED_BYTES 42u
 #define EMW_LANE_SIZE 18u
@@ -66,7 +63,6 @@ static QueueHandle_t s_cmd_queue;
 static httpd_handle_t s_httpd;
 static int s_active_fd = -1;
 static bool s_session_connected;
-static bool s_use_envelope;
 static wifi_transport_config_t s_config;
 static bool s_has_config;
 static bool s_netif_ready;
@@ -101,12 +97,10 @@ static bool publish_mdns(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
-static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence);
-static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_t sequence, const uint8_t *payload, size_t payload_len);
-static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped);
+static bool enqueue_sysex(const uint8_t *sysex);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
-static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence);
+static esp_err_t send_superframe(const uint8_t *frame);
 
 void wifi_transport_init(QueueHandle_t cmd_queue)
 {
@@ -125,7 +119,7 @@ void wifi_transport_init(QueueHandle_t cmd_queue)
 #endif
 }
 
-esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, const uint8_t *payload, size_t payload_len)
+esp_err_t wifi_transport_send_cmd_response(uint8_t status, const uint8_t *payload, size_t payload_len)
 {
     if (!s_httpd || s_active_fd < 0) {
         return ESP_ERR_INVALID_STATE;
@@ -140,7 +134,7 @@ esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, co
     if (payload && payload_len > 0) {
         memcpy(&frame[1], payload, payload_len);
     }
-    return send_superframe(frame, sequence);
+    return send_superframe(frame);
 }
 
 esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonblocking)
@@ -155,7 +149,7 @@ esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonbl
 
     uint8_t frame[EMW_USB_FRAME_SIZE] = {0};
     memcpy(&frame[EMW_LANE_SIZE], stream_lane, EMW_LANE_SIZE);
-    return send_superframe(frame, 0);
+    return send_superframe(frame);
 }
 
 esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking)
@@ -170,7 +164,7 @@ esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking)
     frame[EMW_LANE_SIZE + 1u] = 'S';
     frame[EMW_LANE_SIZE + 2u] = (uint8_t)(status >> 8u);
     frame[EMW_LANE_SIZE + 3u] = (uint8_t)(status & 0xffu);
-    return send_superframe(frame, 0);
+    return send_superframe(frame);
 }
 
 esp_err_t wifi_transport_provision(const char *ssid, const char *password)
@@ -617,7 +611,6 @@ static void clear_active_session_state(void)
 {
     s_active_fd = -1;
     s_session_connected = false;
-    s_use_envelope = false;
 }
 
 static void close_active_session(int sockfd)
@@ -711,7 +704,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
         }
         s_active_fd = current_fd;
         s_session_connected = true;
-        s_use_envelope = true;
         return ESP_OK;
     }
 
@@ -745,64 +737,15 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    uint8_t sysex[EMW_SYSEX_BYTES] = {0};
-    uint16_t sequence = 0;
-    bool enveloped = false;
-    bool has_sysex = !s_use_envelope && frame.type == HTTPD_WS_TYPE_BINARY && frame.len == EMW_SYSEX_BYTES;
-    if (has_sysex) {
-        memcpy(sysex, data, sizeof(sysex));
-    } else if (frame.type == HTTPD_WS_TYPE_BINARY) {
-        has_sysex = unwrap_envelope(data, frame.len, sysex, sizeof(sysex), &sequence);
-        enveloped = has_sysex;
-    }
-    if (!has_sysex || !enqueue_sysex(sysex, sequence, enveloped)) {
+    if (frame.type != HTTPD_WS_TYPE_BINARY || frame.len != EMW_SYSEX_BYTES ||
+        !enqueue_sysex(data)) {
         close_active_session(current_fd);
         return ESP_FAIL;
     }
     return ESP_OK;
 }
 
-static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence)
-{
-    if (!data || !out || out_len < EMW_SYSEX_BYTES || len < WIFI_ENVELOPE_HEADER_BYTES) {
-        return false;
-    }
-    if (data[0] != 'E' || data[1] != 'M' || data[2] != 'W' ||
-        data[3] != WIFI_ENVELOPE_VERSION ||
-        data[4] != WIFI_ENVELOPE_KIND_SYSEX) {
-        return false;
-    }
-    const uint16_t payload_len = (uint16_t)data[8] | ((uint16_t)data[9] << 8u);
-    if (payload_len != EMW_SYSEX_BYTES || len != (size_t)WIFI_ENVELOPE_HEADER_BYTES + payload_len) {
-        return false;
-    }
-    if (sequence) {
-        *sequence = (uint16_t)data[5] | ((uint16_t)data[6] << 8u);
-    }
-    memcpy(out, &data[WIFI_ENVELOPE_HEADER_BYTES], EMW_SYSEX_BYTES);
-    return true;
-}
-
-static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_t sequence, const uint8_t *payload, size_t payload_len)
-{
-    if (!out || !payload || out_len < WIFI_ENVELOPE_HEADER_BYTES + payload_len || payload_len > UINT16_MAX) {
-        return 0;
-    }
-    out[0] = 'E';
-    out[1] = 'M';
-    out[2] = 'W';
-    out[3] = WIFI_ENVELOPE_VERSION;
-    out[4] = kind;
-    out[5] = (uint8_t)(sequence & 0xffu);
-    out[6] = (uint8_t)((sequence >> 8u) & 0xffu);
-    out[7] = 0;
-    out[8] = (uint8_t)(payload_len & 0xffu);
-    out[9] = (uint8_t)((payload_len >> 8u) & 0xffu);
-    memcpy(&out[WIFI_ENVELOPE_HEADER_BYTES], payload, payload_len);
-    return WIFI_ENVELOPE_HEADER_BYTES + payload_len;
-}
-
-static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped)
+static bool enqueue_sysex(const uint8_t *sysex)
 {
     if (!sysex || !s_cmd_queue) {
         return false;
@@ -826,10 +769,6 @@ static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool envelope
         }
     }
 
-    if (enveloped && sequence == 0u && cmd_any) {
-        return false;
-    }
-
     const uint8_t *stream_lane = &decoded[EMW_LANE_SIZE];
     bool stream_any = false;
     for (size_t i = 0; i < EMW_LANE_SIZE; ++i) {
@@ -849,12 +788,11 @@ static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool envelope
         return true;
     }
 
-    transport_debug_log_lane(EMW_COMMAND_SOURCE_WIFI, "rx", decoded, EMW_LANE_SIZE, sequence);
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_WIFI, "rx", decoded, EMW_LANE_SIZE);
 
     command_t cmd = {0};
     cmd.length = EMW_LANE_SIZE;
     cmd.source = EMW_COMMAND_SOURCE_WIFI;
-    cmd.wifi_sequence = sequence;
     memcpy(cmd.data, decoded, EMW_LANE_SIZE);
     return xQueueSendToBack(s_cmd_queue, &cmd, 0) == pdTRUE;
 }
@@ -902,7 +840,7 @@ static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out)
     }
 }
 
-static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence)
+static esp_err_t send_superframe(const uint8_t *frame)
 {
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
     sysex[0] = 0xF0;
@@ -913,28 +851,12 @@ static esp_err_t send_superframe(const uint8_t *frame, uint16_t sequence)
     encode_payload_7bit_fixed(frame, &sysex[5]);
     sysex[EMW_SYSEX_BYTES - 1u] = 0xF7;
 
-    uint8_t envelope[WIFI_ENVELOPE_HEADER_BYTES + EMW_SYSEX_BYTES] = {0};
-    uint8_t *payload = sysex;
-    size_t payload_len = sizeof(sysex);
-    if (s_use_envelope) {
-        payload_len = build_envelope(envelope,
-                                     sizeof(envelope),
-                                     WIFI_ENVELOPE_KIND_SYSEX,
-                                     sequence,
-                                     sysex,
-                                     sizeof(sysex));
-        if (payload_len == 0) {
-            return ESP_FAIL;
-        }
-        payload = envelope;
-    }
-
     httpd_ws_frame_t ws = {
         .final = true,
         .fragmented = false,
         .type = HTTPD_WS_TYPE_BINARY,
-        .payload = payload,
-        .len = payload_len,
+        .payload = sysex,
+        .len = sizeof(sysex),
     };
     return httpd_ws_send_data(s_httpd, s_active_fd, &ws);
 }

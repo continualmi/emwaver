@@ -169,7 +169,7 @@ static bool ble_enqueue_superframe(const uint8_t *sysex)
         return true;
     }
 
-    transport_debug_log_lane(EMW_COMMAND_SOURCE_BLE, "rx", decoded, EMW_BLE_LANE_SIZE, 0);
+    transport_debug_log_lane(EMW_COMMAND_SOURCE_BLE, "rx", decoded, EMW_BLE_LANE_SIZE);
 
     command_t cmd = {0};
     cmd.length = EMW_BLE_LANE_SIZE;

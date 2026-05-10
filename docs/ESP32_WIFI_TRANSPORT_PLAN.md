@@ -42,7 +42,6 @@ In scope:
 - Manual connect by IP or hostname.
 - Same protocol semantics as USB/BLE.
 - VPN-friendly remote access when the VPN exposes the ESP32's LAN subnet.
-- Local pairing/authentication for the Wi-Fi control port.
 - App/daemon/gateway UI changes needed to select and connect Wi-Fi devices.
 
 Out of scope for the first version:
@@ -115,28 +114,12 @@ VPN behavior:
 
 ## Security Model
 
-Being on the LAN or VPN is useful but should not be the only control boundary.
-
-Minimum Wi-Fi transport security:
-
-- Require local pairing before accepting hardware-control commands.
-- Store a per-device control secret in ESP32 NVS.
-- Use session tokens or challenge-response to avoid accepting raw unauthenticated commands.
-- Allow users to rotate/reset pairing from a physical/local recovery path.
-- Bind privileged operations, such as credential reset or update mode, to a stronger local confirmation path where practical.
-
-Preferred first security slice:
-
-1. BLE or USB provisioning establishes a random device secret.
-2. App/daemon stores the paired device record locally.
-3. Wi-Fi session starts with a nonce challenge.
-4. Client reaches the board over a trusted LAN/VPN path.
-5. Firmware accepts command frames only after authentication.
+LAN/VPN reachability is the control boundary for the current Wi-Fi transport. If a client can reach the ESP32 WebSocket on the local network, it can control the board.
 
 Current implementation note:
-- The current firmware/macOS slice uses LAN/VPN reachability as the trust boundary. Firmware accepts envelope command frames immediately after WebSocket open and still rejects concurrent clients as busy.
+- Firmware accepts the same raw 48-byte EMWaver SysEx frames used by USB/BLE immediately after WebSocket open and still rejects concurrent clients as busy.
 
-TLS or stronger local authorization can be revisited later, but the current runtime model is LAN/VPN trust: do not expose the control socket to the public internet.
+TLS or stronger local authorization can be revisited later, but the current runtime model is trusted private network access: do not expose the control socket to the public internet.
 
 ## Same-Wi-Fi Setup Flow
 
@@ -147,10 +130,10 @@ Setup flow:
 1. User connects the ESP32 to EMWaver over USB or BLE.
 2. App asks for local Wi-Fi SSID/password.
 3. App sends SSID and password only.
-4. App sends Wi-Fi credentials, device hostname, and pairing setup to firmware over USB/BLE.
+4. Firmware generates and owns the stable default hostname.
 5. ESP32 stores the setup in NVS flash.
 6. ESP32 joins the Wi-Fi as a station.
-7. ESP32 starts the authenticated WebSocket server on port `3922`.
+7. ESP32 starts the WebSocket server on port `3922`.
 8. ESP32 advertises `_emwaver._tcp` with mDNS.
 9. App discovers the device and connects to `ws://<device>.local:3922/v1/ws`.
 
@@ -171,18 +154,17 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 - Add compile-time Wi-Fi transport feature gate. Current firmware progress: `main/Kconfig.projbuild` defines `CONFIG_EMWAVER_ENABLE_WIFI_TRANSPORT`, which maps to `EMWAVER_ENABLE_WIFI_TRANSPORT` in the Wi-Fi transport source and defaults on for ESP targets; isolated ESP32-S2 `libmain.a` validation passes with the shared Wi-Fi transport source.
 - Add NVS storage for:
   - Wi-Fi SSID and credential metadata,
-  - device hostname,
-  - pairing/reset state.
+  - firmware-generated device hostname.
 - Add station-mode connection manager.
 - Add reconnect/backoff behavior. Current firmware progress: reconnect scheduling now falls back to an immediate reconnect attempt if the reconnect task cannot be created, so the status flag does not remain stuck in a pending state.
-- Add visible connection status over USB/BLE diagnostics. Current firmware progress: binary Wi-Fi status and text `wifi status` both expose provisioned/authenticated/station state, reconnecting state, runtime-active state, the last ESP-IDF station disconnect reason, and the current station IPv4 address when online; text `wifi status` also includes the advertised hostname for local setup debugging.
+- Add visible connection status over USB/BLE diagnostics. Current firmware progress: binary Wi-Fi status and text `wifi status` both expose provisioned/socket/station state, reconnecting state, runtime-active state, the last ESP-IDF station disconnect reason, and the current station IPv4 address when online; text `wifi status` also includes the advertised hostname for local setup debugging.
 
 ### Phase 2: Provisioning
 
 - Add BLE provisioning flow for Wi-Fi credentials.
 - Keep USB provisioning available for desktop recovery and development.
-- Store provisioned Wi-Fi credentials and pairing state in ESP32 NVS flash.
-- Generate or accept a stable local hostname used for mDNS advertisement.
+- Store provisioned Wi-Fi credentials in ESP32 NVS flash.
+- Generate a stable local hostname used for mDNS advertisement.
 - After successful provisioning, attempt station-mode Wi-Fi connection and report status over the provisioning transport.
 - Support clearing Wi-Fi credentials from a local command.
 - Pairing reset has been removed; clearing Wi-Fi setup erases SSID/password and requires provisioning again.
@@ -190,17 +172,10 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 ### Phase 3: Runtime Transport
 
 - Add WebSocket server on the ESP32 at `/v1/ws` on fixed port `3922`.
-- Define a small transport envelope:
-  - protocol version,
-  - frame length,
-  - frame kind,
-  - sequence id,
-  - payload bytes.
-- Current firmware/macOS v1 shape: binary frames start with `EMW`, envelope version `1`, frame kind, little-endian sequence id, one reserved byte, little-endian payload length, then payload bytes. Frame kind `1` carries the existing 48-byte EMWaver SysEx packet. Enveloped command responses echo the request sequence id, and the macOS Wi-Fi command path waits for the matching response sequence before completing a synchronous command.
-- Raw 48-byte SysEx WebSocket command frames remain a compatibility path only for clients that do not opt into envelope version `1` during authentication; once a session opts into the envelope, firmware requires enveloped command frames.
-- Carry the existing EMWaver command payload inside the envelope.
-- Add request/response correlation and timeout handling. The first macOS slice correlates synchronous command responses by echoed envelope sequence id and reports a Wi-Fi command timeout if no matching response arrives before the caller deadline.
-- Add streaming support for sampler/retransmit status without blocking command responses. ESP32 firmware can now route sampler stream lanes over the Wi-Fi WebSocket for sessions that start sampling over Wi-Fi, ingest Wi-Fi retransmit stream lanes into the shared circular RX buffer, and send Wi-Fi `BS` buffer-status frames using sequence `0`; macOS and daemon command sequences start at `1`, skip reserved sequence `0` after wraparound, macOS and daemon stream-only retransmit frames use sequence `0`, ESP32 accepts incoming sequence-`0` envelopes only for stream-only frames, ESP32 rejects envelope command frames with reserved sequence `0`, Wi-Fi retransmit uses `BS` frames for host-side pacing, and the daemon ignores those sequence-`0` `BS` frames instead of appending them to captured script data.
+- Use binary WebSocket frames that carry the existing 48-byte EMWaver SysEx packet directly.
+- Keep the same command/response and stream-lane semantics used by USB MIDI and BLE; Wi-Fi only changes the transport pipe.
+- Add command timeout handling in the app/daemon. Command responses are ordinary EMWaver command-lane responses, not Wi-Fi-specific frame types.
+- Add streaming support for sampler/retransmit status. ESP32 firmware can route sampler stream lanes over the Wi-Fi WebSocket for sessions that start sampling over Wi-Fi, ingest Wi-Fi retransmit stream lanes into the shared circular RX buffer, and send Wi-Fi `BS` buffer-status frames for host-side pacing.
 
 ### Phase 4: Discovery
 
@@ -212,7 +187,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
   - transport capabilities,
   - user-visible device name.
 - Keep manual IP connection as the fallback.
-- Current firmware progress: mDNS is published only after the WebSocket server and `/v1/ws` handler are ready. If mDNS initialization, hostname setup, or service publication fails, firmware leaves the authenticated WebSocket online for manual IP/hostname connections and logs the discovery failure; incomplete TXT metadata is also logged.
+- Current firmware progress: mDNS is published only after the WebSocket server and `/v1/ws` handler are ready. If mDNS initialization, hostname setup, or service publication fails, firmware leaves the WebSocket online for manual IP/hostname connections and logs the discovery failure; incomplete TXT metadata is also logged.
 - Current OTA coexistence progress: starting OTA SoftAP suspends the station-mode runtime WebSocket, mDNS advertisement, active Wi-Fi session state, and reconnect state before switching the radio into AP mode. If OTA SoftAP is stopped or fails to finish starting before the firmware reboots into an update, a provisioned board resumes station-mode Wi-Fi automatically.
 
 ### Phase 5: Validation
@@ -220,7 +195,7 @@ Manual IP/hostname entry remains required as a fallback for networks where mDNS 
 - Validate LAN control with blink, GPIO, ADC, SPI, PWM, and sampler flows.
 - Validate disconnect/reconnect during idle and active sessions.
 - Validate VPN access by direct LAN IP.
-- Validate that unauthenticated clients cannot run commands.
+- Validate that a reachable trusted-LAN client can run commands without a Wi-Fi auth step.
 - Validate recovery when Wi-Fi credentials are wrong.
 - Current compile validation: ESP32-S3 `idf.py -B build-esp32s3-check esp-idf/main/libmain.a` and isolated ESP32-S2 `idf.py -B /tmp/emwaver-s2-wifi-check -DSDKCONFIG=/tmp/emwaver-s2-wifi-sdkconfig set-target esp32s2 esp-idf/main/libmain.a` both pass for the shared Wi-Fi transport source. Remaining gaps require real hardware LAN/VPN script execution.
 
@@ -260,10 +235,9 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
 - Add doctor checks for:
   - missing route to device,
   - connection refused,
-  - authentication failure,
   - mDNS unavailable,
   - reachable/busy/connection failed.
-- Current daemon progress: `emwaver devices` now performs best-effort `_emwaver._tcp` mDNS discovery and prints discovered ESP32 Wi-Fi endpoints with TXT board/firmware metadata; `emwaver devices --json` exposes the same inventory to the gateway. `emwaver devices --wifi <host-or-ip>` can manually probe a reachable endpoint. Manual daemon Wi-Fi host input accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL. The daemon Wi-Fi adapter filters sequence-`0` `BS` buffer-status frames out of the local capture buffer while keeping ordinary sequence-`0` stream lanes available to scripts.
+- Current daemon progress: `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery and prints discovered ESP32 Wi-Fi endpoints with TXT board/firmware metadata; `emwaver devices --json` exposes the same inventory to the gateway. The daemon Wi-Fi runtime adapter still needs the same raw-SysEx simplification now applied to macOS and firmware.
 - Current daemon progress: `emwaver doctor --wifi <host-or-ip>` probes Wi-Fi reachability and classifies common route, connection-refused, mDNS/DNS, and device-busy failures.
 
 ### Gateway
@@ -279,7 +253,7 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
 
 - Add Wi-Fi device discovery and manual connection surfaces.
 - Current macOS Wi-Fi device records normalize ESP32-S2, ESP32-S3, and generic ESP32 board metadata instead of assuming every Wi-Fi endpoint is ESP32-S3. Manual macOS host/IP entry accepts bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL, and local pairing persistence rejects malformed host strings before saving fallback records. macOS rejects discovered Wi-Fi records that do not advertise protocol `1` or a Wi-Fi capability, with capability matching kept tolerant of TXT-record case/whitespace differences. macOS update UI now also keeps ESP32/ESP32-S2/ESP32-S3 board metadata on the ESP serial-flashing path instead of falling through to STM32 DFU prompts.
-- Current macOS validation: `xcodebuild build-for-testing -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO` compiles the Wi-Fi metadata, envelope, and host-validation tests. A targeted `xcodebuild test -only-testing` run for the new metadata tests was interrupted after hanging in the test runner, so it is not counted as a passing test result.
+- Current macOS validation: `xcodebuild build-for-testing -project macos/EMWaver/EMWaver.xcodeproj -scheme EMWaver -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO` compiles the Wi-Fi metadata, SysEx, and host-validation tests. A targeted `xcodebuild test -only-testing` run for the new metadata tests was interrupted after hanging in the test runner, so it is not counted as a passing test result.
 - Current macOS auto-connect progress: advertised Wi-Fi endpoints are attempted automatically when no wired runtime is active, so a provisioned same-LAN board can reconnect. macOS sends only SSID/password during Wi-Fi setup. The ESP32 owns its default hostname and advertises it through mDNS; macOS displays firmware-reported station IP when available for manual LAN/VPN fallback.
 - Current Android/default-script progress: Android USB metadata inference distinguishes ESP32-S2, ESP32-S3, and generic ESP32 product/manufacturer strings, Android update UI keeps ESP boards out of the STM32 DFU flow without S3-only assumptions, and the bundled GPIO/ADC/PWM/blink/sampler/CC1101/I2C/UART examples treat ESP32-S2 as an ESP runtime target instead of falling back to STM32 pin defaults.
 - Reuse existing script/device runtime paths.
@@ -288,7 +262,6 @@ emwaver gateway --daemon-fallback --wifi 192.168.1.44
   - not provisioned,
   - connecting,
   - online,
-  - authenticated,
   - running,
   - disconnected.
 
@@ -303,7 +276,7 @@ Reasons:
 - debuggable with standard tools,
 - friendly to future local dashboard surfaces.
 
-Keep the payload binary-safe. Hardware command packets should use binary WebSocket frames rather than JSON command payloads. JSON can remain useful for hello/capability/auth messages, but hardware command frames should not be text-reencoded unless there is a clear reason.
+Keep the payload binary-safe. Hardware command packets use binary WebSocket frames carrying the same SysEx bytes as USB/BLE rather than JSON command payloads.
 
 ## UX Requirements
 
@@ -359,24 +332,24 @@ Resolved v1 decisions:
 - Advertise service type `_emwaver._tcp`.
 - Use WebSocket at `/v1/ws`.
 - Use local USB/BLE provisioning to store SSID/password in ESP32 NVS; firmware owns the hostname and Wi-Fi command control trusts LAN/VPN reachability.
-- Use authenticated binary envelope version `1` for new clients while keeping raw 48-byte SysEx binary frames as a compatibility path during the transition; echo request sequence ids on command responses and match them in the macOS command path.
+- Use raw 48-byte EMWaver SysEx binary WebSocket frames. Wi-Fi does not define a separate envelope or sequence layer.
 - Use USB and BLE provisioning where platform APIs allow it.
 - Support multiple ESP32 boards on the same LAN by opening one WebSocket per selected endpoint; no per-device port allocation.
-- Represent active ownership per ESP32 endpoint as one active authenticated WebSocket session. A second client receives a busy response instead of silently taking over the board.
+- Represent active ownership per ESP32 endpoint as one active WebSocket session. A second client receives a busy response instead of silently taking over the board.
 
 ## Implementation Order
 
-1. Document protocol envelope and security handshake.
+1. Document the LAN-trust transport binding.
 2. Add ESP32 station-mode connection manager behind a feature gate.
 3. Add local Wi-Fi credential provisioning over BLE or USB.
 4. Add LAN-trust Wi-Fi server carrying EMWaver frames.
-5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: `emwaver-device` now has a reusable ESP32 Wi-Fi WebSocket transport adapter, envelope version `1`, sequence-correlated command responses, local receive buffering, and filtering for sequence-`0` `BS` pacing frames so they do not pollute script capture data. CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring now accept `--wifi <host-or-ip>`.
+5. Add Rust daemon Wi-Fi transport adapter. Current daemon progress: CLI direct run, daemon serve/start, daemon fallback, and Linux service flag wiring accept `--wifi <host-or-ip>`, but the daemon adapter still needs to be updated to the raw-SysEx WebSocket transport shape.
 6. Add `emwaver devices` and `emwaver run --direct --wifi`. Current daemon progress: direct Wi-Fi run is wired, `emwaver devices` performs best-effort `_emwaver._tcp` mDNS discovery, and `emwaver devices --wifi <host-or-ip>` can manually probe a paired endpoint.
 7. Add gateway device selection/manual IP path. Current gateway progress: manual Wi-Fi daemon start is wired from the browser runtime panel, gateway-side `emwaver devices --json` discovery can fill host/port from discovered endpoints, daemon-reported Wi-Fi discoveries appear in the runtime device list, and bare IPv6 literals are accepted by the daemon adapter; Wi-Fi control uses LAN/VPN reachability as the trust boundary.
 8. Add native app discovery/manual connect surfaces. Current macOS progress: manual connect, mDNS discovery, USB/BLE provisioning, status/clear recovery, and paired Wi-Fi auto-connect are wired.
 9. Validate LAN script execution on real ESP32-S3 hardware. Tracked as `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` in `docs/TESTS.md`.
 10. Validate VPN-by-IP execution. Tracked as `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` in `docs/TESTS.md`.
-11. Add docs for user-owned VPN remote access. Current docs progress: `docs/ESP32_WIFI_REMOTE_ACCESS.md` covers same-LAN, VPN-by-IP, SSH/port-forwarding, pairing-secret rotation, CLI examples, and troubleshooting without introducing an EMWaver-hosted relay.
+11. Add docs for user-owned VPN remote access. Current docs progress: `docs/ESP32_WIFI_REMOTE_ACCESS.md` covers same-LAN, VPN-by-IP, SSH/port-forwarding, CLI examples, and troubleshooting without introducing an EMWaver-hosted relay.
 
 ## Non-Negotiables
 

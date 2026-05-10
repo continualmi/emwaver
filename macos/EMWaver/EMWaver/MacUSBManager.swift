@@ -225,15 +225,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return lane.dropFirst(4).allSatisfy { $0 == 0 }
     }
 
-    static func wiFiSequenceForOutgoingSuperframe(_ superframe: Data) -> UInt16? {
-        guard superframe.count >= superframeSizeBytes else { return nil }
-        let cmdLane = superframe.subdata(in: 0..<laneSizeBytes)
-        let streamLane = superframe.subdata(in: laneSizeBytes..<superframeSizeBytes)
-        let cmdEmpty = cmdLane.allSatisfy { $0 == 0 }
-        let streamEmpty = streamLane.allSatisfy { $0 == 0 }
-        return cmdEmpty && !streamEmpty ? 0 : nil
-    }
-
     private enum EmwOpcode {
         static let version: UInt8 = 0x01
         static let enterDfu: UInt8 = 0x06
@@ -652,7 +643,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
             let provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned"
-            let authText = response[2] == 0 ? "idle" : "connected"
+            let socketText = response[2] == 0 ? "idle" : "connected"
             if response.count >= 4 {
                 let stationText = response[3] == 0 ? "offline" : "online"
                 if response.count >= 5 {
@@ -663,18 +654,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                         let ipText = Self.wiFiStatusStationIP(response)
                         let runtimeText = Self.wiFiStatusRuntimeText(response)
                         if let ipText {
-                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(authText); runtime is \(runtimeText).", isError: false)
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(socketText); runtime is \(runtimeText).", isError: false)
                         } else {
-                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(authText); runtime is \(runtimeText).", isError: false)
+                            self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(socketText); runtime is \(runtimeText).", isError: false)
                         }
                     } else {
-                        self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(authText).", isError: false)
+                        self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(socketText).", isError: false)
                     }
                 } else {
-                    self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText); socket is \(authText).", isError: false)
+                    self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText), station is \(stationText); socket is \(socketText).", isError: false)
                 }
             } else {
-                self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText); socket is \(authText).", isError: false)
+                self.finishWiFiProvisioning(message: "Wi-Fi is \(provisionedText); socket is \(socketText).", isError: false)
             }
         }
     }
@@ -1635,7 +1626,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 setError("Wi-Fi write failed: Not connected")
                 return
             }
-            wifiManager?.send(sysex, sequence: Self.wiFiSequenceForOutgoingSuperframe(superframe))
+            wifiManager?.send(sysex)
             return
         }
 

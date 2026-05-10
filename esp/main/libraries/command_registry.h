@@ -34,7 +34,6 @@ typedef struct {
     uint8_t data[256];
     uint16_t length;
     uint8_t source;
-    uint16_t wifi_sequence;
 } command_t;
 
 #define EMW_COMMAND_SOURCE_UNKNOWN 0u
