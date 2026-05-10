@@ -29,7 +29,7 @@ http://127.0.0.1:3921
 
 ## CLI Flow
 
-`emwaver run` talks to a running Gateway. It does not run scripts in-process.
+`emw run` talks to a running Gateway. It does not run scripts in-process. `emwaver` is the full binary name; `emw` is the intended shortcut.
 
 ```bash
 cd gateway/backend
@@ -46,11 +46,11 @@ cargo run -p emwaver -- run ../../assets/default-scripts/blink.emw
 Useful Gateway startup modes:
 
 ```bash
-emwaver gateway serve --sim-device
-emwaver gateway serve --no-device
-emwaver gateway serve --device 0
-emwaver gateway serve --ble
-emwaver gateway serve --wifi 192.168.1.44 --wifi-port 3922
+emw gateway serve --sim-device
+emw gateway serve --no-device
+emw gateway serve --device 0
+emw gateway serve --ble
+emw gateway serve --wifi 192.168.1.44 --wifi-port 3922
 ```
 
 ## WebSocket Flow

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# EMWaver dev helper + installer for the daemon CLI.
+# EMWaver dev helper + installer for the Gateway CLI.
 #
 # Usage:
 #   ./emwaver.sh devices
-#   ./emwaver.sh daemon status
+#   ./emwaver.sh gateway status
 #   ./emwaver.sh install
 #   ./emwaver.sh install --prefix ~/.local
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
-DAEMON_DIR="$ROOT/daemon"
+GATEWAY_BACKEND_DIR="$ROOT/gateway/backend"
 
 ensure_cargo() {
   if ! command -v cargo >/dev/null 2>&1; then
@@ -40,7 +40,7 @@ Commands:
 
 Examples:
   ./emwaver.sh devices
-  ./emwaver.sh daemon status
+  ./emwaver.sh gateway status
   ./emwaver.sh install
 USAGE
 }
@@ -80,10 +80,12 @@ HELP
   ensure_cargo
 
   echo "Installing emwaver into: $prefix/bin"
-  cargo install --path "$DAEMON_DIR/emwaver" --root "$prefix" $force_flag
+  cargo install --path "$GATEWAY_BACKEND_DIR/emwaver" --root "$prefix" $force_flag
+  ln -sf emwaver "$prefix/bin/emw"
 
   echo
   echo "✅ Installed: $prefix/bin/emwaver"
+  echo "✅ Installed: $prefix/bin/emw -> emwaver"
 
   case ":$PATH:" in
     *":$prefix/bin:"*)
@@ -97,7 +99,7 @@ HELP
   esac
 
   echo ""
-  echo "Then run: emwaver devices"
+  echo "Then run: emw devices"
 }
 
 main() {
@@ -116,9 +118,8 @@ main() {
       ;;
     *)
       ensure_cargo
-      cd "$DAEMON_DIR"
-      cargo build -q -p emwaver
-      exec cargo run -q -p emwaver -- "$@"
+      cargo build --manifest-path "$GATEWAY_BACKEND_DIR/Cargo.toml" -q -p emwaver
+      exec "$GATEWAY_BACKEND_DIR/target/debug/emwaver" "$@"
       ;;
   esac
 }

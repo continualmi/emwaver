@@ -42,6 +42,8 @@ mkdir -p "$BIN_DIR"
 cp -f "$GATEWAY_BACKEND_DIR/target/release/emwaver" "$BIN_DIR/emwaver"
 chmod +x "$BIN_DIR/emwaver"
 echo "installed: $BIN_DIR/emwaver"
+ln -sf emwaver "$BIN_DIR/emw"
+echo "installed: $BIN_DIR/emw -> emwaver"
 
 echo
 echo "== Prepare gateway dependencies =="
@@ -88,10 +90,10 @@ cat <<EOF
 Done.
 
 Try:
-  $BIN_DIR/emwaver doctor
-  $BIN_DIR/emwaver gateway serve --sim-device
+  $BIN_DIR/emw doctor
+  $BIN_DIR/emw gateway serve --sim-device
 
 For hardware:
-  $BIN_DIR/emwaver gateway serve --device 0
-  $BIN_DIR/emwaver gateway serve --ble
+  $BIN_DIR/emw gateway serve --device 0
+  $BIN_DIR/emw gateway serve --ble
 EOF

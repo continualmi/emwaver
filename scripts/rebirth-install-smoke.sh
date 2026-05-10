@@ -15,8 +15,8 @@ fi
 
 cleanup() {
   set +e
-  if [[ -x "$PREFIX/bin/emwaver" ]]; then
-    "$PREFIX/bin/emwaver" gateway stop >/dev/null 2>&1 || true
+  if [[ -x "$PREFIX/bin/emw" ]]; then
+    "$PREFIX/bin/emw" gateway stop >/dev/null 2>&1 || true
   fi
   if [[ -n "${GATEWAY_PID:-}" ]]; then
     pkill -TERM -P "$GATEWAY_PID" >/dev/null 2>&1 || true
@@ -39,10 +39,11 @@ echo "port: $PORT"
 EMWAVER_INSTALL_PREFIX="$PREFIX" "$ROOT/gateway/backend/install/install.sh"
 
 test -x "$PREFIX/bin/emwaver"
+test -x "$PREFIX/bin/emw"
 test -f "$PREFIX/share/emwaver/gateway/dist/client/index.html"
 test -f "$PREFIX/share/emwaver/assets/default-scripts/script_bootstrap.emw"
 
-"$PREFIX/bin/emwaver" gateway serve --port "$PORT" --sim-device >"$LOG_PATH" 2>&1 &
+"$PREFIX/bin/emw" gateway serve --port "$PORT" --sim-device >"$LOG_PATH" 2>&1 &
 GATEWAY_PID=$!
 
 for _ in $(seq 1 40); do

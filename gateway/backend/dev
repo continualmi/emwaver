@@ -3,12 +3,12 @@ set -euo pipefail
 
 # One-command dev runner for the Gateway CLI/backend.
 # - Builds emwaver
-# - Runs the emwaver CLI with your args
+# - Runs the emwaver CLI with your args from the caller's current directory
 
-cd "$(dirname "$0")"
+BACKEND_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # Fast incremental build
-cargo build -q -p emwaver
+cargo build --manifest-path "$BACKEND_DIR/Cargo.toml" -q -p emwaver
 
 # Run CLI
 if [[ $# -eq 0 ]]; then
@@ -20,4 +20,4 @@ if [[ $# -eq 0 ]]; then
   exit 0
 fi
 
-exec cargo run -q -p emwaver -- "$@"
+exec "$BACKEND_DIR/target/debug/emwaver" "$@"
