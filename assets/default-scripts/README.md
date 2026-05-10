@@ -26,29 +26,32 @@ Use this to reason about CLI behavior when UI is not visible.
 - `rfm69.emw` (profile actions and probe/RX/TX)
 - `sampler.emw` (start/stop/retransmit/load/save/remove/clear)
 
-### Continuous stream scripts
+### Continuous UI scripts
 
-- `hello.emw` (periodic startup heartbeat logs)
+- `hello.emw` (periodic heartbeat UI state)
 - `blink.emw` (timer based output when running)
 
 ### Runtime helper
 
 - `script_bootstrap.emw` (platform/runtime shim and API surface, not typically run as a user script)
 
-## Shared CLI logging contract
+## UI snapshot contract
 
-All default scripts emit direct `console.log(...)` calls for terminal visibility.
+Default scripts are UI programs. Visible state for CLI, browser, native app, and
+Agent workflows must be rendered through `UI.render(...)` and read through
+`ui.snapshot`.
 
 Contract:
 
-- startup context line per script:
-  - script name + board/pin config + defaults
-  - example: `[blink] startup | board=... pin=...`
-- action/state lines:
-  - start/transition/complete for user actions (start/stop, open/read/write, probe/init/reset, etc.)
-  - keep short, stable keywords
-- warnings/errors:
-  - human-readable plain text
-  - avoid stack-only or highly verbose payloads
+- startup context is visible in the rendered UI:
+  - script name, board/module config, selected pins, and defaults,
+- action state is visible in the rendered UI:
+  - start/transition/complete states for user actions such as start/stop,
+    open/read/write, probe/init/reset, save/load, and scan,
+- warnings/errors are visible in the rendered UI:
+  - human-readable status text,
+  - enough detail for an Agent to diagnose the next step from a snapshot.
 
-For stream-like scripts, logs should be throttled to lifecycle/relevant milestones and avoid per-sample spam.
+Do not add terminal logging as a parallel script contract. The migration in
+`../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` removes script-visible
+`console.*` APIs and relies on snapshots/events for terminal automation.

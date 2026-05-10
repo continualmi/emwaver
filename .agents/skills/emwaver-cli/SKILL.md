@@ -62,8 +62,8 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 
 Use the default scripts under [`/Users/luisml/continualmi/emwaver/assets/default-scripts`](/Users/luisml/continualmi/emwaver/assets/default-scripts) as the canonical examples for Script API usage patterns.
 
-- `script_bootstrap.emw`: canonical runtime/API surface (`console.log`, `UI.*`, `SPI`, `Wire`, `Serial`, `Sampler`, timers, storage).
-- `hello.emw`: minimal board detection + `UI.render` + timer loop + `console.log`.
+- `script_bootstrap.emw`: canonical runtime/API surface (`UI.*`, `SPI`, `Wire`, `Serial`, `Sampler`, timers, storage). Script-visible logging is being removed by `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md`.
+- `hello.emw`: minimal board detection + `UI.render` + timer loop.
 - `blink.emw`: GPIO output (`pinMode`, `digitalWrite`) + `every()` + interactive UI controls.
 - `gpio.emw`: direct pin control UI, pin selection patterns, board-specific pin menus.
 - `adc.emw`: `analogRead` pin/internal sources + sync/async result handling + status UI.

@@ -119,6 +119,7 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 - [REBIRTH_ISSUES.md](docs/REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
 - [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.
 - [TESTS_REBIRTH.md](docs/TESTS_REBIRTH.md) tracks validation.
+- [UI_SNAPSHOT_RUNTIME_MIGRATION.md](docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md) controls the removal of script-visible logging in favor of UI snapshots/events.
 - [PACKAGING.md](docs/PACKAGING.md) covers CLI and gateway packaging direction.
 - [ESP32_WIFI_TRANSPORT_AUDIT.md](docs/ESP32_WIFI_TRANSPORT_AUDIT.md) audits implementation evidence and remaining hardware gates for the ESP32 Wi-Fi transport plan.
 - [ESP32_WIFI_REMOTE_ACCESS.md](docs/ESP32_WIFI_REMOTE_ACCESS.md) documents user-owned LAN/VPN access for ESP32 Wi-Fi transport.

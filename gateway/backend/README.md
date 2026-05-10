@@ -27,15 +27,14 @@ Run a script through a running Gateway:
 
 ```sh
 cargo run -p emwaver -- run ../../assets/default-scripts/hello.emw
-cargo run -p emwaver -- run ../../assets/default-scripts/hello.emw --no-wait # return after gateway accepted script.run
 ```
 
-`emwaver run` now forwards `console.log(...)` text from scripts to the terminal as
-`script.log` messages by default. Use `--no-wait` to send the script and return as soon
-as the Gateway accepts the request. Without `--no-wait`, the CLI stays connected and
-exits when it sees `script.stopped`, or on terminal/error/disconnect.
-Run lifecycle lines (`running script`, `started`, `stopped`, `warning`, interrupt notices)
-are shown with `--verbose-run`.
+The script observability direction is UI-only. The migration in
+[`../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md`](../../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md)
+removes script-visible `console.*` APIs and `script.log` forwarding. `emwaver run`
+should become a session starter; terminal and Agent workflows should inspect
+`ui.snapshot`, send `ui.event`, list sessions, and stop sessions through Gateway
+commands.
 
 Hardware transports are selected when the Gateway starts:
 

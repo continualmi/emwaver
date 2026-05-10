@@ -76,7 +76,6 @@ Outbound:
 hello.ack
 device.status
 script.started
-script.log
 script.stopped
 script.error
 ui.snapshot
@@ -84,6 +83,11 @@ plot.data
 ```
 
 `hello.role` is informational for client labels such as `cli` and `web`. Runtime-owner roles such as `app` and `host` must be removed.
+
+The follow-up script observability migration is controlled by
+[`../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md`](../docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md).
+It removes script-visible `console.*` APIs and keeps `ui.snapshot` as the only
+script state channel for CLI/browser/Agent automation.
 
 ## Migration Checklist
 

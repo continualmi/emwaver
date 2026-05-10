@@ -6,7 +6,7 @@ Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for full
 
 ## Automation Bench Goal
 
-The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI and localhost Gateway, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/logs, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
+The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI and localhost Gateway, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/status, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
 
 ## Test Code Index
 
@@ -139,7 +139,7 @@ The hardware test suite should move toward an agent-driven local automation benc
 
 - Script target: multi-device diagnostic `.emw` scripts or equivalent CLI-driven test scripts.
 - Setup: connect at least two EMWaver boards simultaneously, initially either two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32 device. Attach representative modules such as CC1101, RFID, PWM servo, ADC/GPIO loopback, I2C, SPI, or UART fixtures.
-- Steps: discover both devices; connect to both at the same time; assign stable names/ids; run per-device commands; run a coordinated test where one board generates or transmits and another board observes or samples; collect snapshots/logs/status for each device; stop/reset both devices.
+- Steps: discover both devices; connect to both at the same time; assign stable names/ids; run per-device commands; run a coordinated test where one board generates or transmits and another board observes or samples; collect snapshots/status for each device; stop/reset both devices.
 - Tests: multi-device discovery, stable selection, concurrent BLE/USB ownership, command routing by device, per-device UI/status attribution, and agent-driven validation of hardware loops across boards.
 - Expected: one local agent session can control the bench as a hardware validation box and repeatedly probe EMWaver capabilities without manual reconnect/reconfigure steps.
 
