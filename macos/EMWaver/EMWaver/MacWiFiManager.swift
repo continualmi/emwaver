@@ -27,7 +27,7 @@ final class MacWiFiManager {
     static let serviceType = "_emwaver._tcp"
     private static let livenessPingInterval: DispatchTimeInterval = .seconds(2)
     private static let livenessPingTimeout: DispatchTimeInterval = .seconds(3)
-    private static let discoveryPingTimeout: DispatchTimeInterval = .seconds(2)
+    private static let discoveryConnectTimeout: DispatchTimeInterval = .seconds(3)
 
     private struct BonjourMetadata {
         var localIdentifier: String?
@@ -401,35 +401,46 @@ final class MacWiFiManager {
     }
 
     private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord) {
-        guard let url = Self.webSocketURL(host: record.host, port: record.port) else { return }
+        guard let port = NWEndpoint.Port(rawValue: UInt16(record.port)) else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
-        Self.log("validating advertised websocket id=\(record.id)")
-        let validationSocket = URLSession.shared.webSocketTask(with: url)
-        validationSocket.resume()
-        queue.asyncAfter(deadline: .now() + Self.discoveryPingTimeout) { [weak self, weak validationSocket] in
-            guard let self, let validationSocket else { return }
+        Self.log("validating advertised tcp id=\(record.id)")
+        let connection = NWConnection(
+            host: NWEndpoint.Host(record.host),
+            port: port,
+            using: .tcp
+        )
+        connection.stateUpdateHandler = { [weak self, weak connection] state in
+            guard let self, let connection else { return }
+            self.queue.async {
+                guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
+                switch state {
+                case .ready:
+                    Self.log("advertised validation passed id=\(record.id)")
+                    self.validatingAdvertisedDeviceIDs.remove(record.id)
+                    connection.cancel()
+                    guard self.advertisedDeviceIDs.contains(record.id) else { return }
+                    var validatedRecord = record
+                    validatedRecord.lastSeen = Date()
+                    self.discoveredDevicesByID[record.id] = validatedRecord
+                    self.publishDevices()
+                case .failed(let error):
+                    Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
+                    self.validatingAdvertisedDeviceIDs.remove(record.id)
+                    connection.cancel()
+                case .cancelled:
+                    self.validatingAdvertisedDeviceIDs.remove(record.id)
+                default:
+                    break
+                }
+            }
+        }
+        connection.start(queue: queue)
+        queue.asyncAfter(deadline: .now() + Self.discoveryConnectTimeout) { [weak self, weak connection] in
+            guard let self, let connection else { return }
             guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
             Self.log("advertised validation timed out id=\(record.id)")
             self.validatingAdvertisedDeviceIDs.remove(record.id)
-            validationSocket.cancel(with: .goingAway, reason: nil)
-        }
-        validationSocket.sendPing { [weak self, weak validationSocket] error in
-            guard let self, let validationSocket else { return }
-            self.queue.async {
-                guard self.validatingAdvertisedDeviceIDs.contains(record.id) else { return }
-                self.validatingAdvertisedDeviceIDs.remove(record.id)
-                validationSocket.cancel(with: .goingAway, reason: nil)
-                guard self.advertisedDeviceIDs.contains(record.id) else { return }
-                if let error {
-                    Self.log("advertised validation failed id=\(record.id) error=\(error.localizedDescription)")
-                    return
-                }
-                Self.log("advertised validation passed id=\(record.id)")
-                var validatedRecord = record
-                validatedRecord.lastSeen = Date()
-                self.discoveredDevicesByID[record.id] = validatedRecord
-                self.publishDevices()
-            }
+            connection.cancel()
         }
     }
 
