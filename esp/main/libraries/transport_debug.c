@@ -61,20 +61,18 @@ void transport_debug_log_lane(uint8_t source,
 
     if (source == EMW_COMMAND_SOURCE_WIFI) {
         ESP_LOGI(TAG,
-                 "[%s] %s seq=%u op=%02x lane=%s",
+                 "[%s] %s seq=%u lane=%s",
                  source_name(source),
                  direction,
                  (unsigned)wifi_sequence,
-                 lane[0],
                  hex);
         return;
     }
 
     ESP_LOGI(TAG,
-             "[%s] %s op=%02x lane=%s",
+             "[%s] %s lane=%s",
              source_name(source),
              direction,
-             lane[0],
              hex);
 }
 
