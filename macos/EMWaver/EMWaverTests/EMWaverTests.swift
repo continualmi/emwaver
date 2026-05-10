@@ -154,4 +154,32 @@ struct EMWaverTests {
         #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false) == .discovered)
     }
 
+    @Test func localDeviceLabelUsesOnlyFullHardwareUID() {
+        let uidDevice = LocalDeviceDescriptor(
+            id: "wifi:emwaver-005cd960.local:3922",
+            displayName: "emwaver-005cd960",
+            transport: .wifi,
+            boardType: "esp32",
+            moduleLabel: nil,
+            identifierText: "UID d83bdaa4ec7c",
+            connectionState: .connected,
+            lastErrorText: nil,
+            isActive: true
+        )
+        #expect(LocalDeviceLabelFormatter.label(for: uidDevice) == "ESP32 / d83bdaa4ec7c")
+
+        let unprobedDevice = LocalDeviceDescriptor(
+            id: "ble:B57C47F1-1111-2222-3333-444455556666",
+            displayName: "EMWaver",
+            transport: .ble,
+            boardType: "esp32s3",
+            moduleLabel: nil,
+            identifierText: "UID 01",
+            connectionState: .discovered,
+            lastErrorText: "UID unavailable",
+            isActive: false
+        )
+        #expect(LocalDeviceLabelFormatter.label(for: unprobedDevice) == "ESP32-S3 / EMWaver")
+    }
+
 }

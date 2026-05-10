@@ -90,7 +90,8 @@ final class MacScriptSessionManager: ObservableObject {
         devicesByID = Dictionary(uniqueKeysWithValues: devices.map { ($0.id, $0) })
 
         if let userSelectedDeviceID {
-            if devicesByID[userSelectedDeviceID] != nil {
+            if let selected = devicesByID[userSelectedDeviceID],
+               Self.hardwareUID(from: selected.identifierText) != nil {
                 selectedDeviceID = userSelectedDeviceID
                 return
             }
@@ -101,24 +102,39 @@ final class MacScriptSessionManager: ObservableObject {
     }
 
     func selectDeviceID(_ id: String?) {
+        guard let id,
+              let descriptor = devicesByID[id],
+              Self.hardwareUID(from: descriptor.identifierText) != nil else {
+            userSelectedDeviceID = nil
+            selectedDeviceID = preferredDeviceID(in: Array(devicesByID.values))
+            return
+        }
         userSelectedDeviceID = id
         selectedDeviceID = id
     }
 
     private func preferredDeviceID(in devices: [LocalDeviceDescriptor]) -> String? {
-        devices.sorted { lhs, rhs in
-            let lhsState = connectionPriority(lhs.connectionState)
-            let rhsState = connectionPriority(rhs.connectionState)
-            if lhsState != rhsState { return lhsState < rhsState }
+        devices.filter { Self.hardwareUID(from: $0.identifierText) != nil }
+            .sorted { lhs, rhs in
+                let lhsState = connectionPriority(lhs.connectionState)
+                let rhsState = connectionPriority(rhs.connectionState)
+                if lhsState != rhsState { return lhsState < rhsState }
 
-            let lhsTransport = transportPriority(lhs.transport)
-            let rhsTransport = transportPriority(rhs.transport)
-            if lhsTransport != rhsTransport { return lhsTransport < rhsTransport }
+                let lhsTransport = transportPriority(lhs.transport)
+                let rhsTransport = transportPriority(rhs.transport)
+                if lhsTransport != rhsTransport { return lhsTransport < rhsTransport }
 
-            if lhs.isActive != rhs.isActive { return lhs.isActive && !rhs.isActive }
-            return LocalDeviceLabelFormatter.label(for: lhs)
-                .localizedStandardCompare(LocalDeviceLabelFormatter.label(for: rhs)) == .orderedAscending
-        }.first?.id
+                if lhs.isActive != rhs.isActive { return lhs.isActive && !rhs.isActive }
+                return LocalDeviceLabelFormatter.label(for: lhs)
+                    .localizedStandardCompare(LocalDeviceLabelFormatter.label(for: rhs)) == .orderedAscending
+            }.first?.id
+    }
+
+    private static func hardwareUID(from identifierText: String?) -> String? {
+        guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
+        let uid = String(identifierText.dropFirst("UID ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard uid.count == 12, uid.allSatisfy(\.isHexDigit) else { return nil }
+        return uid
     }
 
     private func connectionPriority(_ state: LocalDeviceDescriptor.ConnectionState) -> Int {

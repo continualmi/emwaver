@@ -120,7 +120,7 @@ struct ContentView: View {
 
     private var selectedLocalDevice: LocalDeviceDescriptor? {
         guard let id = scriptSessions.selectedDeviceID else { return nil }
-        return device.discoveredDevices.first(where: { $0.id == id })
+        return device.discoveredDevices.first(where: { $0.id == id && hardwareUID(from: $0.identifierText) != nil })
             ?? toolbarDeviceChoices.first(where: { $0.id == id })
     }
 
@@ -408,10 +408,13 @@ struct ContentView: View {
             .flatMap { selectedID in device.discoveredDevices.first(where: { $0.id == selectedID }) }
             .flatMap { hardwareUID(from: $0.identifierText) }
         for item in device.discoveredDevices {
-            let key = hardwareUID(from: item.identifierText).map { "uid:\($0)" } ?? item.id
+            guard let uid = hardwareUID(from: item.identifierText) else {
+                continue
+            }
+            let key = "uid:\(uid)"
             if let selectedDeviceID = scriptSessions.selectedDeviceID,
                let selectedUID,
-               hardwareUID(from: item.identifierText) == selectedUID {
+               uid == selectedUID {
                 if item.id == selectedDeviceID {
                     choices[key] = item
                 } else if choices[key] == nil {
@@ -455,7 +458,8 @@ struct ContentView: View {
     private func hardwareUID(from identifierText: String?) -> String? {
         guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
         let uid = String(identifierText.dropFirst("UID ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-        return uid.isEmpty ? nil : uid
+        guard uid.count == 12, uid.allSatisfy(\.isHexDigit) else { return nil }
+        return uid
     }
 
     private func transportIcon(for transport: LocalDeviceDescriptor.TransportKind) -> String {

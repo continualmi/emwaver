@@ -9,9 +9,6 @@ enum LocalDeviceLabelFormatter {
         if let module = descriptor.moduleLabel, !module.isEmpty {
             return "\(board) / \(module)"
         }
-        if let suffix = shortIdentifier(for: descriptor.id) {
-            return "\(board) / \(suffix)"
-        }
         return descriptor.displayName.isEmpty ? board : "\(board) / \(descriptor.displayName)"
     }
 
@@ -30,19 +27,6 @@ enum LocalDeviceLabelFormatter {
         }
     }
 
-    private static func shortIdentifier(for id: String) -> String? {
-        if id.hasPrefix("uid:") {
-            return cleanIdentifier(String(id.dropFirst("uid:".count)))?.uppercased()
-        }
-        if id.hasPrefix("ble:") {
-            return tail(String(id.dropFirst("ble:".count)).replacingOccurrences(of: "-", with: ""))
-        }
-        if id.hasPrefix("wifi:") {
-            return String(id.dropFirst("wifi:".count))
-        }
-        return nil
-    }
-
     private static func hardwareUID(from identifierText: String?) -> String? {
         guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
         return cleanIdentifier(String(identifierText.dropFirst("UID ".count)))
@@ -50,12 +34,7 @@ enum LocalDeviceLabelFormatter {
 
     private static func cleanIdentifier(_ value: String) -> String? {
         let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        return clean.isEmpty ? nil : clean
-    }
-
-    private static func tail(_ value: String) -> String? {
-        let clean = value.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !clean.isEmpty else { return nil }
-        return String(clean.suffix(min(6, clean.count))).uppercased()
+        guard clean.count == 12, clean.allSatisfy(\.isHexDigit) else { return nil }
+        return clean
     }
 }

@@ -209,7 +209,6 @@ private final class MacTransportDeviceSession {
 /// It implements `ScriptDevice` for the shared Script runtime.
 final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     static let transportDebugLoggingEnabledDefaultsKey = "emwaver.transportDebugLoggingEnabled"
-    static let uidConnectionProbeEnabledDefaultsKey = "emwaver.uidConnectionProbeEnabled"
     static let connectionPollIntervalSeconds: TimeInterval = 5.0
     private static let bleDiscoveryStaleIntervalSeconds: TimeInterval = 8.0
 
@@ -224,13 +223,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return false
         }
         return lane.dropFirst(4).allSatisfy { $0 == 0 }
-    }
-
-    private static func defaultUIDConnectionProbeEnabled() -> Bool {
-        if UserDefaults.standard.object(forKey: uidConnectionProbeEnabledDefaultsKey) == nil {
-            return true
-        }
-        return UserDefaults.standard.bool(forKey: uidConnectionProbeEnabledDefaultsKey)
     }
 
     private enum EmwOpcode {
@@ -266,22 +258,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var lastErrorText: String? = nil
     @Published var deviceEmwaverVersion: String? = nil
     @Published var connectedHardwareUID: String? = nil
-    @Published var uidConnectionProbeEnabled: Bool = MacUSBManager.defaultUIDConnectionProbeEnabled() {
-        didSet {
-            UserDefaults.standard.set(uidConnectionProbeEnabled, forKey: Self.uidConnectionProbeEnabledDefaultsKey)
-            midiQueue.async {
-                self.wifiManager?.setUIDConnectionProbeEnabled(self.uidConnectionProbeEnabled)
-                if !self.uidConnectionProbeEnabled {
-                    self.uidConnectionProbeInFlightDeviceIDs.removeAll()
-                    self.hardwareUIDByDeviceID.removeAll()
-                    self.publishDiscoveredDevices()
-                    DispatchQueue.main.async {
-                        self.connectedHardwareUID = nil
-                    }
-                }
-            }
-        }
-    }
     @Published var uidConnectionProbeLastChecked: Date? = nil
     @Published var autoConnectEnabled: Bool = true {
         didSet {
@@ -398,7 +374,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self?.recordUIDConnectionProbeCheck(at: checkedAt)
             }
         )
-        self.wifiManager?.setUIDConnectionProbeEnabled(uidConnectionProbeEnabled)
         self.wifiManager?.startDiscovery()
         midiQueue.async {
             self.refreshPortsInternal()
@@ -1384,8 +1359,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func scheduleUIDConnectionPollsInternal() {
-        guard uidConnectionProbeEnabled else { return }
-
         var deviceIDs: [String] = []
         if activeTransport == .usbMidi,
            connectedSource != 0,
@@ -1406,10 +1379,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
                 self.midiQueue.async {
                     self.uidConnectionProbeInFlightDeviceIDs.remove(deviceID)
-                    guard self.uidConnectionProbeEnabled else {
-                        self.publishDiscoveredDevices()
-                        return
-                    }
                     if let uid {
                         self.hardwareUIDByDeviceID[deviceID] = uid
                         if self.activeDeviceID == deviceID {
@@ -1542,7 +1511,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func queryHardwareUID(timeoutMs: Int, deviceID: String? = nil) -> String? {
-        guard uidConnectionProbeEnabled else { return nil }
         recordUIDConnectionProbeCheck()
         let resp = sendCommandInternal(
             Data([EmwOpcode.hardwareUID]),

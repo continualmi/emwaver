@@ -146,8 +146,8 @@ struct DeviceConnectionSheet: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    uidProbeStatusLine
                     deviceListCard
-                    connectionProbeCard
                     if shouldShowWiFiCard {
                         wifiCard
                     }
@@ -296,32 +296,11 @@ struct DeviceConnectionSheet: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
-    private var connectionProbeCard: some View {
-        HStack(alignment: .center, spacing: 14) {
-            Image(systemName: "checkmark.circle")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 28)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text("UID connection check")
-                    .font(.subheadline.weight(.semibold))
-                Text(uidProbeLastCheckedText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-
-            Toggle("Enabled", isOn: Binding(
-                get: { device.uidConnectionProbeEnabled },
-                set: { device.uidConnectionProbeEnabled = $0 }
-            ))
-            .toggleStyle(.checkbox)
-        }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    private var uidProbeStatusLine: some View {
+        Text(uidProbeLastCheckedText)
+            .font(.caption.weight(.medium))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var groupedLocalDevices: [LocalDeviceGroup] {
@@ -608,7 +587,8 @@ struct DeviceConnectionSheet: View {
     private func hardwareUID(from identifierText: String?) -> String? {
         guard let identifierText, identifierText.hasPrefix("UID ") else { return nil }
         let uid = String(identifierText.dropFirst("UID ".count)).trimmingCharacters(in: .whitespacesAndNewlines)
-        return uid.isEmpty ? nil : uid
+        guard uid.count == 12, uid.allSatisfy(\.isHexDigit) else { return nil }
+        return uid
     }
 
     private func groupTitleCandidate(for item: LocalDeviceDescriptor) -> String {
