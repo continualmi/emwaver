@@ -29,6 +29,8 @@ pub trait CommandBridge: Send + Sync + 'static {
     fn transmit_buffer(&self) -> Result<()> {
         Ok(())
     }
+
+    fn close(&self) {}
 }
 
 pub struct Engine {

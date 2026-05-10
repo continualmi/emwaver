@@ -49,6 +49,10 @@ cargo run -p emwaver -- gateway serve --ble
 cargo run -p emwaver -- gateway serve --wifi 192.168.1.44
 ```
 
+BLE discovery/control is enabled with `--ble`. On macOS it is opt-in because
+continuous background CoreBluetooth polling can destabilize long-running
+Gateway processes.
+
 `emw devices`, browser status, and `/v1/devices` report Gateway-owned discovery
 state when Gateway is running. Physical devices are exposed only after a
 successful local hardware UID read. Multi-transport ESP boards stay discoverable

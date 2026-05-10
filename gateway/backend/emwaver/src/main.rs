@@ -21,7 +21,7 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{
-    atomic::{AtomicU64, Ordering},
+    atomic::{AtomicBool, AtomicU64, Ordering},
     mpsc, Arc, Mutex,
 };
 use std::thread;
@@ -275,7 +275,7 @@ enum GatewayCmd {
         #[arg(long)]
         device: Option<String>,
 
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        /// Enable ESP32 BLE discovery/control.
         #[arg(long)]
         ble: bool,
 
@@ -309,7 +309,7 @@ enum GatewayCmd {
         #[arg(long)]
         device: Option<String>,
 
-        /// Use ESP32 BLE transport instead of USB MIDI/SysEx.
+        /// Enable ESP32 BLE discovery/control.
         #[arg(long)]
         ble: bool,
 
@@ -1479,6 +1479,7 @@ struct GatewayDeviceRegistry {
     active_claims: Mutex<HashMap<String, GatewayActiveClaim>>,
     no_device: bool,
     sim_device: bool,
+    enable_ble: bool,
     startup_wifi_targets: Vec<ManualWiFiTarget>,
 }
 
@@ -1493,6 +1494,7 @@ impl GatewayDeviceRegistry {
     fn new(
         no_device: bool,
         sim_device: bool,
+        enable_ble: bool,
         startup_wifi_targets: Vec<ManualWiFiTarget>,
     ) -> Result<Self> {
         let settings = load_gateway_settings()?;
@@ -1502,6 +1504,7 @@ impl GatewayDeviceRegistry {
             active_claims: Mutex::new(HashMap::new()),
             no_device,
             sim_device,
+            enable_ble,
             startup_wifi_targets,
         })
     }
@@ -1561,7 +1564,9 @@ impl GatewayDeviceRegistry {
         let active_claims = self.active_claims();
         let mut refreshed = Vec::new();
         refresh_gateway_midi_devices(&mut refreshed, &mut previous_by_transport, &active_claims);
-        refresh_gateway_ble_devices(&mut refreshed, &mut previous_by_transport, &active_claims);
+        if self.enable_ble {
+            refresh_gateway_ble_devices(&mut refreshed, &mut previous_by_transport, &active_claims);
+        }
         refresh_gateway_wifi_devices(
             &mut refreshed,
             &mut previous_by_transport,
@@ -2060,7 +2065,8 @@ fn open_claimed_gateway_bridge(
         transport_id: entry.transport_id.clone(),
         source,
         requires_session: entry.requires_session,
-        heartbeat_stop_tx,
+        closed: AtomicBool::new(false),
+        heartbeat_stop_tx: Mutex::new(heartbeat_stop_tx),
         heartbeat_thread: Mutex::new(heartbeat_thread),
     }))
 }
@@ -2106,23 +2112,30 @@ struct ClaimedGatewayBridge {
     transport_id: String,
     source: u8,
     requires_session: bool,
-    heartbeat_stop_tx: Option<mpsc::Sender<()>>,
+    closed: AtomicBool,
+    heartbeat_stop_tx: Mutex<Option<mpsc::Sender<()>>>,
     heartbeat_thread: Mutex<Option<thread::JoinHandle<()>>>,
 }
 
 impl Drop for ClaimedGatewayBridge {
     fn drop(&mut self) {
-        if let Some(stop_tx) = self.heartbeat_stop_tx.take() {
-            let _ = stop_tx.send(());
+        if self.closed.swap(true, Ordering::AcqRel) {
+            return;
         }
-        if self.requires_session {
-            let _ = transport_session_disconnect(self.sender.as_ref(), self.source, 1_000);
+        self.stop_heartbeat();
+        self.registry
+            .release_claim(&self.hardware_uid, &self.transport_id);
+    }
+}
+
+impl ClaimedGatewayBridge {
+    fn stop_heartbeat(&self) {
+        if let Some(stop_tx) = self.heartbeat_stop_tx.lock().unwrap().take() {
+            let _ = stop_tx.send(());
         }
         if let Some(handle) = self.heartbeat_thread.lock().unwrap().take() {
             let _ = handle.join();
         }
-        self.registry
-            .release_claim(&self.hardware_uid, &self.transport_id);
     }
 }
 
@@ -2145,6 +2158,18 @@ impl CommandBridge for ClaimedGatewayBridge {
 
     fn transmit_buffer(&self) -> Result<()> {
         self.inner.transmit_buffer()
+    }
+
+    fn close(&self) {
+        if self.closed.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        self.stop_heartbeat();
+        if self.requires_session {
+            let _ = transport_session_disconnect(self.sender.as_ref(), self.source, 1_000);
+        }
+        self.registry
+            .release_claim(&self.hardware_uid, &self.transport_id);
     }
 }
 
@@ -3138,7 +3163,7 @@ fn format_wifi_status(status: &WiFiStatus) -> String {
 fn gateway_serve(
     port: Option<u16>,
     _device_id: Option<String>,
-    _ble: bool,
+    ble: bool,
     wifi: Option<String>,
     wifi_port: u16,
     no_device: bool,
@@ -3167,6 +3192,7 @@ fn gateway_serve(
     let device_registry = Arc::new(GatewayDeviceRegistry::new(
         no_device,
         sim_device,
+        ble || default_ble_discovery_enabled(),
         startup_wifi_targets,
     )?);
     if let Err(err) = device_registry.refresh() {
@@ -3337,6 +3363,10 @@ fn now_millis() -> u64 {
         .unwrap_or(0)
 }
 
+fn default_ble_discovery_enabled() -> bool {
+    !cfg!(target_os = "macos")
+}
+
 fn start_gateway_script_session(
     state: &GatewayServerState,
     name: String,
@@ -3409,6 +3439,7 @@ fn run_script_session_worker(
     startup_tx: mpsc::Sender<Result<SessionSnapshot, String>>,
     command_rx: mpsc::Receiver<SessionCommand>,
 ) {
+    let bridge_for_shutdown = bridge.clone();
     let engine = match Engine::new(bootstrap.as_str(), bridge).and_then(|engine| {
         engine.run_script(&source)?;
         Ok(engine)
@@ -3417,6 +3448,7 @@ fn run_script_session_worker(
         Err(err) => {
             session.set_state("error");
             sessions.remove(&session.id);
+            bridge_for_shutdown.close();
             let _ = startup_tx.send(Err(err.to_string()));
             return;
         }
@@ -3471,6 +3503,7 @@ fn run_script_session_worker(
             }
         }
     }
+    bridge_for_shutdown.close();
 }
 
 fn update_session_snapshot(

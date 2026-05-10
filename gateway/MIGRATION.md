@@ -143,7 +143,7 @@ script state channel for CLI/browser/Agent automation.
 - [x] macOS and Windows no longer start or expose Gateway host control.
 - [x] Gateway browser status is non-invasive: it reports cached Gateway-owned transport state and does not open competing device probe sessions.
 - [x] Gateway device lists expose physical devices only after a successful local hardware UID read.
-- [x] Gateway discovers USB MIDI, BLE, and Wi-Fi together; selected device/transport settings are persisted locally, and ESP multi-transport boards claim exactly one control transport per script session.
+- [x] Gateway discovers USB MIDI and Wi-Fi together, with BLE available through the `--ble` Gateway flag; selected device/transport settings are persisted locally, and ESP multi-transport boards claim exactly one control transport per script session.
 
 ## Current Status
 
