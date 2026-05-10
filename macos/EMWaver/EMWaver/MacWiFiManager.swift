@@ -22,15 +22,13 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var lastSeen: Date
 }
 
-final class MacWiFiManager {
+final class MacWiFiManager: NSObject {
     static let defaultPort = 3922
     static let serviceType = "_emwaver._tcp"
     private static let livenessProbeInterval: DispatchTimeInterval = .seconds(2)
     private static let livenessProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
-    private static let discoveryProbeOpenDelay: DispatchTimeInterval = .milliseconds(200)
-    private static let discoveryProbeRetryDelay: DispatchTimeInterval = .milliseconds(250)
     private static let hardwareUIDCommand = Data([0x08])
 
     private struct BonjourMetadata {
@@ -48,6 +46,7 @@ final class MacWiFiManager {
     private let onError: (String) -> Void
     private let onConnected: (MacWiFiDeviceRecord) -> Void
     private let onDisconnected: (String?) -> Void
+    private var webSocketSession: URLSession!
 
     private var browser: NWBrowser?
     private var discoveredDevicesByID: [String: MacWiFiDeviceRecord] = [:]
@@ -58,11 +57,18 @@ final class MacWiFiManager {
     private var advertisedRecordsByID: [String: MacWiFiDeviceRecord] = [:]
     private var validatingAdvertisedDeviceIDs: Set<String> = []
     private var advertisedValidationSockets: [String: URLSessionWebSocketTask] = [:]
+    private var advertisedValidationProbes: [String: AdvertisedValidationProbe] = [:]
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
     private var pendingLivenessSequence: UInt16?
     private var txSequence: UInt16 = 1
+
+    private struct AdvertisedValidationProbe {
+        var record: MacWiFiDeviceRecord
+        var frame: Data
+        var removeOnFailure: Bool
+    }
 
     private final class PendingResponse {
         let semaphore = DispatchSemaphore(value: 0)
@@ -82,6 +88,12 @@ final class MacWiFiManager {
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
+        super.init()
+        self.webSocketSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
+    }
+
+    deinit {
+        webSocketSession.invalidateAndCancel()
     }
 
     var activeDeviceID: String? {
@@ -229,14 +241,12 @@ final class MacWiFiManager {
             self.disconnect(notify: false)
 
             Self.log("opening websocket url=\(url.absoluteString)")
-            let socket = URLSession.shared.webSocketTask(with: url)
+            let socket = self.webSocketSession.webSocketTask(with: url)
             self.socket = socket
             self.connectedDeviceID = nil
             self.pendingConnectionRecord = record
 
             socket.resume()
-            self.receiveLoop(socket: socket)
-            self.sendLivenessProbe(socket: socket, record: record, markConnectedOnSuccess: true)
             self.publishDevices()
         }
     }
@@ -442,16 +452,14 @@ final class MacWiFiManager {
         guard socket == nil else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
         Self.log("validating advertised uid id=\(record.id)")
-        let validationSocket = URLSession.shared.webSocketTask(with: url)
+        let validationSocket = webSocketSession.webSocketTask(with: url)
         advertisedValidationSockets[record.id] = validationSocket
-        validationSocket.resume()
-        scheduleAdvertisedUIDSend(
+        advertisedValidationProbes[record.id] = AdvertisedValidationProbe(
             record: record,
-            socket: validationSocket,
             frame: frame,
-            removeOnFailure: removeOnFailure,
-            delay: Self.discoveryProbeOpenDelay
+            removeOnFailure: removeOnFailure
         )
+        validationSocket.resume()
         queue.asyncAfter(deadline: .now() + Self.discoveryProbeTimeout) { [weak self] in
             guard let self else { return }
             guard self.validatingAdvertisedDeviceIDs.contains(record.id),
@@ -461,35 +469,23 @@ final class MacWiFiManager {
         }
     }
 
-    private func scheduleAdvertisedUIDSend(
+    private func sendAdvertisedUIDProbe(
         record: MacWiFiDeviceRecord,
         socket validationSocket: URLSessionWebSocketTask,
         frame: Data,
-        removeOnFailure: Bool,
-        delay: DispatchTimeInterval
+        removeOnFailure: Bool
     ) {
-        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
+        validationSocket.send(.data(frame)) { [weak self] error in
             guard let self else { return }
-            guard self.validatingAdvertisedDeviceIDs.contains(record.id),
-                  self.advertisedValidationSockets[record.id] === validationSocket else { return }
-            validationSocket.send(.data(frame)) { [weak self] error in
-                guard let self else { return }
-                self.queue.async {
-                    guard self.validatingAdvertisedDeviceIDs.contains(record.id),
-                          self.advertisedValidationSockets[record.id] === validationSocket else { return }
-                    if let error {
-                        Self.log("advertised UID probe send not ready id=\(record.id) error=\(error.localizedDescription)")
-                        self.scheduleAdvertisedUIDSend(
-                            record: record,
-                            socket: validationSocket,
-                            frame: frame,
-                            removeOnFailure: removeOnFailure,
-                            delay: Self.discoveryProbeRetryDelay
-                        )
-                        return
-                    }
-                    self.receiveAdvertisedUIDResponse(record: record, socket: validationSocket, removeOnFailure: removeOnFailure)
+            self.queue.async {
+                guard self.validatingAdvertisedDeviceIDs.contains(record.id),
+                      self.advertisedValidationSockets[record.id] === validationSocket else { return }
+                if let error {
+                    Self.log("advertised UID probe send failed id=\(record.id) error=\(error.localizedDescription)")
+                    self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+                    return
                 }
+                self.receiveAdvertisedUIDResponse(record: record, socket: validationSocket, removeOnFailure: removeOnFailure)
             }
         }
     }
@@ -527,6 +523,7 @@ final class MacWiFiManager {
     private func finishAdvertisedValidationSuccess(_ record: MacWiFiDeviceRecord, uid: String, socket validationSocket: URLSessionWebSocketTask) {
         validatingAdvertisedDeviceIDs.remove(record.id)
         advertisedValidationSockets.removeValue(forKey: record.id)
+        advertisedValidationProbes.removeValue(forKey: record.id)
         guard advertisedDeviceIDs.contains(record.id) else { return }
         var validatedRecord = record
         validatedRecord.localIdentifier = uid
@@ -536,6 +533,7 @@ final class MacWiFiManager {
             socket.cancel(with: .goingAway, reason: nil)
         }
         advertisedValidationSockets.removeAll()
+        advertisedValidationProbes.removeAll()
         validatingAdvertisedDeviceIDs.removeAll()
         self.socket = validationSocket
         connectedDeviceID = nil
@@ -547,6 +545,7 @@ final class MacWiFiManager {
 
     private func finishAdvertisedValidationFailure(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool) {
         validatingAdvertisedDeviceIDs.remove(record.id)
+        advertisedValidationProbes.removeValue(forKey: record.id)
         advertisedValidationSockets.removeValue(forKey: record.id)?.cancel(with: .goingAway, reason: nil)
         if removeOnFailure {
             removeUnreachableAdvertisedRecord(record.id)
@@ -561,6 +560,52 @@ final class MacWiFiManager {
         Self.log("removing unreachable advertised discovery id=\(id)")
         discoveredDevicesByID.removeValue(forKey: id)
         publishDevices()
+    }
+
+    private func handleWebSocketOpened(_ openedSocket: URLSessionWebSocketTask) {
+        queue.async {
+            if self.socket === openedSocket,
+               let record = self.pendingConnectionRecord,
+               self.connectedDeviceID == nil {
+                Self.log("websocket opened id=\(record.id)")
+                self.receiveLoop(socket: openedSocket)
+                self.sendLivenessProbe(socket: openedSocket, record: record, markConnectedOnSuccess: true)
+                self.publishDevices()
+                return
+            }
+
+            guard let id = self.advertisedValidationSockets.first(where: { $0.value === openedSocket })?.key,
+                  let probe = self.advertisedValidationProbes[id],
+                  self.validatingAdvertisedDeviceIDs.contains(id) else {
+                return
+            }
+            Self.log("advertised websocket opened id=\(id)")
+            self.sendAdvertisedUIDProbe(
+                record: probe.record,
+                socket: openedSocket,
+                frame: probe.frame,
+                removeOnFailure: probe.removeOnFailure
+            )
+        }
+    }
+
+    private func handleWebSocketClosed(_ closedSocket: URLSessionWebSocketTask, closeCode: URLSessionWebSocketTask.CloseCode) {
+        queue.async {
+            if self.socket === closedSocket {
+                let id = self.connectedDeviceID ?? self.pendingConnectionRecord?.id ?? "nil"
+                Self.log("websocket closed id=\(id) code=\(closeCode.rawValue)")
+                self.onError("Wi-Fi disconnected")
+                self.disconnect(notify: true)
+                return
+            }
+
+            guard let id = self.advertisedValidationSockets.first(where: { $0.value === closedSocket })?.key,
+                  let probe = self.advertisedValidationProbes[id] else {
+                return
+            }
+            Self.log("advertised websocket closed id=\(id) code=\(closeCode.rawValue)")
+            self.finishAdvertisedValidationFailure(probe.record, removeOnFailure: probe.removeOnFailure)
+        }
     }
 
     private func markConnected(record: MacWiFiDeviceRecord, socket: URLSessionWebSocketTask) {
@@ -916,4 +961,23 @@ final class MacWiFiManager {
         capabilities.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("wifi") == .orderedSame }
     }
 
+}
+
+extension MacWiFiManager: URLSessionWebSocketDelegate {
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didOpenWithProtocol negotiatedProtocol: String?
+    ) {
+        handleWebSocketOpened(webSocketTask)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        webSocketTask: URLSessionWebSocketTask,
+        didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
+        reason: Data?
+    ) {
+        handleWebSocketClosed(webSocketTask, closeCode: closeCode)
+    }
 }
