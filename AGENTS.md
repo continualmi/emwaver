@@ -15,6 +15,12 @@ Implementation details belong in folder-level `README.md` files.
 
 ---
 
+## 0) Agent Workflow
+
+- Keep validation logs compact. `xcodebuild`, ESP-IDF, and other embedded build systems can emit very large logs that waste conversation context. Prefer quiet or filtered output by default, such as `xcodebuild -quiet ...`, `idf.py build 2>&1 | tail -120`, or focused `rg` filters for `error:`, `warning:`, and file paths. Only capture or paste full build logs when the compact output is insufficient to diagnose a failure.
+
+---
+
 ## 1) Product Vision (core)
 
 EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, CLI/gateway flows, managed firmware, and optional Agent assistance.
