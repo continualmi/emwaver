@@ -58,6 +58,7 @@ final class MacScriptSessionManager: ObservableObject {
     private weak var device: MacUSBManager?
     private var sessionsByID: [String: MacScriptSession] = [:]
     private var devicesByID: [String: LocalDeviceDescriptor] = [:]
+    private var userSelectedDeviceID: String?
 
     var activePreviewManager: ScriptPreviewManager? {
         guard let selectedSessionID else { return nil }
@@ -88,13 +89,60 @@ final class MacScriptSessionManager: ObservableObject {
     func updateDevices(_ devices: [LocalDeviceDescriptor]) {
         devicesByID = Dictionary(uniqueKeysWithValues: devices.map { ($0.id, $0) })
 
-        if let selectedDeviceID, devicesByID[selectedDeviceID] != nil {
-            return
+        if let userSelectedDeviceID {
+            if devicesByID[userSelectedDeviceID] != nil {
+                selectedDeviceID = userSelectedDeviceID
+                return
+            }
+            self.userSelectedDeviceID = nil
         }
 
-        selectedDeviceID = devices.first(where: { $0.isActive })?.id
-            ?? devices.first(where: { $0.connectionState == .connected })?.id
-            ?? devices.first?.id
+        selectedDeviceID = preferredDeviceID(in: devices)
+    }
+
+    func selectDeviceID(_ id: String?) {
+        userSelectedDeviceID = id
+        selectedDeviceID = id
+    }
+
+    private func preferredDeviceID(in devices: [LocalDeviceDescriptor]) -> String? {
+        devices.sorted { lhs, rhs in
+            let lhsState = connectionPriority(lhs.connectionState)
+            let rhsState = connectionPriority(rhs.connectionState)
+            if lhsState != rhsState { return lhsState < rhsState }
+
+            let lhsTransport = transportPriority(lhs.transport)
+            let rhsTransport = transportPriority(rhs.transport)
+            if lhsTransport != rhsTransport { return lhsTransport < rhsTransport }
+
+            if lhs.isActive != rhs.isActive { return lhs.isActive && !rhs.isActive }
+            return LocalDeviceLabelFormatter.label(for: lhs)
+                .localizedStandardCompare(LocalDeviceLabelFormatter.label(for: rhs)) == .orderedAscending
+        }.first?.id
+    }
+
+    private func connectionPriority(_ state: LocalDeviceDescriptor.ConnectionState) -> Int {
+        switch state {
+        case .connected:
+            return 0
+        case .connecting:
+            return 1
+        case .discovered:
+            return 2
+        case .disconnected:
+            return 3
+        }
+    }
+
+    private func transportPriority(_ transport: LocalDeviceDescriptor.TransportKind) -> Int {
+        switch transport {
+        case .usbMidi:
+            return 0
+        case .ble:
+            return 1
+        case .wifi:
+            return 2
+        }
     }
 
     func run(_ request: ScriptsRootView.ScriptRunRequest) -> ScriptsRootView.ScriptRunResult? {

@@ -49,6 +49,7 @@ final class MacWiFiManager: NSObject {
     private let onError: (String) -> Void
     private let onConnected: (MacWiFiDeviceRecord) -> Void
     private let onDisconnected: (String?) -> Void
+    private let onUIDProbeChecked: (Date) -> Void
     private var webSocketSession: URLSession!
 
     private var browser: NWBrowser?
@@ -63,6 +64,7 @@ final class MacWiFiManager: NSObject {
     private var advertisedValidationSockets: [String: URLSessionWebSocketTask] = [:]
     private var advertisedValidationProbes: [String: AdvertisedValidationProbe] = [:]
     private var pendingResponse: PendingResponse?
+    private var uidConnectionProbeEnabled = true
     private var discoveryReachabilityTimer: DispatchSourceTimer?
     private var livenessTimer: DispatchSourceTimer?
 
@@ -72,10 +74,20 @@ final class MacWiFiManager: NSObject {
         var removeOnFailure: Bool
     }
 
+    private enum PendingResponseKind {
+        case command
+        case uidLiveness
+    }
+
     private final class PendingResponse {
+        let kind: PendingResponseKind
         let semaphore = DispatchSemaphore(value: 0)
         var payload: Data?
         var completion: ((Data?) -> Void)?
+
+        init(kind: PendingResponseKind) {
+            self.kind = kind
+        }
     }
 
     init(
@@ -83,13 +95,15 @@ final class MacWiFiManager: NSObject {
         onData: @escaping (Data, String?) -> Void,
         onError: @escaping (String) -> Void,
         onConnected: @escaping (MacWiFiDeviceRecord) -> Void,
-        onDisconnected: @escaping (String?) -> Void
+        onDisconnected: @escaping (String?) -> Void,
+        onUIDProbeChecked: @escaping (Date) -> Void
     ) {
         self.onDevicesChanged = onDevicesChanged
         self.onData = onData
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
+        self.onUIDProbeChecked = onUIDProbeChecked
         super.init()
         self.webSocketSession = URLSession(configuration: .default, delegate: self, delegateQueue: nil)
     }
@@ -143,6 +157,31 @@ final class MacWiFiManager: NSObject {
 
     func record(id: String) -> MacWiFiDeviceRecord? {
         queue.sync { discoveredDevicesByID[id] }
+    }
+
+    func setUIDConnectionProbeEnabled(_ enabled: Bool) {
+        queue.async {
+            guard self.uidConnectionProbeEnabled != enabled else { return }
+            Self.log("UID connection probe enabled=\(enabled)")
+            self.uidConnectionProbeEnabled = enabled
+            if enabled {
+                if let socket = self.socket,
+                   let id = self.connectedDeviceID,
+                   let record = self.discoveredDevicesByID[id] {
+                    self.sendLivenessProbe(socket: socket, record: record, markConnectedOnSuccess: false)
+                    self.startLivenessTimer(socket: socket, record: record)
+                }
+            } else {
+                self.cancelLivenessTimer()
+                self.cancelPendingUIDLivenessProbe()
+                for id in self.discoveredDevicesByID.keys {
+                    self.discoveredDevicesByID[id]?.localIdentifier = nil
+                }
+                self.pendingConnectionRecord?.localIdentifier = nil
+                self.unreachableAdvertisedDeviceIDs.removeAll()
+                self.publishDevices()
+            }
+        }
     }
 
     func connect(host: String, port: Int = MacWiFiManager.defaultPort) {
@@ -283,7 +322,7 @@ final class MacWiFiManager: NSObject {
             return nil
         }
 
-        let pending = PendingResponse()
+        let pending = PendingResponse(kind: .command)
         let deadline = Date().addingTimeInterval(Double(max(1, timeout)) / 1000.0)
         guard claimPendingResponse(pending, deadline: deadline) else {
             onError("Wi-Fi command timed out waiting for pending response")
@@ -395,7 +434,7 @@ final class MacWiFiManager: NSObject {
             advertisedIDs.insert(id)
             let capabilities = metadata.capabilities.isEmpty ? ["wifi"] : metadata.capabilities
             Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ","))")
-            let currentUID = Self.isFullHardwareUID(discoveredDevicesByID[id]?.localIdentifier)
+            let currentUID = uidConnectionProbeEnabled && Self.isFullHardwareUID(discoveredDevicesByID[id]?.localIdentifier)
                 ? discoveredDevicesByID[id]?.localIdentifier
                 : nil
             let record = MacWiFiDeviceRecord(
@@ -412,6 +451,11 @@ final class MacWiFiManager: NSObject {
                 lastSeen: Date()
             )
             advertisedRecordsByID[id] = record
+            if !uidConnectionProbeEnabled {
+                unreachableAdvertisedDeviceIDs.remove(id)
+                discoveredDevicesByID[id] = record
+                continue
+            }
             if unreachableAdvertisedDeviceIDs.contains(id) {
                 continue
             }
@@ -433,7 +477,7 @@ final class MacWiFiManager: NSObject {
             if connectedDeviceID == id {
                 record.isAdvertised = false
                 discoveredDevicesByID[id] = record
-                if let activeSocket = socket {
+                if uidConnectionProbeEnabled, let activeSocket = socket {
                     Self.log("advertisement disappeared for connected id=\(id); checking UID liveness")
                     sendLivenessProbe(socket: activeSocket, record: record, markConnectedOnSuccess: false)
                 }
@@ -466,6 +510,7 @@ final class MacWiFiManager: NSObject {
     }
 
     private func validatePublishedAdvertisedRecords() {
+        guard uidConnectionProbeEnabled else { return }
         let records = advertisedRecordsByID.values
         for record in records where connectedDeviceID != record.id {
             guard advertisedDeviceIDs.contains(record.id),
@@ -477,6 +522,13 @@ final class MacWiFiManager: NSObject {
     }
 
     private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool = false) {
+        guard uidConnectionProbeEnabled else {
+            var visibleRecord = record
+            visibleRecord.localIdentifier = nil
+            discoveredDevicesByID[record.id] = visibleRecord
+            publishDevices()
+            return
+        }
         guard let url = Self.webSocketURL(host: record.host, port: record.port),
               let hardwareUIDCommand = Self.hardwareUIDCommandSysex() else { return }
         guard socket == nil else { return }
@@ -505,6 +557,7 @@ final class MacWiFiManager: NSObject {
         sysex: Data,
         removeOnFailure: Bool
     ) {
+        onUIDProbeChecked(Date())
         validationSocket.send(.data(sysex)) { [weak self] error in
             guard let self else { return }
             self.queue.async {
@@ -595,7 +648,13 @@ final class MacWiFiManager: NSObject {
                self.connectedDeviceID == nil {
                 Self.log("websocket opened id=\(record.id)")
                 self.receiveLoop(socket: openedSocket)
-                self.sendLivenessProbe(socket: openedSocket, record: record, markConnectedOnSuccess: true)
+                if self.uidConnectionProbeEnabled {
+                    self.sendLivenessProbe(socket: openedSocket, record: record, markConnectedOnSuccess: true)
+                } else {
+                    var connectedRecord = record
+                    connectedRecord.localIdentifier = nil
+                    self.markConnected(record: connectedRecord, socket: openedSocket)
+                }
                 self.publishDevices()
                 return
             }
@@ -651,6 +710,7 @@ final class MacWiFiManager: NSObject {
     }
 
     private func startLivenessTimer(socket: URLSessionWebSocketTask, record: MacWiFiDeviceRecord) {
+        guard uidConnectionProbeEnabled else { return }
         cancelLivenessTimer()
         let timer = DispatchSource.makeTimerSource(queue: queue)
         timer.schedule(
@@ -676,14 +736,15 @@ final class MacWiFiManager: NSObject {
         record: MacWiFiDeviceRecord,
         markConnectedOnSuccess: Bool
     ) {
+        guard uidConnectionProbeEnabled else { return }
         guard pendingResponse == nil else { return }
         guard let hardwareUIDCommand = Self.hardwareUIDCommandSysex() else { return }
-        let pending = PendingResponse()
+        let pending = PendingResponse(kind: .uidLiveness)
         pendingResponse = pending
         pending.completion = { [weak self, weak socket] payload in
             guard let self, let socket else { return }
             self.queue.async {
-                guard self.socket === socket else { return }
+                guard self.socket === socket, self.uidConnectionProbeEnabled else { return }
                 guard let payload, let uid = Self.hardwareUID(from: payload) else {
                     Self.log("UID liveness returned invalid response id=\(record.id)")
                     self.onError("Wi-Fi disconnected: UID probe failed")
@@ -707,18 +768,21 @@ final class MacWiFiManager: NSObject {
         Self.log("UID liveness probe id=\(record.id) initial=\(markConnectedOnSuccess)")
         queue.asyncAfter(deadline: .now() + Self.livenessProbeTimeout) { [weak self, weak socket] in
             guard let self, let socket else { return }
-            guard self.socket === socket, self.pendingResponse === pending else { return }
+            guard self.socket === socket,
+                  self.uidConnectionProbeEnabled,
+                  self.pendingResponse === pending else { return }
             Self.log("UID liveness timed out id=\(record.id)")
             self.pendingResponse = nil
             self.onError("Wi-Fi disconnected: UID probe timed out")
             self.markAdvertisedRecordUnreachable(record.id)
             self.disconnect(notify: true)
         }
+        onUIDProbeChecked(Date())
         socket.send(.data(hardwareUIDCommand)) { [weak self] error in
             guard let self else { return }
             self.queue.async {
                 if let error {
-                    guard self.pendingResponse === pending else { return }
+                    guard self.uidConnectionProbeEnabled, self.pendingResponse === pending else { return }
                     Self.log("UID liveness send failed id=\(record.id) error=\(error.localizedDescription)")
                     self.pendingResponse = nil
                     self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
@@ -790,6 +854,11 @@ final class MacWiFiManager: NSObject {
         pendingResponse = nil
         pending?.completion?(nil)
         pending?.semaphore.signal()
+    }
+
+    private func cancelPendingUIDLivenessProbe() {
+        guard pendingResponse?.kind == .uidLiveness else { return }
+        pendingResponse = nil
     }
 
     private func publishDevices() {

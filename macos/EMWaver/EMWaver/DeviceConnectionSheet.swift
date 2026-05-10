@@ -28,6 +28,12 @@ struct DeviceConnectionSheet: View {
     private static let wifiHostDefaultsKey = "emwaver.wifi.manual.host"
     private static let wifiPortDefaultsKey = "emwaver.wifi.manual.port"
     private static let wifiPasswordKeychainAccount = "emwaver.wifi.setup.password"
+    private static let uidProbeTimestampFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        return formatter
+    }()
 
     @ObservedObject var device: MacUSBManager
     @ObservedObject var firmwareUpdater: FirmwareUpdateManager
@@ -111,7 +117,14 @@ struct DeviceConnectionSheet: View {
     }
 
     private var shouldShowWiFiCard: Bool {
-        isEspBoard && device.connectedTransportKind != "Wi-Fi"
+        isEspBoard
+    }
+
+    private var uidProbeLastCheckedText: String {
+        guard let checkedAt = device.uidConnectionProbeLastChecked else {
+            return "Last checked: never"
+        }
+        return "Last checked: \(Self.uidProbeTimestampFormatter.string(from: checkedAt))"
     }
 
     private var currentBoardDisplayName: String {
@@ -134,6 +147,7 @@ struct DeviceConnectionSheet: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     deviceListCard
+                    connectionProbeCard
                     if shouldShowWiFiCard {
                         wifiCard
                     }
@@ -282,6 +296,34 @@ struct DeviceConnectionSheet: View {
         .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
     }
 
+    private var connectionProbeCard: some View {
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: "checkmark.circle")
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text("UID connection check")
+                    .font(.subheadline.weight(.semibold))
+                Text(uidProbeLastCheckedText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer(minLength: 12)
+
+            Toggle("Enabled", isOn: Binding(
+                get: { device.uidConnectionProbeEnabled },
+                set: { device.uidConnectionProbeEnabled = $0 }
+            ))
+            .toggleStyle(.checkbox)
+        }
+        .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 18, style: .continuous).fill(Color.secondary.opacity(0.08)))
+    }
+
     private var groupedLocalDevices: [LocalDeviceGroup] {
         var groups: [LocalDeviceGroup] = []
         var indexByKey: [String: Int] = [:]
@@ -349,7 +391,7 @@ struct DeviceConnectionSheet: View {
                 isWiFiSetupPresented = true
             }
             .buttonStyle(.borderedProminent)
-            .disabled(!device.isConnected || device.connectedTransportKind == "Wi-Fi")
+            .disabled(!device.isConnected)
         }
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -362,7 +404,7 @@ struct DeviceConnectionSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
                         .font(.headline)
-                    Text("Send network credentials over the current USB or BLE connection. The ESP32 will choose its own local hostname.")
+                    Text("Send network credentials over the current device connection. The ESP32 will choose its own local hostname.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -429,7 +471,6 @@ struct DeviceConnectionSheet: View {
         .buttonStyle(.bordered)
         .disabled(device.isWiFiProvisioning ||
                   !device.isConnected ||
-                  device.connectedTransportKind == "Wi-Fi" ||
                   wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
@@ -439,8 +480,7 @@ struct DeviceConnectionSheet: View {
         }
         .buttonStyle(.bordered)
         .disabled(device.isWiFiProvisioning ||
-                  !device.isConnected ||
-                  device.connectedTransportKind == "Wi-Fi")
+                  !device.isConnected)
     }
 
     private var wifiStatusButton: some View {
@@ -449,8 +489,7 @@ struct DeviceConnectionSheet: View {
         }
         .buttonStyle(.bordered)
         .disabled(device.isWiFiProvisioning ||
-                  !device.isConnected ||
-                  device.connectedTransportKind == "Wi-Fi")
+                  !device.isConnected)
     }
 
     private var firmwareCard: some View {
@@ -526,6 +565,10 @@ struct DeviceConnectionSheet: View {
     }
 
     private func selectedTransportID(for group: LocalDeviceGroup) -> String {
+        if let selectedDeviceID,
+           group.transports.contains(where: { $0.id == selectedDeviceID }) {
+            return selectedDeviceID
+        }
         if let active = group.transports.first(where: { $0.isActive }) {
             return active.id
         }

@@ -302,7 +302,10 @@ struct ContentView: View {
             DeviceConnectionSheet(
                 device: device,
                 firmwareUpdater: firmwareUpdater,
-                selectedDeviceID: $scriptSessions.selectedDeviceID
+                selectedDeviceID: Binding(
+                    get: { scriptSessions.selectedDeviceID },
+                    set: { scriptSessions.selectDeviceID($0) }
+                )
             )
         }
         .sheet(isPresented: $firmwareUpdater.isPresented) {
@@ -368,7 +371,7 @@ struct ContentView: View {
                 Picker("Local Device", selection: Binding(
                     get: { scriptSessions.selectedDeviceID },
                     set: { selectedID in
-                        scriptSessions.selectedDeviceID = selectedID
+                        scriptSessions.selectDeviceID(selectedID)
                         if let selectedID,
                            let item = device.discoveredDevices.first(where: { $0.id == selectedID }),
                            item.connectionState != .connected {

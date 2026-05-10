@@ -209,6 +209,7 @@ private final class MacTransportDeviceSession {
 /// It implements `ScriptDevice` for the shared Script runtime.
 final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     static let transportDebugLoggingEnabledDefaultsKey = "emwaver.transportDebugLoggingEnabled"
+    static let uidConnectionProbeEnabledDefaultsKey = "emwaver.uidConnectionProbeEnabled"
     static let connectionPollIntervalSeconds: TimeInterval = 5.0
     private static let bleDiscoveryStaleIntervalSeconds: TimeInterval = 8.0
 
@@ -223,6 +224,13 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return false
         }
         return lane.dropFirst(4).allSatisfy { $0 == 0 }
+    }
+
+    private static func defaultUIDConnectionProbeEnabled() -> Bool {
+        if UserDefaults.standard.object(forKey: uidConnectionProbeEnabledDefaultsKey) == nil {
+            return true
+        }
+        return UserDefaults.standard.bool(forKey: uidConnectionProbeEnabledDefaultsKey)
     }
 
     private enum EmwOpcode {
@@ -258,6 +266,22 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     @Published var lastErrorText: String? = nil
     @Published var deviceEmwaverVersion: String? = nil
     @Published var connectedHardwareUID: String? = nil
+    @Published var uidConnectionProbeEnabled: Bool = MacUSBManager.defaultUIDConnectionProbeEnabled() {
+        didSet {
+            UserDefaults.standard.set(uidConnectionProbeEnabled, forKey: Self.uidConnectionProbeEnabledDefaultsKey)
+            midiQueue.async {
+                self.wifiManager?.setUIDConnectionProbeEnabled(self.uidConnectionProbeEnabled)
+                if !self.uidConnectionProbeEnabled {
+                    self.hardwareUIDByDeviceID.removeAll()
+                    self.publishDiscoveredDevices()
+                    DispatchQueue.main.async {
+                        self.connectedHardwareUID = nil
+                    }
+                }
+            }
+        }
+    }
+    @Published var uidConnectionProbeLastChecked: Date? = nil
     @Published var autoConnectEnabled: Bool = true {
         didSet {
             if autoConnectEnabled {
@@ -367,8 +391,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self?.midiQueue.async {
                     self?.handleWiFiDisconnected(deviceID: deviceID)
                 }
+            },
+            onUIDProbeChecked: { [weak self] checkedAt in
+                self?.recordUIDConnectionProbeCheck(at: checkedAt)
             }
         )
+        self.wifiManager?.setUIDConnectionProbeEnabled(uidConnectionProbeEnabled)
         self.wifiManager?.startDiscovery()
         midiQueue.async {
             self.refreshPortsInternal()
@@ -450,9 +478,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
 
     private func activeTransportAllowsWiFiSetup() -> Bool {
         switch activeTransport {
-        case .usbMidi, .ble:
+        case .usbMidi, .ble, .wifi:
             return true
-        case .none, .wifi:
+        case .none:
             return false
         }
     }
@@ -540,7 +568,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before provisioning Wi-Fi.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
@@ -600,7 +628,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before clearing Wi-Fi setup.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
@@ -628,7 +656,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         DispatchQueue.global(qos: .userInitiated).async {
             let canQuery = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
             guard canQuery else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before checking Wi-Fi status.", isError: true)
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.", isError: true)
                 return
             }
             let boardType = self.midiQueue.sync {
@@ -1346,6 +1374,12 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         publishDiscoveredDevices()
     }
 
+    private func recordUIDConnectionProbeCheck(at date: Date = Date()) {
+        DispatchQueue.main.async {
+            self.uidConnectionProbeLastChecked = date
+        }
+    }
+
     private func suppressPendingAutoConnectWiFiIfNeeded(errorMessage: String) {
         guard let id = pendingAutoConnectWiFiID,
               errorMessage.localizedCaseInsensitiveContains("Wi-Fi") else {
@@ -1464,6 +1498,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func queryHardwareUID(timeoutMs: Int, deviceID: String? = nil) -> String? {
+        guard uidConnectionProbeEnabled else { return nil }
+        recordUIDConnectionProbeCheck()
         let resp = sendCommandInternal(
             Data([EmwOpcode.hardwareUID]),
             timeout: timeoutMs,
@@ -1999,7 +2035,7 @@ extension MacUSBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
         publishDiscoveredDevices()
         guard autoConnectEnabled, peripheral.state != .connected, peripheral.state != .connecting else { return }
         NSLog("EMWaver BLE discovered: %@ rssi=%@", name, RSSI)
-        connectBleInternal(peripheral, name: name, makeActive: activeTransport == .none)
+        connectBleInternal(peripheral, name: name, makeActive: activeTransport == .none || activeTransport == .wifi)
     }
 
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
