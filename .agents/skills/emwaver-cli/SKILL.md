@@ -13,6 +13,8 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 2. [`/Users/luisml/continualmi/emwaver/gateway/README.md`](/Users/luisml/continualmi/emwaver/gateway/README.md)
 3. [`/Users/luisml/continualmi/emwaver/gateway/MIGRATION.md`](/Users/luisml/continualmi/emwaver/gateway/MIGRATION.md)
 4. [`/Users/luisml/continualmi/emwaver/AGENTS.md`](/Users/luisml/continualmi/emwaver/AGENTS.md)
+5. [`/Users/luisml/continualmi/emwaver/assets/default-scripts/README.md`](/Users/luisml/continualmi/emwaver/assets/default-scripts/README.md)
+6. [`/Users/luisml/continualmi/emwaver/assets/default-scripts`](/Users/luisml/continualmi/emwaver/assets/default-scripts) (read the scripts directly for concrete `.emw` API usage)
 
 ## Where things live
 
@@ -55,6 +57,26 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 - Device probe output issue (`devices`, `doctor`, Wi-Fi checks): [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs), [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-device/src`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver-device/src)
 - Gateway lifecycle behavior (`gateway serve|start|stop|status`): [`/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs`](/Users/luisml/continualmi/emwaver/gateway/backend/emwaver/src/main.rs)
 - Installer/dev helper behavior: [`/Users/luisml/continualmi/emwaver/emwaver.sh`](/Users/luisml/continualmi/emwaver/emwaver.sh), [`/Users/luisml/continualmi/emwaver/gateway/backend/install`](/Users/luisml/continualmi/emwaver/gateway/backend/install)
+
+## Default `.emw` API examples (read before proposing script API behavior)
+
+Use the default scripts under [`/Users/luisml/continualmi/emwaver/assets/default-scripts`](/Users/luisml/continualmi/emwaver/assets/default-scripts) as the canonical examples for Script API usage patterns.
+
+- `script_bootstrap.emw`: canonical runtime/API surface (`console.log`, `UI.*`, `SPI`, `Wire`, `Serial`, `Sampler`, timers, storage).
+- `hello.emw`: minimal board detection + `UI.render` + timer loop + `console.log`.
+- `blink.emw`: GPIO output (`pinMode`, `digitalWrite`) + `every()` + interactive UI controls.
+- `gpio.emw`: direct pin control UI, pin selection patterns, board-specific pin menus.
+- `adc.emw`: `analogRead` pin/internal sources + sync/async result handling + status UI.
+- `uart.emw`: `Serial.begin/end/read/write` flows, byte/hex formatting, UI-driven command actions.
+- `i2c.emw`: `Wire.begin/end/read/write/xfer`, address parsing, scan flow with cooperative scheduling.
+- `pwm.emw`: `pwmWrite`/`pwmStop` command patterns with guardrails and status updates.
+- `sampler.emw`: signal capture/retransmit with `Sampler.*`, file save/load, and larger UI workflows.
+- `chart.emw`: `UI.plot`, `UI.buffer`, viewport handling, and synthetic data generation.
+- `cc1101.emw`: SPI register-level radio control, board-aware pin defaults, and RF profile tooling.
+- `rfm69.emw`: SPI register map access (`readReg`/`writeReg`), mode transitions, and RFM69 config/probe patterns.
+- `rfid.emw`: MFRC522 RFID flow over SPI, register helpers, and card detection/auth interactions.
+
+When asked “how to use `.emw` APIs,” prefer citing one or more of these scripts by filename and API calls, then adapt in-place rather than inventing new patterns.
 
 ## Validation posture
 
