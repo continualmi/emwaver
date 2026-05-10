@@ -45,8 +45,8 @@ Use it to capture:
 
 1. Add/verify CLI commands for the agent loop: run a local `.emw`, wait for `script.started`, print or save the latest `ui.snapshot`, send `ui.event` by node id/handler token, stop the script, and report runtime/device status.
 2. Fix development CLI ergonomics so `emw run path/to/script.emw` resolves paths from the caller's working directory while still using the repo dev wrapper.
-3. Run `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION`: provision a real ESP32-S3, verify same-LAN mDNS/IP script execution, wrong/no-secret rejection, Wi-Fi drop recovery, USB/BLE recovery, and GPIO/ADC/SPI/PWM/sampler/retransmit coverage.
-4. Run `009_ESP32_WIFI_VPN_BY_IP_EXECUTION`: verify user-owned VPN/private-IP script execution, manual IP fallback without mDNS, wrong/no-secret rejection, reconnect behavior, and no hosted relay/account path.
+3. Run `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION`: provision a real ESP32-S3, verify same-LAN mDNS/IP script execution, second-client busy handling, Wi-Fi drop recovery, USB/BLE recovery, and GPIO/ADC/SPI/PWM/sampler/retransmit coverage.
+4. Run `009_ESP32_WIFI_VPN_BY_IP_EXECUTION`: verify user-owned VPN/private-IP script execution, manual IP fallback without mDNS, reachable/busy/connection-failed behavior, reconnect behavior, and no hosted relay/account path.
 5. Validate local gateway script execution on real hardware through the macOS native app, including custom scripts outside `assets/default-scripts`.
 6. Validate `emwaver run --direct --ble` and `emwaver run --direct --device <id>` against attached hardware when the native app is not owning the device.
 7. Design the multi-device runtime contract for two simultaneous boards: device ids, transport labels, per-device status, routing commands to a chosen board, and UI/snapshot attribution.

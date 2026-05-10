@@ -19,11 +19,9 @@
 #include "esp_log.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
-#include "esp_random.h"
 #include "esp_wifi.h"
 #include "freertos/task.h"
 #include "mdns.h"
-#include "mbedtls/md.h"
 #include "nvs.h"
 #include "sampler.h"
 #include "sdkconfig.h"
@@ -42,17 +40,14 @@
 #define WIFI_KEY_SSID "ssid"
 #define WIFI_KEY_PASS "pass"
 #define WIFI_KEY_HOST "hostname"
-#define WIFI_KEY_SECRET "secret"
 #define WIFI_MAX_SSID 32u
 #define WIFI_MAX_PASS 64u
 #define WIFI_MAX_HOST 32u
-#define WIFI_MAX_SECRET 64u
 #define WIFI_CONTROL_PORT 3922
 #define WIFI_WS_PATH "/v1/ws"
 #define WIFI_FIRMWARE_VERSION "1.0.0"
 #define WIFI_RECONNECT_BASE_MS 1000u
 #define WIFI_RECONNECT_MAX_MS 30000u
-#define WIFI_AUTH_TIMEOUT_MS 8000u
 #define WIFI_ENVELOPE_HEADER_BYTES 10u
 #define WIFI_ENVELOPE_VERSION 1u
 #define WIFI_ENVELOPE_KIND_SYSEX 1u
@@ -64,17 +59,13 @@ typedef struct {
     char ssid[WIFI_MAX_SSID + 1u];
     char password[WIFI_MAX_PASS + 1u];
     char hostname[WIFI_MAX_HOST + 1u];
-    char secret[WIFI_MAX_SECRET + 1u];
 } wifi_transport_config_t;
 
 static const char *TAG = "WIFI_TRANSPORT";
 static QueueHandle_t s_cmd_queue;
 static httpd_handle_t s_httpd;
 static int s_active_fd = -1;
-static bool s_authenticated;
-static char s_auth_challenge[33];
-static TickType_t s_auth_deadline_ticks;
-static uint32_t s_auth_generation;
+static bool s_session_connected;
 static bool s_use_envelope;
 static wifi_transport_config_t s_config;
 static bool s_has_config;
@@ -90,9 +81,8 @@ static char s_station_ip[16];
 static uint8_t s_station_ipv4[4];
 
 static void wifi_register_commands(void);
-static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname);
+static void wifi_provision_command(const char *ssid, const char *password);
 static void wifi_clear_command(void);
-static void wifi_pairing_reset_command(const char *secret);
 static void wifi_status_command(void);
 static bool load_config(wifi_transport_config_t *out);
 static esp_err_t save_config(const wifi_transport_config_t *config);
@@ -111,17 +101,8 @@ static bool publish_mdns(void);
 static void build_mdns_instance_name(char *out, size_t out_len);
 static void build_local_id_suffix(char *out, size_t out_len);
 static esp_err_t ws_handler(httpd_req_t *req);
-static bool auth_message_matches(const uint8_t *data, size_t len);
 static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence);
 static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_t sequence, const uint8_t *payload, size_t payload_len);
-static bool auth_challenge_expired(void);
-static void auth_challenge_task(void *arg);
-static void auth_timeout_task(void *arg);
-static void generate_auth_challenge(void);
-static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len);
-static bool extract_json_int(const char *json, const char *key, int *out);
-static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len);
-static bool constant_time_equal(const char *a, const char *b, size_t len);
 static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped);
 static bool decode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
 static void encode_payload_7bit_fixed(const uint8_t *in, uint8_t *out);
@@ -146,7 +127,7 @@ void wifi_transport_init(QueueHandle_t cmd_queue)
 
 esp_err_t wifi_transport_send_cmd_response(uint8_t status, uint16_t sequence, const uint8_t *payload, size_t payload_len)
 {
-    if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
+    if (!s_httpd || s_active_fd < 0) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -168,7 +149,7 @@ esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonbl
     if (!stream_lane) {
         return ESP_ERR_INVALID_ARG;
     }
-    if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
+    if (!s_httpd || s_active_fd < 0) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -180,7 +161,7 @@ esp_err_t wifi_transport_send_stream_lane(const uint8_t *stream_lane, bool nonbl
 esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking)
 {
     (void)nonblocking;
-    if (!s_httpd || s_active_fd < 0 || !s_authenticated) {
+    if (!s_httpd || s_active_fd < 0) {
         return ESP_ERR_INVALID_STATE;
     }
 
@@ -192,29 +173,19 @@ esp_err_t wifi_transport_send_buffer_status(uint16_t status, bool nonblocking)
     return send_superframe(frame, 0);
 }
 
-esp_err_t wifi_transport_provision(const char *ssid, const char *password, const char *secret, const char *hostname)
+esp_err_t wifi_transport_provision(const char *ssid, const char *password)
 {
     if (!config_field_fits(ssid, WIFI_MAX_SSID) ||
-        !config_field_fits(password, WIFI_MAX_PASS) ||
-        !config_field_fits(secret, WIFI_MAX_SECRET) ||
-        (hostname && hostname[0] != '\0' && !config_field_fits(hostname, WIFI_MAX_HOST))) {
+        !config_field_fits(password, WIFI_MAX_PASS)) {
         return ESP_ERR_INVALID_ARG;
     }
 
     wifi_transport_config_t config = {0};
     strlcpy(config.ssid, ssid ? ssid : "", sizeof(config.ssid));
     strlcpy(config.password, password ? password : "", sizeof(config.password));
-    strlcpy(config.secret, secret ? secret : "", sizeof(config.secret));
-    if (hostname && hostname[0] != '\0') {
-        if (!is_valid_hostname(hostname)) {
-            return ESP_ERR_INVALID_ARG;
-        }
-        strlcpy(config.hostname, hostname, sizeof(config.hostname));
-    } else {
-        default_hostname(config.hostname, sizeof(config.hostname));
-    }
+    default_hostname(config.hostname, sizeof(config.hostname));
 
-    if (config.ssid[0] == '\0' || config.secret[0] == '\0') {
+    if (config.ssid[0] == '\0') {
         return ESP_ERR_INVALID_ARG;
     }
 
@@ -261,28 +232,6 @@ esp_err_t wifi_transport_clear_config(void)
     return err;
 }
 
-esp_err_t wifi_transport_reset_pairing(const char *secret)
-{
-    if (!s_has_config || !secret || secret[0] == '\0' || !config_field_fits(secret, WIFI_MAX_SECRET)) {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    wifi_transport_config_t next = s_config;
-    strlcpy(next.secret, secret, sizeof(next.secret));
-    esp_err_t err = save_config(&next);
-    if (err != ESP_OK) {
-        return err;
-    }
-    s_config = next;
-
-    const int fd = s_active_fd;
-    clear_active_session_state();
-    if (s_httpd && fd >= 0) {
-        (void)httpd_sess_trigger_close(s_httpd, fd);
-    }
-    return ESP_OK;
-}
-
 void wifi_transport_suspend_runtime(void)
 {
 #if EMWAVER_ENABLE_WIFI_TRANSPORT
@@ -323,9 +272,9 @@ bool wifi_transport_is_provisioned(void)
     return s_has_config;
 }
 
-bool wifi_transport_is_authenticated(void)
+bool wifi_transport_is_session_connected(void)
 {
-    return s_authenticated;
+    return s_session_connected;
 }
 
 bool wifi_transport_is_station_online(void)
@@ -360,24 +309,15 @@ static void wifi_register_commands(void)
         (const cmd_arg_spec_t[]){
             {"ssid", CMD_ARG_STRING, true},
             {"password", CMD_ARG_STRING, true},
-            {"secret", CMD_ARG_STRING, true},
-            {"hostname", CMD_ARG_STRING, false},
             {NULL, CMD_ARG_DONE, false},
         });
     (void)register_command("wifi clear", (void *)wifi_clear_command, (const cmd_arg_spec_t[]){{NULL, CMD_ARG_DONE, false}});
-    (void)register_command(
-        "wifi pair",
-        (void *)wifi_pairing_reset_command,
-        (const cmd_arg_spec_t[]){
-            {"secret", CMD_ARG_STRING, true},
-            {NULL, CMD_ARG_DONE, false},
-        });
     (void)register_command("wifi status", (void *)wifi_status_command, (const cmd_arg_spec_t[]){{NULL, CMD_ARG_DONE, false}});
 }
 
-static void wifi_provision_command(const char *ssid, const char *password, const char *secret, const char *hostname)
+static void wifi_provision_command(const char *ssid, const char *password)
 {
-    if (wifi_transport_provision(ssid, password, secret, hostname) != ESP_OK) {
+    if (wifi_transport_provision(ssid, password) != ESP_OK) {
         command_send_err("wifi nvs");
         return;
     }
@@ -393,15 +333,6 @@ static void wifi_clear_command(void)
     command_send_ok((const uint8_t *)"wifi cleared", strlen("wifi cleared"));
 }
 
-static void wifi_pairing_reset_command(const char *secret)
-{
-    if (wifi_transport_reset_pairing(secret) != ESP_OK) {
-        command_send_err("wifi pair");
-        return;
-    }
-    command_send_ok((const uint8_t *)"wifi pairing reset", strlen("wifi pairing reset"));
-}
-
 static void wifi_status_command(void)
 {
     char status[160];
@@ -414,7 +345,7 @@ static void wifi_status_command(void)
         "wifi:%s:%s:%s:%s:runtime=%s:host=%s:ip=%s:reason=%u",
         s_has_config ? "provisioned" : "unprovisioned",
         s_station_online ? "online" : "offline",
-        s_authenticated ? "authenticated" : "idle",
+        s_session_connected ? "connected" : "idle",
         s_reconnect_pending ? "reconnecting" : "stable",
         runtime_running ? "running" : "idle",
         s_config.hostname[0] != '\0' ? s_config.hostname : "none",
@@ -437,18 +368,16 @@ static bool load_config(wifi_transport_config_t *out)
     size_t ssid_len = sizeof(out->ssid);
     size_t pass_len = sizeof(out->password);
     size_t host_len = sizeof(out->hostname);
-    size_t secret_len = sizeof(out->secret);
     esp_err_t err = nvs_get_str(nvs, WIFI_KEY_SSID, out->ssid, &ssid_len);
     if (err == ESP_OK) {
         (void)nvs_get_str(nvs, WIFI_KEY_PASS, out->password, &pass_len);
         (void)nvs_get_str(nvs, WIFI_KEY_HOST, out->hostname, &host_len);
-        err = nvs_get_str(nvs, WIFI_KEY_SECRET, out->secret, &secret_len);
     }
     nvs_close(nvs);
     if (out->hostname[0] == '\0' || !is_valid_hostname(out->hostname)) {
         default_hostname(out->hostname, sizeof(out->hostname));
     }
-    return err == ESP_OK && out->ssid[0] != '\0' && out->secret[0] != '\0';
+    return err == ESP_OK && out->ssid[0] != '\0';
 }
 
 static esp_err_t save_config(const wifi_transport_config_t *config)
@@ -461,7 +390,6 @@ static esp_err_t save_config(const wifi_transport_config_t *config)
     err = nvs_set_str(nvs, WIFI_KEY_SSID, config->ssid);
     if (err == ESP_OK) err = nvs_set_str(nvs, WIFI_KEY_PASS, config->password);
     if (err == ESP_OK) err = nvs_set_str(nvs, WIFI_KEY_HOST, config->hostname);
-    if (err == ESP_OK) err = nvs_set_str(nvs, WIFI_KEY_SECRET, config->secret);
     if (err == ESP_OK) err = nvs_commit(nvs);
     nvs_close(nvs);
     return err;
@@ -497,8 +425,7 @@ static bool is_valid_hostname(const char *hostname)
         const char c = hostname[i];
         const bool is_digit = c >= '0' && c <= '9';
         const bool is_lower = c >= 'a' && c <= 'z';
-        const bool is_upper = c >= 'A' && c <= 'Z';
-        if (!is_digit && !is_lower && !is_upper && c != '-') {
+        if (!is_digit && !is_lower && c != '-') {
             return false;
         }
     }
@@ -689,10 +616,8 @@ static void close_session(httpd_handle_t hd, int sockfd)
 static void clear_active_session_state(void)
 {
     s_active_fd = -1;
-    s_authenticated = false;
+    s_session_connected = false;
     s_use_envelope = false;
-    s_auth_challenge[0] = '\0';
-    s_auth_generation++;
 }
 
 static void close_active_session(int sockfd)
@@ -785,20 +710,8 @@ static esp_err_t ws_handler(httpd_req_t *req)
             return ESP_FAIL;
         }
         s_active_fd = current_fd;
-        s_authenticated = false;
-        s_use_envelope = false;
-        generate_auth_challenge();
-        const uint32_t generation = s_auth_generation;
-        if (xTaskCreate(auth_timeout_task, "wifi_auth_timeout", 2048, (void *)(uintptr_t)s_auth_generation, 4, NULL) != pdPASS) {
-            ESP_LOGW(TAG, "failed to start Wi-Fi auth timeout task");
-            close_active_session(current_fd);
-            return ESP_ERR_NO_MEM;
-        }
-        if (xTaskCreate(auth_challenge_task, "wifi_auth_challenge", 3072, (void *)(uintptr_t)generation, 4, NULL) != pdPASS) {
-            ESP_LOGW(TAG, "failed to start Wi-Fi auth challenge task");
-            close_active_session(current_fd);
-            return ESP_ERR_NO_MEM;
-        }
+        s_session_connected = true;
+        s_use_envelope = true;
         return ESP_OK;
     }
 
@@ -832,34 +745,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
 
-    if (!s_authenticated) {
-        if (!auth_challenge_expired() && auth_message_matches(data, frame.len)) {
-            s_active_fd = current_fd;
-            s_authenticated = true;
-            s_auth_challenge[0] = '\0';
-            ESP_LOGI(TAG, "Wi-Fi WebSocket authenticated fd=%d", current_fd);
-            httpd_ws_frame_t reply = {
-                .final = true,
-                .fragmented = false,
-                .type = HTTPD_WS_TYPE_TEXT,
-                .payload = (uint8_t *)"auth ok",
-                .len = strlen("auth ok"),
-            };
-            return httpd_ws_send_frame(req, &reply);
-        }
-        ESP_LOGW(TAG, "Wi-Fi WebSocket auth failed fd=%d", current_fd);
-        httpd_ws_frame_t reply = {
-            .final = true,
-            .fragmented = false,
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t *)"auth fail",
-            .len = strlen("auth fail"),
-        };
-        (void)httpd_ws_send_frame(req, &reply);
-        close_active_session(current_fd);
-        return ESP_FAIL;
-    }
-
     uint8_t sysex[EMW_SYSEX_BYTES] = {0};
     uint16_t sequence = 0;
     bool enveloped = false;
@@ -875,44 +760,6 @@ static esp_err_t ws_handler(httpd_req_t *req)
         return ESP_FAIL;
     }
     return ESP_OK;
-}
-
-static bool auth_message_matches(const uint8_t *data, size_t len)
-{
-    if (!data || len == 0 || s_config.secret[0] == '\0') {
-        return false;
-    }
-
-    char json[257] = {0};
-    size_t copy_len = len;
-    if (copy_len >= sizeof(json)) {
-        copy_len = sizeof(json) - 1u;
-    }
-    memcpy(json, data, copy_len);
-
-    char type[16] = {0};
-    char challenge[65] = {0};
-    char response[65] = {0};
-    char expected[65] = {0};
-    int protocol_version = 0;
-    if (!extract_json_string(json, "type", type, sizeof(type)) ||
-        strcmp(type, "auth") != 0 ||
-        !extract_json_int(json, "protocolVersion", &protocol_version) ||
-        protocol_version != 1 ||
-        !extract_json_string(json, "challenge", challenge, sizeof(challenge)) ||
-        strcmp(challenge, s_auth_challenge) != 0 ||
-        !extract_json_string(json, "response", response, sizeof(response)) ||
-        !hmac_sha256_hex(s_config.secret, challenge, expected, sizeof(expected))) {
-        return false;
-    }
-
-    const bool ok = strlen(response) == strlen(expected) && constant_time_equal(response, expected, strlen(expected));
-    if (ok) {
-        int envelope_version = 0;
-        s_use_envelope = extract_json_int(json, "envelopeVersion", &envelope_version) &&
-                         envelope_version == WIFI_ENVELOPE_VERSION;
-    }
-    return ok;
 }
 
 static bool unwrap_envelope(const uint8_t *data, size_t len, uint8_t *out, size_t out_len, uint16_t *sequence)
@@ -953,177 +800,6 @@ static size_t build_envelope(uint8_t *out, size_t out_len, uint8_t kind, uint16_
     out[9] = (uint8_t)((payload_len >> 8u) & 0xffu);
     memcpy(&out[WIFI_ENVELOPE_HEADER_BYTES], payload, payload_len);
     return WIFI_ENVELOPE_HEADER_BYTES + payload_len;
-}
-
-static void generate_auth_challenge(void)
-{
-    for (size_t i = 0; i < 16u; ++i) {
-        uint8_t byte = (uint8_t)(esp_random() & 0xFFu);
-        snprintf(&s_auth_challenge[i * 2u], sizeof(s_auth_challenge) - (i * 2u), "%02x", byte);
-    }
-    s_auth_challenge[32] = '\0';
-    s_auth_deadline_ticks = xTaskGetTickCount() + pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS);
-    s_auth_generation++;
-}
-
-static bool auth_challenge_expired(void)
-{
-    if (s_auth_challenge[0] == '\0') {
-        return true;
-    }
-    return (int32_t)(xTaskGetTickCount() - s_auth_deadline_ticks) >= 0;
-}
-
-static void auth_challenge_task(void *arg)
-{
-    const uint32_t generation = (uint32_t)(uintptr_t)arg;
-    vTaskDelay(pdMS_TO_TICKS(1));
-    if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
-        const int fd = s_active_fd;
-        char challenge_json[72];
-        snprintf(challenge_json, sizeof(challenge_json), "{\"type\":\"challenge\",\"challenge\":\"%s\"}", s_auth_challenge);
-        httpd_ws_frame_t challenge = {
-            .final = true,
-            .fragmented = false,
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t *)challenge_json,
-            .len = strlen(challenge_json),
-        };
-        const esp_err_t err = httpd_ws_send_data(s_httpd, fd, &challenge);
-        if (err == ESP_OK) {
-            ESP_LOGI(TAG, "Wi-Fi WebSocket auth challenge sent fd=%d", fd);
-        } else {
-            ESP_LOGW(TAG, "Wi-Fi WebSocket auth challenge send failed fd=%d err=%s", fd, esp_err_to_name(err));
-            close_active_session(fd);
-        }
-    }
-    vTaskDelete(NULL);
-}
-
-static void auth_timeout_task(void *arg)
-{
-    const uint32_t generation = (uint32_t)(uintptr_t)arg;
-    vTaskDelay(pdMS_TO_TICKS(WIFI_AUTH_TIMEOUT_MS));
-    if (generation == s_auth_generation && !s_authenticated && s_active_fd >= 0 && s_httpd) {
-        const int fd = s_active_fd;
-        ESP_LOGW(TAG, "Wi-Fi WebSocket auth timed out fd=%d", fd);
-        httpd_ws_frame_t reply = {
-            .final = true,
-            .fragmented = false,
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t *)"auth timeout",
-            .len = strlen("auth timeout"),
-        };
-        (void)httpd_ws_send_data(s_httpd, fd, &reply);
-        clear_active_session_state();
-        (void)httpd_sess_trigger_close(s_httpd, fd);
-    }
-    vTaskDelete(NULL);
-}
-
-static bool extract_json_string(const char *json, const char *key, char *out, size_t out_len)
-{
-    if (!json || !key || !out || out_len == 0) {
-        return false;
-    }
-
-    char pattern[40];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    const char *pos = strstr(json, pattern);
-    if (!pos) {
-        return false;
-    }
-    pos = strchr(pos + strlen(pattern), ':');
-    if (!pos) {
-        return false;
-    }
-    pos++;
-    while (*pos == ' ' || *pos == '\t') {
-        pos++;
-    }
-    if (*pos != '"') {
-        return false;
-    }
-    pos++;
-
-    size_t written = 0;
-    while (*pos && *pos != '"' && written + 1u < out_len) {
-        out[written++] = *pos++;
-    }
-    out[written] = '\0';
-    return *pos == '"' && written > 0;
-}
-
-static bool extract_json_int(const char *json, const char *key, int *out)
-{
-    if (!json || !key || !out) {
-        return false;
-    }
-
-    char pattern[40];
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
-    const char *pos = strstr(json, pattern);
-    if (!pos) {
-        return false;
-    }
-    pos = strchr(pos + strlen(pattern), ':');
-    if (!pos) {
-        return false;
-    }
-    pos++;
-    while (*pos == ' ' || *pos == '\t') {
-        pos++;
-    }
-    if (*pos < '0' || *pos > '9') {
-        return false;
-    }
-
-    int value = 0;
-    while (*pos >= '0' && *pos <= '9') {
-        value = (value * 10) + (*pos - '0');
-        pos++;
-    }
-    *out = value;
-    return true;
-}
-
-static bool hmac_sha256_hex(const char *secret, const char *message, char *out, size_t out_len)
-{
-    if (!secret || !message || !out || out_len < 65u) {
-        return false;
-    }
-
-    uint8_t digest[32] = {0};
-    const mbedtls_md_info_t *info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-    if (!info) {
-        return false;
-    }
-    if (mbedtls_md_hmac(info,
-                        (const unsigned char *)secret,
-                        strlen(secret),
-                        (const unsigned char *)message,
-                        strlen(message),
-                        digest) != 0) {
-        return false;
-    }
-
-    for (size_t i = 0; i < sizeof(digest); ++i) {
-        snprintf(&out[i * 2u], out_len - (i * 2u), "%02x", digest[i]);
-    }
-    out[64] = '\0';
-    return true;
-}
-
-static bool constant_time_equal(const char *a, const char *b, size_t len)
-{
-    if (!a || !b) {
-        return false;
-    }
-    uint8_t diff = 0;
-    for (size_t i = 0; i < len; ++i) {
-        diff |= (uint8_t)(a[i] ^ b[i]);
-    }
-    return diff == 0;
 }
 
 static bool enqueue_sysex(const uint8_t *sysex, uint16_t sequence, bool enveloped)

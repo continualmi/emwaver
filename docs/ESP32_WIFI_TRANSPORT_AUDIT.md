@@ -13,12 +13,11 @@ Implement the ESP32 Wi-Fi transport on macOS and ESP32 firmware so an ESP32 boar
 | Requirement | Evidence | Status |
 | --- | --- | --- |
 | ESP32 station-mode Wi-Fi transport exists behind a feature gate | `esp/main/Kconfig.projbuild`, `esp/main/libraries/wifi_transport.c`, `esp/README.md` | `[x]` |
-| ESP32 stores SSID/password/hostname/local pairing secret in NVS | `wifi_transport_provision`, `save_config`, `load_config` in `esp/main/libraries/wifi_transport.c` | `[x]` |
+| ESP32 stores SSID/password in NVS and owns the stable default hostname | `wifi_transport_provision`, `default_hostname`, `save_config`, `load_config` in `esp/main/libraries/wifi_transport.c` | `[x]` |
 | USB/BLE local provisioning command lane exists | `handle_wifi_config_opcode` in `esp/main/libraries/init.c`; macOS setup UI in `DeviceConnectionSheet.swift` | `[x]` |
-| Local clear and pairing reset paths exist | `wifi_transport_clear_config`, `wifi_transport_reset_pairing`; macOS `Clear Setup` and `Reset Pairing` controls | `[x]` |
-| Authenticated WebSocket server runs at `/v1/ws` on port `3922` | `WIFI_CONTROL_PORT`, `WIFI_WS_PATH`, `ws_handler` in `wifi_transport.c` | `[x]` |
-| HMAC challenge-response uses local pairing secret without sending raw secret | `auth_message_matches` in firmware; `sendHello` in `MacWiFiManager.swift`; daemon `authenticate` in `daemon/emwaver-device/src/wifi.rs` | `[x]` |
-| Firmware rejects command frames before auth and releases malformed sessions | `ws_handler`, `close_active_session`, `auth_timeout_task` in `wifi_transport.c` | `[x]` |
+| Local clear path exists | `wifi_transport_clear_config`; macOS `Clear Setup` control | `[x]` |
+| LAN-trust WebSocket server runs at `/v1/ws` on port `3922` | `WIFI_CONTROL_PORT`, `WIFI_WS_PATH`, `ws_handler` in `wifi_transport.c` | `[x]` |
+| Firmware accepts command sessions immediately after WebSocket open and rejects concurrent clients as busy | `ws_handler`, `close_active_session` in `wifi_transport.c` | `[x]` |
 | Binary envelope version `1` carries existing EMWaver SysEx payload | `unwrap_envelope`/`build_envelope` in firmware; `makeEnvelope`/`unwrapEnvelope` in `MacWiFiManager.swift`; daemon Wi-Fi adapter | `[x]` |
 | Request sequence ids are echoed and matched | `wifi_transport_send_cmd_response`, `active_command_wifi_sequence`; macOS `pendingResponses`; daemon Wi-Fi tests | `[x]` |
 | Sequence `0` is reserved for stream/status frames | firmware `enqueue_sysex` and `send_superframe`; macOS/daemon sequence helpers and tests | `[x]` |
@@ -27,8 +26,8 @@ Implement the ESP32 Wi-Fi transport on macOS and ESP32 firmware so an ESP32 boar
 | mDNS TXT includes protocol, board, firmware, capability, and local id metadata | `publish_mdns` in `wifi_transport.c` | `[x]` |
 | Manual IP/hostname fallback exists for LAN/VPN paths | macOS `MacWiFiManager.webSocketURL`; daemon `wifi_websocket_url`; gateway manual daemon start | `[x]` |
 | macOS discovers, filters, and connects Wi-Fi devices | `MacWiFiManager.swift`, `MacUSBManager.swift`, `DeviceConnectionSheet.swift` | `[x]` |
-| macOS stores local pairing metadata and Keychain-backed local pairing secret | `MacWiFiManager.swift`, `macos/README.md` | `[x]` |
-| macOS validates manual host and port input before pairing/connection | `MacWiFiManager.isValidManualHost`, `DeviceConnectionSheet.parsedWiFiPort`, `EMWaverTests.swift` | `[x]` |
+| macOS connects discovered/manual Wi-Fi endpoints without local Wi-Fi pairing metadata or Keychain-backed Wi-Fi secrets | `MacWiFiManager.swift`, `macos/README.md` | `[x]` |
+| macOS validates manual host and port input before connection | `MacWiFiManager.isValidManualHost`, `DeviceConnectionSheet.parsedWiFiPort`, `EMWaverTests.swift` | `[x]` |
 | Daemon supports discovery, direct run, doctor, and gateway fallback over Wi-Fi | `daemon/emwaver/src/main.rs`, `daemon/emwaver-device/src/wifi.rs`, `daemon/README.md` | `[x]` |
 | Gateway can list discovered Wi-Fi endpoints and start daemon with manual Wi-Fi args | `gateway/src/server.ts`, gateway runtime panel code, `gateway/README.md` | `[x]` |
 | OTA SoftAP does not leave station-mode runtime listener active | `esp/main/libraries/ota_wifi.c`, `wifi_transport_suspend_runtime`, `wifi_transport_resume_runtime` | `[x]` |

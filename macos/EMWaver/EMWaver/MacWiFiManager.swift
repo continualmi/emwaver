@@ -6,7 +6,6 @@
 
 import Foundation
 import Network
-import CryptoKit
 import Darwin
 
 struct MacWiFiDeviceRecord: Identifiable, Equatable {
@@ -19,7 +18,6 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
     var firmwareVersion: String?
     var protocolVersion: String?
     var capabilities: [String]
-    var isPaired: Bool
     var isAdvertised: Bool
     var lastSeen: Date
 }
@@ -27,14 +25,6 @@ struct MacWiFiDeviceRecord: Identifiable, Equatable {
 final class MacWiFiManager {
     static let defaultPort = 3922
     static let serviceType = "_emwaver._tcp"
-
-    private struct PairedWiFiDevice: Codable {
-        var host: String
-        var port: Int
-        var displayName: String
-        var secret: String?
-        var lastSeen: Date
-    }
 
     private struct BonjourMetadata {
         var localIdentifier: String?
@@ -45,9 +35,6 @@ final class MacWiFiManager {
         var capabilities: [String] = []
     }
 
-    private static let pairingStoreKey = "com.emwaver.macos.pairedWifiDevices.v1"
-    private static let pairingSecretAccountPrefix = "wifi-pairing:"
-
     private let queue = DispatchQueue(label: "com.emwaver.macos.wifi", qos: .userInitiated)
     private let onDevicesChanged: ([MacWiFiDeviceRecord]) -> Void
     private let onData: (Data, String?) -> Void
@@ -57,13 +44,9 @@ final class MacWiFiManager {
 
     private var browser: NWBrowser?
     private var discoveredDevicesByID: [String: MacWiFiDeviceRecord] = [:]
-    private var pairedDevicesByID: [String: PairedWiFiDevice] = [:]
     private var socket: URLSessionWebSocketTask?
     private var connectedDeviceID: String?
-    private var pendingAuthSecret: String?
-    private var pendingAuthRecord: MacWiFiDeviceRecord?
-    private var authTimeoutWorkItem: DispatchWorkItem?
-    private var pendingPairingRollback: (id: String, previous: PairedWiFiDevice?, previousSecret: String?)?
+    private var pendingConnectionRecord: MacWiFiDeviceRecord?
     private var pendingResponses: [UInt16: PendingResponse] = [:]
     private var txSequence: UInt16 = 1
 
@@ -84,7 +67,6 @@ final class MacWiFiManager {
         self.onError = onError
         self.onConnected = onConnected
         self.onDisconnected = onDisconnected
-        loadPairedDevices()
     }
 
     var activeDeviceID: String? {
@@ -97,7 +79,7 @@ final class MacWiFiManager {
 
     var connectingDeviceID: String? {
         queue.sync {
-            socket != nil && connectedDeviceID == nil ? pendingAuthRecord?.id : nil
+            socket != nil && connectedDeviceID == nil ? pendingConnectionRecord?.id : nil
         }
     }
 
@@ -133,9 +115,8 @@ final class MacWiFiManager {
         queue.sync { discoveredDevicesByID[id] }
     }
 
-    func connect(host: String, port: Int = MacWiFiManager.defaultPort, pairingSecret: String) {
+    func connect(host: String, port: Int = MacWiFiManager.defaultPort) {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         queue.async {
             guard !trimmedHost.isEmpty else {
                 self.onError("Wi-Fi host is required")
@@ -145,10 +126,6 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi host must be a hostname or IP address without a scheme, path, or port")
                 return
             }
-            guard !trimmedSecret.isEmpty else {
-                self.onError("Wi-Fi pairing secret is required")
-                return
-            }
             guard Self.isValidPort(port) else {
                 self.onError("Wi-Fi port must be between 1 and 65535")
                 return
@@ -156,11 +133,6 @@ final class MacWiFiManager {
 
             let safePort = port
             let id = Self.deviceID(host: trimmedHost, port: safePort)
-            let previousSecret = self.pairedSecret(id: id, paired: self.pairedDevicesByID[id])
-            guard Self.savePairingSecret(trimmedSecret, id: id) else {
-                self.onError("Could not save Wi-Fi pairing secret")
-                return
-            }
             let record = MacWiFiDeviceRecord(
                 id: id,
                 displayName: trimmedHost,
@@ -171,45 +143,25 @@ final class MacWiFiManager {
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
-                isPaired: true,
                 isAdvertised: false,
                 lastSeen: Date()
             )
             self.discoveredDevicesByID[id] = record
-            self.pendingPairingRollback = (id: id, previous: self.pairedDevicesByID[id], previousSecret: previousSecret)
-            self.pairedDevicesByID[id] = PairedWiFiDevice(
-                host: trimmedHost,
-                port: safePort,
-                displayName: trimmedHost,
-                secret: nil,
-                lastSeen: Date()
-            )
-            self.savePairedDevices()
             self.publishDevices()
             self.connect(record: record)
         }
     }
 
-    func storePairing(host: String, port: Int = MacWiFiManager.defaultPort, displayName: String? = nil, pairingSecret: String) {
+    func addManualDevice(host: String, port: Int = MacWiFiManager.defaultPort, displayName: String? = nil) {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedName = displayName?.trimmingCharacters(in: .whitespacesAndNewlines)
         queue.async {
             guard !trimmedHost.isEmpty,
-                  Self.isValidManualHost(trimmedHost),
-                  !trimmedSecret.isEmpty else { return }
+                  Self.isValidManualHost(trimmedHost) else { return }
 
             let safePort = Self.isValidPort(port) ? port : Self.defaultPort
             let id = Self.deviceID(host: trimmedHost, port: safePort)
-            guard Self.savePairingSecret(trimmedSecret, id: id) else { return }
             let visibleName = (trimmedName?.isEmpty == false ? trimmedName! : trimmedHost)
-            self.pairedDevicesByID[id] = PairedWiFiDevice(
-                host: trimmedHost,
-                port: safePort,
-                displayName: visibleName,
-                secret: nil,
-                lastSeen: Date()
-            )
             self.discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: visibleName,
@@ -220,43 +172,28 @@ final class MacWiFiManager {
                 firmwareVersion: nil,
                 protocolVersion: "1",
                 capabilities: ["wifi"],
-                isPaired: true,
                 isAdvertised: false,
                 lastSeen: Date()
             )
-            self.savePairedDevices()
             self.publishDevices()
         }
     }
 
-    func removePairing(host: String, port: Int = MacWiFiManager.defaultPort) {
+    func removeManualDevice(host: String, port: Int = MacWiFiManager.defaultPort) {
         let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
         queue.async {
             guard !trimmedHost.isEmpty else { return }
 
             let safePort = Self.isValidPort(port) ? port : Self.defaultPort
             let id = Self.deviceID(host: trimmedHost, port: safePort)
-            self.pairedDevicesByID.removeValue(forKey: id)
-            Self.deletePairingSecret(id: id)
-            if var record = self.discoveredDevicesByID[id] {
-                record.isPaired = false
-                self.discoveredDevicesByID[id] = record
-            }
-            self.savePairedDevices()
+            self.discoveredDevicesByID.removeValue(forKey: id)
             self.publishDevices()
         }
     }
 
     func connect(record: MacWiFiDeviceRecord) {
         queue.async {
-            Self.log("connect requested id=\(record.id) host=\(record.host) port=\(record.port) paired=\(record.isPaired) advertised=\(record.isAdvertised)")
-            guard let paired = self.pairedDevicesByID[record.id],
-                  let secret = self.pairedSecret(id: record.id, paired: paired),
-                  !secret.isEmpty else {
-                Self.log("connect rejected: missing pairing secret id=\(record.id)")
-                self.onError("Pair this Wi-Fi device locally before connecting")
-                return
-            }
+            Self.log("connect requested id=\(record.id) host=\(record.host) port=\(record.port) advertised=\(record.isAdvertised)")
             guard record.protocolVersion == "1" else {
                 Self.log("connect rejected: unsupported protocol=\(record.protocolVersion ?? "nil") id=\(record.id)")
                 self.onError("Firmware does not support this Wi-Fi transport protocol")
@@ -279,12 +216,11 @@ final class MacWiFiManager {
             let socket = URLSession.shared.webSocketTask(with: url)
             self.socket = socket
             self.connectedDeviceID = nil
-            self.pendingAuthSecret = secret
-            self.pendingAuthRecord = record
+            self.pendingConnectionRecord = record
 
             socket.resume()
+            self.markConnected(record: record, socket: socket)
             self.receiveLoop(socket: socket)
-            self.scheduleAuthTimeout(for: socket)
             self.publishDevices()
         }
     }
@@ -292,7 +228,7 @@ final class MacWiFiManager {
     func send(_ data: Data, sequence: UInt16? = nil) {
         queue.async {
             guard let socket = self.socket, self.connectedDeviceID != nil else {
-                Self.log("send rejected: socket not authenticated bytes=\(data.count)")
+                Self.log("send rejected: socket not connected bytes=\(data.count)")
                 self.onError("Wi-Fi write failed: Not connected")
                 return
             }
@@ -371,22 +307,16 @@ final class MacWiFiManager {
 
     private func disconnect(notify: Bool) {
         let oldID = connectedDeviceID
-        let wasAuthenticated = connectedDeviceID != nil
-        if socket != nil || connectedDeviceID != nil || pendingAuthRecord != nil {
-            Self.log("disconnect notify=\(notify) authenticated=\(wasAuthenticated) id=\(oldID ?? pendingAuthRecord?.id ?? "nil")")
-        }
-        authTimeoutWorkItem?.cancel()
-        authTimeoutWorkItem = nil
-        if !wasAuthenticated {
-            rollbackPendingPairing()
+        let wasConnected = connectedDeviceID != nil
+        if socket != nil || connectedDeviceID != nil || pendingConnectionRecord != nil {
+            Self.log("disconnect notify=\(notify) connected=\(wasConnected) id=\(oldID ?? pendingConnectionRecord?.id ?? "nil")")
         }
         socket?.cancel(with: .goingAway, reason: nil)
         socket = nil
         connectedDeviceID = nil
         failPendingResponses()
         txSequence = 1
-        pendingAuthSecret = nil
-        pendingAuthRecord = nil
+        pendingConnectionRecord = nil
         if notify {
             onDisconnected(oldID)
         }
@@ -406,9 +336,8 @@ final class MacWiFiManager {
             }
             let id = Self.deviceID(host: host, port: Self.defaultPort)
             advertisedIDs.insert(id)
-            migrateSingleSavedPairingIfNeeded(to: id, host: host, displayName: name, metadata: metadata)
             let capabilities = metadata.capabilities.isEmpty ? ["wifi"] : metadata.capabilities
-            Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ",")) paired=\(pairedDevicesByID[id] != nil)")
+            Self.log("discovered name=\(name) host=\(host) id=\(id) proto=\(metadata.protocolVersion ?? "nil") caps=\(capabilities.joined(separator: ","))")
             discoveredDevicesByID[id] = MacWiFiDeviceRecord(
                 id: id,
                 displayName: name.isEmpty ? host : name,
@@ -419,18 +348,12 @@ final class MacWiFiManager {
                 firmwareVersion: metadata.firmwareVersion,
                 protocolVersion: metadata.protocolVersion ?? "1",
                 capabilities: capabilities,
-                isPaired: pairedDevicesByID[id] != nil,
                 isAdvertised: true,
                 lastSeen: Date()
             )
         }
 
-        for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) && pairedDevicesByID[id] == nil {
-            Self.log("removing stale unpaired discovery id=\(id)")
-            discoveredDevicesByID.removeValue(forKey: id)
-        }
-
-        for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) && pairedDevicesByID[id] != nil {
+        for id in Array(discoveredDevicesByID.keys) where !advertisedIDs.contains(id) {
             guard var record = discoveredDevicesByID[id],
                   record.isAdvertised else {
                 continue
@@ -439,7 +362,7 @@ final class MacWiFiManager {
                 record.isAdvertised = false
                 discoveredDevicesByID[id] = record
             } else {
-                Self.log("hiding non-advertised paired device id=\(id)")
+                Self.log("removing stale discovery id=\(id)")
                 discoveredDevicesByID.removeValue(forKey: id)
             }
         }
@@ -447,74 +370,16 @@ final class MacWiFiManager {
         publishDevices()
     }
 
-    private func migrateSingleSavedPairingIfNeeded(
-        to advertisedID: String,
-        host: String,
-        displayName: String,
-        metadata: BonjourMetadata
-    ) {
-        guard pairedDevicesByID[advertisedID] == nil else { return }
-        let candidates = pairedDevicesByID.keys.filter { pairedID in
-            pairedID != advertisedID && discoveredDevicesByID[pairedID]?.isAdvertised != true
-        }
-        guard candidates.count == 1,
-              let oldID = candidates.first,
-              let oldPairing = pairedDevicesByID[oldID],
-              let secret = pairedSecret(id: oldID, paired: oldPairing),
-              !secret.isEmpty else {
-            return
-        }
-
-        _ = Self.savePairingSecret(secret, id: advertisedID)
-        Self.deletePairingSecret(id: oldID)
-        pairedDevicesByID.removeValue(forKey: oldID)
-        discoveredDevicesByID.removeValue(forKey: oldID)
-        pairedDevicesByID[advertisedID] = PairedWiFiDevice(
-            host: host,
-            port: Self.defaultPort,
-            displayName: displayName.isEmpty ? host : displayName,
-            secret: nil,
-            lastSeen: Date()
-        )
-        savePairedDevices()
-    }
-
-    private func sendHello(socket: URLSessionWebSocketTask, secret: String, challenge: String) {
-        let response = Self.hmacHex(secret: secret, message: challenge)
-        let hello: [String: Any] = [
-            "type": "auth",
-            "client": "emwaver-macos",
-            "protocolVersion": 1,
-            "envelopeVersion": 1,
-            "challenge": challenge,
-            "response": response,
-        ]
-        guard let data = try? JSONSerialization.data(withJSONObject: hello) else { return }
-        Self.log("sending auth response challengeBytes=\(challenge.count)")
-        socket.send(.data(data)) { [weak self] error in
-            if let error {
-                Self.log("auth send failed error=\(error.localizedDescription)")
-                self?.onError("Wi-Fi authentication failed: \(error.localizedDescription)")
-            }
-        }
-    }
-
-    private func scheduleAuthTimeout(for socket: URLSessionWebSocketTask) {
-        authTimeoutWorkItem?.cancel()
-        let workItem = DispatchWorkItem { [weak self, weak socket] in
-            guard let self,
-                  let socket,
-                  self.socket === socket,
-                  self.connectedDeviceID == nil else {
-                return
-            }
-            Self.log("auth timed out id=\(self.pendingAuthRecord?.id ?? "nil")")
-            self.onError("Wi-Fi authentication timed out")
-            self.rollbackPendingPairing()
-            self.disconnect(notify: true)
-        }
-        authTimeoutWorkItem = workItem
-        queue.asyncAfter(deadline: .now() + 8, execute: workItem)
+    private func markConnected(record: MacWiFiDeviceRecord, socket: URLSessionWebSocketTask) {
+        guard self.socket === socket else { return }
+        Self.log("connected id=\(record.id)")
+        var connectedRecord = record
+        connectedRecord.lastSeen = Date()
+        self.discoveredDevicesByID[record.id] = connectedRecord
+        self.connectedDeviceID = record.id
+        self.pendingConnectionRecord = nil
+        self.onConnected(connectedRecord)
+        self.publishDevices()
     }
 
     private func receiveLoop(socket: URLSessionWebSocketTask) {
@@ -536,61 +401,11 @@ final class MacWiFiManager {
                     }
                 case .string(let text):
                     Self.log("receive text=\(Self.redactedAuthText(text))")
-                    if let challenge = Self.challengeValue(from: text),
-                       let secret = self.pendingAuthSecret {
-                        Self.log("auth challenge received bytes=\(challenge.count)")
-                        self.sendHello(socket: socket, secret: secret, challenge: challenge)
-                    } else if text.localizedCaseInsensitiveContains("auth") &&
-                                text.localizedCaseInsensitiveContains("ok"),
-                              let record = self.pendingAuthRecord {
-                        self.queue.async {
-                            guard self.socket === socket else { return }
-                            Self.log("authenticated id=\(record.id)")
-                            let now = Date()
-                            var connectedRecord = record
-                            connectedRecord.lastSeen = now
-                            if var paired = self.pairedDevicesByID[record.id] {
-                                paired.lastSeen = now
-                                paired.displayName = record.displayName
-                                self.pairedDevicesByID[record.id] = paired
-                                self.savePairedDevices()
-                            }
-                            self.discoveredDevicesByID[record.id] = connectedRecord
-                            self.authTimeoutWorkItem?.cancel()
-                            self.authTimeoutWorkItem = nil
-                            self.connectedDeviceID = record.id
-                            self.pendingAuthSecret = nil
-                            self.pendingAuthRecord = nil
-                            self.pendingPairingRollback = nil
-                            self.onConnected(connectedRecord)
-                            self.publishDevices()
-                        }
-                    } else if text.localizedCaseInsensitiveContains("auth") &&
-                                text.localizedCaseInsensitiveContains("fail") {
-                        Self.log("auth failed")
-                        self.onError("Wi-Fi pairing secret rejected")
-                        self.queue.async {
-                            if self.socket === socket {
-                                self.rollbackPendingPairing()
-                                self.disconnect(notify: true)
-                            }
-                        }
-                    } else if text.localizedCaseInsensitiveContains("auth") &&
-                                text.localizedCaseInsensitiveContains("timeout") {
-                        Self.log("auth timeout response")
-                        self.onError("Wi-Fi authentication timed out")
-                        self.queue.async {
-                            if self.socket === socket {
-                                self.rollbackPendingPairing()
-                                self.disconnect(notify: true)
-                            }
-                        }
-                    } else if text.localizedCaseInsensitiveContains("busy") {
+                    if text.localizedCaseInsensitiveContains("busy") {
                         Self.log("device busy")
                         self.onError("Wi-Fi device is busy with another session")
                         self.queue.async {
                             if self.socket === socket {
-                                self.rollbackPendingPairing()
                                 self.disconnect(notify: true)
                             }
                         }
@@ -604,9 +419,6 @@ final class MacWiFiManager {
                 self.onError("Wi-Fi disconnected: \(error.localizedDescription)")
                 self.queue.async {
                     if self.socket === socket {
-                        if self.connectedDeviceID == nil {
-                            self.rollbackPendingPairing()
-                        }
                         self.disconnect(notify: true)
                     }
                 }
@@ -631,33 +443,6 @@ final class MacWiFiManager {
         for response in pending {
             response.semaphore.signal()
         }
-    }
-
-    private func rollbackPendingPairing() {
-        guard let rollback = pendingPairingRollback else { return }
-        if let previous = rollback.previous {
-            pairedDevicesByID[rollback.id] = previous
-            if let previousSecret = rollback.previousSecret {
-                _ = Self.savePairingSecret(previousSecret, id: rollback.id)
-            } else {
-                Self.deletePairingSecret(id: rollback.id)
-            }
-            if var record = discoveredDevicesByID[rollback.id] {
-                record.isPaired = true
-                record.displayName = previous.displayName
-                discoveredDevicesByID[rollback.id] = record
-            }
-        } else {
-            pairedDevicesByID.removeValue(forKey: rollback.id)
-            Self.deletePairingSecret(id: rollback.id)
-            if var record = discoveredDevicesByID[rollback.id] {
-                record.isPaired = false
-                discoveredDevicesByID[rollback.id] = record
-            }
-        }
-        pendingPairingRollback = nil
-        savePairedDevices()
-        publishDevices()
     }
 
     private func publishDevices() {
@@ -706,53 +491,6 @@ final class MacWiFiManager {
         return (data.subdata(in: 10..<data.count), sequence)
     }
 
-    private func loadPairedDevices() {
-        guard let data = UserDefaults.standard.data(forKey: Self.pairingStoreKey),
-              let records = try? JSONDecoder().decode([String: PairedWiFiDevice].self, from: data) else {
-            return
-        }
-        var migrated = false
-        pairedDevicesByID = records
-        for (id, record) in records {
-            if let inlineSecret = record.secret, !inlineSecret.isEmpty {
-                _ = Self.savePairingSecret(inlineSecret, id: id)
-                pairedDevicesByID[id]?.secret = nil
-                migrated = true
-            }
-        }
-        if migrated {
-            savePairedDevices()
-        }
-    }
-
-    private func savePairedDevices() {
-        let records = pairedDevicesByID.mapValues { record in
-            PairedWiFiDevice(
-                host: record.host,
-                port: record.port,
-                displayName: record.displayName,
-                secret: nil,
-                lastSeen: record.lastSeen
-            )
-        }
-        guard let data = try? JSONEncoder().encode(records) else { return }
-        UserDefaults.standard.set(data, forKey: Self.pairingStoreKey)
-    }
-
-    private func pairedSecret(id: String, paired: PairedWiFiDevice?) -> String? {
-        if let secret = try? KeychainStore.getString(account: Self.pairingSecretAccount(id: id)),
-           !secret.isEmpty {
-            return secret
-        }
-        if let inlineSecret = paired?.secret, !inlineSecret.isEmpty {
-            _ = Self.savePairingSecret(inlineSecret, id: id)
-            pairedDevicesByID[id]?.secret = nil
-            savePairedDevices()
-            return inlineSecret
-        }
-        return nil
-    }
-
     private static func log(_ message: String) {
         print("[Wi-Fi] \(message)")
     }
@@ -782,32 +520,7 @@ final class MacWiFiManager {
         return bytes
     }
 
-    private static func redactedAuthText(_ text: String) -> String {
-        if text.localizedCaseInsensitiveContains("challenge") {
-            return "auth challenge"
-        }
-        if text.localizedCaseInsensitiveContains("response") {
-            return "auth response"
-        }
-        return text
-    }
-
-    private static func savePairingSecret(_ secret: String, id: String) -> Bool {
-        do {
-            try KeychainStore.setString(secret, account: pairingSecretAccount(id: id))
-            return true
-        } catch {
-            return false
-        }
-    }
-
-    private static func deletePairingSecret(id: String) {
-        KeychainStore.delete(account: pairingSecretAccount(id: id))
-    }
-
-    private static func pairingSecretAccount(id: String) -> String {
-        pairingSecretAccountPrefix + id
-    }
+    private static func redactedAuthText(_ text: String) -> String { text }
 
     static func deviceID(host: String, port: Int) -> String {
         "wifi:\(host.lowercased()):\(port)"
@@ -917,21 +630,4 @@ final class MacWiFiManager {
         capabilities.contains { $0.trimmingCharacters(in: .whitespacesAndNewlines).caseInsensitiveCompare("wifi") == .orderedSame }
     }
 
-    static func challengeValue(from text: String) -> String? {
-        guard let data = text.data(using: .utf8),
-              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let type = object["type"] as? String,
-              type == "challenge",
-              let challenge = object["challenge"] as? String,
-              !challenge.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return nil
-        }
-        return challenge
-    }
-
-    private static func hmacHex(secret: String, message: String) -> String {
-        let key = SymmetricKey(data: Data(secret.utf8))
-        let signature = HMAC<SHA256>.authenticationCode(for: Data(message.utf8), using: key)
-        return signature.map { String(format: "%02x", $0) }.joined()
-    }
 }

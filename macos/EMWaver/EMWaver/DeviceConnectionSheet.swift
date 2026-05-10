@@ -1,4 +1,3 @@
-import Security
 import SwiftUI
 
 struct DeviceConnectionSheet: View {
@@ -28,7 +27,6 @@ struct DeviceConnectionSheet: View {
     private static let wifiSSIDDefaultsKey = "emwaver.wifi.setup.ssid"
     private static let wifiHostDefaultsKey = "emwaver.wifi.manual.host"
     private static let wifiPortDefaultsKey = "emwaver.wifi.manual.port"
-    private static let wifiHostnameDefaultsKey = "emwaver.wifi.setup.hostname"
     private static let wifiPasswordKeychainAccount = "emwaver.wifi.setup.password"
 
     @ObservedObject var device: MacUSBManager
@@ -37,10 +35,8 @@ struct DeviceConnectionSheet: View {
     @Environment(\.dismiss) private var dismiss
     @State private var wifiHost: String = ""
     @State private var wifiPort: String = "3922"
-    @State private var wifiPairingSecret: String = ""
     @State private var wifiSSID: String = ""
     @State private var wifiPassword: String = ""
-    @State private var wifiHostname: String = ""
     @State private var isWiFiSetupPresented: Bool = false
 
     private var parsedWiFiPort: Int? {
@@ -133,14 +129,6 @@ struct DeviceConnectionSheet: View {
         }
     }
 
-    private static func generatePairingSecret() -> String {
-        var bytes = [UInt8](repeating: 0, count: 24)
-        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess {
-            return bytes.map { String(format: "%02x", $0) }.joined()
-        }
-        return UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-    }
-
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
@@ -156,12 +144,6 @@ struct DeviceConnectionSheet: View {
         .frame(minWidth: 560, idealWidth: 620, minHeight: 480, idealHeight: 560)
         .onAppear {
             loadWiFiFormState()
-            if wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                wifiPairingSecret = Self.generatePairingSecret()
-            }
-            if wifiHostname.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                wifiHostname = MacUSBManager.generatedWiFiHostname()
-            }
             firmwareUpdater.refreshDfuPresence(includeEspSerialProbe: true)
         }
         .onDisappear {
@@ -171,9 +153,6 @@ struct DeviceConnectionSheet: View {
             saveWiFiFormState()
         }
         .onChange(of: wifiPassword) { _ in
-            saveWiFiFormState()
-        }
-        .onChange(of: wifiHostname) { _ in
             saveWiFiFormState()
         }
         .onChange(of: wifiHost) { _ in
@@ -191,7 +170,6 @@ struct DeviceConnectionSheet: View {
         wifiSSID = UserDefaults.standard.string(forKey: Self.wifiSSIDDefaultsKey) ?? wifiSSID
         wifiHost = UserDefaults.standard.string(forKey: Self.wifiHostDefaultsKey) ?? wifiHost
         wifiPort = UserDefaults.standard.string(forKey: Self.wifiPortDefaultsKey) ?? wifiPort
-        wifiHostname = UserDefaults.standard.string(forKey: Self.wifiHostnameDefaultsKey) ?? wifiHostname
         wifiPassword = (try? KeychainStore.getString(account: Self.wifiPasswordKeychainAccount)) ?? wifiPassword
     }
 
@@ -199,7 +177,6 @@ struct DeviceConnectionSheet: View {
         UserDefaults.standard.set(wifiSSID, forKey: Self.wifiSSIDDefaultsKey)
         UserDefaults.standard.set(wifiHost, forKey: Self.wifiHostDefaultsKey)
         UserDefaults.standard.set(wifiPort, forKey: Self.wifiPortDefaultsKey)
-        UserDefaults.standard.set(wifiHostname, forKey: Self.wifiHostnameDefaultsKey)
         do {
             try KeychainStore.setString(wifiPassword, account: Self.wifiPasswordKeychainAccount)
         } catch {
@@ -376,7 +353,7 @@ struct DeviceConnectionSheet: View {
                 VStack(alignment: .leading, spacing: 6) {
                     Label("ESP32 Wi-Fi Setup", systemImage: "wifi")
                         .font(.headline)
-                    Text("Send network credentials and the local pairing secret over the current USB or BLE connection.")
+                    Text("Send network credentials over the current USB or BLE connection. The ESP32 will choose its own local hostname.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
@@ -396,15 +373,7 @@ struct DeviceConnectionSheet: View {
                         .textFieldStyle(.roundedBorder)
                         .frame(minWidth: 250)
 
-                    TextField("Hostname", text: $wifiHostname)
-                        .textFieldStyle(.roundedBorder)
-                }
-
-                GridRow {
                     SecureField("Wi-Fi password", text: $wifiPassword)
-                        .textFieldStyle(.roundedBorder)
-
-                    SecureField("Pairing secret", text: $wifiPairingSecret)
                         .textFieldStyle(.roundedBorder)
                 }
             }
@@ -415,9 +384,6 @@ struct DeviceConnectionSheet: View {
                     HStack(spacing: 10) {
                         wifiSendSetupButton
                         wifiClearSetupButton
-                    }
-                    HStack(spacing: 10) {
-                        wifiResetPairingButton
                         wifiStatusButton
                     }
                 }
@@ -439,7 +405,6 @@ struct DeviceConnectionSheet: View {
         HStack(spacing: 10) {
             wifiSendSetupButton
             wifiClearSetupButton
-            wifiResetPairingButton
             wifiStatusButton
         }
     }
@@ -449,42 +414,24 @@ struct DeviceConnectionSheet: View {
             saveWiFiFormState()
             device.provisionWiFi(
                 ssid: wifiSSID,
-                password: wifiPassword,
-                pairingSecret: wifiPairingSecret,
-                hostname: wifiHostname
+                password: wifiPassword
             )
         }
         .buttonStyle(.bordered)
         .disabled(device.isWiFiProvisioning ||
                   !device.isConnected ||
                   device.connectedTransportKind == "Wi-Fi" ||
-                  wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                  wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var wifiClearSetupButton: some View {
         Button("Clear Setup") {
-            device.clearWiFiProvisioning(hostname: wifiHostname)
+            device.clearWiFiProvisioning()
         }
         .buttonStyle(.bordered)
         .disabled(device.isWiFiProvisioning ||
                   !device.isConnected ||
                   device.connectedTransportKind == "Wi-Fi")
-    }
-
-    private var wifiResetPairingButton: some View {
-        Button("Reset Pairing") {
-            device.resetWiFiPairing(
-                pairingSecret: wifiPairingSecret,
-                hostname: wifiHostname,
-                pairingHost: wifiHost
-            )
-        }
-        .buttonStyle(.bordered)
-        .disabled(device.isWiFiProvisioning ||
-                  !device.isConnected ||
-                  device.connectedTransportKind == "Wi-Fi" ||
-                  wifiPairingSecret.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 
     private var wifiStatusButton: some View {
@@ -528,14 +475,13 @@ struct DeviceConnectionSheet: View {
 
     private func transportActionTitle(for item: LocalDeviceDescriptor) -> String {
         let prefix = item.transport.rawValue
-        if item.lastErrorText == "Pairing required" { return "Pair \(prefix)" }
         if item.connectionState == .connected { return "Use \(prefix)" }
         if item.connectionState == .connecting { return "\(prefix) Connecting" }
         return "Use \(prefix)"
     }
 
     private func isTransportActionDisabled(_ item: LocalDeviceDescriptor) -> Bool {
-        item.connectionState == .connecting || item.lastErrorText == "Pairing required"
+        item.connectionState == .connecting
     }
 
     @ViewBuilder

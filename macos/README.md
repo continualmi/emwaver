@@ -60,43 +60,35 @@ Responsibilities:
 
 Transport behavior:
 - `MacUSBManager.swift` currently coordinates CoreMIDI USB, CoreBluetooth BLE, and the app-facing `ScriptDevice` routing surface.
-- `MacWiFiManager.swift` owns the first ESP32 Wi-Fi transport slice: local mDNS discovery, manual LAN/VPN host pairing records, WebSocket connection/auth bootstrap, binary packet send/receive, and disconnect handling.
+- `MacWiFiManager.swift` owns the first ESP32 Wi-Fi transport slice: local mDNS discovery, manual LAN/VPN hosts, WebSocket connection, binary packet send/receive, and disconnect handling.
 - USB MIDI remains the preferred wired path when present.
-- The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and paired/discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
+- The device sheet now exposes a unified local device list for discovered USB MIDI, ESP32-S3 BLE candidates, and discovered Wi-Fi devices, so multi-board bench work can start with explicit user selection.
 - Wi-Fi devices use the same EMWaver SysEx/superframe payload as USB MIDI and BLE once connected. The Wi-Fi edge is a WebSocket transport adapter, not a separate hardware-control protocol.
-- macOS opts into Wi-Fi binary envelope version `1` during WebSocket authentication. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model; firmware echoes the request sequence id on command responses, and macOS matches synchronous command replies by that sequence.
-- macOS only sends Wi-Fi command frames after WebSocket challenge/auth has completed and the selected Wi-Fi record is marked connected.
+- macOS uses Wi-Fi binary envelope version `1` after opening the WebSocket. The envelope adds version, frame kind, sequence id, and payload length around the existing 48-byte SysEx payload while preserving the shared runtime command model; firmware echoes the request sequence id on command responses, and macOS matches synchronous command replies by that sequence.
+- macOS only sends Wi-Fi command frames after WebSocket connection has completed and the selected Wi-Fi record is marked connected.
 - macOS validates Wi-Fi envelope payload lengths before sending so oversized local payloads do not wrap the 16-bit envelope length field.
 - If no matching Wi-Fi command response arrives before the caller timeout, macOS reports `Wi-Fi command timed out`.
 - macOS reserves Wi-Fi envelope sequence `0` for uncorrelated stream/status frames; stream-only retransmit frames use sequence `0`, while command requests start at sequence `1` and skip `0` after wraparound.
 - Wi-Fi retransmit buffers use firmware `BS` status frames for host-side pacing, and exact padded `BS` status frames are not appended to the script capture buffer; ordinary stream data that begins with the same bytes is preserved.
 - Wi-Fi device metadata is target-aware for ESP32-S2, ESP32-S3, and generic ESP32 records; manual IP records use a generic ESP32 label until mDNS metadata supplies a specific board type.
 - Wi-Fi mDNS discovery reads the firmware TXT records for board type and firmware version, so the local device list can show advertised ESP32 metadata instead of relying only on hardcoded defaults.
-- Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection/auth, with capability matching kept case/whitespace tolerant for TXT-record compatibility.
-- Wi-Fi mDNS discovery prunes devices that stop advertising from the visible local device list. Paired/manual records remain stored as local credentials, but they are not shown as live device rows unless the endpoint is advertised or connected.
-- The initial Wi-Fi UI supports manual host/IP plus port and a local pairing secret. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
-- Manual Wi-Fi connection rejects ports outside the valid TCP range before storing a pairing record or opening the WebSocket.
+- Wi-Fi mDNS discovery also tracks the advertised `proto` and `cap` TXT records. Discovered devices without protocol version `1` or without the `wifi` capability are rejected before WebSocket connection, with capability matching kept case/whitespace tolerant for TXT-record compatibility.
+- Wi-Fi mDNS discovery prunes devices that stop advertising from the visible local device list unless the endpoint is currently connected.
+- The Wi-Fi UI supports manual host/IP plus port. Manual IP remains important for VPN paths where mDNS does not cross subnet boundaries.
+- Manual Wi-Fi connection rejects ports outside the valid TCP range before opening the WebSocket.
 - The Wi-Fi manual-connect UI also requires the port text to parse as a valid TCP port instead of silently falling back to `3922` for malformed input.
 - Manual Wi-Fi connection also requires the host field to be a bare hostname or IP address, with scheme/path/embedded-port input rejected so the separate validated port remains authoritative.
 - Manual Wi-Fi connection supports bare IPv6 literals for routed LAN/VPN paths and brackets them only when constructing the WebSocket URL.
-- The device sheet seeds a local hostname for Wi-Fi provisioning so the app can immediately store the matching `<hostname>.local` pairing record after setup, while still allowing manual override.
-- Manual Wi-Fi hostnames are validated before provisioning and before local pairing persistence, so macOS does not store a local pairing record for a malformed hostname, IP address, or mDNS name.
-- The device sheet seeds a local random pairing secret for Wi-Fi setup so users can provision a Wi-Fi-capable ESP32 board without inventing their own secret, while still allowing manual override.
-- The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE where available. It sends SSID, password, hostname, and local pairing secret over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
-- The same USB/BLE local setup surface can clear ESP32 Wi-Fi provisioning for recovery after a bad network setup; when a hostname is provided it also removes that local macOS pairing record.
-- The USB/BLE local setup surface can also reset only the ESP32 Wi-Fi pairing secret while keeping the existing SSID/password/hostname on the board, updating the matching local macOS pairing record when a hostname or manual host/IP is provided.
-- The setup surface can query the ESP32 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, current station IP when firmware provides it, reconnecting, last station disconnect reason, authenticated state, and sampler/transmit runtime-active state for local diagnostics.
-- During Wi-Fi provisioning, macOS always sends an effective local hostname: the device sheet pre-fills one, and the manager generates an `emwaver-...` fallback if a lower-level caller leaves it blank. The app stores the matching `<hostname>.local` paired-device record immediately so the advertised endpoint can be selected without re-entering the pairing secret.
-- Wi-Fi connection authentication waits for the ESP32 firmware challenge, proves the locally stored pairing secret with HMAC-SHA256, and marks the device connected only after the firmware returns `auth ok`.
-- Wi-Fi WebSocket sessions that open but do not complete challenge/auth within the local or firmware timeout are disconnected with a specific authentication-timeout error.
-- Wi-Fi records report `connecting` while WebSocket challenge/auth is pending, so the local device list distinguishes authentication bootstrap, same-LAN discovery, and completed connection without showing saved-but-offline endpoints as live devices.
-- Manual Wi-Fi pairing records are rolled back if authentication fails, times out, or disconnects before `auth ok`, so a bad temporary secret does not replace the last good local pairing.
-- Successful Wi-Fi authentication refreshes the local paired-device `lastSeen` timestamp for credential ordering and diagnostics.
+- The ESP32 firmware owns the default local hostname and advertises it through mDNS.
+- The device sheet can provision ESP32-S2 or ESP32-S3 Wi-Fi while the board is connected over USB MIDI or BLE where available. It sends SSID and password over the shared binary command lane before the board joins station-mode Wi-Fi and advertises on the LAN.
+- The same USB/BLE local setup surface can clear ESP32 Wi-Fi provisioning for recovery after a bad network setup.
+- The setup surface can query the ESP32 binary Wi-Fi status opcode over USB/BLE and reports provisioned, station online/offline, current station IP when firmware provides it, reconnecting, last station disconnect reason, connected socket state, and sampler/transmit runtime-active state for local diagnostics.
+- Wi-Fi control uses LAN/VPN reachability as the trust boundary. If the Mac can reach the ESP32 WebSocket, it can control the board; use trusted LANs, VPNs, or SSH tunnels only.
+- Wi-Fi records report `connecting` while WebSocket connection is pending, so the local device list distinguishes same-LAN discovery and completed connection without showing saved-but-offline endpoints as live devices.
 - If the firmware reports the Wi-Fi command socket is already owned by another session, macOS surfaces a busy-session error instead of treating it as a generic disconnect.
-- Wi-Fi pairing metadata is stored in local macOS app preferences, while the local pairing secret is stored in Keychain and migrated out of older inline preference records on load. Pairing records are not account-backed, cloud-synced, or used for hardware ownership/activation.
 - macOS runs a lightweight 5-second connection poll across the unified transport manager. The poll refreshes USB MIDI candidates, reconciles stale active USB/BLE/Wi-Fi state, prunes BLE devices that stop advertising, republishes the device list, keeps BLE discovery active when auto-connect is enabled, and retries the existing auto-connect path.
-- Saved Wi-Fi pairing records are local credentials, not live device presence. The device list only shows Wi-Fi devices that are actively advertised or connected, so old `.local` records do not look like plugged-in devices on launch.
-- If auto-connect is enabled and no wired EMWaver runtime is connected, macOS first tries the most recently seen paired Wi-Fi endpoint from local pairing records, then scans for the ESP32-S3 EMWaver BLE GATT service.
+- The device list only shows Wi-Fi devices that are actively advertised, manually entered in the current app session, or connected, so old `.local` endpoints do not look like plugged-in devices on launch.
+- If auto-connect is enabled and no wired EMWaver runtime is connected, macOS tries advertised Wi-Fi endpoints, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
 - Gateway-controlled runs can now include a `deviceId`; the macOS app creates a separate remote script runtime per `script.run` request and routes `Device.sendPacket` / `Device.sendCommand` through a targeted device bridge. This enables the initial automation-bench shape of one connected device = one remote script session. Shared capture buffers and mixed USB/BLE concurrent ownership still need hardening before treating every script API as fully isolated.

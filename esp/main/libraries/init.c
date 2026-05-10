@@ -304,13 +304,9 @@ static void handle_wifi_config_opcode(const command_t *cmd)
     enum {
         WIFI_STAGE_SSID_MAX = 32,
         WIFI_STAGE_PASS_MAX = 64,
-        WIFI_STAGE_SECRET_MAX = 64,
-        WIFI_STAGE_HOST_MAX = 32,
     };
     static char staged_ssid[WIFI_STAGE_SSID_MAX + 1];
     static char staged_password[WIFI_STAGE_PASS_MAX + 1];
-    static char staged_secret[WIFI_STAGE_SECRET_MAX + 1];
-    static char staged_hostname[WIFI_STAGE_HOST_MAX + 1];
     static bool staged_active;
 
     const uint8_t sub = cmd->data[1];
@@ -318,8 +314,6 @@ static void handle_wifi_config_opcode(const command_t *cmd)
         case EMW_WIFI_CFG_BEGIN:
             memset(staged_ssid, 0, sizeof(staged_ssid));
             memset(staged_password, 0, sizeof(staged_password));
-            memset(staged_secret, 0, sizeof(staged_secret));
-            memset(staged_hostname, 0, sizeof(staged_hostname));
             staged_active = true;
             send_binary_ok(NULL, 0);
             return;
@@ -338,14 +332,6 @@ static void handle_wifi_config_opcode(const command_t *cmd)
                 case EMW_WIFI_FIELD_PASSWORD:
                     target = staged_password;
                     target_len = sizeof(staged_password);
-                    break;
-                case EMW_WIFI_FIELD_SECRET:
-                    target = staged_secret;
-                    target_len = sizeof(staged_secret);
-                    break;
-                case EMW_WIFI_FIELD_HOSTNAME:
-                    target = staged_hostname;
-                    target_len = sizeof(staged_hostname);
                     break;
                 default:
                     send_binary_err();
@@ -369,14 +355,12 @@ static void handle_wifi_config_opcode(const command_t *cmd)
                 send_binary_err();
                 return;
             }
-            if (wifi_transport_provision(staged_ssid, staged_password, staged_secret, staged_hostname) != ESP_OK) {
+            if (wifi_transport_provision(staged_ssid, staged_password) != ESP_OK) {
                 send_binary_err();
                 return;
             }
             memset(staged_ssid, 0, sizeof(staged_ssid));
             memset(staged_password, 0, sizeof(staged_password));
-            memset(staged_secret, 0, sizeof(staged_secret));
-            memset(staged_hostname, 0, sizeof(staged_hostname));
             staged_active = false;
             send_binary_ok(NULL, 0);
             return;
@@ -387,24 +371,6 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             }
             memset(staged_ssid, 0, sizeof(staged_ssid));
             memset(staged_password, 0, sizeof(staged_password));
-            memset(staged_secret, 0, sizeof(staged_secret));
-            memset(staged_hostname, 0, sizeof(staged_hostname));
-            staged_active = false;
-            send_binary_ok(NULL, 0);
-            return;
-        case EMW_WIFI_CFG_PAIR_RESET:
-            if (!staged_active) {
-                send_binary_err();
-                return;
-            }
-            if (wifi_transport_reset_pairing(staged_secret) != ESP_OK) {
-                send_binary_err();
-                return;
-            }
-            memset(staged_ssid, 0, sizeof(staged_ssid));
-            memset(staged_password, 0, sizeof(staged_password));
-            memset(staged_secret, 0, sizeof(staged_secret));
-            memset(staged_hostname, 0, sizeof(staged_hostname));
             staged_active = false;
             send_binary_ok(NULL, 0);
             return;
@@ -415,7 +381,7 @@ static void handle_wifi_config_opcode(const command_t *cmd)
             const bool runtime_running = sampler_is_sampling() || sampler_is_transmitting();
             uint8_t out[] = {
                 wifi_transport_is_provisioned() ? 1u : 0u,
-                wifi_transport_is_authenticated() ? 1u : 0u,
+                wifi_transport_is_session_connected() ? 1u : 0u,
                 wifi_transport_is_station_online() ? 1u : 0u,
                 wifi_transport_is_reconnecting() ? 1u : 0u,
                 (uint8_t)(reason & 0xffu),

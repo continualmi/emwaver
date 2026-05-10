@@ -32,7 +32,7 @@ The desired path is station-mode LAN OTA:
 
 1. The ESP32 joins the user's Wi-Fi using the existing provisioning flow over USB or BLE.
 2. The app, CLI, daemon, or gateway discovers the ESP32 by `_emwaver._tcp` or connects by private IP.
-3. The client authenticates with the existing local Wi-Fi pairing secret model.
+3. The OTA authorization model must be redesigned for the LAN-trust runtime; do not assume a local Wi-Fi authorization exists.
 4. The client requests update-exclusive mode.
 5. Firmware stops or rejects script/runtime activity during the update.
 6. The client uploads the managed ESP32 app image over LAN.
@@ -52,13 +52,13 @@ Serial flashing remains the recovery, first-install, and unbrick path. LAN OTA i
 
 ## Firmware Plan
 
-Add a station-mode OTA service that is available only after Wi-Fi provisioning and local authentication.
+Add a station-mode OTA service that is available only after Wi-Fi provisioning and a future OTA-specific authorization check.
 
 Required firmware behavior:
 
-- Reuse the existing station-mode Wi-Fi configuration, mDNS identity, board metadata, and local pairing secret.
-- Authenticate OTA clients using the same local pairing secret challenge/response model as Wi-Fi runtime control, without sending the raw secret over the network.
-- Accept OTA only from authenticated clients.
+- Reuse the existing station-mode Wi-Fi configuration, mDNS identity, and board metadata.
+- Authenticate OTA clients using a new OTA-specific authorization model.
+- Accept OTA only from authorized clients.
 - Enter update-exclusive mode before accepting firmware bytes.
 - Suspend or close the runtime WebSocket while OTA is active.
 - Reject OTA start if sampler, retransmit, or another runtime operation is active, unless the client first stops that work through the normal runtime path.
@@ -68,7 +68,7 @@ Required firmware behavior:
 - Write to the next OTA partition with ESP-IDF OTA APIs.
 - Set the boot partition only after full write and verification succeed.
 - Reboot after successful commit.
-- Abort cleanly on upload failure, auth failure, size mismatch, hash mismatch, timeout, or disconnect before commit.
+- Abort cleanly on upload failure, authorization failure, size mismatch, hash mismatch, timeout, or disconnect before commit.
 - Preserve serial flashing as recovery when LAN OTA fails.
 
 The current SoftAP OTA implementation may remain temporarily as legacy/developer code, but it should not be presented as the product update path. Once LAN OTA is implemented and validated, SoftAP OTA should either be removed or hidden behind an explicit developer-only build flag.
@@ -85,18 +85,18 @@ Implement client support in this order:
 
 macOS behavior:
 
-- Show LAN OTA only for ESP32 devices connected over authenticated Wi-Fi.
-- Use mDNS-discovered endpoint metadata or a manually paired private IP endpoint.
-- Reuse the locally stored Wi-Fi pairing secret from Keychain.
+- Show LAN OTA only for ESP32 devices connected over Wi-Fi.
+- Use mDNS-discovered endpoint metadata or a manually entered private IP endpoint.
+- Do not rely on a removed Keychain Wi-Fi secret.
 - Keep ESP serial flashing visible as the fallback/recovery path.
 - During LAN OTA, show update-exclusive status, progress, verification, reboot, reconnect, and final firmware/runtime verification.
 - If LAN OTA fails before commit, keep the user on the same screen with serial flashing guidance available.
 
 CLI/daemon behavior:
 
-- Add a direct LAN OTA command that accepts host/IP, port if needed, local pairing secret, and firmware image path.
+- Add a direct LAN OTA command that accepts host/IP, port if needed, host/IP, port if needed, and firmware image path.
 - Support mDNS-discovered endpoints and manual private IP endpoints.
-- Reject attempts without a pairing secret.
+- Reject attempts that do not satisfy the future OTA authorization model.
 - Print clear progress and final reconnect/verification status.
 - Keep the command local-only and account-free.
 
@@ -112,10 +112,8 @@ LAN OTA uses local device trust, not backend ownership.
 
 Required rules:
 
-- The local pairing secret is the OTA authorization secret for the first implementation.
-- The pairing secret remains local to the user's device/app storage and ESP32 NVS.
-- The raw pairing secret must never be sent over LAN.
-- Wrong-secret and no-secret OTA attempts must be rejected before upload.
+- The OTA authorization design is unresolved after removing the Wi-Fi pairing flow.
+- Unauthorized OTA attempts must be rejected before upload.
 - OTA should not be advertised as safe for direct public internet exposure.
 - The preferred remote posture is same LAN, VPN, Tailscale/private routing, SSH tunnel, or user-owned port forwarding.
 - Future signed firmware verification should be planned before treating OTA as hardened for broad release.
@@ -129,8 +127,7 @@ Required scenarios:
 - Same-LAN mDNS OTA update succeeds.
 - Same-LAN manual private IP OTA update succeeds.
 - VPN/private-routed IP OTA update succeeds.
-- Wrong pairing secret is rejected before upload.
-- Missing pairing secret is rejected before upload.
+- Unauthorized OTA attempts are rejected before upload.
 - OTA is rejected while a script/runtime operation is active, or the client stops the runtime before entering update mode.
 - Interrupted upload does not switch boot partition.
 - Hash mismatch does not switch boot partition.
@@ -147,7 +144,7 @@ Evidence to record:
 - Network shape: same LAN, manual private IP, or VPN/private route.
 - mDNS hostname and/or private IP.
 - Exact app/CLI command or UI flow used.
-- Auth rejection results for wrong/no-secret attempts.
+- Authorization rejection results for unauthorized attempts.
 - Failure-mode result for interrupted upload or hash mismatch.
 - Post-update script execution result.
 - Serial recovery result if tested.
@@ -163,4 +160,3 @@ When implementation begins, update these docs in the same PR as the relevant cod
 - `docs/TESTS.md`: add `010_ESP32_LAN_OTA_UPDATE`.
 - `esp/README.md`: describe station-mode LAN OTA as the target update path and SoftAP OTA as legacy/developer-only if it remains.
 - `macos/README.md`: document LAN OTA once macOS implements it.
-

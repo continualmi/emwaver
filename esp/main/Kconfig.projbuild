@@ -4,7 +4,7 @@ config EMWAVER_ENABLE_WIFI_TRANSPORT
     bool "Enable EMWaver ESP32 Wi-Fi transport"
     default y
     help
-        Enables the station-mode authenticated WebSocket transport used by
+        Enables the station-mode LAN-trust WebSocket transport used by
         EMWaver Wi-Fi provisioning and LAN/VPN script control.
 
 endmenu

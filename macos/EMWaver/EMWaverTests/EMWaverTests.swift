@@ -104,21 +104,6 @@ struct EMWaverTests {
         #expect(MacUSBManager.wiFiSequenceForOutgoingSuperframe(Data(repeating: 0, count: 36)) == nil)
     }
 
-    @Test func wifiGeneratedHostnameUsesSafeAsciiSuffix() {
-        #expect(MacUSBManager.generatedWiFiHostname(randomSuffix: "ABC-123_xyz") == "emwaver-abc123xy")
-        #expect(MacUSBManager.generatedWiFiHostname(randomSuffix: "-_") == "emwaver-local")
-        #expect(MacUSBManager.isValidWiFiHostname(MacUSBManager.generatedWiFiHostname(randomSuffix: "ABC-123_xyz")))
-    }
-
-    @Test func wifiProvisioningHostnameRejectsMalformedLocalNames() {
-        #expect(MacUSBManager.isValidWiFiHostname(""))
-        #expect(MacUSBManager.isValidWiFiHostname("emwaver-a1b2"))
-        #expect(!MacUSBManager.isValidWiFiHostname("-emwaver"))
-        #expect(!MacUSBManager.isValidWiFiHostname("emwaver-"))
-        #expect(!MacUSBManager.isValidWiFiHostname("emwaver.local"))
-        #expect(!MacUSBManager.isValidWiFiHostname("emwaver local"))
-    }
-
     @Test func wifiStatusParsesOptionalStationIP() {
         #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0])) == nil)
         #expect(MacUSBManager.wiFiStatusStationIP(Data([0x80, 1, 0, 1, 0, 0, 0, 1, 10, 0, 0, 8])) == "10.0.0.8")
@@ -167,19 +152,10 @@ struct EMWaverTests {
     }
 
     @Test func wifiConnectionStateDistinguishesPairedOfflineFallbacks() {
-        #expect(MacUSBManager.wiFiConnectionState(isActive: true, isConnected: true, isConnecting: false, isPaired: true, isAdvertised: true) == .connected)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: true, isConnecting: false, isPaired: true, isAdvertised: true) == .connected)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: true, isPaired: true, isAdvertised: true) == .connecting)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: true, isAdvertised: false) == .disconnected)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: true, isAdvertised: true) == .discovered)
-        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false, isPaired: false, isAdvertised: true) == .discovered)
-    }
-
-    @Test func wifiChallengeParserAcceptsChallengeJsonOnly() {
-        #expect(MacWiFiManager.challengeValue(from: #"{"type":"challenge","challenge":"abc123"}"#) == "abc123")
-        #expect(MacWiFiManager.challengeValue(from: #"{"type":"auth","challenge":"abc123"}"#) == nil)
-        #expect(MacWiFiManager.challengeValue(from: #"{"type":"challenge","challenge":"   "}"#) == nil)
-        #expect(MacWiFiManager.challengeValue(from: "auth ok") == nil)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: true, isConnected: true, isConnecting: false) == .connected)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: true, isConnecting: false) == .connected)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: true) == .connecting)
+        #expect(MacUSBManager.wiFiConnectionState(isActive: false, isConnected: false, isConnecting: false) == .discovered)
     }
 
 }

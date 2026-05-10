@@ -249,12 +249,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         static let wifiApply: UInt8 = 0x02
         static let wifiClear: UInt8 = 0x03
         static let wifiStatus: UInt8 = 0x04
-        static let wifiPairReset: UInt8 = 0x05
-
         static let wifiFieldSSID: UInt8 = 0x00
         static let wifiFieldPassword: UInt8 = 0x01
-        static let wifiFieldSecret: UInt8 = 0x02
-        static let wifiFieldHostname: UInt8 = 0x03
     }
 
     private var transportDebugLoggingEnabled: Bool {
@@ -527,29 +523,18 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         }
     }
 
-    func connectWiFi(host: String, port: Int = MacWiFiManager.defaultPort, pairingSecret: String) {
+    func connectWiFi(host: String, port: Int = MacWiFiManager.defaultPort) {
         midiQueue.async {
             self.pendingAutoConnectWiFiID = nil
         }
-        wifiManager?.connect(host: host, port: port, pairingSecret: pairingSecret)
+        wifiManager?.connect(host: host, port: port)
     }
 
-    func provisionWiFi(ssid: String, password: String, pairingSecret: String, hostname: String) {
+    func provisionWiFi(ssid: String, password: String) {
         let trimmedSSID = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
-        let effectiveHostname = trimmedHostname.isEmpty ? Self.generatedWiFiHostname() : trimmedHostname
 
         guard !trimmedSSID.isEmpty else {
             setError("Wi-Fi SSID is required")
-            return
-        }
-        guard !trimmedSecret.isEmpty else {
-            setError("Wi-Fi pairing secret is required")
-            return
-        }
-        guard Self.isValidWiFiHostname(effectiveHostname) else {
-            setError("Wi-Fi hostname must use letters, numbers, or hyphens and cannot start or end with a hyphen.")
             return
         }
 
@@ -574,12 +559,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             }
 
             let passwordBytes = Array(password.utf8)
-            let hostnameBytes = Array(effectiveHostname.utf8)
             let fields: [(UInt8, [UInt8], Int)] = [
                 (EmwOpcode.wifiFieldSSID, Array(trimmedSSID.utf8), 32),
                 (EmwOpcode.wifiFieldPassword, passwordBytes, 64),
-                (EmwOpcode.wifiFieldSecret, Array(trimmedSecret.utf8), 64),
-                (EmwOpcode.wifiFieldHostname, hostnameBytes, 32),
             ]
 
             for (_, bytes, maxLen) in fields where bytes.count > maxLen {
@@ -611,19 +593,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
 
-            let host = effectiveHostname.contains(".") ? effectiveHostname : "\(effectiveHostname).local"
-            self.wifiManager?.storePairing(
-                host: host,
-                displayName: effectiveHostname,
-                pairingSecret: trimmedSecret
-            )
-            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network as \(host).", isError: false)
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself with mDNS.", isError: false)
         }
     }
 
-    func clearWiFiProvisioning(hostname: String) {
-        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
-
+    func clearWiFiProvisioning() {
         DispatchQueue.main.async {
             self.isWiFiProvisioning = true
             self.isWiFiProvisioningError = false
@@ -647,86 +621,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 self.finishWiFiProvisioning(message: "Wi-Fi setup clear was rejected by the device.", isError: true)
                 return
             }
-            if !trimmedHostname.isEmpty {
-                let host = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
-                self.wifiManager?.removePairing(host: host)
-            }
             self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false)
-        }
-    }
-
-    func resetWiFiPairing(pairingSecret: String, hostname: String, pairingHost: String = "") {
-        let trimmedSecret = pairingSecret.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedHostname = hostname.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedPairingHost = pairingHost.trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard !trimmedSecret.isEmpty else {
-            setError("Wi-Fi pairing secret is required")
-            return
-        }
-        guard trimmedSecret.utf8.count <= 64 else {
-            setError("Wi-Fi pairing secret is too long.")
-            return
-        }
-        guard Self.isValidWiFiHostname(trimmedHostname) else {
-            setError("Wi-Fi hostname must use letters, numbers, or hyphens and cannot start or end with a hyphen.")
-            return
-        }
-        guard trimmedPairingHost.isEmpty || MacWiFiManager.isValidManualHost(trimmedPairingHost) else {
-            setError("Wi-Fi host must be a hostname or IP address without a scheme, path, or port.")
-            return
-        }
-
-        DispatchQueue.main.async {
-            self.isWiFiProvisioning = true
-            self.isWiFiProvisioningError = false
-            self.wifiProvisioningStatus = "Resetting Wi-Fi pairing"
-        }
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            let canProvision = self.midiQueue.sync { self.activeTransportAllowsWiFiSetup() }
-            guard canProvision else {
-                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board over USB or BLE before resetting Wi-Fi pairing.", isError: true)
-                return
-            }
-            let boardType = self.midiQueue.sync {
-                self.connectedBoardType ?? self.lastDetectedBoardType ?? ""
-            }
-            guard self.isWiFiProvisionableBoardType(boardType) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset is available for Wi-Fi-capable ESP32 devices.", isError: true)
-                return
-            }
-            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiBegin]) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset failed to start.", isError: true)
-                return
-            }
-            let bytes = Array(trimmedSecret.utf8)
-            var offset = 0
-            while offset < bytes.count {
-                let count = min(13, bytes.count - offset)
-                var command = Data([EmwOpcode.wifiConfig, EmwOpcode.wifiField, EmwOpcode.wifiFieldSecret, UInt8(offset), UInt8(count)])
-                command.append(contentsOf: bytes[offset..<(offset + count)])
-                guard self.sendWiFiConfigCommand(command) else {
-                    self.finishWiFiProvisioning(message: "Wi-Fi pairing reset failed while sending the secret.", isError: true)
-                    return
-                }
-                offset += count
-            }
-            guard self.sendWiFiConfigCommand([EmwOpcode.wifiConfig, EmwOpcode.wifiPairReset]) else {
-                self.finishWiFiProvisioning(message: "Wi-Fi pairing reset was rejected by the device.", isError: true)
-                return
-            }
-            if !trimmedHostname.isEmpty || !trimmedPairingHost.isEmpty {
-                let hostnameRecord = trimmedHostname.contains(".") ? trimmedHostname : "\(trimmedHostname).local"
-                let recordHost = trimmedHostname.isEmpty ? trimmedPairingHost : hostnameRecord
-                let displayName = trimmedHostname.isEmpty ? trimmedPairingHost : trimmedHostname
-                self.wifiManager?.storePairing(
-                    host: recordHost,
-                    displayName: displayName,
-                    pairingSecret: trimmedSecret
-                )
-            }
-            self.finishWiFiProvisioning(message: "Wi-Fi pairing reset. Existing network settings remain on the ESP32 board.", isError: false)
         }
     }
 
@@ -757,7 +652,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
                 return
             }
             let provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned"
-            let authText = response[2] == 0 ? "idle" : "authenticated"
+            let authText = response[2] == 0 ? "idle" : "connected"
             if response.count >= 4 {
                 let stationText = response[3] == 0 ? "offline" : "online"
                 if response.count >= 5 {
@@ -852,7 +747,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         if !isTransportConnectedInternal() {
             connectToFirstPortInternal()
         }
-        _ = connectToFirstPairedWiFiInternal()
+        _ = connectToFirstAdvertisedWiFiInternal()
     }
 
     private func startConnectionPollingInternal() {
@@ -1077,31 +972,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return response[12] == 0 ? "idle" : "running"
     }
 
-    static func generatedWiFiHostname(randomSuffix: String = UUID().uuidString) -> String {
-        let suffixScalars = randomSuffix.lowercased().unicodeScalars.filter { scalar in
-            (scalar.value >= 48 && scalar.value <= 57) || (scalar.value >= 97 && scalar.value <= 122)
-        }
-        let suffix = String(String.UnicodeScalarView(suffixScalars)).prefix(8)
-        if suffix.isEmpty {
-            return "emwaver-local"
-        }
-        return "emwaver-\(suffix)"
-    }
-
-    static func isValidWiFiHostname(_ hostname: String) -> Bool {
-        if hostname.isEmpty {
-            return true
-        }
-        guard hostname.count <= 32,
-              hostname.first != "-",
-              hostname.last != "-" else {
-            return false
-        }
-        return hostname.unicodeScalars.allSatisfy { scalar in
-            CharacterSet.alphanumerics.contains(scalar) || scalar == "-"
-        }
-    }
-
     func transmitBuffer() {
         transmitBuffer(deviceID: nil)
     }
@@ -1256,9 +1126,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let connectionState = Self.wiFiConnectionState(
                 isActive: isActive,
                 isConnected: isConnected,
-                isConnecting: isConnecting,
-                isPaired: record.isPaired,
-                isAdvertised: record.isAdvertised
+                isConnecting: isConnecting
             )
             let endpoint = "\(record.host):\(record.port)"
             let detail = record.firmwareVersion.map { "\(endpoint) · FW \($0)" } ?? endpoint
@@ -1267,7 +1135,6 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             let identifierText = hardwareUID.map { "UID \($0)" }
             let errorText: String? = {
                 if let error = wifiConnectionErrorsByID[record.id] { return error }
-                if !record.isPaired { return "Pairing required" }
                 if identifierText == nil { return "UID unavailable" }
                 return nil
             }()
@@ -1292,14 +1159,11 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     static func wiFiConnectionState(
         isActive: Bool,
         isConnected: Bool,
-        isConnecting: Bool,
-        isPaired: Bool,
-        isAdvertised: Bool
+        isConnecting: Bool
     ) -> LocalDeviceDescriptor.ConnectionState {
         if isActive { return .connected }
         if isConnected { return .connected }
         if isConnecting { return .connecting }
-        if isPaired && !isAdvertised { return .disconnected }
         return .discovered
     }
 
@@ -1360,7 +1224,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         connectInternal(candidate: chosen, displayName: display)
     }
 
-    private func connectToFirstPairedWiFiInternal() -> Bool {
+    private func connectToFirstAdvertisedWiFiInternal() -> Bool {
         if wifiManager?.connectingDeviceID != nil {
             return true
         }
@@ -1370,7 +1234,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return true
         }
         guard let record = wifiDevices
-            .filter({ $0.isPaired && !suppressedAutoConnectWiFiIDs.contains($0.id) })
+            .filter({ $0.isAdvertised && !suppressedAutoConnectWiFiIDs.contains($0.id) })
             .sorted(by: { $0.lastSeen > $1.lastSeen })
             .first else {
             return false
