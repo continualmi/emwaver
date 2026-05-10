@@ -78,6 +78,34 @@ function timeOfDay(d = new Date()) {
 type LogEntry = { type: string; at: string; raw: RemoteIncomingMessage };
 type LiveSession = { id: string; name: string; deviceId: string; root: RemoteUiNode | null; rev: number; plotDataByNodeId: Record<string, RemotePlotData> };
 
+function normalizedTransport(value: string) {
+  const lower = value.trim().toLowerCase();
+  if (lower === "usb" || lower === "ble" || lower === "wifi") return lower;
+  return "auto";
+}
+
+function deviceKey(device: GatewayDevice) {
+  if (device.deviceKey) return device.deviceKey;
+  if (device.hardwareUid) return `uid:${device.hardwareUid}`;
+  return device.id || device.transportId || "";
+}
+
+function groupedDeviceOptions(devices: GatewayDevice[]) {
+  const map = new Map<string, { id: string; label: string; transports: GatewayDevice[] }>();
+  for (const device of devices) {
+    const id = deviceKey(device);
+    if (!id) continue;
+    const existing = map.get(id);
+    const label = device.hardwareUid ? `UID ${device.hardwareUid}` : device.name || id;
+    if (existing) {
+      existing.transports.push(device);
+    } else {
+      map.set(id, { id, label, transports: [device] });
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+}
+
 export function GatewayApp() {
   const [examples, setExamples] = useState<ExampleScript[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
@@ -88,6 +116,7 @@ export function GatewayApp() {
   const [scriptInstanceId, setScriptInstanceId] = useState("");
   const [sessions, setSessions] = useState<Record<string, LiveSession>>({});
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
+  const [selectedTransport, setSelectedTransport] = useState("auto");
   const [uiRev, setUiRev] = useState(0);
   const [remoteUiRoot, setRemoteUiRoot] = useState<RemoteUiNode | null>(null);
   const [plotDataByNodeId, setPlotDataByNodeId] = useState<Record<string, RemotePlotData>>({});
@@ -152,11 +181,8 @@ export function GatewayApp() {
       if (msg.type === "device.status") {
         const status = msg as RemoteDeviceStatus;
         setDeviceStatus(status);
-        setSelectedDeviceId((current) => {
-          const devices = status.devices || [];
-          if (current && devices.some((device) => device.id === current)) return current;
-          return devices.find((device) => device.connected)?.id || devices[0]?.id || "";
-        });
+        setSelectedDeviceId(status.settings?.selectedDeviceId || "");
+        setSelectedTransport(normalizedTransport(status.settings?.selectedTransport || "auto"));
       }
       if (msg.type === "script.started") {
         const id = String(msg.scriptInstanceId || "");
@@ -235,6 +261,39 @@ export function GatewayApp() {
     setUiError(null);
   }
 
+  async function saveGatewayTarget(deviceId: string, transport: string) {
+    const selectedDeviceUid = deviceId.startsWith("uid:") ? deviceId.slice(4) : null;
+    const selectedTransport = normalizedTransport(transport);
+    try {
+      const response = await fetch("/v1/settings", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          selectedDeviceUid,
+          selectedTransport,
+          wifiTargets: deviceStatus?.settings?.wifiTargets || [],
+        }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok || body?.ok === false) {
+        throw new Error(body?.message || body?.error || "settings_failed");
+      }
+    } catch (error) {
+      setUiError(formatError(error));
+    }
+  }
+
+  function chooseDevice(id: string) {
+    setSelectedDeviceId(id);
+    void saveGatewayTarget(id, selectedTransport);
+  }
+
+  function chooseTransport(transport: string) {
+    const normalized = normalizedTransport(transport);
+    setSelectedTransport(normalized);
+    void saveGatewayTarget(selectedDeviceId, normalized);
+  }
+
   function runScript() {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -244,7 +303,13 @@ export function GatewayApp() {
     setLog([]);
     setUnreadLog(0);
     setUiError(null);
-    wsSend(ws, { type: "script.run", name: selected || "script.emw", source, deviceId: selectedDeviceId || undefined });
+    wsSend(ws, {
+      type: "script.run",
+      name: selected || "script.emw",
+      source,
+      deviceId: selectedDeviceId || undefined,
+      transport: selectedTransport === "auto" ? undefined : selectedTransport,
+    });
   }
 
   function stopScript() {
@@ -295,7 +360,8 @@ export function GatewayApp() {
     const port = String(device.port || String(device.endpoint || "").split(":")[1] || "3922");
     setManualWifiHost(host);
     setManualWifiPort(port);
-    setSelectedDeviceId(device.id || `wifi:${host}:${port}`);
+    chooseDevice(deviceKey(device));
+    chooseTransport("wifi");
     setActivity("runtime");
   }
 
@@ -303,7 +369,9 @@ export function GatewayApp() {
     const host = manualWifiHost.trim();
     const port = manualWifiPort.trim() || "3922";
     if (!host) return;
-    setSelectedDeviceId(`wifi:${host}:${port}`);
+    setManualWifiHost(host);
+    setManualWifiPort(port);
+    chooseTransport("wifi");
   }
 
   const canPreview = !!(selected && isEmw(selected));
@@ -388,7 +456,9 @@ export function GatewayApp() {
           canStop={liveScript}
           devices={deviceStatus?.devices || []}
           selectedDeviceId={selectedDeviceId}
-          setSelectedDeviceId={setSelectedDeviceId}
+          selectedTransport={selectedTransport}
+          setSelectedDeviceId={chooseDevice}
+          setSelectedTransport={chooseTransport}
           sessions={liveSessions}
           activeSessionId={scriptInstanceId}
           onSelectSession={selectLiveSession}
@@ -932,7 +1002,9 @@ function Workspace(props: {
   canStop: boolean;
   devices: RemoteDeviceStatus["devices"];
   selectedDeviceId: string;
+  selectedTransport: string;
   setSelectedDeviceId: (id: string) => void;
+  setSelectedTransport: (transport: string) => void;
   sessions: LiveSession[];
   activeSessionId: string;
   onSelectSession: (id: string) => void;
@@ -957,7 +1029,9 @@ function Workspace(props: {
     canStop,
     devices,
     selectedDeviceId,
+    selectedTransport,
     setSelectedDeviceId,
+    setSelectedTransport,
     sessions,
     activeSessionId,
     onSelectSession,
@@ -973,6 +1047,15 @@ function Workspace(props: {
   } = props;
 
   const showPreview = canPreview && mode === "preview";
+  const deviceOptions = groupedDeviceOptions(devices || []);
+  const selectedGroup = deviceOptions.find((group) => group.id === selectedDeviceId);
+  const transportChoices = Array.from(
+    new Set(
+      (selectedGroup?.transports || devices || [])
+        .map((device) => normalizedTransport(device.transport || "auto"))
+        .filter((transport) => transport !== "auto")
+    )
+  ).sort((a, b) => ["usb", "ble", "wifi"].indexOf(a) - ["usb", "ble", "wifi"].indexOf(b));
 
   return (
     <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
@@ -1016,10 +1099,23 @@ function Workspace(props: {
             className="h-9 max-w-[260px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
             title="Device to run the next script on"
           >
-            <option value="">Active device</option>
-            {(devices || []).map((device) => (
-              <option key={device.id || device.name} value={device.id || ""}>
-                {(device.name || device.id || "Device") + (device.connected ? " · connected" : "")}
+            <option value="">Auto device</option>
+            {deviceOptions.map((device) => (
+              <option key={device.id} value={device.id}>
+                {device.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedTransport}
+            onChange={(event) => setSelectedTransport(event.target.value)}
+            className="h-9 max-w-[150px] rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-3 text-[12px] text-[color:var(--ink)] outline-none"
+            title="Transport preference for the next script"
+          >
+            <option value="auto">Auto transport</option>
+            {transportChoices.map((transport) => (
+              <option key={transport} value={transport}>
+                {transport.toUpperCase()}
               </option>
             ))}
           </select>

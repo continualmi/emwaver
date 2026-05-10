@@ -185,7 +185,9 @@ impl WiFiDevice {
                     if st.response_data.is_some() {
                         return Ok(st.response_data.take());
                     }
-                    warn!("Wi-Fi receive failed: {err:#}");
+                    if !is_expected_receive_timeout(&err) {
+                        warn!("Wi-Fi receive failed: {err:#}");
+                    }
                     return Ok(None);
                 }
             }
@@ -244,6 +246,17 @@ fn set_read_timeout(stream: &mut MaybeTlsStream<TcpStream>, timeout: Option<Dura
     if let MaybeTlsStream::Plain(stream) = stream {
         let _ = stream.set_read_timeout(timeout);
     }
+}
+
+fn is_expected_receive_timeout(err: &tungstenite::Error) -> bool {
+    matches!(
+        err,
+        tungstenite::Error::Io(io_err)
+            if matches!(
+                io_err.kind(),
+                std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+            )
+    )
 }
 
 fn wifi_websocket_url(host: &str, port: u16) -> Result<String> {

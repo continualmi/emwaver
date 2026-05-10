@@ -16,7 +16,7 @@ const WIFI_SSID_LIMIT: usize = 32;
 const WIFI_PASSWORD_LIMIT: usize = 64;
 const WIFI_FIELD_CHUNK: usize = 13;
 
-pub trait DeviceCommandSender {
+pub trait DeviceCommandSender: Send + Sync + 'static {
     fn send_command(&self, cmd_lane: &[u8], timeout_ms: u64) -> Result<Option<Vec<u8>>>;
 }
 

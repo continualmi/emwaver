@@ -71,7 +71,7 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
             .await
             .context("failed to list BLE peripherals")?;
         let mut out = Vec::new();
-        for (index, peripheral) in peripherals.into_iter().enumerate() {
+        for peripheral in peripherals.into_iter() {
             if !is_emwaver_peripheral(&peripheral).await {
                 continue;
             }
@@ -85,7 +85,7 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
                 .map(|p| p.address.to_string())
                 .unwrap_or_else(|| "unknown".to_string());
             out.push(BleDeviceInfo {
-                id: index.to_string(),
+                id: peripheral.id().to_string(),
                 name,
                 address,
             });
@@ -115,10 +115,10 @@ impl BleDevice {
     }
 
     pub fn connect_by_id(id: &str, scan_ms: u64) -> Result<Arc<Self>> {
-        let selected_id = id
-            .trim()
-            .parse::<usize>()
-            .with_context(|| format!("invalid BLE device id: {id}"))?;
+        let selected_id = id.trim().to_string();
+        if selected_id.is_empty() {
+            anyhow::bail!("invalid BLE device id: {id}");
+        }
         let rt = Runtime::new().context("failed to create BLE runtime")?;
         let (peripheral, command_characteristic, notify_characteristic) =
             rt.block_on(async move {
@@ -270,7 +270,7 @@ async fn first_adapter() -> Result<Adapter> {
 async fn scan_for_emwaver(
     adapter: &Adapter,
     scan_ms: u64,
-    selected_id: Option<usize>,
+    selected_id: Option<String>,
 ) -> Result<(
     Peripheral,
     btleplug::api::Characteristic,
@@ -286,8 +286,11 @@ async fn scan_for_emwaver(
         .peripherals()
         .await
         .context("failed to list BLE peripherals")?;
-    for (index, peripheral) in peripherals.into_iter().enumerate() {
-        if selected_id.is_some_and(|id| id != index) {
+    for peripheral in peripherals.into_iter() {
+        if selected_id
+            .as_deref()
+            .is_some_and(|id| peripheral.id().to_string() != id)
+        {
             continue;
         }
         if !is_emwaver_peripheral(&peripheral).await {

@@ -6,10 +6,33 @@ export type RemoteDeviceStatus = {
   hostSessionId?: string;
   connected: boolean;
   runtimeOwner?: string;
-  devices?: Array<{ id?: string; name?: string; transport?: string; boardType?: string; host?: string; port?: number; endpoint?: string; connected?: boolean; isActive?: boolean; hardwareUid?: string }>;
+  settings?: {
+    selectedDeviceUid?: string | null;
+    selectedDeviceId?: string | null;
+    selectedTransport?: string | null;
+    wifiTargets?: Array<{ host: string; port: number }>;
+  };
+  devices?: Array<{
+    id?: string;
+    deviceKey?: string | null;
+    transportId?: string;
+    name?: string;
+    transport?: string;
+    boardType?: string;
+    host?: string;
+    port?: number;
+    endpoint?: string;
+    address?: string;
+    addresses?: string[];
+    connected?: boolean;
+    connectionState?: string;
+    isActive?: boolean;
+    isSelected?: boolean;
+    hardwareUid?: string;
+  }>;
 };
 
-export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null; deviceId?: string | null };
+export type RemoteScriptStarted = { type: "script.started"; hostSessionId: string; scriptInstanceId: string; name?: string | null; deviceId?: string | null; transportId?: string | null; warning?: string | null };
 export type RemoteScriptStopped = { type: "script.stopped"; hostSessionId: string; scriptInstanceId: string; deviceId?: string | null; reason?: string | null };
 export type RemoteScriptError = { type: "script.error"; hostSessionId: string; error: string; requestId?: string };
 

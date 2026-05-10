@@ -3,15 +3,17 @@ use clap::{Parser, Subcommand};
 use directories::ProjectDirs;
 use emwaver_device::{
     list_ble_devices, list_wifi_devices, query_hardware_uid, query_version, wifi_clear,
-    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, BleDeviceInfo, Device,
-    DeviceCommandSender, DeviceInfo, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
+    wifi_disconnect_reason_text, wifi_provision, wifi_status, BleDevice, Device,
+    DeviceCommandSender, WiFiDevice, WiFiDeviceInfo, WiFiStatus,
 };
 use emwaver_runtime::{CommandBridge, Engine, SimulatorCommandBridge};
 use nix::sys::signal::kill;
 use nix::unistd::{setsid, Pid};
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::fs::OpenOptions;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{self, ErrorKind, Read, Write};
 use std::net::{TcpListener, TcpStream};
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
@@ -29,24 +31,8 @@ use tungstenite::{
 };
 use url::Url;
 
-#[derive(Clone)]
-struct GatewayTransportStatus {
-    device_id: Option<String>,
-    ble: bool,
-    wifi: Option<String>,
-    wifi_port: u16,
-    no_device: bool,
-    sim_device: bool,
-    hardware_uid: Option<String>,
-    firmware_version: Option<String>,
-}
-
-struct CommandBridgeHandle {
-    bridge: Arc<dyn CommandBridge>,
-    command_sender: Option<Arc<dyn DeviceCommandSender>>,
-}
-
 const DEFAULT_GATEWAY_PORT: u16 = 3921;
+const GATEWAY_UID_POLL_INTERVAL: Duration = Duration::from_secs(5);
 
 #[derive(Parser, Debug)]
 #[command(name = "emwaver", about = "EMWaver Gateway CLI")]
@@ -71,6 +57,24 @@ enum Commands {
 
     /// Terminal UI for Gateway + device status.
     Tui,
+
+    /// Open or print Gateway target settings.
+    Settings {
+        #[command(subcommand)]
+        cmd: Option<SettingsCmd>,
+    },
+
+    /// Show or set the saved Gateway device UID.
+    Device {
+        #[command(subcommand)]
+        cmd: Option<DeviceSettingsCmd>,
+    },
+
+    /// Show or set the saved Gateway transport preference.
+    Transport {
+        #[command(subcommand)]
+        cmd: Option<TransportSettingsCmd>,
+    },
 
     /// List local devices and optionally probe a Wi-Fi endpoint.
     Devices {
@@ -128,6 +132,10 @@ enum Commands {
         /// Target device id reported by the running Gateway.
         #[arg(long)]
         device: Option<String>,
+
+        /// Transport preference for this run: auto, usb, ble, or wifi.
+        #[arg(long)]
+        transport: Option<String>,
     },
 
     /// Provision, inspect, or clear ESP32 Wi-Fi setup over USB, BLE, or Wi-Fi.
@@ -308,7 +316,73 @@ enum ServiceCmd {
 }
 
 #[derive(Subcommand, Debug)]
+enum SettingsCmd {
+    /// Print current Gateway target settings.
+    Show {
+        /// Print structured JSON.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Clear all saved Gateway target settings.
+    Reset,
+}
+
+#[derive(Subcommand, Debug)]
+enum DeviceSettingsCmd {
+    /// Print the saved device UID.
+    Show,
+
+    /// Save the device UID to target by default.
+    Set {
+        /// Hardware UID, with or without the uid: prefix.
+        uid: String,
+    },
+
+    /// Clear the saved device UID.
+    Clear,
+}
+
+#[derive(Subcommand, Debug)]
+enum TransportSettingsCmd {
+    /// Print the saved transport preference.
+    Show,
+
+    /// Save the transport preference: auto, usb, ble, or wifi.
+    Set {
+        /// Transport preference.
+        transport: String,
+    },
+
+    /// Clear the saved transport preference.
+    Clear,
+}
+
+#[derive(Subcommand, Debug)]
 enum WifiCmd {
+    /// Add a manual Wi-Fi target for Gateway polling.
+    Add {
+        /// Hostname or IP address.
+        host: String,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        port: u16,
+    },
+
+    /// Remove a manual Wi-Fi target.
+    Remove {
+        /// Hostname or IP address.
+        host: String,
+
+        /// ESP32 Wi-Fi control port.
+        #[arg(long, default_value_t = 3922)]
+        port: u16,
+    },
+
+    /// List manual Wi-Fi targets.
+    List,
+
     /// Send Wi-Fi credentials to a Wi-Fi-capable ESP32 board.
     Provision {
         /// Wi-Fi network SSID.
@@ -398,6 +472,326 @@ fn pidfile_path() -> Result<PathBuf> {
 
 fn logfile_path() -> Result<PathBuf> {
     Ok(state_dir()?.join("gateway.log"))
+}
+
+fn config_dir() -> Result<PathBuf> {
+    if let Some(dir) = env_trim("EMWAVER_CONFIG_DIR") {
+        let d = PathBuf::from(dir);
+        fs::create_dir_all(&d)?;
+        return Ok(d);
+    }
+
+    let d = project_dirs()?.config_dir().to_path_buf();
+    fs::create_dir_all(&d)?;
+    Ok(d)
+}
+
+fn settings_path() -> Result<PathBuf> {
+    Ok(config_dir()?.join("gateway-settings.json"))
+}
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GatewaySettings {
+    selected_device_uid: Option<String>,
+    selected_transport: Option<String>,
+    #[serde(default)]
+    wifi_targets: Vec<ManualWiFiTarget>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ManualWiFiTarget {
+    host: String,
+    port: u16,
+}
+
+fn load_gateway_settings() -> Result<GatewaySettings> {
+    let path = settings_path()?;
+    match fs::read_to_string(&path) {
+        Ok(text) => {
+            let mut settings: GatewaySettings = serde_json::from_str(&text)
+                .with_context(|| format!("failed to parse settings at {}", path.display()))?;
+            normalize_gateway_settings(&mut settings);
+            Ok(settings)
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => Ok(GatewaySettings::default()),
+        Err(err) => Err(err).with_context(|| format!("failed to read {}", path.display())),
+    }
+}
+
+fn save_gateway_settings(settings: &GatewaySettings) -> Result<()> {
+    let mut settings = settings.clone();
+    normalize_gateway_settings(&mut settings);
+    let path = settings_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let body = serde_json::to_vec_pretty(&settings)?;
+    fs::write(&path, body).with_context(|| format!("failed to write {}", path.display()))
+}
+
+fn normalize_gateway_settings(settings: &mut GatewaySettings) {
+    settings.selected_device_uid = settings
+        .selected_device_uid
+        .as_deref()
+        .and_then(|uid| normalize_hardware_uid(uid).ok());
+    settings.selected_transport = settings
+        .selected_transport
+        .as_deref()
+        .and_then(|transport| normalize_transport_preference(transport).ok());
+    for target in &mut settings.wifi_targets {
+        target.host = target.host.trim().to_string();
+    }
+    settings
+        .wifi_targets
+        .retain(|target| !target.host.is_empty() && target.port > 0);
+    settings
+        .wifi_targets
+        .sort_by(|a, b| a.host.cmp(&b.host).then(a.port.cmp(&b.port)));
+    settings
+        .wifi_targets
+        .dedup_by(|a, b| a.host.eq_ignore_ascii_case(&b.host) && a.port == b.port);
+}
+
+fn normalize_hardware_uid(uid: &str) -> Result<String> {
+    let uid = uid.trim();
+    let uid = uid
+        .get(0..4)
+        .filter(|prefix| prefix.eq_ignore_ascii_case("uid:"))
+        .map(|_| &uid[4..])
+        .unwrap_or(uid)
+        .trim()
+        .to_ascii_lowercase();
+    if uid.len() != 12 || !uid.chars().all(|ch| ch.is_ascii_hexdigit()) {
+        anyhow::bail!("device UID must be 12 hexadecimal characters");
+    }
+    Ok(uid)
+}
+
+fn normalize_transport_preference(transport: &str) -> Result<String> {
+    let value = transport.trim().to_ascii_lowercase();
+    match value.as_str() {
+        "" => Ok("auto".to_string()),
+        "auto" | "default" => Ok("auto".to_string()),
+        "usb" | "midi" | "usb-midi" | "usbmidi" => Ok("usb".to_string()),
+        "ble" | "bluetooth" => Ok("ble".to_string()),
+        "wifi" | "wi-fi" => Ok("wifi".to_string()),
+        _ => anyhow::bail!("transport must be auto, usb, ble, or wifi"),
+    }
+}
+
+fn gateway_settings_json(settings: &GatewaySettings) -> serde_json::Value {
+    serde_json::json!({
+        "selectedDeviceUid": settings.selected_device_uid.clone(),
+        "selectedDeviceId": settings.selected_device_uid.as_ref().map(|uid| format!("uid:{uid}")),
+        "selectedTransport": settings.selected_transport.as_deref().unwrap_or("auto"),
+        "wifiTargets": settings.wifi_targets.clone(),
+        "settingsPath": settings_path().ok().map(|path| path.display().to_string()),
+    })
+}
+
+fn print_settings(json: bool) -> Result<()> {
+    let settings = load_gateway_settings()?;
+    if json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&gateway_settings_json(&settings))?
+        );
+        return Ok(());
+    }
+
+    println!(
+        "device: {}",
+        settings
+            .selected_device_uid
+            .as_deref()
+            .map(|uid| format!("uid:{uid}"))
+            .unwrap_or_else(|| "auto".to_string())
+    );
+    println!(
+        "transport: {}",
+        settings.selected_transport.as_deref().unwrap_or("auto")
+    );
+    if settings.wifi_targets.is_empty() {
+        println!("wifi targets: none");
+    } else {
+        println!("wifi targets:");
+        for target in settings.wifi_targets {
+            println!("  {}:{}", target.host, target.port);
+        }
+    }
+    println!("settings: {}", settings_path()?.display());
+    Ok(())
+}
+
+fn print_saved_device() -> Result<()> {
+    let settings = load_gateway_settings()?;
+    println!(
+        "{}",
+        settings
+            .selected_device_uid
+            .as_deref()
+            .map(|uid| format!("uid:{uid}"))
+            .unwrap_or_else(|| "auto".to_string())
+    );
+    Ok(())
+}
+
+fn print_saved_transport() -> Result<()> {
+    let settings = load_gateway_settings()?;
+    println!(
+        "{}",
+        settings.selected_transport.as_deref().unwrap_or("auto")
+    );
+    Ok(())
+}
+
+fn print_wifi_targets() -> Result<()> {
+    let settings = load_gateway_settings()?;
+    if settings.wifi_targets.is_empty() {
+        println!("none");
+    } else {
+        for target in settings.wifi_targets {
+            println!("{}:{}", target.host, target.port);
+        }
+    }
+    Ok(())
+}
+
+fn set_saved_device(uid: Option<String>) -> Result<()> {
+    let mut settings = load_gateway_settings()?;
+    settings.selected_device_uid = uid.as_deref().map(normalize_hardware_uid).transpose()?;
+    save_gateway_settings(&settings)?;
+    print_settings(false)
+}
+
+fn set_saved_transport(transport: Option<String>) -> Result<()> {
+    let mut settings = load_gateway_settings()?;
+    settings.selected_transport = transport
+        .as_deref()
+        .map(normalize_transport_preference)
+        .transpose()?;
+    save_gateway_settings(&settings)?;
+    print_settings(false)
+}
+
+fn reset_gateway_settings() -> Result<()> {
+    save_gateway_settings(&GatewaySettings::default())?;
+    print_settings(false)
+}
+
+fn add_wifi_target(host: String, port: u16) -> Result<()> {
+    let mut settings = load_gateway_settings()?;
+    let host = host.trim().to_string();
+    if host.is_empty() {
+        anyhow::bail!("Wi-Fi host is required");
+    }
+    settings.wifi_targets.push(ManualWiFiTarget { host, port });
+    save_gateway_settings(&settings)?;
+    print_settings(false)
+}
+
+fn remove_wifi_target(host: String, port: u16) -> Result<()> {
+    let mut settings = load_gateway_settings()?;
+    let host = host.trim().to_string();
+    settings
+        .wifi_targets
+        .retain(|target| !(target.host.eq_ignore_ascii_case(&host) && target.port == port));
+    save_gateway_settings(&settings)?;
+    print_settings(false)
+}
+
+fn settings_terminal_ui() -> Result<()> {
+    let mut settings = load_gateway_settings()?;
+    let devices_body = gateway_devices_json_if_running(DEFAULT_GATEWAY_PORT)
+        .ok()
+        .flatten();
+    let mut uid_labels: Vec<(String, String)> = Vec::new();
+    if let Some(body) = devices_body.as_ref() {
+        let mut labels_by_uid: HashMap<String, Vec<String>> = HashMap::new();
+        for device in body
+            .get("devices")
+            .and_then(serde_json::Value::as_array)
+            .into_iter()
+            .flatten()
+        {
+            let Some(uid) = json_str(device, "hardwareUid") else {
+                continue;
+            };
+            let transport = json_str(device, "transport").unwrap_or("unknown");
+            let name = json_str(device, "name").unwrap_or("EMWaver device");
+            labels_by_uid
+                .entry(uid.to_string())
+                .or_default()
+                .push(format!("{transport} {name}"));
+        }
+        for (uid, mut labels) in labels_by_uid {
+            labels.sort();
+            labels.dedup();
+            uid_labels.push((uid, labels.join(", ")));
+        }
+        uid_labels.sort_by(|a, b| a.0.cmp(&b.0));
+    }
+
+    println!("EMWaver Gateway Settings");
+    println!(
+        "current device: {}",
+        settings
+            .selected_device_uid
+            .as_deref()
+            .map(|uid| format!("uid:{uid}"))
+            .unwrap_or_else(|| "auto".to_string())
+    );
+    println!(
+        "current transport: {}",
+        settings.selected_transport.as_deref().unwrap_or("auto")
+    );
+    println!();
+    if uid_labels.is_empty() {
+        println!("No UID-backed Gateway devices are currently reported.");
+    } else {
+        println!("Devices:");
+        for (idx, (uid, label)) in uid_labels.iter().enumerate() {
+            println!("  {}. uid:{} ({label})", idx + 1, uid);
+        }
+    }
+
+    print!("Select device number, UID, `auto`, or Enter to keep: ");
+    io::stdout().flush()?;
+    let mut line = String::new();
+    io::stdin().read_line(&mut line)?;
+    let device_choice = line.trim();
+    if !device_choice.is_empty() {
+        if device_choice.eq_ignore_ascii_case("auto") || device_choice.eq_ignore_ascii_case("clear")
+        {
+            settings.selected_device_uid = None;
+        } else if let Ok(idx) = device_choice.parse::<usize>() {
+            let Some((uid, _)) = uid_labels.get(idx.saturating_sub(1)) else {
+                anyhow::bail!("device selection is out of range");
+            };
+            settings.selected_device_uid = Some(uid.clone());
+        } else {
+            settings.selected_device_uid = Some(normalize_hardware_uid(device_choice)?);
+        }
+    }
+
+    print!("Select transport auto/usb/ble/wifi, `clear`, or Enter to keep: ");
+    io::stdout().flush()?;
+    line.clear();
+    io::stdin().read_line(&mut line)?;
+    let transport_choice = line.trim();
+    if !transport_choice.is_empty() {
+        if transport_choice.eq_ignore_ascii_case("clear") {
+            settings.selected_transport = None;
+        } else {
+            settings.selected_transport = Some(normalize_transport_preference(transport_choice)?);
+        }
+    }
+
+    save_gateway_settings(&settings)?;
+    println!();
+    print_settings(false)
 }
 
 fn read_pid(pidfile: &Path) -> Option<i32> {
@@ -727,7 +1121,7 @@ Type=simple
 ExecStart={}
 Restart=on-failure
 RestartSec=2
-Environment=RUST_LOG=info
+Environment=RUST_LOG=emwaver=info,emwaver_device=info,emwaver_runtime=info,btleplug=off
 
 [Install]
 WantedBy=default.target
@@ -875,25 +1269,513 @@ fn shell_escape(value: &str) -> String {
     }
 }
 
-#[derive(Debug, Clone)]
-struct ValidatedMidiDevice {
-    info: DeviceInfo,
-    hardware_uid: String,
-    version: Option<String>,
+#[derive(Clone)]
+struct GatewayDeviceEntry {
+    transport_id: String,
+    name: String,
+    transport: String,
+    priority: u8,
+    board_type: String,
+    firmware_version: Option<String>,
+    hardware_uid: Option<String>,
+    endpoint: Option<String>,
+    address: Option<String>,
+    host: Option<String>,
+    port: Option<u16>,
+    addresses: Vec<String>,
+    connected: bool,
+    bridge: Arc<dyn CommandBridge>,
+    sender: Option<Arc<dyn DeviceCommandSender>>,
 }
 
-#[derive(Debug, Clone)]
-struct ValidatedBleDevice {
-    info: BleDeviceInfo,
-    hardware_uid: String,
-    version: Option<String>,
+impl GatewayDeviceEntry {
+    fn device_key(&self) -> Option<String> {
+        self.hardware_uid
+            .as_deref()
+            .map(str::trim)
+            .filter(|uid| !uid.is_empty())
+            .map(|uid| format!("uid:{uid}"))
+    }
+
+    fn to_json(
+        &self,
+        settings: &GatewaySettings,
+        active_transport_id: Option<&str>,
+    ) -> serde_json::Value {
+        let device_key = self.device_key();
+        let selected_uid = settings.selected_device_uid.as_deref();
+        let selected_transport = settings.selected_transport.as_deref().unwrap_or("auto");
+        let is_selected_device = selected_uid
+            .zip(self.hardware_uid.as_deref())
+            .is_some_and(|(selected, uid)| selected.eq_ignore_ascii_case(uid));
+        let is_selected_transport = selected_transport == "auto"
+            || selected_transport == transport_setting_name(&self.transport);
+        serde_json::json!({
+            "id": self.transport_id,
+            "deviceKey": device_key,
+            "transportId": self.transport_id,
+            "name": self.name,
+            "transport": self.transport,
+            "boardType": self.board_type,
+            "firmwareVersion": self.firmware_version,
+            "hardwareUid": self.hardware_uid,
+            "endpoint": self.endpoint,
+            "address": self.address,
+            "host": self.host,
+            "port": self.port,
+            "addresses": self.addresses,
+            "connected": self.connected,
+            "connectionState": if self.connected { "connected" } else { "disconnected" },
+            "isActive": active_transport_id == Some(self.transport_id.as_str()),
+            "isSelected": is_selected_device && is_selected_transport,
+        })
+    }
 }
 
-#[derive(Debug, Clone)]
-struct ValidatedWiFiDevice {
-    info: WiFiDeviceInfo,
-    hardware_uid: String,
-    version: Option<String>,
+struct GatewayDeviceRegistry {
+    devices: Mutex<Vec<GatewayDeviceEntry>>,
+    settings: Mutex<GatewaySettings>,
+    no_device: bool,
+    sim_device: bool,
+    startup_wifi_targets: Vec<ManualWiFiTarget>,
+}
+
+struct ResolvedGatewayBridge {
+    bridge: Arc<dyn CommandBridge>,
+    device_id: Option<String>,
+    transport_id: Option<String>,
+    warning: Option<String>,
+}
+
+impl GatewayDeviceRegistry {
+    fn new(
+        no_device: bool,
+        sim_device: bool,
+        startup_wifi_targets: Vec<ManualWiFiTarget>,
+    ) -> Result<Self> {
+        let settings = load_gateway_settings()?;
+        Ok(Self {
+            devices: Mutex::new(Vec::new()),
+            settings: Mutex::new(settings),
+            no_device,
+            sim_device,
+            startup_wifi_targets,
+        })
+    }
+
+    fn refresh(&self) -> Result<()> {
+        if let Ok(settings) = load_gateway_settings() {
+            *self.settings.lock().unwrap() = settings;
+        }
+
+        if self.no_device {
+            *self.devices.lock().unwrap() = vec![GatewayDeviceEntry {
+                transport_id: "local-gateway-no-device".to_string(),
+                name: "Gateway hardware disabled".to_string(),
+                transport: "None".to_string(),
+                priority: 255,
+                board_type: "none".to_string(),
+                firmware_version: None,
+                hardware_uid: None,
+                endpoint: None,
+                address: None,
+                host: None,
+                port: None,
+                addresses: Vec::new(),
+                connected: true,
+                bridge: Arc::new(NoDeviceCommandBridge),
+                sender: None,
+            }];
+            return Ok(());
+        }
+
+        if self.sim_device {
+            *self.devices.lock().unwrap() = vec![GatewayDeviceEntry {
+                transport_id: "local-gateway-sim".to_string(),
+                name: "EMWaver simulator".to_string(),
+                transport: "Simulator".to_string(),
+                priority: 254,
+                board_type: "sim".to_string(),
+                firmware_version: None,
+                hardware_uid: None,
+                endpoint: None,
+                address: None,
+                host: None,
+                port: None,
+                addresses: Vec::new(),
+                connected: true,
+                bridge: Arc::new(SimulatorCommandBridge::basic_board()?),
+                sender: None,
+            }];
+            return Ok(());
+        }
+
+        let previous = self.devices.lock().unwrap().clone();
+        let mut previous_by_transport: HashMap<String, GatewayDeviceEntry> = previous
+            .into_iter()
+            .map(|entry| (entry.transport_id.clone(), entry))
+            .collect();
+        let mut refreshed = Vec::new();
+        refresh_gateway_midi_devices(&mut refreshed, &mut previous_by_transport);
+        refresh_gateway_ble_devices(&mut refreshed, &mut previous_by_transport);
+        refresh_gateway_wifi_devices(
+            &mut refreshed,
+            &mut previous_by_transport,
+            &self.settings.lock().unwrap(),
+            &self.startup_wifi_targets,
+        );
+        refreshed.sort_by(|a, b| {
+            a.priority
+                .cmp(&b.priority)
+                .then(a.hardware_uid.cmp(&b.hardware_uid))
+                .then(a.transport_id.cmp(&b.transport_id))
+        });
+        refreshed.dedup_by(|a, b| a.transport_id == b.transport_id);
+        *self.devices.lock().unwrap() = refreshed;
+        Ok(())
+    }
+
+    fn snapshot(&self) -> Vec<GatewayDeviceEntry> {
+        self.devices.lock().unwrap().clone()
+    }
+
+    fn settings(&self) -> GatewaySettings {
+        self.settings.lock().unwrap().clone()
+    }
+
+    fn replace_settings(&self, settings: GatewaySettings) -> Result<()> {
+        save_gateway_settings(&settings)?;
+        *self.settings.lock().unwrap() = load_gateway_settings()?;
+        Ok(())
+    }
+
+    fn devices_json(&self) -> Vec<serde_json::Value> {
+        let settings = self.settings();
+        let resolved = self.resolve(None, None).ok();
+        let active_transport_id = resolved
+            .as_ref()
+            .and_then(|resolved| resolved.transport_id.as_deref());
+        self.snapshot()
+            .into_iter()
+            .map(|entry| entry.to_json(&settings, active_transport_id))
+            .collect()
+    }
+
+    fn resolve(
+        &self,
+        requested_device_id: Option<&str>,
+        requested_transport: Option<&str>,
+    ) -> Result<ResolvedGatewayBridge> {
+        let devices = self.snapshot();
+        if devices.is_empty() {
+            anyhow::bail!("no UID-validated EMWaver devices are available");
+        }
+
+        let settings = self.settings();
+        let requested_device_id = requested_device_id
+            .map(str::trim)
+            .filter(|id| !id.is_empty());
+        if let Some(transport_id) = requested_device_id.filter(|id| is_transport_id(id)) {
+            let entry = devices
+                .iter()
+                .find(|entry| entry.transport_id == transport_id)
+                .with_context(|| format!("Gateway transport is unavailable: {transport_id}"))?;
+            return Ok(ResolvedGatewayBridge {
+                bridge: entry.bridge.clone(),
+                device_id: entry.device_key(),
+                transport_id: Some(entry.transport_id.clone()),
+                warning: None,
+            });
+        }
+
+        let requested_uid = requested_device_id
+            .or_else(|| settings.selected_device_uid.as_deref())
+            .map(normalize_hardware_uid)
+            .transpose()?;
+        let transport = requested_transport
+            .or(settings.selected_transport.as_deref())
+            .map(normalize_transport_preference)
+            .transpose()?
+            .unwrap_or_else(|| "auto".to_string());
+
+        let mut candidates: Vec<&GatewayDeviceEntry> = devices
+            .iter()
+            .filter(|entry| entry.connected)
+            .filter(|entry| {
+                requested_uid
+                    .as_deref()
+                    .zip(entry.hardware_uid.as_deref())
+                    .map(|(wanted, actual)| wanted.eq_ignore_ascii_case(actual))
+                    .unwrap_or_else(|| requested_uid.is_none())
+            })
+            .collect();
+
+        if candidates.is_empty() {
+            if let Some(uid) = requested_uid.as_deref() {
+                anyhow::bail!("selected device uid:{uid} is not available");
+            }
+            anyhow::bail!("no UID-validated EMWaver devices are available");
+        }
+
+        candidates.sort_by(|a, b| {
+            a.priority
+                .cmp(&b.priority)
+                .then(a.transport_id.cmp(&b.transport_id))
+        });
+        let exact = if transport == "auto" {
+            None
+        } else {
+            candidates
+                .iter()
+                .copied()
+                .find(|entry| transport_setting_name(&entry.transport) == transport)
+        };
+        let selected = exact.unwrap_or(candidates[0]);
+        let warning = if transport != "auto" && exact.is_none() {
+            Some(format!(
+                "selected {transport} transport is unavailable; using {} for {}",
+                selected.transport,
+                selected
+                    .hardware_uid
+                    .as_deref()
+                    .map(|uid| format!("uid:{uid}"))
+                    .unwrap_or_else(|| selected.transport_id.clone())
+            ))
+        } else {
+            None
+        };
+
+        Ok(ResolvedGatewayBridge {
+            bridge: selected.bridge.clone(),
+            device_id: selected.device_key(),
+            transport_id: Some(selected.transport_id.clone()),
+            warning,
+        })
+    }
+}
+
+fn is_transport_id(value: &str) -> bool {
+    value.starts_with("midi:") || value.starts_with("ble:") || value.starts_with("wifi:")
+}
+
+fn transport_setting_name(transport: &str) -> &'static str {
+    match transport {
+        "USB" => "usb",
+        "BLE" => "ble",
+        "Wi-Fi" => "wifi",
+        _ => "auto",
+    }
+}
+
+fn refresh_gateway_midi_devices(
+    out: &mut Vec<GatewayDeviceEntry>,
+    previous: &mut HashMap<String, GatewayDeviceEntry>,
+) {
+    let Ok(devices) = emwaver_device::list_devices() else {
+        return;
+    };
+    for info in devices {
+        let transport_id = format!("midi:{}", info.id);
+        if let Some(entry) = previous.remove(&transport_id) {
+            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+                out.push(entry);
+                continue;
+            }
+        }
+
+        let device = Device::new();
+        if device.connect_by_id(&info.id).is_err() {
+            continue;
+        }
+        let bridge = Arc::new(DeviceCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
+            continue;
+        };
+        out.push(GatewayDeviceEntry {
+            transport_id,
+            name: info.name.clone(),
+            transport: "USB".to_string(),
+            priority: 0,
+            board_type: infer_gateway_board_type(&info.name, info.likely_emwaver),
+            firmware_version,
+            hardware_uid: Some(hardware_uid),
+            endpoint: None,
+            address: None,
+            host: None,
+            port: None,
+            addresses: Vec::new(),
+            connected: true,
+            bridge,
+            sender: Some(sender),
+        });
+    }
+}
+
+fn refresh_gateway_ble_devices(
+    out: &mut Vec<GatewayDeviceEntry>,
+    previous: &mut HashMap<String, GatewayDeviceEntry>,
+) {
+    let Ok(devices) = list_ble_devices(1_500) else {
+        return;
+    };
+    for info in devices {
+        let transport_id = format!("ble:{}", info.id);
+        if let Some(entry) = previous.remove(&transport_id) {
+            out.push(entry);
+            continue;
+        }
+
+        let Ok(device) = BleDevice::connect_by_id(&info.id, 3_000) else {
+            continue;
+        };
+        let bridge = Arc::new(BleCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
+            continue;
+        };
+        out.push(GatewayDeviceEntry {
+            transport_id,
+            name: info.name,
+            transport: "BLE".to_string(),
+            priority: 1,
+            board_type: "esp32s3".to_string(),
+            firmware_version,
+            hardware_uid: Some(hardware_uid),
+            endpoint: None,
+            address: Some(info.address),
+            host: None,
+            port: None,
+            addresses: Vec::new(),
+            connected: true,
+            bridge,
+            sender: Some(sender),
+        });
+    }
+
+    let remaining_ble_ids: Vec<String> = previous
+        .keys()
+        .filter(|transport_id| transport_id.starts_with("ble:"))
+        .cloned()
+        .collect();
+    for transport_id in remaining_ble_ids {
+        if let Some(entry) = previous.remove(&transport_id) {
+            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+                out.push(entry);
+            }
+        }
+    }
+}
+
+fn refresh_gateway_wifi_devices(
+    out: &mut Vec<GatewayDeviceEntry>,
+    previous: &mut HashMap<String, GatewayDeviceEntry>,
+    settings: &GatewaySettings,
+    startup_targets: &[ManualWiFiTarget],
+) {
+    let mut infos = list_wifi_devices(1_500).unwrap_or_default();
+    for target in settings.wifi_targets.iter().chain(startup_targets.iter()) {
+        if infos
+            .iter()
+            .any(|info| info.host.eq_ignore_ascii_case(&target.host) && info.port == target.port)
+        {
+            continue;
+        }
+        infos.push(WiFiDeviceInfo {
+            id: format!("manual:{}:{}", target.host, target.port),
+            name: format!("ESP32 Wi-Fi {}:{}", target.host, target.port),
+            host: target.host.clone(),
+            port: target.port,
+            addresses: vec![target.host.clone()],
+            txt: HashMap::new(),
+        });
+    }
+
+    for info in infos
+        .into_iter()
+        .filter(wifi_record_advertises_supported_runtime)
+    {
+        let transport_id = format!("wifi:{}:{}", info.host, info.port);
+        if let Some(entry) = previous.remove(&transport_id) {
+            if let Some(entry) = refresh_existing_gateway_entry(entry) {
+                out.push(entry);
+                continue;
+            }
+        }
+
+        let Ok(device) = WiFiDevice::connect(&info.host, info.port) else {
+            continue;
+        };
+        let bridge = Arc::new(WiFiCommandBridge { device });
+        let sender: Arc<dyn DeviceCommandSender> = bridge.clone();
+        let Some((hardware_uid, firmware_version)) = query_gateway_identity(sender.as_ref()) else {
+            continue;
+        };
+        let board_type = info
+            .txt
+            .get("board")
+            .cloned()
+            .unwrap_or_else(|| "esp32".to_string());
+        let firmware_version = firmware_version.or_else(|| info.txt.get("fw").cloned());
+        out.push(GatewayDeviceEntry {
+            transport_id,
+            name: info.name,
+            transport: "Wi-Fi".to_string(),
+            priority: 2,
+            board_type,
+            firmware_version,
+            hardware_uid: Some(hardware_uid),
+            endpoint: Some(format!("{}:{}", info.host, info.port)),
+            address: None,
+            host: Some(info.host),
+            port: Some(info.port),
+            addresses: info.addresses,
+            connected: true,
+            bridge,
+            sender: Some(sender),
+        });
+    }
+
+    for (_transport_id, entry) in previous
+        .drain()
+        .filter(|(transport_id, _)| transport_id.starts_with("wifi:"))
+    {
+        if let Some(entry) = refresh_existing_gateway_entry(entry) {
+            out.push(entry);
+        }
+    }
+}
+
+fn refresh_existing_gateway_entry(mut entry: GatewayDeviceEntry) -> Option<GatewayDeviceEntry> {
+    let sender = entry.sender.as_ref()?;
+    let (hardware_uid, firmware_version) = query_gateway_identity(sender.as_ref())?;
+    entry.hardware_uid = Some(hardware_uid);
+    if firmware_version.is_some() {
+        entry.firmware_version = firmware_version;
+    }
+    entry.connected = true;
+    Some(entry)
+}
+
+fn query_gateway_identity(sender: &dyn DeviceCommandSender) -> Option<(String, Option<String>)> {
+    let uid = query_hardware_uid(sender, 1_500).ok().flatten()?;
+    let version = query_version(sender, 1_000).unwrap_or(None);
+    Some((uid, version))
+}
+
+fn infer_gateway_board_type(name: &str, likely_emwaver: bool) -> String {
+    let lower = name.to_ascii_lowercase();
+    if lower.contains("esp32-s2") || lower.contains("esp32s2") {
+        "esp32s2".to_string()
+    } else if lower.contains("esp32-s3") || lower.contains("esp32s3") || lower.contains("s3") {
+        "esp32s3".to_string()
+    } else if lower.contains("esp32") {
+        "esp32".to_string()
+    } else if likely_emwaver {
+        "emwaver".to_string()
+    } else {
+        "unknown".to_string()
+    }
 }
 
 fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
@@ -993,82 +1875,11 @@ fn list_devices_lines(
         return Ok(lines);
     }
 
-    let mut out: Vec<String> = Vec::new();
-
-    match validated_midi_devices(1_500, false) {
-        Ok(devices) if devices.is_empty() => {
-            out.push("No UID-validated EMWaver USB devices found.".to_string())
-        }
-        Ok(devices) => {
-            out.push("USB devices:".to_string());
-            for device in devices {
-                let version = device.version.as_deref().unwrap_or("unknown fw");
-                out.push(format!(
-                    "  {}: {} ({version}, UID {})",
-                    device.info.id, device.info.name, device.hardware_uid
-                ));
-            }
-        }
-        Err(err) => out.push(format!("USB scan unavailable: {err:#}")),
-    }
-
-    match validated_ble_devices(1_500, false) {
-        Ok(devices) if devices.is_empty() => {
-            out.push("No UID-validated EMWaver BLE devices found.".to_string())
-        }
-        Ok(devices) => {
-            out.push("BLE devices:".to_string());
-            for device in devices {
-                let version = device.version.as_deref().unwrap_or("unknown fw");
-                out.push(format!(
-                    "  {}: {} ({}, {version}, UID {})",
-                    device.info.id, device.info.name, device.info.address, device.hardware_uid
-                ));
-            }
-        }
-        Err(err) => out.push(format!("BLE scan unavailable: {err:#}")),
-    }
-
-    match validated_wifi_devices(1_500) {
-        Ok(devices) if devices.is_empty() => {
-            out.push("No UID-validated EMWaver Wi-Fi devices found.".to_string())
-        }
-        Ok(devices) => {
-            out.push("Wi-Fi devices:".to_string());
-            for device in devices {
-                let board = device
-                    .info
-                    .txt
-                    .get("board")
-                    .map(String::as_str)
-                    .unwrap_or("unknown board");
-                let firmware = device
-                    .version
-                    .as_deref()
-                    .or_else(|| device.info.txt.get("fw").map(String::as_str))
-                    .unwrap_or("unknown fw");
-                let addresses = if device.info.addresses.is_empty() {
-                    device.info.host.clone()
-                } else {
-                    device.info.addresses.join(", ")
-                };
-                out.push(format!(
-                    "  {}: {} at {}:{} ({board}, {firmware}, UID {})",
-                    device.info.id,
-                    device.info.name,
-                    addresses,
-                    device.info.port,
-                    device.hardware_uid
-                ));
-            }
-        }
-        Err(err) => out.push(format!("Wi-Fi discovery unavailable: {err:#}")),
-    }
-
-    let (wifi_lines, _wifi_ok) = wifi_probe_lines(wifi, wifi_port)?;
-    out.extend(wifi_lines);
-
-    Ok(out)
+    let _ = (wifi, wifi_port);
+    Ok(vec![
+        "Gateway devices: unavailable".to_string(),
+        "Gateway is not running. Start it with `emw gateway start`.".to_string(),
+    ])
 }
 
 fn wifi_probe_lines(wifi: Option<String>, wifi_port: u16) -> Result<(Vec<String>, bool)> {
@@ -1148,266 +1959,20 @@ fn list_devices(json: bool, wifi: Option<String>, wifi_port: u16, port: Option<u
     if json {
         println!(
             "{}",
-            serde_json::to_string_pretty(&list_devices_json(wifi, wifi_port, None)?)?
+            serde_json::to_string_pretty(&serde_json::json!({
+                "ok": false,
+                "error": "gateway_not_running",
+                "message": "Gateway is not running. Start it with `emw gateway start`.",
+                "devices": [],
+            }))?
         );
         return Ok(());
     }
-    for line in list_devices_lines(wifi, wifi_port, gateway_port)? {
+    let _ = (wifi, wifi_port);
+    for line in list_devices_lines(None, 3922, gateway_port)? {
         println!("{line}");
     }
     Ok(())
-}
-
-fn list_devices_json(
-    wifi: Option<String>,
-    wifi_port: u16,
-    gateway_status: Option<&GatewayTransportStatus>,
-) -> Result<serde_json::Value> {
-    let mut devices = Vec::new();
-
-    if let Some(status) = gateway_status {
-        let selected = selected_gateway_device(true, status);
-        if status.no_device
-            || status.sim_device
-            || selected
-                .get("hardwareUid")
-                .and_then(serde_json::Value::as_str)
-                .is_some_and(|uid| !uid.trim().is_empty())
-        {
-            push_unique_device(&mut devices, selected);
-        }
-        return Ok(serde_json::json!({
-            "ok": true,
-            "devices": devices,
-            "usbError": null,
-            "bleError": null,
-            "wifiDiscoveryError": null,
-            "wifiProbe": {
-                "ok": true,
-                "lines": [],
-            },
-        }));
-    }
-
-    let usb_error = match validated_midi_devices(1_500, false) {
-        Ok(midi_devices) => {
-            for device in midi_devices {
-                push_unique_device(
-                    &mut devices,
-                    serde_json::json!({
-                        "id": format!("midi:{}", device.info.id),
-                        "name": device.info.name,
-                        "transport": "USB",
-                        "boardType": if device.info.likely_emwaver { "emwaver" } else { "unknown" },
-                        "firmwareVersion": device.version,
-                        "hardwareUid": device.hardware_uid,
-                    }),
-                );
-            }
-            None
-        }
-        Err(err) => Some(format!("USB scan unavailable: {err:#}")),
-    };
-
-    let ble_error = match validated_ble_devices(1_500, false) {
-        Ok(ble_devices) => {
-            for device in ble_devices {
-                push_unique_device(
-                    &mut devices,
-                    serde_json::json!({
-                        "id": format!("ble:{}", device.info.id),
-                        "name": device.info.name,
-                        "transport": "BLE",
-                        "boardType": "esp32s3",
-                        "address": device.info.address,
-                        "firmwareVersion": device.version,
-                        "hardwareUid": device.hardware_uid,
-                    }),
-                );
-            }
-            None
-        }
-        Err(err) => Some(format!("BLE scan unavailable: {err:#}")),
-    };
-
-    let wifi_discovery_error = match validated_wifi_devices(1_500) {
-        Ok(wifi_devices) => {
-            for device in wifi_devices {
-                let board = device
-                    .info
-                    .txt
-                    .get("board")
-                    .cloned()
-                    .unwrap_or_else(|| "esp32".to_string());
-                push_unique_device(
-                    &mut devices,
-                    serde_json::json!({
-                        "id": format!("wifi:{}:{}", device.info.host, device.info.port),
-                        "name": device.info.name,
-                        "transport": "Wi-Fi",
-                        "boardType": board,
-                        "firmwareVersion": device.version.clone().or_else(|| device.info.txt.get("fw").cloned()),
-                        "hardwareUid": device.hardware_uid,
-                        "host": device.info.host,
-                        "port": device.info.port,
-                        "endpoint": format!("{}:{}", device.info.host, device.info.port),
-                        "addresses": device.info.addresses,
-                    }),
-                );
-            }
-            None
-        }
-        Err(err) => Some(format!("Wi-Fi discovery unavailable: {err:#}")),
-    };
-
-    if let Some(host) = wifi.as_deref() {
-        if let Ok((hardware_uid, version)) = probe_wifi_endpoint(host, wifi_port) {
-            push_unique_device(
-                &mut devices,
-                serde_json::json!({
-                    "id": format!("wifi:{host}:{wifi_port}"),
-                    "name": format!("ESP32 Wi-Fi {host}:{wifi_port}"),
-                    "transport": "Wi-Fi",
-                    "boardType": "esp32",
-                    "firmwareVersion": version,
-                    "hardwareUid": hardware_uid,
-                    "host": host,
-                    "port": wifi_port,
-                    "endpoint": format!("{host}:{wifi_port}"),
-                    "addresses": [host],
-                }),
-            );
-        }
-    }
-
-    let (wifi_probe_lines, wifi_ok) = wifi_probe_lines(wifi, wifi_port)?;
-    Ok(serde_json::json!({
-        "ok": usb_error.is_none() && ble_error.is_none() && wifi_discovery_error.is_none(),
-        "devices": devices,
-        "usbError": usb_error,
-        "bleError": ble_error,
-        "wifiDiscoveryError": wifi_discovery_error,
-        "wifiProbe": {
-            "ok": wifi_ok,
-            "lines": wifi_probe_lines,
-        },
-    }))
-}
-
-fn push_unique_device(devices: &mut Vec<serde_json::Value>, device: serde_json::Value) {
-    let id = device
-        .get("id")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string);
-    if let Some(id) = id.as_deref() {
-        if devices
-            .iter()
-            .any(|existing| existing.get("id").and_then(serde_json::Value::as_str) == Some(id))
-        {
-            return;
-        }
-    }
-    devices.push(device);
-}
-
-fn validated_midi_devices(timeout_ms: u64, skip_all: bool) -> Result<Vec<ValidatedMidiDevice>> {
-    if skip_all {
-        return Ok(Vec::new());
-    }
-
-    let devices = emwaver_device::list_devices()?;
-    let mut out = Vec::new();
-    for device_info in devices {
-        let device = Device::new();
-        if let Err(err) = device.connect_by_id(&device_info.id) {
-            info!(
-                "USB MIDI device {} failed connection validation: {err:#}",
-                device_info.name
-            );
-            continue;
-        }
-        match query_hardware_uid(device.as_ref(), timeout_ms) {
-            Ok(Some(hardware_uid)) => {
-                let version = query_version(device.as_ref(), 1_000).unwrap_or(None);
-                out.push(ValidatedMidiDevice {
-                    info: device_info,
-                    hardware_uid,
-                    version,
-                });
-            }
-            Ok(None) => info!(
-                "USB MIDI device {} did not return a valid hardware UID",
-                device_info.name
-            ),
-            Err(err) => info!(
-                "USB MIDI device {} failed UID validation: {err:#}",
-                device_info.name
-            ),
-        }
-    }
-    Ok(out)
-}
-
-fn validated_ble_devices(timeout_ms: u64, skip_all: bool) -> Result<Vec<ValidatedBleDevice>> {
-    if skip_all {
-        return Ok(Vec::new());
-    }
-
-    let devices = list_ble_devices(timeout_ms)?;
-    let mut out = Vec::new();
-    for device_info in devices {
-        let device = match BleDevice::connect_by_id(&device_info.id, timeout_ms) {
-            Ok(device) => device,
-            Err(err) => {
-                info!(
-                    "BLE device {} failed connection validation: {err:#}",
-                    device_info.name
-                );
-                continue;
-            }
-        };
-        match query_hardware_uid(device.as_ref(), timeout_ms) {
-            Ok(Some(hardware_uid)) => {
-                let version = query_version(device.as_ref(), 1_000).unwrap_or(None);
-                out.push(ValidatedBleDevice {
-                    info: device_info,
-                    hardware_uid,
-                    version,
-                });
-            }
-            Ok(None) => info!(
-                "BLE device {} did not return a valid hardware UID",
-                device_info.name
-            ),
-            Err(err) => info!(
-                "BLE device {} failed UID validation: {err:#}",
-                device_info.name
-            ),
-        }
-    }
-    Ok(out)
-}
-
-fn validated_wifi_devices(timeout_ms: u64) -> Result<Vec<ValidatedWiFiDevice>> {
-    let devices = list_wifi_devices(timeout_ms)?;
-    let mut out = Vec::new();
-    for device in devices
-        .into_iter()
-        .filter(wifi_record_advertises_supported_runtime)
-    {
-        match probe_wifi_endpoint(&device.host, device.port) {
-            Ok((hardware_uid, version)) => out.push(ValidatedWiFiDevice {
-                info: device,
-                hardware_uid,
-                version,
-            }),
-            Err(err) => info!(
-                "Wi-Fi endpoint {}:{} failed UID validation: {err:#}",
-                device.host, device.port
-            ),
-        }
-    }
-    Ok(out)
 }
 
 fn probe_wifi_endpoint(host: &str, port: u16) -> Result<(String, Option<String>)> {
@@ -1695,6 +2260,7 @@ fn run_script(
     timeout_ms: u64,
     no_wait: bool,
     device: Option<String>,
+    transport: Option<String>,
 ) -> Result<()> {
     let source = fs::read_to_string(&script)
         .with_context(|| format!("failed to read script at {}", script.display()))?;
@@ -1741,6 +2307,7 @@ fn run_script(
             "name": name,
             "source": source,
             "deviceId": device,
+            "transport": transport,
         })
         .to_string(),
     ))
@@ -1764,6 +2331,9 @@ fn run_script(
 
         match msg_type {
             "script.started" => {
+                if let Some(warning) = value.get("warning").and_then(|v| v.as_str()) {
+                    println!("warning: {warning}");
+                }
                 println!("started {name}");
                 return Ok(());
             }
@@ -1776,63 +2346,6 @@ fn run_script(
             }
             _ => {}
         }
-    }
-}
-
-fn make_command_bridge(
-    device_id: Option<String>,
-    ble: bool,
-    wifi: Option<String>,
-    wifi_port: u16,
-    no_device: bool,
-    sim_device: bool,
-) -> Result<CommandBridgeHandle> {
-    validate_service_transport_flags(
-        device_id.as_deref(),
-        ble,
-        wifi.as_deref(),
-        no_device,
-        sim_device,
-    )?;
-
-    if no_device {
-        Ok(CommandBridgeHandle {
-            bridge: Arc::new(NoDeviceCommandBridge),
-            command_sender: None,
-        })
-    } else if sim_device {
-        Ok(CommandBridgeHandle {
-            bridge: Arc::new(SimulatorCommandBridge::basic_board()?),
-            command_sender: None,
-        })
-    } else if ble {
-        let bridge = Arc::new(BleCommandBridge {
-            device: BleDevice::connect_auto(5_000)?,
-        });
-        Ok(CommandBridgeHandle {
-            bridge: bridge.clone(),
-            command_sender: Some(bridge),
-        })
-    } else if let Some(wifi) = wifi {
-        let bridge = Arc::new(WiFiCommandBridge {
-            device: WiFiDevice::connect(&wifi, wifi_port)?,
-        });
-        Ok(CommandBridgeHandle {
-            bridge: bridge.clone(),
-            command_sender: Some(bridge),
-        })
-    } else {
-        let device = Device::new();
-        if let Some(device_id) = device_id {
-            device.connect_by_id(&device_id)?;
-        } else {
-            device.connect_auto()?;
-        }
-        let bridge = Arc::new(DeviceCommandBridge { device });
-        Ok(CommandBridgeHandle {
-            bridge: bridge.clone(),
-            command_sender: Some(bridge),
-        })
     }
 }
 
@@ -1857,50 +2370,6 @@ fn make_device_command_sender(
         }
         Ok(device)
     }
-}
-
-fn bridge_for_gateway_device_id(
-    device_id: Option<&str>,
-    default_bridge: &Arc<dyn CommandBridge>,
-) -> Result<Arc<dyn CommandBridge>> {
-    let Some(device_id) = device_id.map(str::trim).filter(|id| !id.is_empty()) else {
-        return Ok(default_bridge.clone());
-    };
-    if let Some(midi_id) = device_id.strip_prefix("midi:") {
-        return Ok(make_command_bridge(
-            Some(midi_id.to_string()),
-            false,
-            None,
-            3922,
-            false,
-            false,
-        )?
-        .bridge);
-    }
-    if device_id.starts_with("ble:") {
-        return Ok(make_command_bridge(None, true, None, 3922, false, false)?.bridge);
-    }
-    if let Some(rest) = device_id.strip_prefix("wifi:") {
-        let (host, port) = parse_wifi_device_id(rest)?;
-        return Ok(make_command_bridge(None, false, Some(host), port, false, false)?.bridge);
-    }
-    if device_id.starts_with("uid:") {
-        return Ok(default_bridge.clone());
-    }
-    anyhow::bail!("unsupported Gateway device id: {device_id}")
-}
-
-fn parse_wifi_device_id(value: &str) -> Result<(String, u16)> {
-    let (host, port) = value
-        .rsplit_once(':')
-        .context("Wi-Fi device id must be wifi:<host>:<port>")?;
-    let port = port
-        .parse::<u16>()
-        .with_context(|| format!("invalid Wi-Fi device port: {port}"))?;
-    if host.is_empty() {
-        anyhow::bail!("Wi-Fi device id is missing host");
-    }
-    Ok((host.to_string(), port))
 }
 
 fn run_wifi_provision(
@@ -1976,14 +2445,17 @@ fn format_wifi_status(status: &WiFiStatus) -> String {
 
 fn gateway_serve(
     port: Option<u16>,
-    device_id: Option<String>,
-    ble: bool,
+    _device_id: Option<String>,
+    _ble: bool,
     wifi: Option<String>,
     wifi_port: u16,
     no_device: bool,
     sim_device: bool,
     bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
+    if no_device && sim_device {
+        anyhow::bail!("--no-device cannot be combined with --sim-device");
+    }
     if let Some(parent) = pidfile_path()?.parent() {
         fs::create_dir_all(parent)?;
     }
@@ -1993,39 +2465,34 @@ fn gateway_serve(
     let bootstrap_path = bootstrap_path.unwrap_or_else(default_bootstrap_path);
     let bootstrap = fs::read_to_string(&bootstrap_path)
         .with_context(|| format!("failed to read bootstrap at {}", bootstrap_path.display()))?;
-    let bridge = make_command_bridge(
-        device_id.clone(),
-        ble,
-        wifi.clone(),
-        wifi_port,
-        no_device,
-        sim_device,
-    )?;
-    let (hardware_uid, firmware_version) = bridge
-        .command_sender
-        .as_ref()
-        .map(|sender| {
-            (
-                query_hardware_uid(sender.as_ref(), 1_500).unwrap_or(None),
-                query_version(sender.as_ref(), 1_000).unwrap_or(None),
-            )
+    let startup_wifi_targets = wifi
+        .map(|host| ManualWiFiTarget {
+            host,
+            port: wifi_port,
         })
-        .unwrap_or((None, None));
-    let transport_status = GatewayTransportStatus {
-        device_id: device_id.clone(),
-        ble,
-        wifi: wifi.clone(),
-        wifi_port,
+        .into_iter()
+        .collect();
+    let device_registry = Arc::new(GatewayDeviceRegistry::new(
         no_device,
         sim_device,
-        hardware_uid,
-        firmware_version,
-    };
+        startup_wifi_targets,
+    )?);
+    if let Err(err) = device_registry.refresh() {
+        info!("initial Gateway device refresh failed: {err:#}");
+    }
+    {
+        let device_registry = device_registry.clone();
+        thread::spawn(move || loop {
+            thread::sleep(GATEWAY_UID_POLL_INTERVAL);
+            if let Err(err) = device_registry.refresh() {
+                info!("Gateway device refresh failed: {err:#}");
+            }
+        });
+    }
 
     let state = Arc::new(GatewayServerState {
         bootstrap: Arc::new(bootstrap),
-        bridge: bridge.bridge,
-        transport_status: Arc::new(Mutex::new(transport_status)),
+        device_registry,
         client_dist,
     });
     let port_value = port.unwrap_or(3921);
@@ -2052,8 +2519,7 @@ fn gateway_serve(
 #[derive(Clone)]
 struct GatewayServerState {
     bootstrap: Arc<String>,
-    bridge: Arc<dyn CommandBridge>,
-    transport_status: Arc<Mutex<GatewayTransportStatus>>,
+    device_registry: Arc<GatewayDeviceRegistry>,
     client_dist: PathBuf,
 }
 
@@ -2105,7 +2571,7 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                         continue;
                     }
                 }
-                if last_status.elapsed() >= Duration::from_secs(5) {
+                if last_status.elapsed() >= GATEWAY_UID_POLL_INTERVAL {
                     send_gateway_device_status(&mut ws, &state)?;
                     last_status = Instant::now();
                 }
@@ -2170,19 +2636,27 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                     .and_then(|v| v.as_str())
                     .filter(|id| !id.trim().is_empty())
                     .map(str::to_string);
+                let requested_transport = value
+                    .get("transport")
+                    .and_then(|v| v.as_str())
+                    .filter(|transport| !transport.trim().is_empty())
+                    .map(str::to_string);
                 let script_id = format!("local-{}", std::process::id());
                 active_engine = None;
                 active_script_id = Some(script_id.clone());
                 rev = 0;
+                let mut resolved_target: Option<ResolvedGatewayBridge> = None;
 
                 let result = (|| -> Result<Engine> {
                     if source.trim().is_empty() {
                         anyhow::bail!("script source is empty");
                     }
-                    let script_bridge = bridge_for_gateway_device_id(
+                    let resolved = state.device_registry.resolve(
                         requested_device_id.as_deref(),
-                        &state.bridge,
+                        requested_transport.as_deref(),
                     )?;
+                    let script_bridge = resolved.bridge.clone();
+                    resolved_target = Some(resolved);
                     let engine = Engine::new(state.bootstrap.as_str(), script_bridge)?;
                     engine.run_script(&source)?;
                     Ok(engine)
@@ -2190,6 +2664,16 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
 
                 match result {
                     Ok(engine) => {
+                        let resolved_device_id = resolved_target
+                            .as_ref()
+                            .and_then(|target| target.device_id.clone())
+                            .or(requested_device_id.clone());
+                        let resolved_transport_id = resolved_target
+                            .as_ref()
+                            .and_then(|target| target.transport_id.clone());
+                        let warning = resolved_target
+                            .as_ref()
+                            .and_then(|target| target.warning.clone());
                         send_ws_json(
                             &mut ws,
                             serde_json::json!({
@@ -2197,7 +2681,9 @@ fn handle_gateway_websocket(stream: TcpStream, state: Arc<GatewayServerState>) -
                                 "hostSessionId": "local",
                                 "scriptInstanceId": script_id,
                                 "name": name,
-                                "deviceId": requested_device_id,
+                                "deviceId": resolved_device_id,
+                                "transportId": resolved_transport_id,
+                                "warning": warning,
                             }),
                         )?;
                         rev += 1;
@@ -2294,7 +2780,7 @@ fn send_gateway_device_status<S: Read + Write>(
     ws: &mut WebSocket<S>,
     state: &GatewayServerState,
 ) -> Result<()> {
-    let transport_status = state.transport_status.lock().unwrap();
+    let settings = state.device_registry.settings();
     send_ws_json(
         ws,
         serde_json::json!({
@@ -2302,93 +2788,11 @@ fn send_gateway_device_status<S: Read + Write>(
             "hostSessionId": "local",
             "connected": true,
             "runtimeOwner": "emwaver-gateway",
-            "devices": gateway_status_devices(true, &transport_status),
+            "devices": state.device_registry.devices_json(),
+            "settings": gateway_settings_json(&settings),
         }),
     )?;
     Ok(())
-}
-
-fn gateway_status_devices(
-    connected: bool,
-    transport_status: &GatewayTransportStatus,
-) -> Vec<serde_json::Value> {
-    vec![selected_gateway_device(connected, transport_status)]
-}
-
-fn selected_gateway_device(
-    connected: bool,
-    transport_status: &GatewayTransportStatus,
-) -> serde_json::Value {
-    if transport_status.no_device {
-        return serde_json::json!({
-            "id": "local-gateway-no-device",
-            "name": "Gateway hardware disabled",
-            "transport": "None",
-            "connected": connected,
-        });
-    }
-    if transport_status.sim_device {
-        return serde_json::json!({
-            "id": "local-gateway-sim",
-            "name": "EMWaver simulator",
-            "transport": "Simulator",
-            "boardType": "sim",
-            "connected": connected,
-        });
-    }
-    if transport_status.ble {
-        let transport_id = "ble:auto".to_string();
-        return serde_json::json!({
-            "id": gateway_owned_device_id(&transport_id, transport_status),
-            "transportId": transport_id,
-            "name": "ESP32 BLE",
-            "transport": "BLE",
-            "boardType": "esp32s3",
-            "connected": connected,
-            "firmwareVersion": transport_status.firmware_version.clone(),
-            "hardwareUid": transport_status.hardware_uid.clone(),
-        });
-    }
-    if let Some(host) = transport_status.wifi.as_deref() {
-        let transport_id = format!("wifi:{host}:{}", transport_status.wifi_port);
-        return serde_json::json!({
-            "id": gateway_owned_device_id(&transport_id, transport_status),
-            "transportId": transport_id,
-            "name": format!("ESP32 Wi-Fi {host}:{}", transport_status.wifi_port),
-            "transport": "Wi-Fi",
-            "boardType": "esp32",
-            "connected": connected,
-            "endpoint": format!("{host}:{}", transport_status.wifi_port),
-            "firmwareVersion": transport_status.firmware_version.clone(),
-            "hardwareUid": transport_status.hardware_uid.clone(),
-        });
-    }
-
-    let selected_id = transport_status
-        .device_id
-        .as_deref()
-        .unwrap_or("auto")
-        .to_string();
-    let transport_id = format!("midi:{selected_id}");
-    serde_json::json!({
-        "id": gateway_owned_device_id(&transport_id, transport_status),
-        "transportId": transport_id,
-        "name": if selected_id == "auto" { "USB MIDI auto".to_string() } else { format!("USB MIDI {selected_id}") },
-        "transport": "USB",
-        "connected": connected,
-        "firmwareVersion": transport_status.firmware_version.clone(),
-        "hardwareUid": transport_status.hardware_uid.clone(),
-    })
-}
-
-fn gateway_owned_device_id(fallback: &str, transport_status: &GatewayTransportStatus) -> String {
-    transport_status
-        .hardware_uid
-        .as_deref()
-        .map(str::trim)
-        .filter(|uid| !uid.is_empty())
-        .map(|uid| format!("uid:{uid}"))
-        .unwrap_or_else(|| fallback.to_string())
 }
 
 fn send_ui_snapshot<S: Read + Write>(
@@ -2593,16 +2997,50 @@ fn handle_gateway_http(mut stream: TcpStream, state: Arc<GatewayServerState>) ->
             200,
             serde_json::json!({ "examples": load_bundled_examples()? }),
         ),
-        ("GET", "/v1/devices") => {
-            let transport_status = state.transport_status.lock().unwrap().clone();
-            match list_devices_json(None, 3922, Some(&transport_status)) {
-                Ok(body) => write_http_json(&mut stream, 200, body),
+        ("GET", "/v1/devices") => write_http_json(
+            &mut stream,
+            200,
+            serde_json::json!({
+                "ok": true,
+                "devices": state.device_registry.devices_json(),
+                "settings": gateway_settings_json(&state.device_registry.settings()),
+            }),
+        ),
+        ("GET", "/v1/settings") => write_http_json(
+            &mut stream,
+            200,
+            serde_json::json!({
+                "ok": true,
+                "settings": gateway_settings_json(&state.device_registry.settings()),
+            }),
+        ),
+        ("POST", "/v1/settings") => {
+            match serde_json::from_slice::<GatewaySettings>(&request.body) {
+                Ok(settings) => match state.device_registry.replace_settings(settings) {
+                    Ok(()) => write_http_json(
+                        &mut stream,
+                        200,
+                        serde_json::json!({
+                            "ok": true,
+                            "settings": gateway_settings_json(&state.device_registry.settings()),
+                        }),
+                    ),
+                    Err(err) => write_http_json(
+                        &mut stream,
+                        400,
+                        serde_json::json!({
+                            "ok": false,
+                            "error": "settings_failed",
+                            "message": err.to_string(),
+                        }),
+                    ),
+                },
                 Err(err) => write_http_json(
                     &mut stream,
-                    500,
+                    400,
                     serde_json::json!({
                         "ok": false,
-                        "error": "devices_failed",
+                        "error": "invalid_settings",
                         "message": err.to_string(),
                     }),
                 ),
@@ -2620,6 +3058,7 @@ fn handle_gateway_http(mut stream: TcpStream, state: Arc<GatewayServerState>) ->
 struct HttpRequest {
     method: String,
     path: String,
+    body: Vec<u8>,
 }
 
 fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest> {
@@ -2666,7 +3105,8 @@ fn read_http_request(stream: &mut TcpStream) -> Result<HttpRequest> {
         }
         buffer.extend_from_slice(&chunk[..n]);
     }
-    Ok(HttpRequest { method, path })
+    let body = buffer[body_start..buffer.len().min(body_start + content_length)].to_vec();
+    Ok(HttpRequest { method, path, body })
 }
 
 fn find_header_end(buffer: &[u8]) -> Option<usize> {
@@ -2808,6 +3248,8 @@ fn default_scripts_dir() -> PathBuf {
 }
 
 fn print_paths() -> Result<()> {
+    println!("config dir: {}", config_dir()?.display());
+    println!("settings:   {}", settings_path()?.display());
     println!("state dir: {}", state_dir()?.display());
     println!("pidfile:  {}", pidfile_path()?.display());
     println!("logfile:  {}", logfile_path()?.display());
@@ -2929,9 +3371,12 @@ fn env_trim(key: &str) -> Option<String> {
 }
 
 fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+    let log_filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        tracing_subscriber::EnvFilter::new(
+            "emwaver=info,emwaver_device=info,emwaver_runtime=info,btleplug=off",
+        )
+    });
+    tracing_subscriber::fmt().with_env_filter(log_filter).init();
 
     let cli = Cli::parse();
 
@@ -3045,6 +3490,21 @@ fn main() -> Result<()> {
             ServiceCmd::Status => service_status(),
         },
         Commands::Tui => run_tui(),
+        Commands::Settings { cmd } => match cmd {
+            None => settings_terminal_ui(),
+            Some(SettingsCmd::Show { json }) => print_settings(json),
+            Some(SettingsCmd::Reset) => reset_gateway_settings(),
+        },
+        Commands::Device { cmd } => match cmd {
+            None | Some(DeviceSettingsCmd::Show) => print_saved_device(),
+            Some(DeviceSettingsCmd::Set { uid }) => set_saved_device(Some(uid)),
+            Some(DeviceSettingsCmd::Clear) => set_saved_device(None),
+        },
+        Commands::Transport { cmd } => match cmd {
+            None | Some(TransportSettingsCmd::Show) => print_saved_transport(),
+            Some(TransportSettingsCmd::Set { transport }) => set_saved_transport(Some(transport)),
+            Some(TransportSettingsCmd::Clear) => set_saved_transport(None),
+        },
         Commands::Devices {
             json,
             port,
@@ -3060,8 +3520,21 @@ fn main() -> Result<()> {
             timeout_ms,
             no_wait,
             device,
-        } => run_script(script, name, port, gateway_url, timeout_ms, no_wait, device),
+            transport,
+        } => run_script(
+            script,
+            name,
+            port,
+            gateway_url,
+            timeout_ms,
+            no_wait,
+            device,
+            transport,
+        ),
         Commands::Wifi { cmd } => match cmd {
+            WifiCmd::Add { host, port } => add_wifi_target(host, port),
+            WifiCmd::Remove { host, port } => remove_wifi_target(host, port),
+            WifiCmd::List => print_wifi_targets(),
             WifiCmd::Provision {
                 ssid,
                 password,
@@ -3216,6 +3689,23 @@ mod tests {
             gateway_ui_event_args("viewport", json!({"min": 10, "max": 20})),
             vec![json!({"min": 10, "max": 20})]
         );
+    }
+
+    #[test]
+    fn gateway_settings_normalize_uid_prefix() {
+        assert_eq!(
+            normalize_hardware_uid(" UID:D83BDAA4EC7C ").unwrap(),
+            "d83bdaa4ec7c"
+        );
+        assert!(normalize_hardware_uid("d83b").is_err());
+    }
+
+    #[test]
+    fn gateway_settings_normalize_transport_aliases() {
+        assert_eq!(normalize_transport_preference("usb-midi").unwrap(), "usb");
+        assert_eq!(normalize_transport_preference("Wi-Fi").unwrap(), "wifi");
+        assert_eq!(normalize_transport_preference("").unwrap(), "auto");
+        assert!(normalize_transport_preference("serial").is_err());
     }
 
     #[test]

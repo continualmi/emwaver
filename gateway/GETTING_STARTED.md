@@ -18,7 +18,7 @@ Run the Gateway from the Rust workspace:
 
 ```bash
 cd ../backend
-cargo run -p emwaver -- gateway serve --sim-device
+cargo run -p emwaver -- gateway serve
 ```
 
 Open:
@@ -43,14 +43,21 @@ cd gateway/backend
 cargo run -p emwaver -- run ../../assets/default-scripts/blink.emw
 ```
 
-Useful Gateway startup modes:
+Gateway starts the local webserver and polls all supported transports. The explicit modes are for special cases:
 
 ```bash
 emw gateway serve --sim-device
 emw gateway serve --no-device
-emw gateway serve --device 0
-emw gateway serve --ble
-emw gateway serve --wifi 192.168.1.44 --wifi-port 3922
+emw gateway serve --wifi 192.168.1.44 --wifi-port 3922 # manual Wi-Fi seed
+```
+
+Select defaults once, then omit flags on normal runs:
+
+```bash
+emw settings
+emw device set uid:d83bdaa4ec7c
+emw transport set auto
+emw run assets/default-scripts/hello.emw
 ```
 
 ## WebSocket Flow
@@ -73,7 +80,9 @@ Then send:
 {
   "type": "script.run",
   "name": "hello.emw",
-  "source": "UI.render(UI.text({ text: \"hello\" }));"
+  "source": "UI.render(UI.text({ text: \"hello\" }));",
+  "deviceId": "uid:d83bdaa4ec7c",
+  "transport": "auto"
 }
 ```
 

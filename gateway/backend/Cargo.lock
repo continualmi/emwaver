@@ -714,6 +714,7 @@ dependencies = [
  "emwaver-runtime",
  "nix",
  "ratatui",
+ "serde",
  "serde_json",
  "tracing",
  "tracing-subscriber",
