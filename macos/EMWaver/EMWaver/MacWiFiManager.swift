@@ -30,6 +30,7 @@ final class MacWiFiManager {
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryProbeOpenDelay: DispatchTimeInterval = .milliseconds(200)
+    private static let discoveryProbeRetryDelay: DispatchTimeInterval = .milliseconds(250)
     private static let hardwareUIDCommand = Data([0x08])
 
     private struct BonjourMetadata {
@@ -444,7 +445,30 @@ final class MacWiFiManager {
         let validationSocket = URLSession.shared.webSocketTask(with: url)
         advertisedValidationSockets[record.id] = validationSocket
         validationSocket.resume()
-        queue.asyncAfter(deadline: .now() + Self.discoveryProbeOpenDelay) { [weak self] in
+        scheduleAdvertisedUIDSend(
+            record: record,
+            socket: validationSocket,
+            frame: frame,
+            removeOnFailure: removeOnFailure,
+            delay: Self.discoveryProbeOpenDelay
+        )
+        queue.asyncAfter(deadline: .now() + Self.discoveryProbeTimeout) { [weak self] in
+            guard let self else { return }
+            guard self.validatingAdvertisedDeviceIDs.contains(record.id),
+                  self.advertisedValidationSockets[record.id] === validationSocket else { return }
+            Self.log("advertised validation timed out id=\(record.id)")
+            self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+        }
+    }
+
+    private func scheduleAdvertisedUIDSend(
+        record: MacWiFiDeviceRecord,
+        socket validationSocket: URLSessionWebSocketTask,
+        frame: Data,
+        removeOnFailure: Bool,
+        delay: DispatchTimeInterval
+    ) {
+        queue.asyncAfter(deadline: .now() + delay) { [weak self] in
             guard let self else { return }
             guard self.validatingAdvertisedDeviceIDs.contains(record.id),
                   self.advertisedValidationSockets[record.id] === validationSocket else { return }
@@ -454,12 +478,27 @@ final class MacWiFiManager {
                     guard self.validatingAdvertisedDeviceIDs.contains(record.id),
                           self.advertisedValidationSockets[record.id] === validationSocket else { return }
                     if let error {
-                        Self.log("advertised UID probe send failed id=\(record.id) error=\(error.localizedDescription)")
-                        self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
+                        Self.log("advertised UID probe send not ready id=\(record.id) error=\(error.localizedDescription)")
+                        self.scheduleAdvertisedUIDSend(
+                            record: record,
+                            socket: validationSocket,
+                            frame: frame,
+                            removeOnFailure: removeOnFailure,
+                            delay: Self.discoveryProbeRetryDelay
+                        )
+                        return
                     }
+                    self.receiveAdvertisedUIDResponse(record: record, socket: validationSocket, removeOnFailure: removeOnFailure)
                 }
             }
         }
+    }
+
+    private func receiveAdvertisedUIDResponse(
+        record: MacWiFiDeviceRecord,
+        socket validationSocket: URLSessionWebSocketTask,
+        removeOnFailure: Bool
+    ) {
         validationSocket.receive { [weak self] result in
             guard let self else { return }
             self.queue.async {
@@ -482,13 +521,6 @@ final class MacWiFiManager {
                     self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
                 }
             }
-        }
-        queue.asyncAfter(deadline: .now() + Self.discoveryProbeTimeout) { [weak self] in
-            guard let self else { return }
-            guard self.validatingAdvertisedDeviceIDs.contains(record.id),
-                  self.advertisedValidationSockets[record.id] === validationSocket else { return }
-            Self.log("advertised validation timed out id=\(record.id)")
-            self.finishAdvertisedValidationFailure(record, removeOnFailure: removeOnFailure)
         }
     }
 
