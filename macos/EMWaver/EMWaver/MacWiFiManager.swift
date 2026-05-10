@@ -7,6 +7,7 @@
 import Foundation
 import Network
 import Darwin
+import EMWaverTransport
 
 struct MacWiFiDeviceRecord: Identifiable, Equatable {
     let id: String
@@ -29,7 +30,9 @@ final class MacWiFiManager: NSObject {
     private static let livenessProbeTimeout: DispatchTimeInterval = .seconds(3)
     private static let discoveryReachabilityInterval: DispatchTimeInterval = .seconds(2)
     private static let discoveryProbeTimeout: DispatchTimeInterval = .seconds(3)
-    private static let hardwareUIDCommand = Data([0x08])
+    private static let laneSizeBytes = 18
+    private static let superframeSizeBytes = 36
+    private static let hardwareUIDOpcode: UInt8 = 0x08
 
     private struct BonjourMetadata {
         var localIdentifier: String?
@@ -448,7 +451,8 @@ final class MacWiFiManager: NSObject {
 
     private func validateAdvertisedRecord(_ record: MacWiFiDeviceRecord, removeOnFailure: Bool = false) {
         guard let url = Self.webSocketURL(host: record.host, port: record.port),
-              let frame = Self.makeEnvelope(kind: 1, sequence: 1, payload: Self.hardwareUIDCommand) else { return }
+              let hardwareUIDCommand = Self.hardwareUIDCommandSysex(),
+              let frame = Self.makeEnvelope(kind: 1, sequence: 1, payload: hardwareUIDCommand) else { return }
         guard socket == nil else { return }
         validatingAdvertisedDeviceIDs.insert(record.id)
         Self.log("validating advertised uid id=\(record.id)")
@@ -649,7 +653,8 @@ final class MacWiFiManager: NSObject {
     ) {
         guard pendingLivenessSequence == nil else { return }
         let sequence = nextSequence()
-        guard let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: Self.hardwareUIDCommand) else { return }
+        guard let hardwareUIDCommand = Self.hardwareUIDCommandSysex(),
+              let frame = Self.makeEnvelope(kind: 1, sequence: sequence, payload: hardwareUIDCommand) else { return }
         let pending = PendingResponse()
         pendingLivenessSequence = sequence
         pendingResponses[sequence] = pending
@@ -813,7 +818,21 @@ final class MacWiFiManager: NSObject {
         return (data.subdata(in: 10..<data.count), sequence)
     }
 
+    static func hardwareUIDCommandSysex() -> Data? {
+        var superframe = Data(repeating: 0, count: superframeSizeBytes)
+        superframe[0] = hardwareUIDOpcode
+        return UsbMidiSysex.encodeSuperframe(superframe)
+    }
+
     static func hardwareUID(from response: Data) -> String? {
+        if let superframe = UsbMidiSysex.decodeSysexToSuperframe(response),
+           superframe.count >= laneSizeBytes {
+            return hardwareUID(fromCommandLane: superframe.subdata(in: 0..<laneSizeBytes))
+        }
+        return hardwareUID(fromCommandLane: response)
+    }
+
+    private static func hardwareUID(fromCommandLane response: Data) -> String? {
         guard response.count >= 7, response[0] == 0x80 else { return nil }
         let payload = response.dropFirst(1)
         let significantLength = payload.lastIndex(where: { $0 != 0 })

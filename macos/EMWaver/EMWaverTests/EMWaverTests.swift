@@ -7,6 +7,7 @@
 
 import Testing
 import Foundation
+import EMWaverTransport
 @testable import EMWaver
 
 struct EMWaverTests {
@@ -62,6 +63,23 @@ struct EMWaverTests {
         #expect(MacWiFiManager.hardwareUID(from: response) == "d83bdaa4ec7c")
         #expect(MacWiFiManager.hardwareUID(from: Data([0x80, 0, 0, 0, 0, 0, 0])) == nil)
         #expect(MacWiFiManager.hardwareUID(from: Data([0x81, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c])) == nil)
+    }
+
+    @Test func wifiHardwareUIDProbeUsesSysexEnvelopePayload() throws {
+        let sysex = try #require(MacWiFiManager.hardwareUIDCommandSysex())
+        #expect(sysex.count == 48)
+
+        let frame = try #require(MacWiFiManager.makeEnvelope(kind: 1, sequence: 1, payload: sysex))
+        let envelope = try #require(MacWiFiManager.unwrapEnvelope(frame))
+        #expect(envelope.sequence == 1)
+        #expect(envelope.payload == sysex)
+    }
+
+    @Test func wifiHardwareUIDParsesSysexCommandResponse() throws {
+        var superframe = Data(repeating: 0, count: 36)
+        superframe.replaceSubrange(0..<7, with: Data([0x80, 0xd8, 0x3b, 0xda, 0xa4, 0xec, 0x7c]))
+        let sysex = try #require(UsbMidiSysex.encodeSuperframe(superframe))
+        #expect(MacWiFiManager.hardwareUID(from: sysex) == "d83bdaa4ec7c")
     }
 
     @Test func wifiEnvelopeRejectsOversizedPayloads() {
