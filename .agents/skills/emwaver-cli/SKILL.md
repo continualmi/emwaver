@@ -24,8 +24,11 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 
 ## CLI invocation policy
 
-- Use `emw` as the canonical CLI command in examples and executions; treat it as the dev-equivalent entrypoint (the command we expect to behave like running the local `cargo run -p emwaver -- ...` flow).
-- If `emw` is unavailable in a source-checkout/dev environment, map to the dev helper explicitly and retry the same command via `./emwaver.sh ...`.
+- Always run commands with `emw` first in examples and real executions; treat it as the canonical entrypoint (the command we expect to behave like running the local `cargo run -p emwaver -- ...` flow).
+- If `emw` fails because of command resolution/path issues (`command not found`, not executable, missing shim/symlink), immediately retry the same command via `./emwaver.sh ...`.
+- After a path-resolution failure, apply a one-time path fix so later commands keep using `emw`:
+  - `./emwaver.sh install --prefix ~/.local --force`
+  - `export PATH="$HOME/.local/bin:$PATH"`
 - Keep command semantics identical between `emw` and the dev fallback (`./emwaver.sh`) so troubleshooting reflects installed-user behavior.
 
 ### How `emw` mapping works today
