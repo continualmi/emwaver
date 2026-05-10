@@ -272,6 +272,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             midiQueue.async {
                 self.wifiManager?.setUIDConnectionProbeEnabled(self.uidConnectionProbeEnabled)
                 if !self.uidConnectionProbeEnabled {
+                    self.uidConnectionProbeInFlightDeviceIDs.removeAll()
                     self.hardwareUIDByDeviceID.removeAll()
                     self.publishDiscoveredDevices()
                     DispatchQueue.main.async {
@@ -338,6 +339,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private var pendingAutoConnectWiFiID: String?
     private var suppressedAutoConnectWiFiIDs: Set<String> = []
     private var wifiConnectionErrorsByID: [String: String] = [:]
+    private var uidConnectionProbeInFlightDeviceIDs: Set<String> = []
 
     private var bleCentral: CBCentralManager?
     private var blePeripheral: CBPeripheral?
@@ -795,6 +797,7 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         refreshPortsInternal()
         publishDiscoveredDevices()
         autoConnectIfNeededInternal()
+        scheduleUIDConnectionPollsInternal()
     }
 
     // MARK: - ScriptDevice (TX/RX)
@@ -1377,6 +1380,47 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     private func recordUIDConnectionProbeCheck(at date: Date = Date()) {
         DispatchQueue.main.async {
             self.uidConnectionProbeLastChecked = date
+        }
+    }
+
+    private func scheduleUIDConnectionPollsInternal() {
+        guard uidConnectionProbeEnabled else { return }
+
+        var deviceIDs: [String] = []
+        if activeTransport == .usbMidi,
+           connectedSource != 0,
+           connectedDestination != 0,
+           let activeDeviceID,
+           activeDeviceID.hasPrefix("midi:") {
+            deviceIDs.append(activeDeviceID)
+        }
+
+        for (uuid, peripheral) in bleConnectedPeripheralsByID where peripheral.state == .connected {
+            guard bleCommandCharacteristicsByID[uuid] != nil else { continue }
+            deviceIDs.append("ble:\(uuid.uuidString)")
+        }
+
+        for deviceID in deviceIDs where !uidConnectionProbeInFlightDeviceIDs.contains(deviceID) {
+            uidConnectionProbeInFlightDeviceIDs.insert(deviceID)
+            DispatchQueue.global(qos: .utility).async {
+                let uid = self.queryHardwareUID(timeoutMs: 1500, deviceID: deviceID)
+                self.midiQueue.async {
+                    self.uidConnectionProbeInFlightDeviceIDs.remove(deviceID)
+                    guard self.uidConnectionProbeEnabled else {
+                        self.publishDiscoveredDevices()
+                        return
+                    }
+                    if let uid {
+                        self.hardwareUIDByDeviceID[deviceID] = uid
+                        if self.activeDeviceID == deviceID {
+                            DispatchQueue.main.async {
+                                self.connectedHardwareUID = uid
+                            }
+                        }
+                    }
+                    self.publishDiscoveredDevices()
+                }
+            }
         }
     }
 
