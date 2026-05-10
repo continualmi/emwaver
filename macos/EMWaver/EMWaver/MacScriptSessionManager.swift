@@ -34,6 +34,7 @@ struct MacScriptSessionSummary: Identifiable, Equatable {
 @MainActor
 private final class MacScriptSession {
     let manager: ScriptPreviewManager
+    let deviceBridge: LocalTargetedScriptDevice
     let scriptId: String
     let scriptName: String
     let deviceID: String?
@@ -44,6 +45,7 @@ private final class MacScriptSession {
 
     init(
         manager: ScriptPreviewManager,
+        deviceBridge: LocalTargetedScriptDevice,
         scriptId: String,
         scriptName: String,
         deviceID: String?,
@@ -52,6 +54,7 @@ private final class MacScriptSession {
         transportSessionClaimed: Bool
     ) {
         self.manager = manager
+        self.deviceBridge = deviceBridge
         self.scriptId = scriptId
         self.scriptName = scriptName
         self.deviceID = deviceID
@@ -188,10 +191,12 @@ final class MacScriptSessionManager: ObservableObject {
         }
 
         let manager = ScriptPreviewManager()
-        manager.attach(device: LocalTargetedScriptDevice(base: device, deviceID: targetID))
+        let deviceBridge = LocalTargetedScriptDevice(base: device, deviceID: targetID)
+        manager.attach(device: deviceBridge)
 
         let session = MacScriptSession(
             manager: manager,
+            deviceBridge: deviceBridge,
             scriptId: request.scriptId,
             scriptName: request.name,
             deviceID: targetID,

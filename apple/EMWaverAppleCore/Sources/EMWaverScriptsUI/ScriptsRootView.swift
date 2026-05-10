@@ -348,6 +348,13 @@ public struct ScriptsRootView: View {
                         VStack {
                             if renderManager.isRendering {
                                 ProgressView("Rendering…")
+                            } else if let error = renderManager.scriptError, !error.isEmpty {
+                                Text(error)
+                                    .font(.caption.monospaced())
+                                    .foregroundColor(.red)
+                                    .textSelection(.enabled)
+                                    .multilineTextAlignment(.leading)
+                                    .frame(maxWidth: 640, alignment: .leading)
                             } else {
                                 Text("Render a script to preview it here.")
                                     .foregroundColor(.secondary)
