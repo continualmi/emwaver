@@ -38,7 +38,7 @@ use url::Url;
 const DEFAULT_GATEWAY_PORT: u16 = 3921;
 const GATEWAY_UID_POLL_INTERVAL: Duration = Duration::from_secs(5);
 const GATEWAY_BLE_SCAN_MS: u64 = 5_000;
-const GATEWAY_BLE_STALE_TTL: Duration = Duration::from_secs(20);
+const GATEWAY_BLE_STALE_TTL: Duration = Duration::from_secs(6);
 const GATEWAY_TRANSPORT_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 const TRANSPORT_SOURCE_USB: u8 = 1;
 const TRANSPORT_SOURCE_BLE: u8 = 2;
@@ -1009,6 +1009,15 @@ fn gateway_start(
         return Ok(());
     }
 
+    // Secondary guard: if something is already listening on the port (pidfile
+    // was stale or missing), refuse to start a second gateway process.
+    let port_value = port.unwrap_or(DEFAULT_GATEWAY_PORT);
+    if TcpStream::connect(("127.0.0.1", port_value)).is_ok() {
+        anyhow::bail!(
+            "port {port_value} is already in use — another gateway process may be running"
+        );
+    }
+
     let exe = std::env::current_exe().context("failed to resolve current emwaver executable")?;
     let logfile = logfile_path()?;
     let stdout = OpenOptions::new()
@@ -1063,11 +1072,10 @@ fn gateway_start(
 
     let pid = child.id();
     fs::write(pidfile_path()?, pid.to_string())?;
+    wait_for_gateway_http(pid as i32, port_value)?;
     if let Ok(stamp) = binary_mtime_stamp() {
         let _ = fs::write(binary_stamp_path().unwrap_or_default(), stamp);
     }
-    let port_value = port.unwrap_or(DEFAULT_GATEWAY_PORT);
-    wait_for_gateway_http(pid as i32, port_value)?;
     println!("gateway: started (pid={pid})");
     println!("gateway url: {}", gateway_web_url(port_value));
     println!("logfile: {}", logfile.display());
@@ -1127,11 +1135,16 @@ fn parse_gateway_port_arg(args: &[String]) -> Option<u16> {
 fn wait_for_gateway_http(pid: i32, port: u16) -> Result<()> {
     let deadline = Instant::now() + Duration::from_secs(15);
     loop {
-        if gateway_http_json(port, "/health").is_ok() {
-            return Ok(());
-        }
         if !is_running(pid) {
             anyhow::bail!("gateway exited before localhost HTTP became ready");
+        }
+        if gateway_http_json(port, "/health").is_ok() {
+            // Verify the process we launched is still alive — another process
+            // on the same port could have answered the health check instead.
+            if !is_running(pid) {
+                anyhow::bail!("gateway exited before localhost HTTP became ready");
+            }
+            return Ok(());
         }
         if Instant::now() >= deadline {
             anyhow::bail!("timed out waiting for Gateway HTTP on 127.0.0.1:{port}");
@@ -1164,14 +1177,19 @@ fn gateway_stop() -> Result<()> {
 
 fn binary_mtime_stamp() -> Result<String> {
     let exe = std::env::current_exe().context("failed to resolve current executable")?;
-    let mtime = fs::metadata(&exe)
-        .and_then(|m| m.modified())
-        .context("failed to stat current executable")?;
+    let meta = fs::metadata(&exe).context("failed to stat current executable")?;
+    let mtime = meta
+        .modified()
+        .context("failed to read mtime of current executable")?;
     let secs = mtime
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs();
-    Ok(secs.to_string())
+    // Include file size so that a same-second rebuild is also detected,
+    // and combine with the canonical path so debug vs release binaries
+    // never share a stamp.
+    let path = exe.canonicalize().unwrap_or(exe);
+    Ok(format!("{}:{}:{}", path.display(), secs, meta.len()))
 }
 
 fn maybe_auto_restart_gateway() {
@@ -1209,6 +1227,14 @@ fn gateway_restart() -> Result<()> {
             }
         }
         let _ = fs::remove_file(&pidfile);
+    }
+    // Wait for port 3921 to be free before starting a new process.
+    let port_deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < port_deadline {
+        if TcpStream::connect(("127.0.0.1", DEFAULT_GATEWAY_PORT)).is_err() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
     }
     gateway_start(None, None, false, None, 3922, false, false, None)
 }
