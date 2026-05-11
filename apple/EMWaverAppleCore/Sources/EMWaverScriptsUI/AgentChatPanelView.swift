@@ -77,14 +77,6 @@ public struct AgentChatPanelView: View {
                                     .foregroundStyle(.secondary)
                                     .font(.callout)
                             }
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(messageCardBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(messageCardBorder)
-                            )
-                            .shadow(color: messageCardShadow, radius: 10, y: 4)
                         }
 
                         if let err = viewModel.lastError, !err.isEmpty {
@@ -399,128 +391,66 @@ private struct MessageRow: View {
     let message: AgentChatMessage
 
     var body: some View {
-        HStack {
-            if message.role == .user {
-                Spacer(minLength: 24)
+        if isToolRow {
+            HStack(spacing: 5) {
+                Image(systemName: "wrench.and.screwdriver")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(toolInlineText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
             }
-
-            VStack(alignment: message.role == .user ? .trailing : .leading, spacing: 6) {
-                if message.role != .user {
+        } else if message.role == .user {
+            HStack {
+                Spacer(minLength: 24)
+                Text(message.text)
+                    .textSelection(.enabled)
+                    .font(.callout)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.accentColor.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16, style: .continuous)
+                            .strokeBorder(Color.accentColor.opacity(0.20))
+                    )
+                    .shadow(color: messageCardShadow, radius: 10, y: 4)
+                    .frame(maxWidth: 560, alignment: .trailing)
+            }
+        } else {
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 6) {
-                        if message.role == .system && isToolBubble {
-                            Image(systemName: "wrench.and.screwdriver")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        } else if message.role == .assistant {
-                            Image(systemName: "sparkles")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        Text(roleLabel)
+                        Image(systemName: "sparkles")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text("Agent")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                }
-
-                if message.role == .assistant {
-                    ChatMarkdownView(markdown: renderedText)
+                    ChatMarkdownView(markdown: message.text)
                         .textSelection(.enabled)
                         .font(.callout)
-                } else {
-                    Text(renderedText)
-                        .textSelection(.enabled)
-                        .font(isToolBubble ? .caption : .callout)
-                        .foregroundStyle(isToolBubble ? .secondary : .primary)
                 }
-            }
-            .padding(.horizontal, isToolBubble ? 10 : 14)
-            .padding(.vertical, isToolBubble ? 9 : 12)
-            .background(bubbleBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .strokeBorder(bubbleBorder)
-            )
-            .shadow(color: messageCardShadow, radius: 10, y: 4)
-            .frame(maxWidth: 560, alignment: message.role == .user ? .trailing : .leading)
-
-            if message.role != .user {
+                .frame(maxWidth: 560, alignment: .leading)
                 Spacer(minLength: 24)
             }
         }
     }
 
-    private var isToolBubble: Bool {
+    private var isToolRow: Bool {
         message.role == .system && message.text.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("[tool]")
     }
 
-    private func friendlyToolName(_ toolId: String) -> String {
-        switch toolId {
-        case "list_scripts": return "List EMWaver scripts"
-        case "list_signal_files": return "List signal files"
-        case "web_fetch": return "Fetch web page"
-        case "write_script": return "Write script"
-        case "apply_patch": return "Edit files"
-        case "run_script": return "Run script"
-        case "ui_snapshot": return "Snapshot UI"
-        case "ui_event": return "UI action"
-        default: return toolId
-        }
-    }
-
-    private var renderedText: String {
-        if isToolBubble {
-            let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            let raw = t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
-
-            // raw can be either:
-            //   "web_fetch"
-            // or
-            //   "web_fetch https://example.com"
-            let parts = raw.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
-            let toolId = parts.first.map(String.init) ?? raw
-            let detail = (parts.count > 1) ? String(parts[1]) : ""
-
-            let title = friendlyToolName(toolId)
-            if detail.isEmpty { return title }
-            return title + "\n" + detail
-        }
-        return message.text
-    }
-
-    private var roleLabel: String {
-        switch message.role {
-        case .user: return "You"
-        case .assistant: return "Agent"
-        case .system:
-            if isToolBubble { return "Tool" }
-            return "System"
-        }
-    }
-
-    private var bubbleBackground: some ShapeStyle {
-        switch message.role {
-        case .user:
-            return AnyShapeStyle(Color.accentColor.opacity(0.18))
-        case .assistant:
-            return AnyShapeStyle(messageCardBackground)
-        case .system:
-            if isToolBubble {
-                return AnyShapeStyle(Color.secondary.opacity(0.11))
-            }
-            return AnyShapeStyle(Color.orange.opacity(0.10))
-        }
-    }
-
-    private var bubbleBorder: Color {
-        switch message.role {
-        case .user:
-            return Color.accentColor.opacity(0.20)
-        case .assistant:
-            return messageCardBorder
-        case .system:
-            return isToolBubble ? Color.secondary.opacity(0.16) : Color.orange.opacity(0.18)
-        }
+    private var toolInlineText: String {
+        let t = message.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = t.replacingOccurrences(of: "[tool]", with: "").trimmingCharacters(in: .whitespaces)
+        let parts = raw.split(separator: " ", maxSplits: 1, omittingEmptySubsequences: true)
+        let toolId = parts.first.map(String.init) ?? raw
+        let detail = parts.count > 1 ? String(parts[1]) : ""
+        if detail.isEmpty { return toolId }
+        return toolId + "  " + detail
     }
 }
 

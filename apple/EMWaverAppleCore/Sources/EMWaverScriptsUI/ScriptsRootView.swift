@@ -115,7 +115,7 @@ public struct ScriptsRootView: View {
 
     #if os(macOS)
     @State private var showingAgentPanel = false
-    private let agentPanelWidth: CGFloat = 380
+    @State private var agentPanelWidth: CGFloat = 380
     #endif
 
     @MainActor
@@ -200,6 +200,7 @@ public struct ScriptsRootView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
 
                 if showingAgentPanel {
+                    AgentPanelResizeHandle(panelWidth: $agentPanelWidth)
                     AgentChatPanelView(
                         viewModel: agentViewModel,
                         agentEnabled: agentEnabled,
@@ -913,7 +914,6 @@ public struct ScriptsRootView: View {
         let empty = schema([])
         let scriptId = optionalStringProperty("scriptId", "Script id. Defaults to the current script.")
         return [
-            AgentToolDefinition(name: "get_current_script", description: "Return the open or selected script id, name, draft text, read-only flag, and dirty flag.", parameters: empty),
             AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom .emw scripts.", parameters: empty),
             AgentToolDefinition(name: "read_script", description: "Return script source. Defaults to the current script.", parameters: schema([scriptId])),
             AgentToolDefinition(name: "apply_patch_to_script", description: "Update an editable script draft. Asset scripts are read-only.", parameters: schema([
@@ -921,8 +921,7 @@ public struct ScriptsRootView: View {
                 optionalStringProperty("patch", "Unified diff patch to apply."),
                 optionalStringProperty("content", "Full replacement script content."),
             ])),
-            AgentToolDefinition(name: "preview_script", description: "Render a script in the local preview.", parameters: schema([scriptId])),
-            AgentToolDefinition(name: "run_script", description: "Alias for preview_script; starts the script runtime.", parameters: schema([scriptId])),
+            AgentToolDefinition(name: "run_script", description: "Start the script runtime for the given script.", parameters: schema([scriptId])),
             AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
             AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
             AgentToolDefinition(name: "get_ui_snapshot", description: "Return the latest rendered script UI tree summary.", parameters: empty),
@@ -962,15 +961,13 @@ public struct ScriptsRootView: View {
     private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
         do {
             switch name {
-            case "get_current_script":
-                return try await agentToolCurrentScript()
             case "list_scripts":
                 return agentToolListScripts()
             case "read_script":
                 return try await agentToolReadScript(scriptId: arguments["scriptId"]?.stringValue)
             case "apply_patch_to_script":
                 return try await agentToolApplyPatch(scriptId: arguments["scriptId"]?.stringValue, patch: arguments["patch"]?.stringValue, content: arguments["content"]?.stringValue)
-            case "preview_script", "run_script":
+            case "run_script":
                 return try await agentToolPreviewScript(scriptId: arguments["scriptId"]?.stringValue, toolName: name)
             case "stop_script":
                 if let onStopActiveScript {
@@ -1021,13 +1018,6 @@ public struct ScriptsRootView: View {
             return selected
         }
         throw MacAgentToolError.noScriptSelected
-    }
-
-    private func agentToolCurrentScript() async throws -> AgentToolResult {
-        let id = try currentAgentScriptId()
-        await viewModel.ensureContent(for: id)
-        let source = (showingEditor && currentScriptId == id && editorMode == .script) ? editorContent : viewModel.scriptDraft(for: id)
-        return AgentToolResult(id: nil, name: "get_current_script", ok: true, result: .object(scriptObject(id: id, source: source)))
     }
 
     private func agentToolListScripts() -> AgentToolResult {
@@ -1437,6 +1427,41 @@ public struct ScriptsRootView: View {
         #endif
     }
 }
+
+#if os(macOS)
+private struct AgentPanelResizeHandle: View {
+    @Binding var panelWidth: CGFloat
+    private let minWidth: CGFloat = 240
+    private let maxWidth: CGFloat = 680
+    @State private var isHovering = false
+    @State private var dragStartWidth: CGFloat? = nil
+
+    var body: some View {
+        ZStack {
+            Color.clear
+                .frame(width: 8)
+                .contentShape(Rectangle())
+            Rectangle()
+                .fill(Color.primary.opacity(isHovering ? 0.20 : 0.10))
+                .frame(width: 1)
+        }
+        .frame(width: 8)
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { value in
+                    if dragStartWidth == nil { dragStartWidth = panelWidth }
+                    let proposed = (dragStartWidth ?? panelWidth) - value.translation.width
+                    panelWidth = max(minWidth, min(maxWidth, proposed))
+                }
+                .onEnded { _ in dragStartWidth = nil }
+        )
+        .onHover { hovering in
+            isHovering = hovering
+            if hovering { NSCursor.resizeLeftRight.push() } else { NSCursor.pop() }
+        }
+    }
+}
+#endif
 
 private struct EmwFileBadgeIcon: View {
     var body: some View {
