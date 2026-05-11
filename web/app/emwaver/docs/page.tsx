@@ -13,9 +13,7 @@ export default function DocsIndex() {
         <p className="mt-4 max-w-3xl text-base leading-8 text-[color:var(--ink-dim)]">
           EMWaver turns your phone or computer into the working surface for hardware control.
           Plug in a supported board, open the app, and start interacting with peripherals,
-          signals, and scripts without firmware builds or IDE setup. On Linux, the primary
-          desktop/server path is the <code>emwaver</code> CLI: it starts a localhost browser
-          gateway for rendering scripts and a daemon underneath for USB/BLE transport.
+          signals, and scripts without firmware builds or IDE setup.
         </p>
 
         <div className="mt-8 grid gap-3 md:grid-cols-3">
@@ -34,7 +32,7 @@ export default function DocsIndex() {
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Install the app or CLI</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use the native app where it fits, or use the CLI on Linux/macOS to run the browser gateway and daemon locally.
+              Use the native app where it fits — macOS, Windows, Android, or iOS.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
@@ -91,13 +89,6 @@ export default function DocsIndex() {
         The board handles the physical I/O. Your phone or computer handles rendering, storage, script
         execution, and local device transport.
       </p>
-      <p>
-        On Linux, that host layer is intentionally CLI-first: <code>emwaver start</code> brings up the
-        local gateway and browser-rendered script UI, while the daemon owns BLE, USB MIDI/SysEx,
-        script execution, and UI event dispatch underneath. The same CLI/gateway shape is also useful
-        on macOS, and the long-term goal is to make the approach available on Windows as well.
-      </p>
-
       <h2>Quick start details</h2>
       <ol>
         <li>
@@ -110,7 +101,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app or CLI</strong> through the{" "}
-          <Link href="/emwaver/docs/install">Android APK, macOS DMG, Windows installer, or CLI preview download</Link>.
+          <Link href="/emwaver/docs/install">Android APK, macOS DMG, or Windows installer</Link>.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
@@ -125,10 +116,7 @@ export default function DocsIndex() {
       <ul>
         <li><strong>Android</strong> direct APK preview download</li>
         <li><strong>macOS</strong> direct DMG preview download</li>
-        <li><strong>Linux</strong> CLI/gateway tarball as the primary desktop/server method</li>
-        <li><strong>macOS CLI</strong> tarball for command-line gateway and daemon workflows</li>
         <li><strong>Windows</strong> direct installer preview, with ZIP available as an alternate package</li>
-        <li><strong>Windows CLI</strong> planned for future parity with the Linux/macOS command-line path</li>
         <li><strong>App Store and Google Play</strong> mobile listings coming soon</li>
       </ul>
 

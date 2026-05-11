@@ -19,18 +19,6 @@ const MOBILE_STORES = [
 
 const DIRECT_DOWNLOADS = [
   {
-    platform: "Linux",
-    name: "CLI + Gateway",
-    description: "Primary Linux package for localhost browser rendering and daemon-backed USB/BLE transport.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-x64.tar.gz`,
-  },
-  {
-    platform: "macOS",
-    name: "CLI + Gateway",
-    description: "Command-line gateway and daemon package for macOS.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos-cli.tar.gz`,
-  },
-  {
     platform: "Android",
     name: "APK",
     description: "Direct Android preview build.",
@@ -84,13 +72,12 @@ export default function InstallPage() {
               Install EMWaver on the device you already use.
             </h1>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              Install the native app or CLI for your platform, connect a supported board, and run
-              local scripts without an EMWaver account or cloud activation. Linux is CLI-first:
-              the command starts a localhost browser gateway and a daemon for BLE/USB transport.
+              Install the native app for your platform, connect a supported board, and run
+              local scripts without an EMWaver account or cloud activation.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["Linux CLI", "macOS", "macOS CLI", "Android", "Windows"].map((label) => (
+              {["macOS", "Android", "Windows"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
@@ -113,8 +100,7 @@ export default function InstallPage() {
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              Desktop builds are available directly. Linux uses the CLI/gateway package as the
-              primary browser-rendered hardware-control path.
+              Desktop and mobile builds are available directly.
             </p>
           </div>
 
@@ -189,35 +175,6 @@ export default function InstallPage() {
           </div>
         </section>
 
-        <section className="mt-10 grid gap-4 md:grid-cols-3">
-          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
-              Linux CLI-first
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use <code>emwaver start</code> to launch the localhost gateway and daemon-backed
-              runtime without needing a Linux desktop app.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-              Browser rendering
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              The gateway renders script UI at localhost while the daemon owns script execution,
-              UI events, and local BLE/USB transport.
-            </p>
-          </div>
-          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
-              Cross-platform goal
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              The CLI/gateway model already targets Linux and macOS packages, with Windows CLI
-              parity planned alongside the native Windows app.
-            </p>
-          </div>
-        </section>
       </main>
 
     </div>

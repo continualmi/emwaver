@@ -1,7 +1,0 @@
-[workspace]
-members = [
-  "emwaver-device",
-  "emwaver-runtime",
-  "emwaver",
-]
-resolver = "2"

@@ -23,19 +23,18 @@ Implementation details belong in folder-level `README.md` files.
 
 ## 1) Product Vision (core)
 
-EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, CLI/gateway flows, managed firmware, and optional Agent assistance.
+EMWaver is a **local-first**, open-source, AI-assisted electronics platform by **Continual MI**. It turns supported MCU boards into a scriptable hardware lab through local apps, managed firmware, and optional Agent assistance.
 
 Core direction:
 - **Business model:** open-source core plus paid Agent API usage. Revenue should come from the Agent service, not from accounts, hosted cloud control, or gating local hardware access.
 - **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
 - **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
-- **Gateway:** the local Gateway direction is being consolidated under `gateway/` as the owner of the local backend, CLI, runtime, transports, and browser frontend for terminal/browser workflows. See `gateway/MIGRATION.md`.
-- **Remote control posture:** native apps should not be positioned as Continual-hosted or Gateway-controlled remote-control hosts for the open-source core. CLI/browser workflows should use the local Gateway; native apps stay self-contained. Remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
+- **Remote control posture:** native apps should not be positioned as Continual-hosted remote-control hosts for the open-source core. Native apps stay self-contained. Remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
 - **Hardware:** multiple supported MCU boards (currently STM32-based, with ESP32 support returning; e.g., STM32F042 EMWaver board and ESP32-S3 class devices). Users bring their own compatible board.
 - **Hardware repo direction:** EMWaver should become a single open-source monorepo, with imported hardware design repos preserved under `hardware/`.
-- **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps/CLI/gateway flows should handle firmware setup and updates where practical.
+- **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** Agent-assisted workflows are first-class and are the primary paid product direction. Each app may keep its own Agent interface/runtime, but those runtimes are API clients. The only planned network interface is an optional API key to a future Continual MI/MGPT Agent backend.
 - **Client surfaces:** Android, iOS, macOS, Windows.
@@ -47,8 +46,8 @@ Core direction:
 
 ### The Core Thesis
 
-1. **Local-first electronics platform** — EMWaver uses local apps, CLI, and localhost gateway flows as the default hardware-control path.
-2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, gateway, scripts, and Agent), not the hardware. Users supply their own supported MCU board.
+1. **Local-first electronics platform** — EMWaver uses local apps as the default hardware-control path.
+2. **Software-first platform** — the product is the software stack (apps, firmware, runtime, scripts, and Agent), not the hardware. Users supply their own supported MCU board.
 3. **AI-first platform** — agents are first-class for building/testing scripts and interacting with runtime UI.
 4. **Best beginner experience** — buy a cheap supported board, install EMWaver, plug in, and start exploring without accounts, cloud activation, or firmware toolchains.
 
@@ -70,7 +69,6 @@ We intentionally give up:
 - Revenue through paid Agent API usage.
 - Multiple supported boards, one unified UX.
 - Cross-platform apps (Android/iOS/macOS/Windows).
-- Localhost gateway and SSH/VPN-friendly remote workflows.
 - Agent-driven exploration loops.
 - Larger addressable market (every compatible board owner).
 
@@ -80,7 +78,7 @@ We intentionally give up:
 
 ### Business model (open-source core + Agent API)
 
-- **Open-source core**: local runtime, local gateway, CLI, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
+- **Open-source core**: local runtime, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
 - **Paid Agent API**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI/MGPT instructions and metered API usage.
 - **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to the focused Continual MI/MGPT Agent backend unless a later product decision explicitly reopens cloud services.
 - **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
@@ -109,11 +107,6 @@ We intentionally give up:
 - Near-term EMWaver AI is served by the Continual MI/MGPT backend rather than by prompts or inference logic shipped in this repo.
 - Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
 - App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary `.emw` instruction packs, hidden board recipes, provider-routing logic, or metering policy.
-
-### Linux host scope
-
-- Linux support is **headless/CLI/gateway-first**, not a Linux GUI app.
-- SSH, TUI, CLI, and localhost browser gateway workflows are the preferred Linux direction; host-backed boards keep runtime state on the machine that owns the hardware.
 
 ### Distribution and release posture
 
@@ -163,7 +156,6 @@ Use the local README first when working in a folder:
 - `docs/REBIRTH_AUDIT.md` — completion audit and remaining gaps for the active rebirth objective
 - `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
-- `docs/PACKAGING.md` — CLI/gateway packaging direction for macOS, Linux, and Windows
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
 - `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — migration to UI snapshots/events as the only script observability channel
 - `docs/TESTS_REBIRTH.md` — validation tracker for rebirth implementation work
@@ -172,11 +164,9 @@ Use the local README first when working in a folder:
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
-- `gateway/MIGRATION.md` — controlling plan for moving local backend, CLI, runtime, transports, and browser frontend ownership into `gateway/`
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
-- `gateway/README.md` — localhost hardware control gateway direction
 - `hardware/README.md` — imported hardware design monorepo index and policy
 - `windows/README.md` — Windows app pages/services/runtime map
 - `apple/README.md` — shared Swift package (cross-platform Apple modules)
@@ -193,7 +183,6 @@ If a folder has a README, detailed documentation should live there.
 - `stm/` — firmware and firmware-related tooling (multi-board targets).
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
 - Public website/docs/downloads surface — owned by `../society` under `/emwaver`; this repo no longer carries a standalone `web/` app. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of an EMWaver cloud runtime.
-- `gateway/` — local Gateway consolidation target for account-free local `.emw` hardware control, CLI/backend/runtime/transport ownership, and the browser frontend.
 - `android/`, `ios/`, `macos/`, `windows/` — client apps.
 - `apple/` — shared Apple code package.
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
@@ -215,8 +204,7 @@ If a folder has a README, detailed documentation should live there.
 8. **Backend authority is Agent-only**: do not put local core hardware access behind backend policy, device registration, subscription checks, or account state.
 9. **No activation gate**: local board access is not governed by plan entitlements or hosted device ownership.
 10. **Multi-board support**: the platform supports multiple MCU targets behind a unified UX.
-11. **Linux host scope is headless/CLI/gateway-first**: no Linux GUI app; use CLI, TUI, SSH, and localhost gateway workflows.
-12. **CI/Releases policy**: GitHub Actions are for gateway/platform CI and optional deployment; public static pages deploy from `../society`, and GitHub Releases are not end-user app distribution for apps.
+11. **CI/Releases policy**: GitHub Actions are for platform CI and optional deployment; public static pages deploy from `../society`, and GitHub Releases are not end-user app distribution for apps.
 
 ---
 
@@ -226,7 +214,7 @@ If a folder has a README, detailed documentation should live there.
 - When changing a specific subsystem, update that folder's README.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
-- Keep local gateway/runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.
+- Keep local runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.
 - Keep imported hardware repos under `hardware/` and preserve history where practical.
 
 Workflow:

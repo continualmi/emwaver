@@ -31,7 +31,6 @@ The core hardware-control path is open and local-first: no EMWaver account, no c
 - A script-first electronics platform for running `.emw` scripts against real hardware.
 - A managed multi-transport runtime where USB is first-class, with BLE and Wi-Fi available for board classes designed around them.
 - Native client surfaces for Android, iOS, macOS, and Windows.
-- A local Gateway direction for browser and CLI control of the local hardware runtime.
 - A software-first platform where users bring a supported board and EMWaver manages the runtime and firmware setup where practical.
 - A Continual MI project with optional paid Agent API usage as the business model, not paid local hardware access.
 
@@ -51,7 +50,6 @@ apple/                   Shared Swift package used by iOS and macOS
 ios/                     iPhone and iPad app
 macos/                   macOS app
 windows/                 Windows 11 app
-gateway/                 Local Gateway backend, CLI/runtime/transports, and browser frontend
 stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 firmware/                Bundled firmware payloads consumed by apps
@@ -85,7 +83,6 @@ cd emwaver
 
 Then use the README for the subsystem you are changing:
 
-- [gateway/README.md](gateway/README.md) and [gateway/MIGRATION.md](gateway/MIGRATION.md) for local Gateway work.
 - [android/README.md](android/README.md), [ios/README.md](ios/README.md), [macos/README.md](macos/README.md), or [windows/README.md](windows/README.md) for app-specific work.
 - [stm/README.md](stm/README.md) and [esp/README.md](esp/README.md) for firmware work.
 - [hardware/README.md](hardware/README.md) for imported hardware repositories.
@@ -95,13 +92,11 @@ Then use the README for the subsystem you are changing:
 The target local flow is:
 
 ```text
-native app, CLI, or localhost browser UI
-  -> local runtime / localhost gateway
+native app
+  -> local runtime
   -> local transport
   -> supported board firmware
 ```
-
-The gateway binds to localhost by default. Remote usage should be user-owned infrastructure around the local tool, such as SSH, VPN, Tailscale, or explicit port forwarding. Continual MI-hosted remote hardware control is not part of the open-source core.
 
 ## Agent Direction
 
@@ -114,13 +109,11 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 ## Release Trackers
 
 - [REBIRTH.md](docs/REBIRTH.md) captures the local-first open-source product pivot.
-- [gateway/MIGRATION.md](gateway/MIGRATION.md) controls the Gateway consolidation into one local backend, CLI, runtime, transport, and browser frontend owner.
 - [LAUNCH_MVP.md](docs/LAUNCH_MVP.md) defines the minimum launch checklist.
 - [REBIRTH_ISSUES.md](docs/REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
 - [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.
 - [TESTS_REBIRTH.md](docs/TESTS_REBIRTH.md) tracks validation.
 - [UI_SNAPSHOT_RUNTIME_MIGRATION.md](docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md) controls the removal of script-visible logging in favor of UI snapshots/events.
-- [PACKAGING.md](docs/PACKAGING.md) covers CLI and gateway packaging direction.
 - [ESP32_WIFI_TRANSPORT_AUDIT.md](docs/ESP32_WIFI_TRANSPORT_AUDIT.md) audits implementation evidence and remaining hardware gates for the ESP32 Wi-Fi transport plan.
 - [ESP32_WIFI_REMOTE_ACCESS.md](docs/ESP32_WIFI_REMOTE_ACCESS.md) documents user-owned LAN/VPN access for ESP32 Wi-Fi transport.
 - [AGENT_API.md](docs/AGENT_API.md) defines the optional paid Agent API boundary.

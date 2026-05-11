@@ -6,7 +6,7 @@ const capabilityCards = [
   {
     label: "Local-first",
     title: "Your computer stays in charge",
-    body: "Run scripts from the native apps, CLI, or localhost gateway without EMWaver accounts, cloud activation, or hosted relay dependencies.",
+    body: "Run scripts from the native apps without EMWaver accounts, cloud activation, or hosted relay dependencies.",
   },
   {
     label: "Managed firmware",
@@ -145,7 +145,6 @@ export default function HomePage() {
                   "Full-screen native UI instead of tiny embedded displays.",
                   "Host storage for captures, scripts, and generated artifacts.",
                   "USB-first control, with BLE and Wi-Fi available for boards designed around them.",
-                  "Localhost gateway direction for browser control without hosted infrastructure.",
                 ].map((item) => (
                   <div key={item} className="flex gap-3">
                     <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-[color:var(--aqua)]" />
