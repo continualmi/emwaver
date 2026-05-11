@@ -126,7 +126,12 @@ export function GatewayApp() {
   const [manualWifiPort, setManualWifiPort] = useState("3922");
   const [gatewayDevices, setGatewayDevices] = useState<GatewayDevice[]>([]);
   const [gatewayDevicesBusy, setGatewayDevicesBusy] = useState(false);
-  const [activity, setActivity] = useState<ActivityId | null>("library");
+  const [activity, setActivity] = useState<ActivityId | null>(() => {
+    const hash = typeof window !== "undefined" ? window.location.hash.slice(1) : "";
+    return (["library", "runtime", "agent", "log"] as ActivityId[]).includes(hash as ActivityId)
+      ? (hash as ActivityId)
+      : "library";
+  });
   const [unreadLog, setUnreadLog] = useState(0);
   const [panelWidth, setPanelWidth] = useState<number>(() => {
     if (typeof window === "undefined") return 320;
@@ -291,6 +296,7 @@ export function GatewayApp() {
     setActivity((current) => {
       const resolved = current === next ? null : next;
       activityRef.current = resolved;
+      window.location.hash = resolved ?? "";
       return resolved;
     });
     if (next === "log") setUnreadLog(0);

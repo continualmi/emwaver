@@ -1,5 +1,7 @@
 use anyhow::{Context, Result};
-use btleplug::api::{Central, CharPropFlags, Manager as _, Peripheral as _, ScanFilter, WriteType};
+use btleplug::api::{
+    Central, CentralEvent, CharPropFlags, Manager as _, Peripheral as _, ScanFilter, WriteType,
+};
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use futures::StreamExt;
 use std::sync::{Arc, Condvar, Mutex};
@@ -67,17 +69,33 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
     let rt = Runtime::new().context("failed to create BLE runtime")?;
     rt.block_on(async move {
         let adapter = first_adapter().await?;
+        let mut events = adapter
+            .events()
+            .await
+            .context("failed to subscribe to BLE events")?;
         adapter
             .start_scan(ScanFilter::default())
             .await
             .context("failed to start EMWaver BLE scan")?;
-        tokio::time::sleep(Duration::from_millis(scan_ms.max(250))).await;
-        let peripherals = adapter
-            .peripherals()
-            .await
-            .context("failed to list BLE peripherals")?;
+
+        let mut seen_ids = std::collections::HashSet::new();
+        let deadline = tokio::time::Instant::now()
+            + tokio::time::Duration::from_millis(scan_ms.max(250));
+        loop {
+            match tokio::time::timeout_at(deadline, events.next()).await {
+                Ok(Some(CentralEvent::DeviceDiscovered(id) | CentralEvent::DeviceUpdated(id))) => {
+                    seen_ids.insert(id);
+                }
+                Ok(Some(_)) => {}
+                Ok(None) | Err(_) => break,
+            }
+        }
+
         let mut out = Vec::new();
-        for peripheral in peripherals.into_iter() {
+        for id in seen_ids {
+            let Ok(peripheral) = adapter.peripheral(&id).await else {
+                continue;
+            };
             if !is_emwaver_peripheral(&peripheral).await {
                 continue;
             }

@@ -338,6 +338,9 @@ enum GatewayCmd {
     /// Stop the background Gateway (best-effort).
     Stop,
 
+    /// Restart the background Gateway.
+    Restart,
+
     /// Print Gateway status (running/not running), local web URL, and autostart status.
     Status,
 
@@ -593,6 +596,10 @@ fn pidfile_path() -> Result<PathBuf> {
 
 fn logfile_path() -> Result<PathBuf> {
     Ok(state_dir()?.join("gateway.log"))
+}
+
+fn binary_stamp_path() -> Result<PathBuf> {
+    Ok(state_dir()?.join("gateway-binary.stamp"))
 }
 
 fn config_dir() -> Result<PathBuf> {
@@ -1056,6 +1063,9 @@ fn gateway_start(
 
     let pid = child.id();
     fs::write(pidfile_path()?, pid.to_string())?;
+    if let Ok(stamp) = binary_mtime_stamp() {
+        let _ = fs::write(binary_stamp_path().unwrap_or_default(), stamp);
+    }
     let port_value = port.unwrap_or(DEFAULT_GATEWAY_PORT);
     wait_for_gateway_http(pid as i32, port_value)?;
     println!("gateway: started (pid={pid})");
@@ -1150,6 +1160,57 @@ fn gateway_stop() -> Result<()> {
     // pidfile cleanup is best-effort; the process may take a moment to exit.
     info!("sent SIGTERM to pid={pid}");
     Ok(())
+}
+
+fn binary_mtime_stamp() -> Result<String> {
+    let exe = std::env::current_exe().context("failed to resolve current executable")?;
+    let mtime = fs::metadata(&exe)
+        .and_then(|m| m.modified())
+        .context("failed to stat current executable")?;
+    let secs = mtime
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    Ok(secs.to_string())
+}
+
+fn maybe_auto_restart_gateway() {
+    let Ok(current) = binary_mtime_stamp() else {
+        return;
+    };
+    let Ok(stamp_path) = binary_stamp_path() else {
+        return;
+    };
+    let stored = fs::read_to_string(&stamp_path).unwrap_or_default();
+    if stored.trim() == current.as_str() {
+        return;
+    }
+    // Binary changed — only restart if Gateway is actually running.
+    let Ok(Some(_)) = gateway_running() else {
+        return;
+    };
+    println!("gateway: binary updated, restarting...");
+    let _ = gateway_restart();
+}
+
+fn gateway_restart() -> Result<()> {
+    let pidfile = pidfile_path()?;
+    if let Some(pid) = read_pid(&pidfile) {
+        if is_running(pid) {
+            kill(Pid::from_raw(pid), nix::sys::signal::Signal::SIGTERM)
+                .with_context(|| format!("failed to SIGTERM pid={pid}"))?;
+            info!("sent SIGTERM to pid={pid}");
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while std::time::Instant::now() < deadline {
+                if !is_running(pid) {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        }
+        let _ = fs::remove_file(&pidfile);
+    }
+    gateway_start(None, None, false, None, 3922, false, false, None)
 }
 
 fn autostart_status() -> Result<String> {
@@ -1949,7 +2010,7 @@ fn refresh_gateway_ble_devices(
         Ok(devices) => devices,
         Err(err) => {
             info!("Gateway BLE scan failed: {err:#}");
-            retain_recent_ble_entries(out, previous, active_claims, now);
+            retain_recent_ble_entries(out, previous, now);
             return;
         }
     };
@@ -2009,13 +2070,12 @@ fn refresh_gateway_ble_devices(
         });
     }
 
-    retain_recent_ble_entries(out, previous, active_claims, now);
+    retain_recent_ble_entries(out, previous, now);
 }
 
 fn retain_recent_ble_entries(
     out: &mut Vec<GatewayDeviceEntry>,
     previous: &mut HashMap<String, GatewayDeviceEntry>,
-    active_claims: &[GatewayActiveClaim],
     now: Instant,
 ) {
     let remaining_ble_ids: Vec<String> = previous
@@ -2024,23 +2084,12 @@ fn retain_recent_ble_entries(
         .cloned()
         .collect();
     for transport_id in remaining_ble_ids {
-        if let Some(entry) = previous.remove(&transport_id) {
-            retain_recent_ble_entry(out, entry, active_claims, now);
+        if let Some(mut entry) = previous.remove(&transport_id) {
+            if now.duration_since(entry.last_seen) <= GATEWAY_BLE_STALE_TTL {
+                entry.bridge = None;
+                out.push(entry);
+            }
         }
-    }
-}
-
-fn retain_recent_ble_entry(
-    out: &mut Vec<GatewayDeviceEntry>,
-    mut entry: GatewayDeviceEntry,
-    active_claims: &[GatewayActiveClaim],
-    now: Instant,
-) {
-    let is_active = is_active_transport(active_claims, &entry.transport_id);
-    let is_recent = now.duration_since(entry.last_seen) <= GATEWAY_BLE_STALE_TTL;
-    if is_active || is_recent {
-        entry.bridge = None;
-        out.push(entry);
     }
 }
 
@@ -2333,7 +2382,7 @@ fn infer_gateway_board_type(name: &str, likely_emwaver: bool) -> String {
 fn gateway_http_json(port: u16, path: &str) -> Result<serde_json::Value> {
     let mut stream = TcpStream::connect(("127.0.0.1", port))
         .with_context(|| format!("failed to connect to Gateway HTTP on 127.0.0.1:{port}"))?;
-    let timeout = Duration::from_millis(5_000);
+    let timeout = Duration::from_millis(10_000);
     stream
         .set_read_timeout(Some(timeout))
         .context("failed to set Gateway HTTP read timeout")?;
@@ -4694,6 +4743,13 @@ fn main() -> Result<()> {
 
     let cli = Cli::parse();
 
+    // Auto-restart the Gateway if the binary has been updated since it started.
+    // Skip for gateway management commands to avoid restart loops.
+    let is_gateway_cmd = matches!(cli.cmd, Commands::Gateway { .. });
+    if !is_gateway_cmd {
+        maybe_auto_restart_gateway();
+    }
+
     match cli.cmd {
         Commands::Gateway { cmd } => match cmd {
             GatewayCmd::Start {
@@ -4735,6 +4791,7 @@ fn main() -> Result<()> {
                 bootstrap_path,
             ),
             GatewayCmd::Stop => gateway_stop(),
+            GatewayCmd::Restart => gateway_restart(),
             GatewayCmd::Status => {
                 match gateway_running()? {
                     Some(pid) => {
