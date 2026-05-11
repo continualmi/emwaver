@@ -155,6 +155,12 @@ public final class AgentChatViewModel: ObservableObject {
                     self.assistantPlaceholderId = nil
                     self.activeRunTask = nil
                 }
+            } catch let urlError as URLError where urlError.code == .cancelled {
+                await MainActor.run {
+                    self.isSending = false
+                    self.assistantPlaceholderId = nil
+                    self.activeRunTask = nil
+                }
             } catch {
                 await MainActor.run {
                     let fallback = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -272,7 +278,9 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func toolBubbleArgs(_ arguments: [String: AgentToolJSON]) -> [String: Any] {
         var args: [String: Any] = [:]
-        if let detail = arguments["scriptId"]?.stringValue ?? arguments["event"]?.stringValue {
+        if let detail = arguments["scriptId"]?.stringValue
+                     ?? arguments["token"]?.stringValue
+                     ?? arguments["event"]?.stringValue {
             args["detail"] = detail
         }
         return args

@@ -925,8 +925,8 @@ public struct ScriptsRootView: View {
             AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
             AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
             AgentToolDefinition(name: "get_ui_snapshot", description: "Return the latest rendered script UI tree summary.", parameters: empty),
-            AgentToolDefinition(name: "send_ui_event", description: "Dispatch a UI event handler token into the running script.", parameters: schema([
-                ("token", .object(["type": .string("string"), "description": .string("UI event handler token.")])),
+            AgentToolDefinition(name: "send_ui_event", description: "Dispatch a UI event handler token into the running script. Call get_ui_snapshot first and use the exact token string from an eventHandlers entry (format: 'tap:someToken'). Do not guess tokens.", parameters: schema([
+                ("token", .object(["type": .string("string"), "description": .string("Exact event handler token from the UI snapshot eventHandlers field.")])),
                 ("arguments", .object(["type": .string("array"), "description": .string("Optional event argument array."), "items": .object([:])])),
             ], required: ["token"])),
         ]
@@ -1125,6 +1125,9 @@ public struct ScriptsRootView: View {
         guard let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MacAgentToolError.missingArgument("token")
         }
+        guard activePreviewManager.hasActiveScript else {
+            return AgentToolResult(id: nil, name: "send_ui_event", ok: false, error: "No script is currently running. Start a script first, then call get_ui_snapshot to obtain valid event tokens.")
+        }
         let args: [Any]
         if case .array(let values) = arguments {
             args = values.map(agentToolAnyValue)
@@ -1153,8 +1156,8 @@ public struct ScriptsRootView: View {
         var props: [String: AgentToolJSON] = [:]
         if let text = node.props.text { props["text"] = .string(text) }
         if let label = node.props.label { props["label"] = .string(label) }
-        let handlers = node.props.eventHandlers.map { key, value in
-            "\(key.rawValue):\(value)"
+        let handlers = node.props.eventHandlers.map { _, value in
+            value
         }.sorted()
         return .object([
             "id": .string(node.id),
@@ -1278,6 +1281,58 @@ public struct ScriptsRootView: View {
                         Image(systemName: "chevron.left")
                         Text("Back")
                     }
+                }
+            }
+
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    if let openSettings = onRequestOpenSettings {
+                        Button("Settings…") { openSettings() }
+                    }
+
+                    #if os(macOS)
+                    if showingAgentPanel {
+                        Divider()
+
+                        Button {
+                            agentViewModel.newConversation()
+                        } label: {
+                            Label("New Agent Chat", systemImage: "plus.message")
+                        }
+
+                        if !agentViewModel.conversations.isEmpty {
+                            ForEach(agentViewModel.conversations) { conv in
+                                Button {
+                                    agentViewModel.selectConversation(conv.id)
+                                } label: {
+                                    HStack {
+                                        Text(conv.title)
+                                        if agentViewModel.selectedConversationId == conv.id {
+                                            Spacer()
+                                            Image(systemName: "checkmark")
+                                        }
+                                    }
+                                }
+                            }
+
+                            if let selected = agentViewModel.selectedConversationId {
+                                Button(role: .destructive) {
+                                    agentViewModel.deleteConversation(selected)
+                                } label: {
+                                    Label("Delete Agent Chat", systemImage: "trash")
+                                }
+                            }
+                        }
+
+                        Button {
+                            agentViewModel.clear()
+                        } label: {
+                            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
+                        }
+                    }
+                    #endif
+                } label: {
+                    Image(systemName: "ellipsis.circle")
                 }
             }
         } else {

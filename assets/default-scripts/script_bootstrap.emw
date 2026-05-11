@@ -1345,7 +1345,7 @@ if (typeof analogWrite !== 'function') {
       events.forEach(function (event) {
         var fn = props[event.key];
         if (typeof fn === 'function') {
-          var token = id + ':' + event.type;
+          var token = event.type + ':' + id;
           _scriptRegisterCallback(token, fn);
           handlers[event.type] = token;
         }

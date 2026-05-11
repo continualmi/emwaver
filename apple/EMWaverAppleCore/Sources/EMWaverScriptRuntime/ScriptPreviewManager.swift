@@ -82,6 +82,8 @@ public final class ScriptPreviewManager: ObservableObject {
         scriptEngine = nil
     }
 
+    public var hasActiveScript: Bool { scriptEngine != nil }
+
     public func invoke(token: String, arguments: [Any]) {
         scriptEngine?.invoke(handler: token, arguments: arguments)
     }
