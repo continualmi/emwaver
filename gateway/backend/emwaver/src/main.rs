@@ -338,7 +338,7 @@ enum GatewayCmd {
     /// Stop the background Gateway (best-effort).
     Stop,
 
-    /// Print Gateway status (running/not running) and autostart status.
+    /// Print Gateway status (running/not running), local web URL, and autostart status.
     Status,
 
     /// Check whether autostart is configured (macOS launchd / Linux systemd).
@@ -996,7 +996,9 @@ fn gateway_start(
     bootstrap_path: Option<PathBuf>,
 ) -> Result<()> {
     if let Some(pid) = gateway_running()? {
+        let port_value = gateway_port_for_pid(pid);
         println!("gateway: already running (pid={pid})");
+        println!("gateway url: {}", gateway_web_url(port_value));
         return Ok(());
     }
 
@@ -1057,8 +1059,59 @@ fn gateway_start(
     let port_value = port.unwrap_or(DEFAULT_GATEWAY_PORT);
     wait_for_gateway_http(pid as i32, port_value)?;
     println!("gateway: started (pid={pid})");
+    println!("gateway url: {}", gateway_web_url(port_value));
     println!("logfile: {}", logfile.display());
     Ok(())
+}
+
+fn gateway_web_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
+
+fn gateway_port_for_pid(pid: i32) -> u16 {
+    gateway_port_from_process_args(pid).unwrap_or(DEFAULT_GATEWAY_PORT)
+}
+
+fn gateway_port_from_process_args(pid: i32) -> Option<u16> {
+    #[cfg(target_os = "linux")]
+    {
+        let cmdline = fs::read(format!("/proc/{pid}/cmdline")).ok()?;
+        let parts: Vec<String> = cmdline
+            .split(|byte| *byte == 0)
+            .filter(|part| !part.is_empty())
+            .map(|part| String::from_utf8_lossy(part).to_string())
+            .collect();
+        if let Some(port) = parse_gateway_port_arg(&parts) {
+            return Some(port);
+        }
+    }
+
+    let output = Command::new("ps")
+        .arg("-p")
+        .arg(pid.to_string())
+        .arg("-o")
+        .arg("args=")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let args = String::from_utf8_lossy(&output.stdout);
+    let parts: Vec<String> = args.split_whitespace().map(|part| part.to_string()).collect();
+    parse_gateway_port_arg(&parts)
+}
+
+fn parse_gateway_port_arg(args: &[String]) -> Option<u16> {
+    for (index, arg) in args.iter().enumerate() {
+        if arg == "--port" {
+            let value = args.get(index + 1)?;
+            return value.parse::<u16>().ok();
+        }
+        if let Some(value) = arg.strip_prefix("--port=") {
+            return value.parse::<u16>().ok();
+        }
+    }
+    None
 }
 
 fn wait_for_gateway_http(pid: i32, port: u16) -> Result<()> {
@@ -4684,8 +4737,18 @@ fn main() -> Result<()> {
             GatewayCmd::Stop => gateway_stop(),
             GatewayCmd::Status => {
                 match gateway_running()? {
-                    Some(pid) => println!("gateway: running (pid={pid})"),
-                    None => println!("gateway: not running"),
+                    Some(pid) => {
+                        let port = gateway_port_for_pid(pid);
+                        println!("gateway: running (pid={pid})");
+                        println!("gateway url: {}", gateway_web_url(port));
+                    }
+                    None => {
+                        println!("gateway: not running");
+                        println!(
+                            "gateway url: {}",
+                            gateway_web_url(DEFAULT_GATEWAY_PORT)
+                        );
+                    }
                 }
                 println!("{}", autostart_status()?);
                 Ok(())
