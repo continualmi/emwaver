@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-const DISCORD_INVITE_URL = "https://discord.gg/ZBNJGwBfPp";
+const DISCORD_INVITE_URL = "https://discord.gg/pywqBwJt4m";
 
 export default function DocsCommunityPage() {
   return (
