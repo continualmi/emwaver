@@ -69,6 +69,13 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
     let rt = Runtime::new().context("failed to create BLE runtime")?;
     rt.block_on(async move {
         let adapter = first_adapter().await?;
+
+        // Stop any previous scan so that restarting it causes CoreBluetooth to
+        // re-emit DeviceDiscovered for already-known peripherals. Without this,
+        // macOS deduplicates advertisement events and known devices never appear
+        // in subsequent scan cycles.
+        let _ = adapter.stop_scan().await;
+
         let mut events = adapter
             .events()
             .await
@@ -88,6 +95,15 @@ pub fn list_ble_devices(scan_ms: u64) -> Result<Vec<BleDeviceInfo>> {
                 }
                 Ok(Some(_)) => {}
                 Ok(None) | Err(_) => break,
+            }
+        }
+
+        // Also include any peripherals that are currently connected — they stop
+        // advertising while connected so they won't appear in scan events.
+        let all = adapter.peripherals().await.unwrap_or_default();
+        for peripheral in &all {
+            if peripheral.is_connected().await.unwrap_or(false) {
+                seen_ids.insert(peripheral.id());
             }
         }
 
