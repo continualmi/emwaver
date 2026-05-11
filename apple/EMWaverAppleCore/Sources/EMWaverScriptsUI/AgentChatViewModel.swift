@@ -13,6 +13,12 @@ public final class AgentChatViewModel: ObservableObject {
 
     public static let defaultModelId = "managed-by-server"
     private static let storedPromptName = "emwaver-prompt"
+    private static let localPrompt: String? = {
+        guard let url = Bundle.module.url(forResource: "emwaver-prompt", withExtension: "txt"),
+              let text = try? String(contentsOf: url, encoding: .utf8),
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return text
+    }()
     private static let selectedConversationDefaultsKey = "emwaver.agent.selectedConversation"
     private static let legacyUniverseDefaultsKey = "emwaver.agent.mgptUniverse"
 
@@ -193,7 +199,8 @@ public final class AgentChatViewModel: ObservableObject {
                 universe: universe,
                 userInput: toolPrompt(userPrompt),
                 tools: tools,
-                toolChoice: tools?.isEmpty == false ? .auto : nil
+                toolChoice: tools?.isEmpty == false ? .auto : nil,
+                systemPromptOverride: Self.localPrompt
             )
         )
 
@@ -215,7 +222,8 @@ public final class AgentChatViewModel: ObservableObject {
                     userInput: userPrompt,
                     tools: tools,
                     toolChoice: .auto,
-                    toolResults: toolResults
+                    toolResults: toolResults,
+                    systemPromptOverride: Self.localPrompt
                 )
             )
         }
@@ -254,8 +262,9 @@ public final class AgentChatViewModel: ObservableObject {
     private func executeToolCalls(_ toolCalls: [AgentToolCall], runtime: AgentToolRuntime) async -> [AgentToolResult] {
         var results: [AgentToolResult] = []
         for call in toolCalls.prefix(10) {
-            appendSystemToolBubble(name: call.name, args: toolBubbleArgs(call.arguments ?? [:]))
+            let bubbleId = appendSystemToolBubble(name: call.name, args: toolBubbleArgs(call.arguments ?? [:]), callArguments: call.arguments)
             let result = await runtime.execute(call.name, call.arguments ?? [:])
+            updateToolBubble(id: bubbleId, result: result)
             results.append(
                 AgentToolResult(
                     id: call.id ?? result.id,
@@ -278,10 +287,12 @@ public final class AgentChatViewModel: ObservableObject {
 
     private func toolBubbleArgs(_ arguments: [String: AgentToolJSON]) -> [String: Any] {
         var args: [String: Any] = [:]
-        if let detail = arguments["scriptId"]?.stringValue
-                     ?? arguments["token"]?.stringValue
-                     ?? arguments["event"]?.stringValue {
+        if let detail = arguments["scriptId"]?.stringValue {
             args["detail"] = detail
+        } else if case .number(let pin) = arguments["pin"] {
+            args["detail"] = "pin \(Int(pin))"
+        } else if case .number(let cs) = arguments["cs"] {
+            args["detail"] = "cs \(Int(cs))"
         }
         return args
     }
@@ -332,8 +343,9 @@ public final class AgentChatViewModel: ObservableObject {
         return "[tool] \(name)"
     }
 
-    private func appendSystemToolBubble(name: String, args: [String: Any]) {
-        let msg = AgentChatMessage(role: .system, text: makeToolBubbleText(name: name, args: args))
+    @discardableResult
+    private func appendSystemToolBubble(name: String, args: [String: Any], callArguments: [String: AgentToolJSON]? = nil) -> UUID {
+        let msg = AgentChatMessage(role: .system, text: makeToolBubbleText(name: name, args: args), toolMeta: AgentChatToolMeta(arguments: callArguments))
 
         // If we currently have an assistant placeholder message (empty bubble) at the end,
         // insert tool bubbles *before* it so the timeline reads naturally.
@@ -346,6 +358,19 @@ public final class AgentChatViewModel: ObservableObject {
         } else {
             appendMessage(msg)
         }
+        return msg.id
+    }
+
+    private func updateToolBubble(id: UUID, result: AgentToolResult) {
+        guard let idx = messages.firstIndex(where: { $0.id == id }) else { return }
+        let old = messages[idx]
+        let output: AgentToolJSON? = result.output
+            ?? (result.ok ? result.result : result.error.map { .string($0) })
+        let updated = AgentChatMessage(
+            id: old.id, role: old.role, text: old.text, createdAt: old.createdAt,
+            toolMeta: AgentChatToolMeta(arguments: old.toolMeta?.arguments, output: output, ok: result.ok)
+        )
+        replaceMessage(id: id, with: updated)
     }
 
     private func appendMessage(_ message: AgentChatMessage) {

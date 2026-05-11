@@ -1,7 +1,17 @@
 # UI Snapshot Runtime Migration
 
-Status: in progress — Gateway/CLI/default-script slice implemented; native
-runtime cleanup remains.
+> **SUPERSEDED** — This document describes an approach that was reversed.
+> The native Agent automation direction has moved to named hardware primitive
+> tools (`spi_transfer`, `gpio_read`, `gpio_write`, etc.). See
+> `docs/AGENT_EVAL_RUNTIME.md` for the current decision and motivation.
+>
+> The Gateway/CLI slice described here (session list, snapshot, event, stop
+> commands) remains valid for browser and CLI sessions. The native Agent tool
+> set (`get_ui_snapshot`, `send_ui_event`, and later `eval`) has been removed
+> and replaced with typed hardware tools.
+
+Status: partially implemented — Gateway/CLI/default-script slice implemented;
+native runtime cleanup stopped and direction reversed (see above).
 
 This migration removes script-visible terminal logging from EMWaver and makes UI
 snapshots the only supported state surface for scripts, the CLI, browser flows,

@@ -117,6 +117,7 @@ crates/**/Cargo.lock
 worktrees/
 .dev-checkouts/
 prompt.txt
+**/Resources/emwaver-prompt.txt
 
 # Notes (keep tracked)
 # notes.txt

@@ -89,6 +89,7 @@ Agent configuration direction:
 - subsequent turns send only `universe` and `userInput` to MGPT,
 - the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with an API key stored locally/keychain-backed by the host app,
 - the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
+- `EMWaverScriptsUI/Resources/emwaver-prompt.txt` is gitignored. When present, it is sent as `systemPromptOverride` on every request, bypassing the universe's stored prompt for a faster iteration loop. Copy it from `../mdl/mgpt/backend-api/prompts/emwaver-prompt.txt` for internal builds. Open-source builds without the file fall back to the universe prompt.
 
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`

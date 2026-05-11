@@ -32,6 +32,7 @@ public final class ScriptEngine {
     private var globalBindings: [String: Any] = [:]
     private var renderHandler: ((ScriptTree) -> Void)?
     private var errorHandler: ((String) -> Void)?
+    var consoleHandler: ((String) -> Void)?
 
     // Timer support for `every()` (bootstrap uses setTimeout/clearTimeout).
     // Access only from executionQueue.
@@ -83,6 +84,28 @@ public final class ScriptEngine {
         context.exceptionHandler = { [weak self] _, exception in
             self?.emitError(self?.formatScriptError(from: exception) ?? "Script error: Unknown JavaScript exception")
         }
+
+        let consolePrintBlock: @convention(block) (String) -> Void = { [weak self] text in
+            self?.consoleHandler?(text)
+        }
+        context.setObject(consolePrintBlock, forKeyedSubscript: "_consolePrint" as NSString)
+        context.evaluateScript("""
+var console = (function() {
+  function fmt(args) {
+    return Array.prototype.map.call(args, function(a) {
+      if (a === null) return 'null';
+      if (a === undefined) return 'undefined';
+      if (typeof a === 'object') { try { return JSON.stringify(a); } catch(e) { return String(a); } }
+      return String(a);
+    }).join(' ');
+  }
+  return {
+    log:   function() { _consolePrint(fmt(arguments)); },
+    warn:  function() { _consolePrint('[warn] ' + fmt(arguments)); },
+    error: function() { _consolePrint('[error] ' + fmt(arguments)); }
+  };
+})();
+""")
 
         let renderBlock: @convention(block) (JSValue) -> Void = { [weak self] value in
             self?.handleRender(nodeValue: value)
@@ -609,6 +632,27 @@ public final class ScriptEngine {
                 return
             }
             _ = callback.call(withArguments: arguments)
+        }
+    }
+
+    public func eval(_ code: String) async -> (output: [String], result: String?) {
+        await withCheckedContinuation { continuation in
+            executionQueue.async { [weak self] in
+                guard let self, let context = self.context else {
+                    continuation.resume(returning: ([], nil))
+                    return
+                }
+                var captured: [String] = []
+                let prev = self.consoleHandler
+                self.consoleHandler = { line in captured.append(line); prev?(line) }
+                defer { self.consoleHandler = prev }
+                context.exception = nil
+                let value = context.evaluateScript(code)
+                let result: String? = (value?.isUndefined == false && value?.isNull == false)
+                    ? value?.toString()
+                    : nil
+                continuation.resume(returning: (captured, result))
+            }
         }
     }
 

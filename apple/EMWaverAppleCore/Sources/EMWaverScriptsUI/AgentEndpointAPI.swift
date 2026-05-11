@@ -29,14 +29,16 @@ struct AgentEndpointRequest: Encodable {
     let tools: [AgentToolDefinition]?
     let toolChoice: AgentToolChoice?
     let toolResults: [AgentToolResult]?
+    let systemPromptOverride: String?
 
-    init(model: String, universe: String, userInput: String, tools: [AgentToolDefinition]? = nil, toolChoice: AgentToolChoice? = nil, toolResults: [AgentToolResult]? = nil) {
+    init(model: String, universe: String, userInput: String, tools: [AgentToolDefinition]? = nil, toolChoice: AgentToolChoice? = nil, toolResults: [AgentToolResult]? = nil, systemPromptOverride: String? = nil) {
         self.model = model
         self.universe = universe
         self.userInput = userInput
         self.tools = tools
         self.toolChoice = toolChoice
         self.toolResults = toolResults
+        self.systemPromptOverride = systemPromptOverride
     }
 }
 

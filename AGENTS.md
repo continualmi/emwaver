@@ -157,7 +157,8 @@ Use the local README first when working in a folder:
 - `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
-- `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — migration to UI snapshots/events as the only script observability channel
+- `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read); motivation for removing get_ui_snapshot/send_ui_event and eval
+- `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — superseded; Gateway/CLI snapshot slice remains valid, native Agent snapshot/eval direction was reversed (see AGENT_EVAL_RUNTIME.md)
 - `docs/TESTS_REBIRTH.md` — validation tracker for rebirth implementation work
 - `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, and next steps
 - `docs/SCHEDULE.md` — active weekly planning/scheduling tracker used in ongoing execution updates

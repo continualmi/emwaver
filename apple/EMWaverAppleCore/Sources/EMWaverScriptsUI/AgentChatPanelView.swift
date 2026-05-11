@@ -389,18 +389,57 @@ private var composerFieldBackgroundColor: Color {
 
 private struct MessageRow: View {
     let message: AgentChatMessage
+    @State private var isExpanded = false
 
     var body: some View {
         if isToolRow {
-            HStack(spacing: 5) {
-                Image(systemName: "wrench.and.screwdriver")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text(toolInlineText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "wrench.and.screwdriver")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Text(toolInlineText)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                }
+                .buttonStyle(.plain)
+
+                if isExpanded, let meta = message.toolMeta {
+                    VStack(alignment: .leading, spacing: 6) {
+                        if let args = meta.arguments, !args.isEmpty {
+                            Text("Arguments")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(formatAgentToolJSON(.object(args)))
+                                .font(.system(.caption2, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                        if let output = meta.output {
+                            Text(meta.ok == false ? "Error" : "Output")
+                                .font(.caption2)
+                                .foregroundStyle(.tertiary)
+                            Text(formatAgentToolJSON(output))
+                                .font(.system(.caption2, design: .monospaced))
+                                .textSelection(.enabled)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(8)
+                                .background(Color.black.opacity(0.06), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                        }
+                    }
+                    .padding(.top, 6)
+                }
             }
         } else if message.role == .user {
             HStack {
@@ -451,6 +490,26 @@ private struct MessageRow: View {
         let detail = parts.count > 1 ? String(parts[1]) : ""
         if detail.isEmpty { return toolId }
         return toolId + "  " + detail
+    }
+}
+
+private func formatAgentToolJSON(_ json: AgentToolJSON, indent: Int = 0) -> String {
+    let pad = String(repeating: "  ", count: indent)
+    switch json {
+    case .string(let s): return "\"\(s)\""
+    case .number(let n): return n == n.rounded() && abs(n) < 1e15 ? String(Int(n)) : String(n)
+    case .bool(let b):   return b ? "true" : "false"
+    case .null:          return "null"
+    case .array(let a):
+        if a.isEmpty { return "[]" }
+        let items = a.map { "\(pad)  \(formatAgentToolJSON($0, indent: indent + 1))" }.joined(separator: ",\n")
+        return "[\n\(items)\n\(pad)]"
+    case .object(let o):
+        if o.isEmpty { return "{}" }
+        let items = o.sorted { $0.key < $1.key }
+            .map { "\(pad)  \"\($0.key)\": \(formatAgentToolJSON($0.value, indent: indent + 1))" }
+            .joined(separator: ",\n")
+        return "{\n\(items)\n\(pad)}"
     }
 }
 

@@ -45,7 +45,8 @@ Use this skill for work under [`/Users/luisml/continualmi/emwaver/gateway/backen
 ## Core behaviors to preserve
 
 - The CLI is Gateway-oriented: `emw run` requires a running Gateway, starts a Gateway-owned script session, and should not reintroduce direct/local runtime mode.
-- Terminal automation should use `emw scripts`, `emw ui snapshot`, `emw ui event`, and `emw script stop`; do not revive script log streaming.
+- Gateway/CLI terminal automation uses `emw scripts`, `emw ui snapshot`, `emw ui event`, and `emw script stop`.
+- Native macOS/iOS Agent automation uses `eval` to run JS snippets directly in the engine and reads `console.log` output; `get_ui_snapshot` and `send_ui_event` are removed from the native Agent tool set. See `docs/AGENT_EVAL_RUNTIME.md`.
 - Local hardware control must remain account-free and local-first (no activation, hosted relay, or subscription gate).
 - Keep command semantics aligned with migration decisions in `gateway/MIGRATION.md`; do not revive removed command groups/flags.
 - Keep binary naming stable: `emwaver` is primary, `emw` is a shortcut alias when installed.

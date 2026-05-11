@@ -924,11 +924,28 @@ public struct ScriptsRootView: View {
             AgentToolDefinition(name: "run_script", description: "Start the script runtime for the given script.", parameters: schema([scriptId])),
             AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
             AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
-            AgentToolDefinition(name: "get_ui_snapshot", description: "Return the latest rendered script UI tree summary.", parameters: empty),
-            AgentToolDefinition(name: "send_ui_event", description: "Dispatch a UI event handler token into the running script. Call get_ui_snapshot first and use the exact token string from an eventHandlers entry (format: 'tap:someToken'). Do not guess tokens.", parameters: schema([
-                ("token", .object(["type": .string("string"), "description": .string("Exact event handler token from the UI snapshot eventHandlers field.")])),
-                ("arguments", .object(["type": .string("array"), "description": .string("Optional event argument array."), "items": .object([:])])),
-            ], required: ["token"])),
+            AgentToolDefinition(name: "spi_transfer", description: "Send bytes over SPI and receive the response. `bytes` is the TX array (0–255 each). `cs` is the chip-select pin number. `rx_length`, if provided, overrides the number of response bytes to read.", parameters: schema([
+                ("bytes", .object(["type": .string("array"), "items": .object(["type": .string("number")]), "description": .string("Bytes to transmit (0–255 each).")])),
+                ("cs", .object(["type": .string("number"), "description": .string("Chip-select pin number.")])),
+                ("rx_length", .object(["type": .string("number"), "description": .string("Number of response bytes. Defaults to len(bytes).")])),
+            ], required: ["bytes", "cs"])),
+            AgentToolDefinition(name: "gpio_mode", description: "Set a GPIO pin mode.", parameters: schema([
+                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
+                ("mode", .object(["type": .string("string"), "enum": .array([.string("INPUT"), .string("OUTPUT"), .string("INPUT_PULLUP")]), "description": .string("Pin mode.")])),
+            ], required: ["pin", "mode"])),
+            AgentToolDefinition(name: "gpio_write", description: "Write HIGH or LOW to a digital output pin.", parameters: schema([
+                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
+                ("value", .object(["type": .string("string"), "enum": .array([.string("HIGH"), .string("LOW")]), "description": .string("Output level.")])),
+            ], required: ["pin", "value"])),
+            AgentToolDefinition(name: "gpio_read", description: "Read the current level of a digital pin. Returns 0 or 1.", parameters: schema([
+                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
+            ], required: ["pin"])),
+            AgentToolDefinition(name: "analog_read", description: "Read an ADC pin. Returns a floating-point voltage or raw value depending on the board.", parameters: schema([
+                ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
+            ], required: ["pin"])),
+            AgentToolDefinition(name: "sleep", description: "Wait for a given number of milliseconds before continuing. Use after triggering async hardware operations to allow them time to complete.", parameters: schema([
+                ("ms", .object(["type": .string("number"), "description": .string("Milliseconds to wait (max 30000).")])),
+            ], required: ["ms"])),
         ]
     }
 
@@ -953,9 +970,8 @@ public struct ScriptsRootView: View {
         let selected = currentScriptId ?? viewModel.selectedScriptId ?? ""
         let manager = activePreviewManager
         let running = manager.activeScriptName ?? ""
-        let hasTree = manager.scriptTree != nil
         let deviceState = device == nil ? "not attached" : "attached"
-        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); hasUISnapshot=\(hasTree)"
+        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState)"
     }
 
     private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
@@ -979,10 +995,22 @@ public struct ScriptsRootView: View {
                 return AgentToolResult(id: nil, name: name, ok: true, result: .object(["stopped": .bool(true)]))
             case "get_device_status":
                 return agentToolDeviceStatus()
-            case "get_ui_snapshot":
-                return agentToolUISnapshot()
-            case "send_ui_event":
-                return try agentToolSendUIEvent(token: arguments["token"]?.stringValue, arguments: arguments["arguments"])
+            case "spi_transfer":
+                return await agentToolSpiTransfer(arguments: arguments)
+            case "gpio_mode":
+                return await agentToolGpioMode(arguments: arguments)
+            case "gpio_write":
+                return await agentToolGpioWrite(arguments: arguments)
+            case "gpio_read":
+                return await agentToolGpioRead(arguments: arguments)
+            case "analog_read":
+                return await agentToolAnalogRead(arguments: arguments)
+            case "sleep":
+                let ms: Double
+                if case .number(let v) = arguments["ms"] { ms = v } else { ms = 0 }
+                let clamped = min(max(ms, 0), 30_000)
+                try await Task.sleep(nanoseconds: UInt64(clamped) * 1_000_000)
+                return AgentToolResult(id: nil, name: "sleep", ok: true, result: .object(["slept_ms": .number(clamped)]))
             default:
                 return AgentToolResult(id: nil, name: name, ok: false, error: "Unknown EMWaver tool: \(name)")
             }
@@ -1111,34 +1139,93 @@ public struct ScriptsRootView: View {
         ]))
     }
 
-    private func agentToolUISnapshot() -> AgentToolResult {
-        guard let tree = activePreviewManager.scriptTree else {
-            return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object(["available": .bool(false)]))
+    private func agentHwEval(_ js: String, toolName: String) async -> (output: [String], result: String?, error: String?) {
+        let (lines, result) = await activePreviewManager.eval(js)
+        if let first = lines.first, first.hasPrefix("[error]") {
+            return (lines, nil, first)
         }
-        return AgentToolResult(id: nil, name: "get_ui_snapshot", ok: true, result: .object([
-            "available": .bool(true),
-            "root": scriptNodeObject(tree.root)
-        ]))
+        return (lines, result, nil)
     }
 
-    private func agentToolSendUIEvent(token: String?, arguments: AgentToolJSON?) throws -> AgentToolResult {
-        guard let token, !token.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw MacAgentToolError.missingArgument("token")
+    private func agentToolSpiTransfer(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        guard case .array(let byteValues) = arguments["bytes"] else {
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes must be an array")
         }
-        guard activePreviewManager.hasActiveScript else {
-            return AgentToolResult(id: nil, name: "send_ui_event", ok: false, error: "No script is currently running. Start a script first, then call get_ui_snapshot to obtain valid event tokens.")
+        guard case .number(let cs) = arguments["cs"] else {
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "cs (chip-select pin) is required")
         }
-        let args: [Any]
-        if case .array(let values) = arguments {
-            args = values.map(agentToolAnyValue)
-        } else {
-            args = []
+        let byteLiterals = byteValues.compactMap { if case .number(let n) = $0 { return Int(n) } else { return nil } }
+        var opts = "{ cs: \(Int(cs))"
+        if case .number(let rxLen) = arguments["rx_length"] {
+            opts += ", rxLength: \(Int(rxLen))"
         }
-        activePreviewManager.invoke(token: token, arguments: args)
-        return AgentToolResult(id: nil, name: "send_ui_event", ok: true, result: .object([
-            "token": .string(token),
-            "dispatched": .bool(true)
-        ]))
+        opts += " }"
+        let js = "(function(){ var r = SPI.transfer(\(byteLiterals), \(opts)); if (!r) return 'null'; var out = []; for (var i=0;i<r.length;i++) out.push(r[i]&0xff); return JSON.stringify(out); })()"
+        let (_, result, err) = await agentHwEval(js, toolName: "spi_transfer")
+        if let err { return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: err) }
+        guard let raw = result, let data = raw.data(using: .utf8),
+              let parsed = try? JSONDecoder().decode([Int].self, from: data) else {
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "Could not parse SPI response: \(result ?? "nil")")
+        }
+        let rxArray = AgentToolJSON.array(parsed.map { .number(Double($0)) })
+        return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object(["rx": rxArray]))
+    }
+
+    private func agentToolGpioMode(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        guard case .number(let pin) = arguments["pin"],
+              let mode = arguments["mode"]?.stringValue else {
+            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "pin and mode are required")
+        }
+        let jsMode: String
+        switch mode.uppercased() {
+        case "INPUT":        jsMode = "INPUT"
+        case "OUTPUT":       jsMode = "OUTPUT"
+        case "INPUT_PULLUP": jsMode = "INPUT_PULLUP"
+        default: return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "Invalid mode: \(mode)")
+        }
+        let js = "pinMode(\(Int(pin)), \(jsMode)); 'ok'"
+        let (_, _, err) = await agentHwEval(js, toolName: "gpio_mode")
+        if let err { return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: err) }
+        return AgentToolResult(id: nil, name: "gpio_mode", ok: true, result: .object(["pin": .number(pin), "mode": .string(mode)]))
+    }
+
+    private func agentToolGpioWrite(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        guard case .number(let pin) = arguments["pin"],
+              let value = arguments["value"]?.stringValue else {
+            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "pin and value are required")
+        }
+        let jsLevel: String
+        switch value.uppercased() {
+        case "HIGH": jsLevel = "HIGH"
+        case "LOW":  jsLevel = "LOW"
+        default: return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "value must be HIGH or LOW")
+        }
+        let js = "digitalWrite(\(Int(pin)), \(jsLevel)); 'ok'"
+        let (_, _, err) = await agentHwEval(js, toolName: "gpio_write")
+        if let err { return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: err) }
+        return AgentToolResult(id: nil, name: "gpio_write", ok: true, result: .object(["pin": .number(pin), "value": .string(value)]))
+    }
+
+    private func agentToolGpioRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        guard case .number(let pin) = arguments["pin"] else {
+            return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: "pin is required")
+        }
+        let js = "digitalRead(\(Int(pin)))"
+        let (_, result, err) = await agentHwEval(js, toolName: "gpio_read")
+        if let err { return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: err) }
+        let level = Int(result ?? "") ?? -1
+        return AgentToolResult(id: nil, name: "gpio_read", ok: true, result: .object(["pin": .number(pin), "level": .number(Double(level))]))
+    }
+
+    private func agentToolAnalogRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
+        guard case .number(let pin) = arguments["pin"] else {
+            return AgentToolResult(id: nil, name: "analog_read", ok: false, error: "pin is required")
+        }
+        let js = "analogRead(\(Int(pin)))"
+        let (_, result, err) = await agentHwEval(js, toolName: "analog_read")
+        if let err { return AgentToolResult(id: nil, name: "analog_read", ok: false, error: err) }
+        let value = Double(result ?? "") ?? 0
+        return AgentToolResult(id: nil, name: "analog_read", ok: true, result: .object(["pin": .number(pin), "value": .number(value)]))
     }
 
     private func scriptObject(id: String, source: String) -> [String: AgentToolJSON] {
@@ -1152,32 +1239,6 @@ public struct ScriptsRootView: View {
         ]
     }
 
-    private func scriptNodeObject(_ node: ScriptNode) -> AgentToolJSON {
-        var props: [String: AgentToolJSON] = [:]
-        if let text = node.props.text { props["text"] = .string(text) }
-        if let label = node.props.label { props["label"] = .string(label) }
-        let handlers = node.props.eventHandlers.map { _, value in
-            value
-        }.sorted()
-        return .object([
-            "id": .string(node.id),
-            "type": .string(node.type.rawValue),
-            "props": .object(props),
-            "eventHandlers": .array(handlers.map { AgentToolJSON.string($0) }),
-            "children": .array(node.children.map(scriptNodeObject))
-        ])
-    }
-
-    private func agentToolAnyValue(_ value: AgentToolJSON) -> Any {
-        switch value {
-        case .string(let value): return value
-        case .number(let value): return value
-        case .bool(let value): return value
-        case .object(let value): return value.mapValues(agentToolAnyValue)
-        case .array(let value): return value.map(agentToolAnyValue)
-        case .null: return NSNull()
-        }
-    }
     #endif
 
     @ToolbarContentBuilder

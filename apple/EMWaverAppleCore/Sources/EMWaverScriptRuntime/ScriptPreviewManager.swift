@@ -88,6 +88,11 @@ public final class ScriptPreviewManager: ObservableObject {
         scriptEngine?.invoke(handler: token, arguments: arguments)
     }
 
+    public func eval(_ code: String) async -> (output: [String], result: String?) {
+        guard let engine = scriptEngine else { return (["[error] No script running"], nil) }
+        return await engine.eval(code)
+    }
+
     private func setupEngineIfNeeded() {
         if scriptEngine != nil {
             registerBindings()

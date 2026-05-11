@@ -78,7 +78,6 @@ public final class ScriptsViewModel: ObservableObject {
     private let signalTextExtension = ".txt"
     private let unsavedKey = "__unsaved__"
     private let lastScriptDefaultsKey = "scripts.last_script_id"
-    private let assetIdPrefix = "__asset__"
 
     public init(
         fileService: FileService = .shared,
@@ -429,8 +428,7 @@ public final class ScriptsViewModel: ObservableObject {
             guard let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
                 continue
             }
-            let id = assetIdPrefix + filename
-            updated[id] = AssetRecord(id: id, name: filename, content: content)
+            updated[filename] = AssetRecord(id: filename, name: filename, content: content)
         }
         assetRecords = updated
         rebuildScriptItems()
