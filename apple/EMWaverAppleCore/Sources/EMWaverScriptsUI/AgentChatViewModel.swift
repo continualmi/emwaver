@@ -99,16 +99,7 @@ public final class AgentChatViewModel: ObservableObject {
         conversations.removeAll { $0.id == id }
         try? chatStore.archiveConversation(id)
         if selectedConversationId == id {
-            selectedConversationId = conversations.first?.id
-            if let selectedConversationId {
-                UserDefaults.standard.set(selectedConversationId.uuidString, forKey: Self.selectedConversationDefaultsKey)
-                selectedUniverseId = conversations.first { $0.id == selectedConversationId }?.universeId
-                loadMessagesForSelectedConversation(selectedConversationId)
-            } else {
-                UserDefaults.standard.removeObject(forKey: Self.selectedConversationDefaultsKey)
-                selectedUniverseId = nil
-                messages = []
-            }
+            startLocalConversation()
         }
     }
 
