@@ -192,7 +192,7 @@ public final class AgentChatViewModel: ObservableObject {
                 userInput: toolPrompt(userPrompt),
                 tools: tools,
                 toolChoice: tools?.isEmpty == false ? .auto : nil,
-                systemPromptOverride: Self.localPrompt
+                systemPrompt: Self.localPrompt
             )
         )
 
@@ -217,7 +217,7 @@ public final class AgentChatViewModel: ObservableObject {
                     tools: tools,
                     toolChoice: .auto,
                     toolResults: accumulatedToolResults,
-                    systemPromptOverride: Self.localPrompt
+                    systemPrompt: Self.localPrompt
                 )
             )
         }
