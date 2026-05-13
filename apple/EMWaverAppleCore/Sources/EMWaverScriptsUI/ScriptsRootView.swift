@@ -1139,93 +1139,239 @@ public struct ScriptsRootView: View {
         ]))
     }
 
-    private func agentHwEval(_ js: String, toolName: String) async -> (output: [String], result: String?, error: String?) {
-        let (lines, result) = await activePreviewManager.evalHardwarePrimitive(js)
-        if let first = lines.first, first.hasPrefix("[error]") {
-            return (lines, nil, first)
+    private enum AgentHardwareProtocol {
+        static let responseOK: UInt8 = 0x80
+        static let responseErr: UInt8 = 0x81
+        static let responseBusy: UInt8 = 0x82
+
+        static let gpio: UInt8 = 0x10
+        static let gpioInput: UInt8 = 0x00
+        static let gpioOutput: UInt8 = 0x01
+        static let gpioRead: UInt8 = 0x02
+        static let gpioHigh: UInt8 = 0x03
+        static let gpioLow: UInt8 = 0x04
+        static let gpioPull: UInt8 = 0x05
+
+        static let adcRead: UInt8 = 0x20
+        static let adcPin: UInt8 = 0x00
+
+        static let spiTransfer: UInt8 = 0x50
+    }
+
+    private enum AgentHardwareSendResult {
+        case success([UInt8])
+        case failure(String)
+    }
+
+    private enum AgentArgumentResult<Value> {
+        case success(Value)
+        case failure(AgentToolResult)
+    }
+
+    private final class AgentHardwareDeviceBox: @unchecked Sendable {
+        let device: any ScriptDevice
+
+        init(_ device: any ScriptDevice) {
+            self.device = device
         }
-        return (lines, result, nil)
+    }
+
+    private func agentHardwareSend(_ command: [UInt8], timeout: Int = 1500) async -> AgentHardwareSendResult {
+        guard let device else {
+            return .failure("No device connected")
+        }
+        guard command.count <= device.bufferPacketSizeBytes() else {
+            return .failure("Command is too large (\(command.count) bytes, max \(device.bufferPacketSizeBytes()))")
+        }
+
+        let deviceBox = AgentHardwareDeviceBox(device)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                let device = deviceBox.device
+                guard device.beginAgentHardwarePrimitiveSession() else {
+                    continuation.resume(returning: .failure(device.deviceErrorDescription() ?? "Device is busy or unavailable"))
+                    return
+                }
+                defer {
+                    device.endAgentHardwarePrimitiveSession()
+                }
+
+                guard let response = device.sendCommand(Data(command), timeout: timeout) else {
+                    continuation.resume(returning: .failure(device.deviceErrorDescription() ?? "Device did not respond"))
+                    return
+                }
+                guard let status = response.first else {
+                    continuation.resume(returning: .failure("Device returned an empty response"))
+                    return
+                }
+
+                switch status {
+                case AgentHardwareProtocol.responseOK:
+                    continuation.resume(returning: .success(Array(response.dropFirst())))
+                case AgentHardwareProtocol.responseBusy:
+                    continuation.resume(returning: .failure("Device busy (0x82): another transport session owns runtime control"))
+                case AgentHardwareProtocol.responseErr:
+                    continuation.resume(returning: .failure("Device returned ERR (0x81)"))
+                default:
+                    continuation.resume(returning: .failure("Device error: \(status)"))
+                }
+            }
+        }
+    }
+
+    private func agentNumber(_ value: AgentToolJSON?, name: String, toolName: String) -> AgentArgumentResult<Double> {
+        guard case .number(let number) = value else {
+            return .failure(AgentToolResult(id: nil, name: toolName, ok: false, error: "\(name) is required"))
+        }
+        return .success(number)
+    }
+
+    private func agentPin(_ value: AgentToolJSON?, name: String, toolName: String) -> AgentArgumentResult<UInt8> {
+        switch agentNumber(value, name: name, toolName: toolName) {
+        case .success(let number):
+            let pin = Int(number)
+            guard pin >= 0 && pin <= 255 else {
+                return .failure(AgentToolResult(id: nil, name: toolName, ok: false, error: "\(name) must be 0-255"))
+            }
+            return .success(UInt8(pin))
+        case .failure(let result):
+            return .failure(result)
+        }
     }
 
     private func agentToolSpiTransfer(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
         guard case .array(let byteValues) = arguments["bytes"] else {
             return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes must be an array")
         }
-        guard case .number(let cs) = arguments["cs"] else {
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "cs (chip-select pin) is required")
+        guard let device else {
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "No device connected")
         }
-        let byteLiterals = byteValues.compactMap { if case .number(let n) = $0 { return Int(n) } else { return nil } }
-        var opts = "{ cs: \(Int(cs))"
+        let maxTx = max(0, device.bufferPacketSizeBytes() - 4)
+        guard byteValues.count <= maxTx else {
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes is too long (\(byteValues.count), max \(maxTx))")
+        }
+
+        var tx: [UInt8] = []
+        tx.reserveCapacity(byteValues.count)
+        for value in byteValues {
+            guard case .number(let number) = value else {
+                return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "bytes must contain only numbers")
+            }
+            let byte = Int(number)
+            guard byte >= 0 && byte <= 255 else {
+                return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "SPI bytes must be 0-255")
+            }
+            tx.append(UInt8(byte))
+        }
+
+        let cs: UInt8
+        switch agentPin(arguments["cs"], name: "cs (chip-select pin)", toolName: "spi_transfer") {
+        case .success(let value): cs = value
+        case .failure(let result): return result
+        }
+
+        let maxRx = max(0, device.bufferPacketSizeBytes() - 1)
+        var rxLength = tx.count
         if case .number(let rxLen) = arguments["rx_length"] {
-            opts += ", rxLength: \(Int(rxLen))"
+            rxLength = max(0, min(maxRx, Int(rxLen)))
         }
-        opts += " }"
-        let js = "(function(){ var r = SPI.transfer(\(byteLiterals), \(opts)); if (!r) return 'null'; var out = []; for (var i=0;i<r.length;i++) out.push(r[i]&0xff); return JSON.stringify(out); })()"
-        let (_, result, err) = await agentHwEval(js, toolName: "spi_transfer")
-        if let err { return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: err) }
-        guard let raw = result, let data = raw.data(using: .utf8),
-              let parsed = try? JSONDecoder().decode([Int].self, from: data) else {
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: "Could not parse SPI response: \(result ?? "nil")")
+        let command = [AgentHardwareProtocol.spiTransfer, cs, UInt8(rxLength), UInt8(tx.count)] + tx
+
+        switch await agentHardwareSend(command) {
+        case .success(let payload):
+            let rx = Array(payload.prefix(rxLength)).map { AgentToolJSON.number(Double($0)) }
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object(["rx": .array(rx)]))
+        case .failure(let error):
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: error)
         }
-        let rxArray = AgentToolJSON.array(parsed.map { .number(Double($0)) })
-        return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object(["rx": rxArray]))
     }
 
     private func agentToolGpioMode(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        guard case .number(let pin) = arguments["pin"],
-              let mode = arguments["mode"]?.stringValue else {
-            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "pin and mode are required")
+        let pin: UInt8
+        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_mode") {
+        case .success(let value): pin = value
+        case .failure(let result): return result
         }
-        let jsMode: String
+        guard let mode = arguments["mode"]?.stringValue else {
+            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "mode is required")
+        }
+
+        let command: [UInt8]
         switch mode.uppercased() {
-        case "INPUT":        jsMode = "INPUT"
-        case "OUTPUT":       jsMode = "OUTPUT"
-        case "INPUT_PULLUP": jsMode = "INPUT_PULLUP"
+        case "INPUT":
+            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioInput, pin]
+        case "OUTPUT":
+            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioOutput, pin]
+        case "INPUT_PULLUP":
+            command = [AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioPull, pin, 1]
         default: return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: "Invalid mode: \(mode)")
         }
-        let js = "pinMode(\(Int(pin)), \(jsMode)); 'ok'"
-        let (_, _, err) = await agentHwEval(js, toolName: "gpio_mode")
-        if let err { return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: err) }
-        return AgentToolResult(id: nil, name: "gpio_mode", ok: true, result: .object(["pin": .number(pin), "mode": .string(mode)]))
+
+        switch await agentHardwareSend(command) {
+        case .success:
+            return AgentToolResult(id: nil, name: "gpio_mode", ok: true, result: .object(["pin": .number(Double(pin)), "mode": .string(mode)]))
+        case .failure(let error):
+            return AgentToolResult(id: nil, name: "gpio_mode", ok: false, error: error)
+        }
     }
 
     private func agentToolGpioWrite(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        guard case .number(let pin) = arguments["pin"],
-              let value = arguments["value"]?.stringValue else {
-            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "pin and value are required")
+        let pin: UInt8
+        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_write") {
+        case .success(let value): pin = value
+        case .failure(let result): return result
         }
-        let jsLevel: String
+        guard let value = arguments["value"]?.stringValue else {
+            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "value is required")
+        }
+
+        let subcommand: UInt8
         switch value.uppercased() {
-        case "HIGH": jsLevel = "HIGH"
-        case "LOW":  jsLevel = "LOW"
+        case "HIGH": subcommand = AgentHardwareProtocol.gpioHigh
+        case "LOW":  subcommand = AgentHardwareProtocol.gpioLow
         default: return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: "value must be HIGH or LOW")
         }
-        let js = "digitalWrite(\(Int(pin)), \(jsLevel)); 'ok'"
-        let (_, _, err) = await agentHwEval(js, toolName: "gpio_write")
-        if let err { return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: err) }
-        return AgentToolResult(id: nil, name: "gpio_write", ok: true, result: .object(["pin": .number(pin), "value": .string(value)]))
+
+        switch await agentHardwareSend([AgentHardwareProtocol.gpio, subcommand, pin]) {
+        case .success:
+            return AgentToolResult(id: nil, name: "gpio_write", ok: true, result: .object(["pin": .number(Double(pin)), "value": .string(value)]))
+        case .failure(let error):
+            return AgentToolResult(id: nil, name: "gpio_write", ok: false, error: error)
+        }
     }
 
     private func agentToolGpioRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        guard case .number(let pin) = arguments["pin"] else {
-            return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: "pin is required")
+        let pin: UInt8
+        switch agentPin(arguments["pin"], name: "pin", toolName: "gpio_read") {
+        case .success(let value): pin = value
+        case .failure(let result): return result
         }
-        let js = "digitalRead(\(Int(pin)))"
-        let (_, result, err) = await agentHwEval(js, toolName: "gpio_read")
-        if let err { return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: err) }
-        let level = Int(result ?? "") ?? -1
-        return AgentToolResult(id: nil, name: "gpio_read", ok: true, result: .object(["pin": .number(pin), "level": .number(Double(level))]))
+
+        switch await agentHardwareSend([AgentHardwareProtocol.gpio, AgentHardwareProtocol.gpioRead, pin]) {
+        case .success(let payload):
+            let level = payload.first.map { $0 == 0 ? 0 : 1 } ?? 0
+            return AgentToolResult(id: nil, name: "gpio_read", ok: true, result: .object(["pin": .number(Double(pin)), "level": .number(Double(level))]))
+        case .failure(let error):
+            return AgentToolResult(id: nil, name: "gpio_read", ok: false, error: error)
+        }
     }
 
     private func agentToolAnalogRead(arguments: [String: AgentToolJSON]) async -> AgentToolResult {
-        guard case .number(let pin) = arguments["pin"] else {
-            return AgentToolResult(id: nil, name: "analog_read", ok: false, error: "pin is required")
+        let pin: UInt8
+        switch agentPin(arguments["pin"], name: "pin", toolName: "analog_read") {
+        case .success(let value): pin = value
+        case .failure(let result): return result
         }
-        let js = "analogRead(\(Int(pin)))"
-        let (_, result, err) = await agentHwEval(js, toolName: "analog_read")
-        if let err { return AgentToolResult(id: nil, name: "analog_read", ok: false, error: err) }
-        let value = Double(result ?? "") ?? 0
-        return AgentToolResult(id: nil, name: "analog_read", ok: true, result: .object(["pin": .number(pin), "value": .number(value)]))
+
+        switch await agentHardwareSend([AgentHardwareProtocol.adcRead, AgentHardwareProtocol.adcPin, pin, 1]) {
+        case .success(let payload):
+            let lo = UInt16(payload.indices.contains(0) ? payload[0] : 0)
+            let hi = UInt16(payload.indices.contains(1) ? payload[1] : 0)
+            let value = Double((hi << 8) | lo)
+            return AgentToolResult(id: nil, name: "analog_read", ok: true, result: .object(["pin": .number(Double(pin)), "value": .number(value)]))
+        case .failure(let error):
+            return AgentToolResult(id: nil, name: "analog_read", ok: false, error: error)
+        }
     }
 
     private func scriptObject(id: String, source: String) -> [String: AgentToolJSON] {

@@ -586,11 +586,35 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
             return false
         }
         setTransportDebugLogging(transportDebugLoggingEnabled, deviceID: request.targetID)
-        midiQueue.async {
+        midiQueue.sync {
             guard self.transportSessionClaimsByDeviceID[request.targetID] == nil else { return }
             self.startTransportSessionHeartbeatInternal(deviceID: request.targetID, source: source)
         }
         return true
+    }
+
+    func beginAgentHardwarePrimitiveSession() -> Bool {
+        beginScriptTransportSession(deviceID: nil)
+    }
+
+    func endAgentHardwarePrimitiveSession() {
+        guard let (targetID, claim) = takeTransportSessionClaim(deviceID: nil) else {
+            return
+        }
+        guard isTransportConnectedInternal(deviceID: targetID) else {
+            return
+        }
+        _ = sendTransportSessionCommandInternal(
+            subcommand: EmwOpcode.transportSessionDisconnect,
+            source: claim.source,
+            deviceID: targetID,
+            timeoutMs: 1000,
+            reportErrors: false
+        )
+    }
+
+    func deviceErrorDescription() -> String? {
+        lastErrorText
     }
 
     func endScriptTransportSession(deviceID: String?) {

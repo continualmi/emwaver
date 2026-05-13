@@ -26,7 +26,6 @@ public final class ScriptPreviewManager: ObservableObject {
 
     private weak var device: (any ScriptDevice)?
     private var scriptEngine: ScriptEngine?
-    private var hardwareEngine: ScriptEngine?
 
     public init() {}
 
@@ -94,15 +93,6 @@ public final class ScriptPreviewManager: ObservableObject {
         return await engine.eval(code)
     }
 
-    public func evalHardwarePrimitive(_ code: String) async -> (output: [String], result: String?) {
-        if let engine = scriptEngine {
-            return await engine.eval(code)
-        }
-        setupHardwareEngineIfNeeded()
-        guard let engine = hardwareEngine else { return (["[error] Hardware runtime unavailable"], nil) }
-        return await engine.eval(code)
-    }
-
     private func setupEngineIfNeeded() {
         if scriptEngine != nil {
             registerBindings()
@@ -128,28 +118,9 @@ public final class ScriptPreviewManager: ObservableObject {
         scriptEngine = engine
     }
 
-    private func setupHardwareEngineIfNeeded() {
-        if hardwareEngine != nil {
-            registerBindings()
-            return
-        }
-
-        let engine = ScriptEngine()
-        engine.setup(
-            renderHandler: { _ in },
-            bindings: buildBindings(),
-            errorHandler: { [weak self] message in
-                guard let self else { return }
-                self.scriptError = message
-            }
-        )
-        hardwareEngine = engine
-    }
-
     private func registerBindings() {
         let bindings = buildBindings()
         scriptEngine?.registerGlobalBindings(bindings)
-        hardwareEngine?.registerGlobalBindings(bindings)
     }
 
     private func buildBindings() -> [String: Any] {

@@ -6,7 +6,8 @@ Status: implemented (macOS native Agent, May 2026)
 
 The native Agent controls hardware through direct hardware primitive tools
 (`spi_transfer`, `gpio_read`, `gpio_write`, `gpio_mode`, `analog_read`) that
-run in the live script engine. The previous approaches — `get_ui_snapshot` /
+send native EMW protocol packets through the active local device. The previous
+approaches — `get_ui_snapshot` /
 `send_ui_event` (snapshot navigation), and then `eval` (arbitrary JS snippets)
 — have both been removed from the native Agent tool set.
 
@@ -38,12 +39,13 @@ mechanically but failed in practice: the model does not know the JS API surface
 (`SPI.transfer`, `CC1101.readRegister`, etc.) without reading the relevant
 bundled script first, and even then it frequently guessed wrong API names.
 Named hardware tools solve this at the source — the parameter schema is the
-API, and the tool implementation handles the JS internally.
+API, and the tool implementation handles the native protocol internally.
 
 ## Current Model: Named Hardware Primitive Tools
 
 The Agent issues typed hardware operations directly. The tool schemas make the
-API surface discoverable; the tool implementations encode the correct JS.
+API surface discoverable; the tool implementations encode the correct EMW
+protocol packets.
 
 ```
 spi_transfer(bytes=[0x80, 0x00], cs=4, rx_length=2)  →  { rx: [0x00, 0x14] }
@@ -84,21 +86,21 @@ uses to operate the hardware.
 
 ## How Hardware Tools Work
 
-Each hardware tool calls `ScriptPreviewManager.eval(js)` internally with a
-safe, deterministic JS snippet — e.g. `SPI.transfer([0x80,0x00],{cs:4,rxLength:2})`.
-`SPI.transfer`, `pinMode`, `digitalWrite`, `digitalRead`, and `analogRead` are
-all defined in `script_bootstrap.emw` (loaded into every JS context via
-`ScriptEngine.injectDSL`). They encode the appropriate EMW op-code packet and
-call `__emwSendPacket` which routes to `ScriptDevice.sendCommand` on the active
-USB/BLE transport.
+Each hardware tool builds the appropriate EMW opcode packet directly in the
+native client and calls `ScriptDevice.sendCommand` on the active local device.
+For ESP32 transports, macOS claims the runtime transport session around the
+primitive call so runtime/control traffic is accepted by firmware.
 
-The hardware tool layer, not the model, owns the JS API details.
+The hardware tool layer, not the model, owns the protocol details. Tool
+failures are returned as tool results; they must not surface as `.emw` script
+errors or mutate the script preview error state.
 
 ## console.log
 
 `console.log`, `console.warn`, and `console.error` remain available in the
 `.emw` script runtime on native Apple platforms (installed in
-`ScriptEngine.installHostPrimitives`). Output is captured per internal `eval`
-call and can surface in tool results. Bundled `.emw` scripts should still
-express user-facing state through `UI.render(...)`; `console.log` is an
-internal diagnostic channel, not the primary agent output path.
+`ScriptEngine.installHostPrimitives`). Hardware primitive tools no longer run
+through that script runtime, so script console output is separate from Agent
+hardware tool results. Bundled `.emw` scripts should still express user-facing
+state through `UI.render(...)`; `console.log` is an internal diagnostic channel,
+not the primary agent output path.

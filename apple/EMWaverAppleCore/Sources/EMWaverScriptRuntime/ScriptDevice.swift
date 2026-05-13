@@ -13,6 +13,9 @@ public protocol ScriptDevice: AnyObject {
     func clearBuffer()
     func loadBuffer(data: Data)
     func bufferPacketSizeBytes() -> Int
+    func beginAgentHardwarePrimitiveSession() -> Bool
+    func endAgentHardwarePrimitiveSession()
+    func deviceErrorDescription() -> String?
 
     func sendPacket(_ data: Data)
     func sendCommand(_ command: Data, timeout: Int) -> Data?
@@ -21,6 +24,9 @@ public protocol ScriptDevice: AnyObject {
 
 public extension ScriptDevice {
     func bufferPacketSizeBytes() -> Int { 18 }
+    func beginAgentHardwarePrimitiveSession() -> Bool { true }
+    func endAgentHardwarePrimitiveSession() {}
+    func deviceErrorDescription() -> String? { nil }
 }
 
 @objc public protocol ScriptDeviceJSExport: JSExport {

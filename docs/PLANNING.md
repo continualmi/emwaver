@@ -17,7 +17,7 @@ Use it to capture:
 
 - Gateway consolidation: `gateway/` becomes the single owner of the local backend, CLI, runtime, transports, and browser frontend. The controlling migration document is `gateway/MIGRATION.md`.
 - EMWaver rebirth: local-first open-source runtime, Gateway-driven `.emw` execution, hardware monorepo consolidation, and paid Agent API usage through the future Continual MI/MGPT backend as the primary business model.
-- Agent-driven hardware automation: the native Agent uses named hardware primitive tools (`spi_transfer`, `gpio_read`, `gpio_write`, etc.) that internally call the live script engine, replacing both the snapshot/event navigation model and the earlier `eval` approach. See `docs/AGENT_EVAL_RUNTIME.md`.
+- Agent-driven hardware automation: the native Agent uses named hardware primitive tools (`spi_transfer`, `gpio_read`, `gpio_write`, etc.) that send native EMW protocol packets through the local device, replacing both the snapshot/event navigation model and the earlier `eval` approach. See `docs/AGENT_EVAL_RUNTIME.md`.
 - Multi-device test bench goal: support a local hardware "box" with at least two simultaneously connected EMWaver boards, initially two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32, so one agent session can probe modules, transports, scripts, and hardware feedback loops end to end.
 - First implementation slice is tracked in `REBIRTH_ISSUES.md`: gateway package, local WebSocket endpoint, runtime/device extraction, shared mock device simulator contract, `emwaver run`, account-free local hardware control, hardware repo inventory, static web deployment migration, and hardware asset deduplication.
 
