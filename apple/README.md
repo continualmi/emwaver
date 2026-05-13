@@ -90,6 +90,7 @@ Agent configuration direction:
 - the package should keep the Agent runtime/interface, collect local script/device/UI/error context, and authenticate with an API key stored locally/keychain-backed by the host app,
 - the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
 - `EMWaverScriptsUI/Resources/emwaver-prompt.txt` is gitignored. When present, it is sent as `systemPromptOverride` on every request, bypassing the universe's stored prompt for a faster iteration loop. Copy it from `../mdl/mgpt/backend-api/prompts/emwaver-prompt.txt` for internal builds. Open-source builds without the file fall back to the universe prompt.
+- The shared Agent composer follows desktop chat conventions on macOS: Return sends the message and Shift-Return inserts a newline.
 
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`

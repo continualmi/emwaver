@@ -202,21 +202,12 @@ public struct AgentChatPanelView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .bottom, spacing: 10) {
-                TextField("Message", text: $viewModel.draft, axis: .vertical)
-                    .lineLimit(1...8)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .textFieldStyle(.plain)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 10)
-                    .background(composerFieldBackgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(messageCardBorder)
-                    )
-                    .foregroundStyle(.primary)
-                    .tint(.accentColor)
-                    .disabled(viewModel.isSending)
+            HStack(alignment: .center, spacing: 10) {
+                AgentComposerInput(
+                    text: $viewModel.draft,
+                    isDisabled: viewModel.isSending,
+                    onSubmit: submitComposer
+                )
 
                 if viewModel.isSending {
                     Button(role: .destructive) {
@@ -228,15 +219,14 @@ public struct AgentChatPanelView: View {
                     .buttonStyle(.bordered)
                 } else {
                     Button {
-                        sendOrUpgrade()
+                        submitComposer()
                     } label: {
                         Text("Send")
                             .frame(minWidth: 64)
                     }
                     .buttonStyle(.borderedProminent)
-                    .keyboardShortcut(.return, modifiers: [.command])
                     .help("Send message")
-                    .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(!canSubmitDraft)
                 }
             }
         }
@@ -282,6 +272,15 @@ public struct AgentChatPanelView: View {
         }
     }
 
+    private var canSubmitDraft: Bool {
+        !viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func submitComposer() {
+        guard !viewModel.isSending, canSubmitDraft else { return }
+        sendOrUpgrade()
+    }
+
     @ViewBuilder
     private var suggestions: some View {
         let items: [String] = [
@@ -314,6 +313,172 @@ public struct AgentChatPanelView: View {
         return "folder"
     }
 }
+
+private struct AgentComposerInput: View {
+    @Binding var text: String
+    let isDisabled: Bool
+    let onSubmit: () -> Void
+
+    var body: some View {
+        Group {
+            #if canImport(AppKit)
+            ZStack(alignment: .topLeading) {
+                AgentComposerMacTextView(text: $text, isDisabled: isDisabled, onSubmit: onSubmit)
+                    .frame(maxWidth: .infinity)
+
+                if text.isEmpty {
+                    Text("Message")
+                        .foregroundStyle(.secondary)
+                        .allowsHitTesting(false)
+                }
+            }
+            #else
+            TextField("Message", text: $text, axis: .vertical)
+                .lineLimit(1...8)
+                .fixedSize(horizontal: false, vertical: true)
+                .textFieldStyle(.plain)
+                .submitLabel(.send)
+                .onSubmit(onSubmit)
+            #endif
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(composerFieldBackgroundColor, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(messageCardBorder)
+        )
+        .foregroundStyle(.primary)
+        .tint(.accentColor)
+        .disabled(isDisabled)
+    }
+}
+
+#if canImport(AppKit)
+private struct AgentComposerMacTextView: NSViewRepresentable {
+    @Binding var text: String
+    let isDisabled: Bool
+    let onSubmit: () -> Void
+
+    func makeNSView(context: Context) -> AgentComposerTextContainer {
+        let container = AgentComposerTextContainer()
+        container.textView.delegate = context.coordinator
+        container.textView.onSubmit = onSubmit
+        container.textView.string = text
+        container.textView.isEditable = !isDisabled
+        return container
+    }
+
+    func updateNSView(_ nsView: AgentComposerTextContainer, context: Context) {
+        context.coordinator.text = $text
+        nsView.textView.onSubmit = onSubmit
+        nsView.textView.isEditable = !isDisabled
+        nsView.textView.alphaValue = isDisabled ? 0.55 : 1.0
+
+        if nsView.textView.string != text {
+            nsView.textView.string = text
+            nsView.invalidateIntrinsicContentSize()
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(text: $text)
+    }
+
+    final class Coordinator: NSObject, NSTextViewDelegate {
+        var text: Binding<String>
+
+        init(text: Binding<String>) {
+            self.text = text
+        }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text.wrappedValue = textView.string
+            textView.enclosingScrollView?.superview?.invalidateIntrinsicContentSize()
+        }
+    }
+}
+
+private final class AgentComposerTextContainer: NSView {
+    let scrollView: NSScrollView
+    let textView: AgentComposerNSTextView
+
+    private let minimumTextHeight: CGFloat = 20
+    private let maximumTextHeight: CGFloat = 148
+
+    override init(frame frameRect: NSRect) {
+        scrollView = NSScrollView()
+        textView = AgentComposerNSTextView()
+        super.init(frame: frameRect)
+
+        wantsLayer = true
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
+        addSubview(scrollView)
+
+        textView.drawsBackground = false
+        textView.isRichText = false
+        textView.isAutomaticQuoteSubstitutionEnabled = false
+        textView.isAutomaticDashSubstitutionEnabled = false
+        textView.font = .systemFont(ofSize: NSFont.systemFontSize)
+        textView.textColor = .labelColor
+        textView.textContainerInset = .zero
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.minSize = NSSize(width: 0, height: minimumTextHeight)
+        textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override var intrinsicContentSize: NSSize {
+        NSSize(width: NSView.noIntrinsicMetric, height: measuredTextHeight())
+    }
+
+    override func layout() {
+        super.layout()
+        scrollView.frame = bounds
+        textView.frame = NSRect(origin: .zero, size: NSSize(width: bounds.width, height: measuredTextHeight()))
+    }
+
+    private func measuredTextHeight() -> CGFloat {
+        guard let layoutManager = textView.layoutManager,
+              let textContainer = textView.textContainer else {
+            return minimumTextHeight
+        }
+
+        let width = max(bounds.width, 1)
+        textContainer.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
+        layoutManager.ensureLayout(for: textContainer)
+        let usedHeight = ceil(layoutManager.usedRect(for: textContainer).height)
+        return min(max(usedHeight, minimumTextHeight), maximumTextHeight)
+    }
+}
+
+private final class AgentComposerNSTextView: NSTextView {
+    var onSubmit: (() -> Void)?
+
+    override func keyDown(with event: NSEvent) {
+        let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
+        let isReturn = event.keyCode == 36 || event.keyCode == 76
+        if isReturn && !flags.contains(.shift) {
+            onSubmit?()
+            return
+        }
+
+        super.keyDown(with: event)
+    }
+}
+#endif
 
 private struct SuggestionCard: View {
     let title: String
