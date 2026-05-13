@@ -1140,7 +1140,7 @@ public struct ScriptsRootView: View {
     }
 
     private func agentHwEval(_ js: String, toolName: String) async -> (output: [String], result: String?, error: String?) {
-        let (lines, result) = await activePreviewManager.eval(js)
+        let (lines, result) = await activePreviewManager.evalHardwarePrimitive(js)
         if let first = lines.first, first.hasPrefix("[error]") {
             return (lines, nil, first)
         }
