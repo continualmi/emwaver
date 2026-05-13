@@ -319,12 +319,22 @@ private struct AgentComposerInput: View {
     let isDisabled: Bool
     let onSubmit: () -> Void
 
+    #if canImport(AppKit)
+    @State private var macTextHeight: CGFloat = AgentComposerMetrics.minimumTextHeight
+    #endif
+
     var body: some View {
         Group {
             #if canImport(AppKit)
             ZStack(alignment: .topLeading) {
-                AgentComposerMacTextView(text: $text, isDisabled: isDisabled, onSubmit: onSubmit)
+                AgentComposerMacTextView(
+                    text: $text,
+                    measuredHeight: $macTextHeight,
+                    isDisabled: isDisabled,
+                    onSubmit: onSubmit
+                )
                     .frame(maxWidth: .infinity)
+                    .frame(height: macTextHeight, alignment: .topLeading)
 
                 if text.isEmpty {
                     Text("Message")
@@ -351,12 +361,19 @@ private struct AgentComposerInput: View {
         .foregroundStyle(.primary)
         .tint(.accentColor)
         .disabled(isDisabled)
+        .fixedSize(horizontal: false, vertical: true)
     }
+}
+
+private enum AgentComposerMetrics {
+    static let minimumTextHeight: CGFloat = 20
+    static let maximumTextHeight: CGFloat = 148
 }
 
 #if canImport(AppKit)
 private struct AgentComposerMacTextView: NSViewRepresentable {
     @Binding var text: String
+    @Binding var measuredHeight: CGFloat
     let isDisabled: Bool
     let onSubmit: () -> Void
 
@@ -364,6 +381,9 @@ private struct AgentComposerMacTextView: NSViewRepresentable {
         let container = AgentComposerTextContainer()
         container.textView.delegate = context.coordinator
         container.textView.onSubmit = onSubmit
+        container.onHeightChange = { height in
+            context.coordinator.measuredHeight.wrappedValue = height
+        }
         container.textView.string = text
         container.textView.isEditable = !isDisabled
         return container
@@ -371,7 +391,11 @@ private struct AgentComposerMacTextView: NSViewRepresentable {
 
     func updateNSView(_ nsView: AgentComposerTextContainer, context: Context) {
         context.coordinator.text = $text
+        context.coordinator.measuredHeight = $measuredHeight
         nsView.textView.onSubmit = onSubmit
+        nsView.onHeightChange = { height in
+            context.coordinator.measuredHeight.wrappedValue = height
+        }
         nsView.textView.isEditable = !isDisabled
         nsView.textView.alphaValue = isDisabled ? 0.55 : 1.0
 
@@ -379,23 +403,27 @@ private struct AgentComposerMacTextView: NSViewRepresentable {
             nsView.textView.string = text
             nsView.invalidateIntrinsicContentSize()
         }
+        nsView.updateMeasuredHeight()
     }
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(text: $text)
+        Coordinator(text: $text, measuredHeight: $measuredHeight)
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        var measuredHeight: Binding<CGFloat>
 
-        init(text: Binding<String>) {
+        init(text: Binding<String>, measuredHeight: Binding<CGFloat>) {
             self.text = text
+            self.measuredHeight = measuredHeight
         }
 
         func textDidChange(_ notification: Notification) {
             guard let textView = notification.object as? NSTextView else { return }
             text.wrappedValue = textView.string
-            textView.enclosingScrollView?.superview?.invalidateIntrinsicContentSize()
+            guard let container = textView.enclosingScrollView?.superview as? AgentComposerTextContainer else { return }
+            container.updateMeasuredHeight()
         }
     }
 }
@@ -403,9 +431,7 @@ private struct AgentComposerMacTextView: NSViewRepresentable {
 private final class AgentComposerTextContainer: NSView {
     let scrollView: NSScrollView
     let textView: AgentComposerNSTextView
-
-    private let minimumTextHeight: CGFloat = 20
-    private let maximumTextHeight: CGFloat = 148
+    var onHeightChange: ((CGFloat) -> Void)?
 
     override init(frame frameRect: NSRect) {
         scrollView = NSScrollView()
@@ -432,7 +458,7 @@ private final class AgentComposerTextContainer: NSView {
         textView.textContainer?.widthTracksTextView = true
         textView.isHorizontallyResizable = false
         textView.isVerticallyResizable = true
-        textView.minSize = NSSize(width: 0, height: minimumTextHeight)
+        textView.minSize = NSSize(width: 0, height: AgentComposerMetrics.minimumTextHeight)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: CGFloat.greatestFiniteMagnitude)
     }
 
@@ -441,26 +467,35 @@ private final class AgentComposerTextContainer: NSView {
     }
 
     override var intrinsicContentSize: NSSize {
-        NSSize(width: NSView.noIntrinsicMetric, height: measuredTextHeight())
+        NSSize(width: NSView.noIntrinsicMetric, height: updateMeasuredHeight())
     }
 
     override func layout() {
         super.layout()
         scrollView.frame = bounds
-        textView.frame = NSRect(origin: .zero, size: NSSize(width: bounds.width, height: measuredTextHeight()))
+        textView.frame = NSRect(origin: .zero, size: NSSize(width: bounds.width, height: updateMeasuredHeight()))
+    }
+
+    @discardableResult
+    func updateMeasuredHeight() -> CGFloat {
+        let height = measuredTextHeight()
+        DispatchQueue.main.async { [weak self] in
+            self?.onHeightChange?(height)
+        }
+        return height
     }
 
     private func measuredTextHeight() -> CGFloat {
         guard let layoutManager = textView.layoutManager,
               let textContainer = textView.textContainer else {
-            return minimumTextHeight
+            return AgentComposerMetrics.minimumTextHeight
         }
 
         let width = max(bounds.width, 1)
         textContainer.containerSize = NSSize(width: width, height: CGFloat.greatestFiniteMagnitude)
         layoutManager.ensureLayout(for: textContainer)
         let usedHeight = ceil(layoutManager.usedRect(for: textContainer).height)
-        return min(max(usedHeight, minimumTextHeight), maximumTextHeight)
+        return min(max(usedHeight, AgentComposerMetrics.minimumTextHeight), AgentComposerMetrics.maximumTextHeight)
     }
 }
 
