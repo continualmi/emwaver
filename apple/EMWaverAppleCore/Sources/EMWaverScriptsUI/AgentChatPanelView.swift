@@ -289,7 +289,7 @@ public struct AgentChatPanelView: View {
             "How do I capture and replay an IR remote?",
         ]
 
-        if viewModel.messages.isEmpty && viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if viewModel.messages.isEmpty {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 180), spacing: 10)], alignment: .leading, spacing: 10) {
                 ForEach(items, id: \.self) { text in
                     Button {
