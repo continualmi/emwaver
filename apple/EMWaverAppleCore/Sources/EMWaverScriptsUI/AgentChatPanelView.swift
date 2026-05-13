@@ -64,6 +64,10 @@ public struct AgentChatPanelView: View {
             ZStack {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 12) {
+                        if viewModel.messages.isEmpty && !viewModel.isLoadingConversation {
+                            suggestions
+                        }
+
                         ForEach(viewModel.messages) { msg in
                             MessageRow(message: msg)
                                 .id(msg.id)
@@ -198,11 +202,10 @@ public struct AgentChatPanelView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            suggestions
-
-            HStack(alignment: .center, spacing: 10) {
+            HStack(alignment: .bottom, spacing: 10) {
                 TextField("Message", text: $viewModel.draft, axis: .vertical)
-                    .lineLimit(1...6)
+                    .lineLimit(1...8)
+                    .fixedSize(horizontal: false, vertical: true)
                     .textFieldStyle(.plain)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 10)
@@ -214,9 +217,6 @@ public struct AgentChatPanelView: View {
                     .foregroundStyle(.primary)
                     .tint(.accentColor)
                     .disabled(viewModel.isSending)
-                    .onSubmit {
-                        sendOrUpgrade()
-                    }
 
                 if viewModel.isSending {
                     Button(role: .destructive) {
@@ -234,6 +234,8 @@ public struct AgentChatPanelView: View {
                             .frame(minWidth: 64)
                     }
                     .buttonStyle(.borderedProminent)
+                    .keyboardShortcut(.return, modifiers: [.command])
+                    .help("Send message")
                     .disabled(viewModel.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
