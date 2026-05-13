@@ -91,6 +91,7 @@ Agent configuration direction:
 - the package must not bundle production Agent prompts, private `.emw` instructions, provider routing, or metering policy.
 - `EMWaverScriptsUI/Resources/emwaver-prompt.txt` is gitignored. When present, it is sent as `systemPromptOverride` on every request, bypassing the universe's stored prompt for a faster iteration loop. Copy it from `../mdl/mgpt/backend-api/prompts/emwaver-prompt.txt` for internal builds. Open-source builds without the file fall back to the universe prompt.
 - The shared Agent composer follows desktop chat conventions on macOS: Return sends the message and Shift-Return inserts a newline.
+- During a multi-step Agent tool turn, the client sends cumulative in-flight tool results back to MGPT so each continuation sees the full active tool transcript while prior completed turns remain server-side in the MGPT universe.
 
 Also bundles package resources, including firmware payload under:
 - `Resources/Firmware/emwaver.bin`

@@ -197,6 +197,7 @@ public final class AgentChatViewModel: ObservableObject {
         )
 
         var currentResponse = response
+        var accumulatedToolResults: [AgentToolResult] = []
         while let toolCalls = currentResponse.toolCalls, !toolCalls.isEmpty {
             try Task.checkCancellation()
             guard let toolRuntime else {
@@ -204,6 +205,7 @@ public final class AgentChatViewModel: ObservableObject {
             }
 
             let toolResults = await executeToolCalls(toolCalls, runtime: toolRuntime)
+            accumulatedToolResults.append(contentsOf: toolResults)
             try Task.checkCancellation()
             currentResponse = try await api.send(
                 endpoint: ctx.baseURL,
@@ -211,10 +213,10 @@ public final class AgentChatViewModel: ObservableObject {
                 request: AgentEndpointRequest(
                     model: Self.publicModelAlias,
                     universe: universe,
-                    userInput: userPrompt,
+                    userInput: toolPrompt(userPrompt),
                     tools: tools,
                     toolChoice: .auto,
-                    toolResults: toolResults,
+                    toolResults: accumulatedToolResults,
                     systemPromptOverride: Self.localPrompt
                 )
             )
