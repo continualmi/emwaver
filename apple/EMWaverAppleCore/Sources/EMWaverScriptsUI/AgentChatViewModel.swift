@@ -12,6 +12,7 @@ public final class AgentChatViewModel: ObservableObject {
     private static let log = OSLog(subsystem: "com.emwaver", category: "AgentChat")
 
     public static let defaultModelId = "managed-by-server"
+    private static let publicModelAlias = "emw-1-lite-frozen"
     private static let storedPromptName = "emwaver-prompt"
     private static let localPrompt: String? = {
         guard let url = Bundle.module.url(forResource: "emwaver-prompt", withExtension: "txt"),
@@ -186,7 +187,7 @@ public final class AgentChatViewModel: ObservableObject {
             endpoint: ctx.baseURL,
             apiKey: ctx.accessToken,
             request: AgentEndpointRequest(
-                model: "mdl-1-lite-frozen",
+                model: Self.publicModelAlias,
                 universe: universe,
                 userInput: toolPrompt(userPrompt),
                 tools: tools,
@@ -208,7 +209,7 @@ public final class AgentChatViewModel: ObservableObject {
                 endpoint: ctx.baseURL,
                 apiKey: ctx.accessToken,
                 request: AgentEndpointRequest(
-                    model: "mdl-1-lite-frozen",
+                    model: Self.publicModelAlias,
                     universe: universe,
                     userInput: userPrompt,
                     tools: tools,

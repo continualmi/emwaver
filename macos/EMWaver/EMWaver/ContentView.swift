@@ -123,47 +123,50 @@ struct ContentView: View {
         return LocalDeviceLabelFormatter.label(for: selectedLocalDevice)
     }
 
+    private var scriptsRootContent: some View {
+        ScriptsRootView(
+            previewManager: previewManager,
+            device: scriptDeviceBridge,
+            agentEndpointProvider: {
+                auth.agentEndpointConfig
+            },
+            hostStatusSink: { running, name in
+                // Treat "preview showing" as "script running" on macOS.
+                hostSessions.setScriptStatus(running: running, activeScriptName: name)
+            },
+            agentEnabled: auth.isSignedIn,
+            onRequestAgentUpgrade: {
+                auth.isSignInSheetPresented = true
+            },
+            onRequestOpenSettings: {
+                showingSettings = true
+            },
+            leadingHeaderItem: nil,
+            agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
+            onRunScript: { request in
+                scriptSessions.run(request)
+            },
+            activePreviewManagerProvider: {
+                scriptSessions.activePreviewManager
+            },
+            onStopActiveScript: {
+                scriptSessions.stopSelectedSession()
+            },
+            externalScriptSessions: scriptSessions.scriptSessionStatuses,
+            onSelectExternalScriptSession: { id in
+                scriptSessions.selectSession(id)
+            },
+            onStopExternalScriptSession: { id in
+                scriptSessions.stopSession(id)
+            }
+        )
+        .id(scriptDeviceAttachmentKey)
+    }
+
     var body: some View {
         NavigationStack {
             ZStack {
-                ScriptsRootView(
-                    previewManager: previewManager,
-                    device: scriptDeviceBridge,
-                    agentEndpointProvider: {
-                        auth.agentEndpointConfig
-                    },
-                    hostStatusSink: { running, name in
-                        // Treat "preview showing" as "script running" on macOS.
-                        hostSessions.setScriptStatus(running: running, activeScriptName: name)
-                    },
-                    agentEnabled: auth.isSignedIn,
-                    onRequestAgentUpgrade: {
-                        auth.isSignInSheetPresented = true
-                    },
-                    onRequestOpenSettings: {
-                        showingSettings = true
-                    },
-                    leadingHeaderItem: nil,
-                    agentLeadingToolbarItem: AnyView(agentKeyToolbarItem),
-                    onRunScript: { request in
-                        scriptSessions.run(request)
-                    },
-                    activePreviewManagerProvider: {
-                        scriptSessions.activePreviewManager
-                    },
-                    onStopActiveScript: {
-                        scriptSessions.stopSelectedSession()
-                    },
-                    externalScriptSessions: scriptSessions.scriptSessionStatuses,
-                    onSelectExternalScriptSession: { id in
-                        scriptSessions.selectSession(id)
-                    },
-                    onStopExternalScriptSession: { id in
-                        scriptSessions.stopSession(id)
-                    }
-                )
-                .id(scriptDeviceAttachmentKey)
-
+                scriptsRootContent
             }
             .overlay(alignment: .top) {
                 Divider()
