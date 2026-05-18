@@ -661,15 +661,9 @@ private struct MessageRow: View {
             }
         } else {
             HStack {
-                HStack(alignment: .top, spacing: 8) {
-                    Image(systemName: "sparkles")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .padding(.top, 3)
-                    ChatMarkdownView(markdown: message.text)
-                        .textSelection(.enabled)
-                        .font(.callout)
-                }
+                ChatMarkdownView(markdown: message.text)
+                    .textSelection(.enabled)
+                    .font(.callout)
                 .frame(maxWidth: 560, alignment: .leading)
                 Spacer(minLength: 24)
             }
