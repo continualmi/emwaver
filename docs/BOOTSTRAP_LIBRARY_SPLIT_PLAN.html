@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver Bootstrap Library Split Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212f;
+      --muted: #637187;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --kernel: #214d8f;
+      --ui: #0c7a68;
+      --hardware: #8b5a00;
+      --components: #7b4ab8;
+      --danger: #ad3434;
+      --shadow: 0 18px 46px rgba(23, 33, 47, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.45;
+    }
+
+    header {
+      min-height: 82vh;
+      display: grid;
+      align-items: end;
+      padding: 48px 24px 34px;
+      color: white;
+      background:
+        linear-gradient(180deg, rgba(8, 14, 24, 0.10), rgba(8, 14, 24, 0.86)),
+        url("../hardware/emwaver-link/catalog/images/IMG_0160.webp") center / cover no-repeat;
+    }
+
+    .hero {
+      width: 100%;
+      max-width: 1140px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-weight: 750;
+      font-size: 12px;
+      opacity: 0.84;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 920px;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 22px 0 0;
+      font-size: clamp(18px, 2vw, 24px);
+      color: rgba(255, 255, 255, 0.86);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 26px 24px 76px;
+    }
+
+    section {
+      padding: 42px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    pre {
+      margin: 16px 0 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 8px;
+      background: #101824;
+      color: #eaf0f8;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .lead {
+      max-width: 840px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 1px 0 rgba(23, 33, 47, 0.03);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      color: white;
+      background: var(--kernel);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .tag.ui { background: var(--ui); }
+    .tag.hardware { background: var(--hardware); }
+    .tag.components { background: var(--components); }
+    .tag.danger { background: var(--danger); }
+
+    .map {
+      display: grid;
+      grid-template-columns: 1fr 1.25fr;
+      gap: 18px;
+      margin-top: 24px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 10px;
+    }
+
+    .module {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .module strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .module.kernel { border-top: 5px solid var(--kernel); }
+    .module.ui { border-top: 5px solid var(--ui); }
+    .module.hardware { border-top: 5px solid var(--hardware); }
+    .module.components { border-top: 5px solid var(--components); }
+
+    .arrow {
+      display: grid;
+      place-items: center;
+      min-height: 44px;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 22px;
+    }
+
+    th,
+    td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    th {
+      background: #ecf1f8;
+      color: #405069;
+      font-size: 13px;
+      text-transform: uppercase;
+    }
+
+    .phase-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr) 170px;
+      gap: 16px;
+      align-items: start;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .phase strong {
+      color: var(--kernel);
+    }
+
+    .status {
+      justify-self: end;
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #e7effd;
+      color: #214d8f;
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .callout {
+      margin-top: 22px;
+      padding: 18px;
+      border-radius: 8px;
+      background: #edf8f6;
+      border: 1px solid #b9ded7;
+    }
+
+    .callout p {
+      color: #285b55;
+    }
+
+    @media (max-width: 900px) {
+      header {
+        min-height: 72vh;
+      }
+
+      .two,
+      .three,
+      .map {
+        grid-template-columns: 1fr;
+      }
+
+      .phase {
+        grid-template-columns: 1fr;
+      }
+
+      .status {
+        justify-self: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">EMWaver Script Runtime Plan</div>
+      <h1>Split the bootstrap into a visible kernel and importable libraries.</h1>
+      <p>
+        The current bootstrap is the whole script world: packet transport, protocol constants,
+        hardware interfaces, UI nodes, JSX helpers, sampler APIs, and filesystem helpers. The next
+        step is to make those parts explicit, inspectable, and importable.
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Decision</h2>
+      <p class="lead">
+        Do not hide the core runtime behind an anonymous bootstrap. Name it <code>emw-kernel.emw</code>,
+        expose it as read-only runtime infrastructure, and move user-facing APIs into ordinary
+        importable libraries such as <code>emw-jsx.emw</code>, <code>emw-ui.emw</code>,
+        <code>emw-hardware.emw</code>, and <code>emw-components.emw</code>.
+      </p>
+
+      <div class="grid two">
+        <div class="card">
+          <span class="tag">Keep Internal</span>
+          <h3>Kernel responsibility</h3>
+          <p>
+            Host primitive capture, packet send, timeout/timer basics, module loading, and safe
+            runtime registration. This is the minimum surface every script needs.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag ui">Expose As Libraries</span>
+          <h3>User-facing APIs</h3>
+          <p>
+            UI authoring, JSX, GPIO/SPI/I2C/UART interfaces, sampler helpers, and higher-level
+            components should live in importable files that users and the Agent can inspect.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Current Bootstrap</h2>
+      <p class="lead">
+        <code>script_bootstrap.emw</code> is about 1,600 lines and currently mixes kernel, protocol,
+        hardware, UI, JSX, sampler, and filesystem concerns.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Current Area</th>
+            <th>Examples</th>
+            <th>Target File</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Host bridge and packet send</td>
+            <td><code>__sendPacket</code>, <code>__emwSendPacket</code>, response parsing, primitive hiding</td>
+            <td><code>emw-kernel.emw</code></td>
+          </tr>
+          <tr>
+            <td>Runtime timing</td>
+            <td><code>millis</code>, <code>delay</code>, <code>sleep</code>, <code>every</code></td>
+            <td><code>emw-kernel.emw</code> or <code>emw-runtime.emw</code></td>
+          </tr>
+          <tr>
+            <td>Protocol constants</td>
+            <td><code>EMW_OP_GPIO</code>, <code>EMW_OP_I2C</code>, <code>__emwWriteU16LE</code></td>
+            <td><code>emw-protocol.emw</code></td>
+          </tr>
+          <tr>
+            <td>Hardware interfaces</td>
+            <td><code>device</code>, pins, <code>pinMode</code>, <code>SPI</code>, <code>Wire</code>, <code>Serial</code>, ADC/PWM</td>
+            <td><code>emw-hardware.emw</code></td>
+          </tr>
+          <tr>
+            <td>Sampler and signals</td>
+            <td><code>Sampler</code>, <code>SamplerSignals</code>, buffer load/save, retransmit helpers</td>
+            <td><code>emw-sampler.emw</code></td>
+          </tr>
+          <tr>
+            <td>Raw UI node factories</td>
+            <td><code>UI.column</code>, <code>UI.button</code>, handler registration, <code>UI.render</code>, <code>UI.buffer</code></td>
+            <td><code>emw-ui.emw</code></td>
+          </tr>
+          <tr>
+            <td>JSX authoring</td>
+            <td><code>JSX.h</code>, <code>Column</code>, <code>Text</code>, <code>Button</code>, <code>render(&lt;App /&gt;)</code></td>
+            <td><code>emw-jsx.emw</code></td>
+          </tr>
+          <tr>
+            <td>Filesystem helpers</td>
+            <td><code>FS.appDataDir</code>, <code>FS.readText</code>, <code>FS.writeBytes</code>, <code>FS.revealInFinder</code></td>
+            <td><code>emw-fs.emw</code></td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Target Shape</h2>
+      <div class="map">
+        <div class="stack">
+          <div class="module kernel">
+            <strong>emw-kernel.emw</strong>
+            <p>Host bridge, packet send, module loader, runtime registration, basic timers.</p>
+          </div>
+          <div class="arrow">imports</div>
+          <div class="module hardware">
+            <strong>emw-protocol.emw</strong>
+            <p>Opcode constants, packet builders, status/payload helpers.</p>
+          </div>
+          <div class="module hardware">
+            <strong>emw-hardware.emw</strong>
+            <p>GPIO, pins, ADC, PWM, SPI, Wire/I2C, Serial/UART, device metadata.</p>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="module ui">
+            <strong>emw-ui.emw</strong>
+            <p>UI node factories, event handler tokenization, render tree output, plot buffer registration.</p>
+          </div>
+          <div class="module ui">
+            <strong>emw-jsx.emw</strong>
+            <p>JSX helper, primitive tag bindings, <code>render(&lt;App /&gt;)</code>, later state helpers.</p>
+          </div>
+          <div class="module components">
+            <strong>emw-components.emw</strong>
+            <p>Higher-level functional components: pin picker, board status, register cards, logs.</p>
+          </div>
+          <div class="module components">
+            <strong>emw-sampler.emw</strong>
+            <p>Sampler APIs, signal file helpers, capture/retransmit helpers, sampler UI components.</p>
+          </div>
+        </div>
+      </div>
+
+      <pre><code>import { render } from "emw-jsx";
+import { Column, Text, Button } from "emw-ui";
+import { A0, HIGH, OUTPUT, pinMode, digitalWrite } from "emw-hardware";
+
+function App() {
+  return (
+    &lt;Column padding={16} spacing={12}&gt;
+      &lt;Text font="title2"&gt;GPIO&lt;/Text&gt;
+      &lt;Button onTap={() =&gt; {
+        pinMode(A0, OUTPUT);
+        digitalWrite(A0, HIGH);
+      }}&gt;
+        High
+      &lt;/Button&gt;
+    &lt;/Column&gt;
+  );
+}
+
+render(&lt;App /&gt;);</code></pre>
+    </section>
+
+    <section>
+      <h2>Import Model</h2>
+      <p class="lead">
+        Implement the module system in two layers: a small synchronous <code>require(name)</code>
+        loader first, then a transform for ES-style <code>import</code> syntax once the loader is stable.
+      </p>
+
+      <div class="grid three">
+        <div class="card">
+          <span class="tag">Step 1</span>
+          <h3>CommonJS core</h3>
+          <p>
+            Runtime gets <code>require(name)</code>, <code>module.exports</code>, <code>exports</code>,
+            module cache, cycle guard, and module source lookup from <code>moduleSources</code>.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag ui">Step 2</span>
+          <h3>Named imports</h3>
+          <p>
+            Transpile <code>import { render } from "emw-jsx"</code> into a require destructure before
+            JSX transpilation/evaluation.
+          </p>
+        </div>
+        <div class="card">
+          <span class="tag hardware">Step 3</span>
+          <h3>Library registry</h3>
+          <p>
+            Resolve aliases such as <code>emw-jsx</code>, <code>emw-ui</code>, and relative script paths
+            such as <code>./lib/pins.emw</code>.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Script List UX</h2>
+      <p class="lead">
+        Libraries should be visible and inspectable. They should not be hidden away, and the kernel
+        should be named as kernel rather than disguised as a normal example.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Section</th>
+            <th>Contents</th>
+            <th>Behavior</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Examples</td>
+            <td>Runnable bundled demos such as GPIO, Sampler, CC1101, JSX Hello.</td>
+            <td>Open, run, make copy.</td>
+          </tr>
+          <tr>
+            <td>Libraries</td>
+            <td><code>emw-jsx.emw</code>, <code>emw-ui.emw</code>, <code>emw-hardware.emw</code>, <code>emw-sampler.emw</code>.</td>
+            <td>Open read-only, inspect, make copy, import from scripts.</td>
+          </tr>
+          <tr>
+            <td>Kernel</td>
+            <td><code>emw-kernel.emw</code> and possibly <code>emw-protocol.emw</code>.</td>
+            <td>Visible as runtime infrastructure, read-only, not runnable by default.</td>
+          </tr>
+          <tr>
+            <td>User Scripts</td>
+            <td>User-created scripts and libraries.</td>
+            <td>Editable, runnable if script, importable if module/library.</td>
+          </tr>
+          <tr>
+            <td>Signals</td>
+            <td><code>.raw</code> and <code>.txt</code> signal files.</td>
+            <td>Open in signal/text editor, not imported as script modules.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Migration Phases</h2>
+      <div class="phase-list">
+        <div class="phase">
+          <strong>Phase 0</strong>
+          <div>
+            <h3>Keep compatibility</h3>
+            <p>Continue bundling <code>script_bootstrap.emw</code> while adding the module loader and visible libraries.</p>
+          </div>
+          <span class="status">No breakage</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 1</strong>
+          <div>
+            <h3>Implement require</h3>
+            <p>Wire <code>moduleSources</code> into the Apple runtime and support synchronous module evaluation/cache.</p>
+          </div>
+          <span class="status">Runtime</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 2</strong>
+          <div>
+            <h3>Extract emw-jsx and emw-ui</h3>
+            <p>Move JSX helper and UI node factories out of bootstrap into libraries imported by examples.</p>
+          </div>
+          <span class="status">UI</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 3</strong>
+          <div>
+            <h3>Extract hardware interfaces</h3>
+            <p>Move pins, GPIO, ADC, PWM, SPI, Wire, Serial, and protocol helpers into named hardware libraries.</p>
+          </div>
+          <span class="status">Hardware</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 4</strong>
+          <div>
+            <h3>Extract sampler/components</h3>
+            <p>Move Sampler APIs and reusable UI components into importable libraries.</p>
+          </div>
+          <span class="status">Components</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 5</strong>
+          <div>
+            <h3>Expose library sections</h3>
+            <p>Update the script list to show Examples, Libraries, Kernel, User Scripts, and Signals clearly.</p>
+          </div>
+          <span class="status">UX</span>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p>
+          Preferred naming: <strong>emw-kernel</strong> for the runtime core, <strong>emw-jsx</strong>
+          for JSX authoring, <strong>emw-ui</strong> for raw node factories, and
+          <strong>emw-hardware</strong> for device interfaces.
+        </p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
