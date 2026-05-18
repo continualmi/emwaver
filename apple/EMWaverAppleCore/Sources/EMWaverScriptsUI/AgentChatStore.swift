@@ -26,6 +26,8 @@ final class AgentChatStore {
 
     private let dbURL: URL
     private var db: OpaquePointer?
+    private let decoder = JSONDecoder()
+    private let encoder = JSONEncoder()
 
     init(fileManager: FileManager = .default) {
         let base = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
@@ -67,7 +69,7 @@ final class AgentChatStore {
     func messages(conversationId: UUID) throws -> [AgentChatMessage] {
         try query(
             """
-            select id, role, text, created_at
+            select id, role, text, created_at, metadata_json
             from agent_messages
             where conversation_id = ?
             order by created_at asc
@@ -83,7 +85,8 @@ final class AgentChatStore {
                 id: id,
                 role: role,
                 text: text(stmt, 2) ?? "",
-                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3))
+                createdAt: Date(timeIntervalSince1970: sqlite3_column_double(stmt, 3)),
+                toolMeta: decodeToolMeta(text(stmt, 4))
             )
         }
     }
@@ -112,12 +115,13 @@ final class AgentChatStore {
     func upsertMessage(_ message: AgentChatMessage, conversationId: UUID) throws {
         try execute(
             """
-            insert into agent_messages (id, conversation_id, role, text, created_at)
-            values (?, ?, ?, ?, ?)
+            insert into agent_messages (id, conversation_id, role, text, created_at, metadata_json)
+            values (?, ?, ?, ?, ?, ?)
             on conflict(id) do update set
               role = excluded.role,
               text = excluded.text,
-              created_at = excluded.created_at
+              created_at = excluded.created_at,
+              metadata_json = excluded.metadata_json
             """,
             [
                 .text(message.id.uuidString),
@@ -125,6 +129,7 @@ final class AgentChatStore {
                 .text(message.role.rawValue),
                 .text(message.text),
                 .double(message.createdAt.timeIntervalSince1970),
+                .optionalText(encodeToolMeta(message.toolMeta)),
             ]
         )
     }
@@ -229,6 +234,16 @@ final class AgentChatStore {
     private func text(_ stmt: OpaquePointer?, _ column: Int32) -> String? {
         guard let cString = sqlite3_column_text(stmt, column) else { return nil }
         return String(cString: cString)
+    }
+
+    private func encodeToolMeta(_ meta: AgentChatToolMeta?) -> String? {
+        guard let meta, let data = try? encoder.encode(meta) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    private func decodeToolMeta(_ raw: String?) -> AgentChatToolMeta? {
+        guard let raw, let data = raw.data(using: .utf8) else { return nil }
+        return try? decoder.decode(AgentChatToolMeta.self, from: data)
     }
 
     private var lastError: String {
