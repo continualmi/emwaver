@@ -4,7 +4,7 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, Agent client UI, and firmware/update UX on macOS.
 
-The local-first rule is that connected supported boards can run local `.emw` scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
+The local-first rule is that connected supported boards can run local JavaScript scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
@@ -117,7 +117,8 @@ Script sessions:
 
 Agent configuration on macOS:
 - local development loads repo-root `.env` into process environment at app startup,
-- the macOS Agent interface/runtime calls the MGPT responses endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
+- the macOS Agent interface/runtime calls the public MGPT responses endpoint configured by `EMWAVER_AGENT_ENDPOINT` or `CONTINUAL_AGENT_ENDPOINT`,
+- the endpoint must use the external `/api/mgpt/...` route family, not MDL-only `/backend-api/...` routes,
 - the shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends `universe` + `userInput`,
 - the shared Apple Agent client sends the public `emw-1-lite-frozen` model alias for Agent replies,
 - provider selection, private prompts, tool policy, and metering belong server-side on MGPT,

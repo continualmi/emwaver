@@ -104,6 +104,8 @@ EMWaver's Agent is optional. It should help users write, explain, debug, and imp
 
 Agent usage is the planned paid product direction through a future Continual MI/MGPT backend API key. Local hardware control must continue to work without that key.
 
+Agent clients must use the public Agent API surface, such as `/api/mgpt/...` on the configured host. MDL-only `/backend-api/...` routes are not an EMWaver client contract.
+
 Production Agent prompts, hidden board recipes, provider routing, and metering policy do not belong in this open-source repository.
 
 ## Release Trackers

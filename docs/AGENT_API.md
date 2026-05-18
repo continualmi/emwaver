@@ -2,13 +2,13 @@
 
 This document defines the first paid Agent service direction for the local-first EMWaver rebirth.
 
-The open-source runtime, Gateway, CLI, firmware payloads, scripts, and local hardware control should work without an Agent key. The Agent is optional paid assistance for writing, debugging, explaining, and improving `.emw` scripts.
+The open-source runtime, firmware payloads, scripts, and local hardware control should work without an Agent key. The Agent is optional paid assistance for writing, debugging, explaining, and improving local JavaScript scripts.
 
 ## Product Contract
 
 The Agent helps with:
 
-- writing `.emw` scripts from user intent,
+- writing JavaScript scripts from user intent,
 - debugging runtime errors,
 - turning module/datasheet behavior into script code,
 - generating UI controls for scripts,
@@ -46,12 +46,14 @@ Missing key behavior:
 
 ## MGPT Endpoint Shape
 
-The Agent endpoint is MGPT's general-purpose stateful Responses API. EMWaver is only one client. MGPT has no notion of EMWaver, MDL, boards, scripts, flashing, or product-specific schemas at this boundary.
+The Agent endpoint is MGPT's public, external stateful Responses API. EMWaver is only one client. MGPT has no notion of EMWaver, MDL, boards, scripts, flashing, or product-specific schemas at this boundary.
+
+EMWaver must use the normal public API route. It must not call MDL-only `backend-api` routes. `/backend-api/...` is reserved for MDL's trusted internal generation path and should not be used or changed to make EMWaver Agent behavior work.
 
 Endpoint concept:
 
 ```http
-POST /backend-api/mgpt/responses
+POST /api/mgpt/responses
 Authorization: Bearer <agent_api_key>
 Content-Type: application/json
 ```
@@ -93,7 +95,9 @@ The Continual MI/MGPT backend should own:
 
 The open-source client should send user intent and relevant context, not private system instructions.
 
-For the hot path, MGPT should read the universe from Redis using the existing MDL/MGPT universe cache shape. EMWaver apps must not perform database reads, store prompt snapshots, serialize full universe documents, or send EMWaver-specific schemas to MGPT. Their MGPT-facing job is to send `universe` and `userInput`.
+EMWaver apps must not perform database reads, store prompt snapshots, serialize full universe documents, depend on MDL/MGPT cache internals, or send EMWaver-specific schemas to MGPT. Their MGPT-facing job is to call the public Agent API with `universe` and `userInput`.
+
+If the public Agent API fails, EMWaver work should not patch MDL gameplay routes, MDL `backend-api` routes, or MGPT internals as a side effect. Fixing the public API is separate MGPT/platform API work and should be requested explicitly.
 
 The open-source repo should keep only:
 
@@ -105,12 +109,12 @@ The open-source repo should keep only:
 The open-source repo should not contain production Agent IP:
 
 - private system prompts,
-- proprietary `.emw` language instruction packs,
+- proprietary JavaScript instruction packs,
 - hidden board/module recipes,
 - provider selection logic,
 - metering implementation.
 
-Prompt secrecy is not the full moat. The real moat is the maintained Agent service: high-quality `.emw` expertise, hardware recipes, runtime-aware debugging, examples, and tight CLI/gateway integration.
+Prompt secrecy is not the full moat. The real moat is the maintained Agent service: high-quality EMWaver JavaScript expertise, hardware recipes, runtime-aware debugging, examples, and tight native-app integration.
 
 ## Client Integrations
 
@@ -129,3 +133,4 @@ Terminal Agent tooling should be implemented in TypeScript or another client lay
 - Do not ship private Agent prompts in the open-source client.
 - Do not make hosted cloud sessions a prerequisite for Agent help.
 - Do not frame the Agent as an EMWaver-specific model line.
+- Do not use MDL-only `/backend-api/...` routes from EMWaver clients.

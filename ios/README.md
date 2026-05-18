@@ -78,7 +78,7 @@ Interop/legacy native-buffer components exist; keep usage aligned with current p
 
 Open `ios/EMWaver.xcodeproj` in Xcode and run the `EMWaver` scheme on simulator/device.
 
-The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain. Agent calls require `EMWAVER_AGENT_ENDPOINT`, `CONTINUAL_AGENT_ENDPOINT`, or `AgentEndpointURL` in `Info.plist`; local device/script use does not. The endpoint should be the MGPT responses endpoint. The shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends only `universe` + `userInput`.
+The iOS Agent key sheet stores a user-provided Agent API key locally in Keychain. Agent calls require `EMWAVER_AGENT_ENDPOINT`, `CONTINUAL_AGENT_ENDPOINT`, or `AgentEndpointURL` in `Info.plist`; local device/script use does not. The endpoint should be the public MGPT responses endpoint under `/api/mgpt/...`, not an MDL-only `/backend-api/...` route. The shared Apple Agent client creates a persistent MGPT universe from stored prompt `emwaver-prompt` and then sends only `universe` + `userInput`.
 
 Do not assume CI/agent environment can run full iOS builds; validate on proper macOS/Xcode setup.
 

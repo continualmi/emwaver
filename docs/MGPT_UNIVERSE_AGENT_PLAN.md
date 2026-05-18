@@ -1,10 +1,14 @@
 # MGPT Universe Agent Plan
 
-EMWaver Agent apps should behave as thin clients for persistent MGPT universes. MGPT is a general-purpose stateful Responses API with `universe` as the state container name. It has no notion of EMWaver, MDL, boards, scripts, flashing, or product-specific schemas at this boundary.
+EMWaver Agent apps should behave as thin clients for persistent MGPT universes through the public Agent API. MGPT is a general-purpose stateful Responses API with `universe` as the state container name. It has no notion of EMWaver, MDL, boards, scripts, flashing, or product-specific schemas at this boundary.
 
 ## Goal
 
 EMWaver clients send a generic universe turn to the MGPT-facing boundary:
+
+```http
+POST /api/mgpt/responses
+```
 
 ```json
 {
@@ -12,6 +16,8 @@ EMWaver clients send a generic universe turn to the MGPT-facing boundary:
   "userInput": "Debug this flashing error."
 }
 ```
+
+EMWaver clients must not call `/backend-api/mgpt/...`. That route family is for MDL's trusted internal integration path, not for EMWaver or other external Agent clients.
 
 MGPT loads the universe from server-side cache/storage, composes private prompts and model state, runs the turn, and returns only assistant-visible conversation output. MGPT has no EMWaver-specific hardware, script, board, flashing, or runtime-error schema at this boundary.
 
@@ -31,7 +37,8 @@ MGPT loads the universe from server-side cache/storage, composes private prompts
 - Do not read or write MGPT universe database rows.
 - Do not serialize full universe documents from the client.
 - Do not send EMWaver-specific hardware/script/runtime schemas to MGPT.
-- Do not gate local `.emw` execution behind Agent auth.
+- Do not gate local JavaScript execution behind Agent auth.
+- Do not depend on MDL `backend-api` routes, MDL gameplay generation behavior, or MDL/MGPT cache internals.
 
 ## Current Implementation Prep
 
@@ -42,7 +49,7 @@ MGPT loads the universe from server-side cache/storage, composes private prompts
 
 ## MGPT Compatibility
 
-MDL/MGPT already uses Redis universe cache keys shaped as `mgpt:universe:v1:<universeId>`. EMWaver should follow that server-side pattern rather than introducing an EMWaver-owned conversation database. Any EMWaver-specific tool or hardware handling belongs outside MGPT's generic universe-turn contract.
+EMWaver should stay compatible with MGPT by using the public Agent API contract only. It should not follow server-side Redis key shapes, MDL universe persistence, or MDL `backend-api` implementation details. Any EMWaver-specific tool or hardware handling belongs outside MGPT's generic universe-turn contract.
 
 ## Next Implementation Steps
 

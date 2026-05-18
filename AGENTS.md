@@ -107,6 +107,8 @@ We intentionally give up:
 - Near-term EMWaver AI is served by the Continual MI/MGPT backend rather than by prompts or inference logic shipped in this repo.
 - Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
 - App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary JavaScript instruction packs, hidden board recipes, provider-routing logic, or metering policy.
+- EMWaver Agent clients must use the public/external Agent API surface, such as `/api/mgpt/...` on the configured public host. They must not call MDL-only `/backend-api/...` routes. Those routes are reserved for MDL's trusted internal integration path.
+- Do not change MDL gameplay, MDL `backend-api` behavior, or MGPT internals merely to make an EMWaver Agent flow work. Treat public Agent API failures as public API contract issues unless the user explicitly asks for MGPT/MDL backend implementation work.
 
 ### Distribution and release posture
 

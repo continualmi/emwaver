@@ -516,9 +516,9 @@
         <div>Local hardware</div>
         <div>Runs through the native app and active local transport. No account, cloud activation, hosted relay, or subscription gate.</div>
         <div>Agent API</div>
-        <div>Optional network call for model reasoning. Uses a Continual MI/MGPT endpoint and API key when configured.</div>
+        <div>Optional network call for model reasoning. Uses the public Continual MI/MGPT Agent API and API key when configured.</div>
         <div>Failure mode</div>
-        <div>A connection error such as <code>NSURLErrorDomain -1004</code> for <code>http://127.0.0.1:3000/api/mgpt/universes</code> means the configured local Agent backend is not running or not reachable. It should not block local scripts or direct hardware control.</div>
+        <div>A connection error such as <code>NSURLErrorDomain -1004</code> for a configured <code>/api/mgpt/universes</code> endpoint means the public Agent API host is not running or not reachable. It should not block local scripts or direct hardware control.</div>
         <div>Script storage</div>
         <div>Local scripts remain local files or app-local script records. The Agent can propose edits, but the user-facing artifact is still a local <code>.js</code> script.</div>
       </div>
@@ -544,6 +544,7 @@
             <li>No hidden <code>script_bootstrap</code> compatibility layer.</li>
             <li>No automatic aliases like <code>A0</code>, <code>IR_TX</code>, or hardcoded SPI device pins in generic libraries.</li>
             <li>No Agent hardware work through UI snapshots, button clicking, or arbitrary JavaScript eval.</li>
+            <li>No calls to MDL-only <code>/backend-api/...</code> routes from EMWaver clients.</li>
             <li>No EMWaver account or cloud control dependency for local device access.</li>
           </ul>
         </article>
