@@ -48,8 +48,7 @@ public final class ScriptPreviewManager: ObservableObject {
         scriptTree = nil
         scriptError = nil
 
-        // TODO: support moduleSources import/require.
-        engine.execute(script: trimmed) { [weak self] in
+        engine.execute(script: trimmed, moduleSources: moduleSources) { [weak self] in
             guard let self else { return }
             self.isRendering = false
         }

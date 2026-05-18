@@ -39,8 +39,8 @@ public final class ScriptEngine {
     private var nextTimeoutId: Int = 1
     private var timeouts: [Int: DispatchWorkItem] = [:]
 
-    private let userScriptSourcePath = "/emwaver-user-script.emw"
-    private let bootstrapSourcePath = "/script_bootstrap.emw"
+    private let userScriptSourcePath = "/emwaver-user-script.js"
+    private let kernelSourcePath = "/DefaultScripts/emw-kernel.js"
     private let userScriptWrapperPrefixLineCount = 2
 
     public init() {}
@@ -75,7 +75,7 @@ public final class ScriptEngine {
     private func appDataRootURL() -> URL? {
         // Scripts use FS.appDataDir() as a stable, user-visible location for local artifacts.
         // On Apple, keep this aligned with the app's script storage directory so scripts/signals
-        // behave like "just files" (sampler.emw, etc.).
+        // behave like "just files" (sampler.js, etc.).
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first
         return docs?.appendingPathComponent("scripts", isDirectory: true)
     }
@@ -222,7 +222,7 @@ var console = (function() {
         context.setObject(clearTimeoutBlock, forKeyedSubscript: "clearTimeout" as NSString)
 
         // -----------------------------------------------------------------
-        // Minimal filesystem/path API (used by built-in scripts like sampler.emw)
+        // Minimal filesystem/path API (used by built-in scripts like sampler libraries)
         // -----------------------------------------------------------------
 
         let appDataDirBlock: @convention(block) () -> String = { [weak self] in
@@ -357,7 +357,7 @@ var console = (function() {
         context.setObject(revealBlock, forKeyedSubscript: "_scriptRevealInFinder" as NSString)
 
         // -----------------------------------------------------------------
-        // Sampler buffer API (used by sampler.emw via script_bootstrap.emw)
+        // Sampler buffer API (used by sampler libraries via emw-kernel.js)
         // -----------------------------------------------------------------
 
         let samplerPacketCountBlock: @convention(block) () -> Int = { [weak self] in
@@ -439,7 +439,7 @@ var console = (function() {
         context.setObject(plotBufferSetBlock, forKeyedSubscript: "_scriptPlotBufferSet" as NSString)
 
         // -----------------------------------------------------------------
-        // Buffer helpers used by sampler.emw (load/save + timings)
+        // Buffer helpers used by sampler libraries (load/save + timings)
         // -----------------------------------------------------------------
 
         let bufferSetBytesBlock: @convention(block) (JSValue) -> Int = { [weak self] bytesValue in
@@ -464,7 +464,7 @@ var console = (function() {
         }
         context.setObject(bufferSaveBytesFileBlock, forKeyedSubscript: "_scriptBufferSaveBytesFile" as NSString)
 
-        // Retransmit helper (sampler.emw): start TX and stream the buffer bytes.
+        // Retransmit helper: start TX and stream the buffer bytes.
         // This is intentionally fire-and-forget: firmware completes and sends an OK lane later.
         let deviceTransmitBufferStartBlock: @convention(block) (JSValue, JSValue, String?) -> Int = { [weak self] bytesValue, optsValue, doneToken in
             guard let self, let wrapper = self.globalBindings["Device"] as? ScriptDeviceWrapper else { return 0 }
@@ -590,16 +590,17 @@ var console = (function() {
         }
     }
 
-    public func execute(script: String, completion: (() -> Void)? = nil) {
+    public func execute(script: String, moduleSources: [String: String] = [:], completion: (() -> Void)? = nil) {
         executionQueue.async { [weak self] in
             guard let self, let context = self.context else { return }
 
             self.cancelAllTimeoutsLocked()
             let executableScript: String
             do {
-                executableScript = try ScriptJSXTranspiler.transpile(script)
+                let moduleScript = try ScriptModuleTranspiler.transpile(script)
+                executableScript = try ScriptJSXTranspiler.transpile(moduleScript)
             } catch {
-                self.emitError("Script JSX error: \(error.localizedDescription)")
+                self.emitError("Script compile error: \(error.localizedDescription)")
                 if let completion {
                     DispatchQueue.main.async { completion() }
                 }
@@ -619,6 +620,7 @@ var console = (function() {
             // Re-install on each run so re-injecting bootstrap continues to work.
             self.installHostPrimitives(into: context)
             self.injectDSL(into: context)
+            self.installModuleLoader(into: context, moduleSources: moduleSources)
             self.applyGlobalBindings(to: context)
 
             context.exception = nil
@@ -689,17 +691,72 @@ var console = (function() {
         script.contains("await") || script.contains("async")
     }
 
+    private func installModuleLoader(into context: JSContext, moduleSources: [String: String]) {
+        let transformedSources: [String: String]
+        do {
+            transformedSources = try moduleSources.mapValues { source in
+                let moduleScript = try ScriptModuleTranspiler.transpile(source)
+                return try ScriptJSXTranspiler.transpile(moduleScript)
+            }
+        } catch {
+            emitError("Script module error: \(error.localizedDescription)")
+            return
+        }
+
+        context.setObject(transformedSources, forKeyedSubscript: "__emwModuleSources" as NSString)
+        context.evaluateScript("""
+(function(global) {
+  var sources = global.__emwModuleSources || {};
+  var cache = {};
+
+  function normalize(name) {
+    return String(name || '').trim();
+  }
+
+  function candidates(name) {
+    var n = normalize(name);
+    var out = [n];
+    if (n.slice(-3) !== '.js') out.push(n + '.js');
+    if (n.indexOf('./') === 0) {
+      var bare = n.slice(2);
+      out.push(bare);
+      if (bare.slice(-3) !== '.js') out.push(bare + '.js');
+    }
+    return out;
+  }
+
+  function resolve(name) {
+    var list = candidates(name);
+    for (var i = 0; i < list.length; i += 1) {
+      if (Object.prototype.hasOwnProperty.call(sources, list[i])) return list[i];
+    }
+    throw new Error('Module not found: ' + name);
+  }
+
+  global.require = function(name) {
+    var id = resolve(name);
+    if (cache[id]) return cache[id].exports;
+    var module = { id: id, exports: {} };
+    cache[id] = module;
+    var fn = new Function('require', 'module', 'exports', sources[id] + '\\n//# sourceURL=/DefaultScripts/' + id);
+    fn(global.require, module, module.exports);
+    return module.exports;
+  };
+})(globalThis);
+""", withSourceURL: URL(fileURLWithPath: "/emwaver-module-loader.js"))
+    }
+
     private func injectDSL(into context: JSContext) {
-        guard let url = Bundle.main.url(forResource: "script_bootstrap", withExtension: "emw") else {
-            emitError("Script bootstrap missing from app bundle (script_bootstrap.emw)")
+        guard let url = Bundle.main.url(forResource: "emw-kernel", withExtension: "js", subdirectory: "DefaultScripts") else {
+            emitError("Script kernel missing from app bundle (DefaultScripts/emw-kernel.js)")
             return
         }
 
         do {
             let source = try String(contentsOf: url, encoding: .utf8)
-            context.evaluateScript(source, withSourceURL: URL(fileURLWithPath: bootstrapSourcePath))
+            context.evaluateScript(source, withSourceURL: URL(fileURLWithPath: kernelSourcePath))
         } catch {
-            emitError("Failed to load script bootstrap: \(error)")
+            emitError("Failed to load script kernel: \(error)")
         }
     }
 

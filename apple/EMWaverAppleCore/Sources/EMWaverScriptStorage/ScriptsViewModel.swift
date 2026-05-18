@@ -11,6 +11,8 @@ import SwiftUI
 public final class ScriptsViewModel: ObservableObject {
     public enum FileKind: String, Equatable {
         case script
+        case library
+        case kernel
         case signalRaw
         case signalText
 
@@ -19,10 +21,23 @@ public final class ScriptsViewModel: ObservableObject {
             case .script:
                 // Rendered as a custom EM badge in the UI (see ScriptRow).
                 return "doc.text"
+            case .library:
+                return "books.vertical"
+            case .kernel:
+                return "cpu"
             case .signalRaw:
                 return "waveform.path.ecg"
             case .signalText:
                 return "doc.plaintext"
+            }
+        }
+
+        public var isRunnable: Bool {
+            switch self {
+            case .script:
+                return true
+            case .library, .kernel, .signalRaw, .signalText:
+                return false
             }
         }
     }
@@ -56,6 +71,7 @@ public final class ScriptsViewModel: ObservableObject {
         let id: String
         let name: String
         let content: String
+        let kind: FileKind
     }
 
     @Published public private(set) var assetScripts: [ScriptListItem] = []
@@ -73,7 +89,7 @@ public final class ScriptsViewModel: ObservableObject {
     private let fileService: FileService
     private let defaults: UserDefaults
 
-    private let scriptExtension = ".emw"
+    private let scriptExtension = ".js"
     private let signalRawExtension = ".raw"
     private let signalTextExtension = ".txt"
     private let unsavedKey = "__unsaved__"
@@ -104,7 +120,7 @@ public final class ScriptsViewModel: ObservableObject {
             )
             mergeRemoteScripts(data)
 
-            // Signals are stored under Application Support/signals (sampler.emw convention).
+            // Signals are stored under Application Support/signals (sampler library convention).
             let raw = try await fileService.listSignalFiles(withExtension: signalRawExtension, includeContent: false, accessToken: "")
             let txt = try await fileService.listSignalFiles(withExtension: signalTextExtension, includeContent: false, accessToken: "")
             mergeRemoteSignals(raw + txt)
@@ -157,6 +173,20 @@ public final class ScriptsViewModel: ObservableObject {
 
     public func isAssetScript(_ id: String) -> Bool {
         assetRecords[id] != nil
+    }
+
+    public func isRunnableScript(_ id: String) -> Bool {
+        if let asset = assetRecords[id] {
+            return asset.kind.isRunnable
+        }
+        return records[id]?.metadata != nil || id == unsavedKey
+    }
+
+    public func fileKind(for id: String) -> FileKind {
+        if let asset = assetRecords[id] {
+            return asset.kind
+        }
+        return records[id]?.metadata.map { _ in .script } ?? .script
     }
 
     public func updateDraft(for id: String, content: String) {
@@ -365,13 +395,13 @@ public final class ScriptsViewModel: ObservableObject {
         for asset in assetRecords.values {
             guard !asset.content.isEmpty else { continue }
             if isModuleScript(name: asset.name, content: asset.content) {
-                modules[asset.name] = asset.content
+                addModuleSource(asset.content, name: asset.name, to: &modules)
             }
         }
         for record in records.values {
             guard !record.draftContent.isEmpty else { continue }
             if isModuleScript(name: record.name, content: record.draftContent) {
-                modules[record.name] = record.draftContent
+                addModuleSource(record.draftContent, name: record.name, to: &modules)
             }
         }
         return modules
@@ -422,13 +452,13 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func loadAssetScriptsFromBundle() {
         var updated: [String: AssetRecord] = [:]
-        let urls = Bundle.main.urls(forResourcesWithExtension: "emw", subdirectory: "DefaultScripts") ?? []
+        let urls = Bundle.main.urls(forResourcesWithExtension: "js", subdirectory: "DefaultScripts") ?? []
         for fileUrl in urls {
             let filename = fileUrl.lastPathComponent
             guard let content = try? String(contentsOf: fileUrl, encoding: .utf8) else {
                 continue
             }
-            updated[filename] = AssetRecord(id: filename, name: filename, content: content)
+            updated[filename] = AssetRecord(id: filename, name: filename, content: content, kind: assetKind(for: filename))
         }
         assetRecords = updated
         rebuildScriptItems()
@@ -491,9 +521,14 @@ public final class ScriptsViewModel: ObservableObject {
         custom.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
 
         var assets = assetRecords.values.map {
-            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: .script, modifiedAt: nil)
+            ScriptListItem(id: $0.id, name: $0.name, isDirty: false, isAsset: true, kind: $0.kind, modifiedAt: nil)
         }
-        assets.sort { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        assets.sort {
+            if assetSortRank($0.kind) != assetSortRank($1.kind) {
+                return assetSortRank($0.kind) < assetSortRank($1.kind)
+            }
+            return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+        }
 
         customScripts = custom
         assetScripts = assets
@@ -501,10 +536,13 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func isModuleScript(name: String, content: String) -> Bool {
         let lowered = name.lowercased()
-        if lowered.hasSuffix(".module.emw") || lowered.hasSuffix("_module.emw") {
+        if lowered.hasPrefix("emw-") || lowered.hasSuffix(".module.js") || lowered.hasSuffix("_module.js") {
             return true
         }
         let normalized = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        if normalized.contains("import ") {
+            return true
+        }
         if normalized.contains("module.exports") {
             return true
         }
@@ -512,6 +550,36 @@ public final class ScriptsViewModel: ObservableObject {
             return true
         }
         return false
+    }
+
+    private func addModuleSource(_ source: String, name: String, to modules: inout [String: String]) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        modules[trimmed] = source
+        if trimmed.lowercased().hasSuffix(scriptExtension) {
+            let bare = String(trimmed.dropLast(scriptExtension.count))
+            modules[bare] = source
+        }
+    }
+
+    private func assetKind(for name: String) -> FileKind {
+        let lowered = name.lowercased()
+        if lowered == "emw-kernel.js" || lowered == "emw-protocol.js" {
+            return .kernel
+        }
+        if lowered.hasPrefix("emw-") {
+            return .library
+        }
+        return .script
+    }
+
+    private func assetSortRank(_ kind: FileKind) -> Int {
+        switch kind {
+        case .script: return 0
+        case .library: return 1
+        case .kernel: return 2
+        case .signalRaw, .signalText: return 3
+        }
     }
 
     private func normalizeScriptName(_ rawName: String) -> String {
@@ -548,29 +616,30 @@ public final class ScriptsViewModel: ObservableObject {
     }
 
     private func defaultTemplate() -> String {
-        "// Script script\n" +
+        "// EMWaver JavaScript script\n" +
+        "import { Column, Text, LogViewer, render as uiRender } from \"emw-ui\";\n\n" +
         "let logLines = [];\n" +
-        "const nativePrint = print;\n\n" +
         "function log(message) {\n" +
         "    const text = String(message);\n" +
         "    logLines.push(text);\n" +
         "    if (logLines.length > 200) {\n" +
         "        logLines.splice(0, logLines.length - 200);\n" +
         "    }\n" +
-        "    nativePrint(text);\n" +
-        "    render();\n" +
+        "    draw();\n" +
         "}\n\n" +
-        "render();\n\n" +
-        "function render() {\n" +
-        "    UI.render(UI.column({\n" +
+        "draw();\n\n" +
+        "function draw() {\n" +
+        "    uiRender(\n" +
+        "      Column({\n" +
         "        padding: 16,\n" +
         "        spacing: 12,\n" +
         "        children: [\n" +
-        "            UI.text({ text: 'Script Title', font: 'title2', fontWeight: 'semibold' }),\n" +
-        "            UI.text({ text: 'Customize this script to add controls and logic.' }),\n" +
-        "            UI.logViewer({ text: logLines.join('\\n'), minHeight: 160, padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
+        "            Text({ text: 'Script Title', font: 'title2', fontWeight: 'semibold' }),\n" +
+        "            Text({ text: 'Customize this script to add controls and logic.' }),\n" +
+        "            LogViewer({ text: logLines.join('\\n'), minHeight: 160, padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
         "        ]\n" +
-        "    }));\n" +
+        "      })\n" +
+        "    );\n" +
         "}\n"
     }
 

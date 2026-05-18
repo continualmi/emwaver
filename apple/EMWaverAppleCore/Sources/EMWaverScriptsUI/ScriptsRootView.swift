@@ -471,6 +471,16 @@ public struct ScriptsRootView: View {
     private var readOnlyLabelText: String {
         switch editorMode {
         case .script:
+            if let currentScriptId {
+                switch viewModel.fileKind(for: currentScriptId) {
+                case .library:
+                    return "Library script (read-only)"
+                case .kernel:
+                    return "Kernel script (read-only)"
+                case .script, .signalRaw, .signalText:
+                    break
+                }
+            }
             return "Example script (read-only)"
         case .signalRaw:
             return "Signal .raw (read-only)"
@@ -531,6 +541,10 @@ public struct ScriptsRootView: View {
     }
 
     private func previewScript(_ id: String) {
+        guard viewModel.isRunnableScript(id) else {
+            openEditor(for: id)
+            return
+        }
         if onRunScript == nil, shouldConfirmSwitchBeforePreview(id: id) {
             pendingScriptPreviewId = id
             showingSwitchScriptConfirmation = true
@@ -540,6 +554,10 @@ public struct ScriptsRootView: View {
     }
 
     private func openOrRestoreScript(_ id: String) {
+        guard viewModel.isRunnableScript(id) else {
+            openEditor(for: id)
+            return
+        }
         if let session = sessionStatuses(for: id).first {
             onSelectExternalScriptSession?(session.id)
             viewModel.selectScript(id: id)
@@ -662,7 +680,7 @@ public struct ScriptsRootView: View {
             editorIsReadOnly = false
             // Always wrap .txt (no toggle)
             lineWrapEnabled = true
-        case .script:
+        case .script, .library, .kernel:
             editorMode = .script
             editorIsReadOnly = false
             lineWrapEnabled = false
@@ -792,14 +810,14 @@ public struct ScriptsRootView: View {
         let initial: String
         switch context {
         case .create:
-            initial = "script_script.emw"
+            initial = "script_script.js"
         case .rename(let id):
             initial = viewModel.scriptName(for: id)
         case .copy(let id):
             let original = viewModel.scriptName(for: id)
-            if original.lowercased().hasSuffix(".emw") {
-                let base = String(original.dropLast(4))
-                initial = base + "_copy.emw"
+            if original.lowercased().hasSuffix(".js") {
+                let base = String(original.dropLast(3))
+                initial = base + "_copy.js"
             } else {
                 initial = original + "_copy"
             }
@@ -914,7 +932,7 @@ public struct ScriptsRootView: View {
         let empty = schema([])
         let scriptId = optionalStringProperty("scriptId", "Script id. Defaults to the current script.")
         return [
-            AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom .emw scripts.", parameters: empty),
+            AgentToolDefinition(name: "list_scripts", description: "Return bundled and custom EMWaver JavaScript scripts.", parameters: empty),
             AgentToolDefinition(name: "read_script", description: "Return script source. Defaults to the current script.", parameters: schema([scriptId])),
             AgentToolDefinition(name: "apply_patch_to_script", description: "Update an editable script draft. Asset scripts are read-only.", parameters: schema([
                 scriptId,
@@ -1053,6 +1071,8 @@ public struct ScriptsRootView: View {
             .object([
                 "id": .string(item.id),
                 "name": .string(item.name),
+                "kind": .string(item.kind.rawValue),
+                "runnable": .bool(item.kind.isRunnable),
                 "isAsset": .bool(item.isAsset),
                 "isDirty": .bool(item.isDirty)
             ])
@@ -1106,6 +1126,9 @@ public struct ScriptsRootView: View {
 
     private func agentToolPreviewScript(scriptId: String?, toolName: String) async throws -> AgentToolResult {
         let id = try currentAgentScriptId(scriptId)
+        guard viewModel.isRunnableScript(id) else {
+            throw MacAgentToolError.scriptNotFound("Script is not runnable: \(id)")
+        }
         if showingEditor, currentScriptId == id, editorMode == .script {
             viewModel.updateDraft(for: id, content: editorContent)
         }
@@ -1379,6 +1402,8 @@ public struct ScriptsRootView: View {
             "id": .string(id),
             "name": .string(viewModel.scriptName(for: id)),
             "source": .string(source),
+            "kind": .string(viewModel.fileKind(for: id).rawValue),
+            "runnable": .bool(viewModel.isRunnableScript(id)),
             "isAsset": .bool(viewModel.isAssetScript(id)),
             "isDirty": .bool(viewModel.isScriptDirty(id)),
             "readOnly": .bool(viewModel.isAssetScript(id))
@@ -1414,7 +1439,7 @@ public struct ScriptsRootView: View {
 
         if showingEditor {
             let isScriptEditor = (editorMode == .script)
-            let canRun = isScriptEditor
+            let canRun = isScriptEditor && currentScriptId.map { viewModel.isRunnableScript($0) } != false
             let canSave = isScriptEditor || (editorMode == .signalText)
 
             ToolbarItem(placement: .navigation) {
@@ -1782,6 +1807,13 @@ private struct ScriptRow: View {
                 }
 
                 HStack(spacing: 8) {
+                    Text(kindBadgeText)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(kindBadgeForeground)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(kindBadgeBackground, in: Capsule())
+
                     if let modifiedAt = script.modifiedAt {
                         Text(modifiedAt.formatted(date: .abbreviated, time: .shortened))
                             .font(.caption)
@@ -1818,6 +1850,36 @@ private struct ScriptRow: View {
         .padding(.vertical, 12)
         .contentShape(Rectangle())
         .onTapGesture(perform: onTap)
+    }
+
+    private var kindBadgeText: String {
+        switch script.kind {
+        case .script:
+            return script.isAsset ? "Example" : "User"
+        case .library:
+            return "Library"
+        case .kernel:
+            return "Kernel"
+        case .signalRaw, .signalText:
+            return "Signal"
+        }
+    }
+
+    private var kindBadgeForeground: Color {
+        switch script.kind {
+        case .script:
+            return .blue
+        case .library:
+            return .purple
+        case .kernel:
+            return .orange
+        case .signalRaw, .signalText:
+            return .secondary
+        }
+    }
+
+    private var kindBadgeBackground: Color {
+        kindBadgeForeground.opacity(0.12)
     }
 }
 

@@ -51,7 +51,7 @@ public final class FileService {
     /// Exposes the local scripts storage directory so higher-level services can work without duplicating path logic.
     public func storageDirectoryURL() -> URL { storageDir }
 
-    /// Signals are stored under Application Support/signals (matches sampler.emw usage).
+    /// Signals are stored under Application Support/signals (matches sampler library usage).
     public func signalsDirectoryURL() -> URL { signalsDir }
 
     public init() {

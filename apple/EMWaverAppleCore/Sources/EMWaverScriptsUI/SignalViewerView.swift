@@ -90,7 +90,7 @@ public struct SignalViewerView: View {
                 .font(.system(.body, design: .monospaced))
                 .disabled(true)
                 .padding(8)
-        case .script:
+        case .script, .library, .kernel:
             Text("Not a signal")
         }
     }
@@ -114,7 +114,7 @@ public struct SignalViewerView: View {
             case .signalText:
                 let data = try Data(contentsOf: url)
                 textContent = String(data: data, encoding: .utf8) ?? ""
-            case .script:
+            case .script, .library, .kernel:
                 break
             }
         } catch {

@@ -1,0 +1,1461 @@
+// CC1101 - merged ISM register view + quick preset / packet tools.
+// Desktop scripts are sync-only; long operations are chunked via setTimeout.
+var SCRIPT_NAME = "cc1101";
+
+function normalizeBoardType(value) {
+  var board = String(value || "").trim().toLowerCase();
+  if (board === "esp32s2") return "esp32s2";
+  if (board === "esp32s3") return "esp32s3";
+  return "stm32f042";
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== "undefined" && device && typeof device.boardType === "function") {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return "stm32f042";
+}
+
+function isNumericPinValue(value) {
+  return typeof value === "number" && isFinite(value);
+}
+
+function espPinLabel(pin) {
+  if (pin === 2) return "GPIO2 (GDO0 default)";
+  if (pin === 10) return "GPIO10 (CC1101 CS default)";
+  if (pin === 11) return "GPIO11 (SPI MOSI default)";
+  if (pin === 12) return "GPIO12 (SPI SCK default)";
+  if (pin === 13) return "GPIO13 (SPI MISO default)";
+  return "GPIO" + String(pin);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var pin = 0; pin <= 48; pin += 1) {
+    out.push({ label: espPinLabel(pin), value: String(pin) });
+  }
+  return out;
+}
+
+function buildStmPins() {
+  return [
+    { label: "A0", value: "0" },
+    { label: "A1", value: "1" },
+    { label: "A2 / GDO0 default", value: "2" },
+    { label: "A3", value: "3" },
+    { label: "A4 / NSS / CC1101 CS default", value: "4" },
+    { label: "A5 / SCK", value: "5" },
+    { label: "A6 / MISO", value: "6" },
+    { label: "A7 / MOSI", value: "7" },
+    { label: "B6", value: "22" },
+    { label: "B7", value: "23" },
+  ];
+}
+
+var detectedBoardType = detectBoardType();
+var boardType = detectedBoardType;
+var BOARD_TYPE_OPTIONS = [
+  { label: "ESP32-S2", value: "esp32s2" },
+  { label: "ESP32-S3", value: "esp32s3" },
+  { label: "STM32F042", value: "stm32f042" },
+];
+
+function isEspBoard(type) {
+  return type === "esp32s2" || type === "esp32s3";
+}
+
+function defaultCc1101CsPinForBoard(type) {
+  return isEspBoard(type)
+      ? 10
+      : 4;
+}
+
+function defaultGdo0PinForBoard(type) {
+  return 2;
+}
+
+function spiSummaryForBoard(type) {
+  return isEspBoard(type)
+    ? "Board mode: ESP32. Default CC1101 wiring: CS=GPIO10, MOSI=GPIO11, MISO=GPIO13, SCK=GPIO12, GDO0=GPIO2. SPI bus auto-initializes on first transfer."
+    : "Board mode: STM32F042. Default CC1101 wiring: CS=A4, MOSI=A7, MISO=A6, SCK=A5, GDO0=A2.";
+}
+
+function pinOptionsForBoard(type) {
+  return isEspBoard(type) ? buildEspPins() : buildStmPins();
+}
+
+var DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
+var DEFAULT_GDO0_PIN = defaultGdo0PinForBoard(boardType);
+
+var RF_PARAMETER_STEPS = 6;
+var CC1101_PA_TABLE_SIZE = 8;
+var CC1101_PATABLE_ADDR = 0x3e;
+
+var CC1101_F_XTAL_HZ = 26000000.0;
+var CC1101_REG_FREQ2 = 0x0d;
+var CC1101_REG_FREQ1 = 0x0e;
+var CC1101_REG_FREQ0 = 0x0f;
+var CC1101_REG_MDMCFG4 = 0x10;
+var CC1101_REG_MDMCFG3 = 0x11;
+var CC1101_REG_MDMCFG2 = 0x12;
+var CC1101_REG_DEVIATN = 0x15;
+var CC1101_REG_FREND0 = 0x22;
+var CC1101_REG_IOCFG2 = 0x00;
+var CC1101_REG_IOCFG1 = 0x01;
+var CC1101_REG_IOCFG0 = 0x02;
+var CC1101_REG_PKTCTRL1 = 0x07;
+var CC1101_REG_PKTCTRL0 = 0x08;
+var CC1101_REG_PKTLEN = 0x06;
+var CC1101_REG_ADDR = 0x09;
+var CC1101_REG_CHANNR = 0x0a;
+var CC1101_REG_FSCTRL1 = 0x0b;
+var CC1101_REG_MDMCFG1 = 0x13;
+var CC1101_REG_MDMCFG0 = 0x14;
+var CC1101_REG_MCSM0 = 0x18;
+var CC1101_REG_FOCCFG = 0x19;
+var CC1101_REG_BSCFG = 0x1a;
+var CC1101_REG_AGCCTRL2 = 0x1b;
+var CC1101_REG_AGCCTRL1 = 0x1c;
+var CC1101_REG_AGCCTRL0 = 0x1d;
+var CC1101_REG_FREND1 = 0x21;
+var CC1101_REG_FSCAL3 = 0x23;
+var CC1101_REG_FSCAL2 = 0x24;
+var CC1101_REG_FSCAL1 = 0x25;
+var CC1101_REG_FSCAL0 = 0x26;
+var CC1101_REG_FSTEST = 0x29;
+var CC1101_REG_TEST2 = 0x2c;
+var CC1101_REG_TEST1 = 0x2d;
+var CC1101_REG_TEST0 = 0x2e;
+var CC1101_REG_PARTNUM = 0x30;
+var CC1101_REG_VERSION = 0x31;
+var CC1101_REG_FIFO = 0x3f;
+
+var CC1101_SRES = 0x30;
+var CC1101_SRX = 0x34;
+var CC1101_STX = 0x35;
+var CC1101_SIDLE = 0x36;
+var CC1101_SFTX = 0x3b;
+
+var CC1101_MOD_2FSK = 0;
+var CC1101_MOD_GFSK = 1;
+var CC1101_MOD_ASK = 3;
+var CC1101_MOD_4FSK = 4;
+var CC1101_MOD_MSK = 7;
+
+var CC1101_POWER_LEVELS_DBM = [-30, -20, -15, -10, 0, 5, 7, 10];
+var CC1101_POWER_SETTING_315MHZ = [0x12, 0x0d, 0x1c, 0x34, 0x51, 0x85, 0xcb, 0xc2];
+var CC1101_POWER_SETTING_433MHZ = [0x12, 0x0e, 0x1d, 0x34, 0x60, 0x84, 0xc8, 0xc0];
+var CC1101_POWER_SETTING_868MHZ = [0x03, 0x0f, 0x1e, 0x27, 0x50, 0x81, 0xcb, 0xc2];
+var CC1101_POWER_SETTING_915MHZ = [0x03, 0x0e, 0x1e, 0x27, 0x8e, 0xcd, 0xc7, 0xc0];
+
+var CC1101_CONFIG_REGISTERS = [
+  "IOCFG2",
+  "IOCFG1",
+  "IOCFG0",
+  "FIFOTHR",
+  "SYNC1",
+  "SYNC0",
+  "PKTLEN",
+  "PKTCTRL1",
+  "PKTCTRL0",
+  "ADDR",
+  "CHANNR",
+  "FSCTRL1",
+  "FSCTRL0",
+  "FREQ2",
+  "FREQ1",
+  "FREQ0",
+  "MDMCFG4",
+  "MDMCFG3",
+  "MDMCFG2",
+  "MDMCFG1",
+  "MDMCFG0",
+  "DEVIATN",
+  "MCSM2",
+  "MCSM1",
+  "MCSM0",
+  "FOCCFG",
+  "BSCFG",
+  "AGCCTRL2",
+  "AGCCTRL1",
+  "AGCCTRL0",
+  "WOREVT1",
+  "WOREVT0",
+  "WORCTRL",
+  "FREND1",
+  "FREND0",
+  "FSCAL3",
+  "FSCAL2",
+  "FSCAL1",
+  "FSCAL0",
+  "RCCTRL1",
+  "RCCTRL0",
+  "FSTEST",
+  "PTEST",
+  "AGCTEST",
+  "TEST2",
+  "TEST1",
+  "TEST0",
+];
+
+var CC1101_STATUS_REGISTERS = [
+  "PARTNUM",
+  "VERSION",
+  "FREQEST",
+  "LQI",
+  "RSSI",
+  "MARCSTATE",
+  "WORTIME1",
+  "WORTIME0",
+  "PKTSTATUS",
+  "VCO_VC_DAC",
+  "TXBYTES",
+  "RXBYTES",
+  "RCCTRL1_STATUS",
+  "RCCTRL0_STATUS",
+];
+
+var CC1101_REGISTER_MAP = {
+  IOCFG2: 0x00,
+  IOCFG1: 0x01,
+  IOCFG0: 0x02,
+  FIFOTHR: 0x03,
+  SYNC1: 0x04,
+  SYNC0: 0x05,
+  PKTLEN: 0x06,
+  PKTCTRL1: 0x07,
+  PKTCTRL0: 0x08,
+  ADDR: 0x09,
+  CHANNR: 0x0a,
+  FSCTRL1: 0x0b,
+  FSCTRL0: 0x0c,
+  FREQ2: 0x0d,
+  FREQ1: 0x0e,
+  FREQ0: 0x0f,
+  MDMCFG4: 0x10,
+  MDMCFG3: 0x11,
+  MDMCFG2: 0x12,
+  MDMCFG1: 0x13,
+  MDMCFG0: 0x14,
+  DEVIATN: 0x15,
+  MCSM2: 0x16,
+  MCSM1: 0x17,
+  MCSM0: 0x18,
+  FOCCFG: 0x19,
+  BSCFG: 0x1a,
+  AGCCTRL2: 0x1b,
+  AGCCTRL1: 0x1c,
+  AGCCTRL0: 0x1d,
+  WOREVT1: 0x1e,
+  WOREVT0: 0x1f,
+  WORCTRL: 0x20,
+  FREND1: 0x21,
+  FREND0: 0x22,
+  FSCAL3: 0x23,
+  FSCAL2: 0x24,
+  FSCAL1: 0x25,
+  FSCAL0: 0x26,
+  RCCTRL1: 0x27,
+  RCCTRL0: 0x28,
+  FSTEST: 0x29,
+  PTEST: 0x2a,
+  AGCTEST: 0x2b,
+  TEST2: 0x2c,
+  TEST1: 0x2d,
+  TEST0: 0x2e,
+  PARTNUM: 0x30,
+  VERSION: 0x31,
+  FREQEST: 0x32,
+  LQI: 0x33,
+  RSSI: 0x34,
+  MARCSTATE: 0x35,
+  WORTIME1: 0x36,
+  WORTIME0: 0x37,
+  PKTSTATUS: 0x38,
+  VCO_VC_DAC: 0x39,
+  TXBYTES: 0x3a,
+  RXBYTES: 0x3b,
+  RCCTRL1_STATUS: 0x3c,
+  RCCTRL0_STATUS: 0x3d,
+};
+
+var CC1101_MODULATION_OPTIONS = [
+  { label: "2-FSK", value: String(CC1101_MOD_2FSK) },
+  { label: "GFSK", value: String(CC1101_MOD_GFSK) },
+  { label: "ASK/OOK", value: String(CC1101_MOD_ASK) },
+  { label: "4-FSK", value: String(CC1101_MOD_4FSK) },
+  { label: "MSK", value: String(CC1101_MOD_MSK) },
+];
+
+function toHexByte(n) {
+  var v = Number(n) & 0xff;
+  var s = v.toString(16).toUpperCase();
+  return s.length === 1 ? "0" + s : s;
+}
+
+function isFiniteNumber(n) {
+  return typeof n === "number" && isFinite(n);
+}
+
+function getRegisterAddress(name) {
+  return CC1101_REGISTER_MAP[String(name)] || 0;
+}
+
+function cc1101SpiXfer(tx, opts) {
+  var options = opts || {};
+  var cs = typeof options.cs !== "undefined" ? options.cs : cc1101CsPin;
+  var rxLength = typeof options.rxLength === "number" ? options.rxLength : undefined;
+  return SPI.transfer(tx, { cs: cs, rxLength: rxLength });
+}
+
+function readReg(addr) {
+  var a = Number(addr) & 0xff;
+  var isStatus = a >= 0x30 && a <= 0x3d;
+  var cmd = ((a & 0x3f) | (isStatus ? 0xc0 : 0x80)) & 0xff;
+  var response = cc1101SpiXfer([cmd, 0x00], { rxLength: 2 });
+  return response && response.length >= 2 ? response[1] & 0xff : 0;
+}
+
+function writeReg(addr, value) {
+  var a = Number(addr) & 0xff;
+  cc1101SpiXfer([a & 0x3f, Number(value) & 0xff]);
+}
+
+function cc1101ReadBurstReg(addr, len) {
+  var requested = Math.max(0, Math.min(13, Number(len) | 0));
+  var cmd = ((Number(addr) & 0x3f) | 0xc0) & 0xff;
+  var tx = [cmd];
+  for (var i = 0; i < requested; i += 1) tx.push(0);
+  var response = cc1101SpiXfer(tx);
+  if (!response || response.length < 1) return new Uint8Array(0);
+  return response.slice(1, 1 + requested);
+}
+
+function cc1101WriteBurstReg(addr, data) {
+  var bytes = (data || []).slice(0, 13).map(function (v) {
+    return Number(v) & 0xff;
+  });
+  var cmd = ((Number(addr) & 0x3f) | 0x40) & 0xff;
+  var tx = [cmd].concat(bytes);
+  cc1101SpiXfer(tx);
+  return true;
+}
+
+function ensureCc1101Init() {
+  // Probe VERSION register via SNOP+read.
+  var response = cc1101SpiXfer([0xf1, 0x00], { rxLength: 2 });
+  if (!response || response.length < 2) {
+    statusMessage = "CC1101 probe failed: no response.";
+    return false;
+  }
+  var version = response[1] & 0xff;
+  if (version !== 0x14) {
+    // Some modules report a different VERSION code; continue if SPI reads are working.
+    statusMessage = "CC1101 probe warning: VERSION=0x" + toHexByte(version) + " (expected 0x14).";
+  } else {
+  }
+  return true;
+}
+
+function cc1101Strobe(cmd) {
+  cc1101SpiXfer([Number(cmd) & 0xff]);
+}
+
+function cc1101GetFrequencyMHz() {
+  var freq2 = readReg(CC1101_REG_FREQ2);
+  var freq1 = readReg(CC1101_REG_FREQ1);
+  var freq0 = readReg(CC1101_REG_FREQ0);
+  var word = ((freq2 & 0xff) << 16) | ((freq1 & 0xff) << 8) | (freq0 & 0xff);
+  return (word * (CC1101_F_XTAL_HZ / Math.pow(2, 16))) / 1000000.0;
+}
+
+function cc1101SetFrequencyMHz(frequencyMHz) {
+  var mhz = Number(frequencyMHz);
+  if (!isFiniteNumber(mhz) || mhz <= 0) return false;
+  var word = Math.round((mhz * 1e6 * Math.pow(2, 16)) / CC1101_F_XTAL_HZ);
+  writeReg(CC1101_REG_FREQ2, (word >> 16) & 0xff);
+  writeReg(CC1101_REG_FREQ1, (word >> 8) & 0xff);
+  writeReg(CC1101_REG_FREQ0, word & 0xff);
+  cc1101Strobe(54);
+  cc1101Strobe(51);
+  var confirm = cc1101GetFrequencyMHz();
+  return Math.abs(confirm - mhz) < 0.001;
+}
+
+function cc1101GetDataRate() {
+  var mdmcfg4 = readReg(CC1101_REG_MDMCFG4);
+  var drateE = mdmcfg4 & 0x0f;
+  var drateM = readReg(CC1101_REG_MDMCFG3);
+  var bitRate = ((256 + drateM) * Math.pow(2, drateE) * CC1101_F_XTAL_HZ) / Math.pow(2, 28);
+  return Math.round(bitRate);
+}
+
+function cc1101SetDataRate(bitRate) {
+  var bps = Math.round(Number(bitRate));
+  if (!isFiniteNumber(bps) || bps <= 0) return false;
+  var target = (bps * Math.pow(2, 28)) / CC1101_F_XTAL_HZ;
+  var bestM = 0;
+  var bestE = 0;
+  var bestDiff = Number.MAX_VALUE;
+  for (var e = 0; e <= 15; e += 1) {
+    for (var m = 0; m <= 255; m += 1) {
+      var current = (256 + m) * Math.pow(2, e);
+      var diff = Math.abs(current - target);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestM = m;
+        bestE = e;
+      }
+    }
+  }
+  var cur = readReg(CC1101_REG_MDMCFG4);
+  var bandwidthPart = cur & 0xf0;
+  var newMdmcfg4 = (bandwidthPart | (bestE & 0x0f)) & 0xff;
+  var newMdmcfg3 = bestM & 0xff;
+  cc1101WriteBurstReg(CC1101_REG_MDMCFG4, [newMdmcfg4, newMdmcfg3]);
+  var confirm = cc1101ReadBurstReg(CC1101_REG_MDMCFG4, 2);
+  return confirm.length === 2 && confirm[0] === newMdmcfg4 && confirm[1] === newMdmcfg3;
+}
+
+function cc1101GetBandwidthKHz() {
+  var v = readReg(CC1101_REG_MDMCFG4);
+  var bwExp = (v >> 6) & 0x03;
+  var bwMant = (v >> 4) & 0x03;
+  var bandwidthHz = CC1101_F_XTAL_HZ / (8.0 * (4.0 + bwMant) * Math.pow(2, bwExp));
+  return bandwidthHz / 1000.0;
+}
+
+function cc1101SetBandwidth(bandwidthKHz) {
+  var khz = Number(bandwidthKHz);
+  if (!isFiniteNumber(khz) || khz <= 0) return false;
+  var targetHz = khz * 1000.0;
+  var bestExp = 0;
+  var bestMant = 0;
+  var bestDiff = Number.MAX_VALUE;
+  for (var exp = 0; exp <= 3; exp += 1) {
+    for (var mant = 0; mant <= 3; mant += 1) {
+      var bwHz = CC1101_F_XTAL_HZ / (8.0 * (4.0 + mant) * Math.pow(2, exp));
+      var diff = Math.abs(bwHz - targetHz);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestExp = exp;
+        bestMant = mant;
+      }
+    }
+  }
+  var current = readReg(CC1101_REG_MDMCFG4);
+  var drateE = current & 0x0f;
+  var newMdmcfg4 = ((bestExp << 6) | (bestMant << 4) | drateE) & 0xff;
+  writeReg(CC1101_REG_MDMCFG4, newMdmcfg4);
+  var confirm = readReg(CC1101_REG_MDMCFG4);
+  return confirm === newMdmcfg4;
+}
+
+function cc1101GetDeviation() {
+  var v = readReg(CC1101_REG_DEVIATN);
+  var deviationM = v & 0x07;
+  var deviationE = (v >> 4) & 0x07;
+  var deviationHz = (8 + deviationM) * Math.pow(2, deviationE) * (CC1101_F_XTAL_HZ / Math.pow(2, 17));
+  return Math.round(deviationHz);
+}
+
+function cc1101SetDeviation(deviationHz) {
+  var hz = Math.round(Number(deviationHz));
+  if (!isFiniteNumber(hz) || hz <= 0) return false;
+  var bestE = 0;
+  var bestM = 0;
+  var bestDiff = Number.MAX_VALUE;
+  for (var e = 0; e <= 7; e += 1) {
+    for (var m = 0; m <= 7; m += 1) {
+      var current = (8 + m) * Math.pow(2, e) * (CC1101_F_XTAL_HZ / Math.pow(2, 17));
+      var diff = Math.abs(current - hz);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        bestE = e;
+        bestM = m;
+      }
+    }
+  }
+  var value = ((bestE << 4) | (bestM & 0x07)) & 0xff;
+  writeReg(CC1101_REG_DEVIATN, value);
+  var confirm = readReg(CC1101_REG_DEVIATN);
+  return confirm === value;
+}
+
+function cc1101GetModulation() {
+  var mdmcfg2 = readReg(CC1101_REG_MDMCFG2);
+  return (mdmcfg2 >> 4) & 0x07;
+}
+
+function cc1101GetPowerLevel() {
+  var frequencyMHz = cc1101GetFrequencyMHz();
+  var powerSettings = null;
+  if (frequencyMHz >= 300 && frequencyMHz <= 348) powerSettings = CC1101_POWER_SETTING_315MHZ;
+  else if (frequencyMHz >= 378 && frequencyMHz <= 464) powerSettings = CC1101_POWER_SETTING_433MHZ;
+  else if (frequencyMHz >= 779 && frequencyMHz <= 899.99) powerSettings = CC1101_POWER_SETTING_868MHZ;
+  else if (frequencyMHz >= 900 && frequencyMHz <= 928) powerSettings = CC1101_POWER_SETTING_915MHZ;
+  else return 0;
+
+  var modulation = cc1101GetModulation();
+  var pa = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, 2);
+  if (!pa || pa.length < 2) return 0;
+  var current = (modulation === CC1101_MOD_ASK ? pa[1] : pa[0]) & 0xff;
+  for (var i = 0; i < powerSettings.length && i < CC1101_POWER_LEVELS_DBM.length; i += 1) {
+    if ((powerSettings[i] & 0xff) === current) return CC1101_POWER_LEVELS_DBM[i];
+  }
+  var closestIndex = 0;
+  var smallest = Number.MAX_VALUE;
+  for (var j = 0; j < powerSettings.length && j < CC1101_POWER_LEVELS_DBM.length; j += 1) {
+    var d = Math.abs((powerSettings[j] & 0xff) - current);
+    if (d < smallest) {
+      smallest = d;
+      closestIndex = j;
+    }
+  }
+  return CC1101_POWER_LEVELS_DBM[closestIndex];
+}
+
+function cc1101SetModulationAndPower(modulation, dbm) {
+  var frequencyMHz = cc1101GetFrequencyMHz();
+  var powerIndex = CC1101_POWER_LEVELS_DBM.indexOf(Number(dbm));
+  if (powerIndex < 0) return false;
+
+  var powerSetting = null;
+  if (frequencyMHz >= 300 && frequencyMHz <= 348) powerSetting = CC1101_POWER_SETTING_315MHZ[powerIndex];
+  else if (frequencyMHz >= 378 && frequencyMHz <= 464) powerSetting = CC1101_POWER_SETTING_433MHZ[powerIndex];
+  else if (frequencyMHz >= 779 && frequencyMHz <= 899.99) powerSetting = CC1101_POWER_SETTING_868MHZ[powerIndex];
+  else if (frequencyMHz >= 900 && frequencyMHz <= 928) powerSetting = CC1101_POWER_SETTING_915MHZ[powerIndex];
+  else return false;
+
+  var currentMdmcfg2 = readReg(CC1101_REG_MDMCFG2);
+  var newMdmcfg2 = ((currentMdmcfg2 & 0x0f) | ((Number(modulation) & 0x07) << 4)) & 0xff;
+  var frend0 = Number(modulation) === CC1101_MOD_ASK ? 0x11 : 0x10;
+  writeReg(CC1101_REG_MDMCFG2, newMdmcfg2);
+  writeReg(CC1101_REG_FREND0, frend0);
+
+  var paTable = [];
+  for (var i = 0; i < CC1101_PA_TABLE_SIZE; i += 1) paTable.push(0);
+  if (Number(modulation) === CC1101_MOD_ASK) paTable[1] = powerSetting;
+  else paTable[0] = powerSetting;
+  cc1101WriteBurstReg(CC1101_PATABLE_ADDR, paTable);
+
+  var confirmMdmcfg2 = readReg(CC1101_REG_MDMCFG2);
+  var confirmFrend0 = readReg(CC1101_REG_FREND0);
+  return confirmMdmcfg2 === newMdmcfg2 && confirmFrend0 === frend0;
+}
+
+// -----------------------------------------------------------------------------
+// Quick presets and packet sanity TX
+// -----------------------------------------------------------------------------
+
+function cc1101Reset() {
+  cc1101Strobe(CC1101_SRES);
+}
+
+function cc1101Idle() {
+  cc1101Strobe(CC1101_SIDLE);
+}
+
+function cc1101ApplyDefaults() {
+  writeReg(CC1101_REG_FSCTRL1, 0x06);
+  writeReg(CC1101_REG_MDMCFG1, 0x02);
+  writeReg(CC1101_REG_MDMCFG0, 0xf8);
+  writeReg(CC1101_REG_CHANNR, 0x00);
+  writeReg(CC1101_REG_DEVIATN, 0x47);
+  writeReg(CC1101_REG_MCSM0, 0x18);
+  writeReg(CC1101_REG_FOCCFG, 0x16);
+  writeReg(CC1101_REG_BSCFG, 0x1c);
+  writeReg(CC1101_REG_AGCCTRL2, 0xc7);
+  writeReg(CC1101_REG_AGCCTRL1, 0x00);
+  writeReg(CC1101_REG_AGCCTRL0, 0xb2);
+  writeReg(CC1101_REG_FREND1, 0x56);
+  writeReg(CC1101_REG_FSCAL3, 0xe9);
+  writeReg(CC1101_REG_FSCAL2, 0x2a);
+  writeReg(CC1101_REG_FSCAL1, 0x00);
+  writeReg(CC1101_REG_FSCAL0, 0x1f);
+  writeReg(CC1101_REG_FSTEST, 0x59);
+  writeReg(CC1101_REG_TEST2, 0x81);
+  writeReg(CC1101_REG_TEST1, 0x35);
+  writeReg(CC1101_REG_TEST0, 0x09);
+  writeReg(CC1101_REG_PKTCTRL0, 0x00);
+  writeReg(CC1101_REG_PKTCTRL1, 0x04);
+  writeReg(CC1101_REG_ADDR, 0x00);
+  writeReg(CC1101_REG_PKTLEN, 0xff);
+}
+
+function cc1101SetGdo(gdo2, gdo1, gdo0) {
+  writeReg(CC1101_REG_IOCFG2, gdo2);
+  writeReg(CC1101_REG_IOCFG1, gdo1);
+  writeReg(CC1101_REG_IOCFG0, gdo0);
+}
+
+function applyCommonAsk43392_100k() {
+  cc1101Reset();
+  cc1101ApplyDefaults();
+  writeReg(CC1101_REG_PKTCTRL0, 0x32);
+  cc1101SetGdo(0x2e, 0x2e, 0x0d);
+  cc1101SetFrequencyMHz(433.92);
+  cc1101SetDataRate(100000);
+  cc1101SetModulationAndPower(CC1101_MOD_ASK, 10);
+}
+
+function initRxAsk433() {
+  presetStatusText = "Init RX: 433.92MHz ASK/OOK 100kbps...";
+  render();
+  applyCommonAsk43392_100k();
+  pinMode(gdo0Pin, INPUT);
+  cc1101Strobe(CC1101_SRX);
+  txCarrierOn = false;
+  presetStatusText = "RX ready (GDO0 pin " + String(gdo0Pin) + " = modem out)";
+  render();
+}
+
+function initTxAsk433() {
+  presetStatusText = "Init TX: 433.92MHz ASK/OOK 100kbps...";
+  render();
+  applyCommonAsk43392_100k();
+  pinMode(gdo0Pin, OUTPUT);
+  digitalWrite(gdo0Pin, LOW);
+  txCarrierOn = false;
+  cc1101Strobe(CC1101_STX);
+  presetStatusText = "TX ready (GDO0 pin " + String(gdo0Pin) + " = modem in, carrier gated by GDO0)";
+  render();
+}
+
+function toggleCarrier() {
+  txCarrierOn = !txCarrierOn;
+  pinMode(gdo0Pin, OUTPUT);
+  digitalWrite(gdo0Pin, txCarrierOn ? HIGH : LOW);
+  presetStatusText =
+    txCarrierOn
+      ? "Carrier: ON (GDO0 pin " + String(gdo0Pin) + "=HIGH)"
+      : "Carrier: OFF (GDO0 pin " + String(gdo0Pin) + "=LOW)";
+  render();
+}
+
+function probePartVersion() {
+  var part = readReg(CC1101_REG_PARTNUM);
+  var ver = readReg(CC1101_REG_VERSION);
+  presetStatusText = "Probe: PARTNUM=0x" + toHexByte(part) + " VERSION=0x" + toHexByte(ver);
+  render();
+}
+
+function packetPushLog(line) {
+  packetLogLines.push(String(line));
+  if (packetLogLines.length > 400) packetLogLines = packetLogLines.slice(packetLogLines.length - 400);
+}
+
+function parseHexBytes(text, maxLen) {
+  var s = String(text || "")
+    .replace(/^0x/i, "")
+    .replace(/[^0-9a-f]/gi, "");
+  var out = [];
+  for (var i = 0; i + 1 < s.length; i += 2) {
+    if (out.length >= maxLen) break;
+    out.push(parseInt(s.slice(i, i + 2), 16) & 0xff);
+  }
+  return out;
+}
+
+function packetStrobe(cmdByte) {
+  var response = cc1101SpiXfer([cmdByte & 0xff], { cs: packetCsPin, rxLength: 1 });
+  return response && response.length ? response[0] & 0xff : 0;
+}
+
+function packetWriteReg(addr, value) {
+  cc1101SpiXfer([Number(addr) & 0x3f, Number(value) & 0xff], { cs: packetCsPin });
+}
+
+function packetReadReg(addr) {
+  var a = Number(addr) & 0xff;
+  var cmd = ((a & 0x3f) | (a >= 0x30 && a <= 0x3d ? 0xc0 : 0x80)) & 0xff;
+  var response = cc1101SpiXfer([cmd, 0x00], { cs: packetCsPin, rxLength: 2 });
+  return response && response.length >= 2 ? response[1] & 0xff : 0;
+}
+
+function packetWriteBurst(addr, data) {
+  var bytes = (data || []).map(function (v) {
+    return Number(v) & 0xff;
+  });
+  var cmd = ((Number(addr) & 0x3f) | 0x40) & 0xff;
+  var tx = [cmd].concat(bytes);
+  cc1101SpiXfer(tx, { cs: packetCsPin });
+}
+
+function packetSetFrequencyMHz(mhz) {
+  var word = Math.round((Number(mhz) * 1e6 * Math.pow(2, 16)) / CC1101_F_XTAL_HZ) >>> 0;
+  packetWriteReg(CC1101_REG_FREQ2, (word >> 16) & 0xff);
+  packetWriteReg(CC1101_REG_FREQ1, (word >> 8) & 0xff);
+  packetWriteReg(CC1101_REG_FREQ0, word & 0xff);
+}
+
+function packetSetDataRate(bps) {
+  var target = (Number(bps) * Math.pow(2, 28)) / CC1101_F_XTAL_HZ;
+  var e = 0;
+  while (e < 15 && target > 256 * Math.pow(2, e)) e += 1;
+  var mant = Math.max(0, Math.min(255, Math.round(target / Math.pow(2, e) - 256)));
+  var cur = packetReadReg(CC1101_REG_MDMCFG4);
+  packetWriteReg(CC1101_REG_MDMCFG4, (cur & 0xf0) | (e & 0x0f));
+  packetWriteReg(CC1101_REG_MDMCFG3, mant & 0xff);
+}
+
+function packetInitFixed() {
+  packetStatus = "Initializing...";
+  render();
+
+  var bytes = parseHexBytes(packetPayloadHex, 61);
+  packetStrobe(CC1101_SRES);
+  packetStrobe(CC1101_SIDLE);
+  packetStrobe(CC1101_SFTX);
+
+  packetWriteReg(CC1101_REG_PKTCTRL1, 0x04);
+  packetWriteReg(CC1101_REG_PKTCTRL0, 0x00);
+  packetWriteReg(CC1101_REG_PKTLEN, bytes.length & 0xff);
+
+  var mdmcfg2 = packetReadReg(CC1101_REG_MDMCFG2);
+  packetWriteReg(CC1101_REG_MDMCFG2, (mdmcfg2 & ~0x70) | 0x30);
+
+  packetSetFrequencyMHz(packetFreqMHz);
+  packetSetDataRate(packetDataRateBps);
+
+  packetPushLog(
+    "init packet fixed: len=" +
+      String(bytes.length) +
+      " freq=" +
+      String(packetFreqMHz) +
+      "MHz dr=" +
+      String(packetDataRateBps),
+  );
+  packetStatus = "Initialized";
+  render();
+}
+
+function packetSend() {
+  packetStatus = "Sending...";
+  render();
+
+  var bytes = parseHexBytes(packetPayloadHex, 61);
+  if (!bytes.length) {
+    packetStatus = "No payload";
+    render();
+    return;
+  }
+
+  packetWriteReg(CC1101_REG_PKTLEN, bytes.length & 0xff);
+  packetStrobe(CC1101_SIDLE);
+  packetStrobe(CC1101_SFTX);
+  packetWriteBurst(CC1101_REG_FIFO, bytes);
+  var st = packetStrobe(CC1101_STX);
+
+  packetPushLog("tx " + String(bytes.length) + "B: " + bytes.map(toHexByte).join(" ") + " (st=0x" + toHexByte(st) + ")");
+  packetStatus = "TX strobe sent";
+  render();
+}
+
+// -----------------------------------------------------------------------------
+// UI state
+// -----------------------------------------------------------------------------
+
+var statusMessage = "";
+var presetStatusText = "Ready";
+var txCarrierOn = false;
+var registers = {};
+var rfParams = null; // { frequencyMHz, dataRate, bandwidth, deviation, modulation, txPower }
+var cc1101CsPin = DEFAULT_CC1101_CS;
+var gdo0Pin = DEFAULT_GDO0_PIN;
+
+var packetCsPin = cc1101CsPin;
+var packetFreqMHz = 433.92;
+var packetDataRateBps = 100000;
+var packetPayloadHex = "01 02 03 04";
+var packetStatus = "";
+var packetLogLines = [];
+
+var isLoading = false;
+var loadingProgress = 0;
+var totalLoadSteps = 0;
+var currentCommand = "";
+var abortRequested = false;
+var loadJob = null;
+
+var editDialog = null; // { kind, title, key, mode, allowDecimal }
+var editValue = "";
+
+function applyBoardType(nextBoardType) {
+  var previous = boardType;
+  boardType = normalizeBoardType(nextBoardType);
+  DEFAULT_CC1101_CS = defaultCc1101CsPinForBoard(boardType);
+  DEFAULT_GDO0_PIN = defaultGdo0PinForBoard(boardType);
+  cc1101CsPin = DEFAULT_CC1101_CS;
+  gdo0Pin = DEFAULT_GDO0_PIN;
+  packetCsPin = cc1101CsPin;
+}
+
+function stopLoading(msg) {
+  isLoading = false;
+  abortRequested = false;
+  loadJob = null;
+  currentCommand = "";
+  if (msg) statusMessage = String(msg);
+  render();
+}
+
+function startRefresh() {
+  if (isLoading) return;
+  statusMessage = "";
+  abortRequested = false;
+  isLoading = true;
+  loadingProgress = 0;
+  currentCommand = "";
+
+  totalLoadSteps =
+    CC1101_CONFIG_REGISTERS.length + CC1101_STATUS_REGISTERS.length + CC1101_PA_TABLE_SIZE + RF_PARAMETER_STEPS;
+
+  loadJob = null;
+  render();
+  runLoadAll();
+}
+
+function runLoadAll() {
+  if (!isLoading) return;
+  try {
+    currentCommand = "Probing CC1101...";
+    render();
+    var ok = ensureCc1101Init();
+    if (!ok) {
+      stopLoading(statusMessage || "CC1101 init failed.");
+      return;
+    }
+
+    var nextRegs = {};
+
+    // Render between register reads so progress updates are visible.
+    for (var i = 0; i < CC1101_CONFIG_REGISTERS.length; i += 1) {
+      currentCommand = "Reading " + CC1101_CONFIG_REGISTERS[i] + "...";
+      var addr = getRegisterAddress(CC1101_CONFIG_REGISTERS[i]);
+      nextRegs[CC1101_CONFIG_REGISTERS[i]] = toHexByte(readReg(addr));
+      loadingProgress += 1;
+      render();
+    }
+
+    for (var j = 0; j < CC1101_STATUS_REGISTERS.length; j += 1) {
+      currentCommand = "Reading " + CC1101_STATUS_REGISTERS[j] + "...";
+      var saddr = getRegisterAddress(CC1101_STATUS_REGISTERS[j]);
+      nextRegs[CC1101_STATUS_REGISTERS[j]] = toHexByte(readReg(saddr));
+      loadingProgress += 1;
+      render();
+    }
+
+    currentCommand = "Reading PA_TABLE...";
+    render();
+    var paTable = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+    for (var k = 0; k < Math.min(paTable.length, CC1101_PA_TABLE_SIZE); k += 1) {
+      nextRegs["PA_TABLE" + String(k)] = toHexByte(paTable[k]);
+    }
+    loadingProgress += CC1101_PA_TABLE_SIZE;
+    render();
+
+    currentCommand = "Reading RF parameters...";
+    render();
+    var nextRf = {
+      frequencyMHz: cc1101GetFrequencyMHz(),
+      dataRate: cc1101GetDataRate(),
+      bandwidth: cc1101GetBandwidthKHz(),
+      deviation: cc1101GetDeviation(),
+      modulation: cc1101GetModulation(),
+      txPower: cc1101GetPowerLevel(),
+    };
+    loadingProgress += RF_PARAMETER_STEPS;
+
+    registers = nextRegs;
+    rfParams = nextRf;
+    isLoading = false;
+    currentCommand = "";
+    render();
+  } catch (e) {
+    stopLoading("Load failed: " + String(e && e.message ? e.message : e));
+  }
+}
+
+function openRegisterEdit(name) {
+  editDialog = {
+    kind: "reg",
+    title: "Edit " + String(name),
+    key: String(name),
+    mode: "hex",
+    allowDecimal: false,
+  };
+  editValue = String(registers[String(name)] || "");
+  render();
+}
+
+function openRfEdit(paramKey, title, allowDecimal) {
+  if (!rfParams) return;
+  editDialog = {
+    kind: "rf",
+    title: String(title),
+    key: String(paramKey),
+    mode: "number",
+    allowDecimal: !!allowDecimal,
+  };
+  editValue = String(rfParams[String(paramKey)]);
+  render();
+}
+
+function cancelEdit() {
+  editDialog = null;
+  editValue = "";
+  render();
+}
+
+function applyEdit() {
+  if (!editDialog) return;
+  var value = String(editValue || "").trim();
+
+  if (editDialog.mode === "hex") {
+    if (!/^[0-9a-fA-F]+$/.test(value)) {
+      statusMessage = "Invalid hexadecimal value.";
+      render();
+      return;
+    }
+    var parsed = parseInt(value, 16);
+    if (!isFiniteNumber(parsed)) {
+      statusMessage = "Invalid hexadecimal value.";
+      render();
+      return;
+    }
+
+    try {
+      var key = editDialog.key;
+      if (key.indexOf("PA_TABLE") === 0) {
+        var index = parseInt(key.replace("PA_TABLE", ""), 10);
+        if (!isFiniteNumber(index) || index < 0 || index >= CC1101_PA_TABLE_SIZE) {
+          statusMessage = "Invalid PA table index.";
+          render();
+          return;
+        }
+        var table = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+        if (!table || table.length < CC1101_PA_TABLE_SIZE) {
+          statusMessage = "Failed to read PA table.";
+          render();
+          return;
+        }
+        table[index] = parsed & 0xff;
+        cc1101WriteBurstReg(CC1101_PATABLE_ADDR, Array.prototype.slice.call(table));
+        var verify = cc1101ReadBurstReg(CC1101_PATABLE_ADDR, CC1101_PA_TABLE_SIZE);
+        if (verify && verify.length >= CC1101_PA_TABLE_SIZE) {
+          for (var i = 0; i < CC1101_PA_TABLE_SIZE; i += 1) {
+            registers["PA_TABLE" + String(i)] = toHexByte(verify[i]);
+          }
+        }
+      } else {
+        writeReg(getRegisterAddress(key), parsed);
+        var confirm = readReg(getRegisterAddress(key));
+        registers[key] = toHexByte(confirm);
+      }
+      statusMessage = "";
+      editDialog = null;
+      render();
+    } catch (e) {
+      statusMessage = "Write failed: " + String(e && e.message ? e.message : e);
+      render();
+    }
+    return;
+  }
+
+  if (editDialog.mode === "number") {
+    var numberOk = editDialog.allowDecimal ? /^[0-9]+(\.[0-9]+)?$/.test(value) : /^[0-9]+$/.test(value);
+    if (!numberOk) {
+      statusMessage = "Invalid number value.";
+      render();
+      return;
+    }
+    var n = parseFloat(value);
+    if (!isFiniteNumber(n)) {
+      statusMessage = "Invalid value.";
+      render();
+      return;
+    }
+
+    try {
+      var key2 = editDialog.key;
+      var ok2 = true;
+      var appliedValue = n;
+      if (key2 === "frequencyMHz") {
+        ok2 = cc1101SetFrequencyMHz(n);
+      } else if (key2 === "dataRate") {
+        appliedValue = Math.round(n);
+        ok2 = cc1101SetDataRate(appliedValue);
+      } else if (key2 === "bandwidth") {
+        ok2 = cc1101SetBandwidth(n);
+      } else if (key2 === "deviation") {
+        appliedValue = Math.round(n);
+        ok2 = cc1101SetDeviation(appliedValue);
+      }
+      if (!ok2) {
+        statusMessage = "Failed to set " + String(editDialog.title).toLowerCase() + ".";
+        render();
+        return;
+      }
+      if (rfParams) {
+        rfParams[key2] = appliedValue;
+      }
+      statusMessage = "";
+      editDialog = null;
+      render();
+    } catch (e2) {
+      statusMessage = "Update failed: " + String(e2 && e2.message ? e2.message : e2);
+      render();
+    }
+    return;
+  }
+}
+
+function formatFrequency(mhz) {
+  var v = Number(mhz);
+  if (!isFiniteNumber(v)) return "--";
+  return v.toFixed(6);
+}
+
+function formatBandwidth(khz) {
+  var v = Number(khz);
+  if (!isFiniteNumber(v)) return "--";
+  return v.toFixed(1);
+}
+
+function render() {
+  var progressValue = totalLoadSteps > 0 ? loadingProgress / totalLoadSteps : 0;
+  if (!isFiniteNumber(progressValue)) progressValue = 0;
+  if (progressValue < 0) progressValue = 0;
+  if (progressValue > 1) progressValue = 1;
+
+  UI.render(
+    UI.scroll({
+      padding: 16,
+      spacing: 16,
+      children: [
+        UI.column({
+          spacing: 4,
+          children: [
+            UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
+            UI.text({ text: "Quick presets + full register and RF control", font: "caption" }),
+          ],
+        }),
+
+        isLoading
+          ? UI.card({
+              title: "Initializing CC1101",
+              subtitle: currentCommand || "Preparing...",
+              children: [
+                UI.progress({ value: progressValue }),
+                UI.text({
+                  text: String(loadingProgress) + " / " + String(totalLoadSteps),
+                  font: "caption",
+                }),
+                UI.button({
+                  id: "loading_cancel",
+                  label: "Cancel",
+                  onTap: function () {
+                    abortRequested = true;
+                    render();
+                  },
+                }),
+              ],
+            })
+          : null,
+
+        editDialog
+          ? UI.card({
+              title: editDialog.title,
+              subtitle: editDialog.mode === "hex" ? "Hex byte (00..FF)" : "Numeric value",
+              children: [
+                UI.textField({
+                  id: "edit_value",
+                  value: editValue,
+                  placeholder: editDialog.mode === "hex" ? "00" : "0",
+                  onChange: function (v) {
+                    editValue = String(v);
+                    render();
+                  },
+                  onSubmit: function () {
+                    applyEdit();
+                  },
+                }),
+                UI.row({
+                  spacing: 12,
+                  children: [
+                    UI.button({
+                      id: "edit_cancel",
+                      label: "Cancel",
+                      onTap: cancelEdit,
+                    }),
+                    UI.button({
+                      id: "edit_apply",
+                      label: "OK",
+                      onTap: applyEdit,
+                    }),
+                  ],
+                }),
+              ],
+            })
+          : null,
+
+        UI.column({
+          spacing: 16,
+          children: [
+            UI.column({
+              spacing: 16,
+              children: [
+                UI.card({
+                  title: "Device",
+                  children: [
+                    UI.text({
+                      text:
+                        "Detected board: " +
+                        (detectedBoardType === "esp32s2"
+                          ? "ESP32-S2"
+                          : detectedBoardType === "esp32s3"
+                            ? "ESP32-S3"
+                            : "STM32F042") +
+                        ". " +
+                        spiSummaryForBoard(boardType),
+                      font: "caption",
+                    }),
+                    UI.picker({
+                      id: "board_type",
+                      label: "Board",
+                      selected: String(boardType),
+                      options: BOARD_TYPE_OPTIONS,
+                      onChange: function (value) {
+                        applyBoardType(String(value));
+                        render();
+                      },
+                    }),
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 12,
+                      children: [
+                        UI.picker({
+                          id: "cc1101_cs_pin",
+                          label: "CC1101 CS Pin",
+                          selected: String(cc1101CsPin),
+                          options: pinOptionsForBoard(boardType),
+                          onChange: function (value) {
+                            var n = parseInt(String(value), 10);
+                            cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
+                            packetCsPin = cc1101CsPin;
+                            render();
+                          },
+                        }),
+                        UI.picker({
+                          id: "cc1101_gdo0_pin",
+                          label: "CC1101 GDO0 Pin",
+                          selected: String(gdo0Pin),
+                          options: pinOptionsForBoard(boardType),
+                          onChange: function (value) {
+                            var n = parseInt(String(value), 10);
+                            gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
+                            render();
+                          },
+                        }),
+                      ],
+                    }),
+                    UI.button({
+                      id: "init_read",
+                      label: "Initialize & Read",
+                      onTap: startRefresh,
+                    }),
+                    UI.text({
+                      text: "TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.",
+                      font: "caption",
+                    }),
+                    statusMessage ? UI.text({ text: statusMessage, font: "caption" }) : null,
+                  ],
+                }),
+
+                UI.card({
+                  title: "RF Parameters",
+                  children: [
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 10,
+                      children: [
+                        UI.tile({
+                          title: "Frequency (MHz)",
+                          value: rfParams ? formatFrequency(rfParams.frequencyMHz) : "--",
+                          monospaceValue: true,
+                          disabled: !rfParams,
+                          onTap: function () {
+                            openRfEdit("frequencyMHz", "Frequency (MHz)", true);
+                          },
+                        }),
+                        UI.tile({
+                          title: "Data Rate (bps)",
+                          value: rfParams ? String(rfParams.dataRate) : "--",
+                          monospaceValue: true,
+                          disabled: !rfParams,
+                          onTap: function () {
+                            openRfEdit("dataRate", "Data Rate (bps)", false);
+                          },
+                        }),
+                        UI.tile({
+                          title: "Bandwidth (kHz)",
+                          value: rfParams ? formatBandwidth(rfParams.bandwidth) : "--",
+                          monospaceValue: true,
+                          disabled: !rfParams,
+                          onTap: function () {
+                            openRfEdit("bandwidth", "Bandwidth", true);
+                          },
+                        }),
+                        UI.tile({
+                          title: "Deviation (Hz)",
+                          value: rfParams ? String(rfParams.deviation) : "--",
+                          monospaceValue: true,
+                          disabled: !rfParams,
+                          onTap: function () {
+                            openRfEdit("deviation", "Deviation (Hz)", false);
+                          },
+                        }),
+                      ],
+                    }),
+
+                    UI.picker({
+                      id: "modulation",
+                      label: "Modulation",
+                      selected: rfParams ? String(rfParams.modulation) : String(CC1101_MOD_2FSK),
+                      options: CC1101_MODULATION_OPTIONS,
+                      onChange: function (value) {
+                        if (!rfParams) return;
+                        var m = parseInt(String(value), 10);
+                        var ok = cc1101SetModulationAndPower(m, rfParams.txPower);
+                        if (!ok) {
+                          statusMessage = "Failed to update CC1101 modulation/power.";
+                          render();
+                          return;
+                        }
+                        rfParams.modulation = m;
+                        statusMessage = "";
+                        render();
+                      },
+                    }),
+
+                    UI.picker({
+                      id: "tx_power",
+                      label: "TX Power (dBm)",
+                      selected: rfParams ? String(rfParams.txPower) : String(CC1101_POWER_LEVELS_DBM[0]),
+                      options: CC1101_POWER_LEVELS_DBM.map(function (v) {
+                        return { label: String(v), value: String(v) };
+                      }),
+                      onChange: function (value) {
+                        if (!rfParams) return;
+                        var p = parseInt(String(value), 10);
+                        var ok = cc1101SetModulationAndPower(rfParams.modulation, p);
+                        if (!ok) {
+                          statusMessage = "Failed to update CC1101 modulation/power.";
+                          render();
+                          return;
+                        }
+                        rfParams.txPower = p;
+                        statusMessage = "";
+                        render();
+                      },
+                    }),
+                  ],
+                }),
+
+                UI.card({
+                  title: "Quick Presets",
+                  subtitle: "Known-good ASK/OOK setup and carrier gate",
+                  children: [
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 12,
+                      children: [
+                        UI.button({ id: "preset_init_rx", label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
+                        UI.button({ id: "preset_init_tx", label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
+                      ],
+                    }),
+                    UI.grid({
+                      minColumnWidth: 160,
+                      spacing: 12,
+                      children: [
+                        UI.button({
+                          id: "carrier_toggle",
+                          label: txCarrierOn ? "Carrier OFF" : "Carrier ON",
+                          onTap: toggleCarrier,
+                        }),
+                        UI.button({
+                          id: "preset_idle",
+                          label: "IDLE",
+                          onTap: function () {
+                            cc1101Idle();
+                            txCarrierOn = false;
+                            presetStatusText = "IDLE";
+                            render();
+                          },
+                        }),
+                        UI.button({ id: "probe_part_version", label: "Probe PART/VERSION", onTap: probePartVersion }),
+                      ],
+                    }),
+                    UI.text({ text: presetStatusText, fontWeight: "medium" }),
+                    UI.text({
+                      text: "GDO0 is serial data. RX: modem output. TX: modem input (GDO0 gates carrier).",
+                      font: "caption",
+                    }),
+                  ],
+                }),
+
+                UI.card({
+                  title: "Packet Mode (optional)",
+                  subtitle: "Quick fixed-length packet TX sanity check",
+                  children: [
+                    UI.grid({
+                      minColumnWidth: 160,
+                      spacing: 12,
+                      children: [
+                        UI.textField({
+                          id: "packet_cs_pin",
+                          fillsWidth: true,
+                          value: String(packetCsPin),
+                          placeholder: "CS pin (default board mapping)",
+                          onChange: function (v) {
+                            var n = parseInt(String(v), 10);
+                            packetCsPin = isFiniteNumber(n) ? n : String(v);
+                            render();
+                          },
+                        }),
+                        UI.button({ id: "packet_init", label: "Init", onTap: packetInitFixed }),
+                        UI.button({ id: "packet_send", label: "Send", onTap: packetSend }),
+                      ],
+                    }),
+                    UI.grid({
+                      minColumnWidth: 220,
+                      spacing: 12,
+                      children: [
+                        UI.textField({
+                          id: "packet_freq_mhz",
+                          fillsWidth: true,
+                          value: String(packetFreqMHz),
+                          placeholder: "Freq MHz (433.92)",
+                          onChange: function (v) {
+                            var n = parseFloat(String(v));
+                            if (isFiniteNumber(n)) packetFreqMHz = n;
+                            render();
+                          },
+                        }),
+                        UI.textField({
+                          id: "packet_data_rate_bps",
+                          fillsWidth: true,
+                          value: String(packetDataRateBps),
+                          placeholder: "Data rate bps (100000)",
+                          onChange: function (v) {
+                            var n = parseInt(String(v), 10);
+                            if (isFiniteNumber(n)) packetDataRateBps = n;
+                            render();
+                          },
+                        }),
+                      ],
+                    }),
+                    UI.text({ text: "Payload (hex, up to 61 bytes)", fontWeight: "medium" }),
+                    UI.textEditor({
+                      id: "packet_payload_hex",
+                      value: packetPayloadHex,
+                      placeholder: "01 02 03 ...",
+                      onChange: function (v) {
+                        packetPayloadHex = String(v);
+                        render();
+                      },
+                      minHeight: 56,
+                      fillsWidth: true,
+                    }),
+                    packetStatus ? UI.text({ text: packetStatus, font: "caption" }) : null,
+                    UI.button({
+                      id: "packet_clear_log",
+                      label: "Clear Log",
+                      onTap: function () {
+                        packetLogLines = [];
+                        render();
+                      },
+                    }),
+                    UI.logViewer({ text: packetLogLines.join("\n"), minHeight: 120 }),
+                  ],
+                }),
+              ],
+            }),
+
+            UI.card({
+              title: "Registers",
+              children: [
+                UI.text({ text: "CONFIG", font: "caption", fontWeight: "semibold" }),
+                UI.grid({
+                  minColumnWidth: 150,
+                  spacing: 8,
+                  children: CC1101_CONFIG_REGISTERS.map(function (name) {
+                    return UI.tile({
+                      title: name,
+                      value: registers[name] || "--",
+                      monospaceValue: true,
+                      onTap: function () {
+                        openRegisterEdit(name);
+                      },
+                    });
+                  }),
+                }),
+
+                UI.divider({}),
+
+                UI.text({ text: "STATUS", font: "caption", fontWeight: "semibold" }),
+                UI.grid({
+                  minColumnWidth: 150,
+                  spacing: 8,
+                  children: CC1101_STATUS_REGISTERS.map(function (name) {
+                    return UI.tile({
+                      title: name,
+                      value: registers[name] || "--",
+                      monospaceValue: true,
+                      onTap: function () {
+                        openRegisterEdit(name);
+                      },
+                    });
+                  }),
+                }),
+
+                UI.divider({}),
+
+                UI.text({ text: "PA TABLE", font: "caption", fontWeight: "semibold" }),
+                UI.grid({
+                  minColumnWidth: 150,
+                  spacing: 8,
+                  children: (function () {
+                    var out = [];
+                    for (var i = 0; i < CC1101_PA_TABLE_SIZE; i += 1) {
+                      var key = "PA_TABLE" + String(i);
+                      out.push(
+                        UI.tile({
+                          title: key,
+                          value: registers[key] || "--",
+                          monospaceValue: true,
+                          onTap: (function (k) {
+                            return function () {
+                              openRegisterEdit(k);
+                            };
+                          })(key),
+                        }),
+                      );
+                    }
+                    return out;
+                  })(),
+                }),
+              ],
+            }),
+          ],
+        }),
+
+      ],
+    }),
+  );
+}
+
+render();

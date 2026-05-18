@@ -2,9 +2,13 @@
 
 This folder is the canonical source for bundled EMWaver scripts:
 
-- Android copies these into app bundles during build.
-- Apple apps bundle matching default scripts in their targets.
+- macOS now bundles the `.js` scripts and visible `emw-*` libraries from this folder.
+- Android still uses the legacy `.emw` scripts until its matching migration lands.
 - Native tooling and the Gateway both load from this folder path in repo workflows.
+
+The target public source format is JavaScript. Keep new macOS examples and
+libraries as `.js` files with extensionless imports such as `import { pin, gpio }
+from "emw-gpio";`.
 
 ## Script runtime styles
 
@@ -12,28 +16,27 @@ Use this to reason about CLI behavior when UI is not visible.
 
 ### One-shot / command-response scripts
 
-- `gpio.emw` (manual `HIGH`/`LOW` writes)
-- `uart.emw` (open/close/read/write actions)
-- `i2c.emw` (open/close/write/read/xfer/scan actions)
-- `adc.emw` (read action)
-- `pwm.emw` (apply/stop writes)
-- `rfid.emw` (probe/scan/read/write blocks)
+- `rfid.js` (probe/scan/read/write blocks)
 
 ### UI-driven scripts (mostly event based)
 
-- `chart.emw` (generate/reset/regenerate)
-- `cc1101.emw` (initialize/read/edit/register edits/presets)
-- `rfm69.emw` (profile actions and probe/RX/TX)
-- `sampler.emw` (start/stop/retransmit/load/save/remove/clear)
+- `chart.js` (generate/reset/regenerate)
+- `cc1101.js` (initialize/read/edit/register edits/presets)
+- `rfm69.js` (profile actions and probe/RX/TX)
+- `jsx_hello.js` (JSX/import smoke example)
 
 ### Continuous UI scripts
 
-- `hello.emw` (periodic heartbeat UI state)
-- `blink.emw` (timer based output when running)
+- `hello.js` (periodic heartbeat UI state)
+- `blink.js` (timer based output when running)
 
-### Runtime helper
+### Visible libraries
 
-- `script_bootstrap.emw` (platform/runtime shim and API surface, not typically run as a user script)
+- `emw-kernel.js` (platform/runtime shim and API surface)
+- `emw-protocol.js` (EMW command helpers)
+- `emw-ui.js`, `emw-jsx.js` (UI primitives and JSX authoring)
+- `emw-gpio.js`, `emw-spi.js`, `emw-i2c.js`, `emw-uart.js`, `emw-adc.js`, `emw-pwm.js`
+- `emw-fs.js`, `emw-sampler.js`
 
 ## UI snapshot contract
 
