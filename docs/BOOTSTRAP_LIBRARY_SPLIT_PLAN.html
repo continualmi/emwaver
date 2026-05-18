@@ -659,6 +659,67 @@
     </section>
 
     <section>
+      <h2>Default Script Cleanup</h2>
+      <p class="lead">
+        Splitting runtime APIs into visible libraries lets the bundled script list get smaller and more
+        honest. The default examples should be scripts a user would actually run. Protocol surfaces,
+        bus helpers, GPIO helpers, and sampler APIs should move into read-only libraries instead of
+        appearing as runnable examples.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Current / Possible Script</th>
+            <th>Target</th>
+            <th>Reason</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>script_bootstrap.emw</code></td>
+            <td>Delete after <code>emw-kernel</code>, <code>emw-protocol</code>, and libraries are active.</td>
+            <td>Hidden monolith replaced by visible read-only runtime files.</td>
+          </tr>
+          <tr>
+            <td><code>gpio.emw</code></td>
+            <td>Replace with <code>emw-gpio.emw</code>; keep only a small Blink/GPIO example if useful.</td>
+            <td><code>pin</code> and <code>gpio</code> are library APIs, not a standalone protocol script.</td>
+          </tr>
+          <tr>
+            <td><code>spi.emw</code>, <code>i2c.emw</code>, <code>uart.emw</code></td>
+            <td>Replace with <code>emw-spi.emw</code>, <code>emw-i2c.emw</code>, <code>emw-uart.emw</code>.</td>
+            <td>Bus APIs should be imported by real device examples, not shown as generic runnable scripts.</td>
+          </tr>
+          <tr>
+            <td><code>adc.emw</code>, <code>pwm.emw</code></td>
+            <td>Replace with <code>emw-adc.emw</code> and <code>emw-pwm.emw</code>, or fold into a specific demo.</td>
+            <td>Raw capability tests belong in libraries unless they demonstrate a useful workflow.</td>
+          </tr>
+          <tr>
+            <td><code>sampler.emw</code></td>
+            <td>Move reusable capture/retransmit APIs to <code>emw-sampler.emw</code>; keep only a real sampler demo if it is product-worthy.</td>
+            <td>Sampler helpers should be imported by scripts, while demos should stay focused on user workflows.</td>
+          </tr>
+          <tr>
+            <td><code>blink.emw</code>, <code>cc1101.emw</code>, radio/RFID demos, JSX demos</td>
+            <td>Keep as Examples.</td>
+            <td>These are runnable scripts that prove a real workflow or component.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout">
+        <p>
+          The rule is: if a file mostly exposes protocol, transport, pin, bus, or reusable component
+          behavior, make it a read-only <code>emw-*</code> library. If it shows a real end-user action
+          like blinking a pin, configuring a CC1101, reading RFID, or rendering a JSX UI, keep it as an
+          Example.
+        </p>
+      </div>
+    </section>
+
+    <section>
       <h2>Migration Phases</h2>
       <div class="phase-list">
         <div class="phase">
@@ -708,6 +769,14 @@
             <p>Update the script list to show Examples, Libraries, Kernel, User Scripts, and Signals with clear badges, read-only state, import names, and run/import affordances.</p>
           </div>
           <span class="status">UX</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 6</strong>
+          <div>
+            <h3>Prune default examples</h3>
+            <p>Delete protocol/helper scripts that are replaced by <code>emw-*</code> libraries, including standalone GPIO, SPI, I2C, UART, ADC, PWM, sampler, and bootstrap-style files. Keep only product-worthy runnable examples such as Blink, CC1101, RFID/radio demos, and JSX examples.</p>
+          </div>
+          <span class="status">Cleanup</span>
         </div>
       </div>
 
