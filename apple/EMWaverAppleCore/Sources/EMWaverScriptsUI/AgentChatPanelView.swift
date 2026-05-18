@@ -798,6 +798,10 @@ private struct ChatMarkdownView: View {
         var body: some View {
             if isFencedCodeBlock(block) {
                 CodeBlockView(code: extractFencedCode(block))
+            } else if let heading = parseHeading(block) {
+                HeadingView(level: heading.level, text: heading.text)
+            } else if let table = parseTable(block) {
+                MarkdownTableView(table: table)
             } else if isBulletList(block) {
                 BulletListView(block: block)
             } else {
@@ -825,22 +829,76 @@ private struct ChatMarkdownView: View {
             guard !lines.isEmpty else { return false }
             return lines.allSatisfy { $0.hasPrefix("- ") }
         }
+
+        private func parseHeading(_ s: String) -> (level: Int, text: String)? {
+            let line = s.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard line.hasPrefix("#") else { return nil }
+            let hashes = line.prefix { $0 == "#" }.count
+            guard (1...4).contains(hashes), line.dropFirst(hashes).first == " " else { return nil }
+            let text = line.dropFirst(hashes + 1).trimmingCharacters(in: .whitespaces)
+            return text.isEmpty ? nil : (hashes, text)
+        }
+
+        private func parseTable(_ s: String) -> MarkdownTable? {
+            let lines = s
+                .split(separator: "\n", omittingEmptySubsequences: true)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+            guard lines.count >= 2 else { return nil }
+            guard lines[0].hasPrefix("|"), lines[1].hasPrefix("|") else { return nil }
+            let separatorCells = splitTableRow(lines[1])
+            guard !separatorCells.isEmpty, separatorCells.allSatisfy(isTableSeparatorCell) else { return nil }
+            let headers = splitTableRow(lines[0])
+            guard !headers.isEmpty else { return nil }
+            let rows = lines.dropFirst(2).map(splitTableRow)
+            return MarkdownTable(headers: headers, rows: rows)
+        }
+
+        private func splitTableRow(_ line: String) -> [String] {
+            var trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("|") { trimmed.removeFirst() }
+            if trimmed.hasSuffix("|") { trimmed.removeLast() }
+            return trimmed
+                .split(separator: "|", omittingEmptySubsequences: false)
+                .map { String($0).trimmingCharacters(in: .whitespaces) }
+        }
+
+        private func isTableSeparatorCell(_ cell: String) -> Bool {
+            let trimmed = cell.trimmingCharacters(in: CharacterSet(charactersIn: " :-"))
+            return trimmed.isEmpty && cell.contains("-")
+        }
+    }
+
+    private struct MarkdownTable {
+        let headers: [String]
+        let rows: [[String]]
+    }
+
+    private struct HeadingView: View {
+        let level: Int
+        let text: String
+
+        var body: some View {
+            InlineMarkdownText(text)
+                .font(font)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, level == 1 ? 4 : 2)
+        }
+
+        private var font: Font {
+            switch level {
+            case 1: return .title3.weight(.semibold)
+            case 2: return .headline.weight(.semibold)
+            default: return .subheadline.weight(.semibold)
+            }
+        }
     }
 
     private struct ParagraphView: View {
         let text: String
 
         var body: some View {
-            if let attr = try? AttributedString(
-                markdown: text,
-                options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-            ) {
-                Text(attr)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text(text)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+            InlineMarkdownText(text)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -853,14 +911,7 @@ private struct ChatMarkdownView: View {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text("•")
                             .foregroundStyle(.secondary)
-                        if let attr = try? AttributedString(
-                            markdown: item,
-                            options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
-                        ) {
-                            Text(attr)
-                        } else {
-                            Text(item)
-                        }
+                        InlineMarkdownText(item)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -887,6 +938,65 @@ private struct ChatMarkdownView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
                 .background(Color.black.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private struct MarkdownTableView: View {
+        let table: MarkdownTable
+
+        var body: some View {
+            VStack(alignment: .leading, spacing: 0) {
+                tableRow(cells: table.headers, isHeader: true)
+                ForEach(Array(table.rows.enumerated()), id: \.offset) { index, row in
+                    tableRow(cells: row, isHeader: false)
+                        .background(index.isMultiple(of: 2) ? Color.clear : Color.primary.opacity(0.035))
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(0.12))
+            )
+        }
+
+        private func tableRow(cells: [String], isHeader: Bool) -> some View {
+            let count = max(table.headers.count, cells.count)
+            return HStack(alignment: .top, spacing: 0) {
+                ForEach(0..<count, id: \.self) { index in
+                    InlineMarkdownText(index < cells.count ? cells[index] : "")
+                        .font(isHeader ? .caption.weight(.semibold) : .caption)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 7)
+                        .overlay(alignment: .trailing) {
+                            if index < count - 1 {
+                                Rectangle()
+                                    .fill(Color.primary.opacity(0.10))
+                                    .frame(width: 1)
+                            }
+                        }
+                }
+            }
+            .background(isHeader ? Color.primary.opacity(0.07) : Color.clear)
+        }
+    }
+
+    private struct InlineMarkdownText: View {
+        let text: String
+
+        init(_ text: String) {
+            self.text = text
+        }
+
+        var body: some View {
+            if let attr = try? AttributedString(
+                markdown: text,
+                options: AttributedString.MarkdownParsingOptions(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+            ) {
+                Text(attr)
+            } else {
+                Text(text)
+            }
         }
     }
 }
