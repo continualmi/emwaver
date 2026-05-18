@@ -942,11 +942,11 @@ public struct ScriptsRootView: View {
             AgentToolDefinition(name: "run_script", description: "Start the script runtime for the given script.", parameters: schema([scriptId])),
             AgentToolDefinition(name: "stop_script", description: "Stop the current script runtime.", parameters: empty),
             AgentToolDefinition(name: "get_device_status", description: "Return connected/local device and runtime status known to the macOS app.", parameters: empty),
-            AgentToolDefinition(name: "spi_transfer", description: "Send bytes over SPI and receive the response. `bytes` is the TX array (0–255 each). `cs` is the chip-select pin number. `rx_length`, if provided, overrides the number of response bytes to read.", parameters: schema([
+            AgentToolDefinition(name: "spi_transfer", description: "Send bytes over SPI and receive the response. `bytes` is the TX array (0–255 each). `cs` is the board pin number for chip-select: ESP32 boards use GPIO numbers, STM32F042 uses A0-A15 as 0-15 and B0-B15 as 16-31. If omitted, `cs` defaults to the board's CC1101 wiring: ESP32-S2/S3 GPIO10, STM32F042 A4/4. `rx_length`, if provided, overrides the number of response bytes to read.", parameters: schema([
                 ("bytes", .object(["type": .string("array"), "items": .object(["type": .string("number")]), "description": .string("Bytes to transmit (0–255 each).")])),
-                ("cs", .object(["type": .string("number"), "description": .string("Chip-select pin number.")])),
+                ("cs", .object(["type": .string("number"), "description": .string("Optional chip-select pin. ESP32 boards use GPIO numbers; STM32F042 uses A=0-15 and B=16-31. Omit for the default CC1101 CS pin.")])),
                 ("rx_length", .object(["type": .string("number"), "description": .string("Number of response bytes. Defaults to len(bytes).")])),
-            ], required: ["bytes", "cs"])),
+            ], required: ["bytes"])),
             AgentToolDefinition(name: "gpio_mode", description: "Set a GPIO pin mode.", parameters: schema([
                 ("pin", .object(["type": .string("number"), "description": .string("Pin number.")])),
                 ("mode", .object(["type": .string("string"), "enum": .array([.string("INPUT"), .string("OUTPUT"), .string("INPUT_PULLUP")]), "description": .string("Pin mode.")])),
@@ -989,7 +989,7 @@ public struct ScriptsRootView: View {
         let manager = activePreviewManager
         let running = manager.activeScriptName ?? ""
         let deviceState = device == nil ? "not attached" : "attached"
-        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState)"
+        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); pinNumbering=ESP32 uses GPIO numbers, STM32F042 uses A0-A15 as 0-15 and B0-B15 as 16-31; cc1101Defaults=ESP32-S2/S3 CS GPIO10 MOSI GPIO11 MISO GPIO13 SCK GPIO12 GDO0 GPIO2, STM32F042 CS A4/4 MOSI A7 MISO A6 SCK A5 GDO0 A2"
     }
 
     private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
@@ -1152,8 +1152,12 @@ public struct ScriptsRootView: View {
 
     private func agentToolDeviceStatus() -> AgentToolResult {
         let manager = activePreviewManager
+        let boardType = readAgentBoardType() ?? ""
         return AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
             "connected": .bool(device != nil),
+            "boardType": .string(boardType),
+            "pinNumbering": .string("ESP32 uses GPIO numbers; STM32F042 uses A0-A15 as 0-15 and B0-B15 as 16-31"),
+            "cc1101DefaultCs": .number(Double(defaultAgentCc1101CsPin(boardType: boardType))),
             "runtimeOwner": .string("macos"),
             "activeScriptName": .string(manager.activeScriptName ?? ""),
             "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
@@ -1179,6 +1183,21 @@ public struct ScriptsRootView: View {
         static let adcPin: UInt8 = 0x00
 
         static let spiTransfer: UInt8 = 0x50
+    }
+
+    private func readAgentBoardType() -> String? {
+        guard let device else { return nil }
+        guard let response = device.sendCommand(Data([0x09]), timeout: 1500) else { return nil }
+        let bytes = [UInt8](response)
+        guard bytes.first == AgentHardwareProtocol.responseOK else { return nil }
+        return String(data: Data(bytes.dropFirst()), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+    }
+
+    private func defaultAgentCc1101CsPin(boardType: String?) -> UInt8 {
+        let normalized = (boardType ?? "").trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return normalized == "esp32s2" || normalized == "esp32s3" ? 10 : 4
     }
 
     private enum AgentHardwareSendResult {
@@ -1287,10 +1306,15 @@ public struct ScriptsRootView: View {
             tx.append(UInt8(byte))
         }
 
+        let boardType = readAgentBoardType()
         let cs: UInt8
-        switch agentPin(arguments["cs"], name: "cs (chip-select pin)", toolName: "spi_transfer") {
-        case .success(let value): cs = value
-        case .failure(let result): return result
+        if let explicitCs = arguments["cs"] {
+            switch agentPin(explicitCs, name: "cs (chip-select pin)", toolName: "spi_transfer") {
+            case .success(let value): cs = value
+            case .failure(let result): return result
+            }
+        } else {
+            cs = defaultAgentCc1101CsPin(boardType: boardType)
         }
 
         let maxRx = max(0, device.bufferPacketSizeBytes() - 1)
@@ -1303,7 +1327,11 @@ public struct ScriptsRootView: View {
         switch await agentHardwareSend(command) {
         case .success(let payload):
             let rx = Array(payload.prefix(rxLength)).map { AgentToolJSON.number(Double($0)) }
-            return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object(["rx": .array(rx)]))
+            return AgentToolResult(id: nil, name: "spi_transfer", ok: true, result: .object([
+                "rx": .array(rx),
+                "cs": .number(Double(cs)),
+                "boardType": .string(boardType ?? "")
+            ]))
         case .failure(let error):
             return AgentToolResult(id: nil, name: "spi_transfer", ok: false, error: error)
         }
