@@ -28,7 +28,7 @@ EMWaver is a **local-first**, open-source, AI-assisted electronics platform by *
 Core direction:
 - **Business model:** open-source core plus paid Agent API usage. Revenue should come from the Agent service, not from accounts, hosted cloud control, or gating local hardware access.
 - **No EMWaver accounts/cloud:** EMWaver itself should not require or maintain product accounts, cloud activation, hosted relay, cloud script storage, cloud sync, or subscription checks for core use.
-- **Local-first core:** users should be able to run `.emw` scripts locally without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
+- **Local-first core:** users should be able to run local JavaScript scripts without a Continual MI account, EMWaver account, cloud activation, hosted relay, or subscription check.
 - **Local data ownership:** scripts and core local state should live on the user's device. Do not add cloud script storage, cloud script sync, or account-backed local project storage to the open-source core path.
 - **Remote control posture:** native apps should not be positioned as Continual-hosted remote-control hosts for the open-source core. Native apps stay self-contained. Remote use should be user-owned SSH/VPN/Tailscale/port-forwarding around the local tool.
 - **Transport:** managed multi-transport platform. USB remains first-class for host-backed boards; supported boards may also expose BLE and Wi-Fi when the platform/runtime design requires it.
@@ -79,7 +79,7 @@ We intentionally give up:
 ### Business model (open-source core + Agent API)
 
 - **Open-source core**: local runtime, firmware payloads, scripts, and hardware support should be useful without payment or account sign-in.
-- **Paid Agent API**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves `.emw` scripts using server-side Continual MI/MGPT instructions and metered API usage.
+- **Paid Agent API**: the EMWaver Agent is the primary paid product. It writes, debugs, explains, and improves local JavaScript scripts using server-side Continual MI/MGPT instructions and metered API usage.
 - **No EMWaver cloud product**: do not plan accounts, hosted relay, sync, teams, classrooms, remote fleet behavior, or cloud dashboards as part of the EMWaver core. Any future network service belongs to the focused Continual MI/MGPT Agent backend unless a later product decision explicitly reopens cloud services.
 - **No cloud script storage by default**: local scripts should be opened/saved from the user's filesystem or app-local storage. Do not build script sync as a default product assumption.
 - **AI credits/usage**: Agent usage remains a metered resource.
@@ -106,7 +106,7 @@ We intentionally give up:
 - EMWaver product language should refer to the **Agent**, not to an EMWaver-specific model line.
 - Near-term EMWaver AI is served by the Continual MI/MGPT backend rather than by prompts or inference logic shipped in this repo.
 - Conversational chat and single-turn control operation are product modes of the Agent, not separate branded model categories.
-- App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary `.emw` instruction packs, hidden board recipes, provider-routing logic, or metering policy.
+- App-level Agent runtimes should collect local script/device/UI/error context and send it to the Agent API. They must not embed production system prompts, proprietary JavaScript instruction packs, hidden board recipes, provider-routing logic, or metering policy.
 
 ### Distribution and release posture
 
@@ -156,6 +156,7 @@ Use the local README first when working in a folder:
 - `docs/REBIRTH_AUDIT.md` — completion audit and remaining gaps for the active rebirth objective
 - `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
+- `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document covering script authoring, native hardware tools, and local/API boundaries
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
 - `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read); motivation for removing get_ui_snapshot/send_ui_event and eval
 - `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — superseded; Gateway/CLI snapshot slice remains valid, native Agent snapshot/eval direction was reversed (see AGENT_EVAL_RUNTIME.md)
@@ -198,7 +199,7 @@ If a folder has a README, detailed documentation should live there.
 1. **Managed transport architecture**: USB is first-class for host-backed boards, and the platform may also support BLE/Wi-Fi for board classes designed around them.
 2. **Platform-managed runtime model**: heavy logic should live in host/apps or backend unless a supported autonomous board class explicitly owns that responsibility.
 3. **Software-first business**: revenue comes from paid Agent/API usage through Continual MI/MGPT — not hardware sales, EMWaver accounts, hosted cloud control, or paid local device access.
-4. **Local hardware access is free/open**: core local `.emw` execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
+4. **Local hardware access is free/open**: core local JavaScript execution must not require account sign-in, cloud activation, subscription checks, or hosted relay access.
 5. **Local scripts stay local by default**: no required cloud script storage, cloud project sync, account-backed script library, or hosted file dependency in the core local flow.
 6. **Script-first user experience**: avoid workflows that force end users through MCU toolchains.
 7. **Platform-appropriate distribution**: desktop uses direct installers/downloads; mobile uses app stores, with Android APK available as an alternate path.

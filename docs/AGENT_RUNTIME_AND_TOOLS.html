@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver Agent Runtime and Tools</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #17212f;
+      --muted: #637187;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --agent: #274c77;
+      --script: #0b7668;
+      --device: #885a00;
+      --api: #7a4bb2;
+      --danger: #ad3434;
+      --ok: #2c7a4b;
+      --shadow: 0 18px 46px rgba(23, 33, 47, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.46;
+    }
+
+    header {
+      min-height: 78vh;
+      display: grid;
+      align-items: end;
+      padding: 48px 24px 34px;
+      color: white;
+      background:
+        linear-gradient(180deg, rgba(7, 13, 22, 0.12), rgba(7, 13, 22, 0.88)),
+        url("../hardware/emwaver-link/catalog/images/IMG_0160.webp") center / cover no-repeat;
+    }
+
+    .hero,
+    main {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      font-weight: 760;
+      opacity: 0.86;
+    }
+
+    h1 {
+      max-width: 940px;
+      margin: 0;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 760px;
+      margin: 22px 0 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: clamp(18px, 2vw, 24px);
+    }
+
+    main {
+      padding: 28px 24px 78px;
+    }
+
+    section {
+      padding: 42px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    ul,
+    ol {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      color: #24364f;
+    }
+
+    pre {
+      margin: 16px 0 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 8px;
+      background: #101824;
+      color: #eaf0f8;
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    pre .kw { color: #ff7b72; }
+    pre .id { color: #d2a8ff; }
+    pre .str { color: #a5d6ff; }
+    pre .tagname { color: #7ee787; }
+    pre .attr { color: #ffa657; }
+    pre .num { color: #79c0ff; }
+    pre .fn { color: #d2a8ff; }
+    pre .comment { color: #8b949e; }
+    pre .punct { color: #8b949e; }
+
+    .lead {
+      max-width: 850px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 1px 0 rgba(23, 33, 47, 0.03);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      color: white;
+      background: var(--agent);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .tag.script { background: var(--script); }
+    .tag.device { background: var(--device); }
+    .tag.api { background: var(--api); }
+    .tag.danger { background: var(--danger); }
+    .tag.ok { background: var(--ok); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr 72px 1fr 72px 1fr;
+      gap: 12px;
+      align-items: center;
+      margin-top: 24px;
+    }
+
+    .node {
+      min-height: 150px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .node.agent { border-top: 5px solid var(--agent); }
+    .node.script { border-top: 5px solid var(--script); }
+    .node.device { border-top: 5px solid var(--device); }
+    .arrow {
+      display: grid;
+      place-items: center;
+      height: 54px;
+      color: var(--muted);
+      font-size: 28px;
+      font-weight: 800;
+    }
+
+    .tool-table {
+      width: 100%;
+      margin-top: 22px;
+      border-collapse: collapse;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 1px 0 rgba(23, 33, 47, 0.03);
+    }
+
+    .tool-table th,
+    .tool-table td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .tool-table th {
+      color: var(--ink);
+      background: #eef2f7;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .tool-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .tool-table td {
+      color: var(--muted);
+    }
+
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .callout {
+      margin-top: 20px;
+      padding: 18px;
+      border-radius: 8px;
+      border: 1px solid #e3d2a8;
+      background: #fff8e8;
+    }
+
+    .callout p {
+      color: #5d4a1c;
+    }
+
+    .status {
+      display: grid;
+      grid-template-columns: 180px 1fr;
+      gap: 0;
+      margin-top: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      background: var(--panel);
+    }
+
+    .status div {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .status div:nth-child(odd) {
+      color: var(--ink);
+      background: #eef2f7;
+      font-weight: 760;
+    }
+
+    .status div:nth-child(even) {
+      color: var(--muted);
+    }
+
+    .status div:nth-last-child(-n + 2) {
+      border-bottom: 0;
+    }
+
+    @media (max-width: 860px) {
+      header {
+        min-height: 70vh;
+      }
+
+      .two,
+      .three,
+      .flow,
+      .status {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow {
+        height: 30px;
+        transform: rotate(90deg);
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">EMWaver Agent</div>
+      <h1>Agent runtime and hardware tool model</h1>
+      <p>The Agent is optional assistance for building complete local JavaScript scripts and for operating connected devices through typed hardware tools.</p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Current Position</h2>
+      <p class="lead">
+        EMWaver stays local-first. The user can run scripts and control local hardware without an account or backend. The Agent is a paid, optional helper that can understand the current app context, write full <code>.js</code> scripts, and directly exercise hardware through named tools such as SPI, I2C, GPIO, ADC, PWM, and UART operations.
+      </p>
+      <div class="grid three">
+        <article class="card">
+          <span class="tag script">Goal 1</span>
+          <h3>Write complete scripts</h3>
+          <p>The Agent should create and edit runnable <code>.js</code> scripts that use normal imports, JSX-style UI, and EMWaver libraries like <code>emw-jsx</code>, <code>emw-ui</code>, <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-i2c</code>.</p>
+        </article>
+        <article class="card">
+          <span class="tag device">Goal 2</span>
+          <h3>Interface with devices</h3>
+          <p>The Agent should use hardware tools to perform transfers, probe registers, read pins, and validate behavior before it writes the final user-facing script.</p>
+        </article>
+        <article class="card">
+          <span class="tag api">Boundary</span>
+          <h3>Optional network help</h3>
+          <p>The Agent API is for intelligence and metered assistance. It is not a cloud control plane, script store, activation gate, or device ownership system.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>The Shape</h2>
+      <p class="lead">The source of truth for the user remains local files and the connected device. The model helps decide what to do, but the app owns execution, transport, safety boundaries, and script persistence.</p>
+      <div class="flow">
+        <article class="node agent">
+          <span class="tag">Agent</span>
+          <h3>Reasoning and authoring</h3>
+          <p>Reads user intent, visible script context, runtime errors, and tool results. Produces explanations, script patches, and hardware tool calls.</p>
+        </article>
+        <div class="arrow">&rarr;</div>
+        <article class="node device">
+          <span class="tag device">Native tools</span>
+          <h3>Typed hardware operations</h3>
+          <p>The macOS app sends protocol packets through the active transport for SPI, I2C, GPIO, ADC, PWM, UART, sleep, and status checks.</p>
+        </article>
+        <div class="arrow">&rarr;</div>
+        <article class="node script">
+          <span class="tag script">Script artifact</span>
+          <h3>Full local <code>.js</code> file</h3>
+          <p>Once behavior is understood, the Agent writes a complete script with imports, JSX UI, state, callbacks, and hardware library calls.</p>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>Why Tools Instead of Running JS Snippets</h2>
+      <div class="grid two">
+        <article class="card">
+          <span class="tag danger">Rejected</span>
+          <h3>Arbitrary eval</h3>
+          <p>Letting the Agent run ad hoc JavaScript made the model guess the live API surface. It would invent names, call stale APIs, or depend on script-local variables that were never in scope.</p>
+        </article>
+        <article class="card">
+          <span class="tag ok">Chosen</span>
+          <h3>Named hardware tools</h3>
+          <p>Typed tools give the model a small exact interface. The native app owns EMW protocol packets, transport claims, timeouts, and error reporting.</p>
+        </article>
+      </div>
+      <div class="callout">
+        <p><strong>Decision:</strong> the Agent should not operate hardware by pressing UI buttons or by evaluating guessed JavaScript. It should operate hardware through explicit primitive tools, then write or patch the final script for the user.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>Tool Surface</h2>
+      <p class="lead">The tools are intentionally low-level. Higher-level behaviors such as "initialize CC1101" or "read an RFID card" should be built by the Agent from primitives and then captured as reusable local scripts or libraries.</p>
+      <table class="tool-table">
+        <thead>
+          <tr>
+            <th>Tool group</th>
+            <th>Tools</th>
+            <th>Purpose</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Workspace</td>
+            <td><code>list_scripts</code>, <code>read_script</code>, <code>apply_patch_to_script</code></td>
+            <td>Discover local scripts, inspect source, and apply user-approved edits.</td>
+          </tr>
+          <tr>
+            <td>Runtime</td>
+            <td><code>run_script</code>, <code>stop_script</code>, <code>get_device_status</code>, <code>sleep</code></td>
+            <td>Launch the full user script, stop it, inspect connection state, and wait for hardware settling.</td>
+          </tr>
+          <tr>
+            <td>GPIO</td>
+            <td><code>gpio_mode</code>, <code>gpio_write</code>, <code>gpio_read</code></td>
+            <td>Configure and inspect digital pins using explicit pin numbers or port/number mappings.</td>
+          </tr>
+          <tr>
+            <td>Analog and PWM</td>
+            <td><code>analog_read</code>, <code>pwm_write</code></td>
+            <td>Read ADC values and drive PWM outputs when supported by the active board firmware.</td>
+          </tr>
+          <tr>
+            <td>SPI</td>
+            <td><code>spi_transfer</code></td>
+            <td>Send raw SPI bytes with explicit chip-select handling and return received bytes.</td>
+          </tr>
+          <tr>
+            <td>I2C</td>
+            <td><code>i2c_write</code>, <code>i2c_read</code>, <code>i2c_write_read</code></td>
+            <td>Scan and communicate with I2C devices by address without hardcoded board aliases.</td>
+          </tr>
+          <tr>
+            <td>UART</td>
+            <td><code>uart_write</code>, <code>uart_read</code></td>
+            <td>Send and receive serial data through configured UART pins or board-supported UART channels.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Generated Script Style</h2>
+      <p class="lead">The Agent should write normal-looking JavaScript modules. UI is JSX-like, hardware comes from focused EMWaver libraries, and scripts configure their own pins explicitly.</p>
+      <pre><span class="kw">import</span> { <span class="id">JSX</span>, <span class="id">render</span> } <span class="kw">from</span> <span class="str">"emw-jsx"</span><span class="punct">;</span>
+<span class="kw">import</span> { <span class="id">Column</span>, <span class="id">Text</span>, <span class="id">Button</span>, <span class="id">LogViewer</span> } <span class="kw">from</span> <span class="str">"emw-ui"</span><span class="punct">;</span>
+<span class="kw">import</span> { <span class="id">gpioPin</span>, <span class="id">gpioMode</span>, <span class="id">gpioWrite</span> } <span class="kw">from</span> <span class="str">"emw-gpio"</span><span class="punct">;</span>
+
+<span class="kw">const</span> <span class="id">led</span> = <span class="fn">gpioPin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"A"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">0</span> <span class="punct">});</span>
+
+<span class="kw">function</span> <span class="fn">App</span><span class="punct">()</span> <span class="punct">{</span>
+  <span class="kw">return</span> <span class="punct">(</span>
+    <span class="punct">&lt;</span><span class="tagname">Column</span> <span class="attr">padding</span><span class="punct">={</span><span class="num">16</span><span class="punct">}</span> <span class="attr">spacing</span><span class="punct">={</span><span class="num">12</span><span class="punct">}&gt;</span>
+      <span class="punct">&lt;</span><span class="tagname">Text</span> <span class="attr">font</span><span class="punct">=</span><span class="str">"title2"</span><span class="punct">&gt;</span>GPIO<span class="punct">&lt;/</span><span class="tagname">Text</span><span class="punct">&gt;</span>
+      <span class="punct">&lt;</span><span class="tagname">Button</span> <span class="attr">onTap</span><span class="punct">={() =&gt; {</span>
+        <span class="fn">gpioMode</span><span class="punct">(</span><span class="id">led</span><span class="punct">,</span> <span class="str">"output"</span><span class="punct">);</span>
+        <span class="fn">gpioWrite</span><span class="punct">(</span><span class="id">led</span><span class="punct">,</span> <span class="str">"high"</span><span class="punct">);</span>
+      <span class="punct">}}&gt;</span>High<span class="punct">&lt;/</span><span class="tagname">Button</span><span class="punct">&gt;</span>
+      <span class="punct">&lt;</span><span class="tagname">LogViewer</span> <span class="punct">/&gt;</span>
+    <span class="punct">&lt;/</span><span class="tagname">Column</span><span class="punct">&gt;</span>
+  <span class="punct">);</span>
+<span class="punct">}</span>
+
+<span class="fn">render</span><span class="punct">(&lt;</span><span class="tagname">App</span> <span class="punct">/&gt;);</span></pre>
+      <div class="pill-row">
+        <span class="pill">No hidden bootstrap</span>
+        <span class="pill">No hardcoded pin aliases</span>
+        <span class="pill">No old UI globals</span>
+        <span class="pill">No protocol scripts as examples</span>
+      </div>
+    </section>
+
+    <section>
+      <h2>Agent Loop</h2>
+      <ol>
+        <li>The user describes the target behavior: for example, blink a pin, read a sensor, initialize a radio, or build a control UI.</li>
+        <li>The app supplies visible context: selected script, current error, connected board status, and any user-approved hardware notes.</li>
+        <li>The Agent calls hardware tools when it needs evidence from the device: read a pin, send SPI bytes, scan I2C, or verify a register.</li>
+        <li>The app executes those tool calls locally against the active transport and returns structured results.</li>
+        <li>The Agent writes or patches a complete <code>.js</code> script using the public libraries.</li>
+        <li>The user runs the script locally. Script errors stay script errors; hardware tool failures stay Agent tool results.</li>
+      </ol>
+    </section>
+
+    <section>
+      <h2>Local App Versus Agent API</h2>
+      <div class="status">
+        <div>Local hardware</div>
+        <div>Runs through the native app and active local transport. No account, cloud activation, hosted relay, or subscription gate.</div>
+        <div>Agent API</div>
+        <div>Optional network call for model reasoning. Uses a Continual MI/MGPT endpoint and API key when configured.</div>
+        <div>Failure mode</div>
+        <div>A connection error such as <code>NSURLErrorDomain -1004</code> for <code>http://127.0.0.1:3000/api/mgpt/universes</code> means the configured local Agent backend is not running or not reachable. It should not block local scripts or direct hardware control.</div>
+        <div>Script storage</div>
+        <div>Local scripts remain local files or app-local script records. The Agent can propose edits, but the user-facing artifact is still a local <code>.js</code> script.</div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Implementation Rules</h2>
+      <div class="grid two">
+        <article class="card">
+          <span class="tag ok">Keep</span>
+          <h3>Clear public surface</h3>
+          <ul>
+            <li>Use focused libraries such as <code>emw-gpio</code>, <code>emw-spi</code>, <code>emw-i2c</code>, <code>emw-uart</code>, and <code>emw-ui</code>.</li>
+            <li>Expose bundled read-only library scripts in the script list with a library/script differentiator.</li>
+            <li>Prefer explicit pins and bus configuration in user scripts.</li>
+            <li>Return structured tool results the Agent can reason over.</li>
+          </ul>
+        </article>
+        <article class="card">
+          <span class="tag danger">Avoid</span>
+          <h3>Hidden or ambiguous behavior</h3>
+          <ul>
+            <li>No hidden <code>script_bootstrap</code> compatibility layer.</li>
+            <li>No automatic aliases like <code>A0</code>, <code>IR_TX</code>, or hardcoded SPI device pins in generic libraries.</li>
+            <li>No Agent hardware work through UI snapshots, button clicking, or arbitrary JavaScript eval.</li>
+            <li>No EMWaver account or cloud control dependency for local device access.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section>
+      <h2>What This Enables</h2>
+      <p class="lead">The Agent can become useful before it knows every final script API. It can probe hardware with stable tool schemas, then turn the verified behavior into clean local JavaScript. That keeps EMWaver open-source and script-first while making the paid Agent valuable as a practical hardware assistant.</p>
+    </section>
+  </main>
+</body>
+</html>
