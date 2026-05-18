@@ -67,7 +67,7 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "EMWAVER_AGENT_ENDPOINT"
-            value = "http://127.0.0.1:3000/api/mgpt/responses"
+            value = "http://127.0.0.1:8090/api/mgpt/responses"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>
