@@ -661,15 +661,11 @@ private struct MessageRow: View {
             }
         } else {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "sparkles")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text("Agent")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "sparkles")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .padding(.top, 3)
                     ChatMarkdownView(markdown: message.text)
                         .textSelection(.enabled)
                         .font(.callout)
