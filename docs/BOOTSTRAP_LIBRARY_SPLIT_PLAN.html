@@ -349,8 +349,8 @@
           <span class="tag ui">Expose As Libraries</span>
           <h3>User-facing APIs</h3>
           <p>
-            UI authoring, JSX, GPIO/SPI/I2C/UART interfaces, sampler helpers, and higher-level
-            components should live in importable files that users and the Agent can inspect.
+            UI authoring, JSX, board-aware GPIO/SPI/I2C/UART interfaces, sampler helpers, and
+            higher-level components should live in importable files that users and the Agent can inspect.
           </p>
         </div>
       </div>
@@ -399,7 +399,7 @@
           </tr>
           <tr>
             <td>Hardware interfaces</td>
-            <td><code>device</code>, pins, <code>pinMode</code>, <code>SPI</code>, <code>Wire</code>, <code>Serial</code>, ADC/PWM</td>
+            <td><code>device</code>, board-aware <code>pin(...)</code>, <code>gpio</code>, <code>SPI</code>, <code>Wire</code>, <code>Serial</code>, ADC/PWM</td>
             <td><code>emw-hardware.emw</code></td>
           </tr>
           <tr>
@@ -441,7 +441,7 @@
           </div>
           <div class="module hardware">
             <strong>emw-hardware.emw</strong>
-            <p>GPIO, pins, ADC, PWM, SPI, Wire/I2C, Serial/UART, device metadata.</p>
+            <p>Board-aware pin normalization, GPIO, ADC, PWM, SPI, Wire/I2C, Serial/UART, device metadata.</p>
           </div>
         </div>
 
@@ -467,15 +467,17 @@
 
       <pre><code><span class="kw">import</span> <span class="punct">{</span> <span class="id">render</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-jsx"</span><span class="punct">;</span>
 <span class="kw">import</span> <span class="punct">{</span> <span class="id">Column</span><span class="punct">,</span> <span class="id">Text</span><span class="punct">,</span> <span class="id">Button</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-ui"</span><span class="punct">;</span>
-<span class="kw">import</span> <span class="punct">{</span> <span class="id">A0</span><span class="punct">,</span> <span class="id">HIGH</span><span class="punct">,</span> <span class="id">OUTPUT</span><span class="punct">,</span> <span class="id">pinMode</span><span class="punct">,</span> <span class="id">digitalWrite</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-hardware"</span><span class="punct">;</span>
+<span class="kw">import</span> <span class="punct">{</span> <span class="id">pin</span><span class="punct">,</span> <span class="id">gpio</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-hardware"</span><span class="punct">;</span>
+
+<span class="kw">const</span> <span class="id">outputPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"A"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">0</span> <span class="punct">});</span>
 
 <span class="kw">function</span> <span class="fn">App</span><span class="punct">()</span> <span class="punct">{</span>
   <span class="kw">return</span> <span class="punct">(</span>
     <span class="punct">&lt;</span><span class="tagname">Column</span> <span class="attr">padding</span><span class="punct">={</span><span class="num">16</span><span class="punct">}</span> <span class="attr">spacing</span><span class="punct">={</span><span class="num">12</span><span class="punct">}&gt;</span>
       <span class="punct">&lt;</span><span class="tagname">Text</span> <span class="attr">font</span><span class="punct">=</span><span class="str">"title2"</span><span class="punct">&gt;</span><span class="text">GPIO</span><span class="punct">&lt;/</span><span class="tagname">Text</span><span class="punct">&gt;</span>
       <span class="punct">&lt;</span><span class="tagname">Button</span> <span class="attr">onTap</span><span class="punct">={() =&gt; {</span>
-        <span class="fn">pinMode</span><span class="punct">(</span><span class="const">A0</span><span class="punct">,</span> <span class="const">OUTPUT</span><span class="punct">);</span>
-        <span class="fn">digitalWrite</span><span class="punct">(</span><span class="const">A0</span><span class="punct">,</span> <span class="const">HIGH</span><span class="punct">);</span>
+        <span class="id">gpio</span><span class="punct">.</span><span class="fn">mode</span><span class="punct">(</span><span class="id">outputPin</span><span class="punct">,</span> <span class="str">"output"</span><span class="punct">);</span>
+        <span class="id">gpio</span><span class="punct">.</span><span class="fn">write</span><span class="punct">(</span><span class="id">outputPin</span><span class="punct">,</span> <span class="num">1</span><span class="punct">);</span>
       <span class="punct">}}&gt;</span>
         <span class="text">High</span>
       <span class="punct">&lt;/</span><span class="tagname">Button</span><span class="punct">&gt;</span>
@@ -484,6 +486,49 @@
 <span class="punct">}</span>
 
 <span class="fn">render</span><span class="punct">(&lt;</span><span class="tagname">App</span> <span class="punct">/&gt;);</span></code></pre>
+    </section>
+
+    <section>
+      <h2>Hardware API Redesign</h2>
+      <p class="lead">
+        Opening up the bootstrap should also fix the hardware API. Avoid global pin constants and
+        imported mode constants. Scripts should use explicit pin descriptors that normalize across
+        STM32-style port/pin boards and ESP32-style GPIO-number boards.
+      </p>
+
+      <div class="grid three">
+        <div class="card">
+          <span class="tag hardware">STM32 style</span>
+          <h3>Port and pin</h3>
+          <p><code>pin({ port: "A", number: 0 })</code> or compact <code>pin("A0")</code> for boards that expose port groups.</p>
+        </div>
+        <div class="card">
+          <span class="tag hardware">ESP32 style</span>
+          <h3>GPIO number</h3>
+          <p><code>pin({ gpio: 4 })</code> or compact <code>pin(4)</code> for boards where GPIO number is the native identity.</p>
+        </div>
+        <div class="card">
+          <span class="tag hardware">Board aliases</span>
+          <h3>Named functions</h3>
+          <p><code>pin("IR_TX")</code> and similar aliases can remain available, but they are resolved by the selected board profile.</p>
+        </div>
+      </div>
+
+      <pre><code><span class="kw">import</span> <span class="punct">{</span> <span class="id">pin</span><span class="punct">,</span> <span class="id">gpio</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-hardware"</span><span class="punct">;</span>
+
+<span class="kw">const</span> <span class="id">stmPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"A"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">0</span> <span class="punct">});</span>
+<span class="kw">const</span> <span class="id">espPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">gpio</span><span class="punct">:</span> <span class="num">4</span> <span class="punct">});</span>
+<span class="kw">const</span> <span class="id">txPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">(</span><span class="str">"IR_TX"</span><span class="punct">);</span>
+
+<span class="id">gpio</span><span class="punct">.</span><span class="fn">mode</span><span class="punct">(</span><span class="id">stmPin</span><span class="punct">,</span> <span class="str">"output"</span><span class="punct">);</span>
+<span class="id">gpio</span><span class="punct">.</span><span class="fn">write</span><span class="punct">(</span><span class="id">stmPin</span><span class="punct">,</span> <span class="num">1</span><span class="punct">);</span></code></pre>
+
+      <div class="callout">
+        <p>
+          Mode and level values should be plain script values: <code>"input"</code>, <code>"output"</code>,
+          <code>"input_pullup"</code>, <code>0</code>, and <code>1</code>. They should not require imports.
+        </p>
+      </div>
     </section>
 
     <section>
@@ -597,7 +642,7 @@
           <strong>Phase 3</strong>
           <div>
             <h3>Extract hardware interfaces</h3>
-            <p>Move pins, GPIO, ADC, PWM, SPI, Wire, Serial, and protocol helpers into named hardware libraries.</p>
+            <p>Move board-aware pin normalization, GPIO, ADC, PWM, SPI, Wire, Serial, and protocol helpers into named hardware libraries.</p>
           </div>
           <span class="status">Hardware</span>
         </div>
