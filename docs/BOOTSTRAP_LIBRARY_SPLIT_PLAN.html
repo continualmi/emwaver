@@ -492,9 +492,9 @@
     <section>
       <h2>Hardware API Redesign</h2>
       <p class="lead">
-        Opening up the runtime libraries should also fix the hardware API. Avoid global pin constants and
-        imported mode constants. Scripts should use explicit pin descriptors that normalize across
-        STM32-style port/pin boards and ESP32-style GPIO-number boards.
+        Opening up the runtime libraries should also fix the hardware API. Avoid global pin constants,
+        imported mode constants, and board-specific aliases baked into the runtime. Scripts that need
+        pins should declare them explicitly as GPIO numbers or port/number descriptors.
       </p>
 
       <div class="grid three">
@@ -509,25 +509,33 @@
           <p><code>pin({ gpio: 4 })</code> or compact <code>pin(4)</code> for boards where GPIO number is the native identity.</p>
         </div>
         <div class="card">
-          <span class="tag hardware">Board aliases</span>
-          <h3>Named functions</h3>
-          <p><code>pin("IR_TX")</code> and similar aliases can remain available, but they are resolved by the selected board profile.</p>
+          <span class="tag hardware">No aliases</span>
+          <h3>Script-owned mapping</h3>
+          <p>No <code>pin("IR_TX")</code>, SPI pin aliases, or board-name shortcuts in the libraries. A script must map names to explicit pins itself.</p>
         </div>
       </div>
 
-      <pre><code><span class="kw">import</span> <span class="punct">{</span> <span class="id">pin</span><span class="punct">,</span> <span class="id">gpio</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-hardware"</span><span class="punct">;</span>
+      <pre><code><span class="kw">import</span> <span class="punct">{</span> <span class="id">pin</span><span class="punct">,</span> <span class="id">gpio</span><span class="punct">,</span> <span class="id">spi</span> <span class="punct">}</span> <span class="kw">from</span> <span class="str">"emw-hardware"</span><span class="punct">;</span>
 
-<span class="kw">const</span> <span class="id">stmPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"A"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">0</span> <span class="punct">});</span>
-<span class="kw">const</span> <span class="id">espPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">gpio</span><span class="punct">:</span> <span class="num">4</span> <span class="punct">});</span>
-<span class="kw">const</span> <span class="id">txPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">(</span><span class="str">"IR_TX"</span><span class="punct">);</span>
+<span class="kw">const</span> <span class="id">irTxPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"A"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">0</span> <span class="punct">});</span>
+<span class="kw">const</span> <span class="id">statusLedPin</span> <span class="punct">=</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">gpio</span><span class="punct">:</span> <span class="num">4</span> <span class="punct">});</span>
+<span class="kw">const</span> <span class="id">displayBus</span> <span class="punct">=</span> <span class="id">spi</span><span class="punct">.</span><span class="fn">open</span><span class="punct">({</span>
+  <span class="attr">sck</span><span class="punct">:</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"B"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">3</span> <span class="punct">}),</span>
+  <span class="attr">miso</span><span class="punct">:</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"B"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">4</span> <span class="punct">}),</span>
+  <span class="attr">mosi</span><span class="punct">:</span> <span class="fn">pin</span><span class="punct">({</span> <span class="attr">port</span><span class="punct">:</span> <span class="str">"B"</span><span class="punct">,</span> <span class="attr">number</span><span class="punct">:</span> <span class="num">5</span> <span class="punct">})</span>
+<span class="punct">});</span>
 
-<span class="id">gpio</span><span class="punct">.</span><span class="fn">mode</span><span class="punct">(</span><span class="id">stmPin</span><span class="punct">,</span> <span class="str">"output"</span><span class="punct">);</span>
-<span class="id">gpio</span><span class="punct">.</span><span class="fn">write</span><span class="punct">(</span><span class="id">stmPin</span><span class="punct">,</span> <span class="num">1</span><span class="punct">);</span></code></pre>
+<span class="id">gpio</span><span class="punct">.</span><span class="fn">mode</span><span class="punct">(</span><span class="id">irTxPin</span><span class="punct">,</span> <span class="str">"output"</span><span class="punct">);</span>
+<span class="id">gpio</span><span class="punct">.</span><span class="fn">write</span><span class="punct">(</span><span class="id">irTxPin</span><span class="punct">,</span> <span class="num">1</span><span class="punct">);</span></code></pre>
 
       <div class="callout">
         <p>
           Mode and level values should be plain script values: <code>"input"</code>, <code>"output"</code>,
           <code>"input_pullup"</code>, <code>0</code>, and <code>1</code>. They should not require imports.
+        </p>
+        <p>
+          Hardware libraries should not ship mutable board aliases. SPI, Wire/I2C, UART, PWM, ADC, and
+          component helpers must take explicit pins supplied by the calling <code>.emw</code> script.
         </p>
       </div>
     </section>
@@ -560,7 +568,7 @@
           <span class="tag hardware">Step 3</span>
           <h3>Library registry</h3>
           <p>
-            Resolve aliases such as <code>emw-jsx</code>, <code>emw-ui</code>, and relative script paths
+            Resolve module specifiers such as <code>emw-jsx</code>, <code>emw-ui</code>, and relative script paths
             such as <code>./lib/pins.emw</code>.
           </p>
         </div>
@@ -644,7 +652,7 @@
           <strong>Phase 3</strong>
           <div>
             <h3>Extract hardware interfaces</h3>
-            <p>Move board-aware pin normalization, GPIO, ADC, PWM, SPI, Wire, Serial, and protocol helpers into named hardware libraries.</p>
+            <p>Move board-aware pin normalization, GPIO, ADC, PWM, SPI, Wire, Serial, and protocol helpers into named hardware libraries, while removing built-in pin aliases and requiring explicit pins from each calling script.</p>
           </div>
           <span class="status">Hardware</span>
         </div>
