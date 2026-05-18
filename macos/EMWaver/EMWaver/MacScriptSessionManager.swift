@@ -190,6 +190,9 @@ final class MacScriptSessionManager: ObservableObject {
         }
 
         guard device.beginScriptTransportSession(deviceID: targetID) else {
+            if targetID == nil {
+                return runFailure("Cannot run script: No selected device", request: request)
+            }
             return runFailure(device.lastErrorText ?? "Cannot run script: transport claim failed", request: request)
         }
 
