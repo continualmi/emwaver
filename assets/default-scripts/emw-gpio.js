@@ -1,5 +1,7 @@
 'use strict';
 
+var protocol = require('emw-protocol');
+
 function encodePin(value) {
   if (typeof value === 'number') return value & 0xff;
   if (!value || typeof value !== 'object') {
@@ -40,15 +42,21 @@ function pinValue(value) {
 var gpio = {
   mode: function (target, mode) {
     var normalized = String(mode || '').trim().toLowerCase();
-    if (normalized === 'input') return pinMode(pinValue(target), INPUT);
-    if (normalized === 'output') return pinMode(pinValue(target), OUTPUT);
+    if (normalized === 'input') {
+      return protocol.sendCommand(new Uint8Array([protocol.op.gpio, protocol.gpio.input, pinValue(target) & 0xff]), 1500);
+    }
+    if (normalized === 'output') {
+      return protocol.sendCommand(new Uint8Array([protocol.op.gpio, protocol.gpio.output, pinValue(target) & 0xff]), 1500);
+    }
     throw new Error('unsupported GPIO mode: ' + String(mode));
   },
   write: function (target, value) {
-    return digitalWrite(pinValue(target), Number(value) ? 1 : 0);
+    var level = Number(value) ? protocol.gpio.high : protocol.gpio.low;
+    return protocol.sendCommand(new Uint8Array([protocol.op.gpio, level, pinValue(target) & 0xff]), 1500);
   },
   read: function (target) {
-    return digitalRead(pinValue(target));
+    var resp = protocol.sendCommand(new Uint8Array([protocol.op.gpio, protocol.gpio.read, pinValue(target) & 0xff]), 1500);
+    return resp && resp.length > 1 ? (resp[1] ? 1 : 0) : 0;
   },
   value: pinValue
 };

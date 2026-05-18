@@ -1,5 +1,9 @@
 // Blink a pin using timers (setTimeout) + `every()`.
 
+import { JSX, render as renderTree } from "emw-jsx";
+import { Column, Text, Button, Picker, Slider } from "emw-ui";
+import { pin, gpio } from "emw-gpio";
+
 function normalizeBoardType(value) {
   var board = String(value || "").trim().toLowerCase();
   if (board === "esp32s2") return "esp32s2";
@@ -62,12 +66,22 @@ const boardType = detectBoardType();
 let selectedPin = firstEnabledPin(PINS_BY_BOARD[boardType]);
 let periodMs = 250;
 let isBlinking = false;
-let level = LOW;
+let level = false;
 let loopHandle = null;
 const SCRIPT_NAME = "blink.js";
 
 function boardPins() {
   return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
+
+function selectedTarget() {
+  var value = Number(selectedPin);
+  if (boardType === "esp32s2" || boardType === "esp32s3") {
+    return pin({ gpio: value });
+  }
+  return value >= 16
+    ? pin({ port: "B", number: value - 16 })
+    : pin({ port: "A", number: value });
 }
 
 function stopBlink(silent) {
@@ -88,16 +102,16 @@ function startBlink(logAction) {
 
   const period = Math.max(1, Math.floor(Number(periodMs) || 1));
   periodMs = period;
-  level = LOW;
-  pinMode(selectedPin, OUTPUT);
-  digitalWrite(selectedPin, level);
+  level = false;
+  gpio.mode(selectedTarget(), "output");
+  gpio.write(selectedTarget(), level);
 
   isBlinking = true;
   render();
 
   loopHandle = every(periodMs, function () {
-    level = level === LOW ? HIGH : LOW;
-    digitalWrite(selectedPin, level);
+    level = !level;
+    gpio.write(selectedTarget(), level);
   });
 }
 
@@ -110,52 +124,47 @@ function toggleBlink() {
 }
 
 function render() {
-  UI.render(
-    UI.column({
-      padding: 16,
-      spacing: 14,
-      children: [
-        UI.text({ text: "Blink", font: "title2", fontWeight: "semibold" }),
-        UI.text({ text: boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042", font: "caption" }),
+  renderTree(<App />);
+}
 
-        UI.picker({
-          id: "blink.pin",
-          style: "menu",
-          selected: String(selectedPin),
-          options: boardPins(),
-          onChange: function (value) {
-            selectedPin = String(value);
-            if (isBlinking) {
-              void startBlink(false);
-            } else {
-              render();
-            }
-          },
-        }),
-
-        UI.slider({
-          id: "blink.period",
-          value: Number(periodMs),
-          min: 1,
-          max: 2000,
-          step: 1,
-          onSubmit: function (value) {
-            periodMs = Math.max(1, Math.floor(Number(value) || 1));
-            if (isBlinking) {
-              void startBlink(false);
-            } else {
-              render();
-            }
-          },
-        }),
-
-        UI.button({
-          id: "blink.toggle",
-          label: isBlinking ? "Stop" : "Start",
-          onTap: toggleBlink,
-        }),
-      ],
-    }),
+function App() {
+  return (
+    <Column padding={16} spacing={14}>
+      <Text font="title2" fontWeight="semibold">Blink</Text>
+      <Text font="caption">
+        {boardType === "esp32s2" ? "Detected MCU: ESP32-S2" : boardType === "esp32s3" ? "Detected MCU: ESP32-S3" : "Detected MCU: STM32F042"}
+      </Text>
+      <Picker
+        id="blink.pin"
+        style="menu"
+        selected={String(selectedPin)}
+        options={boardPins()}
+        onChange={(value) => {
+          selectedPin = String(value);
+          if (isBlinking) {
+            void startBlink(false);
+          } else {
+            render();
+          }
+        }}
+      />
+      <Slider
+        id="blink.period"
+        value={Number(periodMs)}
+        min={1}
+        max={2000}
+        step={1}
+        onSubmit={(value) => {
+          periodMs = Math.max(1, Math.floor(Number(value) || 1));
+          if (isBlinking) {
+            void startBlink(false);
+          } else {
+            render();
+          }
+        }}
+      />
+      <Button id="blink.toggle" onTap={toggleBlink}>{isBlinking ? "Stop" : "Start"}</Button>
+    </Column>
   );
 }
 

@@ -1,3 +1,8 @@
+import { JSX, render as renderTree } from "emw-jsx";
+import { Button, Picker, Row, Scroll, Text, TextEditor, TextField } from "emw-ui";
+import { pin, gpio } from "emw-gpio";
+import { spi } from "emw-spi";
+
 const MFRC522_CS = 4; // A4 on the shipping board
 const MFRC522_RST = 22; // B6
 const MFRC522_IRQ = 23; // B7
@@ -84,13 +89,13 @@ function parseHexBytes(input, expectedLen) {
 
 function readReg(reg) {
   var cmd = (((reg & 0xFF) << 1) & 0x7E) | 0x80;
-  var resp = SPI.transfer([cmd, 0x00], { cs: MFRC522_CS, rxLength: 2 });
+  var resp = spi.transfer([cmd, 0x00], { cs: pin({ port: "A", number: 4 }), rxLength: 2 });
   return resp && resp.length >= 2 ? (resp[1] & 0xFF) : 0;
 }
 
 function writeReg(reg, value) {
   var cmd = ((reg & 0xFF) << 1) & 0x7E;
-  SPI.transfer([cmd, value & 0xFF], { cs: MFRC522_CS, rxLength: 2 });
+  spi.transfer([cmd, value & 0xFF], { cs: pin({ port: "A", number: 4 }), rxLength: 2 });
 }
 
 function setBitMask(reg, mask) {
@@ -114,11 +119,11 @@ function mfrcReset() {
 }
 
 function mfrcInit() {
-  pinMode(MFRC522_RST, OUTPUT);
-  digitalWrite(MFRC522_RST, LOW);
+  gpio.mode(pin({ port: "B", number: 6 }), "output");
+  gpio.write(pin({ port: "B", number: 6 }), false);
   delay(2);
-  digitalWrite(MFRC522_RST, HIGH);
-  pinMode(MFRC522_IRQ, INPUT);
+  gpio.write(pin({ port: "B", number: 6 }), true);
+  gpio.mode(pin({ port: "B", number: 7 }), "input");
   delay(2);
 
   mfrcReset();
@@ -159,7 +164,7 @@ function readFifoBytes(count) {
     i += 1;
   }
   tx.push(0x00);
-  var resp = SPI.transfer(tx, { cs: MFRC522_CS, rxLength: tx.length });
+  var resp = spi.transfer(tx, { cs: pin({ port: "A", number: 4 }), rxLength: tx.length });
   var out = [];
   for (var k = 1; k < resp.length; k += 1) out.push(resp[k] & 0xFF);
   return out;
@@ -368,57 +373,50 @@ function actionWriteBlock() {
 }
 
 function render() {
-  UI.render(UI.scroll({
-    padding: 16,
-    spacing: 10,
-    children: [
-      UI.text({ text: "RFID (MFRC522)", font: "title2", fontWeight: "semibold" }),
-      UI.text({ text: "SDA/CS=NSS (A4), RST=B6, IRQ=B7" }),
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({ label: "Probe", onTap: actionProbe }),
-          UI.button({ label: "Scan UID", onTap: actionScanUid }),
-        ],
-      }),
-      UI.text({ text: "Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText, font: "caption" }),
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.picker({
-            style: "segmented",
-            selected: keyMode,
-            options: [{ label: "Key A (0x60)", value: "A" }, { label: "Key B (0x61)", value: "B" }],
-            onChange: function (v) { keyMode = String(v || "A") === "B" ? "B" : "A"; render(); },
-          }),
-          UI.textField({
-            value: blockText,
-            placeholder: "Block (0..63)",
-            onChange: function (v) { blockText = String(v || ""); render(); },
-          }),
-        ],
-      }),
-      UI.textField({
-        value: keyHex,
-        placeholder: "Key (6 bytes hex, default FF FF FF FF FF FF)",
-        onChange: function (v) { keyHex = String(v || ""); render(); },
-      }),
-      UI.textEditor({
-        value: writeHex,
-        placeholder: "Data (16 bytes hex)",
-        minHeight: 90,
-        onChange: function (v) { writeHex = String(v || ""); render(); },
-      }),
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({ label: "Read Block", onTap: actionReadBlock }),
-          UI.button({ label: "Write Block", onTap: actionWriteBlock }),
-        ],
-      }),
-      UI.text({ text: statusText }),
-    ],
-  }));
+  renderTree(<App />);
+}
+
+function App() {
+  return (
+    <Scroll padding={16} spacing={10}>
+      <Text font="title2" fontWeight="semibold">RFID (MFRC522)</Text>
+      <Text>SDA/CS=A4, RST=B6, IRQ=B7</Text>
+      <Row spacing={8}>
+        <Button onTap={actionProbe}>Probe</Button>
+        <Button onTap={actionScanUid}>Scan UID</Button>
+      </Row>
+      <Text font="caption">{"Version: " + versionText + " | UID: " + uidText + " | SAK: " + sakText}</Text>
+      <Row spacing={8}>
+        <Picker
+          style="segmented"
+          selected={keyMode}
+          options={[{ label: "Key A (0x60)", value: "A" }, { label: "Key B (0x61)", value: "B" }]}
+          onChange={(v) => { keyMode = String(v || "A") === "B" ? "B" : "A"; render(); }}
+        />
+        <TextField
+          value={blockText}
+          placeholder="Block (0..63)"
+          onChange={(v) => { blockText = String(v || ""); render(); }}
+        />
+      </Row>
+      <TextField
+        value={keyHex}
+        placeholder="Key (6 bytes hex, default FF FF FF FF FF FF)"
+        onChange={(v) => { keyHex = String(v || ""); render(); }}
+      />
+      <TextEditor
+        value={writeHex}
+        placeholder="Data (16 bytes hex)"
+        minHeight={90}
+        onChange={(v) => { writeHex = String(v || ""); render(); }}
+      />
+      <Row spacing={8}>
+        <Button onTap={actionReadBlock}>Read Block</Button>
+        <Button onTap={actionWriteBlock}>Write Block</Button>
+      </Row>
+      <Text>{statusText}</Text>
+    </Scroll>
+  );
 }
 
 render();

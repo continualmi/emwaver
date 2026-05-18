@@ -1,5 +1,10 @@
 // CC1101 - merged ISM register view + quick preset / packet tools.
 // Desktop scripts are sync-only; long operations are chunked via setTimeout.
+import { JSX, render as renderTree } from "emw-jsx";
+import { Button, Card, Column, Divider, Grid, LogViewer, Picker, Progress, Scroll, Text, TextEditor, TextField, Tile } from "emw-ui";
+import { pin, gpio } from "emw-gpio";
+import { spi } from "emw-spi";
+
 var SCRIPT_NAME = "cc1101";
 
 function normalizeBoardType(value) {
@@ -307,7 +312,17 @@ function cc1101SpiXfer(tx, opts) {
   var options = opts || {};
   var cs = typeof options.cs !== "undefined" ? options.cs : cc1101CsPin;
   var rxLength = typeof options.rxLength === "number" ? options.rxLength : undefined;
-  return SPI.transfer(tx, { cs: cs, rxLength: rxLength });
+  return spi.transfer(tx, { cs: pinTarget(cs), rxLength: rxLength });
+}
+
+function pinTarget(value) {
+  var n = Number(value);
+  if (isEspBoard(boardType)) {
+    return pin({ gpio: n });
+  }
+  return n >= 16
+    ? pin({ port: "B", number: n - 16 })
+    : pin({ port: "A", number: n });
 }
 
 function readReg(addr) {
@@ -605,7 +620,7 @@ function initRxAsk433() {
   presetStatusText = "Init RX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
-  pinMode(gdo0Pin, INPUT);
+  gpio.mode(pinTarget(gdo0Pin), "input");
   cc1101Strobe(CC1101_SRX);
   txCarrierOn = false;
   presetStatusText = "RX ready (GDO0 pin " + String(gdo0Pin) + " = modem out)";
@@ -616,8 +631,8 @@ function initTxAsk433() {
   presetStatusText = "Init TX: 433.92MHz ASK/OOK 100kbps...";
   render();
   applyCommonAsk43392_100k();
-  pinMode(gdo0Pin, OUTPUT);
-  digitalWrite(gdo0Pin, LOW);
+  gpio.mode(pinTarget(gdo0Pin), "output");
+  gpio.write(pinTarget(gdo0Pin), false);
   txCarrierOn = false;
   cc1101Strobe(CC1101_STX);
   presetStatusText = "TX ready (GDO0 pin " + String(gdo0Pin) + " = modem in, carrier gated by GDO0)";
@@ -626,8 +641,8 @@ function initTxAsk433() {
 
 function toggleCarrier() {
   txCarrierOn = !txCarrierOn;
-  pinMode(gdo0Pin, OUTPUT);
-  digitalWrite(gdo0Pin, txCarrierOn ? HIGH : LOW);
+  gpio.mode(pinTarget(gdo0Pin), "output");
+  gpio.write(pinTarget(gdo0Pin), txCarrierOn);
   presetStatusText =
     txCarrierOn
       ? "Carrier: ON (GDO0 pin " + String(gdo0Pin) + "=HIGH)"
@@ -1025,436 +1040,228 @@ function formatBandwidth(khz) {
   return v.toFixed(1);
 }
 
+function loadingCard(progressValue) {
+  if (!isLoading) return null;
+  return Card({
+    title: "Initializing CC1101",
+    subtitle: currentCommand || "Preparing...",
+    children: [
+      Progress({ value: progressValue }),
+      Text({ text: String(loadingProgress) + " / " + String(totalLoadSteps), font: "caption" }),
+      Button({ id: "loading_cancel", label: "Cancel", onTap: function () { abortRequested = true; render(); } }),
+    ],
+  });
+}
+
+function editCard() {
+  if (!editDialog) return null;
+  return Card({
+    title: editDialog.title,
+    subtitle: editDialog.mode === "hex" ? "Hex byte (00..FF)" : "Numeric value",
+    children: [
+      TextField({
+        id: "edit_value",
+        value: editValue,
+        placeholder: editDialog.mode === "hex" ? "00" : "0",
+        onChange: function (v) { editValue = String(v); render(); },
+        onSubmit: applyEdit,
+      }),
+      Row({
+        spacing: 12,
+        children: [
+          Button({ id: "edit_cancel", label: "Cancel", onTap: cancelEdit }),
+          Button({ id: "edit_apply", label: "OK", onTap: applyEdit }),
+        ],
+      }),
+    ],
+  });
+}
+
+function registerTiles(names) {
+  return names.map(function (name) {
+    return Tile({
+      title: name,
+      value: registers[name] || "--",
+      monospaceValue: true,
+      onTap: function () { openRegisterEdit(name); },
+    });
+  });
+}
+
+function paTableTiles() {
+  var out = [];
+  for (var i = 0; i < CC1101_PA_TABLE_SIZE; i += 1) {
+    var key = "PA_TABLE" + String(i);
+    out.push(Tile({
+      title: key,
+      value: registers[key] || "--",
+      monospaceValue: true,
+      onTap: (function (k) { return function () { openRegisterEdit(k); }; })(key),
+    }));
+  }
+  return out;
+}
+
+function boardLabel(type) {
+  return type === "esp32s2" ? "ESP32-S2" : type === "esp32s3" ? "ESP32-S3" : "STM32F042";
+}
+
 function render() {
+  renderTree(<App />);
+}
+
+function App() {
   var progressValue = totalLoadSteps > 0 ? loadingProgress / totalLoadSteps : 0;
   if (!isFiniteNumber(progressValue)) progressValue = 0;
   if (progressValue < 0) progressValue = 0;
   if (progressValue > 1) progressValue = 1;
 
-  UI.render(
-    UI.scroll({
-      padding: 16,
-      spacing: 16,
-      children: [
-        UI.column({
-          spacing: 4,
-          children: [
-            UI.text({ text: "CC1101", font: "title2", fontWeight: "semibold" }),
-            UI.text({ text: "Quick presets + full register and RF control", font: "caption" }),
-          ],
-        }),
+  return (
+    <Scroll padding={16} spacing={16}>
+      <Column spacing={4}>
+        <Text font="title2" fontWeight="semibold">CC1101</Text>
+        <Text font="caption">Quick presets + full register and RF control</Text>
+      </Column>
+      {loadingCard(progressValue)}
+      {editCard()}
+      <Column spacing={16}>
+        <Column spacing={16}>
+          <Card title="Device">
+            <Text font="caption">{"Detected board: " + boardLabel(detectedBoardType) + ". " + spiSummaryForBoard(boardType)}</Text>
+            <Picker
+              id="board_type"
+              label="Board"
+              selected={String(boardType)}
+              options={BOARD_TYPE_OPTIONS}
+              onChange={(value) => { applyBoardType(String(value)); render(); }}
+            />
+            <Grid minColumnWidth={220} spacing={12}>
+              <Picker
+                id="cc1101_cs_pin"
+                label="CC1101 CS Pin"
+                selected={String(cc1101CsPin)}
+                options={pinOptionsForBoard(boardType)}
+                onChange={(value) => {
+                  var n = parseInt(String(value), 10);
+                  cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
+                  packetCsPin = cc1101CsPin;
+                  render();
+                }}
+              />
+              <Picker
+                id="cc1101_gdo0_pin"
+                label="CC1101 GDO0 Pin"
+                selected={String(gdo0Pin)}
+                options={pinOptionsForBoard(boardType)}
+                onChange={(value) => {
+                  var n = parseInt(String(value), 10);
+                  gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
+                  render();
+                }}
+              />
+            </Grid>
+            <Button id="init_read" onTap={startRefresh}>Initialize & Read</Button>
+            <Text font="caption">TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.</Text>
+            {statusMessage ? Text({ text: statusMessage, font: "caption" }) : null}
+          </Card>
 
-        isLoading
-          ? UI.card({
-              title: "Initializing CC1101",
-              subtitle: currentCommand || "Preparing...",
-              children: [
-                UI.progress({ value: progressValue }),
-                UI.text({
-                  text: String(loadingProgress) + " / " + String(totalLoadSteps),
-                  font: "caption",
-                }),
-                UI.button({
-                  id: "loading_cancel",
-                  label: "Cancel",
-                  onTap: function () {
-                    abortRequested = true;
-                    render();
-                  },
-                }),
-              ],
-            })
-          : null,
+          <Card title="RF Parameters">
+            <Grid minColumnWidth={220} spacing={10}>
+              <Tile title="Frequency (MHz)" value={rfParams ? formatFrequency(rfParams.frequencyMHz) : "--"} monospaceValue={true} disabled={!rfParams} onTap={() => { openRfEdit("frequencyMHz", "Frequency (MHz)", true); }} />
+              <Tile title="Data Rate (bps)" value={rfParams ? String(rfParams.dataRate) : "--"} monospaceValue={true} disabled={!rfParams} onTap={() => { openRfEdit("dataRate", "Data Rate (bps)", false); }} />
+              <Tile title="Bandwidth (kHz)" value={rfParams ? formatBandwidth(rfParams.bandwidth) : "--"} monospaceValue={true} disabled={!rfParams} onTap={() => { openRfEdit("bandwidth", "Bandwidth", true); }} />
+              <Tile title="Deviation (Hz)" value={rfParams ? String(rfParams.deviation) : "--"} monospaceValue={true} disabled={!rfParams} onTap={() => { openRfEdit("deviation", "Deviation (Hz)", false); }} />
+            </Grid>
+            <Picker
+              id="modulation"
+              label="Modulation"
+              selected={rfParams ? String(rfParams.modulation) : String(CC1101_MOD_2FSK)}
+              options={CC1101_MODULATION_OPTIONS}
+              onChange={(value) => {
+                if (!rfParams) return;
+                var m = parseInt(String(value), 10);
+                var ok = cc1101SetModulationAndPower(m, rfParams.txPower);
+                if (!ok) {
+                  statusMessage = "Failed to update CC1101 modulation/power.";
+                  render();
+                  return;
+                }
+                rfParams.modulation = m;
+                statusMessage = "";
+                render();
+              }}
+            />
+            <Picker
+              id="tx_power"
+              label="TX Power (dBm)"
+              selected={rfParams ? String(rfParams.txPower) : String(CC1101_POWER_LEVELS_DBM[0])}
+              options={CC1101_POWER_LEVELS_DBM.map(function (v) { return { label: String(v), value: String(v) }; })}
+              onChange={(value) => {
+                if (!rfParams) return;
+                var p = parseInt(String(value), 10);
+                var ok = cc1101SetModulationAndPower(rfParams.modulation, p);
+                if (!ok) {
+                  statusMessage = "Failed to update CC1101 modulation/power.";
+                  render();
+                  return;
+                }
+                rfParams.txPower = p;
+                statusMessage = "";
+                render();
+              }}
+            />
+          </Card>
 
-        editDialog
-          ? UI.card({
-              title: editDialog.title,
-              subtitle: editDialog.mode === "hex" ? "Hex byte (00..FF)" : "Numeric value",
-              children: [
-                UI.textField({
-                  id: "edit_value",
-                  value: editValue,
-                  placeholder: editDialog.mode === "hex" ? "00" : "0",
-                  onChange: function (v) {
-                    editValue = String(v);
-                    render();
-                  },
-                  onSubmit: function () {
-                    applyEdit();
-                  },
-                }),
-                UI.row({
-                  spacing: 12,
-                  children: [
-                    UI.button({
-                      id: "edit_cancel",
-                      label: "Cancel",
-                      onTap: cancelEdit,
-                    }),
-                    UI.button({
-                      id: "edit_apply",
-                      label: "OK",
-                      onTap: applyEdit,
-                    }),
-                  ],
-                }),
-              ],
-            })
-          : null,
+          <Card title="Quick Presets" subtitle="Known-good ASK/OOK setup and carrier gate">
+            <Grid minColumnWidth={220} spacing={12}>
+              <Button id="preset_init_rx" onTap={initRxAsk433}>Init RX (433.92 ASK)</Button>
+              <Button id="preset_init_tx" onTap={initTxAsk433}>Init TX (433.92 ASK)</Button>
+            </Grid>
+            <Grid minColumnWidth={160} spacing={12}>
+              <Button id="carrier_toggle" onTap={toggleCarrier}>{txCarrierOn ? "Carrier OFF" : "Carrier ON"}</Button>
+              <Button id="preset_idle" onTap={() => { cc1101Idle(); txCarrierOn = false; presetStatusText = "IDLE"; render(); }}>IDLE</Button>
+              <Button id="probe_part_version" onTap={probePartVersion}>Probe PART/VERSION</Button>
+            </Grid>
+            <Text fontWeight="medium">{presetStatusText}</Text>
+            <Text font="caption">GDO0 is serial data. RX: modem output. TX: modem input (GDO0 gates carrier).</Text>
+          </Card>
 
-        UI.column({
-          spacing: 16,
-          children: [
-            UI.column({
-              spacing: 16,
-              children: [
-                UI.card({
-                  title: "Device",
-                  children: [
-                    UI.text({
-                      text:
-                        "Detected board: " +
-                        (detectedBoardType === "esp32s2"
-                          ? "ESP32-S2"
-                          : detectedBoardType === "esp32s3"
-                            ? "ESP32-S3"
-                            : "STM32F042") +
-                        ". " +
-                        spiSummaryForBoard(boardType),
-                      font: "caption",
-                    }),
-                    UI.picker({
-                      id: "board_type",
-                      label: "Board",
-                      selected: String(boardType),
-                      options: BOARD_TYPE_OPTIONS,
-                      onChange: function (value) {
-                        applyBoardType(String(value));
-                        render();
-                      },
-                    }),
-                    UI.grid({
-                      minColumnWidth: 220,
-                      spacing: 12,
-                      children: [
-                        UI.picker({
-                          id: "cc1101_cs_pin",
-                          label: "CC1101 CS Pin",
-                          selected: String(cc1101CsPin),
-                          options: pinOptionsForBoard(boardType),
-                          onChange: function (value) {
-                            var n = parseInt(String(value), 10);
-                            cc1101CsPin = isFiniteNumber(n) ? n : DEFAULT_CC1101_CS;
-                            packetCsPin = cc1101CsPin;
-                            render();
-                          },
-                        }),
-                        UI.picker({
-                          id: "cc1101_gdo0_pin",
-                          label: "CC1101 GDO0 Pin",
-                          selected: String(gdo0Pin),
-                          options: pinOptionsForBoard(boardType),
-                          onChange: function (value) {
-                            var n = parseInt(String(value), 10);
-                            gdo0Pin = isFiniteNumber(n) ? n : DEFAULT_GDO0_PIN;
-                            render();
-                          },
-                        }),
-                      ],
-                    }),
-                    UI.button({
-                      id: "init_read",
-                      label: "Initialize & Read",
-                      onTap: startRefresh,
-                    }),
-                    UI.text({
-                      text: "TX power updates PATABLE[0] and PATABLE[1] for ASK/OOK.",
-                      font: "caption",
-                    }),
-                    statusMessage ? UI.text({ text: statusMessage, font: "caption" }) : null,
-                  ],
-                }),
+          <Card title="Packet Mode (optional)" subtitle="Quick fixed-length packet TX sanity check">
+            <Grid minColumnWidth={160} spacing={12}>
+              <TextField
+                id="packet_cs_pin"
+                fillsWidth={true}
+                value={String(packetCsPin)}
+                placeholder="CS pin (default board mapping)"
+                onChange={(v) => { var n = parseInt(String(v), 10); packetCsPin = isFiniteNumber(n) ? n : String(v); render(); }}
+              />
+              <Button id="packet_init" onTap={packetInitFixed}>Init</Button>
+              <Button id="packet_send" onTap={packetSend}>Send</Button>
+            </Grid>
+            <Grid minColumnWidth={220} spacing={12}>
+              <TextField id="packet_freq_mhz" fillsWidth={true} value={String(packetFreqMHz)} placeholder="Freq MHz (433.92)" onChange={(v) => { var n = parseFloat(String(v)); if (isFiniteNumber(n)) packetFreqMHz = n; render(); }} />
+              <TextField id="packet_data_rate_bps" fillsWidth={true} value={String(packetDataRateBps)} placeholder="Data rate bps (100000)" onChange={(v) => { var n = parseInt(String(v), 10); if (isFiniteNumber(n)) packetDataRateBps = n; render(); }} />
+            </Grid>
+            <Text fontWeight="medium">Payload (hex, up to 61 bytes)</Text>
+            <TextEditor id="packet_payload_hex" value={packetPayloadHex} placeholder="01 02 03 ..." onChange={(v) => { packetPayloadHex = String(v); render(); }} minHeight={56} fillsWidth={true} />
+            {packetStatus ? Text({ text: packetStatus, font: "caption" }) : null}
+            <Button id="packet_clear_log" onTap={() => { packetLogLines = []; render(); }}>Clear Log</Button>
+            <LogViewer text={packetLogLines.join("\n")} minHeight={120} />
+          </Card>
+        </Column>
 
-                UI.card({
-                  title: "RF Parameters",
-                  children: [
-                    UI.grid({
-                      minColumnWidth: 220,
-                      spacing: 10,
-                      children: [
-                        UI.tile({
-                          title: "Frequency (MHz)",
-                          value: rfParams ? formatFrequency(rfParams.frequencyMHz) : "--",
-                          monospaceValue: true,
-                          disabled: !rfParams,
-                          onTap: function () {
-                            openRfEdit("frequencyMHz", "Frequency (MHz)", true);
-                          },
-                        }),
-                        UI.tile({
-                          title: "Data Rate (bps)",
-                          value: rfParams ? String(rfParams.dataRate) : "--",
-                          monospaceValue: true,
-                          disabled: !rfParams,
-                          onTap: function () {
-                            openRfEdit("dataRate", "Data Rate (bps)", false);
-                          },
-                        }),
-                        UI.tile({
-                          title: "Bandwidth (kHz)",
-                          value: rfParams ? formatBandwidth(rfParams.bandwidth) : "--",
-                          monospaceValue: true,
-                          disabled: !rfParams,
-                          onTap: function () {
-                            openRfEdit("bandwidth", "Bandwidth", true);
-                          },
-                        }),
-                        UI.tile({
-                          title: "Deviation (Hz)",
-                          value: rfParams ? String(rfParams.deviation) : "--",
-                          monospaceValue: true,
-                          disabled: !rfParams,
-                          onTap: function () {
-                            openRfEdit("deviation", "Deviation (Hz)", false);
-                          },
-                        }),
-                      ],
-                    }),
-
-                    UI.picker({
-                      id: "modulation",
-                      label: "Modulation",
-                      selected: rfParams ? String(rfParams.modulation) : String(CC1101_MOD_2FSK),
-                      options: CC1101_MODULATION_OPTIONS,
-                      onChange: function (value) {
-                        if (!rfParams) return;
-                        var m = parseInt(String(value), 10);
-                        var ok = cc1101SetModulationAndPower(m, rfParams.txPower);
-                        if (!ok) {
-                          statusMessage = "Failed to update CC1101 modulation/power.";
-                          render();
-                          return;
-                        }
-                        rfParams.modulation = m;
-                        statusMessage = "";
-                        render();
-                      },
-                    }),
-
-                    UI.picker({
-                      id: "tx_power",
-                      label: "TX Power (dBm)",
-                      selected: rfParams ? String(rfParams.txPower) : String(CC1101_POWER_LEVELS_DBM[0]),
-                      options: CC1101_POWER_LEVELS_DBM.map(function (v) {
-                        return { label: String(v), value: String(v) };
-                      }),
-                      onChange: function (value) {
-                        if (!rfParams) return;
-                        var p = parseInt(String(value), 10);
-                        var ok = cc1101SetModulationAndPower(rfParams.modulation, p);
-                        if (!ok) {
-                          statusMessage = "Failed to update CC1101 modulation/power.";
-                          render();
-                          return;
-                        }
-                        rfParams.txPower = p;
-                        statusMessage = "";
-                        render();
-                      },
-                    }),
-                  ],
-                }),
-
-                UI.card({
-                  title: "Quick Presets",
-                  subtitle: "Known-good ASK/OOK setup and carrier gate",
-                  children: [
-                    UI.grid({
-                      minColumnWidth: 220,
-                      spacing: 12,
-                      children: [
-                        UI.button({ id: "preset_init_rx", label: "Init RX (433.92 ASK)", onTap: initRxAsk433 }),
-                        UI.button({ id: "preset_init_tx", label: "Init TX (433.92 ASK)", onTap: initTxAsk433 }),
-                      ],
-                    }),
-                    UI.grid({
-                      minColumnWidth: 160,
-                      spacing: 12,
-                      children: [
-                        UI.button({
-                          id: "carrier_toggle",
-                          label: txCarrierOn ? "Carrier OFF" : "Carrier ON",
-                          onTap: toggleCarrier,
-                        }),
-                        UI.button({
-                          id: "preset_idle",
-                          label: "IDLE",
-                          onTap: function () {
-                            cc1101Idle();
-                            txCarrierOn = false;
-                            presetStatusText = "IDLE";
-                            render();
-                          },
-                        }),
-                        UI.button({ id: "probe_part_version", label: "Probe PART/VERSION", onTap: probePartVersion }),
-                      ],
-                    }),
-                    UI.text({ text: presetStatusText, fontWeight: "medium" }),
-                    UI.text({
-                      text: "GDO0 is serial data. RX: modem output. TX: modem input (GDO0 gates carrier).",
-                      font: "caption",
-                    }),
-                  ],
-                }),
-
-                UI.card({
-                  title: "Packet Mode (optional)",
-                  subtitle: "Quick fixed-length packet TX sanity check",
-                  children: [
-                    UI.grid({
-                      minColumnWidth: 160,
-                      spacing: 12,
-                      children: [
-                        UI.textField({
-                          id: "packet_cs_pin",
-                          fillsWidth: true,
-                          value: String(packetCsPin),
-                          placeholder: "CS pin (default board mapping)",
-                          onChange: function (v) {
-                            var n = parseInt(String(v), 10);
-                            packetCsPin = isFiniteNumber(n) ? n : String(v);
-                            render();
-                          },
-                        }),
-                        UI.button({ id: "packet_init", label: "Init", onTap: packetInitFixed }),
-                        UI.button({ id: "packet_send", label: "Send", onTap: packetSend }),
-                      ],
-                    }),
-                    UI.grid({
-                      minColumnWidth: 220,
-                      spacing: 12,
-                      children: [
-                        UI.textField({
-                          id: "packet_freq_mhz",
-                          fillsWidth: true,
-                          value: String(packetFreqMHz),
-                          placeholder: "Freq MHz (433.92)",
-                          onChange: function (v) {
-                            var n = parseFloat(String(v));
-                            if (isFiniteNumber(n)) packetFreqMHz = n;
-                            render();
-                          },
-                        }),
-                        UI.textField({
-                          id: "packet_data_rate_bps",
-                          fillsWidth: true,
-                          value: String(packetDataRateBps),
-                          placeholder: "Data rate bps (100000)",
-                          onChange: function (v) {
-                            var n = parseInt(String(v), 10);
-                            if (isFiniteNumber(n)) packetDataRateBps = n;
-                            render();
-                          },
-                        }),
-                      ],
-                    }),
-                    UI.text({ text: "Payload (hex, up to 61 bytes)", fontWeight: "medium" }),
-                    UI.textEditor({
-                      id: "packet_payload_hex",
-                      value: packetPayloadHex,
-                      placeholder: "01 02 03 ...",
-                      onChange: function (v) {
-                        packetPayloadHex = String(v);
-                        render();
-                      },
-                      minHeight: 56,
-                      fillsWidth: true,
-                    }),
-                    packetStatus ? UI.text({ text: packetStatus, font: "caption" }) : null,
-                    UI.button({
-                      id: "packet_clear_log",
-                      label: "Clear Log",
-                      onTap: function () {
-                        packetLogLines = [];
-                        render();
-                      },
-                    }),
-                    UI.logViewer({ text: packetLogLines.join("\n"), minHeight: 120 }),
-                  ],
-                }),
-              ],
-            }),
-
-            UI.card({
-              title: "Registers",
-              children: [
-                UI.text({ text: "CONFIG", font: "caption", fontWeight: "semibold" }),
-                UI.grid({
-                  minColumnWidth: 150,
-                  spacing: 8,
-                  children: CC1101_CONFIG_REGISTERS.map(function (name) {
-                    return UI.tile({
-                      title: name,
-                      value: registers[name] || "--",
-                      monospaceValue: true,
-                      onTap: function () {
-                        openRegisterEdit(name);
-                      },
-                    });
-                  }),
-                }),
-
-                UI.divider({}),
-
-                UI.text({ text: "STATUS", font: "caption", fontWeight: "semibold" }),
-                UI.grid({
-                  minColumnWidth: 150,
-                  spacing: 8,
-                  children: CC1101_STATUS_REGISTERS.map(function (name) {
-                    return UI.tile({
-                      title: name,
-                      value: registers[name] || "--",
-                      monospaceValue: true,
-                      onTap: function () {
-                        openRegisterEdit(name);
-                      },
-                    });
-                  }),
-                }),
-
-                UI.divider({}),
-
-                UI.text({ text: "PA TABLE", font: "caption", fontWeight: "semibold" }),
-                UI.grid({
-                  minColumnWidth: 150,
-                  spacing: 8,
-                  children: (function () {
-                    var out = [];
-                    for (var i = 0; i < CC1101_PA_TABLE_SIZE; i += 1) {
-                      var key = "PA_TABLE" + String(i);
-                      out.push(
-                        UI.tile({
-                          title: key,
-                          value: registers[key] || "--",
-                          monospaceValue: true,
-                          onTap: (function (k) {
-                            return function () {
-                              openRegisterEdit(k);
-                            };
-                          })(key),
-                        }),
-                      );
-                    }
-                    return out;
-                  })(),
-                }),
-              ],
-            }),
-          ],
-        }),
-
-      ],
-    }),
+        <Card title="Registers">
+          <Text font="caption" fontWeight="semibold">CONFIG</Text>
+          <Grid minColumnWidth={150} spacing={8}>{registerTiles(CC1101_CONFIG_REGISTERS)}</Grid>
+          <Divider />
+          <Text font="caption" fontWeight="semibold">STATUS</Text>
+          <Grid minColumnWidth={150} spacing={8}>{registerTiles(CC1101_STATUS_REGISTERS)}</Grid>
+          <Divider />
+          <Text font="caption" fontWeight="semibold">PA TABLE</Text>
+          <Grid minColumnWidth={150} spacing={8}>{paTableTiles()}</Grid>
+        </Card>
+      </Column>
+    </Scroll>
   );
 }
 

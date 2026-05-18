@@ -156,7 +156,7 @@ function __emwSendPacket(packet, timeoutMs) {
 }
 
 // Best-effort: hide host primitives that are not part of the public Script API.
-// (Scripts should use SPI/Wire/Serial/etc, not raw command strings.)
+// (Scripts should import hardware libraries, not raw command strings.)
 try { __scriptGlobal._scriptSendPacket = undefined; } catch (e) {}
 try { __scriptGlobal._manualSendCommand = undefined; } catch (e) {}
 try { __scriptGlobal._scriptWrite = undefined; } catch (e) {}
@@ -703,725 +703,154 @@ if (typeof device.boardType !== 'function') {
 }
 __scriptGlobal.device = device;
 
-// -----------------------------------------------------------------------------
-// Arduino-ish API surface (GPIO + SPI + ADC), implemented as thin wrappers over the
-// binary opcode protocol.
-// -----------------------------------------------------------------------------
+var __emwUI = (function () {
+  var idCounter = 0;
 
-if (typeof LOW === 'undefined') {
-  var LOW = 0;
-  __scriptGlobal.LOW = LOW;
-}
-if (typeof HIGH === 'undefined') {
-  var HIGH = 1;
-  __scriptGlobal.HIGH = HIGH;
-}
-
-if (typeof INPUT === 'undefined') {
-  var INPUT = 'INPUT';
-  __scriptGlobal.INPUT = INPUT;
-}
-if (typeof OUTPUT === 'undefined') {
-  var OUTPUT = 'OUTPUT';
-  __scriptGlobal.OUTPUT = OUTPUT;
-}
-
-function __scriptResolvePin(pin) {
-  if (typeof pin === 'number') return pin;
-  var key = String(pin || '').trim();
-  var n = Number(key);
-  if (isFinite(n)) return n;
-  throw new Error('Invalid pin: ' + String(pin));
-}
-
-function __scriptHexBytes(values) {
-  if (typeof values === 'string') {
-    return values.replace(/^0x/i, '').replace(/[^0-9a-f]/gi, '').toUpperCase();
-  }
-  var hex = '';
-  var len = values && typeof values.length === 'number' ? values.length : 0;
-  for (var i = 0; i < len; i += 1) {
-    var v = Number(values[i]) & 0xff;
-    var part = v.toString(16).toUpperCase();
-    if (part.length < 2) part = '0' + part;
-    hex += part;
-  }
-  return hex;
-}
-
-function __scriptAsciiHex(text) {
-  var s = String(text);
-  var hex = '';
-  for (var i = 0; i < s.length; i += 1) {
-    var v = s.charCodeAt(i) & 0xff;
-    var part = v.toString(16).toUpperCase();
-    if (part.length < 2) part = '0' + part;
-    hex += part;
-  }
-  return hex;
-}
-
-function __scriptAsciiBytes(text) {
-  var s = String(text);
-  var out = new Uint8Array(s.length);
-  for (var i = 0; i < s.length; i += 1) {
-    out[i] = s.charCodeAt(i) & 0xff;
-  }
-  return out;
-}
-
-if (typeof pinMode !== 'function') {
-  var pinMode = function (pin, mode) {
-    var pinNumber = __scriptResolvePin(pin);
-    if (String(mode) === INPUT) {
-      return __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_IN, pinNumber & 0xff]), 1500);
+  var ensureId = function (type, props) {
+    if (props && typeof props.id === 'string' && props.id.length > 0) {
+      return props.id;
     }
-    if (String(mode) === OUTPUT) {
-      return __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_OUT, pinNumber & 0xff]), 1500);
+    idCounter += 1;
+    return type + '_' + idCounter;
+  };
+
+  var normalizeProps = function (type, props) {
+    var assigned = props ? Object.assign({}, props) : {};
+    delete assigned.x;
+    delete assigned.y;
+    delete assigned.left;
+    delete assigned.top;
+    delete assigned.right;
+    delete assigned.bottom;
+    if (typeof assigned.position === 'string' && assigned.position.toLowerCase() === 'absolute') {
+      delete assigned.position;
     }
-    throw new Error('pinMode: unsupported mode ' + String(mode));
-  };
-  __scriptGlobal.pinMode = pinMode;
-}
+    var children = Array.isArray(assigned.children) ? assigned.children : [];
+    delete assigned.children;
+    var id = ensureId(type, assigned);
+    assigned.id = id;
 
-if (typeof digitalWrite !== 'function') {
-  var digitalWrite = function (pin, value) {
-    var pinNumber = __scriptResolvePin(pin);
-    var level = Number(value) ? 1 : 0;
-    return __emwSendPacket(
-      new Uint8Array([EMW_OP_GPIO, level ? EMW_GPIO_HIGH : EMW_GPIO_LOW, pinNumber & 0xff]),
-      1500,
-    );
-  };
-  __scriptGlobal.digitalWrite = digitalWrite;
-}
-
-if (typeof digitalRead !== 'function') {
-  var digitalRead = function (pin) {
-    var pinNumber = __scriptResolvePin(pin);
-    var resp = __emwSendPacket(new Uint8Array([EMW_OP_GPIO, EMW_GPIO_READ, pinNumber & 0xff]), 1500);
-    if (resp && typeof resp.then === 'function') {
-      return resp.then(function (bytes) {
-        return bytes && bytes.length > 1 ? (bytes[1] ? HIGH : LOW) : LOW;
-      });
+    var cleanedChildren = [];
+    for (var i = 0; i < children.length; i += 1) {
+      var child = children[i];
+      if (child !== null && child !== undefined) {
+        cleanedChildren.push(child);
+      }
     }
-    return resp && resp.length > 1 ? (resp[1] ? HIGH : LOW) : LOW;
-  };
-  __scriptGlobal.digitalRead = digitalRead;
-}
 
-if (typeof SPI === 'undefined') {
-  var SPI = {
-    transfer: function (txBytes, opts) {
-      var cs = opts && typeof opts.cs !== 'undefined' ? __scriptResolvePin(opts.cs) : undefined;
-      var rxLength = opts && typeof opts.rxLength === 'number' ? opts.rxLength : undefined;
-
-      var csEnc = typeof cs === 'number' ? (cs & 0xff) : 4;
-      var rxLen = typeof rxLength === 'number' ? (rxLength | 0) : 0;
-      if (rxLen < 0) rxLen = 0;
-      if (rxLen > 62) rxLen = 62;
-
-      var tx = txBytes instanceof Uint8Array ? txBytes : new Uint8Array(txBytes || []);
-      var txLen = tx.length;
-      if (txLen > 60) txLen = 60;
-
-      var pkt = new Uint8Array(4 + txLen);
-      pkt[0] = EMW_OP_SPI_XFER;
-      pkt[1] = csEnc;
-      pkt[2] = rxLen & 0xff;
-      pkt[3] = txLen & 0xff;
-      for (var i = 0; i < txLen; i += 1) {
-        pkt[4 + i] = tx[i] & 0xff;
-      }
-
-      var resp = __emwSendPacket(pkt, 1500);
-      var want = rxLen > 0 ? rxLen : txLen;
-      if (resp && typeof resp.then === 'function') {
-        return resp.then(function (bytes) {
-          return bytes.slice(1, 1 + want);
-        });
-      }
-      return resp.slice(1, 1 + want);
-    },
+    return { id: id, props: assigned, children: cleanedChildren };
   };
 
-  __scriptGlobal.SPI = SPI;
-}
-
-if (typeof Serial === 'undefined') {
-  var Serial = {
-    begin: function (baud, opts) {
-      var b = typeof baud === 'number' ? baud | 0 : 115200;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      var pkt = new Uint8Array(6);
-      pkt[0] = EMW_OP_UART;
-      pkt[1] = EMW_UART_OPEN;
-      __emwWriteU32LE(pkt, 2, b);
-      return __emwSendPacket(pkt, timeout);
-    },
-    end: function (opts) {
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __emwSendPacket(new Uint8Array([EMW_OP_UART, EMW_UART_CLOSE]), timeout);
-    },
-    write: function (data, opts) {
-      var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      var tx = typeof data === 'string' ? __scriptAsciiBytes(data) : (data instanceof Uint8Array ? data : new Uint8Array(data || []));
-      var txLen = tx.length;
-      if (txLen > 54) txLen = 54;
-      var pkt = new Uint8Array(9 + txLen);
-      pkt[0] = EMW_OP_UART;
-      pkt[1] = EMW_UART_WRITE;
-      __emwWriteU32LE(pkt, 2, typeof baud === 'number' && isFinite(baud) && baud > 0 ? baud : 0);
-      __emwWriteU16LE(pkt, 6, timeout);
-      pkt[8] = txLen & 0xff;
-      for (var i = 0; i < txLen; i += 1) {
-        pkt[9 + i] = tx[i] & 0xff;
+  var collectHandlers = function (id, props) {
+    var handlers = {};
+    var events = [
+      { key: 'onTap', type: 'tap' },
+      { key: 'onChange', type: 'change' },
+      { key: 'onSubmit', type: 'submit' },
+      { key: 'onViewportChange', type: 'viewport' },
+      { key: 'onSelectRange', type: 'select' },
+      { key: 'onCursorMove', type: 'cursor' },
+      { key: 'onClose', type: 'close' },
+    ];
+    events.forEach(function (event) {
+      var fn = props[event.key];
+      if (typeof fn === 'function') {
+        var token = event.type + ':' + id;
+        _scriptRegisterCallback(token, fn);
+        handlers[event.type] = token;
       }
-      var resp = __emwSendPacket(pkt, timeout);
-      if (resp && typeof resp.then === 'function') {
-        return resp.then(function (bytes) {
-          return bytes.slice(1, 2); // payload[0] = written
-        });
+      if (Object.prototype.hasOwnProperty.call(props, event.key)) {
+        delete props[event.key];
       }
-      return resp.slice(1, 2);
-    },
-    read: function (n, opts) {
-      var len = Number(n) | 0;
-      if (len < 0) len = 0;
-      if (len > 63) len = 63;
-      var baud = opts && typeof opts.baud === 'number' ? opts.baud | 0 : undefined;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var pkt = new Uint8Array(9);
-      pkt[0] = EMW_OP_UART;
-      pkt[1] = EMW_UART_READ;
-      __emwWriteU32LE(pkt, 2, typeof baud === 'number' && isFinite(baud) && baud > 0 ? baud : 0);
-      __emwWriteU16LE(pkt, 6, timeout);
-      pkt[8] = len & 0xff;
-      var resp = __emwSendPacket(pkt, timeout);
-      var parse = function (bytes) {
-        var got = bytes && bytes.length > 1 ? (bytes[1] & 0xff) : 0;
-        return bytes.slice(2, 2 + got);
-      };
-      if (resp && typeof resp.then === 'function') {
-        return resp.then(parse);
-      }
-      return parse(resp);
-    },
-  };
-
-  __scriptGlobal.Serial = Serial;
-}
-
-if (typeof Wire === 'undefined') {
-  var Wire = {
-    begin: function (hz, opts) {
-      var h = typeof hz === 'number' ? hz | 0 : 100000;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      var pkt = new Uint8Array(6);
-      pkt[0] = EMW_OP_I2C;
-      pkt[1] = EMW_I2C_OPEN;
-      __emwWriteU32LE(pkt, 2, h);
-      return __emwSendPacket(pkt, timeout);
-    },
-    end: function (opts) {
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 1500;
-      return __emwSendPacket(new Uint8Array([EMW_OP_I2C, EMW_I2C_CLOSE]), timeout);
-    },
-    write: function (addr, data, opts) {
-      var a = Number(addr) | 0;
-      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var tx = data instanceof Uint8Array ? data : new Uint8Array(data || []);
-      var txLen = tx.length;
-      if (txLen > 52) txLen = 52;
-
-      var pkt = new Uint8Array(11 + txLen);
-      pkt[0] = EMW_OP_I2C;
-      pkt[1] = EMW_I2C_WRITE;
-      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
-      __emwWriteU16LE(pkt, 6, timeout);
-      pkt[8] = a & 0x7f;
-      pkt[9] = txLen & 0xff;
-      pkt[10] = 0;
-      for (var i = 0; i < txLen; i += 1) {
-        pkt[11 + i] = tx[i] & 0xff;
-      }
-      return __emwSendPacket(pkt, timeout);
-    },
-    read: function (addr, n, opts) {
-      var a = Number(addr) | 0;
-      var len = Number(n) | 0;
-      if (len < 0) len = 0;
-      if (len > 63) len = 63;
-      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var pkt = new Uint8Array(11);
-      pkt[0] = EMW_OP_I2C;
-      pkt[1] = EMW_I2C_READ;
-      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
-      __emwWriteU16LE(pkt, 6, timeout);
-      pkt[8] = a & 0x7f;
-      pkt[9] = len & 0xff;
-      pkt[10] = 0;
-      var resp = __emwSendPacket(pkt, timeout);
-      var parse = function (bytes) {
-        return bytes.slice(1, 1 + len);
-      };
-      if (resp && typeof resp.then === 'function') {
-        return resp.then(parse);
-      }
-      return parse(resp);
-    },
-    xfer: function (addr, tx, rxLen, opts) {
-      var a = Number(addr) | 0;
-      var len = Number(rxLen) | 0;
-      if (len < 0) len = 0;
-      if (len > 63) len = 63;
-      var hz = opts && typeof opts.hz === 'number' ? opts.hz | 0 : undefined;
-      var timeout = opts && typeof opts.timeout === 'number' ? opts.timeout | 0 : 250;
-      var txBytes = tx instanceof Uint8Array ? tx : new Uint8Array(tx || []);
-      var txLen = txBytes.length;
-      if (txLen > 51) txLen = 51;
-      if (len > 62) len = 62;
-
-      var pkt = new Uint8Array(11 + txLen);
-      pkt[0] = EMW_OP_I2C;
-      pkt[1] = EMW_I2C_XFER;
-      __emwWriteU32LE(pkt, 2, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
-      __emwWriteU16LE(pkt, 6, timeout);
-      pkt[8] = a & 0x7f;
-      pkt[9] = txLen & 0xff;
-      pkt[10] = len & 0xff;
-      for (var i = 0; i < txLen; i += 1) {
-        pkt[11 + i] = txBytes[i] & 0xff;
-      }
-
-      var resp = __emwSendPacket(pkt, timeout);
-      var parse = function (bytes) {
-        return bytes.slice(1, 1 + len);
-      };
-      if (resp && typeof resp.then === 'function') {
-        return resp.then(parse);
-      }
-      return parse(resp);
-    },
-  };
-
-  __scriptGlobal.Wire = Wire;
-}
-
-if (typeof analogReadResolution !== 'function') {
-  var analogReadResolution = function (bits) {
-    var n = Number(bits);
-    if (!isFinite(n) || n < 1 || n > 16) {
-      throw new Error('analogReadResolution: invalid bits ' + String(bits));
-    }
-    __scriptGlobal.__scriptAnalogReadResolution = n | 0;
-  };
-  __scriptGlobal.analogReadResolution = analogReadResolution;
-}
-
-function __scriptU16FromBytes(bytes) {
-  if (!bytes || bytes.length < 2) return 0;
-  var lo = bytes[0] & 0xff;
-  var hi = bytes[1] & 0xff;
-  return (hi << 8) | lo;
-}
-
-function __scriptScaleAnalogRead(value12) {
-  var bits = __scriptGlobal.__scriptAnalogReadResolution;
-  if (typeof bits !== 'number' || !isFinite(bits) || bits <= 0) bits = 12;
-
-  var v = Number(value12) | 0;
-  if (bits === 12) return v;
-  if (bits > 12) return v << (bits - 12);
-  return v >> (12 - bits);
-}
-
-if (typeof analogRead !== 'function') {
-  var analogRead = function (pin, opts) {
-    var pinNumber = __scriptResolvePin(pin);
-    var samples = opts && typeof opts.samples === 'number' ? (opts.samples | 0) : 1;
-    if (samples < 1) samples = 1;
-    if (samples > 64) samples = 64;
-
-    var pkt = new Uint8Array([EMW_OP_ADC_READ, EMW_ADC_SRC_PIN, pinNumber & 0xff, samples & 0xff]);
-    var resp = __emwSendPacket(pkt, 1500);
-    if (resp && typeof resp.then === 'function') {
-      return resp.then(function (bytes) {
-        return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(bytes)));
-      });
-    }
-    return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(resp)));
-  };
-  __scriptGlobal.analogRead = analogRead;
-}
-
-function __scriptAnalogReadInternal(src, opts) {
-  var samples = opts && typeof opts.samples === 'number' ? (opts.samples | 0) : 1;
-  if (samples < 1) samples = 1;
-  if (samples > 64) samples = 64;
-
-  var s = String(src);
-  var srcCode = EMW_ADC_SRC_VREFINT;
-  if (s === 'temp') srcCode = EMW_ADC_SRC_TEMP;
-  else if (s === 'vbat') srcCode = EMW_ADC_SRC_VBAT;
-  else if (s === 'vrefint') srcCode = EMW_ADC_SRC_VREFINT;
-
-  var pkt = new Uint8Array([EMW_OP_ADC_READ, srcCode & 0xff, 0, samples & 0xff]);
-  var resp = __emwSendPacket(pkt, 1500);
-  if (resp && typeof resp.then === 'function') {
-    return resp.then(function (bytes) {
-      return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(bytes)));
     });
-  }
-  return __scriptScaleAnalogRead(__scriptU16FromBytes(__emwPayload(resp)));
-}
-
-if (typeof analogReadVrefint !== 'function') {
-  var analogReadVrefint = function (opts) {
-    return __scriptAnalogReadInternal('vrefint', opts);
+    return handlers;
   };
-  __scriptGlobal.analogReadVrefint = analogReadVrefint;
-}
 
-if (typeof analogReadTemp !== 'function') {
-  var analogReadTemp = function (opts) {
-    return __scriptAnalogReadInternal('temp', opts);
-  };
-  __scriptGlobal.analogReadTemp = analogReadTemp;
-}
-
-if (typeof analogReadVbat !== 'function') {
-  var analogReadVbat = function (opts) {
-    return __scriptAnalogReadInternal('vbat', opts);
-  };
-  __scriptGlobal.analogReadVbat = analogReadVbat;
-}
-
-if (typeof analogWriteResolution !== 'function') {
-  var analogWriteResolution = function (bits) {
-    var n = Number(bits);
-    if (!isFinite(n) || n < 1 || n > 16) {
-      throw new Error('analogWriteResolution: invalid bits ' + String(bits));
-    }
-    __scriptGlobal.__scriptAnalogWriteResolution = n | 0;
-  };
-  __scriptGlobal.analogWriteResolution = analogWriteResolution;
-}
-
-function __scriptScaleAnalogWrite(value) {
-  var bits = __scriptGlobal.__scriptAnalogWriteResolution;
-  if (typeof bits !== 'number' || !isFinite(bits) || bits <= 0) bits = 12;
-
-  var v = Number(value) | 0;
-  if (v < 0) v = 0;
-
-  var max = bits >= 31 ? 0x7fffffff : (1 << bits) - 1;
-  if (v > max) v = max;
-
-  if (bits === 12) return v;
-  if (bits > 12) return v >> (bits - 12);
-  return v << (12 - bits);
-}
-
-if (typeof analogWrite !== 'function') {
-  var analogWrite = function (pin, value, opts) {
-    var pinNumber = __scriptResolvePin(pin);
-    var v12 = __scriptScaleAnalogWrite(value);
-
-    var hz = opts && typeof opts.hz === 'number' ? (opts.hz | 0) : undefined;
-    var timeout = opts && typeof opts.timeout === 'number' ? (opts.timeout | 0) : 1500;
-
-    var pkt = new Uint8Array(9);
-    pkt[0] = EMW_OP_PWM;
-    pkt[1] = EMW_PWM_WRITE;
-    pkt[2] = pinNumber & 0xff;
-    __emwWriteU16LE(pkt, 3, v12);
-    __emwWriteU32LE(pkt, 5, typeof hz === 'number' && isFinite(hz) && hz > 0 ? hz : 0);
-
-    return __emwSendPacket(pkt, timeout);
-  };
-  __scriptGlobal.analogWrite = analogWrite;
-}
-
-  if (typeof UI === 'undefined') {
-  var UI = (function () {
-    var idCounter = 0;
-
-    var ensureId = function (type, props) {
-      if (props && typeof props.id === 'string' && props.id.length > 0) {
-        return props.id;
-      }
-      idCounter += 1;
-      return type + '_' + idCounter;
-    };
-
-    var normalizeProps = function (type, props) {
-      var assigned = props ? Object.assign({}, props) : {};
-      delete assigned.x;
-      delete assigned.y;
-      delete assigned.left;
-      delete assigned.top;
-      delete assigned.right;
-      delete assigned.bottom;
-      if (typeof assigned.position === 'string' && assigned.position.toLowerCase() === 'absolute') {
-        delete assigned.position;
-      }
-      var children = Array.isArray(assigned.children) ? assigned.children : [];
-      delete assigned.children;
-      var id = ensureId(type, assigned);
-      assigned.id = id;
-
-      var cleanedChildren = [];
-      for (var i = 0; i < children.length; i += 1) {
-        var child = children[i];
-        if (child !== null && child !== undefined) {
-          cleanedChildren.push(child);
-        }
-      }
-
-      return { id: id, props: assigned, children: cleanedChildren };
-    };
-
-    var collectHandlers = function (id, props) {
-      var handlers = {};
-      var events = [
-        { key: 'onTap', type: 'tap' },
-        { key: 'onChange', type: 'change' },
-        { key: 'onSubmit', type: 'submit' },
-        // Extended event surface (desktop-only nodes can use these).
-        { key: 'onViewportChange', type: 'viewport' },
-        { key: 'onSelectRange', type: 'select' },
-        { key: 'onCursorMove', type: 'cursor' },
-        { key: 'onClose', type: 'close' },
-      ];
-      events.forEach(function (event) {
-        var fn = props[event.key];
-        if (typeof fn === 'function') {
-          var token = event.type + ':' + id;
-          _scriptRegisterCallback(token, fn);
-          handlers[event.type] = token;
-        }
-        if (Object.prototype.hasOwnProperty.call(props, event.key)) {
-          delete props[event.key];
-        }
-      });
-      return handlers;
-    };
-
-    var makeNode = function (type, props) {
-      var normalized = normalizeProps(type, props);
-      var handlerTokens = collectHandlers(normalized.id, normalized.props);
-      return {
-        type: type,
-        id: normalized.id,
-        props: normalized.props,
-        children: normalized.children,
-        handlers: handlerTokens,
-      };
-    };
-
+  var makeNode = function (type, props) {
+    var normalized = normalizeProps(type, props);
+    var handlerTokens = collectHandlers(normalized.id, normalized.props);
     return {
-      column: function (props) {
-        return makeNode('column', props || {});
-      },
-      row: function (props) {
-        return makeNode('row', props || {});
-      },
-      card: function (props) {
-        return makeNode('card', props || {});
-      },
-      text: function (props) {
-        return makeNode('text', props || {});
-      },
-      button: function (props) {
-        return makeNode('button', props || {});
-      },
-      tile: function (props) {
-        return makeNode('tile', props || {});
-      },
-      slider: function (props) {
-        return makeNode('slider', props || {});
-      },
-      logViewer: function (props) {
-        return makeNode('logViewer', props || {});
-      },
-      scroll: function (props) {
-        return makeNode('scroll', props || {});
-      },
-      textField: function (props) {
-        return makeNode('textField', props || {});
-      },
-      textEditor: function (props) {
-        return makeNode('textEditor', props || {});
-      },
-        picker: function (props) {
-          return makeNode('picker', props || {});
-        },
-        toggle: function (props) {
-          return makeNode('toggle', props || {});
-        },
-        grid: function (props) {
-          return makeNode('grid', props || {});
-        },
-        plot: function (props) {
-          return makeNode('plot', props || {});
-        },
-        modal: function (props) {
-          return makeNode('modal', props || {});
-        },
-        spacer: function (props) {
-          return makeNode('spacer', props || {});
-        },
-        divider: function (props) {
-          return makeNode('divider', props || {});
-      },
-      progress: function (props) {
-        return makeNode('progress', props || {});
-      },
-      render: function (node) {
-        if (!node || typeof node !== 'object') {
-          return;
-        }
-        // Host expects JSON string.
-        try {
-          _scriptRender(JSON.stringify(node));
-        } catch (e) {
-          // Best-effort fallback.
-          _scriptRender('{}');
-        }
-      },
+      type: type,
+      id: normalized.id,
+      props: normalized.props,
+      children: normalized.children,
+      handlers: handlerTokens,
     };
-  })();
-}
-
-__scriptGlobal.UI = UI;
-
-// JSX authoring helper.
-//
-// Native Apple hosts can transpile a small JSX subset to `JSX.h(...)` calls before
-// JavaScriptCore evaluates the script. Keep this helper as sugar over the stable
-// `UI.*` node API so the native renderers continue to consume the same tree.
-if (typeof JSX === 'undefined') {
-  var JSX = (function () {
-    var tagMap = {
-      Column: 'column',
-      Row: 'row',
-      Card: 'card',
-      Text: 'text',
-      Button: 'button',
-      Tile: 'tile',
-      Slider: 'slider',
-      LogViewer: 'logViewer',
-      Scroll: 'scroll',
-      TextField: 'textField',
-      TextEditor: 'textEditor',
-      Picker: 'picker',
-      Toggle: 'toggle',
-      Grid: 'grid',
-      Plot: 'plot',
-      Modal: 'modal',
-      Spacer: 'spacer',
-      Divider: 'divider',
-      Progress: 'progress',
-    };
-
-    function flattenChildren(input, out) {
-      for (var i = 0; i < input.length; i += 1) {
-        var child = input[i];
-        if (child === null || child === undefined || child === false) {
-          continue;
-        }
-        if (Array.isArray(child)) {
-          flattenChildren(child, out);
-          continue;
-        }
-        out.push(child);
-      }
-      return out;
-    }
-
-    function h(type, props) {
-      var assigned = props ? Object.assign({}, props) : {};
-      var children = flattenChildren(Array.prototype.slice.call(arguments, 2), []);
-      if (children.length) {
-        assigned.children = children;
-      }
-
-      if (typeof type === 'function') {
-        return type(assigned);
-      }
-
-      var tag = String(type || '');
-      var factoryName = tagMap[tag] || tag;
-      var factory = UI && UI[factoryName];
-      if (typeof factory !== 'function') {
-        throw new Error('Unknown JSX UI tag: ' + tag);
-      }
-
-      if (factoryName === 'text' && assigned.text == null && children.length) {
-        assigned.text = children.map(function (child) { return String(child); }).join('');
-        children = [];
-      } else if (factoryName === 'button' && assigned.label == null && children.length) {
-        assigned.label = children.map(function (child) { return String(child); }).join('');
-        children = [];
-      }
-
-      if (children.length) {
-        assigned.children = children;
-      }
-      return factory(assigned);
-    }
-
-    return { h: h };
-  })();
-}
-
-__scriptGlobal.JSX = JSX;
-
-// Primitive tag constants used by the Swift JSX transpiler. These let scripts
-// write `<Column>` while still resolving primitives through `JSX.h(...)`.
-var Column = 'Column';
-var Row = 'Row';
-var Card = 'Card';
-var Text = 'Text';
-var Button = 'Button';
-var Tile = 'Tile';
-var Slider = 'Slider';
-var LogViewer = 'LogViewer';
-var Scroll = 'Scroll';
-var TextField = 'TextField';
-var TextEditor = 'TextEditor';
-var Picker = 'Picker';
-var Toggle = 'Toggle';
-var Grid = 'Grid';
-var Plot = 'Plot';
-var Modal = 'Modal';
-var Spacer = 'Spacer';
-var Divider = 'Divider';
-var Progress = 'Progress';
-
-// JSX-facing render entry point. `UI.render(...)` remains the stable lower-level
-// API for existing scripts.
-if (typeof render !== 'function') {
-  var render = function (node) {
-    return UI.render(node);
   };
-  __scriptGlobal.render = render;
+
+  return {
+    column: function (props) { return makeNode('column', props || {}); },
+    row: function (props) { return makeNode('row', props || {}); },
+    card: function (props) { return makeNode('card', props || {}); },
+    text: function (props) { return makeNode('text', props || {}); },
+    button: function (props) { return makeNode('button', props || {}); },
+    tile: function (props) { return makeNode('tile', props || {}); },
+    slider: function (props) { return makeNode('slider', props || {}); },
+    logViewer: function (props) { return makeNode('logViewer', props || {}); },
+    scroll: function (props) { return makeNode('scroll', props || {}); },
+    textField: function (props) { return makeNode('textField', props || {}); },
+    textEditor: function (props) { return makeNode('textEditor', props || {}); },
+    picker: function (props) { return makeNode('picker', props || {}); },
+    toggle: function (props) { return makeNode('toggle', props || {}); },
+    grid: function (props) { return makeNode('grid', props || {}); },
+    plot: function (props) { return makeNode('plot', props || {}); },
+    modal: function (props) { return makeNode('modal', props || {}); },
+    spacer: function (props) { return makeNode('spacer', props || {}); },
+    divider: function (props) { return makeNode('divider', props || {}); },
+    progress: function (props) { return makeNode('progress', props || {}); },
+    buffer: function (bytes) {
+      if (typeof _scriptPlotBufferSet !== 'function') {
+        throw new Error('plot buffer unavailable on this host');
+      }
+      return String(_scriptPlotBufferSet(bytes) || '');
+    },
+    render: function (node) {
+      if (!node || typeof node !== 'object') return;
+      try {
+        _scriptRender(JSON.stringify(node));
+      } catch (e) {
+        _scriptRender('{}');
+      }
+    },
+  };
+})();
+
+var __emwJSX = (function () {
+  function flattenChildren(input, out) {
+    for (var i = 0; i < input.length; i += 1) {
+      var child = input[i];
+      if (child === null || child === undefined || child === false) continue;
+      if (Array.isArray(child)) {
+        flattenChildren(child, out);
+        continue;
+      }
+      out.push(child);
+    }
+    return out;
+  }
+
+  function h(type, props) {
+    var assigned = props ? Object.assign({}, props) : {};
+    var children = flattenChildren(Array.prototype.slice.call(arguments, 2), []);
+    if (children.length) assigned.children = children;
+
+    if (typeof type === 'function') {
+      return type(assigned);
+    }
+
+    throw new Error('Unknown JSX UI tag: ' + String(type || ''));
+  }
+
+  return { h: h };
+})();
+
+function __emwRender(node) {
+  return __emwUI.render(node);
 }
 
-// Create a native-side plot buffer and return an id.
-// This avoids embedding large arrays into the UI tree.
-if (__scriptGlobal.UI) {
-  __scriptGlobal.UI.buffer = function (bytes) {
-    if (typeof _scriptPlotBufferSet !== 'function') {
-      throw new Error('UI.buffer unavailable on this host');
-    }
-    return String(_scriptPlotBufferSet(bytes) || '');
-  };
-}
+__scriptGlobal.__emwUI = __emwUI;
+__scriptGlobal.__emwJSX = __emwJSX;
+__scriptGlobal.__emwRender = __emwRender;
 
 // -----------------------------------------------------------------------------
 // Desktop host helpers (optional)

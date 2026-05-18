@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  JSX: JSX,
-  h: JSX.h,
-  render: render
+  JSX: __emwJSX,
+  h: __emwJSX.h,
+  render: __emwRender
 };

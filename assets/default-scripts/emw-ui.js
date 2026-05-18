@@ -1,8 +1,23 @@
 'use strict';
 
+var ui = __emwUI;
+
+function flattenChildren(input, out) {
+  for (var i = 0; i < input.length; i += 1) {
+    var child = input[i];
+    if (child === null || child === undefined || child === false) continue;
+    if (Array.isArray(child)) {
+      flattenChildren(child, out);
+      continue;
+    }
+    out.push(child);
+  }
+  return out;
+}
+
 function factory(name) {
   return function (props) {
-    return UI[name](props || {});
+    return ui[name](props || {});
   };
 }
 
@@ -10,10 +25,12 @@ function textFactory(name, textProp) {
   return function (props) {
     var assigned = Object.assign({}, props || {});
     if (assigned[textProp] == null && Array.isArray(assigned.children) && assigned.children.length) {
-      assigned[textProp] = assigned.children.map(function (child) { return String(child); }).join('');
+      assigned[textProp] = flattenChildren(assigned.children, []).map(function (child) {
+        return String(child);
+      }).join('');
       delete assigned.children;
     }
-    return UI[name](assigned);
+    return ui[name](assigned);
   };
 }
 
@@ -38,8 +55,8 @@ var Divider = factory('divider');
 var Progress = factory('progress');
 
 module.exports = {
-  UI: UI,
-  render: function (node) { return UI.render(node); },
+  render: function (node) { return __emwRender(node); },
+  buffer: function (bytes) { return ui.buffer(bytes); },
   Column: Column,
   Row: Row,
   Card: Card,

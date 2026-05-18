@@ -22,13 +22,13 @@
   <img src="https://continualmi.com/emwaver/banner.jpeg" alt="EMWaver running across phone, desktop, and supported boards" width="860">
 </p>
 
-EMWaver turns supported MCU boards into a scriptable hardware lab. It is built around local apps, local scripts, managed firmware, and an optional Agent workflow for writing and debugging `.emw` scripts.
+EMWaver turns supported MCU boards into a scriptable hardware lab. It is built around local apps, local JavaScript scripts, managed firmware, and an optional Agent workflow for writing and debugging hardware scripts.
 
 The core hardware-control path is open and local-first: no EMWaver account, no cloud activation, no hosted relay, no subscription check, and no cloud script storage requirement.
 
 ## What EMWaver Is
 
-- A script-first electronics platform for running `.emw` scripts against real hardware.
+- A script-first electronics platform for running local JavaScript scripts against real hardware.
 - A managed multi-transport runtime where USB is first-class, with BLE and Wi-Fi available for board classes designed around them.
 - Native client surfaces for Android, iOS, macOS, and Windows.
 - A software-first platform where users bring a supported board and EMWaver manages the runtime and firmware setup where practical.
@@ -54,7 +54,7 @@ stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 firmware/                Bundled firmware payloads consumed by apps
 hardware/                Imported hardware design repositories
-assets/default-scripts/  Bundled example .emw scripts
+assets/default-scripts/  Bundled example .js scripts and emw-* libraries
 simulator/               Mock and virtual transport direction
 videos/                  Video planning and launch media notes
 ```
@@ -70,7 +70,7 @@ For end users:
    - [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
    - [macOS DMG](https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg)
    - [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
-3. Open the [documentation](https://continualmi.com/emwaver/docs) and run local `.emw` scripts.
+3. Open the [documentation](https://continualmi.com/emwaver/docs) and run local scripts.
 
 App Store, Google Play, and Microsoft Store listings are coming soon.
 
@@ -100,7 +100,7 @@ native app
 
 ## Agent Direction
 
-EMWaver's Agent is optional. It should help users write, explain, debug, and improve `.emw` scripts using local script/device/UI/error context when the user chooses to ask for help.
+EMWaver's Agent is optional. It should help users write, explain, debug, and improve local JavaScript scripts using local script/device/UI/error context when the user chooses to ask for help.
 
 Agent usage is the planned paid product direction through a future Continual MI/MGPT backend API key. Local hardware control must continue to work without that key.
 

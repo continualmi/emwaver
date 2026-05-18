@@ -1,8 +1,11 @@
 'use strict';
 
 // Synthetic chart debug script.
-// Generates a large square wave and renders it via UI.plot.
+// Generates a large square wave and renders it via Plot.
 // The plot component performs viewport compression internally.
+
+import { JSX, render as renderTree } from "emw-jsx";
+import { buffer, Button, Column, Plot, Row, Scroll, Text, TextField } from "emw-ui";
 
 function i(v, d) {
   var n = parseInt(String(v || '').trim(), 10);
@@ -90,15 +93,11 @@ function __makeSquareWaveBytes(bitCount, periodBits) {
 function generate() {
   err = '';
   try {
-    if (!UI || typeof UI.buffer !== 'function') {
-      throw new Error('UI.buffer unavailable on this host');
-    }
-
     var bitCount = clamp(i(sampleCountText, 200000), 1, 2000000);
     var period = clamp(i(periodText, 200), 2, 100000);
     var bytes = __makeSquareWaveBytes(bitCount, period);
 
-    plotBufId = String(UI.buffer(bytes) || '');
+    plotBufId = String(buffer(bytes) || '');
     bufLen = bytes.length;
     xMin = 0;
     xMax = Math.min(10000, bufLen * 8);
@@ -110,87 +109,65 @@ function generate() {
 }
 
 function render() {
-  UI.render(
-    UI.scroll({
-      padding: 16,
-      spacing: 12,
-      children: [
-        UI.column({
-          spacing: 4,
-          children: [
-            UI.text({ text: 'Chart Debug', font: 'title2', fontWeight: 'semibold' }),
-            UI.text({
-              text:
-                'Bits: ' + String(bufLen * 8) +
-                ' • Period: ' + String(periodText) +
-                ' • View: ' + String(xMin) + '…' + String(xMax),
-              font: 'caption',
-            }),
-          ],
-        }),
+  renderTree(<App />);
+}
 
-        UI.plot({
-          height: 320,
-          source: { kind: 'buffer', id: plotBufId },
-          bins: clamp(i(binsText, 900), 64, 12000),
-          xMin: xMin,
-          xMax: xMax,
-          yMin: 0,
-          yMax: 255,
-          errorText: err,
-          onViewportChange: function (r) {
-            var range = __parseViewportRange(r);
-            if (!range) return;
-            __scheduleViewport(range.min, range.max);
-          },
-        }),
-
-        UI.row({
-          spacing: 10,
-          children: [
-                UI.button({
-                  label: 'Reset view',
-                  onTap: function () {
-                    xMin = 0;
-                    xMax = Math.min(10000, bufLen * 8);
-                    render();
-                  },
-                }),
-                UI.button({
-                  label: 'Regenerate',
-                  onTap: function () {
-                    generate();
-                    render();
-                  },
-                }),
-          ],
-        }),
-
-        UI.row({
-          spacing: 10,
-          children: [
-            UI.textField({
-              value: sampleCountText,
-              placeholder: 'Samples (e.g. 200000)',
-              onChange: function (v) { sampleCountText = String(v); },
-              onSubmit: function () { generate(); render(); },
-            }),
-            UI.textField({
-              value: periodText,
-              placeholder: 'Period (e.g. 200)',
-              onChange: function (v) { periodText = String(v); },
-              onSubmit: function () { generate(); render(); },
-            }),
-            UI.textField({
-              value: binsText,
-              placeholder: 'Bins (e.g. 900)',
-              onChange: function (v) { binsText = String(v); },
-              onSubmit: function () { render(); },
-            }),
-          ],
-        }),
-      ],
-    })
+function App() {
+  return (
+    <Scroll padding={16} spacing={12}>
+      <Column spacing={4}>
+        <Text font="title2" fontWeight="semibold">Chart Debug</Text>
+        <Text font="caption">
+          {'Bits: ' + String(bufLen * 8) + ' • Period: ' + String(periodText) + ' • View: ' + String(xMin) + '…' + String(xMax)}
+        </Text>
+      </Column>
+      <Plot
+        height={320}
+        source={{ kind: 'buffer', id: plotBufId }}
+        bins={clamp(i(binsText, 900), 64, 12000)}
+        xMin={xMin}
+        xMax={xMax}
+        yMin={0}
+        yMax={255}
+        errorText={err}
+        onViewportChange={(r) => {
+          var range = __parseViewportRange(r);
+          if (!range) return;
+          __scheduleViewport(range.min, range.max);
+        }}
+      />
+      <Row spacing={10}>
+        <Button onTap={() => {
+          xMin = 0;
+          xMax = Math.min(10000, bufLen * 8);
+          render();
+        }}>Reset view</Button>
+        <Button onTap={() => {
+          generate();
+          render();
+        }}>Regenerate</Button>
+      </Row>
+      <Row spacing={10}>
+        <TextField
+          value={sampleCountText}
+          placeholder="Samples (e.g. 200000)"
+          onChange={(v) => { sampleCountText = String(v); }}
+          onSubmit={() => { generate(); render(); }}
+        />
+        <TextField
+          value={periodText}
+          placeholder="Period (e.g. 200)"
+          onChange={(v) => { periodText = String(v); }}
+          onSubmit={() => { generate(); render(); }}
+        />
+        <TextField
+          value={binsText}
+          placeholder="Bins (e.g. 900)"
+          onChange={(v) => { binsText = String(v); }}
+          onSubmit={() => { render(); }}
+        />
+      </Row>
+    </Scroll>
   );
 }
 

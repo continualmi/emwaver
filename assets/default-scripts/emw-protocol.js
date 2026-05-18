@@ -35,5 +35,34 @@ module.exports = {
     sample: EMW_OP_SAMPLE,
     pwm: EMW_OP_PWM,
     transmit: EMW_OP_TRANSMIT
+  },
+  gpio: {
+    input: EMW_GPIO_IN,
+    output: EMW_GPIO_OUT,
+    read: EMW_GPIO_READ,
+    high: EMW_GPIO_HIGH,
+    low: EMW_GPIO_LOW
+  },
+  adc: {
+    pin: EMW_ADC_SRC_PIN,
+    temp: EMW_ADC_SRC_TEMP,
+    vrefint: EMW_ADC_SRC_VREFINT,
+    vbat: EMW_ADC_SRC_VBAT
+  },
+  uart: {
+    open: EMW_UART_OPEN,
+    close: EMW_UART_CLOSE,
+    write: EMW_UART_WRITE,
+    read: EMW_UART_READ
+  },
+  i2c: {
+    open: EMW_I2C_OPEN,
+    close: EMW_I2C_CLOSE,
+    write: EMW_I2C_WRITE,
+    read: EMW_I2C_READ,
+    xfer: EMW_I2C_XFER
+  },
+  pwm: {
+    write: EMW_PWM_WRITE
   }
 };

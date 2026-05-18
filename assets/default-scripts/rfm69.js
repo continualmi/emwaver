@@ -2,6 +2,11 @@
 // to the current EMWaver .js runtime.
 // Board wiring note: the default RFM69 chip-select is GPIO36 and DIO2 is GPIO42.
 
+import { JSX, render as renderTree } from "emw-jsx";
+import { Button, LogViewer, Picker, Row, Scroll, Text } from "emw-ui";
+import { pin } from "emw-gpio";
+import { spi } from "emw-spi";
+
 var RFM69_CS = 36;
 var RFM69_DIO2 = 42;
 var RFM69_VERSION_EXPECTED = 0x24;
@@ -189,7 +194,7 @@ function describeConfig(config) {
 function rfm69SpiXfer(txBytes, opts) {
   var options = opts || {};
   var rxLength = typeof options.rxLength === "number" ? options.rxLength : txBytes.length;
-  return SPI.transfer(txBytes, { cs: RFM69_CS, rxLength: rxLength });
+  return spi.transfer(txBytes, { cs: pin({ gpio: RFM69_CS }), rxLength: rxLength });
 }
 
 function writeReg(addr, value) {
@@ -479,91 +484,62 @@ function actionResetDefaults() {
 }
 
 function render() {
-  var activeConfig = currentConfig();
-  var activeConfigText = describeConfig(activeConfig);
+  renderTree(<App />);
+}
 
-  UI.render(UI.scroll({
-    padding: 16,
-    spacing: 12,
-    children: [
-      UI.text({ text: "RFM69 Radio", font: "title2", fontWeight: "semibold" }),
-      UI.text({
-        text: "Restored profile-driven RFM69/RFM69HW control panel. Default CS is GPIO36 and DIO2 is GPIO42.",
-      }),
+function statusNode() {
+  if (!statusText) return null;
+  return Text({
+    text: statusText,
+    padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
+    cornerRadius: 8,
+  });
+}
 
-      UI.text({
-        text: "Profile: " + currentProfile().name,
-        fontWeight: "medium",
-      }),
-      UI.picker({
-        style: "menu",
-        selected: String(selectedProfileIndex),
-        options: profileOptions(),
-        onChange: function (value) {
+function lastConfigNode() {
+  if (!lastConfigText) return null;
+  return Text({ text: "Last applied: " + lastConfigText });
+}
+
+function App() {
+  var activeConfigText = describeConfig(currentConfig());
+  return (
+    <Scroll padding={16} spacing={12}>
+      <Text font="title2" fontWeight="semibold">RFM69 Radio</Text>
+      <Text>Restored profile-driven RFM69/RFM69HW control panel. Default CS is GPIO36 and DIO2 is GPIO42.</Text>
+      <Text fontWeight="medium">{"Profile: " + currentProfile().name}</Text>
+      <Picker
+        style="menu"
+        selected={String(selectedProfileIndex)}
+        options={profileOptions()}
+        onChange={(value) => {
           selectedProfileIndex = clampInt(parseInt(String(value), 10), 0, PROFILES.length - 1);
           lastConfig = null;
           lastConfigText = "";
           pushLog("[Profile] " + currentProfile().name);
           render();
-        },
-      }),
-
-      UI.text({
-        text: "Active config: " + activeConfigText,
-        font: "caption",
-      }),
-      UI.text({
-        text: "Version: " + detectedVersionText + " | Mode: " + modeText + " | RSSI: " + rssiText,
-        font: "caption",
-      }),
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({ label: "Probe", onTap: actionProbe }),
-          UI.button({ label: "Read RSSI", onTap: actionReadRssi }),
-          UI.button({ label: "Standby", onTap: actionStandby }),
-        ],
-      }),
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({ label: "Start RX", onTap: actionStartRx }),
-          UI.button({ label: "Start TX", onTap: actionStartTx }),
-          UI.button({ label: "Reset Defaults", onTap: actionResetDefaults }),
-        ],
-      }),
-
-      statusText
-        ? UI.text({
-            text: statusText,
-            padding: { top: 12, bottom: 12, leading: 12, trailing: 12 },
-            cornerRadius: 8,
-          })
-        : null,
-
-      lastConfigText
-        ? UI.text({
-            text: "Last applied: " + lastConfigText,
-          })
-        : null,
-
-      UI.row({
-        spacing: 8,
-        children: [
-          UI.button({
-            label: "Clear Log",
-            onTap: function () {
-              logLines = [];
-              render();
-            },
-          }),
-        ],
-      }),
-      UI.logViewer({ text: logLines.join("\n"), minHeight: 220 }),
-    ],
-  }));
+        }}
+      />
+      <Text font="caption">{"Active config: " + activeConfigText}</Text>
+      <Text font="caption">{"Version: " + detectedVersionText + " | Mode: " + modeText + " | RSSI: " + rssiText}</Text>
+      <Row spacing={8}>
+        <Button onTap={actionProbe}>Probe</Button>
+        <Button onTap={actionReadRssi}>Read RSSI</Button>
+        <Button onTap={actionStandby}>Standby</Button>
+      </Row>
+      <Row spacing={8}>
+        <Button onTap={actionStartRx}>Start RX</Button>
+        <Button onTap={actionStartTx}>Start TX</Button>
+        <Button onTap={actionResetDefaults}>Reset Defaults</Button>
+      </Row>
+      {statusNode()}
+      {lastConfigNode()}
+      <Row spacing={8}>
+        <Button onTap={() => { logLines = []; render(); }}>Clear Log</Button>
+      </Row>
+      <LogViewer text={logLines.join("\n")} minHeight={220} />
+    </Scroll>
+  );
 }
 
 render();

@@ -617,7 +617,8 @@ public final class ScriptsViewModel: ObservableObject {
 
     private func defaultTemplate() -> String {
         "// EMWaver JavaScript script\n" +
-        "import { Column, Text, LogViewer, render as uiRender } from \"emw-ui\";\n\n" +
+        "import { JSX, render } from \"emw-jsx\";\n" +
+        "import { Column, Text, LogViewer } from \"emw-ui\";\n\n" +
         "let logLines = [];\n" +
         "function log(message) {\n" +
         "    const text = String(message);\n" +
@@ -629,16 +630,15 @@ public final class ScriptsViewModel: ObservableObject {
         "}\n\n" +
         "draw();\n\n" +
         "function draw() {\n" +
-        "    uiRender(\n" +
-        "      Column({\n" +
-        "        padding: 16,\n" +
-        "        spacing: 12,\n" +
-        "        children: [\n" +
-        "            Text({ text: 'Script Title', font: 'title2', fontWeight: 'semibold' }),\n" +
-        "            Text({ text: 'Customize this script to add controls and logic.' }),\n" +
-        "            LogViewer({ text: logLines.join('\\n'), minHeight: 160, padding: { top: 12, bottom: 12, leading: 12, trailing: 12 }, cornerRadius: 8 })\n" +
-        "        ]\n" +
-        "      })\n" +
+        "    render(<App />);\n" +
+        "}\n\n" +
+        "function App() {\n" +
+        "    return (\n" +
+        "        <Column padding={16} spacing={12}>\n" +
+        "            <Text font=\"title2\" fontWeight=\"semibold\">Script Title</Text>\n" +
+        "            <Text>Customize this script to add controls and logic.</Text>\n" +
+        "            <LogViewer text={logLines.join('\\n')} minHeight={160} padding={{ top: 12, bottom: 12, leading: 12, trailing: 12 }} cornerRadius={8} />\n" +
+        "        </Column>\n" +
         "    );\n" +
         "}\n"
     }

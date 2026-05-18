@@ -3,7 +3,7 @@
 This folder is the canonical source for bundled EMWaver scripts:
 
 - macOS now bundles the `.js` scripts and visible `emw-*` libraries from this folder.
-- Android still uses the legacy `.emw` scripts until its matching migration lands.
+- Android still needs a matching runtime migration; the canonical default assets are no longer `.emw`.
 - Native tooling and the Gateway both load from this folder path in repo workflows.
 
 The target public source format is JavaScript. Keep new macOS examples and
@@ -23,7 +23,7 @@ Use this to reason about CLI behavior when UI is not visible.
 - `chart.js` (generate/reset/regenerate)
 - `cc1101.js` (initialize/read/edit/register edits/presets)
 - `rfm69.js` (profile actions and probe/RX/TX)
-- `jsx_hello.js` (JSX/import smoke example)
+- `hello.js` (JSX/import smoke example)
 
 ### Continuous UI scripts
 
@@ -41,7 +41,7 @@ Use this to reason about CLI behavior when UI is not visible.
 ## UI snapshot contract
 
 Default scripts are UI programs. Visible state for CLI, browser, native app, and
-Agent workflows must be rendered through `UI.render(...)` and read through
+Agent workflows must be rendered through `render(<App />)` from `emw-jsx` and read through
 `ui.snapshot`.
 
 Contract:
