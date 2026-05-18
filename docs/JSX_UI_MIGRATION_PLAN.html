@@ -359,9 +359,8 @@
       <h1>Move script UI authoring to JSX, keep native rendering.</h1>
       <p>
         EMWaver should make scripts feel familiar to write without turning the app into a browser.
-        JSX becomes the authoring layer, with normal-looking HTML-style tags where they map cleanly;
-        the normalized UI tree remains the private bridge from one script runtime to SwiftUI, Android,
-        Windows, Agent tooling, and tests.
+        JSX becomes the authoring layer; the normalized UI tree remains the private bridge from one
+        script runtime to SwiftUI, Android, Windows, Agent tooling, and tests.
       </p>
     </div>
   </header>
@@ -370,10 +369,9 @@
     <section>
       <h2>Core Decision</h2>
       <p class="lead">
-        Do not migrate to general HTML/CSS or React DOM. Migrate to an EMWaver JSX layer that looks
-        close to normal JSX/HTML for common UI structure, then compiles/evaluates into the current
-        cross-platform UI node model. The user writes familiar code; the native apps render a neutral
-        description of the current UI frame.
+        Do not migrate to general HTML/CSS or React DOM. Migrate to an EMWaver JSX layer that
+        compiles/evaluates into the current cross-platform UI node model. The user writes code;
+        the native apps render a neutral description of the current UI frame.
       </p>
 
       <div class="decision">
@@ -385,13 +383,12 @@
             with a familiar syntax.
           </p>
           <pre><code>render(() =&gt; (
-  &lt;main padding={16} gap={12}&gt;
-    &lt;h2&gt;GPIO Control&lt;/h2&gt;
-    &lt;button onClick={() =&gt; GPIO.write(1, true)}&gt;
+  &lt;Column padding={16} spacing={12}&gt;
+    &lt;Text font="headline"&gt;GPIO Control&lt;/Text&gt;
+    &lt;Button onTap={() =&gt; GPIO.write(1, true)}&gt;
       Set High
-    &lt;/button&gt;
-    &lt;Plot source="samplerBits" height={240} /&gt;
-  &lt;/main&gt;
+    &lt;/Button&gt;
+  &lt;/Column&gt;
 ));</code></pre>
         </div>
 
@@ -410,44 +407,6 @@
     { type: "button", props: { label: "Set High" } }
   ]
 }</code></pre>
-        </div>
-      </div>
-    </section>
-
-    <section>
-      <h2>HTML-Like, Not HTML-Compatible</h2>
-      <p class="lead">
-        The syntax should feel ordinary: lowercase tags, children, props, event handlers, fragments,
-        conditionals, and array maps. The contract should still be explicit: these tags are semantic
-        aliases for native EMWaver primitives, not a promise to support the browser DOM.
-      </p>
-
-      <div class="grid two" style="margin-top: 22px;">
-        <div class="card">
-          <span class="tag green">Familiar aliases</span>
-          <h3>Use normal-looking tags where they fit</h3>
-          <pre><code>&lt;main&gt;      -&gt; Column
-&lt;section&gt;   -&gt; Card or Column section
-&lt;header&gt;    -&gt; Row/Column header region
-&lt;h1&gt;-&lt;h3&gt;   -&gt; Text with title roles
-&lt;p&gt;         -&gt; Text body
-&lt;button&gt;    -&gt; Button
-&lt;input&gt;     -&gt; TextField, Toggle, or Slider by type
-&lt;select&gt;    -&gt; Picker</code></pre>
-        </div>
-
-        <div class="card">
-          <span class="tag amber">Native extensions</span>
-          <h3>Keep hardware widgets explicit</h3>
-          <pre><code>&lt;Plot /&gt;
-&lt;SignalViewer /&gt;
-&lt;RegisterTable /&gt;
-&lt;PinGrid /&gt;
-&lt;SerialMonitor /&gt;</code></pre>
-          <p>
-            Hardware-specific elements should not be disguised as HTML. They are the reason EMWaver
-            exists, so they deserve clear native names.
-          </p>
         </div>
       </div>
     </section>
@@ -492,8 +451,7 @@
     <section>
       <h2>Primitive Set</h2>
       <p class="lead">
-        Keep primitives at the shared native UI intersection. Let users write HTML-like aliases where
-        possible, but normalize everything into a small native control vocabulary.
+        Keep primitives at the shared native UI intersection. Avoid promising arbitrary browser layout.
       </p>
 
       <table class="primitive-table">
@@ -507,18 +465,18 @@
         <tbody>
           <tr>
             <td>Layout</td>
-            <td><code>main</code>, <code>section</code>, <code>div</code>, <code>row</code>, <code>grid</code>, <code>scroll</code>, <code>hr</code></td>
-            <td>Aliases normalize to Column, Row, Grid, Scroll, Spacer, and Divider.</td>
+            <td><code>Column</code>, <code>Row</code>, <code>Grid</code>, <code>Scroll</code>, <code>Spacer</code>, <code>Divider</code></td>
+            <td>Maps cleanly to SwiftUI stacks, Compose rows/columns, and Windows panel layouts.</td>
           </tr>
           <tr>
             <td>Display</td>
-            <td><code>h1</code>, <code>h2</code>, <code>h3</code>, <code>p</code>, <code>span</code>, <code>card</code>, <code>tile</code>, <code>progress</code></td>
+            <td><code>Text</code>, <code>Card</code>, <code>Tile</code>, <code>Progress</code>, <code>LogViewer</code></td>
             <td>Good for hardware status, register values, diagnostics, and script state.</td>
           </tr>
           <tr>
             <td>Input</td>
-            <td><code>button</code>, <code>input type="checkbox"</code>, <code>input type="range"</code>, <code>input type="text"</code>, <code>textarea</code>, <code>select</code></td>
-            <td>DOM-style events such as <code>onClick</code> normalize to EMWaver handler tokens.</td>
+            <td><code>Button</code>, <code>Toggle</code>, <code>Slider</code>, <code>Picker</code>, <code>TextField</code>, <code>TextEditor</code></td>
+            <td>Events become handler tokens bound to JS callbacks inside the active script runtime.</td>
           </tr>
           <tr>
             <td>Hardware</td>
@@ -527,37 +485,6 @@
           </tr>
         </tbody>
       </table>
-    </section>
-
-    <section>
-      <h2>Styling Contract</h2>
-      <p class="lead">
-        EMWaver should not become a styling framework. Support a small set of semantic props that are
-        easy to render consistently on native platforms.
-      </p>
-
-      <div class="grid three risks">
-        <div class="card">
-          <h3>Allow</h3>
-          <p><code>gap</code>, <code>padding</code>, <code>width</code>, <code>height</code>, <code>tone</code>, <code>variant</code>, <code>size</code>, <code>role</code>, <code>icon</code>.</p>
-        </div>
-        <div class="card">
-          <h3>Avoid</h3>
-          <p>CSS classes, arbitrary colors, custom fonts, box shadows, absolute positioning, z-index, and full style objects.</p>
-        </div>
-        <div class="card">
-          <h3>Default</h3>
-          <p>Native platform appearance, consistent spacing, readable typography, and hardware-first information density.</p>
-        </div>
-      </div>
-
-      <pre><code>&lt;section tone="warning" padding={12}&gt;
-  &lt;h3&gt;Signal clipping&lt;/h3&gt;
-  &lt;p&gt;Lower gain or reduce sample period.&lt;/p&gt;
-  &lt;button variant="primary" icon="waveform" onClick={restart}&gt;
-    Restart capture
-  &lt;/button&gt;
-&lt;/section&gt;</code></pre>
     </section>
 
     <section>
@@ -622,8 +549,8 @@
       <h2>What Not To Do</h2>
       <div class="grid three risks">
         <div class="card risk high">
-          <h3>Do not promise browser compatibility</h3>
-          <p>HTML-like tags are aliases. Full HTML/CSS implies a browser layout engine, CSS cascade, DOM events, focus rules, and platform mismatch.</p>
+          <h3>Do not support arbitrary HTML/CSS</h3>
+          <p>That implies a browser layout engine, CSS cascade, DOM events, focus rules, and platform mismatch.</p>
         </div>
         <div class="card risk">
           <h3>Do not make each native app parse source independently</h3>
@@ -637,8 +564,8 @@
 
       <div class="callout">
         <p>
-          Recommended naming: <strong>EMWaver JSX</strong>. It signals familiar syntax: close enough to normal
-          JSX/HTML to read instantly, constrained enough to stay native and cross-platform.
+          Recommended naming: <strong>EMWaver JSX</strong>. It signals familiar syntax without promising
+          React DOM, browser HTML, or general CSS compatibility.
         </p>
       </div>
     </section>
