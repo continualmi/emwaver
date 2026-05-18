@@ -1,0 +1,563 @@
+'use strict';
+
+import { JSX, render as renderTree } from "emw-jsx";
+import { Button, Column, Divider, Picker, Plot, Row, Scroll, Text, TextField } from "emw-ui";
+import { pin, gpio } from "emw-gpio";
+import { FS } from "emw-fs";
+import { Sampler } from "emw-sampler";
+
+const SCRIPT_NAME = "sampler.js";
+
+function normalizeBoardType(value) {
+  var board = String(value || '').trim().toLowerCase();
+  if (board === 'esp32s2') return 'esp32s2';
+  if (board === 'esp32s3') return 'esp32s3';
+  return 'stm32f042';
+}
+
+function detectBoardType() {
+  try {
+    if (typeof device !== 'undefined' && device && typeof device.boardType === 'function') {
+      return normalizeBoardType(device.boardType());
+    }
+  } catch (e) {}
+  return 'stm32f042';
+}
+
+function espPinLabel(value) {
+  var n = Number(value);
+  if (n === 4) return 'GPIO4';
+  if (n === 10) return 'GPIO10';
+  if (n === 11) return 'GPIO11';
+  if (n === 12) return 'GPIO12';
+  if (n === 13) return 'GPIO13';
+  if (n === 37) return 'GPIO37';
+  return 'GPIO' + String(n);
+}
+
+function buildEspPins() {
+  var out = [];
+  for (var n = 0; n <= 48; n += 1) {
+    out.push({ label: espPinLabel(n), value: String(n) });
+  }
+  return out;
+}
+
+function firstPin(options) {
+  return options.length ? String(options[0].value) : '0';
+}
+
+var PINS_BY_BOARD = {
+  stm32f042: [
+    { label: 'A0', value: '0' },
+    { label: 'A1', value: '1' },
+    { label: 'A2', value: '2' },
+    { label: 'A3', value: '3' },
+    { label: 'A4', value: '4' },
+    { label: 'A5', value: '5' },
+    { label: 'A6', value: '6' },
+    { label: 'A7', value: '7' },
+    { label: 'B6', value: String(16 + 6) },
+    { label: 'B7', value: String(16 + 7) },
+  ],
+  esp32s2: buildEspPins(),
+  esp32s3: buildEspPins(),
+};
+
+var status = '';
+var boardType = detectBoardType();
+var rxPin = boardType === 'esp32s2' || boardType === 'esp32s3' ? '4' : '0';
+var txPin = boardType === 'esp32s2' || boardType === 'esp32s3' ? '4' : '1';
+var recording = false;
+var recordId = null;
+var samplePeriodUsText = '10';
+var maxBytesText = '393216';
+var binsText = '400';
+var txDutyText = '50';
+var txPwmHzText = '38000';
+var bufLen = 0;
+var xMin = 0;
+var xMax = 10000;
+var chartErr = '';
+var files = [];
+var selectedFile = '';
+var saveName = 'signal1.raw';
+var __pendingViewport = null;
+var __viewportTimer = null;
+
+function isEspBoard() {
+  return boardType === 'esp32s2' || boardType === 'esp32s3';
+}
+
+function boardPins() {
+  return PINS_BY_BOARD[boardType] || PINS_BY_BOARD.stm32f042;
+}
+
+function pinTarget(value) {
+  var n = Number(value);
+  if (isEspBoard()) return pin({ gpio: n });
+  return n >= 16 ? pin({ port: 'B', number: n - 16 }) : pin({ port: 'A', number: n });
+}
+
+function encodedPin(value) {
+  return gpio.value(pinTarget(value));
+}
+
+function i(value, fallback) {
+  var n = parseInt(String(value || '').trim(), 10);
+  return isFinite(n) ? n : fallback;
+}
+
+function clamp(n, lo, hi) {
+  return Math.max(lo, Math.min(hi, n));
+}
+
+function ends(s, suffix) {
+  return String(s || '').toLowerCase().endsWith(String(suffix || '').toLowerCase());
+}
+
+function baseName(s) {
+  var name = String(s || '').trim();
+  if (!name) return 'signal1';
+  name = name.replace(/[\\/]/g, '_').replace(/\s+/g, '_');
+  return name.replace(/\.(raw|txt)$/i, '');
+}
+
+function signalsDir() {
+  return FS.appDataDir() || '';
+}
+
+function syncPins() {
+  var options = boardPins();
+  var rxValid = false;
+  var txValid = false;
+  for (var idx = 0; idx < options.length; idx += 1) {
+    var value = String(options[idx].value);
+    if (value === String(rxPin)) rxValid = true;
+    if (value === String(txPin)) txValid = true;
+  }
+  if (!rxValid) rxPin = firstPin(options);
+  if (!txValid) txPin = isEspBoard() ? '4' : '1';
+}
+
+function parseViewportRange(range) {
+  var r = range;
+  if (!r) return null;
+  if (Array.isArray(r) && r.length) r = r[0];
+  if (!r || typeof r !== 'object') return null;
+  var min = r.min != null ? Number(r.min) : NaN;
+  var max = r.max != null ? Number(r.max) : NaN;
+  if (!isFinite(min) || !isFinite(max)) return null;
+  return { min: min, max: max };
+}
+
+function applyViewportRange(min, max) {
+  var maxBits = Math.max(0, bufLen * 8);
+  if (maxBits <= 0) return;
+  var lo = clamp(Math.round(Number(min) || 0), 0, maxBits);
+  var hi = clamp(Math.round(Number(max) || 0), 0, maxBits);
+  if (hi <= lo) return;
+  xMin = lo;
+  xMax = hi;
+  render();
+}
+
+function scheduleViewport(min, max) {
+  __pendingViewport = { min: min, max: max };
+  if (__viewportTimer) return;
+  if (typeof setTimeout !== 'function') {
+    var p0 = __pendingViewport;
+    __pendingViewport = null;
+    applyViewportRange(p0.min, p0.max);
+    return;
+  }
+  __viewportTimer = setTimeout(function () {
+    __viewportTimer = null;
+    var p = __pendingViewport;
+    __pendingViewport = null;
+    if (!p) return;
+    applyViewportRange(p.min, p.max);
+  }, 60);
+}
+
+function listFiles() {
+  files = [];
+  selectedFile = selectedFile || '';
+  var root = signalsDir();
+  if (!root) return;
+  try { FS.ensureDir(root); } catch (e0) {}
+
+  var out = [];
+  try {
+    var entries = FS.readDir(root) || [];
+    for (var idx = 0; idx < entries.length; idx += 1) {
+      out.push(String(entries[idx] || ''));
+    }
+  } catch (e1) {}
+
+  files = out
+    .map(function (name) { return String(name || ''); })
+    .filter(function (name) { return ends(name, '.raw') || ends(name, '.txt'); })
+    .filter(function (name, idx, arr) { return arr.indexOf(name) === idx; })
+    .sort();
+
+  if (files.length && !selectedFile) selectedFile = files[0];
+}
+
+function refreshPlot() {
+  chartErr = '';
+  try {
+    bufLen = Sampler.lenBytes();
+    var maxBits = Math.max(0, bufLen * 8);
+    if (maxBits <= 0) return;
+    var start = clamp(i(xMin, 0), 0, maxBits);
+    var end = clamp(i(xMax, 10000), 0, maxBits);
+    if (end <= start) {
+      start = 0;
+      end = Math.min(10000, maxBits);
+    }
+    xMin = start;
+    xMax = end;
+  } catch (e) {
+    chartErr = String(e && e.message ? e.message : e);
+  }
+}
+
+function start() {
+  chartErr = '';
+  status = '';
+  try {
+    var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+    var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
+    var session = Sampler.start({
+      pin: encodedPin(rxPin),
+      clearBefore: true,
+      periodUs: periodUs,
+      maxBytes: maxBytes,
+    });
+    recordId = session && session.id != null ? String(session.id) : null;
+    recording = true;
+    status = 'Recording...';
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function stop() {
+  try {
+    Sampler.stop(recordId);
+  } catch (e) {}
+  recording = false;
+  recordId = null;
+  refreshPlot();
+  render();
+}
+
+function retransmit() {
+  status = '';
+  chartErr = '';
+  if (recording) {
+    try { Sampler.stop(recordId); } catch (e0) {}
+    recording = false;
+    recordId = null;
+  }
+
+  try {
+    var periodUs = clamp(i(samplePeriodUsText, 10), 5, 255);
+    var bytes = Sampler.getBytes();
+    if (!bytes || !bytes.length) {
+      status = 'No samples to retransmit.';
+      return render();
+    }
+    status = 'Retransmitting...';
+    render();
+    Sampler.transmitBufferStart(bytes, {
+      pin: encodedPin(txPin),
+      dutyPercent: clamp(i(txDutyText, 50), 1, 100),
+      freqHz: clamp(i(txPwmHzText, 38000), 0, 200000),
+      tickUs: periodUs,
+      onDone: function () {
+        status = 'Retransmit done.';
+        render();
+      },
+    });
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function clearBuffer() {
+  status = '';
+  chartErr = '';
+  try {
+    Sampler.clear();
+    bufLen = 0;
+    xMin = 0;
+    xMax = 10000;
+    status = 'Cleared';
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function parseTimings(text) {
+  return String(text || '')
+    .split(/[\s,]+/g)
+    .map(function (token) { return parseInt(token, 10); })
+    .filter(function (n) { return isFinite(n) && n !== 0; });
+}
+
+function timingsToBytes(pulsesUs, periodUs, maxBytes) {
+  var maxBits = maxBytes * 8;
+  var total = 0;
+  for (var idx = 0; idx < pulsesUs.length; idx += 1) {
+    total += Math.max(0, Math.round(Math.abs(pulsesUs[idx]) / periodUs));
+    if (total >= maxBits) { total = maxBits; break; }
+  }
+  var out = new Uint8Array(Math.ceil(total / 8));
+  var bit = 0;
+  for (var i0 = 0; i0 < pulsesUs.length && bit < total; i0 += 1) {
+    var us = pulsesUs[i0];
+    var high = us > 0;
+    var run = Math.max(0, Math.round(Math.abs(us) / periodUs));
+    run = Math.min(run, total - bit);
+    if (high) {
+      for (var j = 0; j < run; j += 1) {
+        var index = bit + j;
+        out[index >> 3] |= 1 << (index & 7);
+      }
+    }
+    bit += run;
+  }
+  return out;
+}
+
+function loadSelected() {
+  status = '';
+  chartErr = '';
+  var name = String(selectedFile || '');
+  if (!name) return render();
+  var dir = signalsDir();
+  var path = dir ? FS.join(dir, name) : '';
+  if (!path) return render();
+
+  try {
+    if (ends(name, '.raw')) {
+      Sampler.setBytes(FS.readBytes(path));
+      saveName = baseName(name) + '.raw';
+    } else {
+      var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+      var maxBytes = clamp(i(maxBytesText, 393216), 256, 1024 * 1024);
+      var pulses = parseTimings(FS.readText(path));
+      Sampler.setBytes(timingsToBytes(pulses, periodUs, maxBytes));
+      saveName = baseName(name) + '.raw';
+    }
+    refreshPlot();
+    var maxBits = Math.max(0, bufLen * 8);
+    xMin = 0;
+    xMax = maxBits > 0 ? maxBits : 10000;
+    status = 'Loaded ' + name;
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function saveRaw() {
+  status = '';
+  var dir = signalsDir();
+  if (!dir) return render();
+  var name = baseName(saveName) + '.raw';
+  var path = FS.join(dir, name);
+  try {
+    FS.ensureDir(dir);
+    Sampler.saveBytesFile(path);
+    listFiles();
+    selectedFile = name;
+    status = 'Saved ' + name;
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function saveTimings() {
+  status = '';
+  var dir = signalsDir();
+  if (!dir) return render();
+  var name = baseName(saveName) + '.txt';
+  var path = FS.join(dir, name);
+  try {
+    FS.ensureDir(dir);
+    var periodUs = clamp(i(samplePeriodUsText, 10), 1, 255);
+    FS.writeText(path, Sampler.buildSignedRawTimings({ samplePeriodUs: periodUs }));
+    listFiles();
+    selectedFile = name;
+    status = 'Saved ' + name;
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function removeSelected() {
+  status = '';
+  var name = String(selectedFile || '');
+  if (!name) return render();
+  var dir = signalsDir();
+  var path = dir ? FS.join(dir, name) : '';
+  if (!path) return render();
+  try {
+    FS.remove(path);
+    listFiles();
+    status = 'Deleted ' + name;
+  } catch (e) {
+    status = String(e && e.message ? e.message : e);
+  }
+  render();
+}
+
+function boardLabel() {
+  if (boardType === 'esp32s2') return 'Detected MCU: ESP32-S2';
+  if (boardType === 'esp32s3') return 'Detected MCU: ESP32-S3';
+  return 'Detected MCU: STM32F042';
+}
+
+function fileOptions() {
+  return [{ label: 'New signal', value: '' }].concat(files.map(function (name) {
+    return { label: name, value: name };
+  }));
+}
+
+function resetView() {
+  refreshPlot();
+  var maxBits = Math.max(0, bufLen * 8);
+  xMin = 0;
+  xMax = maxBits > 0 ? maxBits : 10000;
+  render();
+}
+
+function render() {
+  renderTree(<App />);
+}
+
+function App() {
+  var maxBits = Math.max(0, bufLen * 8);
+  return (
+    <Scroll padding={16} spacing={14}>
+      <Column spacing={4}>
+        <Text font="title2" fontWeight="semibold">Sampler</Text>
+        {status ? Text({ text: status, font: 'caption' }) : null}
+      </Column>
+
+      <Divider />
+
+      <Text font="caption">
+        {'Bytes: ' + String(bufLen) + (maxBits ? ' • Samples: ' + String(maxBits) : '') + ' • View: ' + String(xMin) + '...' + String(xMax)}
+      </Text>
+      <Plot
+        height={240}
+        source="samplerBits"
+        bins={clamp(i(binsText, 900), 64, 6000)}
+        xMin={xMin}
+        xMax={xMax}
+        yMin={-10}
+        yMax={265}
+        errorText={chartErr}
+        onViewportChange={(rangeValue) => {
+          var range = parseViewportRange(rangeValue);
+          if (!range) return;
+          scheduleViewport(range.min, range.max);
+        }}
+      />
+
+      <Text fontWeight="semibold">Capture</Text>
+      <Row spacing={10}>
+        <Button onTap={start}>{recording ? 'Recording...' : 'Record'}</Button>
+        <Button onTap={stop}>Stop</Button>
+        <Button onTap={clearBuffer}>Clear</Button>
+        <Button onTap={retransmit}>Retransmit</Button>
+        <Button onTap={resetView}>Refresh</Button>
+      </Row>
+
+      <Row spacing={12}>
+        <Column spacing={6}>
+          <Text font="caption">{boardLabel()}</Text>
+        </Column>
+        <Column spacing={6}>
+          <Picker style="menu" label="Pin" selected={String(rxPin)} options={boardPins()} onChange={(value) => { rxPin = String(value); render(); }} />
+        </Column>
+        <Column spacing={6}>
+          <Picker style="menu" label="TX Pin" selected={String(txPin)} options={boardPins()} onChange={(value) => { txPin = String(value); render(); }} />
+        </Column>
+        <Column spacing={6}>
+          <Picker
+            style="menu"
+            label="Signal"
+            selected={String(selectedFile || '')}
+            options={fileOptions()}
+            onChange={(value) => {
+              selectedFile = String(value || '');
+              if (!selectedFile) {
+                clearBuffer();
+                return;
+              }
+              loadSelected();
+            }}
+          />
+        </Column>
+      </Row>
+
+      <Row spacing={10}>
+        <Column spacing={6}>
+          <Text font="caption" fontWeight="medium">Sample period (us)</Text>
+          <TextField value={samplePeriodUsText} placeholder="10" onChange={(value) => { samplePeriodUsText = String(value); }} onSubmit={() => { render(); }} />
+        </Column>
+        <Column spacing={6}>
+          <Text font="caption" fontWeight="medium">Max capture bytes</Text>
+          <TextField value={maxBytesText} placeholder="393216" onChange={(value) => { maxBytesText = String(value); }} onSubmit={() => { render(); }} />
+        </Column>
+        <Column spacing={6}>
+          <Text font="caption" fontWeight="medium">Plot bins</Text>
+          <TextField value={binsText} placeholder="400" onChange={(value) => { binsText = String(value); }} onSubmit={() => { refreshPlot(); render(); }} />
+        </Column>
+      </Row>
+
+      <Row spacing={10}>
+        <Column spacing={6}>
+          <Text font="caption" fontWeight="medium">TX PWM Hz</Text>
+          <TextField value={txPwmHzText} placeholder="38000" onChange={(value) => { txPwmHzText = String(value); }} onSubmit={() => { render(); }} />
+        </Column>
+        <Column spacing={6}>
+          <Text font="caption" fontWeight="medium">TX duty %</Text>
+          <TextField value={txDutyText} placeholder="50" onChange={(value) => { txDutyText = String(value); }} onSubmit={() => { render(); }} />
+        </Column>
+      </Row>
+
+      <Divider />
+
+      <Text fontWeight="semibold">Files</Text>
+      <Row spacing={10}>
+        <Button onTap={removeSelected}>Delete</Button>
+      </Row>
+      <TextField value={saveName} placeholder="signal1.raw" onChange={(value) => { saveName = String(value); }} onSubmit={() => { render(); }} />
+      <Row spacing={10}>
+        <Button onTap={saveRaw}>Save .raw</Button>
+        <Button onTap={saveTimings}>Save .txt</Button>
+      </Row>
+    </Scroll>
+  );
+}
+
+syncPins();
+listFiles();
+
+if (selectedFile) {
+  loadSelected();
+} else {
+  refreshPlot();
+  render();
+}
