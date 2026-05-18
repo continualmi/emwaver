@@ -989,7 +989,8 @@ public struct ScriptsRootView: View {
         let manager = activePreviewManager
         let running = manager.activeScriptName ?? ""
         let deviceState = device == nil ? "not attached" : "attached"
-        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState)"
+        let boardType = agentReadDeviceTextCommand(AgentHardwareProtocol.boardGet) ?? "unknown"
+        return "selectedScriptId=\(selected); runningScript=\(running); device=\(deviceState); boardType=\(boardType)"
     }
 
     private func executeMacAgentTool(name: String, arguments: [String: AgentToolJSON]) async -> AgentToolResult {
@@ -1152,8 +1153,12 @@ public struct ScriptsRootView: View {
 
     private func agentToolDeviceStatus() -> AgentToolResult {
         let manager = activePreviewManager
+        let boardType = agentReadDeviceTextCommand(AgentHardwareProtocol.boardGet) ?? ""
+        let deviceName = agentReadDeviceTextCommand(AgentHardwareProtocol.nameGet) ?? ""
         return AgentToolResult(id: nil, name: "get_device_status", ok: true, result: .object([
             "connected": .bool(device != nil),
+            "boardType": .string(boardType),
+            "deviceName": .string(deviceName),
             "runtimeOwner": .string("macos"),
             "activeScriptName": .string(manager.activeScriptName ?? ""),
             "activeScriptInstanceId": .string(manager.activeScriptInstanceId ?? ""),
@@ -1167,6 +1172,9 @@ public struct ScriptsRootView: View {
         static let responseErr: UInt8 = 0x81
         static let responseBusy: UInt8 = 0x82
 
+        static let nameGet: UInt8 = 0x04
+        static let boardGet: UInt8 = 0x09
+
         static let gpio: UInt8 = 0x10
         static let gpioInput: UInt8 = 0x00
         static let gpioOutput: UInt8 = 0x01
@@ -1179,6 +1187,15 @@ public struct ScriptsRootView: View {
         static let adcPin: UInt8 = 0x00
 
         static let spiTransfer: UInt8 = 0x50
+    }
+
+    private func agentReadDeviceTextCommand(_ opcode: UInt8) -> String? {
+        guard let device else { return nil }
+        guard let response = device.sendCommand(Data([opcode]), timeout: 1500) else { return nil }
+        let bytes = [UInt8](response)
+        guard bytes.first == AgentHardwareProtocol.responseOK else { return nil }
+        return String(data: Data(bytes.dropFirst()), encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private enum AgentHardwareSendResult {
