@@ -315,11 +315,11 @@
   <header>
     <div class="hero">
       <div class="eyebrow">EMWaver Script Runtime Plan</div>
-      <h1>Split the bootstrap into a visible kernel and importable libraries.</h1>
+      <h1>Replace the bootstrap with visible, importable runtime libraries.</h1>
       <p>
         The current bootstrap is the whole script world: packet transport, protocol constants,
-        hardware interfaces, UI nodes, JSX helpers, sampler APIs, and filesystem helpers. The next
-        step is to make those parts explicit, inspectable, and importable.
+        hardware interfaces, UI nodes, JSX helpers, sampler APIs, and filesystem helpers. The target
+        is to remove that monolith and ship those parts as normal read-only library files in the app.
       </p>
     </div>
   </header>
@@ -328,9 +328,10 @@
     <section>
       <h2>Decision</h2>
       <p class="lead">
-        Do not hide the core runtime behind an anonymous bootstrap. Name it <code>emw-kernel.emw</code>,
-        expose it as read-only runtime infrastructure, and move user-facing APIs into ordinary
-        importable libraries such as <code>emw-jsx.emw</code>, <code>emw-ui.emw</code>,
+        Do not preserve <code>script_bootstrap.emw</code> as the long-term runtime owner. Replace it
+        with ordinary bundled library files. Name the core file <code>emw-kernel.emw</code>,
+        expose it as read-only runtime infrastructure in the main app UI, and move user-facing APIs
+        into importable libraries such as <code>emw-jsx.emw</code>, <code>emw-ui.emw</code>,
         <code>emw-hardware.emw</code>, and <code>emw-components.emw</code>. The <code>emw-</code>
         prefix is worth keeping in code because bare names like <code>ui</code> and
         <code>hardware</code> are too ambiguous once imports become normal.
@@ -491,7 +492,7 @@
     <section>
       <h2>Hardware API Redesign</h2>
       <p class="lead">
-        Opening up the bootstrap should also fix the hardware API. Avoid global pin constants and
+        Opening up the runtime libraries should also fix the hardware API. Avoid global pin constants and
         imported mode constants. Scripts should use explicit pin descriptors that normalize across
         STM32-style port/pin boards and ESP32-style GPIO-number boards.
       </p>
@@ -569,8 +570,9 @@
     <section>
       <h2>Script List UX</h2>
       <p class="lead">
-        Libraries should be visible and inspectable. They should not be hidden away, and the kernel
-        should be named as kernel rather than disguised as a normal example.
+        Libraries should be visible and inspectable in the main app UI as read-only bundled files,
+        alongside the other default scripts. They should not be hidden away, and the kernel should be
+        named as kernel rather than disguised as a normal example.
       </p>
 
       <table>
@@ -590,12 +592,12 @@
           <tr>
             <td>Libraries</td>
             <td><code>emw-jsx.emw</code>, <code>emw-ui.emw</code>, <code>emw-hardware.emw</code>, <code>emw-sampler.emw</code>.</td>
-            <td>Open read-only, inspect, make copy, import from scripts.</td>
+            <td>Visible in the main script UI, read-only, inspect, make copy, import from scripts.</td>
           </tr>
           <tr>
             <td>Kernel</td>
             <td><code>emw-kernel.emw</code> and possibly <code>emw-protocol.emw</code>.</td>
-            <td>Visible as runtime infrastructure, read-only, not runnable by default.</td>
+            <td>Visible in the main script UI as runtime infrastructure, read-only, importable, not a hidden asset.</td>
           </tr>
           <tr>
             <td>User Scripts</td>
@@ -617,10 +619,10 @@
         <div class="phase">
           <strong>Phase 0</strong>
           <div>
-            <h3>Keep compatibility</h3>
-            <p>Continue bundling <code>script_bootstrap.emw</code> while adding the module loader and visible libraries.</p>
+            <h3>Define visible library files</h3>
+            <p>Replace the hidden bootstrap concept with bundled read-only files: <code>emw-kernel.emw</code>, <code>emw-protocol.emw</code>, <code>emw-ui.emw</code>, <code>emw-jsx.emw</code>, and hardware/component libraries.</p>
           </div>
-          <span class="status">No breakage</span>
+          <span class="status">New model</span>
         </div>
         <div class="phase">
           <strong>Phase 1</strong>
@@ -634,7 +636,7 @@
           <strong>Phase 2</strong>
           <div>
             <h3>Extract emw-jsx and emw-ui</h3>
-            <p>Move JSX helper and UI node factories out of bootstrap into libraries imported by examples.</p>
+            <p>Move JSX helper and UI node factories into visible libraries imported by examples.</p>
           </div>
           <span class="status">UI</span>
         </div>
