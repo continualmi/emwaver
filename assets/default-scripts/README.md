@@ -20,7 +20,6 @@ Use this to reason about CLI behavior when UI is not visible.
 
 ### UI-driven scripts (mostly event based)
 
-- `chart.js` (generate/reset/regenerate)
 - `cc1101.js` (initialize/read/edit/register edits/presets)
 - `rfm69.js` (profile actions and probe/RX/TX)
 - `sampler.js` (capture/replay/save/load signals)
