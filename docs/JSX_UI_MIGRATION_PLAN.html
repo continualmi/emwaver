@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver JSX UI Migration Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #18202b;
+      --muted: #627086;
+      --line: #d9dee8;
+      --panel: #ffffff;
+      --paper: #f6f7fa;
+      --blue: #246bfe;
+      --teal: #0b8379;
+      --green: #2f8f4e;
+      --amber: #b46b00;
+      --red: #b83333;
+      --violet: #7048c8;
+      --shadow: 0 18px 50px rgba(24, 32, 43, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.45;
+    }
+
+    header {
+      min-height: 88vh;
+      display: grid;
+      align-items: end;
+      padding: 48px 24px 36px;
+      background:
+        linear-gradient(180deg, rgba(246, 247, 250, 0.04), var(--paper)),
+        url("../hardware/emwaver-air/catalog/images/emwaver-air.png") center / cover no-repeat;
+      position: relative;
+      overflow: hidden;
+    }
+
+    header::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, rgba(9, 15, 25, 0.82), rgba(9, 15, 25, 0.42) 58%, rgba(9, 15, 25, 0.18));
+    }
+
+    .hero {
+      position: relative;
+      max-width: 1120px;
+      margin: 0 auto;
+      width: 100%;
+      color: white;
+    }
+
+    .eyebrow {
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      font-weight: 750;
+      opacity: 0.84;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      max-width: 780px;
+      font-size: clamp(44px, 7vw, 92px);
+      line-height: 0.94;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 710px;
+      margin: 22px 0 0;
+      font-size: clamp(18px, 2vw, 24px);
+      color: rgba(255, 255, 255, 0.86);
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px 24px 72px;
+    }
+
+    section {
+      padding: 42px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    .lead {
+      max-width: 820px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 1px 0 rgba(24, 32, 43, 0.03);
+    }
+
+    .decision {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .decision .card:first-child {
+      border-top: 5px solid var(--blue);
+    }
+
+    .decision .card:last-child {
+      border-top: 5px solid var(--teal);
+    }
+
+    .pipeline {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      align-items: stretch;
+      margin-top: 24px;
+    }
+
+    .step {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 142px;
+      position: relative;
+      box-shadow: var(--shadow);
+    }
+
+    .step::after {
+      content: ">";
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: white;
+      background: var(--blue);
+      font-size: 12px;
+      font-weight: 800;
+      display: grid;
+      place-items: center;
+      z-index: 2;
+    }
+
+    .step:last-child::after {
+      display: none;
+    }
+
+    .step small {
+      display: block;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      color: white;
+      margin-bottom: 10px;
+      background: var(--blue);
+    }
+
+    .tag.teal { background: var(--teal); }
+    .tag.green { background: var(--green); }
+    .tag.amber { background: var(--amber); }
+    .tag.violet { background: var(--violet); }
+
+    pre {
+      margin: 16px 0 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 8px;
+      background: #101722;
+      color: #e6edf5;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    .phase-list {
+      display: grid;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .phase {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) 180px;
+      gap: 16px;
+      align-items: start;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px;
+    }
+
+    .phase strong {
+      color: var(--blue);
+    }
+
+    .status {
+      justify-self: end;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 750;
+      background: #e8f0ff;
+      color: #1c55c9;
+    }
+
+    .risks {
+      margin-top: 22px;
+    }
+
+    .risk {
+      border-left: 4px solid var(--amber);
+    }
+
+    .risk.high {
+      border-left-color: var(--red);
+    }
+
+    .primitive-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      display: table;
+    }
+
+    .primitive-table th,
+    .primitive-table td {
+      text-align: left;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+    }
+
+    .primitive-table tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .primitive-table th {
+      background: #edf1f7;
+      font-size: 13px;
+      text-transform: uppercase;
+      color: #405069;
+    }
+
+    .callout {
+      margin-top: 22px;
+      padding: 18px;
+      border-radius: 8px;
+      background: #eef8f6;
+      border: 1px solid #b9dfd8;
+    }
+
+    .callout p {
+      color: #285b55;
+    }
+
+    @media (max-width: 900px) {
+      header {
+        min-height: 78vh;
+      }
+
+      .two,
+      .three,
+      .decision,
+      .pipeline {
+        grid-template-columns: 1fr;
+      }
+
+      .step::after {
+        content: "v";
+        right: 16px;
+        top: auto;
+        bottom: -9px;
+        transform: none;
+      }
+
+      .phase {
+        grid-template-columns: 1fr;
+      }
+
+      .status {
+        justify-self: start;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">EMWaver UI Runtime Plan</div>
+      <h1>Move script UI authoring to JSX, keep native rendering.</h1>
+      <p>
+        EMWaver should make scripts feel familiar to write without turning the app into a browser.
+        JSX becomes the authoring layer; the normalized UI tree remains the private bridge from one
+        script runtime to SwiftUI, Android, Windows, Agent tooling, and tests.
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Core Decision</h2>
+      <p class="lead">
+        Do not migrate to general HTML/CSS or React DOM. Migrate to an EMWaver JSX layer that
+        compiles/evaluates into the current cross-platform UI node model. The user writes code;
+        the native apps render a neutral description of the current UI frame.
+      </p>
+
+      <div class="decision">
+        <div class="card">
+          <span class="tag">Authoring source</span>
+          <h3>JSX-like .emw code</h3>
+          <p>
+            Humans and agents write components, state, event handlers, hardware calls, and conditional UI
+            with a familiar syntax.
+          </p>
+          <pre><code>render(() =&gt; (
+  &lt;Column padding={16} spacing={12}&gt;
+    &lt;Text font="headline"&gt;GPIO Control&lt;/Text&gt;
+    &lt;Button onTap={() =&gt; GPIO.write(1, true)}&gt;
+      Set High
+    &lt;/Button&gt;
+  &lt;/Column&gt;
+));</code></pre>
+        </div>
+
+        <div class="card">
+          <span class="tag teal">Runtime bridge</span>
+          <h3>Normalized EMWaver UI tree</h3>
+          <p>
+            The script runtime evaluates the code and emits a platform-neutral tree. Renderers consume
+            this private contract; users do not hand-author it.
+          </p>
+          <pre><code>{
+  type: "column",
+  props: { padding: 16, spacing: 12 },
+  children: [
+    { type: "text", props: { text: "GPIO Control" } },
+    { type: "button", props: { label: "Set High" } }
+  ]
+}</code></pre>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Runtime Pipeline</h2>
+      <p class="lead">
+        The in-between representation is not a competing UI system. It is the protocol that prevents
+        every platform from needing its own parser, JS evaluator, component model, event mapper, and
+        test snapshot format.
+      </p>
+
+      <div class="pipeline">
+        <div class="step">
+          <span class="tag">1</span>
+          <h3>.emw JSX source</h3>
+          <small>Readable component code, generated well by agents, editable by users.</small>
+        </div>
+        <div class="step">
+          <span class="tag violet">2</span>
+          <h3>JSX transform</h3>
+          <small>Turns JSX syntax into calls like h(Column, props, children).</small>
+        </div>
+        <div class="step">
+          <span class="tag teal">3</span>
+          <h3>Script execution</h3>
+          <small>Evaluates state, conditionals, maps, event closures, and hardware logic.</small>
+        </div>
+        <div class="step">
+          <span class="tag green">4</span>
+          <h3>UI frame tree</h3>
+          <small>Stable node types, props, children, handler tokens, metadata, and snapshots.</small>
+        </div>
+        <div class="step">
+          <span class="tag amber">5</span>
+          <h3>Native renderers</h3>
+          <small>SwiftUI, Android, iOS, Windows, CLI snapshots, tests, and Agent context.</small>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Primitive Set</h2>
+      <p class="lead">
+        Keep primitives at the shared native UI intersection. Avoid promising arbitrary browser layout.
+      </p>
+
+      <table class="primitive-table">
+        <thead>
+          <tr>
+            <th>Category</th>
+            <th>Primitives</th>
+            <th>Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Layout</td>
+            <td><code>Column</code>, <code>Row</code>, <code>Grid</code>, <code>Scroll</code>, <code>Spacer</code>, <code>Divider</code></td>
+            <td>Maps cleanly to SwiftUI stacks, Compose rows/columns, and Windows panel layouts.</td>
+          </tr>
+          <tr>
+            <td>Display</td>
+            <td><code>Text</code>, <code>Card</code>, <code>Tile</code>, <code>Progress</code>, <code>LogViewer</code></td>
+            <td>Good for hardware status, register values, diagnostics, and script state.</td>
+          </tr>
+          <tr>
+            <td>Input</td>
+            <td><code>Button</code>, <code>Toggle</code>, <code>Slider</code>, <code>Picker</code>, <code>TextField</code>, <code>TextEditor</code></td>
+            <td>Events become handler tokens bound to JS callbacks inside the active script runtime.</td>
+          </tr>
+          <tr>
+            <td>Hardware</td>
+            <td><code>Plot</code>, signal viewers, future oscilloscope/sampler widgets</td>
+            <td>These are EMWaver-specific and should remain first-class, not forced into HTML metaphors.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Migration Phases</h2>
+      <p class="lead">
+        This can be incremental. The existing render tree and native renderer do not need to be thrown away.
+      </p>
+
+      <div class="phase-list">
+        <div class="phase">
+          <strong>Phase 0</strong>
+          <div>
+            <h3>Freeze the current UI node contract</h3>
+            <p>Document the node types, props, handler types, and snapshot shape as the private render protocol.</p>
+          </div>
+          <span class="status">Foundation</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 1</strong>
+          <div>
+            <h3>Add JSX transform support</h3>
+            <p>Bundle or precompile a small JSX transform so scripts can author components while emitting current nodes.</p>
+          </div>
+          <span class="status">Low disruption</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 2</strong>
+          <div>
+            <h3>Create EMWaver component helpers</h3>
+            <p>Expose <code>Column</code>, <code>Button</code>, <code>Plot</code>, and friends as JSX components backed by the existing UI builder.</p>
+          </div>
+          <span class="status">User-facing</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 3</strong>
+          <div>
+            <h3>Add state and rerender rules</h3>
+            <p>Define a small state API for script UI, including event-triggered rerender and timer-triggered rerender.</p>
+          </div>
+          <span class="status">Runtime work</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 4</strong>
+          <div>
+            <h3>Migrate built-in scripts</h3>
+            <p>Convert examples one by one. Keep compatibility with old builder-style scripts during the transition.</p>
+          </div>
+          <span class="status">Validation</span>
+        </div>
+        <div class="phase">
+          <strong>Phase 5</strong>
+          <div>
+            <h3>Update Agent generation</h3>
+            <p>Teach the Agent to generate EMWaver JSX by default and use hardware primitive tools for exploration.</p>
+          </div>
+          <span class="status">Agent path</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>What Not To Do</h2>
+      <div class="grid three risks">
+        <div class="card risk high">
+          <h3>Do not support arbitrary HTML/CSS</h3>
+          <p>That implies a browser layout engine, CSS cascade, DOM events, focus rules, and platform mismatch.</p>
+        </div>
+        <div class="card risk">
+          <h3>Do not make each native app parse source independently</h3>
+          <p>That duplicates language semantics and creates cross-platform drift in errors, state, events, and snapshots.</p>
+        </div>
+        <div class="card risk">
+          <h3>Do not expose the tree as the user-facing API</h3>
+          <p>The tree is the runtime protocol. JSX should be the thing users and agents learn.</p>
+        </div>
+      </div>
+
+      <div class="callout">
+        <p>
+          Recommended naming: <strong>EMWaver JSX</strong>. It signals familiar syntax without promising
+          React DOM, browser HTML, or general CSS compatibility.
+        </p>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
