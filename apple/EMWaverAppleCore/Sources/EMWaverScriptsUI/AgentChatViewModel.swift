@@ -200,6 +200,7 @@ public final class AgentChatViewModel: ObservableObject {
         var accumulatedToolResults: [AgentToolResult] = []
         while let toolCalls = currentResponse.toolCalls, !toolCalls.isEmpty {
             try Task.checkCancellation()
+            appendIntermediateAssistantMessage(from: currentResponse)
             guard let toolRuntime else {
                 throw AgentEndpointError.serverError("Agent requested a tool, but local tools are not available.")
             }
@@ -228,6 +229,14 @@ public final class AgentChatViewModel: ObservableObject {
     private func renderResponse(_ response: AgentEndpointResponse, placeholderId: UUID) async throws -> String {
         _ = placeholderId
 
+        let reply = responseDisplayText(response)
+        guard !reply.isEmpty else {
+            throw AgentEndpointError.serverError("Agent model produced no text")
+        }
+        return reply
+    }
+
+    private func responseDisplayText(_ response: AgentEndpointResponse) -> String {
         let pieces = [
             response.message,
             response.assistantRaw,
@@ -235,11 +244,15 @@ public final class AgentChatViewModel: ObservableObject {
             response.patch.map { "Patch:\n\($0)" },
             response.warnings?.isEmpty == false ? "Warnings:\n" + (response.warnings ?? []).map { "- \($0)" }.joined(separator: "\n") : nil,
         ].compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
-        let reply = pieces.joined(separator: "\n\n")
-        guard !reply.isEmpty else {
-            throw AgentEndpointError.serverError("Agent model produced no text")
+        return pieces.joined(separator: "\n\n")
+    }
+
+    private func appendIntermediateAssistantMessage(from response: AgentEndpointResponse) {
+        let text = responseDisplayText(response)
+        guard !text.isEmpty else {
+            return
         }
-        return reply
+        appendMessage(AgentChatMessage(role: .assistant, text: text))
     }
 
     private func toolPrompt(_ userPrompt: String) -> String {
