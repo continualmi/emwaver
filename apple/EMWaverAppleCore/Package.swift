@@ -60,5 +60,12 @@ let package = Package(
                 .linkedLibrary("sqlite3")
             ]
         ),
+        .testTarget(
+            name: "EMWaverScriptRuntimeTests",
+            dependencies: [
+                "EMWaverScriptRuntime",
+            ],
+            path: "Tests/EMWaverScriptRuntimeTests"
+        ),
     ]
 )

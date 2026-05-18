@@ -1444,6 +1444,119 @@ if (typeof analogWrite !== 'function') {
 
 __scriptGlobal.UI = UI;
 
+// JSX authoring helper.
+//
+// Native Apple hosts can transpile a small JSX subset to `JSX.h(...)` calls before
+// JavaScriptCore evaluates the script. Keep this helper as sugar over the stable
+// `UI.*` node API so the native renderers continue to consume the same tree.
+if (typeof JSX === 'undefined') {
+  var JSX = (function () {
+    var tagMap = {
+      Column: 'column',
+      Row: 'row',
+      Card: 'card',
+      Text: 'text',
+      Button: 'button',
+      Tile: 'tile',
+      Slider: 'slider',
+      LogViewer: 'logViewer',
+      Scroll: 'scroll',
+      TextField: 'textField',
+      TextEditor: 'textEditor',
+      Picker: 'picker',
+      Toggle: 'toggle',
+      Grid: 'grid',
+      Plot: 'plot',
+      Modal: 'modal',
+      Spacer: 'spacer',
+      Divider: 'divider',
+      Progress: 'progress',
+    };
+
+    function flattenChildren(input, out) {
+      for (var i = 0; i < input.length; i += 1) {
+        var child = input[i];
+        if (child === null || child === undefined || child === false) {
+          continue;
+        }
+        if (Array.isArray(child)) {
+          flattenChildren(child, out);
+          continue;
+        }
+        out.push(child);
+      }
+      return out;
+    }
+
+    function h(type, props) {
+      var assigned = props ? Object.assign({}, props) : {};
+      var children = flattenChildren(Array.prototype.slice.call(arguments, 2), []);
+      if (children.length) {
+        assigned.children = children;
+      }
+
+      if (typeof type === 'function') {
+        return type(assigned);
+      }
+
+      var tag = String(type || '');
+      var factoryName = tagMap[tag] || tag;
+      var factory = UI && UI[factoryName];
+      if (typeof factory !== 'function') {
+        throw new Error('Unknown JSX UI tag: ' + tag);
+      }
+
+      if (factoryName === 'text' && assigned.text == null && children.length) {
+        assigned.text = children.map(function (child) { return String(child); }).join('');
+        children = [];
+      } else if (factoryName === 'button' && assigned.label == null && children.length) {
+        assigned.label = children.map(function (child) { return String(child); }).join('');
+        children = [];
+      }
+
+      if (children.length) {
+        assigned.children = children;
+      }
+      return factory(assigned);
+    }
+
+    return { h: h };
+  })();
+}
+
+__scriptGlobal.JSX = JSX;
+
+// Primitive tag constants used by the Swift JSX transpiler. These let scripts
+// write `<Column>` while still resolving primitives through `JSX.h(...)`.
+var Column = 'Column';
+var Row = 'Row';
+var Card = 'Card';
+var Text = 'Text';
+var Button = 'Button';
+var Tile = 'Tile';
+var Slider = 'Slider';
+var LogViewer = 'LogViewer';
+var Scroll = 'Scroll';
+var TextField = 'TextField';
+var TextEditor = 'TextEditor';
+var Picker = 'Picker';
+var Toggle = 'Toggle';
+var Grid = 'Grid';
+var Plot = 'Plot';
+var Modal = 'Modal';
+var Spacer = 'Spacer';
+var Divider = 'Divider';
+var Progress = 'Progress';
+
+// JSX-facing render entry point. `UI.render(...)` remains the stable lower-level
+// API for existing scripts.
+if (typeof render !== 'function') {
+  var render = function (node) {
+    return UI.render(node);
+  };
+  __scriptGlobal.render = render;
+}
+
 // Create a native-side plot buffer and return an id.
 // This avoids embedding large arrays into the UI tree.
 if (__scriptGlobal.UI) {

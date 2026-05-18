@@ -595,7 +595,18 @@ var console = (function() {
             guard let self, let context = self.context else { return }
 
             self.cancelAllTimeoutsLocked()
-            if self.containsAsyncTokens(script) {
+            let executableScript: String
+            do {
+                executableScript = try ScriptJSXTranspiler.transpile(script)
+            } catch {
+                self.emitError("Script JSX error: \(error.localizedDescription)")
+                if let completion {
+                    DispatchQueue.main.async { completion() }
+                }
+                return
+            }
+
+            if self.containsAsyncTokens(executableScript) {
                 self.emitError("Script error: async/await is not supported. Scripts must be synchronous.")
                 if let completion {
                     DispatchQueue.main.async { completion() }
@@ -613,7 +624,7 @@ var console = (function() {
             context.exception = nil
             let wrappedScript = """
 (() => {
-\(script)
+\(executableScript)
 })();
 """
             context.evaluateScript(wrappedScript, withSourceURL: URL(fileURLWithPath: self.userScriptSourcePath))

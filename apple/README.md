@@ -46,11 +46,21 @@ Script execution/runtime support and related infrastructure.
 
 Representative files:
 - `ScriptEngine.swift`
+- `ScriptJSXTranspiler.swift`
 - `ScriptDevice.swift`
 - `SimulatorScriptDevice.swift`
 - `ScriptPreviewManager.swift`
 - `PlotBufferStore.swift`
 - `RustBufferCore.swift` (interop surface)
+
+macOS/iOS Apple runtime now includes the first EMWaver JSX migration slice:
+`ScriptJSXTranspiler` rewrites a small uppercase JSX subset such as
+`<Column><Text>Hello</Text></Column>` into `JSX.h(...)` calls before
+JavaScriptCore evaluates a script. The bootstrap helper in
+`assets/default-scripts/script_bootstrap.emw` maps those calls back to the
+existing `UI.*` node factories, so native SwiftUI rendering still consumes the
+same cross-platform tree. This is intentionally an authoring layer, not a
+replacement for the render protocol.
 
 `SimulatorScriptDevice` is the shared iOS/macOS test adapter for `simulator/fixtures/*.json`. It implements `ScriptDevice` so Apple runtime tests can execute hardware-touching `.emw` scripts without a physical board.
 
