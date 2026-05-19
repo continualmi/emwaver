@@ -51,7 +51,7 @@ Responsibilities:
 
 The iOS transport keeps the historical `USBManager` API as the app-facing device facade. USB MIDI remains preferred when a wired CoreMIDI source/destination is available. When no wired device is found, the manager scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same EMWaver SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 
-iOS also supports a manual ESP32 Wi-Fi runtime connection through the firmware WebSocket endpoint at `ws://<host>:3922/v1/ws`. The scripts toolbar exposes `Connect Wi-Fi` for trusted LAN/VPN endpoints. Wi-Fi uses the same SysEx/superframe payload path as USB MIDI and BLE; mDNS discovery and local SSID/password provisioning are still planned separately.
+iOS also supports a manual ESP32 Wi-Fi runtime connection through the firmware WebSocket endpoint at `ws://<host>:3922/v1/ws`. The scripts toolbar exposes `Connect Wi-Fi` for trusted LAN/VPN endpoints and `Wi-Fi Setup` for sending, clearing, and checking ESP32 SSID/password provisioning over the active local transport. Wi-Fi uses the same SysEx/superframe payload path as USB MIDI and BLE; mDNS discovery remains planned separately.
 
 ## 2.3 Views
 

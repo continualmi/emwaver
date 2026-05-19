@@ -9,6 +9,17 @@ import Foundation
 enum WiFiTransport {
     static let transportName = "Wi-Fi"
     static let defaultPort = 3922
+    private static let wifiConfigOpcode: UInt8 = 0x0A
+    private static let wifiBegin: UInt8 = 0x00
+    private static let wifiField: UInt8 = 0x01
+    private static let wifiApply: UInt8 = 0x02
+    private static let wifiClear: UInt8 = 0x03
+    private static let wifiStatus: UInt8 = 0x04
+    private static let wifiFieldSSID: UInt8 = 0x00
+    private static let wifiFieldPassword: UInt8 = 0x01
+    private static let commandChunkBytes = 13
+    private static let maxSSIDBytes = 32
+    private static let maxPasswordBytes = 64
 
     final class Connection: TransportDeviceConnection {
         let hostOrDeviceId: String
@@ -123,6 +134,101 @@ enum WiFiTransport {
             case .failure(let error):
                 onFailure(error)
             }
+        }
+    }
+
+    static func provisioningCommands(ssid: String, password: String) -> [Data]? {
+        let trimmedSSID = ssid.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedSSID.isEmpty else { return nil }
+        let ssidBytes = Array(trimmedSSID.utf8)
+        let passwordBytes = Array(password.utf8)
+        guard ssidBytes.count <= maxSSIDBytes, passwordBytes.count <= maxPasswordBytes else { return nil }
+
+        var commands = [Data([wifiConfigOpcode, wifiBegin])]
+        commands.append(contentsOf: fieldCommands(field: wifiFieldSSID, bytes: ssidBytes))
+        commands.append(contentsOf: fieldCommands(field: wifiFieldPassword, bytes: passwordBytes))
+        commands.append(Data([wifiConfigOpcode, wifiApply]))
+        return commands
+    }
+
+    static func clearProvisioningCommand() -> Data {
+        Data([wifiConfigOpcode, wifiClear])
+    }
+
+    static func statusCommand() -> Data {
+        Data([wifiConfigOpcode, wifiStatus])
+    }
+
+    static func isOKResponse(_ response: Data?) -> Bool {
+        response?.first == 0x80
+    }
+
+    static func statusMessage(from response: Data?) -> String? {
+        guard let response, response.count >= 3, response.first == 0x80 else { return nil }
+        let provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned"
+        let socketText = response[2] == 0 ? "idle" : "connected"
+        guard response.count >= 4 else {
+            return "Wi-Fi is \(provisionedText); socket is \(socketText)."
+        }
+
+        let stationText = response[3] == 0 ? "offline" : "online"
+        guard response.count >= 5 else {
+            return "Wi-Fi is \(provisionedText), station is \(stationText); socket is \(socketText)."
+        }
+
+        let retryText = response[4] == 0 ? "idle" : "retrying"
+        guard response.count >= 7 else {
+            return "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText)); socket is \(socketText)."
+        }
+
+        let reason = UInt16(response[5]) | (UInt16(response[6]) << 8)
+        let reasonText = disconnectReasonText(reason)
+        let runtimeText = response.count >= 13 && response[12] != 0 ? "running" : "idle"
+        if let ipText = stationIP(fromStatusResponse: response) {
+            return "Wi-Fi is \(provisionedText), station is \(stationText) at \(ipText) (\(retryText), \(reasonText)); socket is \(socketText); runtime is \(runtimeText)."
+        }
+        return "Wi-Fi is \(provisionedText), station is \(stationText) (\(retryText), \(reasonText)); socket is \(socketText); runtime is \(runtimeText)."
+    }
+
+    private static func fieldCommands(field: UInt8, bytes: [UInt8]) -> [Data] {
+        guard !bytes.isEmpty else { return [] }
+        var commands: [Data] = []
+        var offset = 0
+        while offset < bytes.count {
+            let count = min(commandChunkBytes, bytes.count - offset)
+            var command = Data([wifiConfigOpcode, wifiField, field, UInt8(offset), UInt8(count)])
+            command.append(contentsOf: bytes[offset..<(offset + count)])
+            commands.append(command)
+            offset += count
+        }
+        return commands
+    }
+
+    private static func stationIP(fromStatusResponse response: Data) -> String? {
+        guard response.count >= 12, response[7] != 0 else { return nil }
+        return "\(response[8]).\(response[9]).\(response[10]).\(response[11])"
+    }
+
+    private static func disconnectReasonText(_ reason: UInt16) -> String {
+        switch reason {
+        case 0:
+            return "no disconnect reason"
+        case 2:
+            return "auth expired"
+        case 15:
+            return "4-way handshake timeout"
+        case 201:
+            return "no access point"
+        case 202:
+            return "auth failed"
+        case 203:
+            return "association failed"
+        case 204:
+            return "handshake timeout"
+        case 205:
+            return "connection failed"
+        default:
+            return "reason \(reason)"
         }
     }
 

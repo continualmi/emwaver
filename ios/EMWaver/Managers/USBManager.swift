@@ -100,6 +100,9 @@ final class USBManager: NSObject, ObservableObject {
     @Published var availablePorts: [String] = []
     @Published var lastErrorText: String? = nil
     @Published var selfTestStatus: String = ""
+    @Published var wifiProvisioningStatus: String? = nil
+    @Published var isWiFiProvisioningError: Bool = false
+    @Published var isWiFiProvisioning: Bool = false
 
     // MARK: - MIDI plumbing
 
@@ -996,6 +999,84 @@ final class USBManager: NSObject, ObservableObject {
                 self.isConnected = true
                 self.lastErrorText = nil
             }
+        }
+    }
+
+    func provisionWiFi(ssid: String, password: String) {
+        guard let commands = WiFiTransport.provisioningCommands(ssid: ssid, password: password) else {
+            finishWiFiProvisioning(message: "Wi-Fi SSID is required and setup values must fit the ESP32 limits.", isError: true)
+            return
+        }
+
+        setWiFiProvisioningBusy("Sending Wi-Fi setup")
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard self.isConnected else {
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.", isError: true)
+                return
+            }
+
+            for command in commands {
+                guard WiFiTransport.isOKResponse(self.sendCommand(command, timeout: 2000)) else {
+                    self.finishWiFiProvisioning(message: "Wi-Fi setup was rejected by the device.", isError: true)
+                    return
+                }
+            }
+
+            self.finishWiFiProvisioning(message: "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself with mDNS.", isError: false)
+        }
+    }
+
+    func clearWiFiProvisioning() {
+        setWiFiProvisioningBusy("Clearing Wi-Fi setup")
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard self.isConnected else {
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.", isError: true)
+                return
+            }
+
+            guard WiFiTransport.isOKResponse(self.sendCommand(WiFiTransport.clearProvisioningCommand(), timeout: 2000)) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi setup clear was rejected by the device.", isError: true)
+                return
+            }
+
+            self.finishWiFiProvisioning(message: "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false)
+        }
+    }
+
+    func refreshWiFiProvisioningStatus() {
+        setWiFiProvisioningBusy("Checking Wi-Fi status")
+        DispatchQueue.global(qos: .userInitiated).async {
+            guard self.isConnected else {
+                self.finishWiFiProvisioning(message: "Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.", isError: true)
+                return
+            }
+
+            let response = self.sendCommand(WiFiTransport.statusCommand(), timeout: 2000)
+            guard let message = WiFiTransport.statusMessage(from: response) else {
+                self.finishWiFiProvisioning(message: "Wi-Fi status request was rejected by the device.", isError: true)
+                return
+            }
+
+            self.finishWiFiProvisioning(message: message, isError: false)
+        }
+    }
+
+    private func setWiFiProvisioningBusy(_ message: String) {
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = true
+            self.isWiFiProvisioningError = false
+            self.wifiProvisioningStatus = message
+        }
+    }
+
+    private func finishWiFiProvisioning(message: String, isError: Bool) {
+        if isError {
+            setError(message)
+        }
+        DispatchQueue.main.async {
+            self.isWiFiProvisioning = false
+            self.isWiFiProvisioningError = isError
+            self.wifiProvisioningStatus = message
         }
     }
 

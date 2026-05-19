@@ -177,8 +177,11 @@ struct ScriptsContainerView: View {
     @StateObject private var scriptSessions = IOSScriptSessionManager()
     @State private var isFirmwareSheetPresented = false
     @State private var isWiFiConnectPresented = false
+    @State private var isWiFiSetupPresented = false
     @State private var wifiHost = ""
     @State private var wifiPort = String(WiFiTransport.defaultPort)
+    @State private var wifiSSID = ""
+    @State private var wifiPassword = ""
 
     var body: some View {
         NavigationStack {
@@ -243,6 +246,11 @@ struct ScriptsContainerView: View {
                                     isWiFiConnectPresented = true
                                 }
                             }
+
+                            Button("Wi-Fi Setup") {
+                                isWiFiSetupPresented = true
+                            }
+                            .disabled(!bleManager.isConnected)
 
                             if let port = bleManager.connectedPortName, !port.isEmpty {
                                 Divider()
@@ -316,6 +324,52 @@ struct ScriptsContainerView: View {
             FirmwareUpdateSheet(device: bleManager, targetLabel: selectedDeviceLabel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .sheet(isPresented: $isWiFiSetupPresented) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("SSID", text: $wifiSSID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        SecureField("Wi-Fi password", text: $wifiPassword)
+                    }
+
+                    Section {
+                        Button(bleManager.isWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup") {
+                            bleManager.provisionWiFi(ssid: wifiSSID, password: wifiPassword)
+                        }
+                        .disabled(bleManager.isWiFiProvisioning || wifiSSID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+
+                        Button("Clear Setup", role: .destructive) {
+                            bleManager.clearWiFiProvisioning()
+                        }
+                        .disabled(bleManager.isWiFiProvisioning)
+
+                        Button("Status") {
+                            bleManager.refreshWiFiProvisioningStatus()
+                        }
+                        .disabled(bleManager.isWiFiProvisioning)
+                    }
+
+                    if let status = bleManager.wifiProvisioningStatus, !status.isEmpty {
+                        Section {
+                            Text(status)
+                                .foregroundStyle(bleManager.isWiFiProvisioningError ? .orange : .secondary)
+                        }
+                    }
+                }
+                .navigationTitle("ESP32 Wi-Fi Setup")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") {
+                            isWiFiSetupPresented = false
+                        }
+                    }
+                }
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
         .alert("Connect Wi-Fi", isPresented: $isWiFiConnectPresented) {
             TextField("Host or IP", text: $wifiHost)

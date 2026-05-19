@@ -229,11 +229,23 @@
         },
         "ios": {
           "status": "planned",
-          "reason": "iOS now exposes manual Wi-Fi runtime connection, but mDNS discovery and local ESP32 SSID/password provisioning remain planned.",
+          "reason": "iOS now exposes manual Wi-Fi runtime connection and local ESP32 SSID/password provisioning, but mDNS discovery remains planned.",
           "evidence": [
             {
               "file": "ios/EMWaver/Views/ScriptsContainerView.swift",
-              "contains": "Connect Wi-Fi"
+              "contains": [
+                "Connect Wi-Fi",
+                "Wi-Fi Setup",
+                "provisionWiFi"
+              ]
+            },
+            {
+              "file": "ios/EMWaver/Managers/WiFiTransport.swift",
+              "contains": [
+                "provisioningCommands",
+                "clearProvisioningCommand",
+                "statusCommand"
+              ]
             }
           ]
         },

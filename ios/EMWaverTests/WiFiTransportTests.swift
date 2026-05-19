@@ -31,6 +31,31 @@ final class WiFiTransportTests: XCTestCase {
         XCTAssertNil(WiFiTransport.webSocketURL(host: "192.168.4.2", port: 70000))
     }
 
+    func testProvisioningCommandsChunkSsidAndPassword() throws {
+        let commands = try XCTUnwrap(WiFiTransport.provisioningCommands(ssid: "bench-network", password: "password-with-more-than-13-bytes"))
+
+        XCTAssertEqual(commands.first, Data([0x0A, 0x00]))
+        XCTAssertEqual(commands.last, Data([0x0A, 0x02]))
+        XCTAssertTrue(commands.contains { $0.prefix(5) == Data([0x0A, 0x01, 0x00, 0x00, 13]) })
+        XCTAssertTrue(commands.contains { $0.prefix(5) == Data([0x0A, 0x01, 0x01, 0x00, 13]) })
+        XCTAssertTrue(commands.contains { $0.prefix(4) == Data([0x0A, 0x01, 0x01, 13]) })
+    }
+
+    func testProvisioningCommandsRejectInvalidLengths() {
+        XCTAssertNil(WiFiTransport.provisioningCommands(ssid: " ", password: "ok"))
+        XCTAssertNil(WiFiTransport.provisioningCommands(ssid: String(repeating: "s", count: 33), password: "ok"))
+        XCTAssertNil(WiFiTransport.provisioningCommands(ssid: "ok", password: String(repeating: "p", count: 65)))
+    }
+
+    func testStatusMessageParsesStationIPAndRuntime() {
+        let response = Data([0x80, 1, 0, 1, 0, 0, 0, 1, 192, 168, 4, 2, 1])
+
+        XCTAssertEqual(
+            WiFiTransport.statusMessage(from: response),
+            "Wi-Fi is provisioned, station is online at 192.168.4.2 (idle, no disconnect reason); socket is idle; runtime is running."
+        )
+    }
+
     private func assertConnectionOwnsIsolatedSession(
         _ connection: TransportDeviceConnection,
         expectedSessionKey: String,
