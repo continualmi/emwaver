@@ -21,8 +21,20 @@ public sealed class WindowsWiFiTransportTests
         var first = new WindowsWiFiTransport.Connection(" 192.168.4.2 ");
         var second = new WindowsWiFiTransport.Connection(" 192.168.4.3 ");
 
-        Assert.Equal("192.168.4.2", first.HostOrDeviceId);
-        AssertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2", "Wi-Fi: 192.168.4.2", second);
+        Assert.Equal("192.168.4.2:3922", first.HostOrDeviceId);
+        AssertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2:3922", "Wi-Fi: 192.168.4.2:3922", second);
+    }
+
+    [Fact]
+    public void WebSocketUriValidatesManualLanHosts()
+    {
+        Assert.Equal("ws://192.168.4.2:3922/v1/ws", WindowsWiFiTransport.WebSocketUri("192.168.4.2", 3922)?.ToString());
+        Assert.Equal("ws://emwaver-a1b2.local:3922/v1/ws", WindowsWiFiTransport.WebSocketUri("emwaver-a1b2.local", 3922)?.ToString());
+        Assert.Equal("ws://[fd00::1234]:3922/v1/ws", WindowsWiFiTransport.WebSocketUri("fd00::1234", 3922)?.ToString());
+        Assert.Null(WindowsWiFiTransport.WebSocketUri("ws://192.168.4.2", 3922));
+        Assert.Null(WindowsWiFiTransport.WebSocketUri("192.168.4.2/path", 3922));
+        Assert.Null(WindowsWiFiTransport.WebSocketUri("[fd00::1234]", 3922));
+        Assert.Null(WindowsWiFiTransport.WebSocketUri("192.168.4.2", 70000));
     }
 
     private static void AssertConnectionOwnsIsolatedSession(

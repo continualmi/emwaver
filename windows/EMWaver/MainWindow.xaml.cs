@@ -358,14 +358,20 @@ public sealed partial class MainWindow : Window
     {
         ConnectSubmenu.Items.Clear();
 
+        var wifiItem = new MenuFlyoutItem { Text = "Wi-Fi..." };
+        wifiItem.Click += async (_, __) => await ShowWiFiConnectDialogAsync();
+        ConnectSubmenu.Items.Add(wifiItem);
+
         var ports = AppServices.Device.AvailablePorts.ToList();
         if (ports.Count == 0)
         {
+            ConnectSubmenu.Items.Add(new MenuFlyoutSeparator());
             var item = new MenuFlyoutItem { Text = "No ports", IsEnabled = false };
             ConnectSubmenu.Items.Add(item);
             return;
         }
 
+        ConnectSubmenu.Items.Add(new MenuFlyoutSeparator());
         foreach (var p in ports)
         {
             var isCurrent = AppServices.Device.IsConnected
@@ -386,6 +392,48 @@ public sealed partial class MainWindow : Window
 
             ConnectSubmenu.Items.Add(item);
         }
+    }
+
+    private async Task ShowWiFiConnectDialogAsync()
+    {
+        var hostBox = new TextBox
+        {
+            Header = "Host or IP",
+            PlaceholderText = "emwaver-a1b2.local or 192.168.4.2",
+        };
+        var portBox = new TextBox
+        {
+            Header = "Port",
+            Text = WindowsWiFiTransport.DefaultPort.ToString(),
+            PlaceholderText = WindowsWiFiTransport.DefaultPort.ToString(),
+        };
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(hostBox);
+        panel.Children.Add(portBox);
+
+        var dialog = new ContentDialog
+        {
+            Title = "Connect Wi-Fi",
+            Content = panel,
+            PrimaryButtonText = "Connect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Primary,
+            XamlRoot = RootGrid.XamlRoot,
+        };
+
+        var result = await dialog.ShowAsync();
+        if (result != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        var host = hostBox.Text.Trim();
+        var port = int.TryParse(portBox.Text.Trim(), out var parsedPort) && WindowsWiFiTransport.IsValidPort(parsedPort)
+            ? parsedPort
+            : WindowsWiFiTransport.DefaultPort;
+        await AppServices.Device.ConnectWiFiAsync(host, port);
+        UpdateDeviceStatus();
+        RebuildConnectMenu();
     }
 
     private async void OnRefreshPortsClick(object sender, RoutedEventArgs e)

@@ -170,6 +170,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private WindowsBleTransport.ScanSession? _bleScanSession;
     private WindowsBleTransport.Connection? _bleConnection;
+    private WindowsWiFiTransport.Connection? _wifiConnection;
     private readonly TransportDeviceConnectionState _activeConnectionState = new();
     private bool _bleConnecting;
     private readonly TransportDeviceSessionRegistry _bufferSessions = new();
@@ -365,6 +366,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         CloseBleDevice();
+        CloseWiFiDevice();
 
         ActiveBufferSession.CancelResponseWait();
         ClearActiveDeviceTarget();
@@ -452,6 +454,14 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             if (_bleConnection?.IsOpen != true)
             {
                 LastErrorText = "Cannot send command: BLE not connected";
+                return null;
+            }
+        }
+        else if (ActiveTransport == DeviceTransport.Wifi)
+        {
+            if (_wifiConnection?.IsOpen != true)
+            {
+                LastErrorText = "Cannot send command: Wi-Fi not connected";
                 return null;
             }
         }
@@ -599,6 +609,11 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             SendBleSuperframe(superframe36, session);
             return;
         }
+        if (ActiveTransport == DeviceTransport.Wifi)
+        {
+            SendWiFiSuperframe(superframe36, session);
+            return;
+        }
 
         var connection = _usbMidiConnection;
         if (connection == null || !connection.IsOpen)
@@ -743,6 +758,87 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         WindowsBleTransport.CloseHandles(_bleConnection);
         _bleConnection = null;
         _bleConnecting = false;
+    }
+
+    internal async Task ConnectWiFiAsync(string host, int port)
+    {
+        var trimmedHost = host?.Trim() ?? string.Empty;
+        var safePort = WindowsWiFiTransport.IsValidPort(port) ? port : WindowsWiFiTransport.DefaultPort;
+        if (!WindowsWiFiTransport.IsValidManualHost(trimmedHost))
+        {
+            LastErrorText = "Wi-Fi host must be a hostname or IP address";
+            return;
+        }
+
+        Disconnect();
+
+        try
+        {
+            LastErrorText = null;
+            DeviceEmwaverVersion = null;
+            ConnectedBoardType = null;
+
+            var key = $"{trimmedHost}:{safePort}";
+            var session = SetActiveDeviceTarget(WindowsWiFiTransport.SessionId(key), DeviceTransport.Wifi);
+            var connection = await WindowsWiFiTransport.OpenConnectionAsync(
+                trimmedHost,
+                safePort,
+                bytes => ProcessIncomingSysex(bytes, "Wi-Fi", _wifiConnection?.Session, ActiveDeviceSessionId(DeviceTransport.Wifi)),
+                session);
+
+            _wifiConnection = connection;
+            _activeConnectionState.SetConnection(connection);
+            ConnectedPort = new DevicePort(connection.DisplayName, string.Empty, string.Empty);
+
+            var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
+            if (version == null)
+            {
+                await Task.Delay(250);
+                version = await QueryDeviceVersionAsync(timeoutMs: 1500);
+            }
+
+            if (version == null)
+            {
+                LastErrorText = "Wi-Fi endpoint did not respond like an EMWaver device";
+                Disconnect();
+                return;
+            }
+
+            DeviceEmwaverVersion = version;
+            ConnectedBoardType = "esp32s3";
+            LastDetectedBoardType = ConnectedBoardType;
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+            Disconnect();
+        }
+    }
+
+    private void SendWiFiSuperframe(byte[] superframe36, ITransportDeviceSession session)
+    {
+        var connection = _wifiConnection;
+        if (connection == null || !connection.IsOpen)
+        {
+            LastErrorText = "Cannot send: Wi-Fi not connected";
+            return;
+        }
+
+        session.AppendTxBytes(superframe36, NowMs());
+        try
+        {
+            LastErrorText = connection.SendSysexAsync(superframe36).GetAwaiter().GetResult();
+        }
+        catch (Exception ex)
+        {
+            LastErrorText = ex.Message;
+        }
+    }
+
+    private void CloseWiFiDevice()
+    {
+        _wifiConnection?.Dispose();
+        _wifiConnection = null;
     }
 
     private static ulong NowMs()

@@ -17,6 +17,7 @@
             <Button Content="Refresh Ports" Click="OnRefreshClick" />
             <ToggleSwitch x:Name="AutoConnectSwitch" Header="Auto-connect" Toggled="OnAutoConnectToggled" />
             <Button x:Name="DisconnectButton" Content="Disconnect" Click="OnDisconnectClick" />
+            <Button Content="Connect Wi-Fi" Click="OnConnectWiFiClick" />
             <Button x:Name="UpdateModeButton" Content="Enter Update Mode" Click="OnEnterUpdateModeClick" />
             <Button Content="Refresh Update Mode" Click="OnRefreshUpdateModeClick" />
             <Button x:Name="PrimaryFirmwareButton" Content="Update firmware" Click="OnPrimaryFirmwareClick" />
@@ -35,6 +36,9 @@
                 <StackPanel Spacing="8">
                     <TextBlock Text="Devices" FontSize="16" FontWeight="SemiBold" />
                     <TextBlock x:Name="DevicesIntroText" Text="Connected boards are managed locally from this app." Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
+                    <TextBox x:Name="WiFiHostBox" Header="Wi-Fi host or IP" PlaceholderText="emwaver-a1b2.local or 192.168.4.2" />
+                    <TextBox x:Name="WiFiPortBox" Header="Wi-Fi port" Text="3922" />
+                    <Button Content="Connect Wi-Fi" Click="OnConnectWiFiClick" />
                 </StackPanel>
             </Border>
         </StackPanel>

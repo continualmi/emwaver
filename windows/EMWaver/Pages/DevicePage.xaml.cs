@@ -181,6 +181,16 @@ public sealed partial class DevicePage : Page
         UpdateUi();
     }
 
+    private async void OnConnectWiFiClick(object sender, RoutedEventArgs e)
+    {
+        var host = WiFiHostBox.Text.Trim();
+        var port = int.TryParse(WiFiPortBox.Text.Trim(), out var parsedPort) && WindowsWiFiTransport.IsValidPort(parsedPort)
+            ? parsedPort
+            : WindowsWiFiTransport.DefaultPort;
+        await AppServices.Device.ConnectWiFiAsync(host, port);
+        UpdateUi();
+    }
+
     private async void OnPrimaryFirmwareClick(object sender, RoutedEventArgs e)
     {
         var dialog = new FirmwareUpdateDialog(AppServices.Device, AppServices.FirmwareUpdater)

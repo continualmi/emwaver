@@ -64,6 +64,8 @@ Windows app communicates with EMWaver hardware over USB MIDI and ESP32 BLE, and 
 
 Transport logic lives under `Services/UsbMidiSysex.cs` and related device manager services. USB MIDI remains preferred when a wired device is available. When no wired MIDI port is found and auto-connect is enabled, Windows scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 
+Windows also supports a manual ESP32 Wi-Fi runtime connection through the firmware WebSocket endpoint at `ws://<host>:3922/v1/ws`. The device menu and Device page expose `Connect Wi-Fi` for trusted LAN/VPN endpoints. Wi-Fi uses the same 36-byte superframe payload path as USB MIDI and BLE; mDNS discovery and local SSID/password provisioning are still planned separately.
+
 ## 3.2 Scripting UX
 
 Scripts UI and runtime behavior are centered in `ScriptsPage` and `Scripting/*` modules, including plot/state helpers and script document handling.
