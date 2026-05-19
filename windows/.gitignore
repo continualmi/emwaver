@@ -9,3 +9,6 @@
 
 # Local Rust buffer core DLL (generated)
 EMWaver/Native/*.dll
+
+# Synced from repo-level assets/default-scripts during Windows builds.
+EMWaver/Assets/DefaultScripts/*.js

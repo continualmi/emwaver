@@ -299,7 +299,7 @@ internal static partial class ScriptSourceTranspiler
         private char Advance() => _source[_index++];
         private bool StartsLineComment => Current == '/' && Peek == '/';
         private bool StartsBlockComment => Current == '/' && Peek == '*';
-        private bool StartsWith(string text) => _source.StartsWith(text, _index, StringComparison.Ordinal);
+        private bool StartsWith(string text) => _source.AsSpan(_index).StartsWith(text, StringComparison.Ordinal);
         private void SkipWhitespace() { while (!IsAtEnd && char.IsWhiteSpace(Current)) Advance(); }
         private void Consume(char expected) { if (Current != expected) throw new InvalidOperationException("expected " + expected); Advance(); }
 

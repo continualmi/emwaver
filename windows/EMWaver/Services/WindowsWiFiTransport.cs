@@ -20,13 +20,13 @@ internal static class WindowsWiFiTransport
         public ITransportDeviceSession Session { get; }
     }
 
-    internal static string SessionId(string hostOrDeviceId)
+    internal static string SessionId(string? hostOrDeviceId)
     {
         var key = string.IsNullOrWhiteSpace(hostOrDeviceId) ? "active" : hostOrDeviceId.Trim();
         return $"wifi:{key}";
     }
 
-    internal static string DisplayName(string hostOrDeviceId)
+    internal static string DisplayName(string? hostOrDeviceId)
     {
         var key = string.IsNullOrWhiteSpace(hostOrDeviceId) ? "device" : hostOrDeviceId.Trim();
         return $"{TransportName}: {key}";

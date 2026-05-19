@@ -3,6 +3,7 @@ using Xunit;
 
 namespace EMWaver.Tests;
 
+#if WINDOWS
 public sealed class WindowsBleTransportTests
 {
     [Fact]
@@ -27,3 +28,4 @@ public sealed class WindowsBleTransportTests
         }
     }
 }
+#endif

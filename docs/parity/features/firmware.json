@@ -24,8 +24,8 @@
           ]
         },
         "ios": {
-          "status": "planned",
-          "reason": "iOS exposes bundled firmware visibility and STM32 Update Mode entry, but does not yet own the full STM32 DFU transfer runtime.",
+          "status": "not_applicable",
+          "reason": "iOS does not expose the USB DFU device class required to own STM32 DFU flashing. iOS parity for this flow is bundled firmware visibility/share plus requesting STM32 Update Mode over an already-local transport.",
           "evidence": [
             {
               "file": "ios/EMWaver/Views/FirmwareUpdateSheet.swift",
@@ -33,7 +33,7 @@
                 "Bundled STM32 firmware",
                 "Share STM32 firmware",
                 "Enter Update Mode",
-                "full STM32 DFU"
+                "iOS does not yet expose the full STM32 DFU"
               ]
             },
             {

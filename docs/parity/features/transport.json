@@ -94,6 +94,69 @@
           ]
         }
       }
+    },
+    {
+      "id": "transport.wifi_runtime",
+      "description": "ESP32 Wi-Fi runtime transport supports local LAN/VPN hardware control through the firmware WebSocket endpoint.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "macos/EMWaver/EMWaver/MacWiFiManager.swift",
+              "contains": [
+                "NWBrowser[\\s\\S]*bonjour",
+                "URLSessionWebSocketTask",
+                "func connect\\(host:"
+              ]
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/MacUSBManager.swift",
+              "contains": "connectWiFi"
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/DeviceConnectionSheet.swift",
+              "contains": [
+                "Wi-Fi Setup",
+                "wifiHost",
+                "wifiPort",
+                "provisionWiFi"
+              ]
+            }
+          ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS has a Wi-Fi transport identity/session boundary, but does not yet expose live ESP32 WebSocket connection, mDNS/manual endpoint UI, or Wi-Fi provisioning in the native app.",
+          "evidence": [
+            {
+              "file": "ios/EMWaver/Managers/WiFiTransport.swift",
+              "contains": "Wi-Fi[\\s\\S]*TransportDeviceConnection"
+            }
+          ]
+        },
+        "windows": {
+          "status": "planned",
+          "reason": "Windows has a Wi-Fi transport identity/session boundary, but does not yet expose live ESP32 WebSocket connection, mDNS/manual endpoint UI, or Wi-Fi provisioning in the native app.",
+          "evidence": [
+            {
+              "file": "windows/EMWaver/Services/WindowsWiFiTransport.cs",
+              "contains": "Wi-Fi[\\s\\S]*ITransportDeviceConnection"
+            }
+          ]
+        },
+        "android": {
+          "status": "planned",
+          "reason": "Android has a Wi-Fi transport identity/session boundary, but does not yet expose live ESP32 WebSocket connection, mDNS/manual endpoint UI, or Wi-Fi provisioning in the native app.",
+          "evidence": [
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidWiFiTransport.java",
+              "contains": "Wi-Fi[\\s\\S]*TransportDeviceConnection"
+            }
+          ]
+        }
+      }
     }
   ]
 }
