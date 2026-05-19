@@ -1,0 +1,691 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver Cross-Platform Agent and UI Migration Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #182231;
+      --muted: #637084;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --agent: #274c77;
+      --ui: #0b7668;
+      --runtime: #8a5a00;
+      --scripts: #7249b6;
+      --native: #2f7d4c;
+      --risk: #a83a3a;
+      --shadow: 0 18px 46px rgba(24, 34, 49, 0.10);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.46;
+    }
+
+    header {
+      min-height: 82vh;
+      display: grid;
+      align-items: end;
+      padding: 48px 24px 36px;
+      color: white;
+      background:
+        linear-gradient(180deg, rgba(7, 13, 22, 0.06), rgba(7, 13, 22, 0.88)),
+        url("../hardware/emwaver-link/catalog/images/IMG_0160.webp") center / cover no-repeat;
+    }
+
+    .hero,
+    main {
+      width: 100%;
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    .eyebrow {
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      font-size: 12px;
+      font-weight: 760;
+      opacity: 0.86;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin: 0;
+      font-size: clamp(42px, 7vw, 86px);
+      line-height: 0.96;
+      letter-spacing: 0;
+    }
+
+    .hero p {
+      max-width: 800px;
+      margin: 22px 0 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: clamp(18px, 2vw, 24px);
+    }
+
+    main {
+      padding: 28px 24px 78px;
+    }
+
+    section {
+      padding: 42px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    section:last-child {
+      border-bottom: 0;
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      font-size: clamp(28px, 4vw, 44px);
+      line-height: 1.04;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    ul,
+    ol {
+      margin: 12px 0 0;
+      padding-left: 20px;
+      color: var(--muted);
+    }
+
+    li + li {
+      margin-top: 8px;
+    }
+
+    code,
+    pre {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      color: #24364f;
+    }
+
+    pre {
+      margin: 16px 0 0;
+      padding: 16px;
+      overflow: auto;
+      border-radius: 8px;
+      background: #101824;
+      color: #eaf0f8;
+      font-size: 13px;
+      line-height: 1.45;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 22px;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+    }
+
+    th,
+    td {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #334155;
+      background: #eef2f8;
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .lead {
+      max-width: 880px;
+      font-size: 18px;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+      margin-top: 22px;
+    }
+
+    .two {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .three {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 18px;
+      box-shadow: 0 1px 0 rgba(24, 34, 49, 0.03);
+    }
+
+    .card.agent { border-top: 5px solid var(--agent); }
+    .card.ui { border-top: 5px solid var(--ui); }
+    .card.runtime { border-top: 5px solid var(--runtime); }
+    .card.scripts { border-top: 5px solid var(--scripts); }
+    .card.native { border-top: 5px solid var(--native); }
+    .card.risk { border-top: 5px solid var(--risk); }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      margin-bottom: 10px;
+      color: white;
+      background: var(--agent);
+      font-size: 12px;
+      font-weight: 760;
+    }
+
+    .tag.ui { background: var(--ui); }
+    .tag.runtime { background: var(--runtime); }
+    .tag.scripts { background: var(--scripts); }
+    .tag.native { background: var(--native); }
+    .tag.risk { background: var(--risk); }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 24px;
+    }
+
+    .step {
+      min-height: 150px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      position: relative;
+    }
+
+    .step::after {
+      content: ">";
+      position: absolute;
+      right: -9px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      color: white;
+      background: var(--agent);
+      font-size: 12px;
+      font-weight: 800;
+      z-index: 2;
+    }
+
+    .step:last-child::after {
+      display: none;
+    }
+
+    .matrix {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 12px;
+      margin-top: 22px;
+    }
+
+    .platform {
+      min-height: 178px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .platform strong {
+      display: block;
+      margin-bottom: 8px;
+    }
+
+    .checklist {
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      margin-top: 12px;
+    }
+
+    .box {
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      color: white;
+      background: var(--native);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .warn .box {
+      background: var(--risk);
+    }
+
+    @media (max-width: 920px) {
+      header {
+        min-height: 72vh;
+      }
+
+      .two,
+      .three,
+      .flow,
+      .matrix {
+        grid-template-columns: 1fr;
+      }
+
+      .step::after {
+        display: none;
+      }
+
+      table {
+        display: block;
+        overflow-x: auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">EMWaver migration plan</div>
+      <h1>Make the Agent, UI, scripts, and libraries identical across iOS, Android, macOS, and Windows.</h1>
+      <p>
+        macOS is the behavior reference, but the product target is one EMWaver experience: the same Agent workflow,
+        the same script authoring model, the same example/library/kernel separation, and the same visible
+        <code>.js</code>/<code>.jsx</code> script surface on every supported platform.
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <h2>Decision</h2>
+      <p class="lead">
+        Standardize EMWaver around normal JavaScript modules and JSX-style UI authoring while keeping native rendering
+        and platform-native device transports. The user and the Agent should see one script API. The apps may use Swift,
+        Kotlin, and C# internally, but they must implement the same runtime contract, the same generated UI node model,
+        and the same script library exposure.
+      </p>
+
+      <div class="grid three">
+        <div class="card agent">
+          <span class="tag">Agent</span>
+          <h3>Identical user workflow</h3>
+          <p>One chat/editor/run loop, one local context payload shape, one set of hardware primitive tools, and one explanation style across desktop and mobile.</p>
+        </div>
+        <div class="card ui">
+          <span class="tag ui">UI</span>
+          <h3>Identical script UI model</h3>
+          <p>Scripts render JSX into an EMWaver UI tree. SwiftUI, Android, and Windows renderers consume that tree instead of each inventing UI semantics.</p>
+        </div>
+        <div class="card scripts">
+          <span class="tag scripts">Scripts</span>
+          <h3>Identical file surface</h3>
+          <p>Bundled examples, kernel helpers, and libraries ship as readable <code>.js</code> and <code>.jsx</code> files, with clear imports and stable names.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Target Architecture</h2>
+      <p class="lead">
+        The migration is not a move to web views or React DOM. It is a move to a shared script/runtime contract that
+        every native client implements. Native apps stay native; script code and Agent behavior become portable.
+      </p>
+
+      <div class="flow">
+        <div class="step">
+          <span class="tag scripts">Authoring</span>
+          <h3><code>.js</code> and <code>.jsx</code></h3>
+          <p>Users and the Agent write normal modules with imports from EMWaver libraries.</p>
+        </div>
+        <div class="step">
+          <span class="tag runtime">Runtime</span>
+          <h3>Shared JS contract</h3>
+          <p>The same globals, imports, timers, events, errors, and lifecycle rules exist everywhere.</p>
+        </div>
+        <div class="step">
+          <span class="tag ui">UI tree</span>
+          <h3>Normalized nodes</h3>
+          <p>JSX compiles to portable nodes for controls, layouts, plots, logs, forms, and status.</p>
+        </div>
+        <div class="step">
+          <span class="tag native">Native bridge</span>
+          <h3>Platform renderers</h3>
+          <p>SwiftUI, Android UI, and WinUI render the same node tree and event callbacks.</p>
+        </div>
+        <div class="step">
+          <span class="tag">Agent</span>
+          <h3>Context and tools</h3>
+          <p>The Agent reads the same local context and calls the same named hardware primitives.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Script Surface</h2>
+      <p class="lead">
+        The old distinction between hidden bootstrap behavior and visible examples should be replaced with explicit
+        layers. Users can inspect examples and libraries. Kernel internals are documented and stable, but not presented
+        as tutorial code.
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Layer</th>
+            <th>Files</th>
+            <th>Visible to users</th>
+            <th>Migration work</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Examples</strong></td>
+            <td><code>examples/*.js</code>, <code>examples/*.jsx</code></td>
+            <td>Yes, first-class runnable scripts</td>
+            <td>Convert demos to normal imports, consistent metadata, screenshots where useful, and no hidden dependency on bootstrap globals.</td>
+          </tr>
+          <tr>
+            <td><strong>Libraries</strong></td>
+            <td><code>emw-gpio</code>, <code>emw-spi</code>, <code>emw-i2c</code>, <code>emw-uart</code>, <code>emw-ui</code>, <code>emw-jsx</code></td>
+            <td>Yes, readable reference modules</td>
+            <td>Expose stable public exports, examples per library, shared docs, and identical import resolution in every app.</td>
+          </tr>
+          <tr>
+            <td><strong>Kernel</strong></td>
+            <td><code>emw-kernel</code>, protocol/session/runtime adapters</td>
+            <td>Documented, not tutorial-first</td>
+            <td>Keep device packet details, session routing, and runtime lifecycle behind a narrow platform contract.</td>
+          </tr>
+          <tr>
+            <td><strong>Native host</strong></td>
+            <td>Swift, Kotlin, C#, transport implementations</td>
+            <td>No</td>
+            <td>Implement the same device/session/tool contracts without leaking platform-specific behavior into script APIs.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Authoring Standard</h2>
+      <p class="lead">
+        The Agent should generate the same style of script on every platform. Examples should teach that style directly.
+      </p>
+
+      <pre>import { render, Column, Text, Button, Plot } from "emw-jsx";
+import { gpioMode, gpioWrite } from "emw-gpio";
+import { createSampler } from "emw-sampler";
+
+const led = 13;
+let on = false;
+const sampler = createSampler({ channel: 0, hz: 500 });
+
+async function toggle() {
+  on = !on;
+  await gpioMode(led, "output");
+  await gpioWrite(led, on);
+  render(&lt;App /&gt;);
+}
+
+function App() {
+  return (
+    &lt;Column gap={12}&gt;
+      &lt;Text value={on ? "LED on" : "LED off"} /&gt;
+      &lt;Button title="Toggle" onPress={toggle} /&gt;
+      &lt;Plot title="A0" samples={sampler.samples} /&gt;
+    &lt;/Column&gt;
+  );
+}
+
+render(&lt;App /&gt;);</pre>
+    </section>
+
+    <section>
+      <h2>End User Parity</h2>
+      <p class="lead">
+        The platform-specific shell can differ where the operating system requires it, but the user's mental model must
+        not change. A script created on macOS should open, run, render, fail, and be fixable by the Agent on iOS,
+        Android, and Windows with the same names and behavior.
+      </p>
+
+      <div class="matrix">
+        <div class="platform">
+          <strong>macOS</strong>
+          <p>Use the current app as the reference for script list behavior, Agent context, run lifecycle, native UI rendering, transport selection, and local files.</p>
+        </div>
+        <div class="platform">
+          <strong>iOS</strong>
+          <p>Match the same script editor, examples, Agent workflow, runtime errors, JSX rendering, and device-session behavior within iOS storage and permission limits.</p>
+        </div>
+        <div class="platform">
+          <strong>Android</strong>
+          <p>Match the same script library, Agent context, USB/BLE/Wi-Fi device targeting, and JSX-native render bridge without Android-only script names or hidden APIs.</p>
+        </div>
+        <div class="platform">
+          <strong>Windows</strong>
+          <p>Match the same script session list, Agent API client, examples, file exposure, renderer semantics, and transport state through the WinUI host.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Agent Migration</h2>
+      <p class="lead">
+        The Agent is a cross-platform product surface, not a separate implementation per app. Each app should collect
+        equivalent local context and expose equivalent actions.
+      </p>
+
+      <div class="grid two">
+        <div class="card agent">
+          <h3>Shared context payload</h3>
+          <ul>
+            <li>Current script text, file name, language mode, unsaved state, and selected example/library source.</li>
+            <li>Runtime error, console output, active UI tree summary, selected device, transport, firmware status, and recent hardware tool results.</li>
+            <li>Platform capabilities and permission state, expressed through shared capability names rather than platform-specific prose.</li>
+          </ul>
+        </div>
+        <div class="card agent">
+          <h3>Shared Agent actions</h3>
+          <ul>
+            <li>Create or edit <code>.js</code>/<code>.jsx</code> scripts.</li>
+            <li>Explain runtime errors and hardware responses.</li>
+            <li>Call named hardware primitives such as <code>gpio_read</code>, <code>gpio_write</code>, <code>analog_read</code>, and <code>spi_transfer</code>.</li>
+            <li>Return runnable script patches instead of hidden app-specific commands.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Implementation Phases</h2>
+      <div class="grid two">
+        <div class="card scripts">
+          <span class="tag scripts">Phase 1</span>
+          <h3>Inventory and freeze the reference</h3>
+          <p>Document macOS behavior for Agent, editor, run lifecycle, examples, library imports, file storage, session list, errors, and UI nodes. Turn that into a parity checklist.</p>
+        </div>
+        <div class="card runtime">
+          <span class="tag runtime">Phase 2</span>
+          <h3>Define the shared runtime contract</h3>
+          <p>Finalize import resolution, module cache behavior, JSX transform rules, UI node schema, lifecycle callbacks, timers, cancellation, and error serialization.</p>
+        </div>
+        <div class="card ui">
+          <span class="tag ui">Phase 3</span>
+          <h3>Move examples and libraries</h3>
+          <p>Promote visible examples and libraries to explicit <code>.js</code>/<code>.jsx</code> assets. Keep kernel helpers separated and remove tutorial-facing bootstrap leakage.</p>
+        </div>
+        <div class="card native">
+          <span class="tag native">Phase 4</span>
+          <h3>Port renderers and bridges</h3>
+          <p>Bring iOS, Android, and Windows to the same renderer semantics and hardware primitive bridge as macOS, with fixture-based parity tests.</p>
+        </div>
+        <div class="card agent">
+          <span class="tag">Phase 5</span>
+          <h3>Unify Agent UX</h3>
+          <p>Standardize the chat/editor/run affordances, local context shape, tool result display, script patch application, and API-key configuration behavior.</p>
+        </div>
+        <div class="card native">
+          <span class="tag native">Phase 6</span>
+          <h3>Validate cross-platform parity</h3>
+          <p>Run the same scripts, UI fixtures, simulator sessions, and hardware smoke tests across macOS, iOS, Android, and Windows before treating the migration as complete.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Platform Work Items</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Area</th>
+            <th>macOS</th>
+            <th>iOS</th>
+            <th>Android</th>
+            <th>Windows</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>JS runtime</strong></td>
+            <td>Reference behavior and fixtures</td>
+            <td>Match import/lifecycle/error semantics</td>
+            <td>Match import/lifecycle/error semantics</td>
+            <td>Match import/lifecycle/error semantics</td>
+          </tr>
+          <tr>
+            <td><strong>JSX transform</strong></td>
+            <td>Stabilize syntax and generated node shape</td>
+            <td>Bundle same transform or precompiled asset path</td>
+            <td>Bundle same transform or precompiled asset path</td>
+            <td>Bundle same transform or precompiled asset path</td>
+          </tr>
+          <tr>
+            <td><strong>Native renderer</strong></td>
+            <td>SwiftUI renderer is reference</td>
+            <td>Share Apple renderer where possible</td>
+            <td>Implement exact node semantics</td>
+            <td>Implement exact node semantics</td>
+          </tr>
+          <tr>
+            <td><strong>Examples</strong></td>
+            <td>Source of truth asset list</td>
+            <td>Bundle same examples and metadata</td>
+            <td>Bundle same examples and metadata</td>
+            <td>Bundle same examples and metadata</td>
+          </tr>
+          <tr>
+            <td><strong>Agent</strong></td>
+            <td>Reference local context</td>
+            <td>Match context and patch flow</td>
+            <td>Match context and patch flow</td>
+            <td>Match context and patch flow</td>
+          </tr>
+          <tr>
+            <td><strong>Hardware tools</strong></td>
+            <td>Reference primitive names/results</td>
+            <td>Same names/results over iOS transports</td>
+            <td>Same names/results over Android transports</td>
+            <td>Same names/results over Windows transports</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Acceptance Criteria</h2>
+      <div class="grid two">
+        <div class="card native">
+          <div class="checklist"><span class="box">1</span><p>A bundled JSX example opens and runs unchanged on macOS, iOS, Android, and Windows.</p></div>
+          <div class="checklist"><span class="box">2</span><p>The same script imports <code>emw-jsx</code>, <code>emw-ui</code>, <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-i2c</code> on every platform.</p></div>
+          <div class="checklist"><span class="box">3</span><p>The same UI tree fixture renders equivalent controls, plots, labels, buttons, inputs, and event callbacks on every platform.</p></div>
+          <div class="checklist"><span class="box">4</span><p>The same runtime error produces the same user-facing error shape and the same Agent context on every platform.</p></div>
+        </div>
+        <div class="card native">
+          <div class="checklist"><span class="box">5</span><p>The Agent can create, edit, run, and fix a local script using the same visible workflow everywhere.</p></div>
+          <div class="checklist"><span class="box">6</span><p>Examples, libraries, and kernel files are separated in app UI and repository layout.</p></div>
+          <div class="checklist"><span class="box">7</span><p>Local hardware control remains account-free and does not require cloud activation, hosted relay, or script sync.</p></div>
+          <div class="checklist"><span class="box">8</span><p>Parity tests cover runtime fixtures, UI node rendering, Agent context construction, simulator devices, and at least one real-board smoke path per platform.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Risks</h2>
+      <div class="grid three">
+        <div class="card risk">
+          <span class="tag risk">Risk</span>
+          <h3>Four script runtimes drift</h3>
+          <p>Mitigation: keep shared fixtures in the repo and require each app to pass the same module, JSX, error, UI, and simulator cases.</p>
+        </div>
+        <div class="card risk">
+          <span class="tag risk">Risk</span>
+          <h3>Hidden bootstrap behavior survives</h3>
+          <p>Mitigation: require every example to import the libraries it uses and keep kernel helpers out of tutorial-facing code.</p>
+        </div>
+        <div class="card risk">
+          <span class="tag risk">Risk</span>
+          <h3>Agent behavior becomes app-specific</h3>
+          <p>Mitigation: version the Agent context schema and hardware primitive result schema, then test context construction per app.</p>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Immediate Next Steps</h2>
+      <ol>
+        <li>Create the runtime parity checklist from the current macOS Agent/UI/script behavior.</li>
+        <li>Rename or reorganize bundled assets so examples, libraries, and kernel files are explicitly separated.</li>
+        <li>Choose the canonical JSX transform path: runtime transform everywhere, precompile-on-save, or both with the same generated node output.</li>
+        <li>Add shared fixtures for module imports, JSX output, UI node rendering, Agent context payloads, and simulator hardware responses.</li>
+        <li>Port the iOS, Android, and Windows render/runtime bridges until the same examples pass unchanged.</li>
+      </ol>
+    </section>
+  </main>
+</body>
+</html>

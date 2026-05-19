@@ -18,6 +18,7 @@ Use it to capture:
 - Gateway consolidation: `gateway/` becomes the single owner of the local backend, CLI, runtime, transports, and browser frontend. The controlling migration document is `gateway/MIGRATION.md`.
 - EMWaver rebirth: local-first open-source runtime, Gateway-driven `.emw` execution, hardware monorepo consolidation, and paid Agent API usage through the future Continual MI/MGPT backend as the primary business model.
 - Agent-driven hardware automation: the native Agent uses named hardware primitive tools (`spi_transfer`, `gpio_read`, `gpio_write`, etc.) that send native EMW protocol packets through the local device, replacing both the snapshot/event navigation model and the earlier `eval` approach. See `docs/AGENT_EVAL_RUNTIME.md`.
+- Cross-platform Agent/UI parity: iOS, Android, macOS, and Windows should converge on one end-user Agent/editor/run experience, one `.js`/`.jsx` script surface, and identical example/library/kernel exposure. Plan: `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html`.
 - Multi-device test bench goal: support a local hardware "box" with at least two simultaneously connected EMWaver boards, initially two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32, so one agent session can probe modules, transports, scripts, and hardware feedback loops end to end.
 - First implementation slice is tracked in `REBIRTH_ISSUES.md`: gateway package, local WebSocket endpoint, runtime/device extraction, shared mock device simulator contract, `emwaver run`, account-free local hardware control, hardware repo inventory, static web deployment migration, and hardware asset deduplication.
 
@@ -37,6 +38,7 @@ Use it to capture:
 | `P0` | Device simulator | `done for protocol adapters` | Shared fixture, Rust `CommandBridge`, CLI `--sim-device`, Apple `SimulatorScriptDevice`, Windows `SimulatorCommandBridge`, and Android `SimulatorScriptDeviceBridge` are added; virtual transport was evaluated and kept optional/local-only. |
 | `P0` | Remote control scope | `code complete / validation pending` | Native apps are self-contained; CLI/browser control uses Gateway and does not route through native app host services. |
 | `P0` | Agent interfaces | `mostly migrated` | Repo-shipped production prompt files are removed; gateway/CLI plus Apple iOS/macOS, Windows, and Android Agent paths now use API-key endpoint clients instead of EMWaver account chat routes. Remaining work: enrich runtime/hardware request context. |
+| `P0` | Cross-platform Agent/UI parity | `planned` | Use `CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` to migrate iOS, Android, macOS, and Windows toward identical Agent UX, native-rendered JSX UI, shared `.js`/`.jsx` examples, and explicit example/library/kernel separation. |
 | `P0` | Device identity gates | `done for primary native paths` | macOS and Windows local connect/update paths no longer read hardware UIDs or gate flashing on minting/claiming/account state. |
 | `P0` | Hardware monorepo | `done` | The nine primary hardware repos are imported under flat `hardware/<repo-name>/` paths with subtree history. |
 | `P1` | Static public web | `migrated to EMWaver repo` | Public EMWaver static pages live in `web/`, export to `web/out-emwaver`, and are being tested on GitHub Pages for the open-source release. Society keeps only a lightweight `/emwaver` bridge to `emwaver.ai`. |
@@ -50,9 +52,10 @@ Use it to capture:
 2. Run `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION`: provision a real ESP32-S3, verify same-LAN mDNS/IP script execution, second-client busy handling, Wi-Fi drop recovery, USB/BLE recovery, and GPIO/ADC/SPI/PWM/sampler/retransmit coverage.
 3. Run `009_ESP32_WIFI_VPN_BY_IP_EXECUTION`: verify user-owned VPN/private-IP script execution, manual IP fallback without mDNS, reachable/busy/connection-failed behavior, reconnect behavior, and no hosted relay/account path.
 4. Native Agent hardware primitive tools are implemented (`spi_transfer`, `gpio_read/write/mode`, `analog_read`). Next: validate `spi_transfer` against a real CC1101 session and extend hardware tool coverage where useful.
-5. Design the multi-device runtime contract for two simultaneous boards: device ids, transport labels, per-device status, routing commands to a chosen board, and UI/snapshot attribution.
-6. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
-7. Inventory public web and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
+5. Build the cross-platform Agent/UI parity checklist from the current macOS behavior: Agent context, editor/run flow, JSX rendering, examples, libraries, kernel exposure, errors, and storage.
+6. Design the multi-device runtime contract for two simultaneous boards: device ids, transport labels, per-device status, routing commands to a chosen board, and UI/snapshot attribution.
+7. Review older/generated hardware catalog IDs and decide whether they map to imported repos or need separate cleanup.
+8. Inventory public web and hardware folders for duplicated board/module images and choose canonical `hardware/<repo-name>/` asset paths.
 
 ## Blockers / Risks
 

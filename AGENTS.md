@@ -159,6 +159,7 @@ Use the local README first when working in a folder:
 - `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document covering script authoring, native hardware tools, and local/API boundaries
+- `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — cross-platform iOS, Android, macOS, and Windows migration plan for identical Agent/UI behavior, `.js`/`.jsx` authoring, and example/library/kernel separation
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
 - `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read); motivation for removing get_ui_snapshot/send_ui_event and eval
 - `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — superseded; Gateway/CLI snapshot slice remains valid, native Agent snapshot/eval direction was reversed (see AGENT_EVAL_RUNTIME.md)

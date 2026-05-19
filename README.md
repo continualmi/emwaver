@@ -120,6 +120,7 @@ Production Agent prompts, hidden board recipes, provider routing, and metering p
 - [ESP32_WIFI_REMOTE_ACCESS.md](docs/ESP32_WIFI_REMOTE_ACCESS.md) documents user-owned LAN/VPN access for ESP32 Wi-Fi transport.
 - [AGENT_API.md](docs/AGENT_API.md) defines the optional paid Agent API boundary.
 - [AGENT_RUNTIME_AND_TOOLS.html](docs/AGENT_RUNTIME_AND_TOOLS.html) visually documents the Agent's script-authoring and hardware-tool workflow.
+- [CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html](docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html) plans the iOS, Android, macOS, and Windows migration to one Agent/UI/script experience with `.js` and `.jsx` authoring.
 - [AGENTS.md](AGENTS.md) is the repository-wide source of truth for product vision, platform constraints, and contribution guardrails.
 
 ## Contributing
