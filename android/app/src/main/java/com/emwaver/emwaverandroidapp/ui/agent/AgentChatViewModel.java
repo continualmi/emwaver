@@ -55,6 +55,7 @@ public class AgentChatViewModel extends AndroidViewModel {
     private final AgentEndpointApi api;
 
     private String conversationId;
+    @Nullable private AgentEndpointApi.ScriptContext scriptContext;
 
     public AgentChatViewModel(@NonNull Application application) {
         super(application);
@@ -69,6 +70,10 @@ public class AgentChatViewModel extends AndroidViewModel {
 
     @Nullable
     public String getConversationId() { return conversationId; }
+
+    public void setScriptContext(@Nullable AgentEndpointApi.ScriptContext scriptContext) {
+        this.scriptContext = scriptContext;
+    }
 
     public void bootstrap() {
         refreshConversations();
@@ -194,7 +199,7 @@ public class AgentChatViewModel extends AndroidViewModel {
                 final StringBuilder accum = new StringBuilder();
                 final String finalConvoId = convoId;
 
-                api.chatStream(endpoint, token, finalConvoId, trimmed, new AgentEndpointApi.StreamListener() {
+                api.chatStream(endpoint, token, finalConvoId, trimmed, scriptContext, new AgentEndpointApi.StreamListener() {
                     @Override
                     public void onDelta(@NonNull String t) {
                         if (t.isEmpty()) return;

@@ -24,6 +24,7 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.emwaver.emwaverandroidapp.R;
 import com.emwaver.emwaverandroidapp.agent.AgentEndpointApi;
+import com.emwaver.emwaverandroidapp.ui.scripts.ScriptsViewModel;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
 
@@ -33,6 +34,7 @@ import java.util.List;
 public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragment {
 
     private AgentChatViewModel viewModel;
+    private ScriptsViewModel scriptsViewModel;
 
     private RecyclerView recyclerView;
     private EditText input;
@@ -60,6 +62,7 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         super.onViewCreated(view, savedInstanceState);
 
         viewModel = new ViewModelProvider(requireActivity()).get(AgentChatViewModel.class);
+        scriptsViewModel = new ViewModelProvider(requireActivity()).get(ScriptsViewModel.class);
 
         recyclerView = view.findViewById(R.id.agent_chat_list);
         input = view.findViewById(R.id.agent_chat_input);
@@ -188,8 +191,25 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         if (TextUtils.isEmpty(text.trim())) {
             return;
         }
+        viewModel.setScriptContext(currentScriptContext());
         viewModel.sendUserMessage(text);
         input.setText("");
+    }
+
+    @Nullable
+    private AgentEndpointApi.ScriptContext currentScriptContext() {
+        if (scriptsViewModel == null) {
+            return null;
+        }
+        String source = scriptsViewModel.getLastScriptContent();
+        if (source == null || source.trim().isEmpty()) {
+            return null;
+        }
+        String name = scriptsViewModel.getLastScriptName();
+        if (name == null || name.trim().isEmpty()) {
+            name = "untitled.js";
+        }
+        return new AgentEndpointApi.ScriptContext(name, source);
     }
 
     private static final class MessagesAdapter extends RecyclerView.Adapter<MessageViewHolder> {

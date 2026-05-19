@@ -261,7 +261,7 @@ public final class AgentChatViewModel: ObservableObject {
         return """
         \(userPrompt)
 
-        EMWaver local macOS tool context:
+        EMWaver local tool context:
         \(context)
         """
     }

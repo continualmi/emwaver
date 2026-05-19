@@ -59,6 +59,18 @@ public final class AgentEndpointApi {
         }
     }
 
+    public static final class ScriptContext {
+        @NonNull public final String name;
+        @NonNull public final String source;
+
+        public ScriptContext(@Nullable String name, @Nullable String source) {
+            String trimmedName = name != null ? name.trim() : "";
+            String trimmedSource = source != null ? source.trim() : "";
+            this.name = !trimmedName.isEmpty() ? trimmedName : "script.js";
+            this.source = trimmedSource;
+        }
+    }
+
     public interface StreamListener {
         void onDelta(@NonNull String text);
         void onDone(@NonNull Message message, @Nullable String model);
@@ -116,6 +128,17 @@ public final class AgentEndpointApi {
             @NonNull String message,
             @NonNull StreamListener listener
     ) {
+        chatStream(endpoint, apiKey, conversationId, message, null, listener);
+    }
+
+    public void chatStream(
+            @NonNull String endpoint,
+            @NonNull String apiKey,
+            @NonNull String conversationId,
+            @NonNull String message,
+            @Nullable ScriptContext script,
+            @NonNull StreamListener listener
+    ) {
         String trimmedEndpoint = endpoint.trim();
         if (trimmedEndpoint.isEmpty()) {
             listener.onError("Agent endpoint is not configured.");
@@ -138,7 +161,7 @@ public final class AgentEndpointApi {
             if (!universe.isEmpty()) {
                 payload.put("universe", universe);
             }
-            payload.put("userInput", message);
+            payload.put("userInput", buildUserInput(message, script));
         } catch (Exception e) {
             listener.onError(e.toString());
             return;
@@ -228,6 +251,17 @@ public final class AgentEndpointApi {
         if (!a.isEmpty()) return a;
         String b = second != null ? second.trim() : "";
         return b;
+    }
+
+    @NonNull
+    public static String buildUserInput(@Nullable String message, @Nullable ScriptContext script) {
+        String text = message != null ? message.trim() : "";
+        if (script == null || script.source.trim().isEmpty()) {
+            return text;
+        }
+
+        String name = !script.name.trim().isEmpty() ? script.name.trim() : "script.js";
+        return text + "\n\nScript `" + name + "`:\n```emw\n" + script.source.trim() + "\n```";
     }
 
     public static final class UnauthorizedException extends Exception {}

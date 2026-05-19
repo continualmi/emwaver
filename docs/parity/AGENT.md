@@ -15,7 +15,7 @@ part of the broader platform feature parity suite.
 | Select chat | restores messages | shared Apple UI | restores messages | restores messages |
 | Delete/archive chat | local archive | shared Apple UI | local archive API | local archive API |
 | Missing-key behavior | local app still works | local app still works | local app still works | local app still works |
-| Script context in Agent prompt | current script/tool context | shared Apple runtime | current script source | current chat only |
+| Script context in Agent prompt | current script/tool context | shared Apple runtime | current script source | current script source |
 
 ## Test Expectations
 
@@ -48,5 +48,6 @@ sign-in style hosted account gates in native app source.
   history in `%LOCALAPPDATA%/EMWaver/agent-chat.sqlite`.
 - Android now has `agent/AgentChatStore.java` and stores local chat history in
   app-local SQLite as `agent-chat.sqlite`.
-- Android does not yet send current script/runtime context with Agent prompts.
-  That remains the known gap against desktop Agent UX.
+- Android now reads the activity-scoped `ScriptsViewModel` when the Agent sheet
+  sends a message and appends the current script source to Agent `userInput`,
+  matching the Windows request envelope and Apple tool-context path.

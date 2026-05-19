@@ -30,7 +30,7 @@ public final class ScriptsViewModel extends ViewModel {
         lastScriptContent = content;
     }
 
-    String getLastScriptContent() {
+    public String getLastScriptContent() {
         return lastScriptContent;
     }
 
@@ -38,7 +38,7 @@ public final class ScriptsViewModel extends ViewModel {
         lastScriptName = name;
     }
 
-    String getLastScriptName() {
+    public String getLastScriptName() {
         return lastScriptName;
     }
 
@@ -46,7 +46,7 @@ public final class ScriptsViewModel extends ViewModel {
         lastScriptId = id;
     }
 
-    String getLastScriptId() {
+    public String getLastScriptId() {
         return lastScriptId;
     }
 

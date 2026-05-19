@@ -151,6 +151,80 @@
           ]
         }
       }
+    },
+    {
+      "id": "agent.script_context_in_prompt",
+      "description": "Agent sends include the current local script or tool context so replies can reason about the active script.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatViewModel.swift",
+              "contains": [
+                "toolPrompt\\(userPrompt\\)",
+                "EMWaver local tool context"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/ScriptsRootView.swift",
+              "contains": "read_script[\\s\\S]*Defaults to the current script"
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatViewModel.swift",
+              "contains": [
+                "toolPrompt\\(userPrompt\\)",
+                "EMWaver local tool context"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/ScriptsRootView.swift",
+              "contains": "read_script[\\s\\S]*Defaults to the current script"
+            }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "windows/EMWaver/Services/Agent/AgentApi.cs",
+              "contains": [
+                "BuildUserInput",
+                "Script `"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/agent/AgentChatBottomSheetDialogFragment.java",
+              "contains": [
+                "ScriptsViewModel",
+                "currentScriptContext"
+              ]
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApi.java",
+              "contains": [
+                "buildUserInput",
+                "Script `"
+              ]
+            },
+            {
+              "file": "android/app/src/test/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApiTest.java",
+              "contains": "userInputIncludesCurrentScriptContext"
+            }
+          ]
+        }
+      }
     }
   ]
 }

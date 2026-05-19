@@ -190,12 +190,14 @@
           ]
         },
         "android": {
-          "status": "planned",
-          "reason": "Android has SimulatorScriptDeviceBridge, but no checked-in JUnit fixture test yet.",
+          "status": "required",
           "evidence": [
             {
-              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java",
-              "contains": "basic-board|fixture|Simulator"
+              "file": "android/app/src/test/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridgeTest.java",
+              "contains": [
+                "basic-board\\.json",
+                "SimulatorScriptDeviceBridge"
+              ]
             }
           ]
         }
