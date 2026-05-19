@@ -10,10 +10,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.app.PendingIntent;
 import android.content.res.AssetManager;
 import android.hardware.usb.UsbDevice;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -85,7 +87,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
     }
 
     public static String espUpdateUnavailableMessage() {
-        return "ESP32 flashing is not wired on Android yet. The runtime USB path now connects, but firmware updates still need the ESP-native flow on macOS.";
+        return "Connect the ESP32-S3 in serial bootloader mode, grant USB permission, then flash bundled firmware locally from Android.";
     }
 
     private static String normalizeBoardType(@Nullable String boardType) {
@@ -189,6 +191,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         boolean dfuDevicePresent = usbService != null && usbService.isFlashDeviceConnected();
+        boolean espSerialDevicePresent = findEspSerialDevice() != null;
         boolean hasPermission = usbService != null && usbService.hasUsbPermission();
         boolean hasConnection = usbService != null && usbService.getUsbDeviceConnection() != null;
 
@@ -203,7 +206,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         boolean dfuReady = dfuDevicePresent && hasPermission;
-        boolean espBoardConnected = isEspBoardConnected();
+        boolean espBoardConnected = isEspBoardConnected() || espSerialDevicePresent;
         boolean canEnterUpdate = runConnected && !dfuDevicePresent && !espBoardConnected;
 
         if (espBoardConnected && !isFlashing && !updateDone) {
@@ -225,7 +228,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         }
 
         if (updateButton != null) {
-            updateButton.setEnabled(dfuReady && !espBoardConnected && !isFlashing);
+            updateButton.setEnabled(((dfuReady && !espBoardConnected) || espBoardConnected) && !isFlashing);
         }
         if (closeButton != null) {
             closeButton.setEnabled(!isFlashing);
@@ -244,7 +247,7 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             return;
         }
         if (isEspBoardConnected()) {
-            showError("ESP32 does not support the STM32 DFU flow on Android. Use the ESP flashing path on macOS for now.");
+            showError(espUpdateUnavailableMessage());
             return;
         }
 
@@ -268,12 +271,12 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
         lastPct = 0;
         setProgress(0, "", false);
 
-        if (usbService == null || dfu == null) {
-            showError("USB Service not available");
+        if (isEspBoardConnected() || findEspSerialDevice() != null) {
+            startEspSerialUpdate();
             return;
         }
-        if (isEspBoardConnected()) {
-            showError("ESP32 flashing is not available on Android yet. Use the ESP flashing path on macOS for now.");
+        if (usbService == null || dfu == null) {
+            showError("USB Service not available");
             return;
         }
         if (!usbService.isFlashDeviceConnected() || !usbService.hasUsbPermission()) {
@@ -329,6 +332,73 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
             }
             return out.toByteArray();
         }
+    }
+
+    @Nullable
+    private UsbDevice findEspSerialDevice() {
+        if (!isAdded()) {
+            return null;
+        }
+        UsbManager manager = (UsbManager) requireContext().getSystemService(Context.USB_SERVICE);
+        return EspSerialFirmwareUpdater.findCandidateDevice(manager);
+    }
+
+    private void startEspSerialUpdate() {
+        UsbManager manager = (UsbManager) requireContext().getSystemService(Context.USB_SERVICE);
+        if (manager == null) {
+            showError("USB manager not available.");
+            return;
+        }
+        UsbDevice device = EspSerialFirmwareUpdater.findCandidateDevice(manager);
+        if (device == null) {
+            showError(espUpdateUnavailableMessage());
+            return;
+        }
+        if (!manager.hasPermission(device)) {
+            PendingIntent usbPermissionIntent = PendingIntent.getBroadcast(
+                    requireContext(),
+                    0,
+                    new Intent(USBService.ACTION_CONNECT_USB_BOOTLOADER).putExtra(UsbManager.EXTRA_DEVICE, device),
+                    PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S ? PendingIntent.FLAG_MUTABLE : 0)
+            );
+            manager.requestPermission(device, usbPermissionIntent);
+            showError("USB permission requested for ESP serial bootloader. Tap Flash firmware again after permission is granted.");
+            return;
+        }
+
+        UsbDeviceConnection connection = manager.openDevice(device);
+        if (connection == null) {
+            showError("Opening ESP serial bootloader failed.");
+            return;
+        }
+
+        isFlashing = true;
+        updateDfuStateUi();
+
+        new Thread(() -> {
+            try {
+                EspSerialFirmwareUpdater.flashBundledImage(
+                        requireContext().getApplicationContext(),
+                        manager,
+                        device,
+                        connection,
+                        this::emitProgress
+                );
+                handler.post(() -> {
+                    updateDone = true;
+                    setDone(true);
+                });
+            } catch (Exception e) {
+                handler.post(() -> showError(String.valueOf(e.getMessage() != null ? e.getMessage() : e)));
+            } finally {
+                try {
+                    connection.close();
+                } catch (Throwable ignored) {
+                }
+                isFlashing = false;
+                handler.post(this::updateDfuStateUi);
+            }
+        }, "EMW-ESP-FLASH").start();
     }
 
     private void readBlockOrFail(byte[] buffer, int block, int numBytes) throws Exception {
@@ -600,8 +670,10 @@ public class UpdateDeviceDialogFragment extends DialogFragment {
                 return;
             }
             if (device != null && usbService != null) {
-                UsbDeviceConnection connection = ((UsbManager) context.getSystemService(Context.USB_SERVICE)).openDevice(device);
-                usbService.setUsbDeviceConnection(connection);
+                if (device.getVendorId() == Dfu.USB_VENDOR_ID && device.getProductId() == Dfu.USB_PRODUCT_ID) {
+                    UsbDeviceConnection connection = ((UsbManager) context.getSystemService(Context.USB_SERVICE)).openDevice(device);
+                    usbService.setUsbDeviceConnection(connection);
+                }
                 handler.post(UpdateDeviceDialogFragment.this::updateDfuStateUi);
             }
         }

@@ -16,9 +16,10 @@ public class UpdateDeviceDialogFragmentTest {
     }
 
     @Test
-    public void espUpdateUnavailableMessageIsNotS3Specific() {
+    public void espUpdateMessagePointsToAndroidSerialFlashing() {
         String message = UpdateDeviceDialogFragment.espUpdateUnavailableMessage();
-        assertTrue(message.contains("ESP32 flashing"));
-        assertFalse(message.contains("ESP32-S3"));
+        assertTrue(message.contains("serial bootloader"));
+        assertTrue(message.contains("Android"));
+        assertFalse(message.contains("macOS"));
     }
 }

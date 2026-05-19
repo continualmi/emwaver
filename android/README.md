@@ -31,6 +31,7 @@ Located under `android/app/src/main/java/com/emwaver/emwaverandroidapp/`.
 Key components:
 - `UsbMidiSysex.java` — shared SysEx/superframe transport codec.
 - `USBService.java` / `USBManager-like services` — USB MIDI and ESP32 BLE device connection plumbing.
+- `ui/emwaver/EspSerialFirmwareUpdater.java` — local Android ESP serial bootloader firmware updater for bundled ESP app images.
 - `DeviceConnectionManager.java` / `DeviceConnectionService.java` — connection lifecycle.
 - `CommandSender.java` — command dispatch path.
 - `NativeBuffer.java` — native/buffer integration surface.
@@ -63,7 +64,7 @@ Firmware payloads in app assets:
 - `android/app/src/main/assets/firmware/emwaver.bin`
 - `android/app/src/main/assets/ota/emwaveresp.bin`
 
-These are updated by repo firmware tooling and consumed by update flows.
+These are updated by repo firmware tooling and consumed by update flows. The Gradle build syncs STM32 firmware from `stm/emwaver-firmware/Release/emwaver-firmware.bin`; Android packages the checked-in ESP app image at `android/app/src/main/assets/ota/emwaveresp.bin` for the native serial updater.
 
 ---
 
@@ -101,7 +102,7 @@ Simulator testing:
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.
-- ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only. Android does not yet ship the ESP-native flashing flow, so update UI must not route ESP boards into STM32 DFU.
+- ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only. Android firmware update UI keeps ESP boards out of STM32 DFU and uses the Android-native ESP serial bootloader updater for bundled ESP app images.
 
 ---
 

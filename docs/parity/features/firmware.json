@@ -113,12 +113,24 @@
           ]
         },
         "android": {
-          "status": "planned",
-          "reason": "Android detects ESP board types but explicitly routes users away from ESP flashing until an Android-native flow exists.",
+          "status": "required",
           "evidence": [
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java",
-              "contains": "ESP32 flashing is not available on Android yet"
+              "contains": "startEspSerialUpdate|serial bootloader|flashBundledImage"
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/EspSerialFirmwareUpdater.java",
+              "contains": [
+                "BUNDLED_ESP_ASSET_PATH",
+                "FLASH_BEGIN",
+                "FLASH_DATA",
+                "UsbSerialPort"
+              ]
+            },
+            {
+              "file": "android/app/build.gradle",
+              "contains": "usb-serial-for-android"
             }
           ]
         }
