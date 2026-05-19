@@ -63,7 +63,7 @@ The iOS transport keeps the historical `USBManager` API as the app-facing device
 - `ios/EMWaver/firmware/emwaver.bin`
 - `ios/EMWaver/ota/emwaveresp.bin`
 
-These are repo-managed payloads synced by firmware update tooling and consumed by update flows. iOS currently exposes bundled payload visibility and STM32 Update Mode entry over the active local transport. Full STM32 DFU flashing and ESP serial flashing remain planned; use macOS/Windows/Android STM32 DFU for the flash step until the iOS runtime owns those transfer paths.
+These are repo-managed payloads synced by firmware update tooling and consumed by update flows. iOS currently exposes bundled payload visibility, local share/handoff for the bundled STM32 and ESP images, and STM32 Update Mode entry over the active local transport. Full STM32 DFU flashing and ESP serial flashing remain planned; use macOS/Windows/Android STM32 DFU for the flash step until the iOS runtime owns those transfer paths.
 
 ---
 

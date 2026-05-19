@@ -31,6 +31,7 @@
               "file": "ios/EMWaver/Views/FirmwareUpdateSheet.swift",
               "contains": [
                 "Bundled STM32 firmware",
+                "Share STM32 firmware",
                 "Enter Update Mode",
                 "full STM32 DFU"
               ]
@@ -93,7 +94,13 @@
         },
         "ios": {
           "status": "planned",
-          "reason": "iOS can detect ESP boards over local transports, but does not yet expose an ESP serial flashing path."
+          "reason": "iOS can detect ESP boards over local transports and can share the bundled ESP firmware image, but does not yet expose an ESP serial flashing path.",
+          "evidence": [
+            {
+              "file": "ios/EMWaver/Views/FirmwareUpdateSheet.swift",
+              "contains": "Share ESP firmware|Bundled ESP image"
+            }
+          ]
         },
         "windows": {
           "status": "required",

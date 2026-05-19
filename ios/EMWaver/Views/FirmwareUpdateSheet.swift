@@ -23,6 +23,26 @@ struct FirmwareUpdateSheet: View {
                     LabeledContent("Bundled ESP image", value: bundledAssetStatus("emwaveresp", extension: "bin", subdirectory: "ota"))
                 }
 
+                Section("Firmware Handoff") {
+                    if let stm32URL = bundledAssetURL("emwaver", extension: "bin", subdirectory: "firmware") {
+                        ShareLink(item: stm32URL) {
+                            Label("Share STM32 firmware", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Label("STM32 firmware missing", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+
+                    if let espURL = bundledAssetURL("emwaveresp", extension: "bin", subdirectory: "ota") {
+                        ShareLink(item: espURL) {
+                            Label("Share ESP firmware", systemImage: "square.and.arrow.up")
+                        }
+                    } else {
+                        Label("ESP firmware missing", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                    }
+                }
+
                 Section("STM32 Update Mode") {
                     Text("This switches a connected STM32 board into ROM Update Mode. The board will be unusable until firmware is flashed.")
                         .foregroundStyle(.secondary)
@@ -54,7 +74,11 @@ struct FirmwareUpdateSheet: View {
     }
 
     private func bundledAssetStatus(_ name: String, extension ext: String, subdirectory: String) -> String {
-        Bundle.main.url(forResource: name, withExtension: ext, subdirectory: subdirectory) == nil ? "Missing" : "Bundled"
+        bundledAssetURL(name, extension: ext, subdirectory: subdirectory) == nil ? "Missing" : "Bundled"
+    }
+
+    private func bundledAssetURL(_ name: String, extension ext: String, subdirectory: String) -> URL? {
+        Bundle.main.url(forResource: name, withExtension: ext, subdirectory: subdirectory)
     }
 }
 
