@@ -11,6 +11,17 @@ internal static class WindowsWiFiTransport
 {
     internal const string TransportName = "Wi-Fi";
     internal const int DefaultPort = 3922;
+    private const byte WifiConfigOpcode = 0x0A;
+    private const byte WifiBegin = 0x00;
+    private const byte WifiField = 0x01;
+    private const byte WifiApply = 0x02;
+    private const byte WifiClear = 0x03;
+    private const byte WifiStatus = 0x04;
+    private const byte WifiFieldSsid = 0x00;
+    private const byte WifiFieldPassword = 0x01;
+    private const int CommandChunkBytes = 13;
+    private const int MaxSsidBytes = 32;
+    private const int MaxPasswordBytes = 64;
 
     internal sealed class Connection : ITransportDeviceConnection, IDisposable
     {
@@ -153,6 +164,117 @@ internal static class WindowsWiFiTransport
             () => ReceiveLoopAsync(webSocket, onBytes, receiveCancellation.Token),
             CancellationToken.None);
         return connection;
+    }
+
+    internal static IReadOnlyList<byte[]>? ProvisioningCommands(string ssid, string password)
+    {
+        var trimmedSsid = ssid.Trim();
+        if (string.IsNullOrWhiteSpace(trimmedSsid))
+        {
+            return null;
+        }
+
+        var ssidBytes = Encoding.UTF8.GetBytes(trimmedSsid);
+        var passwordBytes = Encoding.UTF8.GetBytes(password);
+        if (ssidBytes.Length > MaxSsidBytes || passwordBytes.Length > MaxPasswordBytes)
+        {
+            return null;
+        }
+
+        var commands = new List<byte[]> { new byte[] { WifiConfigOpcode, WifiBegin } };
+        commands.AddRange(FieldCommands(WifiFieldSsid, ssidBytes));
+        commands.AddRange(FieldCommands(WifiFieldPassword, passwordBytes));
+        commands.Add(new byte[] { WifiConfigOpcode, WifiApply });
+        return commands;
+    }
+
+    internal static byte[] ClearProvisioningCommand() => new byte[] { WifiConfigOpcode, WifiClear };
+
+    internal static byte[] StatusCommand() => new byte[] { WifiConfigOpcode, WifiStatus };
+
+    internal static bool IsOkResponse(byte[]? response) => response is { Length: > 0 } && response[0] == 0x80;
+
+    internal static string? StatusMessage(byte[]? response)
+    {
+        if (response is not { Length: >= 3 } || response[0] != 0x80)
+        {
+            return null;
+        }
+
+        var provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned";
+        var socketText = response[2] == 0 ? "idle" : "connected";
+        if (response.Length < 4)
+        {
+            return $"Wi-Fi is {provisionedText}; socket is {socketText}.";
+        }
+
+        var stationText = response[3] == 0 ? "offline" : "online";
+        if (response.Length < 5)
+        {
+            return $"Wi-Fi is {provisionedText}, station is {stationText}; socket is {socketText}.";
+        }
+
+        var retryText = response[4] == 0 ? "idle" : "retrying";
+        if (response.Length < 7)
+        {
+            return $"Wi-Fi is {provisionedText}, station is {stationText} ({retryText}); socket is {socketText}.";
+        }
+
+        var reason = (ushort)(response[5] | (response[6] << 8));
+        var reasonText = DisconnectReasonText(reason);
+        var runtimeText = response.Length >= 13 && response[12] != 0 ? "running" : "idle";
+        var ipText = StationIp(response);
+        return ipText != null
+            ? $"Wi-Fi is {provisionedText}, station is {stationText} at {ipText} ({retryText}, {reasonText}); socket is {socketText}; runtime is {runtimeText}."
+            : $"Wi-Fi is {provisionedText}, station is {stationText} ({retryText}, {reasonText}); socket is {socketText}; runtime is {runtimeText}.";
+    }
+
+    private static IEnumerable<byte[]> FieldCommands(byte field, byte[] bytes)
+    {
+        if (bytes.Length == 0)
+        {
+            yield break;
+        }
+
+        var offset = 0;
+        while (offset < bytes.Length)
+        {
+            var count = Math.Min(CommandChunkBytes, bytes.Length - offset);
+            var command = new byte[5 + count];
+            command[0] = WifiConfigOpcode;
+            command[1] = WifiField;
+            command[2] = field;
+            command[3] = (byte)offset;
+            command[4] = (byte)count;
+            Array.Copy(bytes, offset, command, 5, count);
+            yield return command;
+            offset += count;
+        }
+    }
+
+    private static string? StationIp(byte[] response)
+    {
+        if (response.Length < 12 || response[7] == 0)
+        {
+            return null;
+        }
+        return $"{response[8]}.{response[9]}.{response[10]}.{response[11]}";
+    }
+
+    private static string DisconnectReasonText(ushort reason)
+    {
+        return reason switch
+        {
+            0 => "no disconnect reason",
+            2 => "auth expired",
+            15 => "4-way handshake timeout",
+            201 => "no access point",
+            202 => "auth failed",
+            203 => "association failed",
+            204 => "handshake timeout",
+            205 => "connection failed",
+            _ => $"reason {reason}",
+        };
     }
 
     private static async Task ReceiveLoopAsync(

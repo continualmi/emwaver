@@ -122,6 +122,48 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
+    private string? _wifiProvisioningStatus;
+    public string? WiFiProvisioningStatus
+    {
+        get => _wifiProvisioningStatus;
+        private set
+        {
+            if (_wifiProvisioningStatus != value)
+            {
+                _wifiProvisioningStatus = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private bool _isWiFiProvisioningError;
+    public bool IsWiFiProvisioningError
+    {
+        get => _isWiFiProvisioningError;
+        private set
+        {
+            if (_isWiFiProvisioningError != value)
+            {
+                _isWiFiProvisioningError = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private bool _isWiFiProvisioning;
+    public bool IsWiFiProvisioning
+    {
+        get => _isWiFiProvisioning;
+        private set
+        {
+            if (_isWiFiProvisioning != value)
+            {
+                _isWiFiProvisioning = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
     private bool _autoConnectEnabled = true;
     public bool AutoConnectEnabled
     {
@@ -813,6 +855,103 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = ex.Message;
             Disconnect();
         }
+    }
+
+    internal async Task ProvisionWiFiAsync(string ssid, string password)
+    {
+        var commands = WindowsWiFiTransport.ProvisioningCommands(ssid, password);
+        if (commands == null)
+        {
+            FinishWiFiProvisioning("Wi-Fi SSID is required and setup values must fit the ESP32 limits.", isError: true);
+            return;
+        }
+
+        SetWiFiProvisioningBusy("Sending Wi-Fi setup");
+        if (!IsConnected)
+        {
+            FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.", isError: true);
+            return;
+        }
+
+        foreach (var command in commands)
+        {
+            if (!WindowsWiFiTransport.IsOkResponse(await SendCommandAsync(command, timeoutMs: 2000, lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81))))
+            {
+                FinishWiFiProvisioning("Wi-Fi setup was rejected by the device.", isError: true);
+                return;
+            }
+        }
+
+        FinishWiFiProvisioning("Wi-Fi setup sent. The ESP32 board will join the network and advertise itself with mDNS.", isError: false);
+    }
+
+    internal async Task ClearWiFiProvisioningAsync()
+    {
+        SetWiFiProvisioningBusy("Clearing Wi-Fi setup");
+        if (!IsConnected)
+        {
+            FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.", isError: true);
+            return;
+        }
+
+        var response = await SendCommandAsync(
+            WindowsWiFiTransport.ClearProvisioningCommand(),
+            timeoutMs: 2000,
+            lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81));
+        if (!WindowsWiFiTransport.IsOkResponse(response))
+        {
+            FinishWiFiProvisioning("Wi-Fi setup clear was rejected by the device.", isError: true);
+            return;
+        }
+
+        FinishWiFiProvisioning("Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.", isError: false);
+    }
+
+    internal async Task RefreshWiFiProvisioningStatusAsync()
+    {
+        SetWiFiProvisioningBusy("Checking Wi-Fi status");
+        if (!IsConnected)
+        {
+            FinishWiFiProvisioning("Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.", isError: true);
+            return;
+        }
+
+        var response = await SendCommandAsync(
+            WindowsWiFiTransport.StatusCommand(),
+            timeoutMs: 2000,
+            lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81));
+        var message = WindowsWiFiTransport.StatusMessage(response);
+        if (message == null)
+        {
+            FinishWiFiProvisioning("Wi-Fi status request was rejected by the device.", isError: true);
+            return;
+        }
+
+        FinishWiFiProvisioning(message, isError: false);
+    }
+
+    private void SetWiFiProvisioningBusy(string message)
+    {
+        RunOnUi(() =>
+        {
+            IsWiFiProvisioning = true;
+            IsWiFiProvisioningError = false;
+            WiFiProvisioningStatus = message;
+        });
+    }
+
+    private void FinishWiFiProvisioning(string message, bool isError)
+    {
+        if (isError)
+        {
+            LastErrorText = message;
+        }
+        RunOnUi(() =>
+        {
+            IsWiFiProvisioning = false;
+            IsWiFiProvisioningError = isError;
+            WiFiProvisioningStatus = message;
+        });
     }
 
     private void SendWiFiSuperframe(byte[] superframe36, ITransportDeviceSession session)

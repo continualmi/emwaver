@@ -109,6 +109,13 @@ public sealed partial class DevicePage : Page
         UpdateModeButton.IsEnabled = !updater.IsFlashing && (isEsp || device.IsConnected);
         PrimaryFirmwareButton.Content = GetPrimaryFirmwareTitle(isEsp);
         PrimaryFirmwareButton.IsEnabled = !updater.IsFlashing && CanRunFirmwareAction(isEsp, device, updater);
+        WiFiProvisionButton.IsEnabled = device.IsConnected
+            && !device.IsWiFiProvisioning
+            && !string.IsNullOrWhiteSpace(WiFiSsidBox.Text);
+        WiFiClearButton.IsEnabled = device.IsConnected && !device.IsWiFiProvisioning;
+        WiFiStatusButton.IsEnabled = device.IsConnected && !device.IsWiFiProvisioning;
+        WiFiProvisionButton.Content = device.IsWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup";
+        WiFiProvisioningStatusText.Text = device.WiFiProvisioningStatus ?? string.Empty;
 
         DevicesIntroText.Text = "Local devices.";
     }
@@ -188,6 +195,24 @@ public sealed partial class DevicePage : Page
             ? parsedPort
             : WindowsWiFiTransport.DefaultPort;
         await AppServices.Device.ConnectWiFiAsync(host, port);
+        UpdateUi();
+    }
+
+    private async void OnProvisionWiFiClick(object sender, RoutedEventArgs e)
+    {
+        await AppServices.Device.ProvisionWiFiAsync(WiFiSsidBox.Text, WiFiPasswordBox.Password);
+        UpdateUi();
+    }
+
+    private async void OnClearWiFiClick(object sender, RoutedEventArgs e)
+    {
+        await AppServices.Device.ClearWiFiProvisioningAsync();
+        UpdateUi();
+    }
+
+    private async void OnWiFiStatusClick(object sender, RoutedEventArgs e)
+    {
+        await AppServices.Device.RefreshWiFiProvisioningStatusAsync();
         UpdateUi();
     }
 

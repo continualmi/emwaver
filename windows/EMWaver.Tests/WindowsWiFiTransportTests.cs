@@ -1,4 +1,5 @@
 using EMWaver.Services;
+using System.Linq;
 using Xunit;
 
 namespace EMWaver.Tests;
@@ -35,6 +36,37 @@ public sealed class WindowsWiFiTransportTests
         Assert.Null(WindowsWiFiTransport.WebSocketUri("192.168.4.2/path", 3922));
         Assert.Null(WindowsWiFiTransport.WebSocketUri("[fd00::1234]", 3922));
         Assert.Null(WindowsWiFiTransport.WebSocketUri("192.168.4.2", 70000));
+    }
+
+    [Fact]
+    public void ProvisioningCommandsChunkSsidAndPassword()
+    {
+        var commands = WindowsWiFiTransport.ProvisioningCommands("bench-network", "password-with-more-than-13-bytes");
+
+        Assert.NotNull(commands);
+        Assert.Equal(new byte[] { 0x0A, 0x00 }, commands[0]);
+        Assert.Equal(new byte[] { 0x0A, 0x02 }, commands[^1]);
+        Assert.Contains(commands, command => command.Take(5).ToArray().SequenceEqual(new byte[] { 0x0A, 0x01, 0x00, 0x00, 13 }));
+        Assert.Contains(commands, command => command.Take(5).ToArray().SequenceEqual(new byte[] { 0x0A, 0x01, 0x01, 0x00, 13 }));
+        Assert.Contains(commands, command => command.Take(4).ToArray().SequenceEqual(new byte[] { 0x0A, 0x01, 0x01, 13 }));
+    }
+
+    [Fact]
+    public void ProvisioningCommandsRejectInvalidLengths()
+    {
+        Assert.Null(WindowsWiFiTransport.ProvisioningCommands(" ", "ok"));
+        Assert.Null(WindowsWiFiTransport.ProvisioningCommands(new string('s', 33), "ok"));
+        Assert.Null(WindowsWiFiTransport.ProvisioningCommands("ok", new string('p', 65)));
+    }
+
+    [Fact]
+    public void StatusMessageParsesStationIpAndRuntime()
+    {
+        byte[] response = new byte[] { 0x80, 1, 0, 1, 0, 0, 0, 1, 192, 168, 4, 2, 1 };
+
+        Assert.Equal(
+            "Wi-Fi is provisioned, station is online at 192.168.4.2 (idle, no disconnect reason); socket is idle; runtime is running.",
+            WindowsWiFiTransport.StatusMessage(response));
     }
 
     private static void AssertConnectionOwnsIsolatedSession(

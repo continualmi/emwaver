@@ -39,6 +39,14 @@
                     <TextBox x:Name="WiFiHostBox" Header="Wi-Fi host or IP" PlaceholderText="emwaver-a1b2.local or 192.168.4.2" />
                     <TextBox x:Name="WiFiPortBox" Header="Wi-Fi port" Text="3922" />
                     <Button Content="Connect Wi-Fi" Click="OnConnectWiFiClick" />
+                    <TextBox x:Name="WiFiSsidBox" Header="SSID" PlaceholderText="Network name" />
+                    <PasswordBox x:Name="WiFiPasswordBox" Header="Wi-Fi password" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="WiFiProvisionButton" Content="Send Wi-Fi Setup" Click="OnProvisionWiFiClick" />
+                        <Button x:Name="WiFiClearButton" Content="Clear Setup" Click="OnClearWiFiClick" />
+                        <Button x:Name="WiFiStatusButton" Content="Status" Click="OnWiFiStatusClick" />
+                    </StackPanel>
+                    <TextBlock x:Name="WiFiProvisioningStatusText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
         </StackPanel>
