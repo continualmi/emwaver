@@ -225,6 +225,91 @@
           ]
         }
       }
+    },
+    {
+      "id": "agent.visible_chat_controls",
+      "description": "Agent panels expose conversation selection, new/clear chat actions, starter suggestions, message history, composer input, and send action.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/ScriptsRootView.swift",
+              "contains": [
+                "New Agent Chat",
+                "Clear Agent Messages"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatPanelView.swift",
+              "contains": [
+                "How do I connect an EMWaver device over USB\\?",
+                "Help me write a script for a connected board\\.",
+                "Message",
+                "send"
+              ]
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/ScriptsRootView.swift",
+              "contains": [
+                "New Agent Chat",
+                "Clear Agent Messages"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatPanelView.swift",
+              "contains": [
+                "How do I connect an EMWaver device over USB\\?",
+                "Help me write a script for a connected board\\.",
+                "Message",
+                "send"
+              ]
+            }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "windows/EMWaver/Pages/ScriptsPage.xaml",
+              "contains": [
+                "AgentConversationsCombo",
+                "New",
+                "Clear",
+                "How do I connect an EMWaver device over USB\\?",
+                "Help me write a script for a connected board\\.",
+                "AgentMessagesList",
+                "AgentInput",
+                "AgentSendButton"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "android/app/src/main/res/layout/dialog_agent_chat.xml",
+              "contains": [
+                "agent_chat_conversations",
+                "agent_chat_new",
+                "agent_chat_clear",
+                "agent_suggestion_usb",
+                "agent_suggestion_script",
+                "agent_chat_list",
+                "agent_chat_input",
+                "agent_chat_send"
+              ]
+            }
+          ]
+        }
+      }
     }
   ]
 }

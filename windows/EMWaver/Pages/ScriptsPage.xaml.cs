@@ -178,6 +178,7 @@ public sealed partial class ScriptsPage : Page
 
         AgentMessagesList.ItemsSource = _agentMessages;
         AgentConversationsCombo.ItemsSource = _agentConversations;
+        _agentMessages.CollectionChanged += (_, _) => UpdateAgentSuggestionsVisibility();
 
         _agentConversationId = LoadAgentConversationId();
 
@@ -1281,6 +1282,12 @@ public sealed partial class ScriptsPage : Page
         AgentInput.IsEnabled = !sending;
         AgentSendButton.IsEnabled = !sending && _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
         AgentThinkingRow.Visibility = sending ? Visibility.Visible : Visibility.Collapsed;
+        UpdateAgentSuggestionsVisibility();
+    }
+
+    private void UpdateAgentSuggestionsVisibility()
+    {
+        AgentSuggestionsPanel.Visibility = _agentMessages.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private async Task RefreshAgentUiAsync(bool force)
@@ -1393,6 +1400,15 @@ public sealed partial class ScriptsPage : Page
     private void OnAgentInputTextChanged(object sender, TextChangedEventArgs e)
     {
         AgentSendButton.IsEnabled = _agentEnabled && !string.IsNullOrWhiteSpace(AgentInput.Text?.Trim());
+    }
+
+    private void OnAgentSuggestionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string suggestion }) return;
+
+        AgentInput.Text = suggestion;
+        AgentInput.Focus(FocusState.Programmatic);
+        AgentInput.SelectionStart = AgentInput.Text.Length;
     }
 
     private async void OnAgentConversationChanged(object sender, SelectionChangedEventArgs e)
