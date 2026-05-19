@@ -25,11 +25,19 @@
         },
         "ios": {
           "status": "planned",
-          "reason": "iOS bundles firmware assets but does not yet expose the full STM32 DFU update UI/runtime.",
+          "reason": "iOS exposes bundled firmware visibility and STM32 Update Mode entry, but does not yet own the full STM32 DFU transfer runtime.",
           "evidence": [
             {
-              "file": "ios/README.md",
-              "contains": "bundled firmware assets|firmware"
+              "file": "ios/EMWaver/Views/FirmwareUpdateSheet.swift",
+              "contains": [
+                "Bundled STM32 firmware",
+                "Enter Update Mode",
+                "full STM32 DFU"
+              ]
+            },
+            {
+              "file": "ios/EMWaver/Managers/USBManager.swift",
+              "contains": "requestEnterUpdateMode[\\s\\S]*Data\\(\\[0x06\\]\\)"
             }
           ]
         },

@@ -200,6 +200,17 @@ final class USBManager: NSObject, ObservableObject {
         usbMidiConnection?.isConnected == true
     }
 
+    func requestEnterUpdateMode() {
+        midiQueue.async {
+            guard self.isConnected, self.activeTransport == .ble || self.isUsbMidiConnected else {
+                self.setError("Cannot enter Update Mode: Not connected")
+                return
+            }
+
+            self.sendPacket(Data([0x06]))
+        }
+    }
+
     // MARK: - Common helpers (used across the iOS codebase)
 
     static func isPaddedOkFrame(_ data: Data) -> Bool {
