@@ -13,12 +13,7 @@ import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothGattCallback;
-import android.bluetooth.BluetoothGattCharacteristic;
 import android.bluetooth.BluetoothManager;
-import android.bluetooth.BluetoothProfile;
-import android.bluetooth.le.ScanCallback;
-import android.bluetooth.le.ScanResult;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -533,9 +528,31 @@ public class USBService extends Service implements DeviceConnectionService {
             if (bluetoothAdapter.getBluetoothLeScanner() == null) {
                 return;
             }
-            bleScanSession = new AndroidBleTransport.ScanSession(
+            bleScanSession = AndroidBleTransport.scanSession(
                     bluetoothAdapter.getBluetoothLeScanner(),
-                    bleScanCallback);
+                    new AndroidBleTransport.ScanListener() {
+                        @SuppressLint("MissingPermission")
+                        @Override
+                        public void onDevice(BluetoothDevice device, String displayName, @Nullable String advertisementName) {
+                            if (!hasBlePermission()) {
+                                return;
+                            }
+                            stopBleScan();
+                            synchronized (bleLock) {
+                                closeBleLocked();
+                                TransportDeviceSession session = setActiveDeviceTarget(
+                                        AndroidBleTransport.sessionId(device),
+                                        ActiveTransport.BLE);
+                                pendingBleConnection = AndroidBleTransport.openConnection(
+                                        USBService.this,
+                                        device,
+                                        displayName,
+                                        session,
+                                        bleListener);
+                            }
+                            Log.d(TAG, "BLE connecting: " + (advertisementName != null ? advertisementName : device.getAddress()));
+                        }
+                    });
             bleScanSession.start();
             Log.d(TAG, "BLE scan started");
         }
@@ -678,93 +695,52 @@ public class USBService extends Service implements DeviceConnectionService {
         }
     }
 
-    private final ScanCallback bleScanCallback = new ScanCallback() {
-        @SuppressLint("MissingPermission")
+    private final AndroidBleTransport.Listener bleListener = new AndroidBleTransport.Listener() {
         @Override
-        public void onScanResult(int callbackType, ScanResult result) {
-            if (result == null || result.getDevice() == null || !hasBlePermission()) {
-                return;
-            }
-            BluetoothDevice device = result.getDevice();
-            String name = AndroidBleTransport.advertisementName(result);
-            if (!AndroidBleTransport.matchesAdvertisementName(name)) {
-                return;
-            }
-            stopBleScan();
-            synchronized (bleLock) {
-                closeBleLocked();
-                pendingBleConnection = AndroidBleTransport.pendingSession(
-                        USBService.this,
-                        device,
-                        AndroidBleTransport.displayName(result),
-                        bleGattCallback);
-            }
-            Log.d(TAG, "BLE connecting: " + (name != null ? name : device.getAddress()));
-        }
-    };
-
-    private final BluetoothGattCallback bleGattCallback = new BluetoothGattCallback() {
-        @SuppressLint("MissingPermission")
-        @Override
-        public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
-                AndroidBleTransport.discoverServices(gatt);
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
-                synchronized (bleLock) {
-                    AndroidBleTransport.Connection connection = bleConnection;
-                    AndroidBleTransport.PendingConnection pending = pendingBleConnection;
-                    if ((pending != null && pending.owns(gatt)) || (connection != null && connection.owns(gatt))) {
-                        closeBleLocked();
-                    }
-                }
-                startBleScan();
-            }
-        }
-
-        @SuppressLint("MissingPermission")
-        @Override
-        public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
-            AndroidBleTransport.discoverServicesAfterMtu(gatt);
-        }
-
-        @SuppressLint("MissingPermission")
-        @Override
-        public void onServicesDiscovered(BluetoothGatt gatt, int status) {
-            BluetoothGattCharacteristic command = AndroidBleTransport.commandCharacteristic(gatt);
-            if (command == null) {
-                gatt.disconnect();
-                return;
-            }
+        public void onConnected(AndroidBleTransport.Connection connection) {
             synchronized (bleLock) {
                 AndroidBleTransport.PendingConnection pending = pendingBleConnection;
-                String displayName = pending != null && pending.owns(gatt)
-                        ? pending.displayName
-                        : null;
-                TransportDeviceSession session = setActiveDeviceTarget(
-                        AndroidBleTransport.sessionId(gatt.getDevice()),
-                        ActiveTransport.BLE);
-                bleConnection = AndroidBleTransport.connectedSession(gatt, command, displayName, session);
+                if (pending != null && !pending.owns(connection.gatt)) {
+                    connection.close();
+                    return;
+                }
+                bleConnection = connection;
                 activeConnectionState.setConnection(bleConnection);
                 pendingBleConnection = null;
             }
-            AndroidBleTransport.enableNotifications(gatt);
             connectedBoardType = AndroidBleTransport.boardType();
             Toast.makeText(USBService.this, "BLE Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
         }
 
         @Override
-        public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
-            if (characteristic != null && AndroidBleTransport.NOTIFY_UUID.equals(characteristic.getUuid())) {
-                byte[] value = characteristic.getValue();
-                if (value != null) {
-                    AndroidBleTransport.Connection connection = bleConnection;
-                    TransportDeviceSession session = connection != null && connection.owns(gatt)
-                            ? connection.session()
-                            : bufferSession(AndroidBleTransport.sessionId(gatt.getDevice()));
-                    feedSysexBytes(value, 0, value.length, session);
+        public void onDisconnected(BluetoothGatt gatt) {
+            synchronized (bleLock) {
+                AndroidBleTransport.Connection connection = bleConnection;
+                AndroidBleTransport.PendingConnection pending = pendingBleConnection;
+                if ((pending != null && pending.owns(gatt)) || (connection != null && connection.owns(gatt))) {
+                    closeBleLocked();
                 }
             }
+            startBleScan();
+        }
+
+        @Override
+        public void onBytes(AndroidBleTransport.Connection connection, byte[] data) {
+            TransportDeviceSession session;
+            synchronized (bleLock) {
+                AndroidBleTransport.Connection activeConnection = bleConnection;
+                if (activeConnection == null || !activeConnection.owns(connection.gatt)) {
+                    return;
+                }
+                session = activeConnection.session();
+            }
+            feedSysexBytes(data, 0, data.length, session);
+        }
+
+        @Override
+        public void onMissingCommandCharacteristic(BluetoothGatt gatt) {
+            Log.e(TAG, "BLE command characteristic unavailable");
         }
     };
 

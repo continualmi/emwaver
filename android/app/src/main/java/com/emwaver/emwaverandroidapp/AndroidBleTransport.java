@@ -7,6 +7,7 @@
 package com.emwaver.emwaverandroidapp;
 
 import android.content.Context;
+import android.annotation.SuppressLint;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothGattCallback;
@@ -37,6 +38,17 @@ final class AndroidBleTransport {
     static final UUID CLIENT_CHARACTERISTIC_CONFIG_UUID = UUID.fromString("00002902-0000-1000-8000-00805F9B34FB");
 
     private AndroidBleTransport() {}
+
+    interface ScanListener {
+        void onDevice(BluetoothDevice device, String displayName, @Nullable String advertisementName);
+    }
+
+    interface Listener {
+        void onConnected(Connection connection);
+        void onDisconnected(BluetoothGatt gatt);
+        void onBytes(Connection connection, byte[] data);
+        void onMissingCommandCharacteristic(BluetoothGatt gatt);
+    }
 
     static final class ScanSession implements AutoCloseable {
         private final BluetoothLeScanner scanner;
@@ -233,6 +245,17 @@ final class AndroidBleTransport {
         return new PendingConnection(connect(context, device, callback), displayName);
     }
 
+    static PendingConnection openConnection(
+            Context context,
+            BluetoothDevice device,
+            @Nullable String displayName,
+            TransportDeviceSession session,
+            Listener listener
+    ) {
+        BluetoothGattCallback callback = gattCallback(displayName, session, listener);
+        return pendingSession(context, device, displayName, callback);
+    }
+
     static Connection connectedSession(
             BluetoothGatt gatt,
             BluetoothGattCharacteristic command,
@@ -278,6 +301,85 @@ final class AndroidBleTransport {
 
     static void discoverServicesAfterMtu(BluetoothGatt gatt) {
         gatt.discoverServices();
+    }
+
+    static ScanSession scanSession(BluetoothLeScanner scanner, ScanListener listener) {
+        return new ScanSession(scanner, scanCallback(listener));
+    }
+
+    static ScanCallback scanCallback(ScanListener listener) {
+        return new ScanCallback() {
+            @SuppressLint("MissingPermission")
+            @Override
+            public void onScanResult(int callbackType, ScanResult result) {
+                if (result == null || result.getDevice() == null) {
+                    return;
+                }
+                String name = advertisementName(result);
+                if (!matchesAdvertisementName(name)) {
+                    return;
+                }
+                if (listener != null) {
+                    listener.onDevice(result.getDevice(), displayName(result), name);
+                }
+            }
+        };
+    }
+
+    static BluetoothGattCallback gattCallback(
+            @Nullable String displayName,
+            TransportDeviceSession session,
+            Listener listener
+    ) {
+        return new BluetoothGattCallback() {
+            @SuppressLint("MissingPermission")
+            @Override
+            public void onConnectionStateChange(BluetoothGatt gatt, int status, int newState) {
+                if (newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED) {
+                    discoverServices(gatt);
+                } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED && listener != null) {
+                    listener.onDisconnected(gatt);
+                }
+            }
+
+            @SuppressLint("MissingPermission")
+            @Override
+            public void onMtuChanged(BluetoothGatt gatt, int mtu, int status) {
+                discoverServicesAfterMtu(gatt);
+            }
+
+            @SuppressLint("MissingPermission")
+            @Override
+            public void onServicesDiscovered(BluetoothGatt gatt, int status) {
+                BluetoothGattCharacteristic command = commandCharacteristic(gatt);
+                if (command == null) {
+                    if (listener != null) {
+                        listener.onMissingCommandCharacteristic(gatt);
+                    }
+                    gatt.disconnect();
+                    return;
+                }
+                Connection connection = connectedSession(gatt, command, displayName, session);
+                enableNotifications(gatt);
+                if (listener != null) {
+                    listener.onConnected(connection);
+                }
+            }
+
+            @Override
+            public void onCharacteristicChanged(BluetoothGatt gatt, BluetoothGattCharacteristic characteristic) {
+                if (characteristic == null || !NOTIFY_UUID.equals(characteristic.getUuid())) {
+                    return;
+                }
+                byte[] value = characteristic.getValue();
+                if (value == null || listener == null) {
+                    return;
+                }
+                BluetoothGattCharacteristic command = commandCharacteristic(gatt);
+                Connection connection = connectedSession(gatt, command, displayName, session);
+                listener.onBytes(connection, value);
+            }
+        };
     }
 
     @Nullable
