@@ -35,6 +35,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
+import android.os.Looper;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -44,6 +45,8 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
 import java.util.Arrays;
 import java.util.HashMap;
+
+import okhttp3.OkHttpClient;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -59,10 +62,12 @@ public class USBService extends Service implements DeviceConnectionService {
     private enum ActiveTransport {
         NONE,
         USB,
-        BLE
+        BLE,
+        WIFI
     }
 
     private final IBinder binder = new LocalBinder();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     // DFU/flash (USB control transfers)
     private UsbDeviceConnection finalConnection;
@@ -76,6 +81,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
     private final Object midiLock = new Object();
     private final Object bleLock = new Object();
+    private final Object wifiLock = new Object();
     private final TransportDeviceSessionRegistry bufferSessions = new TransportDeviceSessionRegistry();
 
     // ESP32 BLE transport
@@ -83,6 +89,8 @@ public class USBService extends Service implements DeviceConnectionService {
     private AndroidBleTransport.ScanSession bleScanSession;
     private AndroidBleTransport.PendingConnection pendingBleConnection;
     private volatile AndroidBleTransport.Connection bleConnection;
+    private volatile AndroidWiFiTransport.Connection wifiConnection;
+    private OkHttpClient wifiClient;
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
     private final TransportDeviceConnectionState<ActiveTransport> activeConnectionState =
             new TransportDeviceConnectionState<>(ActiveTransport.NONE);
@@ -208,6 +216,10 @@ public class USBService extends Service implements DeviceConnectionService {
         return true;
     }
 
+    private void showToast(String message) {
+        mainHandler.post(() -> Toast.makeText(this, message, Toast.LENGTH_SHORT).show());
+    }
+
     private void updateSamplerStreamingState(byte[] lane) {
         updateSamplerStreamingState(lane, activeBufferSession());
     }
@@ -229,6 +241,17 @@ public class USBService extends Service implements DeviceConnectionService {
 
         if (activeTransport == ActiveTransport.BLE) {
             writeBleSysex(sysex);
+            if (!isLaneEmpty(cmdLane18)) {
+                logTx(cmdLane18, bufferSession);
+            }
+            if (!isLaneEmpty(streamLane18)) {
+                logTx(streamLane18, bufferSession);
+            }
+            return;
+        }
+
+        if (activeTransport == ActiveTransport.WIFI) {
+            writeWiFiSysex(sysex);
             if (!isLaneEmpty(cmdLane18)) {
                 logTx(cmdLane18, bufferSession);
             }
@@ -295,6 +318,10 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     public boolean checkConnection() {
+        AndroidWiFiTransport.Connection wifi = wifiConnection;
+        if (wifi != null && wifi.isOpen()) {
+            return true;
+        }
         AndroidBleTransport.Connection ble = bleConnection;
         if (ble != null && ble.isOpen()) {
             return true;
@@ -354,6 +381,7 @@ public class USBService extends Service implements DeviceConnectionService {
             synchronized (midiLock) {
                 closeMidiLocked();
                 closeBleLocked();
+                closeWiFiLocked();
                 TransportDeviceSession session = setActiveDeviceTarget(
                         AndroidUsbMidiTransport.sessionId(usbDevice),
                         ActiveTransport.USB);
@@ -394,15 +422,21 @@ public class USBService extends Service implements DeviceConnectionService {
                 deviceFirmwareVersion = major + "." + minor;
             }
             String boardTypeHint = queryBoardTypeHint();
-            connectedBoardType = activeTransport == ActiveTransport.BLE && boardTypeHint == null
-                    ? AndroidBleTransport.boardType()
-                    : inferConnectedUsbBoardType(boardTypeHint);
+            connectedBoardType = inferConnectedBoardType(boardTypeHint);
         } catch (Throwable t) {
             deviceFirmwareVersion = null;
-            connectedBoardType = activeTransport == ActiveTransport.BLE
-                    ? AndroidBleTransport.boardType()
-                    : inferConnectedUsbBoardType(null);
+            connectedBoardType = inferConnectedBoardType(null);
         }
+    }
+
+    private String inferConnectedBoardType(@Nullable String boardTypeHint) {
+        if (activeTransport == ActiveTransport.BLE && boardTypeHint == null) {
+            return AndroidBleTransport.boardType();
+        }
+        if (activeTransport == ActiveTransport.WIFI && boardTypeHint == null) {
+            return "esp32";
+        }
+        return inferConnectedUsbBoardType(boardTypeHint);
     }
 
     private String inferConnectedUsbBoardType(@Nullable String boardTypeHint) {
@@ -526,6 +560,99 @@ public class USBService extends Service implements DeviceConnectionService {
         clearActiveDeviceTarget(ActiveTransport.BLE);
     }
 
+    private void closeWiFiLocked() {
+        AndroidWiFiTransport.Connection connection = wifiConnection;
+        wifiConnection = null;
+        if (connection != null) {
+            connection.close();
+        }
+        clearActiveDeviceTarget(ActiveTransport.WIFI);
+    }
+
+    public void connectWiFi(String host, int port) {
+        String trimmedHost = host == null ? "" : host.trim();
+        int safePort = AndroidWiFiTransport.isValidPort(port) ? port : AndroidWiFiTransport.DEFAULT_PORT;
+        if (!AndroidWiFiTransport.isValidManualHost(trimmedHost)) {
+            showToast("Wi-Fi host must be a hostname or IP address");
+            return;
+        }
+        if (wifiClient == null) {
+            wifiClient = new OkHttpClient();
+        }
+
+        final String sessionId = AndroidWiFiTransport.sessionId(trimmedHost + ":" + safePort);
+        final TransportDeviceSession session;
+        final AndroidWiFiTransport.Connection connection;
+        synchronized (wifiLock) {
+            closeMidiLocked();
+            closeBleLocked();
+            closeWiFiLocked();
+            session = setActiveDeviceTarget(sessionId, ActiveTransport.WIFI);
+            connection = AndroidWiFiTransport.createConnection(trimmedHost, safePort, session);
+            wifiConnection = connection;
+            activeConnectionState.setConnection(wifiConnection);
+        }
+
+        try {
+            AndroidWiFiTransport.openConnection(
+                    wifiClient,
+                    connection,
+                    new AndroidWiFiTransport.Listener() {
+                        @Override
+                        public void onOpen(AndroidWiFiTransport.Connection openedConnection) {
+                            synchronized (wifiLock) {
+                                if (wifiConnection == openedConnection) {
+                                    activeConnectionState.setConnection(openedConnection);
+                                }
+                            }
+                            showToast("Wi-Fi Connected!");
+                            queryFirmwareVersionAsync();
+                        }
+
+                        @Override
+                        public void onBytes(AndroidWiFiTransport.Connection openedConnection, byte[] data) {
+                            feedSysexBytes(data, 0, data.length, session);
+                        }
+
+                        @Override
+                        public void onText(AndroidWiFiTransport.Connection openedConnection, String text) {
+                            if (text != null && text.toLowerCase().contains("busy")) {
+                                showToast("Wi-Fi device is busy");
+                                disconnectWiFi(openedConnection);
+                            }
+                        }
+
+                        @Override
+                        public void onClosed(AndroidWiFiTransport.Connection openedConnection) {
+                            disconnectWiFi(openedConnection);
+                        }
+
+                        @Override
+                        public void onFailure(AndroidWiFiTransport.Connection openedConnection, Throwable throwable) {
+                            Log.e(TAG, "Wi-Fi transport failed", throwable);
+                            showToast("Wi-Fi connection failed");
+                            disconnectWiFi(openedConnection);
+                        }
+                    });
+        } catch (RuntimeException e) {
+            Log.e(TAG, "Wi-Fi transport failed to open", e);
+            showToast("Wi-Fi connection failed");
+            disconnectWiFi(connection);
+            return;
+        }
+        showToast("Opening Wi-Fi connection...");
+    }
+
+    private void disconnectWiFi(AndroidWiFiTransport.Connection connection) {
+        synchronized (wifiLock) {
+            if (wifiConnection == connection) {
+                connection.markDisconnected();
+                wifiConnection = null;
+                clearActiveDeviceTarget(ActiveTransport.WIFI);
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     private void writeBleSysex(byte[] sysex) {
         synchronized (bleLock) {
@@ -535,6 +662,19 @@ public class USBService extends Service implements DeviceConnectionService {
                 return;
             }
             connection.writeSysex(sysex);
+        }
+    }
+
+    private void writeWiFiSysex(byte[] sysex) {
+        synchronized (wifiLock) {
+            AndroidWiFiTransport.Connection connection = wifiConnection;
+            if (connection == null || !connection.isOpen()) {
+                showToast("No Wi-Fi device connected");
+                return;
+            }
+            if (!connection.sendSysex(sysex)) {
+                showToast("Wi-Fi write failed");
+            }
         }
     }
 
@@ -892,6 +1032,9 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (bleLock) {
             closeBleLocked();
         }
+        synchronized (wifiLock) {
+            closeWiFiLocked();
+        }
 
         if (midiThread != null) {
             midiThread.quitSafely();
@@ -918,7 +1061,13 @@ public class USBService extends Service implements DeviceConnectionService {
         if (!checkConnection()) {
             return ConnectionType.NONE;
         }
-        return activeTransport == ActiveTransport.BLE ? ConnectionType.BLE : ConnectionType.USB;
+        if (activeTransport == ActiveTransport.BLE) {
+            return ConnectionType.BLE;
+        }
+        if (activeTransport == ActiveTransport.WIFI) {
+            return ConnectionType.WIFI;
+        }
+        return ConnectionType.USB;
     }
 
     @Override
@@ -931,6 +1080,11 @@ public class USBService extends Service implements DeviceConnectionService {
                     return label == null || label.trim().isEmpty()
                             ? "Connected (BLE)"
                             : "Connected (BLE: " + label.trim() + ")";
+                }
+                if (activeTransport == ActiveTransport.WIFI) {
+                    return label == null || label.trim().isEmpty()
+                            ? "Connected (Wi-Fi)"
+                            : "Connected (" + label.trim() + ")";
                 }
                 return label == null || label.trim().isEmpty()
                         ? "Connected (USB)"
@@ -959,6 +1113,9 @@ public class USBService extends Service implements DeviceConnectionService {
         }
         synchronized (bleLock) {
             closeBleLocked();
+        }
+        synchronized (wifiLock) {
+            closeWiFiLocked();
         }
         Log.d(TAG, "Device disconnected");
     }

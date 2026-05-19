@@ -17,6 +17,7 @@ public interface DeviceConnectionService {
     enum ConnectionType {
         USB,
         BLE,
+        WIFI,
         NONE
     }
     

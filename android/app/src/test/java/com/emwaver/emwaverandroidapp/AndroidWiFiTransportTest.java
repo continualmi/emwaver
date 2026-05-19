@@ -28,8 +28,18 @@ public class AndroidWiFiTransportTest {
         AndroidWiFiTransport.Connection first = new AndroidWiFiTransport.Connection(" 192.168.4.2 ");
         AndroidWiFiTransport.Connection second = new AndroidWiFiTransport.Connection(" 192.168.4.3 ");
 
-        assertEquals("192.168.4.2", first.hostOrDeviceId);
-        assertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2", "Wi-Fi: 192.168.4.2", second);
+        assertEquals("192.168.4.2:3922", first.hostOrDeviceId);
+        assertConnectionOwnsIsolatedSession(first, "wifi:192.168.4.2:3922", "Wi-Fi: 192.168.4.2:3922", second);
+    }
+
+    @Test
+    public void webSocketUrlValidatesManualLanHosts() {
+        assertEquals("ws://192.168.4.2:3922/v1/ws", AndroidWiFiTransport.webSocketUrl("192.168.4.2", 3922));
+        assertEquals("ws://emwaver-a1b2.local:3922/v1/ws", AndroidWiFiTransport.webSocketUrl("emwaver-a1b2.local", 3922));
+        assertEquals("ws://[fd00::1234]:3922/v1/ws", AndroidWiFiTransport.webSocketUrl("fd00::1234", 3922));
+        assertEquals(null, AndroidWiFiTransport.webSocketUrl("ws://192.168.4.2", 3922));
+        assertEquals(null, AndroidWiFiTransport.webSocketUrl("192.168.4.2/path", 3922));
+        assertEquals(null, AndroidWiFiTransport.webSocketUrl("192.168.4.2", 70000));
     }
 
     private static void assertConnectionOwnsIsolatedSession(

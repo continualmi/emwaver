@@ -85,6 +85,14 @@ public class DeviceConnectionManager {
         }
     }
 
+    public void connectWiFi(String host, int port) {
+        if (usbService != null) {
+            usbService.connectWiFi(host, port);
+            activeService = usbService;
+            activeConnectionType = DeviceConnectionService.ConnectionType.WIFI;
+        }
+    }
+
     private void checkAndUpdateActiveService() {
         DeviceConnectionService newActiveService = null;
         DeviceConnectionService.ConnectionType newConnectionType = DeviceConnectionService.ConnectionType.NONE;

@@ -17,12 +17,15 @@ import android.hardware.usb.UsbManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
+import android.text.InputType;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.os.Handler;
 import android.os.Looper;
+import android.widget.EditText;
+import android.widget.LinearLayout;
 import android.widget.Toast;
 
 import com.emwaver.emwaverandroidapp.BuildConfig;
@@ -43,6 +46,7 @@ import androidx.lifecycle.Lifecycle;
 import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 
 import com.emwaver.emwaverandroidapp.databinding.ActivityMainBinding;
 import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
@@ -64,6 +68,8 @@ public class MainActivity extends AppCompatActivity {
     private MenuItem connectionMenuItem;
 
     private long lastAutoConnectAttemptMs = 0;
+    private String lastWiFiHost = "";
+    private String lastWiFiPort = String.valueOf(AndroidWiFiTransport.DEFAULT_PORT);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -226,6 +232,10 @@ public class MainActivity extends AppCompatActivity {
         } else {
             status = dfuConnected ? "Update Mode detected" : "Disconnected";
         }
+        String connectionStatus = connectionManager != null ? connectionManager.getConnectionStatus() : null;
+        if (connectionStatus != null && !"Not connected".equalsIgnoreCase(connectionStatus)) {
+            status = connectionStatus;
+        }
 
         String versionLine = "";
         if (connected) {
@@ -268,14 +278,73 @@ public class MainActivity extends AppCompatActivity {
                 }
             });
         } else {
-            builder.setNeutralButton("Search", (d, w) -> {
-                if (connectionManager != null) {
-                    connectionManager.checkForUsbDevices();
-                }
-            });
+            builder.setNeutralButton("Wi-Fi…", (d, w) -> showWiFiConnectionDialog());
         }
 
         builder.show();
+    }
+
+    private void showWiFiConnectionDialog() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int) (20 * getResources().getDisplayMetrics().density);
+        layout.setPadding(padding, padding / 2, padding, 0);
+
+        EditText hostInput = new EditText(this);
+        hostInput.setHint("Host or IP");
+        hostInput.setSingleLine(true);
+        hostInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
+        hostInput.setText(lastWiFiHost);
+        layout.addView(hostInput);
+
+        EditText portInput = new EditText(this);
+        portInput.setHint("Port");
+        portInput.setSingleLine(true);
+        portInput.setInputType(InputType.TYPE_CLASS_NUMBER);
+        portInput.setText(lastWiFiPort);
+        layout.addView(portInput);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Connect Wi-Fi")
+                .setMessage("Connect directly to an ESP32 on your trusted LAN or VPN.")
+                .setView(layout)
+                .setPositiveButton("Connect", null)
+                .setNegativeButton("Cancel", null)
+                .setNeutralButton("Search USB/BLE", (d, w) -> {
+                    if (connectionManager != null) {
+                        connectionManager.checkForUsbDevices();
+                    }
+                })
+                .create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String host = hostInput.getText() != null ? hostInput.getText().toString().trim() : "";
+            String portText = portInput.getText() != null ? portInput.getText().toString().trim() : "";
+            int port = AndroidWiFiTransport.DEFAULT_PORT;
+            if (!portText.isEmpty()) {
+                try {
+                    port = Integer.parseInt(portText);
+                } catch (NumberFormatException ignored) {
+                    port = -1;
+                }
+            }
+
+            if (!AndroidWiFiTransport.isValidManualHost(host)) {
+                hostInput.setError("Enter a hostname or IP address without scheme, path, or port.");
+                return;
+            }
+            if (!AndroidWiFiTransport.isValidPort(port)) {
+                portInput.setError("Port must be 1-65535.");
+                return;
+            }
+
+            lastWiFiHost = host;
+            lastWiFiPort = String.format(Locale.US, "%d", port);
+            if (connectionManager != null) {
+                connectionManager.connectWiFi(host, port);
+            }
+            dialog.dismiss();
+        }));
+        dialog.show();
     }
 
     private void requestAllRequiredPermissions() {

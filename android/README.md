@@ -90,7 +90,7 @@ Release distribution:
 
 ## 6) Guardrails
 
-1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model). USB MIDI remains preferred when a wired device is available; when no wired device is found, Android scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
+1. Keep transport compatibility aligned with firmware protocol (fixed-size packet model). USB MIDI remains preferred when a wired device is available; when no wired device is found, Android scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE and Wi-Fi carry the same SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 2. Keep Android USB discovery aligned with STM32 and ESP32 EMWaver runtime descriptors, including target-aware ESP32-S2/ESP32-S3 product names; do not hard-code STM32-only or ESP32-S3-only identity assumptions in the runtime path.
 3. Keep firmware asset paths stable unless coordinated across tooling and update flows.
 4. Keep app-level dialogs/resources synced with underlying feature availability.
@@ -102,7 +102,7 @@ Simulator testing:
 
 Current Android board split:
 - STM32 runtime uses USB and can enter the DFU-based update flow.
-- ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only. Android firmware update UI keeps ESP boards out of STM32 DFU and uses the Android-native ESP serial bootloader updater for bundled ESP app images.
+- ESP32 runtime now shares the same USB connection path. ESP32-S3 can also connect over BLE; ESP32-S2 is USB/Wi-Fi only. Android can connect to a trusted LAN/VPN ESP32 Wi-Fi endpoint by manual host/IP and port using the firmware WebSocket path (`ws://<host>:3922/v1/ws`). mDNS discovery and local SSID/password provisioning remain planned on Android. Android firmware update UI keeps ESP boards out of STM32 DFU and uses the Android-native ESP serial bootloader updater for bundled ESP app images.
 
 ---
 

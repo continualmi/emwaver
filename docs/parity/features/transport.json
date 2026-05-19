@@ -106,7 +106,6 @@
             {
               "file": "macos/EMWaver/EMWaver/MacWiFiManager.swift",
               "contains": [
-                "NWBrowser[\\s\\S]*bonjour",
                 "URLSessionWebSocketTask",
                 "func connect\\(host:"
               ]
@@ -118,10 +117,8 @@
             {
               "file": "macos/EMWaver/EMWaver/DeviceConnectionSheet.swift",
               "contains": [
-                "Wi-Fi Setup",
                 "wifiHost",
-                "wifiPort",
-                "provisionWiFi"
+                "wifiPort"
               ]
             }
           ]
@@ -147,12 +144,74 @@
           ]
         },
         "android": {
-          "status": "planned",
-          "reason": "Android has a Wi-Fi transport identity/session boundary, but does not yet expose live ESP32 WebSocket connection, mDNS/manual endpoint UI, or Wi-Fi provisioning in the native app.",
+          "status": "required",
           "evidence": [
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidWiFiTransport.java",
-              "contains": "Wi-Fi[\\s\\S]*TransportDeviceConnection"
+              "contains": [
+                "WebSocket",
+                "ws://",
+                "/v1/ws"
+              ]
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java",
+              "contains": [
+                "connectWiFi",
+                "writeWiFiSysex",
+                "ActiveTransport\\.WIFI"
+              ]
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/MainActivity.java",
+              "contains": "Connect Wi-Fi|Host or IP|connectWiFi"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "transport.wifi_discovery_and_provisioning",
+      "description": "ESP32 Wi-Fi setup/discovery UX supports mDNS/manual endpoint workflows and local SSID/password provisioning where the native app owns that surface.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "macos/EMWaver/EMWaver/MacWiFiManager.swift",
+              "contains": [
+                "NWBrowser[\\s\\S]*bonjour",
+                "bonjourMetadata",
+                "capabilities"
+              ]
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/DeviceConnectionSheet.swift",
+              "contains": [
+                "ESP32 Wi-Fi Setup",
+                "provisionWiFi",
+                "clearWiFiProvisioning",
+                "refreshWiFiProvisioningStatus"
+              ]
+            }
+          ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS has Wi-Fi transport identity scaffolding but does not yet expose mDNS/manual Wi-Fi device UX or local ESP32 Wi-Fi provisioning."
+        },
+        "windows": {
+          "status": "planned",
+          "reason": "Windows has Wi-Fi transport identity scaffolding but does not yet expose mDNS/manual Wi-Fi device UX or local ESP32 Wi-Fi provisioning."
+        },
+        "android": {
+          "status": "planned",
+          "reason": "Android now exposes manual Wi-Fi runtime connection, but mDNS discovery and local ESP32 SSID/password provisioning remain planned.",
+          "evidence": [
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/MainActivity.java",
+              "contains": "Connect Wi-Fi"
             }
           ]
         }
