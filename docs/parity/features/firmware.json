@@ -33,7 +33,7 @@
                 "Bundled STM32 firmware",
                 "Share STM32 firmware",
                 "Enter Update Mode",
-                "iOS does not yet expose the full STM32 DFU"
+                "iOS does not expose the full STM32 DFU"
               ]
             },
             {
@@ -93,12 +93,16 @@
           ]
         },
         "ios": {
-          "status": "planned",
-          "reason": "iOS can detect ESP boards over local transports and can share the bundled ESP firmware image, but does not yet expose an ESP serial flashing path.",
+          "status": "not_applicable",
+          "reason": "iOS does not own the generic USB serial flashing path required for ESP32-S3 bootloader updates. iOS parity for this flow is bundled ESP firmware visibility/share plus local runtime control over USB MIDI, BLE, or Wi-Fi.",
           "evidence": [
             {
               "file": "ios/EMWaver/Views/FirmwareUpdateSheet.swift",
-              "contains": "Share ESP firmware|Bundled ESP image"
+              "contains": [
+                "Share ESP firmware",
+                "Bundled ESP image",
+                "iOS does not expose the full STM32 DFU or ESP serial flashing runtime"
+              ]
             }
           ]
         },

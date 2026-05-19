@@ -60,7 +60,7 @@ struct FirmwareUpdateSheet: View {
                 }
 
                 Section("Flashing") {
-                    Label("iOS does not yet expose the full STM32 DFU or ESP serial flashing runtime. Use macOS, Windows, or Android STM32 DFU for the actual flash step.", systemImage: "exclamationmark.triangle")
+                    Label("iOS does not expose the full STM32 DFU or ESP serial flashing runtime. Use macOS, Windows, or Android for the actual flash step.", systemImage: "exclamationmark.triangle")
                         .foregroundStyle(.orange)
                 }
             }
