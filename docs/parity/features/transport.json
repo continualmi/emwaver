@@ -124,12 +124,27 @@
           ]
         },
         "ios": {
-          "status": "planned",
-          "reason": "iOS has a Wi-Fi transport identity/session boundary, but does not yet expose live ESP32 WebSocket connection, mDNS/manual endpoint UI, or Wi-Fi provisioning in the native app.",
+          "status": "required",
           "evidence": [
             {
               "file": "ios/EMWaver/Managers/WiFiTransport.swift",
-              "contains": "Wi-Fi[\\s\\S]*TransportDeviceConnection"
+              "contains": [
+                "URLSessionWebSocketTask",
+                "ws://",
+                "/v1/ws"
+              ]
+            },
+            {
+              "file": "ios/EMWaver/Managers/USBManager.swift",
+              "contains": [
+                "connectWiFi",
+                "sendWiFiSysex",
+                "case wifi"
+              ]
+            },
+            {
+              "file": "ios/EMWaver/Views/ScriptsContainerView.swift",
+              "contains": "Connect Wi-Fi|Host or IP|connectWiFi"
             }
           ]
         },
@@ -214,7 +229,13 @@
         },
         "ios": {
           "status": "planned",
-          "reason": "iOS has Wi-Fi transport identity scaffolding but does not yet expose mDNS/manual Wi-Fi device UX or local ESP32 Wi-Fi provisioning."
+          "reason": "iOS now exposes manual Wi-Fi runtime connection, but mDNS discovery and local ESP32 SSID/password provisioning remain planned.",
+          "evidence": [
+            {
+              "file": "ios/EMWaver/Views/ScriptsContainerView.swift",
+              "contains": "Connect Wi-Fi"
+            }
+          ]
         },
         "windows": {
           "status": "planned",

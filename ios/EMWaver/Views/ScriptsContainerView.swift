@@ -176,6 +176,9 @@ struct ScriptsContainerView: View {
     @EnvironmentObject private var hostSessions: HostSessionManager
     @StateObject private var scriptSessions = IOSScriptSessionManager()
     @State private var isFirmwareSheetPresented = false
+    @State private var isWiFiConnectPresented = false
+    @State private var wifiHost = ""
+    @State private var wifiPort = String(WiFiTransport.defaultPort)
 
     var body: some View {
         NavigationStack {
@@ -235,6 +238,10 @@ struct ScriptsContainerView: View {
                                     bleManager.startScan()
                                 }
                                 .disabled(bleManager.isScanning)
+
+                                Button("Connect Wi-Fi") {
+                                    isWiFiConnectPresented = true
+                                }
                             }
 
                             if let port = bleManager.connectedPortName, !port.isEmpty {
@@ -309,6 +316,26 @@ struct ScriptsContainerView: View {
             FirmwareUpdateSheet(device: bleManager, targetLabel: selectedDeviceLabel)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+        }
+        .alert("Connect Wi-Fi", isPresented: $isWiFiConnectPresented) {
+            TextField("Host or IP", text: $wifiHost)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+            TextField("Port", text: $wifiPort)
+                .keyboardType(.numberPad)
+            Button("Connect") {
+                let parsedPort = Int(wifiPort.trimmingCharacters(in: .whitespacesAndNewlines))
+                let port: Int
+                if let parsedPort, WiFiTransport.isValidPort(parsedPort) {
+                    port = parsedPort
+                } else {
+                    port = WiFiTransport.defaultPort
+                }
+                bleManager.connectWiFi(host: wifiHost, port: port)
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Enter a trusted LAN or VPN ESP32 endpoint.")
         }
     }
 

@@ -17,8 +17,18 @@ final class WiFiTransportTests: XCTestCase {
         let first = WiFiTransport.Connection(hostOrDeviceId: " 192.168.4.2 ")
         let second = WiFiTransport.Connection(hostOrDeviceId: " 192.168.4.3 ")
 
-        XCTAssertEqual(first.hostOrDeviceId, "192.168.4.2")
-        assertConnectionOwnsIsolatedSession(first, expectedSessionKey: "wifi:192.168.4.2", expectedDisplayName: "Wi-Fi: 192.168.4.2", isolatedFrom: second)
+        XCTAssertEqual(first.hostOrDeviceId, "192.168.4.2:3922")
+        assertConnectionOwnsIsolatedSession(first, expectedSessionKey: "wifi:192.168.4.2:3922", expectedDisplayName: "Wi-Fi: 192.168.4.2:3922", isolatedFrom: second)
+    }
+
+    func testWebSocketURLValidatesManualLanHosts() {
+        XCTAssertEqual(WiFiTransport.webSocketURL(host: "192.168.4.2", port: 3922)?.absoluteString, "ws://192.168.4.2:3922/v1/ws")
+        XCTAssertEqual(WiFiTransport.webSocketURL(host: "emwaver-a1b2.local", port: 3922)?.absoluteString, "ws://emwaver-a1b2.local:3922/v1/ws")
+        XCTAssertEqual(WiFiTransport.webSocketURL(host: "fd00::1234", port: 3922)?.absoluteString, "ws://[fd00::1234]:3922/v1/ws")
+        XCTAssertNil(WiFiTransport.webSocketURL(host: "ws://192.168.4.2", port: 3922))
+        XCTAssertNil(WiFiTransport.webSocketURL(host: "192.168.4.2/path", port: 3922))
+        XCTAssertNil(WiFiTransport.webSocketURL(host: "[fd00::1234]", port: 3922))
+        XCTAssertNil(WiFiTransport.webSocketURL(host: "192.168.4.2", port: 70000))
     }
 
     private func assertConnectionOwnsIsolatedSession(

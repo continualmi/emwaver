@@ -72,6 +72,7 @@ final class USBManager: NSObject, ObservableObject {
         case none
         case usbMidi
         case ble
+        case wifi
     }
 
     private func dbg(_ msg: String) {
@@ -126,6 +127,7 @@ final class USBManager: NSObject, ObservableObject {
     private var activeConnectionState = TransportDeviceConnectionState(noneTransport: ActiveTransport.none)
     private var pendingBleConnection: BLETransport.PendingConnection?
     private var bleConnection: BLETransport.Connection?
+    private var wifiConnection: WiFiTransport.Connection?
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -348,7 +350,7 @@ final class USBManager: NSObject, ObservableObject {
     /// Never touches `lastErrorText`.
     private func sendCommandBestEffort(_ command: Data, timeout: Int) -> Data? {
         // Avoid depending on the @Published `isConnected` flag here; it may lag behind CoreMIDI state.
-        guard activeTransport == .ble || isUsbMidiConnected else { return nil }
+        guard activeTransport == .ble || activeTransport == .wifi || isUsbMidiConnected else { return nil }
 
         let session = withBufferQueueSync {
             activeBufferSession.prepareCommandResponseWait()
@@ -359,16 +361,16 @@ final class USBManager: NSObject, ObservableObject {
         sendPacketBestEffortSync(command)
 
         return session.awaitCommandResponse(timeout: timeout) {
-            activeTransport == .ble || isUsbMidiConnected
+            activeTransport == .ble || activeTransport == .wifi || isUsbMidiConnected
         }
     }
 
     private func sendPacketBestEffortSync(_ data: Data) {
-        guard activeTransport == .ble || isUsbMidiConnected else { return }
+        guard activeTransport == .ble || activeTransport == .wifi || isUsbMidiConnected else { return }
 
         // Ensure we send on the MIDI queue, but synchronously for determinism.
         midiQueue.sync {
-            guard self.activeTransport == .ble || self.isUsbMidiConnected else { return }
+            guard self.activeTransport == .ble || self.activeTransport == .wifi || self.isUsbMidiConnected else { return }
             guard let packet64 = self.withBufferQueueSync({ NativeBufferRust.makePacket64(data) }) else { return }
 
             self.withBufferQueueSync {
@@ -415,6 +417,8 @@ final class USBManager: NSObject, ObservableObject {
             }
         case .ble:
             sendBleSysex(sysex, reportErrors: true)
+        case .wifi:
+            sendWiFiSysex(sysex, reportErrors: true)
         case .none:
             setError("Cannot send packet: Not connected")
         }
@@ -422,10 +426,12 @@ final class USBManager: NSObject, ObservableObject {
 
     /// Best-effort send that never updates `lastErrorText`.
     private func sendSuperframeBestEffort(_ superframe: Data) {
-        guard activeTransport == .ble || isUsbMidiConnected else { return }
+        guard activeTransport == .ble || activeTransport == .wifi || isUsbMidiConnected else { return }
         guard let sysex = UsbMidiSysex.encodeSuperframe(superframe) else { return }
         if activeTransport == .ble {
             sendBleSysex(sysex, reportErrors: false)
+        } else if activeTransport == .wifi {
+            sendWiFiSysex(sysex, reportErrors: false)
         } else {
             _ = sendUsbMidiSysex(sysex)
         }
@@ -433,7 +439,7 @@ final class USBManager: NSObject, ObservableObject {
 
     @objc func sendPacket(_ data: Data) {
         midiQueue.async {
-            guard self.isConnected, self.activeTransport == .ble || self.isUsbMidiConnected else {
+            guard self.isConnected, self.activeTransport == .ble || self.activeTransport == .wifi || self.isUsbMidiConnected else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -459,7 +465,7 @@ final class USBManager: NSObject, ObservableObject {
 
     func sendPacket(_ data: Data, deviceId: String) {
         midiQueue.async {
-            guard self.isConnected, self.activeTransport == .ble || self.isUsbMidiConnected else {
+            guard self.isConnected, self.activeTransport == .ble || self.activeTransport == .wifi || self.isUsbMidiConnected else {
                 self.setError("Cannot send packet: Not connected")
                 return
             }
@@ -925,6 +931,8 @@ final class USBManager: NSObject, ObservableObject {
         bleScanSession = nil
         pendingBleConnection = nil
         bleConnection = nil
+        wifiConnection?.close()
+        wifiConnection = nil
         clearActiveDeviceTarget()
         withBufferQueueSync { activeBufferSession.resetSamplerStreaming() }
 
@@ -941,6 +949,63 @@ final class USBManager: NSObject, ObservableObject {
             dbg("sendSysex: MIDISend failed st=\(st)")
         }
         return st
+    }
+
+    func connectWiFi(host: String, port: Int = WiFiTransport.defaultPort) {
+        midiQueue.async {
+            let trimmedHost = host.trimmingCharacters(in: .whitespacesAndNewlines)
+            let safePort = WiFiTransport.isValidPort(port) ? port : WiFiTransport.defaultPort
+            guard WiFiTransport.isValidManualHost(trimmedHost) else {
+                self.setError("Wi-Fi host must be a hostname or IP address")
+                return
+            }
+
+            self.disconnectInternal()
+            let key = "\(trimmedHost):\(safePort)"
+            let session = self.setActiveDeviceTarget(
+                deviceId: WiFiTransport.sessionKey(for: key),
+                transport: .wifi
+            )
+            guard let connection = WiFiTransport.openConnection(
+                host: trimmedHost,
+                port: safePort,
+                session: session,
+                onBytes: { [weak self] data in
+                    self?.midiQueue.async {
+                        guard let self,
+                              let active = self.wifiConnection,
+                              active.sessionKey == WiFiTransport.sessionKey(for: key)
+                                || active.hostOrDeviceId == key
+                        else { return }
+                        self.feedMidiBytes(data, session: active.session)
+                    }
+                },
+                onFailure: { [weak self] error in
+                    self?.setError("Wi-Fi connection failed: \(error.localizedDescription)")
+                }
+            ) else {
+                self.clearActiveDeviceTarget()
+                self.setError("Invalid Wi-Fi host or port")
+                return
+            }
+
+            self.wifiConnection = connection
+            self.activeConnectionState.setConnection(connection)
+            DispatchQueue.main.async {
+                self.connectedPortName = connection.displayName
+                self.isConnected = true
+                self.lastErrorText = nil
+            }
+        }
+    }
+
+    private func sendWiFiSysex(_ sysex: Data, reportErrors: Bool) {
+        guard let connection = wifiConnection, connection.isOpen else {
+            if reportErrors { setError("Wi-Fi send failed: not connected") }
+            return
+        }
+
+        connection.sendSysex(sysex)
     }
 
     private func ensureBleCentral() {
