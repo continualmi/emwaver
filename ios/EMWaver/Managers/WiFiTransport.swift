@@ -5,10 +5,12 @@
  */
 
 import Foundation
+import Network
 
 enum WiFiTransport {
     static let transportName = "Wi-Fi"
     static let defaultPort = 3922
+    static let serviceType = "_emwaver._tcp"
     private static let wifiConfigOpcode: UInt8 = 0x0A
     private static let wifiBegin: UInt8 = 0x00
     private static let wifiField: UInt8 = 0x01
@@ -20,6 +22,17 @@ enum WiFiTransport {
     private static let commandChunkBytes = 13
     private static let maxSSIDBytes = 32
     private static let maxPasswordBytes = 64
+
+    struct DiscoveredDevice: Identifiable, Equatable {
+        let id: String
+        let displayName: String
+        let host: String
+        let port: Int
+        let boardType: String?
+        let firmwareVersion: String?
+        let protocolVersion: String?
+        let capabilities: [String]
+    }
 
     final class Connection: TransportDeviceConnection {
         let hostOrDeviceId: String
@@ -97,6 +110,28 @@ enum WiFiTransport {
         let safeHost = normalizedKey(host, fallback: "")
         let urlHost = safeHost.contains(":") ? "[\(safeHost)]" : safeHost
         return URL(string: "ws://\(urlHost):\(port)/v1/ws")
+    }
+
+    static func discoveredDevice(name: String, domain: String, metadata: [String: String]) -> DiscoveredDevice? {
+        guard let host = bonjourHost(name: name, domain: domain, metadata: metadata) else { return nil }
+        let capabilities = capabilities(metadata["cap"])
+        return DiscoveredDevice(
+            id: sessionKey(for: "\(host):\(defaultPort)"),
+            displayName: name.isEmpty ? host : name,
+            host: host,
+            port: defaultPort,
+            boardType: normalizedBoardType(metadata["board"]),
+            firmwareVersion: nonEmpty(metadata["fw"]),
+            protocolVersion: nonEmpty(metadata["proto"]) ?? "1",
+            capabilities: capabilities.isEmpty ? ["wifi"] : capabilities
+        )
+    }
+
+    static func bonjourMetadata(from metadata: NWBrowser.Result.Metadata) -> [String: String] {
+        guard case .bonjour(let txtRecord) = metadata else {
+            return [:]
+        }
+        return txtRecord.dictionary
     }
 
     static func openConnection(
@@ -230,6 +265,62 @@ enum WiFiTransport {
         default:
             return "reason \(reason)"
         }
+    }
+
+    private static func bonjourHost(name: String, domain: String, metadata: [String: String]) -> String? {
+        if let advertisedHost = metadata["host"], let host = normalizedBonjourHost(advertisedHost) {
+            return host
+        }
+        if let host = normalizedBonjourHost(name) {
+            return host
+        }
+        let qualified = "\(name).\(domain)"
+            .replacingOccurrences(of: "..", with: ".")
+            .trimmingCharacters(in: CharacterSet(charactersIn: "."))
+        return normalizedBonjourHost(qualified)
+    }
+
+    private static func normalizedBonjourHost(_ value: String) -> String? {
+        var host = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !host.isEmpty else { return nil }
+        guard host.rangeOfCharacter(from: .whitespacesAndNewlines) == nil else { return nil }
+        let lowercasedHost = host.lowercased()
+        if lowercasedHost.hasSuffix(".local.") {
+            host.removeLast(1)
+        } else if !lowercasedHost.hasSuffix(".local") {
+            host += ".local"
+        }
+        guard isValidManualHost(host) else { return nil }
+        return host
+    }
+
+    private static func normalizedBoardType(_ value: String?) -> String? {
+        guard let value = nonEmpty(value) else { return nil }
+        switch value.lowercased() {
+        case "esp32s3", "esp32-s3":
+            return "esp32s3"
+        case "esp32s2", "esp32-s2":
+            return "esp32s2"
+        case "esp32":
+            return "esp32"
+        default:
+            return value
+        }
+    }
+
+    private static func nonEmpty(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
+    }
+
+    private static func capabilities(_ value: String?) -> [String] {
+        guard let value = nonEmpty(value) else { return [] }
+        return value
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
     }
 
     private static func normalizedKey(_ value: String?, fallback: String) -> String {

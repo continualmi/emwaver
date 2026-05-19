@@ -56,6 +56,29 @@ final class WiFiTransportTests: XCTestCase {
         )
     }
 
+    func testDiscoveredDeviceNormalizesBonjourRecord() throws {
+        let device = try XCTUnwrap(WiFiTransport.discoveredDevice(
+            name: "EMWaver-A1B2",
+            domain: "local.",
+            metadata: [
+                "host": "emwaver-a1b2",
+                "board": "esp32-s3",
+                "fw": "1.2",
+                "proto": "1",
+                "cap": "wifi, gpio"
+            ]
+        ))
+
+        XCTAssertEqual(device.id, "wifi:emwaver-a1b2.local:3922")
+        XCTAssertEqual(device.displayName, "EMWaver-A1B2")
+        XCTAssertEqual(device.host, "emwaver-a1b2.local")
+        XCTAssertEqual(device.port, 3922)
+        XCTAssertEqual(device.boardType, "esp32s3")
+        XCTAssertEqual(device.firmwareVersion, "1.2")
+        XCTAssertEqual(device.protocolVersion, "1")
+        XCTAssertEqual(device.capabilities, ["wifi", "gpio"])
+    }
+
     private func assertConnectionOwnsIsolatedSession(
         _ connection: TransportDeviceConnection,
         expectedSessionKey: String,

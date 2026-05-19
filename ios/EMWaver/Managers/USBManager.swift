@@ -7,6 +7,7 @@
 import Foundation
 import CoreBluetooth
 import CoreMIDI
+import Network
 import SwiftUI
 import os
 
@@ -103,6 +104,8 @@ final class USBManager: NSObject, ObservableObject {
     @Published var wifiProvisioningStatus: String? = nil
     @Published var isWiFiProvisioningError: Bool = false
     @Published var isWiFiProvisioning: Bool = false
+    @Published var isWiFiDiscovering: Bool = false
+    @Published var wifiDiscoveredDevices: [WiFiTransport.DiscoveredDevice] = []
 
     // MARK: - MIDI plumbing
 
@@ -131,6 +134,7 @@ final class USBManager: NSObject, ObservableObject {
     private var pendingBleConnection: BLETransport.PendingConnection?
     private var bleConnection: BLETransport.Connection?
     private var wifiConnection: WiFiTransport.Connection?
+    private var wifiBrowser: NWBrowser?
 
     // Variables for speed calculation
     private var totalBytesReceived: Int = 0
@@ -998,6 +1002,74 @@ final class USBManager: NSObject, ObservableObject {
                 self.connectedPortName = connection.displayName
                 self.isConnected = true
                 self.lastErrorText = nil
+            }
+        }
+    }
+
+    func startWiFiDiscovery() {
+        midiQueue.async {
+            self.stopWiFiDiscoveryInternal(clearDevices: false)
+            let browser = NWBrowser(
+                for: .bonjour(type: WiFiTransport.serviceType, domain: nil),
+                using: .tcp
+            )
+            browser.browseResultsChangedHandler = { [weak self] results, _ in
+                self?.midiQueue.async {
+                    let devices = results.compactMap { result -> WiFiTransport.DiscoveredDevice? in
+                        guard case let .service(name, type, domain, _) = result.endpoint,
+                              type == WiFiTransport.serviceType else {
+                            return nil
+                        }
+                        return WiFiTransport.discoveredDevice(
+                            name: name,
+                            domain: domain,
+                            metadata: WiFiTransport.bonjourMetadata(from: result.metadata)
+                        )
+                    }
+                    .sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+                    DispatchQueue.main.async {
+                        self?.wifiDiscoveredDevices = devices
+                    }
+                }
+            }
+            browser.stateUpdateHandler = { [weak self] state in
+                switch state {
+                case .ready:
+                    DispatchQueue.main.async {
+                        self?.isWiFiDiscovering = true
+                    }
+                case .failed(let error):
+                    self?.setError("Wi-Fi discovery failed: \(error.localizedDescription)")
+                    self?.stopWiFiDiscoveryInternal(clearDevices: false)
+                case .cancelled:
+                    DispatchQueue.main.async {
+                        self?.isWiFiDiscovering = false
+                    }
+                default:
+                    break
+                }
+            }
+            self.wifiBrowser = browser
+            browser.start(queue: self.midiQueue)
+            DispatchQueue.main.async {
+                self.isWiFiDiscovering = true
+            }
+        }
+    }
+
+    func stopWiFiDiscovery() {
+        midiQueue.async {
+            self.stopWiFiDiscoveryInternal(clearDevices: false)
+        }
+    }
+
+    private func stopWiFiDiscoveryInternal(clearDevices: Bool) {
+        wifiBrowser?.cancel()
+        wifiBrowser = nil
+        DispatchQueue.main.async {
+            self.isWiFiDiscovering = false
+            if clearDevices {
+                self.wifiDiscoveredDevices = []
             }
         }
     }

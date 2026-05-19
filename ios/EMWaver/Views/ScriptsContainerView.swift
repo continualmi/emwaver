@@ -371,26 +371,80 @@ struct ScriptsContainerView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
-        .alert("Connect Wi-Fi", isPresented: $isWiFiConnectPresented) {
-            TextField("Host or IP", text: $wifiHost)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-            TextField("Port", text: $wifiPort)
-                .keyboardType(.numberPad)
-            Button("Connect") {
-                let parsedPort = Int(wifiPort.trimmingCharacters(in: .whitespacesAndNewlines))
-                let port: Int
-                if let parsedPort, WiFiTransport.isValidPort(parsedPort) {
-                    port = parsedPort
-                } else {
-                    port = WiFiTransport.defaultPort
+        .sheet(isPresented: $isWiFiConnectPresented) {
+            NavigationStack {
+                Form {
+                    Section {
+                        TextField("Host or IP", text: $wifiHost)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                        TextField("Port", text: $wifiPort)
+                            .keyboardType(.numberPad)
+                        Button("Connect Wi-Fi") {
+                            connectManualWiFi()
+                            isWiFiConnectPresented = false
+                        }
+                        .disabled(wifiHost.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+
+                    Section {
+                        Button(bleManager.isWiFiDiscovering ? "Searching..." : "Search") {
+                            bleManager.startWiFiDiscovery()
+                        }
+                        .disabled(bleManager.isWiFiDiscovering)
+                        if bleManager.isWiFiDiscovering {
+                            Button("Stop Search") {
+                                bleManager.stopWiFiDiscovery()
+                            }
+                        }
+                    }
+
+                    if !bleManager.wifiDiscoveredDevices.isEmpty {
+                        Section {
+                            ForEach(bleManager.wifiDiscoveredDevices) { device in
+                                Button {
+                                    wifiHost = device.host
+                                    wifiPort = String(device.port)
+                                    bleManager.connectWiFi(host: device.host, port: device.port)
+                                    isWiFiConnectPresented = false
+                                } label: {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(device.displayName)
+                                        Text(device.host)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
-                bleManager.connectWiFi(host: wifiHost, port: port)
+                .navigationTitle("Connect Wi-Fi")
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") {
+                            isWiFiConnectPresented = false
+                        }
+                    }
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Enter a trusted LAN or VPN ESP32 endpoint.")
+            .onAppear {
+                bleManager.startWiFiDiscovery()
+            }
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
         }
+    }
+
+    private func connectManualWiFi() {
+        let parsedPort = Int(wifiPort.trimmingCharacters(in: .whitespacesAndNewlines))
+        let port: Int
+        if let parsedPort, WiFiTransport.isValidPort(parsedPort) {
+            port = parsedPort
+        } else {
+            port = WiFiTransport.defaultPort
+        }
+        bleManager.connectWiFi(host: wifiHost, port: port)
     }
 
     private var connectionStatusText: String {
