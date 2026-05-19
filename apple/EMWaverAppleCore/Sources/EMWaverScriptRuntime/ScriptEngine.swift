@@ -42,8 +42,15 @@ public final class ScriptEngine {
     private let userScriptSourcePath = "/emwaver-user-script.js"
     private let kernelSourcePath = "/DefaultScripts/emw-kernel.js"
     private let userScriptWrapperPrefixLineCount = 2
+    private var bootstrapSource: String?
 
     public init() {}
+
+    public func setBootstrapSource(_ source: String?) {
+        executionQueue.async { [weak self] in
+            self?.bootstrapSource = source
+        }
+    }
 
     /// Hard reset of the JS engine: cancels scheduled timeouts, clears handlers, and discards the JSContext.
     ///
@@ -747,6 +754,11 @@ var console = (function() {
     }
 
     private func injectDSL(into context: JSContext) {
+        if let bootstrapSource {
+            context.evaluateScript(bootstrapSource, withSourceURL: URL(fileURLWithPath: kernelSourcePath))
+            return
+        }
+
         guard let url = Bundle.main.url(forResource: "emw-kernel", withExtension: "js", subdirectory: "DefaultScripts") else {
             emitError("Script kernel missing from app bundle (DefaultScripts/emw-kernel.js)")
             return
