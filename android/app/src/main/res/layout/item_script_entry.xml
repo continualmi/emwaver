@@ -28,9 +28,25 @@
             android:ellipsize="end" />
 
         <TextView
+            android:id="@+id/script_kind_badge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:paddingStart="6dp"
+            android:paddingEnd="6dp"
+            android:paddingTop="2dp"
+            android:paddingBottom="2dp"
+            android:textColor="@color/textSecondary"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:background="@drawable/rounded_background"
+            android:visibility="gone" />
+
+        <TextView
             android:id="@+id/script_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
             android:textColor="@color/textSecondary"
             android:textSize="12sp"
             android:maxLines="1"

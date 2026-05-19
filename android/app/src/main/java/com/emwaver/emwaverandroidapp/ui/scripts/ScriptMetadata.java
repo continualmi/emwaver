@@ -18,12 +18,24 @@ public final class ScriptMetadata {
         CUSTOM  // User's custom scripts from local storage, editable
     }
 
+    public enum FileKind {
+        SCRIPT,
+        LIBRARY,
+        KERNEL
+    }
+
     private final UserFileMetadata metadata;
     private final SourceType sourceType;
+    private final FileKind fileKind;
 
     public ScriptMetadata(UserFileMetadata metadata, SourceType sourceType) {
+        this(metadata, sourceType, FileKind.SCRIPT);
+    }
+
+    public ScriptMetadata(UserFileMetadata metadata, SourceType sourceType, FileKind fileKind) {
         this.metadata = metadata;
         this.sourceType = sourceType;
+        this.fileKind = fileKind != null ? fileKind : FileKind.SCRIPT;
     }
 
     public UserFileMetadata getMetadata() {
@@ -32,6 +44,10 @@ public final class ScriptMetadata {
 
     public SourceType getSourceType() {
         return sourceType;
+    }
+
+    public FileKind getFileKind() {
+        return fileKind;
     }
 
     public boolean isAssetScript() {

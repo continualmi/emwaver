@@ -16,6 +16,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Environment;
@@ -637,9 +639,11 @@ public class ScriptsFragment extends Fragment {
             }
             TextView nameView = view.findViewById(R.id.script_name);
             TextView statusView = view.findViewById(R.id.script_status);
+            TextView kindBadgeView = view.findViewById(R.id.script_kind_badge);
             ImageButton stopButton = view.findViewById(R.id.script_stop_button);
             ImageButton editButton = view.findViewById(R.id.script_edit_button);
             statusView.setVisibility(View.GONE);
+            kindBadgeView.setVisibility(View.GONE);
             stopButton.setVisibility(View.GONE);
 
             if (entry.type == ListEntry.Type.SESSION) {
@@ -664,19 +668,22 @@ public class ScriptsFragment extends Fragment {
             if (entry.type == ListEntry.Type.SCRIPT) {
                 ScriptMetadata scriptMetadata = entry.script;
                 nameView.setText(displayScriptName(scriptMetadata.getName(), true));
-                AndroidScriptSession selectedSession = scriptSessions.selectedSession();
-                boolean isRunning = selectedSession != null
-                        && selectedSession.isRunning()
-                        && TextUtils.equals(selectedSession.scriptId, scriptMetadata.getId());
-                if (isRunning) {
-                    statusView.setText(selectedSession.statusLabel());
+                kindBadgeView.setText(kindBadgeLabel(scriptMetadata));
+                applyKindBadgeStyle(kindBadgeView, scriptMetadata);
+                kindBadgeView.setVisibility(View.VISIBLE);
+                List<AndroidScriptSession> matchingSessions = sessionsForScript(scriptMetadata.getId());
+                AndroidScriptSession runningSession = firstRunningSession(matchingSessions);
+                if (!matchingSessions.isEmpty()) {
+                    statusView.setText(sessionStatusSummary(matchingSessions));
                     statusView.setVisibility(View.VISIBLE);
+                }
+                if (runningSession != null) {
                     stopButton.setVisibility(View.VISIBLE);
                     stopButton.setEnabled(true);
                     stopButton.setAlpha(1.0f);
                     stopButton.setOnClickListener(v -> {
                         v.setPressed(false);
-                        stopRunningScript(selectedSession.instanceId);
+                        stopRunningScript(runningSession.instanceId);
                     });
                 }
                 if (scriptMetadata.isAssetScript()) {
@@ -706,6 +713,9 @@ public class ScriptsFragment extends Fragment {
             // SIGNAL
             SignalMetadata sig = entry.signal;
             nameView.setText(sig.displayName());
+            kindBadgeView.setText("Signal");
+            applySignalBadgeStyle(kindBadgeView);
+            kindBadgeView.setVisibility(View.VISIBLE);
             statusView.setVisibility(View.GONE);
             stopButton.setVisibility(View.GONE);
             editButton.setVisibility(View.VISIBLE);
@@ -719,6 +729,90 @@ public class ScriptsFragment extends Fragment {
             });
             return view;
         }
+    }
+
+    private List<AndroidScriptSession> sessionsForScript(@Nullable String scriptId) {
+        if (TextUtils.isEmpty(scriptId)) {
+            return Collections.emptyList();
+        }
+        List<AndroidScriptSession> matches = new ArrayList<>();
+        for (AndroidScriptSession session : scriptSessions.sessions()) {
+            if (session != null && TextUtils.equals(session.scriptId, scriptId)) {
+                matches.add(session);
+            }
+        }
+        return matches;
+    }
+
+    @Nullable
+    private AndroidScriptSession firstRunningSession(@NonNull List<AndroidScriptSession> sessions) {
+        for (AndroidScriptSession session : sessions) {
+            if (session != null && session.isRunning()) {
+                return session;
+            }
+        }
+        return null;
+    }
+
+    private String sessionStatusSummary(@NonNull List<AndroidScriptSession> sessions) {
+        List<String> parts = new ArrayList<>();
+        for (AndroidScriptSession session : sessions) {
+            if (session == null) {
+                continue;
+            }
+            parts.add(session.statusLabel());
+        }
+        if (parts.isEmpty()) {
+            return "";
+        }
+        return TextUtils.join(", ", parts);
+    }
+
+    private String kindBadgeLabel(@NonNull ScriptMetadata scriptMetadata) {
+        if (scriptMetadata.isCustomScript()) {
+            return "User";
+        }
+        switch (scriptMetadata.getFileKind()) {
+            case LIBRARY:
+                return "Library";
+            case KERNEL:
+                return "Kernel";
+            case SCRIPT:
+            default:
+                return "Example";
+        }
+    }
+
+    private void applyKindBadgeStyle(@NonNull TextView view, @NonNull ScriptMetadata scriptMetadata) {
+        if (scriptMetadata.isCustomScript()) {
+            applyBadgeStyle(view, Color.rgb(15, 118, 110), Color.argb(31, 15, 118, 110));
+            return;
+        }
+        switch (scriptMetadata.getFileKind()) {
+            case LIBRARY:
+                applyBadgeStyle(view, Color.rgb(126, 34, 206), Color.argb(31, 126, 34, 206));
+                break;
+            case KERNEL:
+                applyBadgeStyle(view, Color.rgb(194, 65, 12), Color.argb(31, 194, 65, 12));
+                break;
+            case SCRIPT:
+            default:
+                applyBadgeStyle(view, Color.rgb(1, 87, 155), Color.argb(31, 1, 87, 155));
+                break;
+        }
+    }
+
+    private void applySignalBadgeStyle(@NonNull TextView view) {
+        applyBadgeStyle(view, Color.rgb(79, 79, 79), Color.argb(31, 79, 79, 79));
+    }
+
+    private void applyBadgeStyle(@NonNull TextView view, int foreground, int background) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setCornerRadius(999f);
+        drawable.setColor(background);
+        view.setTextColor(foreground);
+        view.setBackground(drawable);
     }
 
     private void showAssetScriptViewDialog(@NonNull ScriptMetadata scriptMetadata) {
@@ -899,14 +993,6 @@ public class ScriptsFragment extends Fragment {
     private void rebuildCombinedScripts() {
         scripts.clear();
 
-        List<AndroidScriptSession> sessions = scriptSessions.sessions();
-        if (!sessions.isEmpty()) {
-            scripts.add(ListEntry.header("Running"));
-            for (AndroidScriptSession session : sessions) {
-                scripts.add(ListEntry.session(session));
-            }
-        }
-
         if (!assetScripts.isEmpty()) {
             scripts.add(ListEntry.header("Examples"));
             for (ScriptMetadata s : assetScripts) {
@@ -914,14 +1000,18 @@ public class ScriptsFragment extends Fragment {
             }
         }
 
-        scripts.add(ListEntry.header("Your Scripts"));
-        for (ScriptMetadata s : customScripts) {
-            scripts.add(ListEntry.script(s));
+        if (!customScripts.isEmpty()) {
+            scripts.add(ListEntry.header("Your Scripts"));
+            for (ScriptMetadata s : customScripts) {
+                scripts.add(ListEntry.script(s));
+            }
         }
 
-        scripts.add(ListEntry.header("Signals"));
-        for (SignalMetadata s : signalFiles) {
-            scripts.add(ListEntry.signal(s));
+        if (!signalFiles.isEmpty()) {
+            scripts.add(ListEntry.header("Signals"));
+            for (SignalMetadata s : signalFiles) {
+                scripts.add(ListEntry.signal(s));
+            }
         }
 
         refreshScriptList();
@@ -989,9 +1079,6 @@ public class ScriptsFragment extends Fragment {
                 if (viewModel != null) {
                     viewModel.updateDraft(id, name, content, false);
                 }
-                if (isBundledLibraryOrKernel(filename)) {
-                    continue;
-                }
                 UserFileMetadata metadata = new UserFileMetadata(
                     id,
                     name,
@@ -1001,18 +1088,47 @@ public class ScriptsFragment extends Fragment {
                     0,
                     "text/plain"
                 );
-                assetScripts.add(new ScriptMetadata(metadata, ScriptMetadata.SourceType.ASSET));
+                assetScripts.add(new ScriptMetadata(
+                    metadata,
+                    ScriptMetadata.SourceType.ASSET,
+                    assetFileKind(filename)
+                ));
             } catch (IOException e) {
                 Log.w(TAG, "Asset script not found: " + filename, e);
             }
         }
         
-        // Sort asset scripts alphabetically
-        Collections.sort(assetScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+        Collections.sort(assetScripts, (a, b) -> {
+            int kindCompare = Integer.compare(assetSortRank(a.getFileKind()), assetSortRank(b.getFileKind()));
+            if (kindCompare != 0) {
+                return kindCompare;
+            }
+            return a.getName().compareToIgnoreCase(b.getName());
+        });
     }
 
-    private boolean isBundledLibraryOrKernel(@NonNull String filename) {
-        return filename.toLowerCase(Locale.US).startsWith("emw-");
+    private ScriptMetadata.FileKind assetFileKind(@NonNull String filename) {
+        String lower = filename.toLowerCase(Locale.US);
+        if ("emw-kernel.js".equals(lower) || "emw-protocol.js".equals(lower)) {
+            return ScriptMetadata.FileKind.KERNEL;
+        }
+        if (lower.startsWith("emw-")) {
+            return ScriptMetadata.FileKind.LIBRARY;
+        }
+        return ScriptMetadata.FileKind.SCRIPT;
+    }
+
+    private int assetSortRank(@NonNull ScriptMetadata.FileKind kind) {
+        switch (kind) {
+            case SCRIPT:
+                return 0;
+            case LIBRARY:
+                return 1;
+            case KERNEL:
+                return 2;
+            default:
+                return 3;
+        }
     }
     
     private void renameScript(ScriptMetadata scriptMetadata, String newName) {

@@ -218,7 +218,7 @@ public class MainActivity extends AppCompatActivity {
             boolean dfuConnected,
             DeviceConnectionService.ConnectionType connectionType
     ) {
-        if (connected || dfuConnected) {
+        if (dfuConnected) {
             return R.drawable.ai_chip;
         }
         if (connectionType == DeviceConnectionService.ConnectionType.BLE) {
@@ -227,7 +227,10 @@ public class MainActivity extends AppCompatActivity {
         if (connectionType == DeviceConnectionService.ConnectionType.WIFI) {
             return R.drawable.ai_wifi;
         }
-        return R.drawable.ai_usb;
+        if (connectionType == DeviceConnectionService.ConnectionType.USB) {
+            return R.drawable.ai_usb;
+        }
+        return connected ? R.drawable.ai_chip : R.drawable.ai_usb;
     }
 
     private String connectionIconTitle(
