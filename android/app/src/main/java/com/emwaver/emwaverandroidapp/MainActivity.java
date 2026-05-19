@@ -178,6 +178,9 @@ public class MainActivity extends AppCompatActivity {
         boolean connected = connectionManager != null && connectionManager.isConnected();
         USBService usbService = connectionManager != null ? connectionManager.getUsbService() : null;
         boolean dfuConnected = usbService != null && usbService.isFlashDeviceConnected();
+        DeviceConnectionService.ConnectionType connectionType = connectionManager != null
+                ? connectionManager.getActiveConnectionType()
+                : DeviceConnectionService.ConnectionType.NONE;
 
         long now = System.currentTimeMillis();
         if (!connected && !dfuConnected && connectionManager != null) {
@@ -201,9 +204,53 @@ public class MainActivity extends AppCompatActivity {
             getSupportActionBar().setSubtitle(null);
         }
 
-        if (connectionMenuItem != null && connectionMenuItem.getIcon() != null) {
-            connectionMenuItem.getIcon().setTint(tint);
+        if (connectionMenuItem != null) {
+            connectionMenuItem.setIcon(connectionIconRes(connected, dfuConnected, connectionType));
+            connectionMenuItem.setTitle(connectionIconTitle(connected, dfuConnected, connectionType));
+            if (connectionMenuItem.getIcon() != null) {
+                connectionMenuItem.getIcon().mutate().setTint(tint);
+            }
         }
+    }
+
+    private int connectionIconRes(
+            boolean connected,
+            boolean dfuConnected,
+            DeviceConnectionService.ConnectionType connectionType
+    ) {
+        if (connected || dfuConnected) {
+            return R.drawable.ai_chip;
+        }
+        if (connectionType == DeviceConnectionService.ConnectionType.BLE) {
+            return R.drawable.ai_bluetooth;
+        }
+        if (connectionType == DeviceConnectionService.ConnectionType.WIFI) {
+            return R.drawable.ai_wifi;
+        }
+        return R.drawable.ai_usb;
+    }
+
+    private String connectionIconTitle(
+            boolean connected,
+            boolean dfuConnected,
+            DeviceConnectionService.ConnectionType connectionType
+    ) {
+        if (dfuConnected && !connected) {
+            return "Connection: update mode";
+        }
+        if (connected) {
+            if (connectionType == DeviceConnectionService.ConnectionType.BLE) {
+                return "Connection: BLE";
+            }
+            if (connectionType == DeviceConnectionService.ConnectionType.WIFI) {
+                return "Connection: Wi-Fi";
+            }
+            if (connectionType == DeviceConnectionService.ConnectionType.USB) {
+                return "Connection: USB";
+            }
+            return "Connection: connected";
+        }
+        return "Connection: disconnected";
     }
 
     private void showConnectionActionsDialog() {
