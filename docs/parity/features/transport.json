@@ -43,6 +43,14 @@
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidBleTransport.java",
               "contains": "BluetoothLeScanner|BluetoothGatt[\\s\\S]*SERVICE_UUID"
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidBleProtocol.java",
+              "contains": [
+                "startScan",
+                "writeSysex",
+                "ActiveTransport\\.BLE"
+              ]
             }
           ]
         }
@@ -88,8 +96,12 @@
           "status": "required",
           "evidence": [
             {
-              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java",
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidUsbMidiTransport.java",
               "contains": "MidiDevice|UsbMidiSysex|MIDI"
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java",
+              "contains": "connectUsbMidi"
             }
           ]
         }
@@ -185,10 +197,10 @@
               ]
             },
             {
-              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/USBService.java",
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidWiFiProtocol.java",
               "contains": [
-                "connectWiFi",
-                "writeWiFiSysex",
+                "void connect",
+                "writeSysex",
                 "ActiveTransport\\.WIFI"
               ]
             },

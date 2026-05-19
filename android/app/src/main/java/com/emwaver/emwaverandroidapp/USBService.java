@@ -9,11 +9,6 @@ package com.emwaver.emwaverandroidapp;
 import android.Manifest;
 import android.app.PendingIntent;
 import android.app.Service;
-import android.annotation.SuppressLint;
-import android.bluetooth.BluetoothAdapter;
-import android.bluetooth.BluetoothDevice;
-import android.bluetooth.BluetoothGatt;
-import android.bluetooth.BluetoothManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -41,8 +36,6 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 import java.util.Arrays;
 import java.util.HashMap;
 
-import okhttp3.OkHttpClient;
-
 public class USBService extends Service implements DeviceConnectionService {
 
     public static final String ACTION_CONNECT_USB = "com.emwaver.ACTION_CONNECT_USB";
@@ -53,13 +46,6 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_OP_VERSION = 0x01;
     private static final int EMW_OP_ENTER_DFU = 0x06;
     private static final int EMW_OP_BOARD_GET = 0x09;
-
-    private enum ActiveTransport {
-        NONE,
-        USB,
-        BLE,
-        WIFI
-    }
 
     private final IBinder binder = new LocalBinder();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -75,17 +61,9 @@ public class USBService extends Service implements DeviceConnectionService {
     private AndroidUsbMidiTransport.Connection usbMidiConnection;
 
     private final Object midiLock = new Object();
-    private final Object bleLock = new Object();
-    private final Object wifiLock = new Object();
     private final TransportDeviceSessionRegistry bufferSessions = new TransportDeviceSessionRegistry();
-
-    // ESP32 BLE transport
-    private BluetoothAdapter bluetoothAdapter;
-    private AndroidBleTransport.ScanSession bleScanSession;
-    private AndroidBleTransport.PendingConnection pendingBleConnection;
-    private volatile AndroidBleTransport.Connection bleConnection;
-    private volatile AndroidWiFiTransport.Connection wifiConnection;
-    private OkHttpClient wifiClient;
+    private final AndroidBleProtocol bleProtocol = new AndroidBleProtocol(this);
+    private final AndroidWiFiProtocol wifiProtocol = new AndroidWiFiProtocol(this);
     private volatile ActiveTransport activeTransport = ActiveTransport.NONE;
     private final TransportDeviceConnectionState<ActiveTransport> activeConnectionState =
             new TransportDeviceConnectionState<>(ActiveTransport.NONE);
@@ -135,14 +113,14 @@ public class USBService extends Service implements DeviceConnectionService {
         return activeConnectionState.currentScriptDeviceId();
     }
 
-    private TransportDeviceSession setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
+    TransportDeviceSession setActiveDeviceTarget(String deviceId, ActiveTransport transport) {
         ActiveDeviceTarget<ActiveTransport> target = activeConnectionState.setTarget(deviceId, transport);
         TransportDeviceSession session = bufferSessions.select(target.deviceId, true);
         activeTransport = target.transport;
         return session;
     }
 
-    private void clearActiveDeviceTarget(ActiveTransport transport) {
+    void clearActiveDeviceTarget(ActiveTransport transport) {
         if (activeConnectionState.matchesTransport(transport)) {
             activeConnectionState.clear();
             activeTransport = ActiveTransport.NONE;
@@ -211,7 +189,7 @@ public class USBService extends Service implements DeviceConnectionService {
         return true;
     }
 
-    private void showToast(String message) {
+    void showToast(String message) {
         mainHandler.post(() -> Toast.makeText(this, message, Toast.LENGTH_SHORT).show());
     }
 
@@ -235,7 +213,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         if (activeTransport == ActiveTransport.BLE) {
-            writeBleSysex(sysex);
+            bleProtocol.writeSysex(sysex);
             if (!isLaneEmpty(cmdLane18)) {
                 logTx(cmdLane18, bufferSession);
             }
@@ -246,7 +224,7 @@ public class USBService extends Service implements DeviceConnectionService {
         }
 
         if (activeTransport == ActiveTransport.WIFI) {
-            writeWiFiSysex(sysex);
+            wifiProtocol.writeSysex(sysex);
             if (!isLaneEmpty(cmdLane18)) {
                 logTx(cmdLane18, bufferSession);
             }
@@ -293,7 +271,7 @@ public class USBService extends Service implements DeviceConnectionService {
     public void checkForConnectedDevices() {
         UsbDevice dev = findUsbMidiDevice();
         if (dev == null) {
-            startBleScan();
+            bleProtocol.startScan();
             return;
         }
 
@@ -313,12 +291,10 @@ public class USBService extends Service implements DeviceConnectionService {
     }
 
     public boolean checkConnection() {
-        AndroidWiFiTransport.Connection wifi = wifiConnection;
-        if (wifi != null && wifi.isOpen()) {
+        if (wifiProtocol.hasOpenConnection()) {
             return true;
         }
-        AndroidBleTransport.Connection ble = bleConnection;
-        if (ble != null && ble.isOpen()) {
+        if (bleProtocol.hasOpenConnection()) {
             return true;
         }
         synchronized (midiLock) {
@@ -346,7 +322,7 @@ public class USBService extends Service implements DeviceConnectionService {
         feedSysexBytes(data, offset, count, activeBufferSession());
     }
 
-    private void feedSysexBytes(byte[] data, int offset, int count, TransportDeviceSession bufferSession) {
+    void feedSysexBytes(byte[] data, int offset, int count, TransportDeviceSession bufferSession) {
         if (data == null || count <= 0) {
             return;
         }
@@ -373,15 +349,15 @@ public class USBService extends Service implements DeviceConnectionService {
                 Log.e(TAG, "Failed to open USB device");
                 return;
             }
+            bleProtocol.close();
+            wifiProtocol.close();
             synchronized (midiLock) {
                 closeMidiLocked();
-                closeBleLocked();
-                closeWiFiLocked();
                 TransportDeviceSession session = setActiveDeviceTarget(
                         AndroidUsbMidiTransport.sessionId(usbDevice),
                         ActiveTransport.USB);
                 usbMidiConnection = AndroidUsbMidiTransport.openConnection(usbDevice, device, rxReceiver, session);
-                activeConnectionState.setConnection(usbMidiConnection);
+                setActiveConnection(usbMidiConnection);
             }
             Toast.makeText(this, "USB Connected!", Toast.LENGTH_SHORT).show();
             queryFirmwareVersionAsync();
@@ -390,7 +366,7 @@ public class USBService extends Service implements DeviceConnectionService {
 
 
 
-    private void queryFirmwareVersionAsync() {
+    void queryFirmwareVersionAsync() {
         if (midiHandler == null) {
             queryFirmwareVersionOnce();
             return;
@@ -484,7 +460,7 @@ public class USBService extends Service implements DeviceConnectionService {
         activeBufferSession().resetSamplerStreaming();
     }
 
-    private boolean hasBlePermission() {
+    boolean hasBlePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
                     && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
@@ -492,257 +468,38 @@ public class USBService extends Service implements DeviceConnectionService {
         return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
     }
 
-    private void ensureBleAdapter() {
-        if (bluetoothAdapter != null) {
-            return;
-        }
-        BluetoothManager manager = (BluetoothManager) getSystemService(Context.BLUETOOTH_SERVICE);
-        if (manager != null) {
-            bluetoothAdapter = manager.getAdapter();
-        }
-    }
-
-    @SuppressLint("MissingPermission")
-    private void startBleScan() {
-        if (!hasBlePermission()) {
-            Log.d(TAG, "BLE scan skipped: Bluetooth permissions missing");
-            return;
-        }
-        ensureBleAdapter();
-        if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled()) {
-            Log.d(TAG, "BLE scan skipped: Bluetooth unavailable or disabled");
-            return;
-        }
+    boolean hasUsbMidiConnection() {
         synchronized (midiLock) {
             AndroidUsbMidiTransport.Connection connection = usbMidiConnection;
-            if (connection != null && connection.isOpen()) {
-                return;
-            }
-        }
-        synchronized (bleLock) {
-            AndroidBleTransport.Connection connection = bleConnection;
-            if ((connection != null && connection.isOpen())
-                    || (bleScanSession != null && bleScanSession.isScanning())) {
-                return;
-            }
-            if (bluetoothAdapter.getBluetoothLeScanner() == null) {
-                return;
-            }
-            bleScanSession = AndroidBleTransport.scanSession(
-                    bluetoothAdapter.getBluetoothLeScanner(),
-                    new AndroidBleTransport.ScanListener() {
-                        @SuppressLint("MissingPermission")
-                        @Override
-                        public void onDevice(BluetoothDevice device, String displayName, @Nullable String advertisementName) {
-                            if (!hasBlePermission()) {
-                                return;
-                            }
-                            stopBleScan();
-                            synchronized (bleLock) {
-                                closeBleLocked();
-                                TransportDeviceSession session = setActiveDeviceTarget(
-                                        AndroidBleTransport.sessionId(device),
-                                        ActiveTransport.BLE);
-                                pendingBleConnection = AndroidBleTransport.openConnection(
-                                        USBService.this,
-                                        device,
-                                        displayName,
-                                        session,
-                                        bleListener);
-                            }
-                            Log.d(TAG, "BLE connecting: " + (advertisementName != null ? advertisementName : device.getAddress()));
-                        }
-                    });
-            bleScanSession.start();
-            Log.d(TAG, "BLE scan started");
+            return connection != null && connection.isOpen();
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private void stopBleScan() {
-        synchronized (bleLock) {
-            if (bleScanSession != null && hasBlePermission()) {
-                bleScanSession.close();
-            }
-            bleScanSession = null;
+    void closeUsbTransport() {
+        synchronized (midiLock) {
+            closeMidiLocked();
         }
     }
 
-    @SuppressLint("MissingPermission")
-    private void closeBleLocked() {
-        AndroidBleTransport.closeHandles(bleScanSession, bleConnection, pendingBleConnection);
-        bleScanSession = null;
-        bleConnection = null;
-        pendingBleConnection = null;
-        clearActiveDeviceTarget(ActiveTransport.BLE);
+    void closeBleTransport() {
+        bleProtocol.close();
     }
 
-    private void closeWiFiLocked() {
-        AndroidWiFiTransport.Connection connection = wifiConnection;
-        wifiConnection = null;
-        if (connection != null) {
-            connection.close();
-        }
-        clearActiveDeviceTarget(ActiveTransport.WIFI);
+    void closeWiFiTransport() {
+        wifiProtocol.close();
     }
 
     public void connectWiFi(String host, int port) {
-        String trimmedHost = host == null ? "" : host.trim();
-        int safePort = AndroidWiFiTransport.isValidPort(port) ? port : AndroidWiFiTransport.DEFAULT_PORT;
-        if (!AndroidWiFiTransport.isValidManualHost(trimmedHost)) {
-            showToast("Wi-Fi host must be a hostname or IP address");
-            return;
-        }
-        if (wifiClient == null) {
-            wifiClient = new OkHttpClient();
-        }
-
-        final String sessionId = AndroidWiFiTransport.sessionId(trimmedHost + ":" + safePort);
-        final TransportDeviceSession session;
-        final AndroidWiFiTransport.Connection connection;
-        synchronized (wifiLock) {
-            closeMidiLocked();
-            closeBleLocked();
-            closeWiFiLocked();
-            session = setActiveDeviceTarget(sessionId, ActiveTransport.WIFI);
-            connection = AndroidWiFiTransport.createConnection(trimmedHost, safePort, session);
-            wifiConnection = connection;
-            activeConnectionState.setConnection(wifiConnection);
-        }
-
-        try {
-            AndroidWiFiTransport.openConnection(
-                    wifiClient,
-                    connection,
-                    new AndroidWiFiTransport.Listener() {
-                        @Override
-                        public void onOpen(AndroidWiFiTransport.Connection openedConnection) {
-                            synchronized (wifiLock) {
-                                if (wifiConnection == openedConnection) {
-                                    activeConnectionState.setConnection(openedConnection);
-                                }
-                            }
-                            showToast("Wi-Fi Connected!");
-                            queryFirmwareVersionAsync();
-                        }
-
-                        @Override
-                        public void onBytes(AndroidWiFiTransport.Connection openedConnection, byte[] data) {
-                            feedSysexBytes(data, 0, data.length, session);
-                        }
-
-                        @Override
-                        public void onText(AndroidWiFiTransport.Connection openedConnection, String text) {
-                            if (text != null && text.toLowerCase().contains("busy")) {
-                                showToast("Wi-Fi device is busy");
-                                disconnectWiFi(openedConnection);
-                            }
-                        }
-
-                        @Override
-                        public void onClosed(AndroidWiFiTransport.Connection openedConnection) {
-                            disconnectWiFi(openedConnection);
-                        }
-
-                        @Override
-                        public void onFailure(AndroidWiFiTransport.Connection openedConnection, Throwable throwable) {
-                            Log.e(TAG, "Wi-Fi transport failed", throwable);
-                            showToast("Wi-Fi connection failed");
-                            disconnectWiFi(openedConnection);
-                        }
-                    });
-        } catch (RuntimeException e) {
-            Log.e(TAG, "Wi-Fi transport failed to open", e);
-            showToast("Wi-Fi connection failed");
-            disconnectWiFi(connection);
-            return;
-        }
-        showToast("Opening Wi-Fi connection...");
+        wifiProtocol.connect(host, port);
     }
 
-    private void disconnectWiFi(AndroidWiFiTransport.Connection connection) {
-        synchronized (wifiLock) {
-            if (wifiConnection == connection) {
-                connection.markDisconnected();
-                wifiConnection = null;
-                clearActiveDeviceTarget(ActiveTransport.WIFI);
-            }
-        }
+    void setActiveConnection(TransportDeviceConnection connection) {
+        activeConnectionState.setConnection(connection);
     }
 
-    @SuppressLint("MissingPermission")
-    private void writeBleSysex(byte[] sysex) {
-        synchronized (bleLock) {
-            AndroidBleTransport.Connection connection = bleConnection;
-            if (connection == null || !connection.isOpen()) {
-                Toast.makeText(this, "No BLE device connected", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            connection.writeSysex(sysex);
-        }
+    void setConnectedBoardType(String boardType) {
+        connectedBoardType = boardType;
     }
-
-    private void writeWiFiSysex(byte[] sysex) {
-        synchronized (wifiLock) {
-            AndroidWiFiTransport.Connection connection = wifiConnection;
-            if (connection == null || !connection.isOpen()) {
-                showToast("No Wi-Fi device connected");
-                return;
-            }
-            if (!connection.sendSysex(sysex)) {
-                showToast("Wi-Fi write failed");
-            }
-        }
-    }
-
-    private final AndroidBleTransport.Listener bleListener = new AndroidBleTransport.Listener() {
-        @Override
-        public void onConnected(AndroidBleTransport.Connection connection) {
-            synchronized (bleLock) {
-                AndroidBleTransport.PendingConnection pending = pendingBleConnection;
-                if (pending != null && !pending.owns(connection.gatt)) {
-                    connection.close();
-                    return;
-                }
-                bleConnection = connection;
-                activeConnectionState.setConnection(bleConnection);
-                pendingBleConnection = null;
-            }
-            connectedBoardType = AndroidBleTransport.boardType();
-            Toast.makeText(USBService.this, "BLE Connected!", Toast.LENGTH_SHORT).show();
-            queryFirmwareVersionAsync();
-        }
-
-        @Override
-        public void onDisconnected(BluetoothGatt gatt) {
-            synchronized (bleLock) {
-                AndroidBleTransport.Connection connection = bleConnection;
-                AndroidBleTransport.PendingConnection pending = pendingBleConnection;
-                if ((pending != null && pending.owns(gatt)) || (connection != null && connection.owns(gatt))) {
-                    closeBleLocked();
-                }
-            }
-            startBleScan();
-        }
-
-        @Override
-        public void onBytes(AndroidBleTransport.Connection connection, byte[] data) {
-            TransportDeviceSession session;
-            synchronized (bleLock) {
-                AndroidBleTransport.Connection activeConnection = bleConnection;
-                if (activeConnection == null || !activeConnection.owns(connection.gatt)) {
-                    return;
-                }
-                session = activeConnection.session();
-            }
-            feedSysexBytes(data, 0, data.length, session);
-        }
-
-        @Override
-        public void onMissingCommandCharacteristic(BluetoothGatt gatt) {
-            Log.e(TAG, "BLE command characteristic unavailable");
-        }
-    };
 
     @Override
     public void write(byte[] bytes) {
@@ -1005,12 +762,8 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (midiLock) {
             closeMidiLocked();
         }
-        synchronized (bleLock) {
-            closeBleLocked();
-        }
-        synchronized (wifiLock) {
-            closeWiFiLocked();
-        }
+        bleProtocol.close();
+        wifiProtocol.close();
 
         if (midiThread != null) {
             midiThread.quitSafely();
@@ -1067,8 +820,7 @@ public class USBService extends Service implements DeviceConnectionService {
                         : "Connected (USB: " + label.trim() + ")";
             }
             if (activeTransport == ActiveTransport.BLE) {
-                AndroidBleTransport.Connection connection = bleConnection;
-                String label = connection != null ? connection.displayName : null;
+                String label = bleProtocol.connectedLabel();
                 return label == null || label.trim().isEmpty()
                         ? "Connected (BLE)"
                         : "Connected (BLE: " + label.trim() + ")";
@@ -1087,12 +839,8 @@ public class USBService extends Service implements DeviceConnectionService {
         synchronized (midiLock) {
             closeMidiLocked();
         }
-        synchronized (bleLock) {
-            closeBleLocked();
-        }
-        synchronized (wifiLock) {
-            closeWiFiLocked();
-        }
+        bleProtocol.close();
+        wifiProtocol.close();
         Log.d(TAG, "Device disconnected");
     }
 }
