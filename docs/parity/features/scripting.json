@@ -159,21 +159,27 @@
       "platforms": {
         "macos": {
           "status": "planned",
-          "reason": "Apple has SimulatorScriptDevice and shared runtime tests, but no checked-in macOS simulator-backed end-to-end script fixture test yet.",
+          "reason": "Apple has a shared simulator protocol fixture test, but no checked-in macOS ScriptEngine end-to-end fixture test yet.",
           "evidence": [
             {
-              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/SimulatorScriptDevice.swift",
-              "contains": "SimulatorFixture|fixture"
+              "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/SimulatorScriptDeviceTests.swift",
+              "contains": [
+                "basic-board\\.json",
+                "SimulatorScriptDevice"
+              ]
             }
           ]
         },
         "ios": {
           "status": "planned",
-          "reason": "Apple has SimulatorScriptDevice and shared runtime tests, but no checked-in iOS simulator-backed end-to-end script fixture test yet.",
+          "reason": "Apple has a shared simulator protocol fixture test, but no checked-in iOS ScriptEngine end-to-end fixture test yet.",
           "evidence": [
             {
-              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/SimulatorScriptDevice.swift",
-              "contains": "SimulatorFixture|fixture"
+              "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/SimulatorScriptDeviceTests.swift",
+              "contains": [
+                "basic-board\\.json",
+                "SimulatorScriptDevice"
+              ]
             }
           ]
         },
