@@ -362,7 +362,6 @@ public class ScriptsFragment extends Fragment {
         scriptsCard = binding.scriptsCard;
         scriptAdapter = new ScriptListAdapter(scripts);
         binding.scriptsListView.setAdapter(scriptAdapter);
-        updateTargetDeviceStatus();
 
         binding.scriptsListView.setOnItemClickListener((parent, view, position, id) -> {
             if (position < 0 || position >= scripts.size()) {
@@ -526,7 +525,6 @@ public class ScriptsFragment extends Fragment {
     }
 
     private void refreshScriptList() {
-        updateTargetDeviceStatus();
         if (scriptAdapter != null) {
             Log.d(TAG, "refreshScriptList: notifying adapter with " + scripts.size() + " items");
             scriptAdapter.notifyDataSetChanged();
@@ -2267,23 +2265,10 @@ public class ScriptsFragment extends Fragment {
         return TextUtils.isEmpty(label) ? "active device" : label;
     }
 
-    private void updateTargetDeviceStatus() {
-        if (binding == null || binding.scriptTargetStatus == null) {
-            return;
-        }
-
-        if (scriptDeviceConnection == null && isAdded()) {
-            scriptDeviceConnection = new ScriptDeviceConnection(requireContext());
-        }
-
-        binding.scriptTargetStatus.setText("Target: " + currentDeviceLabel());
-    }
-
     private void updateViewMode() {
         if (binding == null) {
             return;
         }
-        updateTargetDeviceStatus();
         boolean hideMainView = showingPreview || showingEditor;
         
         if (backPressedCallback != null) {

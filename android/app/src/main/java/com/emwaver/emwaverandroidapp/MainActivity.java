@@ -230,7 +230,7 @@ public class MainActivity extends AppCompatActivity {
         if (connectionType == DeviceConnectionService.ConnectionType.USB) {
             return R.drawable.ai_usb;
         }
-        return connected ? R.drawable.ai_chip : R.drawable.ai_usb;
+        return R.drawable.ai_chip;
     }
 
     private String connectionIconTitle(
