@@ -35,6 +35,7 @@ import com.emwaver.emwaverandroidapp.ui.flash.Dfu;
 
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 
 public class USBService extends Service implements DeviceConnectionService {
 
@@ -491,6 +492,42 @@ public class USBService extends Service implements DeviceConnectionService {
 
     public void connectWiFi(String host, int port) {
         wifiProtocol.connect(host, port);
+    }
+
+    public String provisionWiFi(String ssid, String password) {
+        List<byte[]> commands = AndroidWiFiTransport.provisioningCommands(ssid, password);
+        if (commands == null) {
+            return "Wi-Fi SSID is required and setup values must fit the ESP32 limits.";
+        }
+        if (!checkConnection()) {
+            return "Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.";
+        }
+
+        for (byte[] command : commands) {
+            if (!AndroidWiFiTransport.isOkResponse(sendCommand(command, 2000))) {
+                return "Wi-Fi setup was rejected by the device.";
+            }
+        }
+
+        return "Wi-Fi setup sent. The ESP32 board will join the network and advertise itself with mDNS.";
+    }
+
+    public String clearWiFiProvisioning() {
+        if (!checkConnection()) {
+            return "Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.";
+        }
+        if (!AndroidWiFiTransport.isOkResponse(sendCommand(AndroidWiFiTransport.clearProvisioningCommand(), 2000))) {
+            return "Wi-Fi setup clear was rejected by the device.";
+        }
+        return "Wi-Fi setup cleared. Provision the ESP32 board again before using Wi-Fi control.";
+    }
+
+    public String refreshWiFiProvisioningStatus() {
+        if (!checkConnection()) {
+            return "Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.";
+        }
+        String message = AndroidWiFiTransport.statusMessage(sendCommand(AndroidWiFiTransport.statusCommand(), 2000));
+        return message != null ? message : "Wi-Fi status request was rejected by the device.";
     }
 
     void setActiveConnection(TransportDeviceConnection connection) {

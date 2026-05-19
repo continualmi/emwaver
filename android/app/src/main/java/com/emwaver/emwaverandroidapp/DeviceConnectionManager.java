@@ -93,6 +93,24 @@ public class DeviceConnectionManager {
         }
     }
 
+    public String provisionWiFi(String ssid, String password) {
+        return usbService != null
+                ? usbService.provisionWiFi(ssid, password)
+                : "Connect a Wi-Fi-capable ESP32 board before provisioning Wi-Fi.";
+    }
+
+    public String clearWiFiProvisioning() {
+        return usbService != null
+                ? usbService.clearWiFiProvisioning()
+                : "Connect a Wi-Fi-capable ESP32 board before clearing Wi-Fi setup.";
+    }
+
+    public String refreshWiFiProvisioningStatus() {
+        return usbService != null
+                ? usbService.refreshWiFiProvisioningStatus()
+                : "Connect a Wi-Fi-capable ESP32 board before checking Wi-Fi status.";
+    }
+
     private void checkAndUpdateActiveService() {
         DeviceConnectionService newActiveService = null;
         DeviceConnectionService.ConnectionType newConnectionType = DeviceConnectionService.ConnectionType.NONE;

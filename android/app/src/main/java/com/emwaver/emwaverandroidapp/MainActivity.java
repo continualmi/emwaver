@@ -24,8 +24,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.os.Handler;
 import android.os.Looper;
+import android.widget.Button;
 import android.widget.EditText;
 import android.widget.LinearLayout;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.emwaver.emwaverandroidapp.BuildConfig;
@@ -272,11 +274,7 @@ public class MainActivity extends AppCompatActivity {
 
         // Secondary actions.
         if (connected) {
-            builder.setNeutralButton("Disconnect", (d, w) -> {
-                if (connectionManager != null) {
-                    connectionManager.disconnect();
-                }
-            });
+            builder.setNeutralButton("Wi-Fi Setup…", (d, w) -> showWiFiSetupDialog());
         } else {
             builder.setNeutralButton("Wi-Fi…", (d, w) -> showWiFiConnectionDialog());
         }
@@ -345,6 +343,100 @@ public class MainActivity extends AppCompatActivity {
             dialog.dismiss();
         }));
         dialog.show();
+    }
+
+    private void showWiFiSetupDialog() {
+        if (connectionManager == null || !connectionManager.isConnected()) {
+            Toast.makeText(this, "Connect a Wi-Fi-capable ESP32 board first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        int padding = (int) (20 * getResources().getDisplayMetrics().density);
+        layout.setPadding(padding, padding / 2, padding, 0);
+
+        EditText ssidInput = new EditText(this);
+        ssidInput.setHint("SSID");
+        ssidInput.setSingleLine(true);
+        ssidInput.setInputType(InputType.TYPE_CLASS_TEXT);
+        layout.addView(ssidInput);
+
+        EditText passwordInput = new EditText(this);
+        passwordInput.setHint("Wi-Fi password");
+        passwordInput.setSingleLine(true);
+        passwordInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        layout.addView(passwordInput);
+
+        TextView statusText = new TextView(this);
+        statusText.setText("");
+        statusText.setPadding(0, padding / 2, 0, padding / 2);
+        layout.addView(statusText);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.VERTICAL);
+        actions.setPadding(0, padding / 2, 0, 0);
+
+        Button sendButton = new Button(this);
+        sendButton.setText("Send Wi-Fi Setup");
+        actions.addView(sendButton);
+
+        Button clearButton = new Button(this);
+        clearButton.setText("Clear Setup");
+        actions.addView(clearButton);
+
+        Button statusButton = new Button(this);
+        statusButton.setText("Status");
+        actions.addView(statusButton);
+        layout.addView(actions);
+
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle("Wi-Fi Setup")
+                .setMessage("Send, clear, or inspect ESP32 Wi-Fi credentials over the active local connection.")
+                .setView(layout)
+                .setPositiveButton("Close", null)
+                .setNeutralButton("Disconnect", (d, w) -> {
+                    if (connectionManager != null) {
+                        connectionManager.disconnect();
+                    }
+                })
+                .create();
+
+        sendButton.setOnClickListener(v -> {
+            String ssid = ssidInput.getText() != null ? ssidInput.getText().toString() : "";
+            String password = passwordInput.getText() != null ? passwordInput.getText().toString() : "";
+            if (ssid.trim().isEmpty()) {
+                ssidInput.setError("SSID is required.");
+                return;
+            }
+            runWiFiSetupAction(statusText, () -> connectionManager.provisionWiFi(ssid, password));
+        });
+        clearButton.setOnClickListener(v -> runWiFiSetupAction(statusText, () -> connectionManager.clearWiFiProvisioning()));
+        statusButton.setOnClickListener(v -> runWiFiSetupAction(statusText, () -> connectionManager.refreshWiFiProvisioningStatus()));
+
+        dialog.show();
+    }
+
+    private interface WiFiSetupAction {
+        String run();
+    }
+
+    private void runWiFiSetupAction(TextView statusText, WiFiSetupAction action) {
+        statusText.setText("Working...");
+        new Thread(() -> {
+            String message;
+            try {
+                message = action.run();
+            } catch (Throwable t) {
+                Log.e(TAG, "Wi-Fi setup action failed", t);
+                message = "Wi-Fi setup action failed.";
+            }
+            String finalMessage = message;
+            uiHandler.post(() -> {
+                statusText.setText(finalMessage);
+                Toast.makeText(MainActivity.this, finalMessage, Toast.LENGTH_SHORT).show();
+            });
+        }, "emw-wifi-setup").start();
     }
 
     private void requestAllRequiredPermissions() {

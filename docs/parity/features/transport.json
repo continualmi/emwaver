@@ -285,11 +285,24 @@
         },
         "android": {
           "status": "planned",
-          "reason": "Android now exposes manual Wi-Fi runtime connection, but mDNS discovery and local ESP32 SSID/password provisioning remain planned.",
+          "reason": "Android now exposes manual Wi-Fi runtime connection and local ESP32 SSID/password provisioning, but mDNS discovery remains planned.",
           "evidence": [
             {
               "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/MainActivity.java",
-              "contains": "Connect Wi-Fi"
+              "contains": [
+                "Connect Wi-Fi",
+                "Wi-Fi Setup",
+                "Send Wi-Fi Setup",
+                "Clear Setup"
+              ]
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/AndroidWiFiTransport.java",
+              "contains": [
+                "provisioningCommands",
+                "clearProvisioningCommand",
+                "statusCommand"
+              ]
             }
           ]
         }

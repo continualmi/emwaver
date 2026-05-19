@@ -7,6 +7,13 @@
 package com.emwaver.emwaverandroidapp;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import java.util.Arrays;
+import java.util.List;
 
 import org.junit.Test;
 
@@ -42,6 +49,34 @@ public class AndroidWiFiTransportTest {
         assertEquals(null, AndroidWiFiTransport.webSocketUrl("192.168.4.2", 70000));
     }
 
+    @Test
+    public void provisioningCommandsChunkSsidAndPassword() {
+        List<byte[]> commands = AndroidWiFiTransport.provisioningCommands("bench-network", "password-with-more-than-13-bytes");
+
+        assertNotNull(commands);
+        assertArrayEquals(new byte[] { 0x0A, 0x00 }, commands.get(0));
+        assertArrayEquals(new byte[] { 0x0A, 0x02 }, commands.get(commands.size() - 1));
+        assertTrue(containsPrefix(commands, new byte[] { 0x0A, 0x01, 0x00, 0x00, 13 }));
+        assertTrue(containsPrefix(commands, new byte[] { 0x0A, 0x01, 0x01, 0x00, 13 }));
+        assertTrue(containsPrefix(commands, new byte[] { 0x0A, 0x01, 0x01, 13 }));
+    }
+
+    @Test
+    public void provisioningCommandsRejectInvalidLengths() {
+        assertNull(AndroidWiFiTransport.provisioningCommands(" ", "ok"));
+        assertNull(AndroidWiFiTransport.provisioningCommands(repeat('s', 33), "ok"));
+        assertNull(AndroidWiFiTransport.provisioningCommands("ok", repeat('p', 65)));
+    }
+
+    @Test
+    public void statusMessageParsesStationIpAndRuntime() {
+        byte[] response = new byte[] { (byte) 0x80, 1, 0, 1, 0, 0, 0, 1, (byte) 192, (byte) 168, 4, 2, 1 };
+
+        assertEquals(
+                "Wi-Fi is provisioned, station is online at 192.168.4.2 (idle, no disconnect reason); socket is idle; runtime is running.",
+                AndroidWiFiTransport.statusMessage(response));
+    }
+
     private static void assertConnectionOwnsIsolatedSession(
             TransportDeviceConnection connection,
             String expectedSessionId,
@@ -55,5 +90,20 @@ public class AndroidWiFiTransportTest {
         assertEquals(expectedSessionId, connection.session().deviceId());
         assertEquals(1, connection.session().getTxPacketCount());
         assertEquals(0, isolatedFrom.session().getTxPacketCount());
+    }
+
+    private static boolean containsPrefix(List<byte[]> commands, byte[] prefix) {
+        for (byte[] command : commands) {
+            if (command.length >= prefix.length && Arrays.equals(Arrays.copyOf(command, prefix.length), prefix)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String repeat(char value, int count) {
+        char[] chars = new char[count];
+        Arrays.fill(chars, value);
+        return new String(chars);
     }
 }

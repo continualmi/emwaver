@@ -8,6 +8,10 @@ package com.emwaver.emwaverandroidapp;
 
 import androidx.annotation.Nullable;
 
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -18,6 +22,17 @@ import okio.ByteString;
 final class AndroidWiFiTransport {
     static final String TRANSPORT_NAME = "Wi-Fi";
     static final int DEFAULT_PORT = 3922;
+    private static final byte WIFI_CONFIG_OPCODE = 0x0A;
+    private static final byte WIFI_BEGIN = 0x00;
+    private static final byte WIFI_FIELD = 0x01;
+    private static final byte WIFI_APPLY = 0x02;
+    private static final byte WIFI_CLEAR = 0x03;
+    private static final byte WIFI_STATUS = 0x04;
+    private static final byte WIFI_FIELD_SSID = 0x00;
+    private static final byte WIFI_FIELD_PASSWORD = 0x01;
+    private static final int COMMAND_CHUNK_BYTES = 13;
+    private static final int MAX_SSID_BYTES = 32;
+    private static final int MAX_PASSWORD_BYTES = 64;
 
     private AndroidWiFiTransport() {}
 
@@ -216,6 +231,118 @@ final class AndroidWiFiTransport {
             }
         });
         connection.attachWebSocket(webSocket);
+    }
+
+    @Nullable
+    static List<byte[]> provisioningCommands(String ssid, String password) {
+        String trimmedSsid = ssid != null ? ssid.trim() : "";
+        if (trimmedSsid.isEmpty()) {
+            return null;
+        }
+
+        byte[] ssidBytes = trimmedSsid.getBytes(StandardCharsets.UTF_8);
+        byte[] passwordBytes = (password != null ? password : "").getBytes(StandardCharsets.UTF_8);
+        if (ssidBytes.length > MAX_SSID_BYTES || passwordBytes.length > MAX_PASSWORD_BYTES) {
+            return null;
+        }
+
+        List<byte[]> commands = new ArrayList<>();
+        commands.add(new byte[] { WIFI_CONFIG_OPCODE, WIFI_BEGIN });
+        commands.addAll(fieldCommands(WIFI_FIELD_SSID, ssidBytes));
+        commands.addAll(fieldCommands(WIFI_FIELD_PASSWORD, passwordBytes));
+        commands.add(new byte[] { WIFI_CONFIG_OPCODE, WIFI_APPLY });
+        return commands;
+    }
+
+    static byte[] clearProvisioningCommand() {
+        return new byte[] { WIFI_CONFIG_OPCODE, WIFI_CLEAR };
+    }
+
+    static byte[] statusCommand() {
+        return new byte[] { WIFI_CONFIG_OPCODE, WIFI_STATUS };
+    }
+
+    static boolean isOkResponse(@Nullable byte[] response) {
+        return response != null && response.length > 0 && response[0] == (byte) 0x80;
+    }
+
+    @Nullable
+    static String statusMessage(@Nullable byte[] response) {
+        if (response == null || response.length < 3 || response[0] != (byte) 0x80) {
+            return null;
+        }
+
+        String provisionedText = response[1] == 0 ? "unprovisioned" : "provisioned";
+        String socketText = response[2] == 0 ? "idle" : "connected";
+        if (response.length < 4) {
+            return "Wi-Fi is " + provisionedText + "; socket is " + socketText + ".";
+        }
+
+        String stationText = response[3] == 0 ? "offline" : "online";
+        if (response.length < 5) {
+            return "Wi-Fi is " + provisionedText + ", station is " + stationText + "; socket is " + socketText + ".";
+        }
+
+        String retryText = response[4] == 0 ? "idle" : "retrying";
+        if (response.length < 7) {
+            return "Wi-Fi is " + provisionedText + ", station is " + stationText + " (" + retryText + "); socket is " + socketText + ".";
+        }
+
+        int reason = (response[5] & 0xFF) | ((response[6] & 0xFF) << 8);
+        String reasonText = disconnectReasonText(reason);
+        String runtimeText = response.length >= 13 && response[12] != 0 ? "running" : "idle";
+        String ipText = stationIp(response);
+        if (ipText != null) {
+            return "Wi-Fi is " + provisionedText + ", station is " + stationText + " at " + ipText + " (" + retryText + ", " + reasonText + "); socket is " + socketText + "; runtime is " + runtimeText + ".";
+        }
+        return "Wi-Fi is " + provisionedText + ", station is " + stationText + " (" + retryText + ", " + reasonText + "); socket is " + socketText + "; runtime is " + runtimeText + ".";
+    }
+
+    private static List<byte[]> fieldCommands(byte field, byte[] bytes) {
+        List<byte[]> commands = new ArrayList<>();
+        for (int offset = 0; offset < bytes.length; offset += COMMAND_CHUNK_BYTES) {
+            int count = Math.min(COMMAND_CHUNK_BYTES, bytes.length - offset);
+            byte[] command = new byte[5 + count];
+            command[0] = WIFI_CONFIG_OPCODE;
+            command[1] = WIFI_FIELD;
+            command[2] = field;
+            command[3] = (byte) offset;
+            command[4] = (byte) count;
+            System.arraycopy(bytes, offset, command, 5, count);
+            commands.add(command);
+        }
+        return commands;
+    }
+
+    @Nullable
+    private static String stationIp(byte[] response) {
+        if (response.length < 12 || response[7] == 0) {
+            return null;
+        }
+        return (response[8] & 0xFF) + "." + (response[9] & 0xFF) + "." + (response[10] & 0xFF) + "." + (response[11] & 0xFF);
+    }
+
+    private static String disconnectReasonText(int reason) {
+        switch (reason) {
+            case 0:
+                return "no disconnect reason";
+            case 2:
+                return "auth expired";
+            case 15:
+                return "4-way handshake timeout";
+            case 201:
+                return "no access point";
+            case 202:
+                return "auth failed";
+            case 203:
+                return "association failed";
+            case 204:
+                return "handshake timeout";
+            case 205:
+                return "connection failed";
+            default:
+                return "reason " + reason;
+        }
     }
 
     private static String normalizeKey(@Nullable String value, String fallback) {
