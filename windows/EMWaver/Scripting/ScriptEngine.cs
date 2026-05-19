@@ -25,6 +25,7 @@ public sealed class ScriptEngine : IDisposable
 
     private Engine? _engine;
     private string _bootstrapSource = string.Empty;
+    private Dictionary<string, string> _moduleSources = new(StringComparer.OrdinalIgnoreCase);
 
     private Action<ScriptTree>? _renderHandler;
     private Action<string>? _errorHandler;
@@ -105,7 +106,9 @@ public sealed class ScriptEngine : IDisposable
                 InstallHostPrimitives(_engine);
                 _engine.Execute(_bootstrapSource);
 
-                var wrapped = "(() => {\n" + trimmed + "\n})();";
+                InstallRequire(_engine);
+                var transformed = ScriptSourceTranspiler.Transpile(trimmed);
+                var wrapped = "(() => {\n" + transformed + "\n})();";
                 _engine.Execute(wrapped);
             }
             catch (JavaScriptException ex)
@@ -222,15 +225,64 @@ public sealed class ScriptEngine : IDisposable
         }
 
         var baseDir = AppContext.BaseDirectory;
-        var path = Path.Combine(baseDir, "Assets", "DefaultScripts", "script_bootstrap.emw");
+        var path = Path.Combine(baseDir, "Assets", "DefaultScripts", "emw-kernel.js");
         if (!File.Exists(path))
         {
             _bootstrapSource = string.Empty;
-            EmitError("Script bootstrap missing from app bundle (Assets/DefaultScripts/script_bootstrap.emw)");
+            EmitError("Script kernel missing from app bundle (Assets/DefaultScripts/emw-kernel.js)");
             return;
         }
 
         _bootstrapSource = File.ReadAllText(path);
+        _moduleSources = LoadModuleSources(Path.GetDirectoryName(path)!);
+    }
+
+    private static Dictionary<string, string> LoadModuleSources(string scriptsDir)
+    {
+        var modules = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (!Directory.Exists(scriptsDir))
+        {
+            return modules;
+        }
+
+        foreach (var path in Directory.EnumerateFiles(scriptsDir, "*.js", SearchOption.TopDirectoryOnly))
+        {
+            var fileName = Path.GetFileName(path);
+            var moduleName = Path.GetFileNameWithoutExtension(path);
+            var transformed = ScriptSourceTranspiler.Transpile(File.ReadAllText(path));
+            modules[fileName] = transformed;
+            modules[moduleName] = transformed;
+        }
+
+        return modules;
+    }
+
+    private void InstallRequire(Engine engine)
+    {
+        var moduleSourcesJson = JsonSerializer.Serialize(_moduleSources);
+        engine.SetValue("__emwModuleSourcesJson", moduleSourcesJson);
+        engine.Execute("""
+            var __emwModuleSources = JSON.parse(__emwModuleSourcesJson || "{}");
+            var __emwModuleCache = {};
+            function require(name) {
+              var key = String(name || "");
+              var resolved = Object.prototype.hasOwnProperty.call(__emwModuleSources, key)
+                ? key
+                : (Object.prototype.hasOwnProperty.call(__emwModuleSources, key + ".js") ? key + ".js" : null);
+              if (!resolved && key.slice(-3) === ".js") {
+                var withoutExt = key.slice(0, -3);
+                if (Object.prototype.hasOwnProperty.call(__emwModuleSources, withoutExt)) resolved = withoutExt;
+              }
+              if (!resolved) throw new Error("Cannot find EMWaver module: " + key);
+              if (Object.prototype.hasOwnProperty.call(__emwModuleCache, resolved)) return __emwModuleCache[resolved];
+              var module = { exports: {} };
+              __emwModuleCache[resolved] = module.exports;
+              var fn = new Function("exports", "module", "require", __emwModuleSources[resolved]);
+              fn(module.exports, module, require);
+              __emwModuleCache[resolved] = module.exports;
+              return module.exports;
+            }
+            """);
     }
 
     private void InstallHostPrimitives(Engine engine)
@@ -398,10 +450,10 @@ public sealed class ScriptEngine : IDisposable
         }));
 
         // Keep parity with macOS: expose the live sampler capture stream as a built-in
-        // plot source named "samplerBits" so sampler.emw can render UI.plot directly.
+        // plot source named "samplerBits" so sampler.js can render UI.plot directly.
         PlotBufferStore.Shared.SetProvider("samplerBits", () => GetSamplerBytes());
 
-        // Sampler buffer API parity with macOS (used by script_bootstrap + sampler.emw).
+        // Sampler buffer API parity with macOS (used by emw-kernel.js + sampler.js).
         engine.SetValue("_scriptSamplerBufferGetPacketCount", new Func<int>(() =>
         {
             var len = GetSamplerBytes().Length;

@@ -7,7 +7,9 @@ public sealed record ScriptInfo(
     bool ShadowsBundled
 )
 {
-    public string FileName => Name + ".emw";
+    public string FileName => Name.EndsWith(".js", System.StringComparison.OrdinalIgnoreCase)
+        ? Name
+        : Name + ".js";
 
     public string KindLabel
     {

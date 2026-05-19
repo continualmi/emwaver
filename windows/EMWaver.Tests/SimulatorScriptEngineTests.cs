@@ -27,16 +27,19 @@ public sealed class SimulatorScriptEngineTests
             errorHandler: errors.Enqueue);
 
         engine.Execute("""
+            import { JSX, render } from "emw-jsx";
+            import { Column, Text } from "emw-ui";
+
             pinMode(13, OUTPUT);
             digitalWrite(13, HIGH);
             var board = device.boardType({ refresh: true });
             var value = analogRead(0);
-            UI.render(UI.column({
-              children: [
-                UI.text({ text: board }),
-                UI.text({ text: String(value) })
-              ]
-            }));
+            render(
+              <Column>
+                <Text>{board}</Text>
+                <Text>{String(value)}</Text>
+              </Column>
+            );
             """);
 
         Assert.True(rendered.Wait(TimeSpan.FromSeconds(8)), "Timed out waiting for simulator-backed script render.");

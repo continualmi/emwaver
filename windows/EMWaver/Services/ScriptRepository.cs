@@ -9,7 +9,7 @@ namespace EMWaver.Services;
 
 internal sealed class ScriptRepository
 {
-    private static readonly string[] EmwExtensions = [".emw"];
+    private static readonly string[] ScriptExtensions = [".js"];
 
     internal string LocalScriptsDir { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -65,9 +65,8 @@ internal sealed class ScriptRepository
 
         var localRaw = Directory
             .EnumerateFiles(LocalScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
-            .Where(p => EmwExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-            // Hide script_bootstrap from local list too (may exist from old versions that copied bundled scripts).
-            .Where(p => !string.Equals(Path.GetFileNameWithoutExtension(p), "script_bootstrap", StringComparison.OrdinalIgnoreCase))
+            .Where(p => ScriptExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
+            .Where(p => !IsBundledLibraryOrKernel(p))
             .ToList();
 
         var bundledRaw = new List<string>();
@@ -75,9 +74,8 @@ internal sealed class ScriptRepository
         {
             bundledRaw = Directory
                 .EnumerateFiles(BundledScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
-                .Where(p => EmwExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-                // script_bootstrap.emw is an internal runtime dependency, not a user-facing script.
-                .Where(p => !string.Equals(Path.GetFileNameWithoutExtension(p), "script_bootstrap", StringComparison.OrdinalIgnoreCase))
+                .Where(p => ScriptExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
+                .Where(p => !IsBundledLibraryOrKernel(p))
                 .ToList();
         }
 
@@ -173,9 +171,9 @@ internal sealed class ScriptRepository
         Directory.CreateDirectory(LocalScriptsDir);
 
         var safe = SanitizeFileName(name);
-        if (!safe.EndsWith(".emw", StringComparison.OrdinalIgnoreCase))
+        if (!safe.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
         {
-            safe += ".emw";
+            safe += ".js";
         }
 
         var fullPath = Path.Combine(LocalScriptsDir, safe);
@@ -219,9 +217,9 @@ internal sealed class ScriptRepository
         Directory.CreateDirectory(LocalScriptsDir);
 
         var safe = SanitizeFileName(newName);
-        if (!safe.EndsWith(".emw", StringComparison.OrdinalIgnoreCase))
+        if (!safe.EndsWith(".js", StringComparison.OrdinalIgnoreCase))
         {
-            safe += ".emw";
+            safe += ".js";
         }
 
         var dest = Path.Combine(LocalScriptsDir, safe);
@@ -248,5 +246,11 @@ internal sealed class ScriptRepository
         }
 
         return trimmed;
+    }
+
+    private static bool IsBundledLibraryOrKernel(string path)
+    {
+        var name = Path.GetFileNameWithoutExtension(path);
+        return name.StartsWith("emw-", StringComparison.OrdinalIgnoreCase);
     }
 }

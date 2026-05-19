@@ -1234,7 +1234,7 @@ public sealed partial class ScriptsPage : Page
         var name = _current?.Name;
         if (string.IsNullOrWhiteSpace(name))
         {
-            name = "untitled.emw";
+            name = "untitled.js";
         }
 
         return new EMWaver.Services.Agent.AgentApi.ScriptContext(name!, source);
@@ -1422,7 +1422,7 @@ public sealed partial class ScriptsPage : Page
         var name = await PromptForNameAsync(
             title: "New Script",
             message: "Enter a name for the new script.",
-            initialValue: "script_script.emw"
+            initialValue: "script_script.js"
         );
 
         if (string.IsNullOrWhiteSpace(name))
@@ -1470,7 +1470,7 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        var initial = _current.Name + ".emw";
+        var initial = _current.Name + ".js";
         var name = await PromptForNameAsync(
             title: "Rename Script",
             message: "Enter a new name.",
@@ -1500,7 +1500,7 @@ public sealed partial class ScriptsPage : Page
             return;
         }
 
-        var initial = _current.Name + "_copy.emw";
+        var initial = _current.Name + "_copy.js";
         var name = await PromptForNameAsync(
             title: "Copy Script",
             message: "Enter a name for the copy.",
@@ -1786,7 +1786,7 @@ public sealed partial class ScriptsPage : Page
         var box = new TextBox
         {
             Text = initialValue,
-            PlaceholderText = "name.emw",
+            PlaceholderText = "name.js",
             Width = 320
         };
 

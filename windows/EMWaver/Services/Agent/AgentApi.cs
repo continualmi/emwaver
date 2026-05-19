@@ -148,7 +148,7 @@ internal sealed class AgentApi
             return text;
         }
 
-        var name = string.IsNullOrWhiteSpace(script.Name) ? "script.emw" : script.Name.Trim();
+        var name = string.IsNullOrWhiteSpace(script.Name) ? "script.js" : script.Name.Trim();
         return text + "\n\nScript `" + name + "`:\n```emw\n" + script.Source.Trim() + "\n```";
     }
 

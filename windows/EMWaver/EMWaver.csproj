@@ -57,7 +57,8 @@
   -->
   <Target Name="SyncDefaultScripts" BeforeTargets="BeforeBuild">
     <ItemGroup>
-      <_SrcDefaultScripts Include="..\..\assets\default-scripts\*.emw" />
+      <_SrcDefaultScripts Include="..\..\assets\default-scripts\*.js" />
+      <_DestDefaultScripts Include="Assets\DefaultScripts\*.js" />
       <_DestDefaultScripts Include="Assets\DefaultScripts\*.emw" />
     </ItemGroup>
 
@@ -78,10 +79,10 @@
     <None Remove="Assets\DefaultScripts\.gitkeep" />
 
     <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
-    <Content Include="Assets\DefaultScripts\*.emw">
+    <Content Include="Assets\DefaultScripts\*.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <!-- WinAppSDK PRI resource indexing can choke on arbitrary asset file types; treat .emw as plain content. -->
+      <!-- Treat script assets as plain content rather than PRI-indexed app resources. -->
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
