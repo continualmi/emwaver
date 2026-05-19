@@ -6,34 +6,62 @@
       "description": "Local hardware control does not require hosted account gates.",
       "parity": "all_required",
       "forbidden": [
-        { "path": "android/app/src/main", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In|sign_in_google", "reason": "Android must not retain hosted account sign-in gates." },
-        { "path": "ios/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "iOS must not retain hosted account sign-in gates." },
-        { "path": "macos/EMWaver/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "macOS must not retain hosted account sign-in gates." },
-        { "path": "windows/EMWaver", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "Windows must not retain hosted account sign-in gates." },
-        { "path": "gateway/backend", "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In", "reason": "Gateway CLI/backend must stay local-first and must not introduce hosted account gates." }
+        {
+          "path": "android/app/src/main",
+          "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In|sign_in_google",
+          "reason": "Android must not retain hosted account sign-in gates."
+        },
+        {
+          "path": "ios/EMWaver",
+          "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In",
+          "reason": "iOS must not retain hosted account sign-in gates."
+        },
+        {
+          "path": "macos/EMWaver/EMWaver",
+          "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In",
+          "reason": "macOS must not retain hosted account sign-in gates."
+        },
+        {
+          "path": "windows/EMWaver",
+          "pattern": "\\bFirebase\\b|firebase|GoogleSignIn|Google Sign-In",
+          "reason": "Windows must not retain hosted account sign-in gates."
+        }
       ],
       "platforms": {
         "macos": {
           "status": "required",
-          "evidence": [{ "file": "macos/README.md", "contains": "without account sign-in" }]
+          "evidence": [
+            {
+              "file": "macos/README.md",
+              "contains": "without account sign-in"
+            }
+          ]
         },
         "ios": {
           "status": "required",
-          "evidence": [{ "file": "ios/README.md", "contains": "local scripts and hardware control must not depend on this key|local device/script use does not" }]
+          "evidence": [
+            {
+              "file": "ios/README.md",
+              "contains": "local scripts and hardware control must not depend on this key|local device/script use does not"
+            }
+          ]
         },
         "windows": {
           "status": "required",
-          "evidence": [{ "file": "windows/README.md", "contains": "without account sign-in" }]
+          "evidence": [
+            {
+              "file": "windows/README.md",
+              "contains": "without account sign-in"
+            }
+          ]
         },
         "android": {
           "status": "required",
-          "evidence": [{ "file": "android/README.md", "contains": "Do not require an EMWaver account" }]
-        },
-        "gateway": {
-          "status": "required",
           "evidence": [
-            { "file": "gateway/backend/README.md", "contains": "does not provide an EMWaver-hosted relay|does not heartbeat to a hosted backend" },
-            { "file": "gateway/backend/emwaver/src/main.rs", "contains": "localhost|Gateway|local" }
+            {
+              "file": "android/README.md",
+              "contains": "Do not require an EMWaver account"
+            }
           ]
         }
       }

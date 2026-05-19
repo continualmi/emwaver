@@ -9,34 +9,55 @@
         "macos": {
           "status": "required",
           "evidence": [
-            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift", "contains": ["emwaver-dfu-helper", "DFU", "firmwareURL"] },
-            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateSheet.swift", "contains": "Update Mode|DFU|Firmware" }
+            {
+              "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift",
+              "contains": [
+                "emwaver-dfu-helper",
+                "DFU",
+                "firmwareURL"
+              ]
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/FirmwareUpdateSheet.swift",
+              "contains": "Update Mode|DFU|Firmware"
+            }
           ]
         },
         "ios": {
           "status": "planned",
           "reason": "iOS bundles firmware assets but does not yet expose the full STM32 DFU update UI/runtime.",
           "evidence": [
-            { "file": "ios/README.md", "contains": "bundled firmware assets|firmware" }
+            {
+              "file": "ios/README.md",
+              "contains": "bundled firmware assets|firmware"
+            }
           ]
         },
         "windows": {
           "status": "required",
           "evidence": [
-            { "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs", "contains": "DFU|Dfu|StartUpdate" },
-            { "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs", "contains": "Update EMWaver|STM32|DFU" }
+            {
+              "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs",
+              "contains": "DFU|Dfu|StartUpdate"
+            },
+            {
+              "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs",
+              "contains": "Update EMWaver|STM32|DFU"
+            }
           ]
         },
         "android": {
           "status": "required",
           "evidence": [
-            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java", "contains": "DFU|flashFirmwareWithDesktopProgress|BUNDLED_FIRMWARE_ASSET_PATH" },
-            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/flash/Dfu.java", "contains": "DFU_DNLOAD|DFU_UPLOAD|DFU_GETSTATUS" }
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java",
+              "contains": "DFU|flashFirmwareWithDesktopProgress|BUNDLED_FIRMWARE_ASSET_PATH"
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/flash/Dfu.java",
+              "contains": "DFU_DNLOAD|DFU_UPLOAD|DFU_GETSTATUS"
+            }
           ]
-        },
-        "gateway": {
-          "status": "planned",
-          "reason": "Gateway owns script/runtime transports today; a user-facing firmware update command is separate future work."
         }
       }
     },
@@ -48,21 +69,50 @@
         "macos": {
           "status": "required",
           "evidence": [
-            { "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift", "contains": ["startEspSerialUpdate", "emwaver-esp-helper", "ESP bootloader"] },
-            { "file": "macos/README.md", "contains": "ESP32-S3 update flow|serial flashing" }
+            {
+              "file": "macos/EMWaver/EMWaver/FirmwareUpdateManager.swift",
+              "contains": [
+                "startEspSerialUpdate",
+                "emwaver-esp-helper",
+                "ESP bootloader"
+              ]
+            },
+            {
+              "file": "macos/README.md",
+              "contains": "ESP32-S3 update flow|serial flashing"
+            }
           ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "iOS can detect ESP boards over local transports, but does not yet expose an ESP serial flashing path."
         },
         "windows": {
           "status": "required",
           "evidence": [
-            { "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs", "contains": "ESP|EspBootloader|serial" },
-            { "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs", "contains": "Flash ESP32-S3|BOOT/RESET|serial" },
-            { "file": "windows/EMWaver/EMWaver.csproj", "contains": "emwaver-esp-helper.exe|emwaver-esp32s3-app.bin" }
+            {
+              "file": "windows/EMWaver/Services/FirmwareUpdateManager.cs",
+              "contains": "ESP|EspBootloader|serial"
+            },
+            {
+              "file": "windows/EMWaver/Dialogs/FirmwareUpdateDialog.xaml.cs",
+              "contains": "Flash ESP32-S3|BOOT/RESET|serial"
+            },
+            {
+              "file": "windows/EMWaver/EMWaver.csproj",
+              "contains": "emwaver-esp-helper.exe|emwaver-esp32s3-app.bin"
+            }
           ]
         },
-        "gateway": {
+        "android": {
           "status": "planned",
-          "reason": "Gateway supports ESP32 runtime transports but not end-user ESP serial firmware flashing."
+          "reason": "Android detects ESP board types but explicitly routes users away from ESP flashing until an Android-native flow exists.",
+          "evidence": [
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/ui/emwaver/UpdateDeviceDialogFragment.java",
+              "contains": "ESP32 flashing is not available on Android yet"
+            }
+          ]
         }
       }
     }

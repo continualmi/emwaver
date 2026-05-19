@@ -9,38 +9,54 @@
         "macos": {
           "status": "required",
           "evidence": [
-            { "file": "macos/EMWaver/EMWaver/Auth/AuthenticationManager.swift", "contains": "KeychainStore\\.setString[\\s\\S]*agent" },
-            { "file": "macos/EMWaver/EMWaver/Auth/SignInSheet.swift", "contains": "Agent API Key|Agent API key" }
+            {
+              "file": "macos/EMWaver/EMWaver/Auth/AuthenticationManager.swift",
+              "contains": "KeychainStore\\.setString[\\s\\S]*agent"
+            },
+            {
+              "file": "macos/EMWaver/EMWaver/Auth/SignInSheet.swift",
+              "contains": "Agent API Key|Agent API key"
+            }
           ]
         },
         "ios": {
           "status": "required",
           "evidence": [
-            { "file": "ios/EMWaver/Auth/AuthenticationManager.swift", "contains": "KeychainStore\\.setString[\\s\\S]*agent" },
-            { "file": "ios/EMWaver/Auth/SignInSheet.swift", "contains": "Agent API Key|Agent API key" }
+            {
+              "file": "ios/EMWaver/Auth/AuthenticationManager.swift",
+              "contains": "KeychainStore\\.setString[\\s\\S]*agent"
+            },
+            {
+              "file": "ios/EMWaver/Auth/SignInSheet.swift",
+              "contains": "Agent API Key|Agent API key"
+            }
           ]
         },
         "windows": {
           "status": "required",
           "evidence": [
-            { "file": "windows/EMWaver/Services/Agent/AgentApiKeyStore.cs", "contains": "SaveApiKeyAsync" },
-            { "file": "windows/EMWaver/Dialogs/AccountDialog.xaml", "contains": "Agent API Key|Agent API key" }
+            {
+              "file": "windows/EMWaver/Services/Agent/AgentApiKeyStore.cs",
+              "contains": "SaveApiKeyAsync"
+            },
+            {
+              "file": "windows/EMWaver/Dialogs/AccountDialog.xaml",
+              "contains": "Agent API Key|Agent API key"
+            }
           ]
         },
         "android": {
           "status": "required",
           "evidence": [
-            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentApiKeyStore.java", "contains": "SharedPreferences[\\s\\S]*api_key" },
-            { "file": "android/app/src/main/res/layout/dialog_sign_in.xml", "contains": "Agent API key" }
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentApiKeyStore.java",
+              "contains": "SharedPreferences[\\s\\S]*api_key"
+            },
+            {
+              "file": "android/app/src/main/res/layout/dialog_sign_in.xml",
+              "contains": "Agent API key"
+            }
           ]
-        },
-        "gateway_frontend": {
-          "status": "planned",
-          "reason": "Gateway Agent tooling should be implemented in TypeScript/client code, not in the Rust device backend."
-        },
-        "cli": {
-          "status": "not_applicable",
-          "reason": "Rust CLI does not expose Agent commands; terminal Agent tooling should live outside the Rust device backend."
         }
       }
     },
@@ -52,25 +68,37 @@
         "macos": {
           "status": "required",
           "evidence": [
-            { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatStore.swift", "contains": "SQLite3[\\s\\S]*agent_conversations[\\s\\S]*agent_messages" }
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatStore.swift",
+              "contains": "SQLite3[\\s\\S]*agent_conversations[\\s\\S]*agent_messages"
+            }
           ]
         },
         "ios": {
           "status": "required",
           "evidence": [
-            { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatStore.swift", "contains": "SQLite3" }
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentChatStore.swift",
+              "contains": "SQLite3"
+            }
           ]
         },
         "windows": {
           "status": "required",
           "evidence": [
-            { "file": "windows/EMWaver/Services/Agent/AgentChatStore.cs", "contains": "Microsoft\\.Data\\.Sqlite[\\s\\S]*agent_conversations[\\s\\S]*agent_messages" }
+            {
+              "file": "windows/EMWaver/Services/Agent/AgentChatStore.cs",
+              "contains": "Microsoft\\.Data\\.Sqlite[\\s\\S]*agent_conversations[\\s\\S]*agent_messages"
+            }
           ]
         },
         "android": {
           "status": "required",
           "evidence": [
-            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentChatStore.java", "contains": "SQLiteOpenHelper[\\s\\S]*agent_conversations[\\s\\S]*agent_messages" }
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentChatStore.java",
+              "contains": "SQLiteOpenHelper[\\s\\S]*agent_conversations[\\s\\S]*agent_messages"
+            }
           ]
         }
       }
@@ -78,24 +106,48 @@
     {
       "id": "agent.backend_contract",
       "description": "Agent clients send bearer-authenticated MGPT-style universe/userInput requests.",
-      "parity": "all_required",
+      "parity": "documented_exceptions",
       "platforms": {
-        "macos_ios": {
+        "macos": {
           "status": "required",
           "evidence": [
-            { "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentEndpointAPI.swift", "contains": ["Authorization[\\s\\S]*Bearer", "userInput"] }
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentEndpointAPI.swift",
+              "contains": [
+                "Authorization[\\s\\S]*Bearer",
+                "userInput"
+              ]
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptsUI/AgentEndpointAPI.swift",
+              "contains": [
+                "Authorization[\\s\\S]*Bearer",
+                "userInput"
+              ]
+            }
           ]
         },
         "windows": {
           "status": "required",
           "evidence": [
-            { "file": "windows/EMWaver/Services/Agent/AgentApi.cs", "contains": "AuthenticationHeaderValue\\(\"Bearer\"[\\s\\S]*UserInput" }
+            {
+              "file": "windows/EMWaver/Services/Agent/AgentApi.cs",
+              "contains": "AuthenticationHeaderValue\\(\"Bearer\"[\\s\\S]*UserInput"
+            }
           ]
         },
         "android": {
           "status": "required",
           "evidence": [
-            { "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApi.java", "contains": "Authorization[\\s\\S]*Bearer[\\s\\S]*userInput" }
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/agent/AgentEndpointApi.java",
+              "contains": "Authorization[\\s\\S]*Bearer[\\s\\S]*userInput"
+            }
           ]
         }
       }

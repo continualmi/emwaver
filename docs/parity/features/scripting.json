@@ -3,26 +3,151 @@
   "features": [
     {
       "id": "scripting.default_scripts_packaged",
-      "description": "Native app and Gateway packages include the canonical default .emw script assets.",
-      "parity": "all_required",
+      "description": "Native app packages include the canonical default .js script assets and kernel/libraries.",
+      "parity": "documented_exceptions",
       "platforms": {
-        "macos_ios": {
+        "macos": {
           "status": "required",
-          "evidence": [{ "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/FileService.swift", "contains": "DefaultScripts|default-scripts|script_bootstrap" }]
+          "evidence": [
+            {
+              "file": "macos/EMWaver/EMWaver.xcodeproj/project.pbxproj",
+              "contains": [
+                "assets/default-scripts",
+                "emw-kernel\\.js",
+                "\\*\\.js"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/ScriptsViewModel.swift",
+              "contains": "urls\\(forResourcesWithExtension: \"js\"[\\s\\S]*DefaultScripts"
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "ios/EMWaver.xcodeproj/project.pbxproj",
+              "contains": [
+                "assets/default-scripts",
+                "emw-kernel\\.js",
+                "\\*\\.js"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptStorage/ScriptsViewModel.swift",
+              "contains": "urls\\(forResourcesWithExtension: \"js\"[\\s\\S]*DefaultScripts"
+            }
+          ]
         },
         "windows": {
           "status": "required",
-          "evidence": [{ "file": "windows/EMWaver/EMWaver.csproj", "contains": "SyncDefaultScripts|Assets\\\\DefaultScripts" }]
+          "evidence": [
+            {
+              "file": "windows/EMWaver/EMWaver.csproj",
+              "contains": [
+                "SyncDefaultScripts",
+                "Assets\\\\DefaultScripts",
+                "\\*\\.js"
+              ]
+            }
+          ]
         },
         "android": {
           "status": "required",
-          "evidence": [{ "file": "android/app/build.gradle", "contains": "syncScriptAssets|DefaultScripts|script_bootstrap" }]
-        },
-        "gateway": {
+          "evidence": [
+            {
+              "file": "android/app/build.gradle",
+              "contains": [
+                "syncScriptAssets",
+                "DefaultScripts",
+                "include\\(\"\\*\\.js\"\\)",
+                "emw-kernel\\.js"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "scripting.js_jsx_runtime",
+      "description": "Native app script runtimes expose JS imports/require, JSX transpilation, and the shared emw-kernel.js surface.",
+      "parity": "documented_exceptions",
+      "platforms": {
+        "macos": {
           "status": "required",
           "evidence": [
-            { "file": "gateway/backend/emwaver-runtime/src/simulator.rs", "contains": "script_bootstrap\\.emw" },
-            { "file": "gateway/backend/README.md", "contains": "bootstrap-path|script_bootstrap\\.emw" }
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift",
+              "contains": [
+                "emw-kernel\\.js",
+                "require",
+                "ScriptModuleTranspiler",
+                "ScriptJSXTranspiler"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/DefaultScriptAssetsTests.swift",
+              "contains": "JavaScriptOnlyAndTranspile|ScriptJSXTranspiler"
+            }
+          ]
+        },
+        "ios": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/ScriptEngine.swift",
+              "contains": [
+                "emw-kernel\\.js",
+                "require",
+                "ScriptModuleTranspiler",
+                "ScriptJSXTranspiler"
+              ]
+            },
+            {
+              "file": "apple/EMWaverAppleCore/Tests/EMWaverScriptRuntimeTests/DefaultScriptAssetsTests.swift",
+              "contains": "JavaScriptOnlyAndTranspile|ScriptJSXTranspiler"
+            }
+          ]
+        },
+        "windows": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "windows/EMWaver/Scripting/ScriptEngine.cs",
+              "contains": [
+                "emw-kernel\\.js",
+                "function require",
+                "ScriptSourceTranspiler\\.Transpile"
+              ]
+            },
+            {
+              "file": "windows/EMWaver/Scripting/ScriptSourceTranspiler.cs",
+              "contains": [
+                "require\\(",
+                "JSX\\.h"
+              ]
+            }
+          ]
+        },
+        "android": {
+          "status": "required",
+          "evidence": [
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/ScriptEngine.java",
+              "contains": [
+                "emw-kernel\\.js",
+                "require\\(\\)",
+                "ScriptSourceTranspiler\\.transpile"
+              ]
+            },
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/ScriptSourceTranspiler.java",
+              "contains": [
+                "require\\(",
+                "JSX\\.h"
+              ]
+            }
           ]
         }
       }
@@ -32,20 +157,46 @@
       "description": "Platform script/runtime tests can run against the shared simulator fixture without physical hardware.",
       "parity": "documented_exceptions",
       "platforms": {
+        "macos": {
+          "status": "planned",
+          "reason": "Apple has SimulatorScriptDevice and shared runtime tests, but no checked-in macOS simulator-backed end-to-end script fixture test yet.",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/SimulatorScriptDevice.swift",
+              "contains": "SimulatorFixture|fixture"
+            }
+          ]
+        },
+        "ios": {
+          "status": "planned",
+          "reason": "Apple has SimulatorScriptDevice and shared runtime tests, but no checked-in iOS simulator-backed end-to-end script fixture test yet.",
+          "evidence": [
+            {
+              "file": "apple/EMWaverAppleCore/Sources/EMWaverScriptRuntime/SimulatorScriptDevice.swift",
+              "contains": "SimulatorFixture|fixture"
+            }
+          ]
+        },
         "windows": {
           "status": "required",
-          "evidence": [{ "file": "windows/EMWaver.Tests/SimulatorScriptEngineTests.cs", "contains": ["SimulatorCommandBridge", "basic-board\\.json"] }]
+          "evidence": [
+            {
+              "file": "windows/EMWaver.Tests/SimulatorScriptEngineTests.cs",
+              "contains": [
+                "SimulatorCommandBridge",
+                "basic-board\\.json"
+              ]
+            }
+          ]
         },
         "android": {
           "status": "planned",
           "reason": "Android has SimulatorScriptDeviceBridge, but no checked-in JUnit fixture test yet.",
-          "evidence": [{ "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java", "contains": "basic-board|fixture|Simulator" }]
-        },
-        "gateway": {
-          "status": "required",
           "evidence": [
-            { "file": "gateway/backend/emwaver-runtime/src/simulator.rs", "contains": "SimulatorCommandBridge|basic-board|fixture" },
-            { "file": "scripts/rebirth-linux-validation.sh", "contains": "--sim-device|sim-device" }
+            {
+              "file": "android/app/src/main/java/com/emwaver/emwaverandroidapp/scripts/SimulatorScriptDeviceBridge.java",
+              "contains": "basic-board|fixture|Simulator"
+            }
           ]
         }
       }
