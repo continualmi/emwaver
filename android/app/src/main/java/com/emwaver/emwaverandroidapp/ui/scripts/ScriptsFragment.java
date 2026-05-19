@@ -89,13 +89,13 @@ import java.util.function.Consumer;
 public class ScriptsFragment extends Fragment {
 
     private static final String TAG = "ScriptsFragment";
-    private static final String SCRIPT_EXTENSION = ".emw";
-    private static final String SCRIPT_DISPLAY_EXTENSION = ".emw";
-    private static final String ASSET_SCRIPT_EXTENSION = ".emw";
+    private static final String SCRIPT_EXTENSION = ".js";
+    private static final String SCRIPT_DISPLAY_EXTENSION = ".js";
+    private static final String ASSET_SCRIPT_EXTENSION = ".js";
     private static final String ASSET_SCRIPTS_DIR = "DefaultScripts";
 
     // User files live in a single flat namespace locally.
-    // UI decides what to show based on extension (.emw scripts vs .raw/.txt signals).
+    // UI decides what to show based on extension (.js scripts vs .raw/.txt signals).
     private static final String SIGNALS_DIR_NAME = "scripts";
     private static final String SIGNAL_RAW_EXTENSION = ".raw";
     private static final String SIGNAL_TEXT_EXTENSION = ".txt";
@@ -981,10 +981,17 @@ public class ScriptsFragment extends Fragment {
             try {
                 String assetPath = ASSET_SCRIPTS_DIR + "/" + filename;
                 InputStream is = requireContext().getAssets().open(assetPath);
-                is.close(); // Just check if it exists
+                String content = readTextFromInputStream(is);
+                is.close();
 
                 String name = filename.substring(0, filename.length() - ASSET_SCRIPT_EXTENSION.length());
                 String id = "__asset__" + assetPath; // Special ID prefix for asset scripts
+                if (viewModel != null) {
+                    viewModel.updateDraft(id, name, content, false);
+                }
+                if (isBundledLibraryOrKernel(filename)) {
+                    continue;
+                }
                 UserFileMetadata metadata = new UserFileMetadata(
                     id,
                     name,
@@ -1002,6 +1009,10 @@ public class ScriptsFragment extends Fragment {
         
         // Sort asset scripts alphabetically
         Collections.sort(assetScripts, (a, b) -> a.getName().compareToIgnoreCase(b.getName()));
+    }
+
+    private boolean isBundledLibraryOrKernel(@NonNull String filename) {
+        return filename.toLowerCase(Locale.US).startsWith("emw-");
     }
     
     private void renameScript(ScriptMetadata scriptMetadata, String newName) {
@@ -1417,7 +1428,7 @@ public class ScriptsFragment extends Fragment {
             showNameInputDialog(
                 "Save Script",
                 "Enter a name for the script:",
-                currentScriptName != null ? currentScriptName : "script_script.emw",
+                currentScriptName != null ? currentScriptName : "script_script.js",
                 name -> createScriptWithContent(name, getEditorText(), "Script saved: ")
             );
             return;
@@ -2004,7 +2015,7 @@ public class ScriptsFragment extends Fragment {
             scriptRenderView.clear();
         }
         updateScriptPlaceholder();
-        scriptEngine.execute(script, () -> {
+        scriptEngine.execute(script, moduleSources(), () -> {
             isRenderingScript = false;
             updateScriptPlaceholder();
         });
@@ -2014,7 +2025,7 @@ public class ScriptsFragment extends Fragment {
         ensureScriptEngineBindings();
         if (scriptEngine == null) {
             scriptEngine = new ScriptEngine();
-            scriptEngine.setBootstrapSource(readAssetUtf8("script_bootstrap.emw"));
+            scriptEngine.setBootstrapSource(readAssetUtf8(ASSET_SCRIPTS_DIR + "/emw-kernel.js"));
             scriptEngine.setAppDataDir(getSignalsDir());
             scriptEngine.setLegacySignalDirs(getLegacySignalDirs());
             if (scriptDeviceConnection == null && isAdded()) {
@@ -2527,7 +2538,7 @@ public class ScriptsFragment extends Fragment {
                 cursor.close();
             }
         }
-        return fileName != null ? fileName : "script.emw";
+        return fileName != null ? fileName : "script.js";
     }
 
     private String buildNewScriptTemplate() {

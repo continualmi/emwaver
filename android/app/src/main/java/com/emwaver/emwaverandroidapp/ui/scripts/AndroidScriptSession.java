@@ -35,9 +35,9 @@ final class AndroidScriptSession {
     }
 
     String fileName() {
-        return scriptName.toLowerCase(java.util.Locale.US).endsWith(".emw")
+        return scriptName.toLowerCase(java.util.Locale.US).endsWith(".js")
                 ? scriptName
-                : scriptName + ".emw";
+                : scriptName + ".js";
     }
 
     String statusLabel() {

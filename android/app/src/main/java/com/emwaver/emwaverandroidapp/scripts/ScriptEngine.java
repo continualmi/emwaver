@@ -73,6 +73,7 @@ public final class ScriptEngine {
     private volatile Scriptable scope;
     private volatile boolean initialized;
     private volatile String bootstrapSource = "";
+    private volatile Map<String, String> moduleSources = Collections.emptyMap();
     private volatile File appDataDir;
     private volatile List<File> legacySignalDirs = Collections.emptyList();
     private volatile byte[] samplerManualBuffer;
@@ -82,6 +83,14 @@ public final class ScriptEngine {
 
     public void setBootstrapSource(String source) {
         bootstrapSource = source != null ? source : "";
+    }
+
+    public void setModuleSources(Map<String, String> sources) {
+        if (sources == null || sources.isEmpty()) {
+            moduleSources = Collections.emptyMap();
+            return;
+        }
+        moduleSources = new HashMap<>(sources);
     }
 
     public void setDeviceConnection(ScriptDeviceBridge deviceConnection) {
@@ -143,6 +152,11 @@ public final class ScriptEngine {
     }
 
     public void execute(String script, Runnable completion) {
+        execute(script, Collections.emptyMap(), completion);
+    }
+
+    public void execute(String script, Map<String, String> sources, Runnable completion) {
+        setModuleSources(sources);
         executor.execute(() -> {
             Context cx = Context.enter();
             try {
@@ -156,13 +170,15 @@ public final class ScriptEngine {
                 callbackRegistry.clear();
                 clearAllTimeouts();
                 injectDsl(cx, scope);
+                installRequire(cx, scope);
 
                 if (containsAsyncTokens(script)) {
                     dispatchError("Script error: async/await is not supported. Scripts must be synchronous.");
                     return;
                 }
 
-                String wrapped = "(function() {\n" + script + "\n})();";
+                String transformed = ScriptSourceTranspiler.transpile(script);
+                String wrapped = "(function() {\n" + transformed + "\n})();";
                 try {
                     cx.evaluateString(scope, wrapped, "ScriptScript", 1, null);
                 } catch (RhinoException ex) {
@@ -1229,9 +1245,74 @@ public final class ScriptEngine {
     private void injectDsl(Context cx, Scriptable scope) {
         String source = bootstrapSource;
         if (source == null || source.trim().isEmpty()) {
-            throw new EvaluatorException("Script bootstrap not loaded (missing script_bootstrap.emw)");
+            throw new EvaluatorException("Script kernel not loaded (missing emw-kernel.js)");
         }
         cx.evaluateString(scope, source, "ScriptBootstrap", 1, null);
+    }
+
+    private void installRequire(Context cx, Scriptable scope) {
+        Scriptable moduleCache = cx.newObject(scope);
+        ScriptableObject.putProperty(scope, "__emwModuleCache", moduleCache);
+        ScriptableObject.putProperty(scope, "require", new BaseFunction() {
+            @Override
+            public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args) {
+                if (args.length < 1) {
+                    throw new EvaluatorException("require() needs a module name");
+                }
+                String moduleName = String.valueOf(args[0]);
+                String resolved = resolveModuleName(moduleName);
+                if (resolved == null) {
+                    throw new EvaluatorException("Cannot find EMWaver module: " + moduleName);
+                }
+                Object cached = ScriptableObject.getProperty(moduleCache, resolved);
+                if (cached != Scriptable.NOT_FOUND) {
+                    return cached;
+                }
+
+                String source = moduleSources.get(resolved);
+                if (source == null) {
+                    source = moduleSources.get(resolved + ".js");
+                }
+                if (source == null) {
+                    throw new EvaluatorException("Cannot find EMWaver module source: " + moduleName);
+                }
+
+                Scriptable exports = cx.newObject(scope);
+                Scriptable module = cx.newObject(scope);
+                ScriptableObject.putProperty(module, "exports", exports);
+                ScriptableObject.putProperty(moduleCache, resolved, exports);
+
+                String transformed = ScriptSourceTranspiler.transpile(source);
+                String wrapped = "(function(exports, module, require) {\n" + transformed + "\n})";
+                Object fnObj = cx.evaluateString(scope, wrapped, "Module:" + resolved, 1, null);
+                if (!(fnObj instanceof Function)) {
+                    throw new EvaluatorException("Invalid EMWaver module: " + moduleName);
+                }
+                ((Function) fnObj).call(cx, scope, scope, new Object[] { exports, module, this });
+                Object moduleExports = ScriptableObject.getProperty(module, "exports");
+                ScriptableObject.putProperty(moduleCache, resolved, moduleExports);
+                return moduleExports;
+            }
+        });
+    }
+
+    private String resolveModuleName(String moduleName) {
+        String trimmed = moduleName != null ? moduleName.trim() : "";
+        if (trimmed.isEmpty()) {
+            return null;
+        }
+        if (moduleSources.containsKey(trimmed)) {
+            return trimmed;
+        }
+        if (trimmed.endsWith(".js")) {
+            String without = trimmed.substring(0, trimmed.length() - 3);
+            if (moduleSources.containsKey(without)) {
+                return without;
+            }
+        } else if (moduleSources.containsKey(trimmed + ".js")) {
+            return trimmed + ".js";
+        }
+        return null;
     }
 
     private String formatRhinoException(RhinoException ex) {
