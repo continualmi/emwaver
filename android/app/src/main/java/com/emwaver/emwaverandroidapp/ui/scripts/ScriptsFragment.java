@@ -993,25 +993,16 @@ public class ScriptsFragment extends Fragment {
     private void rebuildCombinedScripts() {
         scripts.clear();
 
-        if (!assetScripts.isEmpty()) {
-            scripts.add(ListEntry.header("Examples"));
-            for (ScriptMetadata s : assetScripts) {
-                scripts.add(ListEntry.script(s));
-            }
+        for (ScriptMetadata s : assetScripts) {
+            scripts.add(ListEntry.script(s));
         }
 
-        if (!customScripts.isEmpty()) {
-            scripts.add(ListEntry.header("Your Scripts"));
-            for (ScriptMetadata s : customScripts) {
-                scripts.add(ListEntry.script(s));
-            }
+        for (ScriptMetadata s : customScripts) {
+            scripts.add(ListEntry.script(s));
         }
 
-        if (!signalFiles.isEmpty()) {
-            scripts.add(ListEntry.header("Signals"));
-            for (SignalMetadata s : signalFiles) {
-                scripts.add(ListEntry.signal(s));
-            }
+        for (SignalMetadata s : signalFiles) {
+            scripts.add(ListEntry.signal(s));
         }
 
         refreshScriptList();
