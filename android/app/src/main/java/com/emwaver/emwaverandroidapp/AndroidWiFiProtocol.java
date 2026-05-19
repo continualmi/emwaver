@@ -17,12 +17,14 @@ final class AndroidWiFiProtocol {
 
     private final USBService host;
     private final Object lock = new Object();
+    private final AndroidWiFiDiscovery discovery;
 
     private volatile AndroidWiFiTransport.Connection connection;
     private OkHttpClient client;
 
     AndroidWiFiProtocol(USBService host) {
         this.host = host;
+        this.discovery = new AndroidWiFiDiscovery(host);
     }
 
     boolean hasOpenConnection() {
@@ -108,6 +110,14 @@ final class AndroidWiFiProtocol {
             return;
         }
         host.showToast("Opening Wi-Fi connection...");
+    }
+
+    void startDiscovery(AndroidWiFiDiscovery.Listener listener) {
+        discovery.start(listener);
+    }
+
+    void stopDiscovery(boolean clearDevices) {
+        discovery.stop(clearDevices);
     }
 
     void close() {

@@ -302,6 +302,20 @@ public class MainActivity extends AppCompatActivity {
         portInput.setText(lastWiFiPort);
         layout.addView(portInput);
 
+        LinearLayout discoveryActions = new LinearLayout(this);
+        discoveryActions.setOrientation(LinearLayout.HORIZONTAL);
+        Button searchButton = new Button(this);
+        searchButton.setText("Search");
+        discoveryActions.addView(searchButton);
+        Button stopSearchButton = new Button(this);
+        stopSearchButton.setText("Stop Search");
+        discoveryActions.addView(stopSearchButton);
+        layout.addView(discoveryActions);
+
+        LinearLayout discoveredContainer = new LinearLayout(this);
+        discoveredContainer.setOrientation(LinearLayout.VERTICAL);
+        layout.addView(discoveredContainer);
+
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle("Connect Wi-Fi")
                 .setMessage("Connect directly to an ESP32 on your trusted LAN or VPN.")
@@ -314,6 +328,51 @@ public class MainActivity extends AppCompatActivity {
                     }
                 })
                 .create();
+        searchButton.setOnClickListener(v -> {
+            searchButton.setEnabled(false);
+            discoveredContainer.removeAllViews();
+            TextView searching = new TextView(this);
+            searching.setText("Searching...");
+            discoveredContainer.addView(searching);
+            if (connectionManager != null) {
+                connectionManager.startWiFiDiscovery(new AndroidWiFiDiscovery.Listener() {
+                    @Override
+                    public void onDevicesChanged(List<AndroidWiFiTransport.DiscoveredDevice> devices) {
+                        runOnUiThread(() -> {
+                            discoveredContainer.removeAllViews();
+                            if (devices.isEmpty()) {
+                                TextView empty = new TextView(MainActivity.this);
+                                empty.setText("No Wi-Fi devices found");
+                                discoveredContainer.addView(empty);
+                            }
+                            for (AndroidWiFiTransport.DiscoveredDevice device : devices) {
+                                Button deviceButton = new Button(MainActivity.this);
+                                deviceButton.setText(device.displayName + "\n" + device.host);
+                                deviceButton.setAllCaps(false);
+                                deviceButton.setOnClickListener(button -> {
+                                    lastWiFiHost = device.host;
+                                    lastWiFiPort = String.format(Locale.US, "%d", device.port);
+                                    connectionManager.connectWiFi(device.host, device.port);
+                                    dialog.dismiss();
+                                });
+                                discoveredContainer.addView(deviceButton);
+                            }
+                        });
+                    }
+
+                    @Override
+                    public void onError(String message) {
+                        runOnUiThread(() -> Toast.makeText(MainActivity.this, message, Toast.LENGTH_SHORT).show());
+                    }
+                });
+            }
+        });
+        stopSearchButton.setOnClickListener(v -> {
+            if (connectionManager != null) {
+                connectionManager.stopWiFiDiscovery(false);
+            }
+            searchButton.setEnabled(true);
+        });
         dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             String host = hostInput.getText() != null ? hostInput.getText().toString().trim() : "";
             String portText = portInput.getText() != null ? portInput.getText().toString().trim() : "";
@@ -342,6 +401,11 @@ public class MainActivity extends AppCompatActivity {
             }
             dialog.dismiss();
         }));
+        dialog.setOnDismissListener(d -> {
+            if (connectionManager != null) {
+                connectionManager.stopWiFiDiscovery(false);
+            }
+        });
         dialog.show();
     }
 

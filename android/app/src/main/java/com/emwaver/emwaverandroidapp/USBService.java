@@ -494,6 +494,14 @@ public class USBService extends Service implements DeviceConnectionService {
         wifiProtocol.connect(host, port);
     }
 
+    public void startWiFiDiscovery(AndroidWiFiDiscovery.Listener listener) {
+        wifiProtocol.startDiscovery(listener);
+    }
+
+    public void stopWiFiDiscovery(boolean clearDevices) {
+        wifiProtocol.stopDiscovery(clearDevices);
+    }
+
     public String provisionWiFi(String ssid, String password) {
         List<byte[]> commands = AndroidWiFiTransport.provisioningCommands(ssid, password);
         if (commands == null) {

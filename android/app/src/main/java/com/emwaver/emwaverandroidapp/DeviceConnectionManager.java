@@ -93,6 +93,18 @@ public class DeviceConnectionManager {
         }
     }
 
+    public void startWiFiDiscovery(AndroidWiFiDiscovery.Listener listener) {
+        if (usbService != null) {
+            usbService.startWiFiDiscovery(listener);
+        }
+    }
+
+    public void stopWiFiDiscovery(boolean clearDevices) {
+        if (usbService != null) {
+            usbService.stopWiFiDiscovery(clearDevices);
+        }
+    }
+
     public String provisionWiFi(String ssid, String password) {
         return usbService != null
                 ? usbService.provisionWiFi(ssid, password)

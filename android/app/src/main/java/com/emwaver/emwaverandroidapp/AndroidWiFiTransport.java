@@ -9,8 +9,12 @@ package com.emwaver.emwaverandroidapp;
 import androidx.annotation.Nullable;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
@@ -22,6 +26,7 @@ import okio.ByteString;
 final class AndroidWiFiTransport {
     static final String TRANSPORT_NAME = "Wi-Fi";
     static final int DEFAULT_PORT = 3922;
+    static final String SERVICE_TYPE = "_emwaver._tcp.";
     private static final byte WIFI_CONFIG_OPCODE = 0x0A;
     private static final byte WIFI_BEGIN = 0x00;
     private static final byte WIFI_FIELD = 0x01;
@@ -35,6 +40,42 @@ final class AndroidWiFiTransport {
     private static final int MAX_PASSWORD_BYTES = 64;
 
     private AndroidWiFiTransport() {}
+
+    static final class DiscoveredDevice {
+        final String id;
+        final String displayName;
+        final String host;
+        final int port;
+        final String boardType;
+        final String firmwareVersion;
+        final String protocolVersion;
+        final List<String> capabilities;
+
+        DiscoveredDevice(
+                String id,
+                String displayName,
+                String host,
+                int port,
+                String boardType,
+                String firmwareVersion,
+                String protocolVersion,
+                List<String> capabilities
+        ) {
+            this.id = id;
+            this.displayName = displayName;
+            this.host = host;
+            this.port = port;
+            this.boardType = boardType;
+            this.firmwareVersion = firmwareVersion;
+            this.protocolVersion = protocolVersion;
+            this.capabilities = capabilities;
+        }
+
+        @Override
+        public String toString() {
+            return displayName + " (" + host + ")";
+        }
+    }
 
     interface Listener {
         void onOpen(Connection connection);
@@ -233,6 +274,30 @@ final class AndroidWiFiTransport {
         connection.attachWebSocket(webSocket);
     }
 
+    static DiscoveredDevice discoveredDevice(String instanceName, String hostName, int port, Map<String, String> metadata) {
+        String host = normalizeBonjourHost(firstNonEmpty(metadata != null ? metadata.get("host") : null, hostName, instanceName));
+        if (host == null) {
+            return null;
+        }
+
+        int safePort = isValidPort(port) ? port : DEFAULT_PORT;
+        List<String> capabilities = capabilities(metadata != null ? metadata.get("cap") : null);
+        return new DiscoveredDevice(
+                sessionId(host + ":" + safePort),
+                firstNonEmpty(instanceName, host),
+                host,
+                safePort,
+                normalizedBoardType(metadata != null ? metadata.get("board") : null),
+                nonEmpty(metadata != null ? metadata.get("fw") : null),
+                firstNonEmpty(nonEmpty(metadata != null ? metadata.get("proto") : null), "1"),
+                capabilities.isEmpty() ? Collections.singletonList("wifi") : capabilities
+        );
+    }
+
+    static String decodeTextAttribute(byte[] value) {
+        return value == null ? null : new String(value, StandardCharsets.UTF_8).trim();
+    }
+
     @Nullable
     static List<byte[]> provisioningCommands(String ssid, String password) {
         String trimmedSsid = ssid != null ? ssid.trim() : "";
@@ -320,6 +385,71 @@ final class AndroidWiFiTransport {
             return null;
         }
         return (response[8] & 0xFF) + "." + (response[9] & 0xFF) + "." + (response[10] & 0xFF) + "." + (response[11] & 0xFF);
+    }
+
+    private static String normalizeBonjourHost(String value) {
+        String host = nonEmpty(value);
+        if (host == null || host.matches(".*\\s+.*")) {
+            return null;
+        }
+        String lower = host.toLowerCase(Locale.US);
+        if (lower.endsWith(".local.")) {
+            host = host.substring(0, host.length() - 1);
+        } else if (!lower.endsWith(".local") && !host.matches("\\d+\\.\\d+\\.\\d+\\.\\d+")) {
+            host = host + ".local";
+        }
+        return isValidManualHost(host) ? host : null;
+    }
+
+    private static String normalizedBoardType(String value) {
+        String text = nonEmpty(value);
+        if (text == null) {
+            return null;
+        }
+        String lower = text.toLowerCase(Locale.US);
+        if ("esp32s3".equals(lower) || "esp32-s3".equals(lower)) {
+            return "esp32s3";
+        }
+        if ("esp32s2".equals(lower) || "esp32-s2".equals(lower)) {
+            return "esp32s2";
+        }
+        if ("esp32".equals(lower)) {
+            return "esp32";
+        }
+        return text;
+    }
+
+    private static List<String> capabilities(String value) {
+        String text = nonEmpty(value);
+        if (text == null) {
+            return Collections.emptyList();
+        }
+        List<String> result = new ArrayList<>();
+        for (String item : Arrays.asList(text.split(","))) {
+            String trimmed = item.trim().toLowerCase(Locale.US);
+            if (!trimmed.isEmpty()) {
+                result.add(trimmed);
+            }
+        }
+        return result;
+    }
+
+    private static String firstNonEmpty(String... values) {
+        if (values == null) {
+            return null;
+        }
+        for (String value : values) {
+            String text = nonEmpty(value);
+            if (text != null) {
+                return text;
+            }
+        }
+        return null;
+    }
+
+    private static String nonEmpty(String value) {
+        String text = value != null ? value.trim() : "";
+        return text.isEmpty() ? null : text;
     }
 
     private static String disconnectReasonText(int reason) {

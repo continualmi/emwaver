@@ -13,7 +13,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.junit.Test;
 
@@ -75,6 +77,28 @@ public class AndroidWiFiTransportTest {
         assertEquals(
                 "Wi-Fi is provisioned, station is online at 192.168.4.2 (idle, no disconnect reason); socket is idle; runtime is running.",
                 AndroidWiFiTransport.statusMessage(response));
+    }
+
+    @Test
+    public void discoveredDeviceNormalizesNsdRecord() {
+        Map<String, String> metadata = new HashMap<>();
+        metadata.put("host", "emwaver-a1b2");
+        metadata.put("board", "esp32-s3");
+        metadata.put("fw", "1.2");
+        metadata.put("proto", "1");
+        metadata.put("cap", "wifi,gpio");
+
+        AndroidWiFiTransport.DiscoveredDevice device = AndroidWiFiTransport.discoveredDevice("EMWaver-A1B2", null, 3922, metadata);
+
+        assertNotNull(device);
+        assertEquals("wifi:emwaver-a1b2.local:3922", device.id);
+        assertEquals("EMWaver-A1B2", device.displayName);
+        assertEquals("emwaver-a1b2.local", device.host);
+        assertEquals(3922, device.port);
+        assertEquals("esp32s3", device.boardType);
+        assertEquals("1.2", device.firmwareVersion);
+        assertEquals("1", device.protocolVersion);
+        assertEquals(Arrays.asList("wifi", "gpio"), device.capabilities);
     }
 
     private static void assertConnectionOwnsIsolatedSession(
