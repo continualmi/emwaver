@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Collections.Generic;
+using System.Linq;
 using System.Net.WebSockets;
 using System.Text;
 using System.Threading;
@@ -11,6 +13,7 @@ internal static class WindowsWiFiTransport
 {
     internal const string TransportName = "Wi-Fi";
     internal const int DefaultPort = 3922;
+    internal const string ServiceType = "_emwaver._tcp";
     private const byte WifiConfigOpcode = 0x0A;
     private const byte WifiBegin = 0x00;
     private const byte WifiField = 0x01;
@@ -22,6 +25,16 @@ internal static class WindowsWiFiTransport
     private const int CommandChunkBytes = 13;
     private const int MaxSsidBytes = 32;
     private const int MaxPasswordBytes = 64;
+
+    internal sealed record DiscoveredDevice(
+        string Id,
+        string DisplayName,
+        string Host,
+        int Port,
+        string? BoardType,
+        string? FirmwareVersion,
+        string? ProtocolVersion,
+        IReadOnlyList<string> Capabilities);
 
     internal sealed class Connection : ITransportDeviceConnection, IDisposable
     {
@@ -147,6 +160,55 @@ internal static class WindowsWiFiTransport
         return new Uri($"ws://{uriHost}:{port}/v1/ws");
     }
 
+    internal static DiscoveredDevice? DiscoveredDeviceFromDnsSd(
+        string instanceName,
+        string? hostName,
+        int port,
+        IReadOnlyDictionary<string, string>? metadata)
+    {
+        var host = NormalizeBonjourHost(metadata?.GetValueOrDefault("host") ?? hostName ?? instanceName);
+        if (host == null)
+        {
+            return null;
+        }
+
+        var safePort = IsValidPort(port) ? port : DefaultPort;
+        var capabilities = Capabilities(metadata?.GetValueOrDefault("cap"));
+        return new DiscoveredDevice(
+            SessionId($"{host}:{safePort}"),
+            string.IsNullOrWhiteSpace(instanceName) ? host : instanceName.Trim(),
+            host,
+            safePort,
+            NormalizeBoardType(metadata?.GetValueOrDefault("board")),
+            NonEmpty(metadata?.GetValueOrDefault("fw")),
+            NonEmpty(metadata?.GetValueOrDefault("proto")) ?? "1",
+            capabilities.Count > 0 ? capabilities : new[] { "wifi" });
+    }
+
+    internal static IReadOnlyDictionary<string, string> ParseTextAttributes(object? value)
+    {
+        var result = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (value is null)
+        {
+            return result;
+        }
+
+        if (value is IEnumerable<string> lines)
+        {
+            foreach (var line in lines)
+            {
+                AddTextAttribute(result, line);
+            }
+            return result;
+        }
+
+        if (value is string lineValue)
+        {
+            AddTextAttribute(result, lineValue);
+        }
+        return result;
+    }
+
     internal static async Task<Connection> OpenConnectionAsync(
         string host,
         int port,
@@ -259,6 +321,66 @@ internal static class WindowsWiFiTransport
             return null;
         }
         return $"{response[8]}.{response[9]}.{response[10]}.{response[11]}";
+    }
+
+    private static string? NormalizeBonjourHost(string? value)
+    {
+        var host = NonEmpty(value);
+        if (host == null || host.Any(char.IsWhiteSpace))
+        {
+            return null;
+        }
+        if (host.EndsWith(".local.", StringComparison.OrdinalIgnoreCase))
+        {
+            host = host[..^1];
+        }
+        else if (!host.EndsWith(".local", StringComparison.OrdinalIgnoreCase))
+        {
+            host += ".local";
+        }
+        return IsValidManualHost(host) ? host : null;
+    }
+
+    private static string? NormalizeBoardType(string? value)
+    {
+        var text = NonEmpty(value);
+        return text?.ToLowerInvariant() switch
+        {
+            "esp32s3" or "esp32-s3" => "esp32s3",
+            "esp32s2" or "esp32-s2" => "esp32s2",
+            "esp32" => "esp32",
+            _ => text,
+        };
+    }
+
+    private static string? NonEmpty(string? value)
+    {
+        var trimmed = value?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed;
+    }
+
+    private static IReadOnlyList<string> Capabilities(string? value)
+    {
+        return NonEmpty(value)?
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(item => item.ToLowerInvariant())
+            .Where(item => item.Length > 0)
+            .ToArray() ?? Array.Empty<string>();
+    }
+
+    private static void AddTextAttribute(IDictionary<string, string> result, string? line)
+    {
+        var text = NonEmpty(line);
+        if (text == null)
+        {
+            return;
+        }
+        var separator = text.IndexOf('=');
+        if (separator <= 0 || separator == text.Length - 1)
+        {
+            return;
+        }
+        result[text[..separator]] = text[(separator + 1)..];
     }
 
     private static string DisconnectReasonText(ushort reason)

@@ -18,6 +18,7 @@ public sealed partial class DevicePage : Page
         AppServices.FirmwareUpdater.AttachUiDispatcher(this.DispatcherQueue);
 
         PortsList.ItemsSource = AppServices.Device.AvailablePorts;
+        WiFiDiscoveredList.ItemsSource = AppServices.Device.WiFiDiscoveredDevices;
 
         AppServices.Device.PropertyChanged += OnStateChanged;
         AppServices.FirmwareUpdater.PropertyChanged += OnStateChanged;
@@ -116,6 +117,10 @@ public sealed partial class DevicePage : Page
         WiFiStatusButton.IsEnabled = device.IsConnected && !device.IsWiFiProvisioning;
         WiFiProvisionButton.Content = device.IsWiFiProvisioning ? "Provisioning" : "Send Wi-Fi Setup";
         WiFiProvisioningStatusText.Text = device.WiFiProvisioningStatus ?? string.Empty;
+        WiFiSearchButton.IsEnabled = !device.IsWiFiDiscovering;
+        WiFiStopSearchButton.IsEnabled = device.IsWiFiDiscovering;
+        WiFiConnectDiscoveredButton.IsEnabled = WiFiDiscoveredList.SelectedItem is WindowsWiFiTransport.DiscoveredDevice;
+        WiFiSearchButton.Content = device.IsWiFiDiscovering ? "Searching" : "Search";
 
         DevicesIntroText.Text = "Local devices.";
     }
@@ -195,6 +200,31 @@ public sealed partial class DevicePage : Page
             ? parsedPort
             : WindowsWiFiTransport.DefaultPort;
         await AppServices.Device.ConnectWiFiAsync(host, port);
+        UpdateUi();
+    }
+
+    private void OnSearchWiFiClick(object sender, RoutedEventArgs e)
+    {
+        AppServices.Device.StartWiFiDiscovery();
+        UpdateUi();
+    }
+
+    private void OnStopSearchWiFiClick(object sender, RoutedEventArgs e)
+    {
+        AppServices.Device.StopWiFiDiscovery();
+        UpdateUi();
+    }
+
+    private async void OnConnectDiscoveredWiFiClick(object sender, RoutedEventArgs e)
+    {
+        if (WiFiDiscoveredList.SelectedItem is not WindowsWiFiTransport.DiscoveredDevice device)
+        {
+            return;
+        }
+
+        WiFiHostBox.Text = device.Host;
+        WiFiPortBox.Text = device.Port.ToString();
+        await AppServices.Device.ConnectWiFiAsync(device.Host, device.Port);
         UpdateUi();
     }
 

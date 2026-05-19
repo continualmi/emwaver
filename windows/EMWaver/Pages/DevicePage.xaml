@@ -39,6 +39,12 @@
                     <TextBox x:Name="WiFiHostBox" Header="Wi-Fi host or IP" PlaceholderText="emwaver-a1b2.local or 192.168.4.2" />
                     <TextBox x:Name="WiFiPortBox" Header="Wi-Fi port" Text="3922" />
                     <Button Content="Connect Wi-Fi" Click="OnConnectWiFiClick" />
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="WiFiSearchButton" Content="Search" Click="OnSearchWiFiClick" />
+                        <Button x:Name="WiFiStopSearchButton" Content="Stop Search" Click="OnStopSearchWiFiClick" />
+                    </StackPanel>
+                    <ListView x:Name="WiFiDiscoveredList" SelectionMode="Single" DisplayMemberPath="DisplayName" MaxHeight="140" />
+                    <Button x:Name="WiFiConnectDiscoveredButton" Content="Connect Selected Wi-Fi" Click="OnConnectDiscoveredWiFiClick" />
                     <TextBox x:Name="WiFiSsidBox" Header="SSID" PlaceholderText="Network name" />
                     <PasswordBox x:Name="WiFiPasswordBox" Header="Wi-Fi password" />
                     <StackPanel Orientation="Horizontal" Spacing="8">

@@ -272,13 +272,13 @@
           ]
         },
         "windows": {
-          "status": "planned",
-          "reason": "Windows now exposes manual Wi-Fi runtime connection and local ESP32 SSID/password provisioning, but mDNS discovery remains planned.",
+          "status": "required",
           "evidence": [
             {
               "file": "windows/EMWaver/Pages/DevicePage.xaml",
               "contains": [
                 "Connect Wi-Fi",
+                "Connect Selected Wi-Fi",
                 "Send Wi-Fi Setup",
                 "Clear Setup"
               ]
@@ -286,9 +286,19 @@
             {
               "file": "windows/EMWaver/Services/WindowsWiFiTransport.cs",
               "contains": [
+                "ServiceType = \"_emwaver._tcp\"",
+                "DiscoveredDeviceFromDnsSd",
                 "ProvisioningCommands",
                 "ClearProvisioningCommand",
                 "StatusCommand"
+              ]
+            },
+            {
+              "file": "windows/EMWaver/Services/WindowsWiFiDiscovery.cs",
+              "contains": [
+                "DeviceInformation.CreateWatcher",
+                "System.Devices.Dnssd.ServiceName",
+                "System.Devices.Dnssd.TextAttributes"
               ]
             }
           ]

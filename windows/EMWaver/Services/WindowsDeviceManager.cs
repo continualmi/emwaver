@@ -34,6 +34,8 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     }
 
     public ObservableCollection<DevicePort> AvailablePorts { get; } = new();
+    public ObservableCollection<WindowsWiFiTransport.DiscoveredDevice> WiFiDiscoveredDevices { get; } = new();
+    private readonly WindowsWiFiDiscovery _wifiDiscovery = new();
 
     private DevicePort? _connectedPort;
     public DevicePort? ConnectedPort
@@ -159,6 +161,20 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             if (_isWiFiProvisioning != value)
             {
                 _isWiFiProvisioning = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+
+    private bool _isWiFiDiscovering;
+    public bool IsWiFiDiscovering
+    {
+        get => _isWiFiDiscovering;
+        private set
+        {
+            if (_isWiFiDiscovering != value)
+            {
+                _isWiFiDiscovering = value;
                 OnPropertyChanged();
             }
         }
@@ -855,6 +871,27 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             LastErrorText = ex.Message;
             Disconnect();
         }
+    }
+
+    internal void StartWiFiDiscovery()
+    {
+        IsWiFiDiscovering = true;
+        _wifiDiscovery.Start(
+            devices => RunOnUi(() =>
+            {
+                WiFiDiscoveredDevices.Clear();
+                foreach (var device in devices)
+                {
+                    WiFiDiscoveredDevices.Add(device);
+                }
+            }),
+            message => RunOnUi(() => LastErrorText = message));
+    }
+
+    internal void StopWiFiDiscovery()
+    {
+        IsWiFiDiscovering = false;
+        _wifiDiscovery.Stop(clearDevices: false);
     }
 
     internal async Task ProvisionWiFiAsync(string ssid, string password)

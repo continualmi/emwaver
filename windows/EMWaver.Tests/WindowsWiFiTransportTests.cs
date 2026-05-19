@@ -69,6 +69,30 @@ public sealed class WindowsWiFiTransportTests
             WindowsWiFiTransport.StatusMessage(response));
     }
 
+    [Fact]
+    public void DiscoveredDeviceNormalizesDnsSdRecord()
+    {
+        var metadata = WindowsWiFiTransport.ParseTextAttributes(new[]
+        {
+            "host=emwaver-a1b2",
+            "board=esp32-s3",
+            "fw=1.2",
+            "proto=1",
+            "cap=wifi,gpio",
+        });
+        var device = WindowsWiFiTransport.DiscoveredDeviceFromDnsSd("EMWaver-A1B2", null, 3922, metadata);
+
+        Assert.NotNull(device);
+        Assert.Equal("wifi:emwaver-a1b2.local:3922", device.Id);
+        Assert.Equal("EMWaver-A1B2", device.DisplayName);
+        Assert.Equal("emwaver-a1b2.local", device.Host);
+        Assert.Equal(3922, device.Port);
+        Assert.Equal("esp32s3", device.BoardType);
+        Assert.Equal("1.2", device.FirmwareVersion);
+        Assert.Equal("1", device.ProtocolVersion);
+        Assert.Equal(new[] { "wifi", "gpio" }, device.Capabilities);
+    }
+
     private static void AssertConnectionOwnsIsolatedSession(
         ITransportDeviceConnection connection,
         string expectedSessionId,
