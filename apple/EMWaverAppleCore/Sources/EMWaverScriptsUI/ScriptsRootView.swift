@@ -113,8 +113,8 @@ public struct ScriptsRootView: View {
     @State private var pendingScriptPreviewId: String?
     @State private var showingSwitchScriptConfirmation = false
 
-    #if os(macOS)
     @State private var showingAgentPanel = false
+    #if os(macOS)
     @State private var agentPanelWidth: CGFloat = 380
     #endif
 
@@ -268,6 +268,40 @@ public struct ScriptsRootView: View {
         .sheet(item: $namePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
+        #if !os(macOS)
+        .sheet(isPresented: $showingAgentPanel) {
+            NavigationStack {
+                AgentChatPanelView(
+                    viewModel: agentViewModel,
+                    agentEnabled: agentEnabled,
+                    onRequestUpgrade: onRequestAgentUpgrade
+                )
+                .navigationTitle("Agent")
+                #if canImport(UIKit)
+                .navigationBarTitleDisplayMode(.inline)
+                #endif
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("Close") {
+                            showingAgentPanel = false
+                        }
+                    }
+
+                    ToolbarItem(placement: .primaryAction) {
+                        Menu {
+                            agentConversationMenuItems
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                }
+            }
+            #if canImport(UIKit)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            #endif
+        }
+        #endif
         .sheet(item: $signalRenamePrompt) { prompt in
             NamePromptSheet(prompt: prompt)
         }
@@ -1452,6 +1486,17 @@ public struct ScriptsRootView: View {
                 }
             }
         }
+        #else
+        if !showingEditor {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingAgentPanel = true
+                } label: {
+                    Image(systemName: "sparkles")
+                }
+                .accessibilityLabel("Show Agent")
+            }
+        }
         #endif
 
         if showingEditor {
@@ -1539,47 +1584,10 @@ public struct ScriptsRootView: View {
                         Button("Settings…") { openSettings() }
                     }
 
-                    #if os(macOS)
                     if showingAgentPanel {
                         Divider()
-
-                        Button {
-                            agentViewModel.newConversation()
-                        } label: {
-                            Label("New Agent Chat", systemImage: "plus.message")
-                        }
-
-                        if !agentViewModel.conversations.isEmpty {
-                            ForEach(agentViewModel.conversations) { conv in
-                                Button {
-                                    agentViewModel.selectConversation(conv.id)
-                                } label: {
-                                    HStack {
-                                        Text(conv.title)
-                                        if agentViewModel.selectedConversationId == conv.id {
-                                            Spacer()
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-
-                            if let selected = agentViewModel.selectedConversationId {
-                                Button(role: .destructive) {
-                                    agentViewModel.deleteConversation(selected)
-                                } label: {
-                                    Label("Delete Agent Chat", systemImage: "trash")
-                                }
-                            }
-                        }
-
-                        Button {
-                            agentViewModel.clear()
-                        } label: {
-                            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
-                        }
+                        agentConversationMenuItems
                     }
-                    #endif
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
@@ -1608,51 +1616,53 @@ public struct ScriptsRootView: View {
                         }
                     }
 
-                    #if os(macOS)
                     if showingAgentPanel {
                         Divider()
-
-                        Button {
-                            agentViewModel.newConversation()
-                        } label: {
-                            Label("New Agent Chat", systemImage: "plus.message")
-                        }
-
-                        if !agentViewModel.conversations.isEmpty {
-                            ForEach(agentViewModel.conversations) { conv in
-                                Button {
-                                    agentViewModel.selectConversation(conv.id)
-                                } label: {
-                                    HStack {
-                                        Text(conv.title)
-                                        if agentViewModel.selectedConversationId == conv.id {
-                                            Spacer()
-                                            Image(systemName: "checkmark")
-                                        }
-                                    }
-                                }
-                            }
-
-                            if let selected = agentViewModel.selectedConversationId {
-                                Button(role: .destructive) {
-                                    agentViewModel.deleteConversation(selected)
-                                } label: {
-                                    Label("Delete Agent Chat", systemImage: "trash")
-                                }
-                            }
-                        }
-
-                        Button {
-                            agentViewModel.clear()
-                        } label: {
-                            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
-                        }
+                        agentConversationMenuItems
                     }
-                    #endif
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
             }
+        }
+    }
+
+    @ViewBuilder
+    private var agentConversationMenuItems: some View {
+        Button {
+            agentViewModel.newConversation()
+        } label: {
+            Label("New Agent Chat", systemImage: "plus.message")
+        }
+
+        if !agentViewModel.conversations.isEmpty {
+            ForEach(agentViewModel.conversations) { conv in
+                Button {
+                    agentViewModel.selectConversation(conv.id)
+                } label: {
+                    HStack {
+                        Text(conv.title)
+                        if agentViewModel.selectedConversationId == conv.id {
+                            Spacer()
+                            Image(systemName: "checkmark")
+                        }
+                    }
+                }
+            }
+
+            if let selected = agentViewModel.selectedConversationId {
+                Button(role: .destructive) {
+                    agentViewModel.deleteConversation(selected)
+                } label: {
+                    Label("Delete Agent Chat", systemImage: "trash")
+                }
+            }
+        }
+
+        Button {
+            agentViewModel.clear()
+        } label: {
+            Label("Clear Agent Messages", systemImage: "text.badge.xmark")
         }
     }
 

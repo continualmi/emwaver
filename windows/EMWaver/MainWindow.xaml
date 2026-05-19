@@ -132,7 +132,7 @@
 
                     <AppBarSeparator />
 
-                    <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="ELM" Click="OnScriptAgentToggleClick">
+                    <AppBarToggleButton x:Name="ScriptAgentToggleButton" Label="Agent" Click="OnScriptAgentToggleClick">
                         <AppBarToggleButton.Icon>
                             <SymbolIcon Symbol="Message" />
                         </AppBarToggleButton.Icon>

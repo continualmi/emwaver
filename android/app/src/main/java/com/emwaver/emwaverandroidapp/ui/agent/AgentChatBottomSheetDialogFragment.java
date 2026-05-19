@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.view.inputmethod.EditorInfo;
 import android.widget.EditText;
 import android.widget.ImageButton;
+import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -40,6 +41,7 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
     private MaterialButton conversationsButton;
     private MaterialButton newButton;
     private android.widget.TextView status;
+    private LinearLayout suggestions;
 
     private MessagesAdapter adapter;
 
@@ -66,6 +68,7 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         conversationsButton = view.findViewById(R.id.agent_chat_conversations);
         newButton = view.findViewById(R.id.agent_chat_new);
         status = view.findViewById(R.id.agent_chat_status);
+        suggestions = view.findViewById(R.id.agent_chat_suggestions);
 
         adapter = new MessagesAdapter();
         recyclerView.setLayoutManager(new LinearLayoutManager(requireContext()));
@@ -73,6 +76,9 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
 
         viewModel.getMessages().observe(getViewLifecycleOwner(), messages -> {
             adapter.setMessages(messages);
+            if (suggestions != null) {
+                suggestions.setVisibility(messages == null || messages.isEmpty() ? View.VISIBLE : View.GONE);
+            }
             if (messages != null && !messages.isEmpty()) {
                 recyclerView.scrollToPosition(messages.size() - 1);
             }
@@ -127,8 +133,26 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         if (conversationsButton != null) {
             conversationsButton.setOnClickListener(v -> showConversationsPicker());
         }
+        bindSuggestion(view, R.id.agent_suggestion_usb);
+        bindSuggestion(view, R.id.agent_suggestion_script);
+        bindSuggestion(view, R.id.agent_suggestion_gpio);
+        bindSuggestion(view, R.id.agent_suggestion_ir);
 
         viewModel.bootstrap();
+    }
+
+    private void bindSuggestion(@NonNull View root, int buttonId) {
+        MaterialButton button = root.findViewById(buttonId);
+        if (button == null) {
+            return;
+        }
+        button.setOnClickListener(v -> {
+            if (input != null) {
+                input.setText(button.getText());
+                input.setSelection(input.getText() != null ? input.getText().length() : 0);
+                input.requestFocus();
+            }
+        });
     }
 
     private void showConversationsPicker() {

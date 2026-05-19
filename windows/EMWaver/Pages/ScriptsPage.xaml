@@ -235,7 +235,7 @@
                     PointerReleased="OnAgentSplitterPointerReleased"
                     PointerCanceled="OnAgentSplitterPointerReleased" />
 
-            <!-- ELM pane -->
+            <!-- Agent pane -->
             <Grid Grid.Column="3" Margin="12,0,0,0">
                 <Border
                     x:Name="AgentPane"
@@ -261,16 +261,16 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
 
-                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="ELM" FontWeight="SemiBold" /></StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="Agent" FontWeight="SemiBold" /></StackPanel>
 
-                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center" ToolTipService.ToolTip="What is ELM?">
+                                <Button Grid.Column="1" Padding="2" MinWidth="22" Height="22" VerticalAlignment="Center" ToolTipService.ToolTip="What is the Agent?">
                                     <FontIcon Glyph="&#xE946;" FontSize="14" />
                                     <Button.Flyout>
                                         <Flyout Placement="Bottom">
                                             <StackPanel Spacing="8" MaxWidth="280" Padding="4">
-                                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="ELM" FontWeight="SemiBold" /></StackPanel>
-                                                <TextBlock Text="Electronics Language Model" Opacity="0.8" />
-                                                <TextBlock Text="An AI language model trained to control EMWaver and help with electronics workflows."
+                                                <StackPanel Orientation="Horizontal" Spacing="6"><FontIcon Glyph="&#xE945;" /><TextBlock Text="Agent" FontWeight="SemiBold" /></StackPanel>
+                                                <TextBlock Text="EMWaver Agent" Opacity="0.8" />
+                                                <TextBlock Text="An AI assistant that helps write, explain, debug, and improve local EMWaver JavaScript scripts."
                                                            TextWrapping="Wrap"
                                                            Opacity="0.8" />
                                             </StackPanel>

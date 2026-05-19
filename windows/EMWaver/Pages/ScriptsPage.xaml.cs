@@ -46,7 +46,7 @@ public sealed partial class ScriptsPage : Page
         }
 
         public bool IsUser => string.Equals(Role, "You", StringComparison.OrdinalIgnoreCase);
-        public bool IsAssistant => string.Equals(Role, "ELM", StringComparison.OrdinalIgnoreCase);
+        public bool IsAssistant => string.Equals(Role, "Agent", StringComparison.OrdinalIgnoreCase);
         public bool IsTool => string.Equals(Role, "Tool", StringComparison.OrdinalIgnoreCase);
 
         public string RoleLabel => IsUser ? "You" : (IsTool ? "Tool" : "Agent");
@@ -1088,7 +1088,7 @@ public sealed partial class ScriptsPage : Page
         ScrollAgentMessagesToBottom();
 
         // Placeholder row for streaming.
-        var placeholder = new AgentMessageRow("ELM", "");
+        var placeholder = new AgentMessageRow("Agent", "");
         _agentMessages.Add(placeholder);
         ScrollAgentMessagesToBottom();
 
@@ -1214,7 +1214,7 @@ public sealed partial class ScriptsPage : Page
             foreach (var message in messages)
             {
                 _agentMessages.Add(new AgentMessageRow(
-                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "ELM",
+                    string.Equals(message.Role, "user", StringComparison.OrdinalIgnoreCase) ? "You" : "Agent",
                     message.Content));
             }
             SetAgentStatusText("");
@@ -1267,9 +1267,9 @@ public sealed partial class ScriptsPage : Page
     {
         for (var i = _agentMessages.Count - 1; i >= 0; i--)
         {
-            if (_agentMessages[i].Role == "ELM")
+            if (_agentMessages[i].Role == "Agent")
             {
-                _agentMessages[i] = new AgentMessageRow("ELM", text);
+                _agentMessages[i] = new AgentMessageRow("Agent", text);
                 ScrollAgentMessagesToBottom();
                 return;
             }
