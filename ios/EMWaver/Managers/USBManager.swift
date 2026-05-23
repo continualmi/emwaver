@@ -1062,6 +1062,8 @@ final class USBManager: NSObject, ObservableObject {
             self.isConnected = true
             self.lastErrorText = nil
         }
+        return true
+    }
 
     private func disconnectInternal() {
         cancelHeartbeat()
