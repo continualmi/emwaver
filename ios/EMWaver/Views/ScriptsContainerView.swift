@@ -198,7 +198,6 @@ struct ScriptsContainerView: View {
     @EnvironmentObject private var auth: AuthenticationManager
     @EnvironmentObject private var hostSessions: HostSessionManager
     @StateObject private var scriptSessions = IOSScriptSessionManager()
-    @State private var isFirmwareSheetPresented = false
     @State private var isWiFiConnectPresented = false
     @State private var isWiFiSetupPresented = false
     @State private var wifiHost = ""
@@ -308,13 +307,6 @@ struct ScriptsContainerView: View {
                     }
 
                     ToolbarItemGroup(placement: .navigationBarTrailing) {
-                        Button {
-                            isFirmwareSheetPresented = true
-                        } label: {
-                            Image(systemName: "arrow.triangle.2.circlepath")
-                        }
-                        .accessibilityLabel("Firmware")
-
                         Menu {
                             if auth.hasSavedKey {
                                 Text(auth.userLabel)
@@ -341,11 +333,6 @@ struct ScriptsContainerView: View {
         .sheet(isPresented: $auth.isSignInSheetPresented) {
             SignInSheet()
                 .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
-        .sheet(isPresented: $isFirmwareSheetPresented) {
-            FirmwareUpdateSheet(device: bleManager, targetLabel: selectedDeviceLabel)
-                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
         }
         .sheet(isPresented: $isWiFiSetupPresented) {
