@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transport Session Lock Plan — macOS &amp; Android</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #17212f;
+      --muted: #637187;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --accent: #1a5fb4;
+      --ok: #2c7a4b;
+      --err: #ad3434;
+      --warn: #e5a412;
+      --shadow: 0 2px 8px rgba(23,33,47,0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e4eaf3; --muted: #8a99b4; --paper: #0e141c;
+        --panel: #161e2b; --line: #252e3d; --shadow: 0 2px 12px rgba(0,0,0,0.32);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink); background: var(--paper); line-height: 1.52;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 48px 24px 72px; }
+
+    h1 { font-size: 28px; font-weight: 760; margin: 0 0 6px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 48px 0 14px; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+    h3 { font-size: 17px; font-weight: 680; margin: 32px 0 10px; }
+    p, li { font-size: 15px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+
+    pre {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      padding: 16px 20px; overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      font-size: 13px; line-height: 1.6; margin: 0 0 24px;
+    }
+    code { font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace; font-size: 13px; }
+
+    table {
+      width: 100%; border-collapse: collapse; margin: 0 0 28px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      overflow: hidden; box-shadow: var(--shadow);
+    }
+    th, td { text-align: left; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--line); }
+    th { font-weight: 680; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    td { color: var(--ink); }
+
+    .callout {
+      border-left: 4px solid var(--accent); background: var(--panel);
+      padding: 14px 18px; margin: 0 0 24px; border-radius: 0 8px 8px 0; box-shadow: var(--shadow);
+    }
+    .callout.warn { border-color: var(--warn); }
+    .callout.err { border-color: var(--err); }
+    .callout.ok { border-color: var(--ok); }
+    .callout h4 { margin: 0 0 4px; font-size: 14px; font-weight: 680; }
+    .callout p, .callout li { margin: 4px 0; font-size: 14px; }
+
+    hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+
+    .seq {
+      margin: 24px 0 36px;
+      display: grid;
+      grid-template-columns: 22px 1fr 1fr 1fr 1fr;
+      gap: 0; font-size: 13px; line-height: 1.5;
+    }
+    .seq-header { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0 8px 10px; }
+    .seq-step { grid-column: 1; color: var(--muted); font-size: 11px; text-align: right; padding: 3px 10px 3px 0; }
+    .seq-cell { padding: 3px 10px; border-left: 1px solid var(--line); white-space: nowrap; }
+    .seq-arrow { color: var(--accent); font-weight: 700; }
+    .seq-ok { color: var(--ok); }
+    .seq-err { color: var(--err); }
+    .seq-warn { color: var(--warn); }
+
+    .phase-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 4px;
+      font-size: 12px; font-weight: 680; margin-right: 8px;
+    }
+    .phase-badge.macos { background: #0071e3; color: white; }
+    .phase-badge.android { background: #34a853; color: white; }
+    .phase-badge.both { background: #7c3aed; color: white; }
+  </style>
+</head>
+<body>
+
+<main>
+
+<h1>Transport Session Lock Plan</h1>
+<p class="sub">
+  Fixing macOS predicate fragility and implementing Android transport sessions.<br>
+  One serial command bus, one lock, zero races.
+</p>
+
+<!-- ================================================================== -->
+<h2>1. The Problem</h2>
+
+<h3>1.1 macOS: Predicate Routing Is Flimsy</h3>
+
+<p>
+  The heartbeat runs on a background <code>DispatchQueue.global(qos: .utility)</code> thread
+  while script SPI/GPIO commands run on the MIDI queue. Both call <code>sendCommandInternal()</code>
+  concurrently. To keep responses from being stolen, macOS uses a <strong>predicate</strong>:
+</p>
+
+<pre>// Heartbeat send:
+sendCommandInternal(
+    heartbeatData,
+    responsePredicate: { lane in
+        lane.first == 0x80 || lane.first == 0x81 || lane.first == 0x82
+    }
+)
+
+// SPI send:
+sendCommandInternal(
+    spiData,
+    responsePredicate: nil       // accepts anything
+)</pre>
+
+<p>
+  This fails catastrophically when:
+</p>
+
+<ol>
+  <li>Script sends SPI_XFER. SPI waiter's predicate is nil → accepts <strong>any</strong> response lane.</li>
+  <li>Heartbeat fires on background thread, sends <code>[0x0B, 0x03, source]</code>.</li>
+  <li>Both commands go out to the device (order depends on thread scheduling).</li>
+  <li>Device responds to heartbeat with <code>[0x80]</code> — first byte is 0x80.</li>
+  <li>SPI waiter's predicate (nil) matches. <strong>SPI waiter consumes the heartbeat OK.</strong></li>
+  <li>Device responds to SPI with <code>[0x80, rxByte1, rxByte2]</code>.</li>
+  <li>Heartbeat waiter's predicate matches. <strong>Heartbeat waiter consumes the SPI data.</strong></li>
+  <li>Script gets garbage or wrong-length response. Breaks.</li>
+</ol>
+
+<div class="callout err">
+  <h4>&#9888; Predicate is defense-by-coincidence</h4>
+  <p>
+    It only works if responses arrive in exactly the same order as sent, AND responses are
+    distinguishable. SPI responses start with <code>0x80</code> — exactly what the heartbeat
+    predicate accepts. It's broken by construction.
+  </p>
+</div>
+
+<h3>1.2 Android: No Session At All</h3>
+
+<p>
+  The Android app never sends <code>EMW_OP_TRANSPORT_SESSION</code>. BLE/WiFi-connected ESP32
+  devices reject all operational commands with <strong>error 130</strong> (BUSY).
+  This is the bug the user is hitting with cc1101.js.
+</p>
+
+<h3>1.3 Android: No Response Routing Either</h3>
+
+<p>
+  <code>DeviceBufferSession.awaitCommandResponse()</code> is raw polling — it grabs the next
+  <code>&gt;= 0x80</code> status packet with no filtering:
+</p>
+
+<pre>// Android — no predicate, just grabs next 0x80+ packet
+public byte[] awaitCommandResponse(int timeoutMs) {
+    while (...) {
+        byte[] pkt = nextRxPacketData();
+        if (pkt != null && (pkt[0] & 0xFF) >= 0x80) {
+            return Arrays.copyOf(pkt, PACKET_SIZE_BYTES);
+        }
+    }
+}</pre>
+
+<p>
+  Even if we add transport session to Android without fixing this, two concurrent
+  <code>sendCommand</code> callers (script + heartbeat) would steal each other's responses.
+</p>
+
+<!-- ================================================================== -->
+<h2>2. The Solution: Single Serial Command Bus</h2>
+
+<p>
+  <strong>Principle:</strong> Only one command+response cycle can be in flight at any time.
+  A single lock serializes all <code>sendCommand</code> calls — script and heartbeat alike.
+  The heartbeat simply acquires the same lock and waits its turn.
+</p>
+
+<h3>2.1 Before (macOS — concurrent)</h3>
+
+<div class="seq">
+  <div class="seq-header" style="grid-column:1">#</div>
+  <div class="seq-header">Main thread (MIDI queue)</div>
+  <div class="seq-header">Background thread (utility)</div>
+  <div class="seq-header">Device</div>
+  <div class="seq-header">Issue</div>
+
+  <div class="seq-step">1</div>
+  <div class="seq-cell seq-arrow">&#10132; SPI_XFER</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell">&#8592; receives SPI</div>
+  <div class="seq-cell"></div>
+
+  <div class="seq-step">2</div>
+  <div class="seq-cell">waiting for SPI resp</div>
+  <div class="seq-cell seq-arrow">&#10132; HEARTBEAT</div>
+  <div class="seq-cell">&#8592; receives HB</div>
+  <div class="seq-cell seq-warn">Two commands in flight</div>
+
+  <div class="seq-step">3</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell seq-arrow">&#10132; OK (HB), &#8594; SPI data</div>
+  <div class="seq-cell"></div>
+
+  <div class="seq-step">4</div>
+  <div class="seq-cell seq-err">consumes HB OK?</div>
+  <div class="seq-cell seq-err">consumes SPI data?</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell seq-err">Predicate race — who gets what?</div>
+</div>
+
+<h3>2.2 After (lock — serialized)</h3>
+
+<div class="seq">
+  <div class="seq-header" style="grid-column:1">#</div>
+  <div class="seq-header">Thread A (script)</div>
+  <div class="seq-header">Thread B (heartbeat)</div>
+  <div class="seq-header">Device</div>
+  <div class="seq-header">Lock state</div>
+
+  <div class="seq-step">1</div>
+  <div class="seq-cell seq-arrow">acquires lock &#10132; SPI_XFER</div>
+  <div class="seq-cell">blocks on lock</div>
+  <div class="seq-cell">&#8592; receives SPI</div>
+  <div class="seq-cell">LOCKED (A)</div>
+
+  <div class="seq-step">2</div>
+  <div class="seq-cell seq-arrow">&#10129; SPI response</div>
+  <div class="seq-cell">(waiting)</div>
+  <div class="seq-cell seq-arrow">&#10132; SPI data</div>
+  <div class="seq-cell">LOCKED (A)</div>
+
+  <div class="seq-step">3</div>
+  <div class="seq-cell">releases lock</div>
+  <div class="seq-cell seq-arrow">acquires lock &#10132; HEARTBEAT</div>
+  <div class="seq-cell">&#8592; receives HB</div>
+  <div class="seq-cell seq-ok">LOCKED (B)</div>
+
+  <div class="seq-step">4</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell seq-arrow">&#10129; OK</div>
+  <div class="seq-cell seq-arrow">&#10132; OK</div>
+  <div class="seq-cell seq-ok">LOCKED (B)</div>
+
+  <div class="seq-step">5</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell">releases lock</div>
+  <div class="seq-cell"></div>
+  <div class="seq-cell seq-ok">FREE</div>
+</div>
+
+<p><strong>Result:</strong> No response routing ambiguity. Each command owns the bus from send through response. Responses can never end up at the wrong waiter.</p>
+
+<!-- ================================================================== -->
+<h2>3. Lock Placement</h2>
+
+<p>
+  The lock wraps the entire synchronous <code>sendCommand</code> body — prepare, send, wait:
+</p>
+
+<pre>// Pseudocode — both platforms
+sendCommand(command, timeout):
+    lock.acquire()
+    try:
+        prepareResponseWaiter()
+        writePacket(command)
+        response = awaitResponse(timeout)
+        return response
+    finally:
+        lock.release()
+
+// Heartbeat — same lock
+sendHeartbeat():
+    lock.acquire()
+    try:
+        prepareResponseWaiter()
+        writePacket([0x0B, 0x03, source])
+        response = awaitResponse(1000)
+        if response[0] != 0x80:
+            handleSessionExpiry()
+    finally:
+        lock.release()</pre>
+
+<h3>3.1 macOS lock location</h3>
+
+<p>Add a <code>DispatchSemaphore(value: 1)</code> or serial <code>DispatchQueue</code> inside
+<code>MacUSBManager.sendCommandInternal()</code>. The heartbeat already routes through
+<code>sendTransportSessionCommandInternal</code> → <code>sendCommandInternal</code>, so it
+automatically acquires the same lock.</p>
+
+<h3>3.2 Android lock location</h3>
+
+<p>Add a <code>private final Object commandLock = new Object()</code> to <code>USBService</code>.
+Wrap <code>sendCommand()</code> and the heartbeat send in <code>synchronized (commandLock)</code>.</p>
+
+<!-- ================================================================== -->
+<h2>4. Implementation Plan</h2>
+
+<h3>4.1 Phase 1 — Android Transport Session <span class="phase-badge android">Android</span></h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>USBService.java</code></td>
+      <td>
+        Add <code>commandLock</code> and wrap <code>sendCommand()</code> body.<br>
+        Add transport session constants (0x0B, 0x01, 0x02, 0x03).<br>
+        Add <code>beginTransportSession(deviceId)</code> — sends CONNECT, starts heartbeat.<br>
+        Add <code>endTransportSession(deviceId)</code> — stops heartbeat, sends DISCONNECT.<br>
+        Add <code>requiresTransportSession(deviceId)</code> — true for BLE/WiFi/ESP32-USB.<br>
+        Add heartbeat handler map + <code>HandlerThread</code> for timer.
+      </td>
+    </tr>
+    <tr>
+      <td><code>DeviceConnectionService.java</code></td>
+      <td>
+        Add default methods: <code>beginTransportSession</code>, <code>endTransportSession</code>,
+        <code>requiresTransportSession</code> (no-ops for non-USBService implementors).
+      </td>
+    </tr>
+    <tr>
+      <td><code>ScriptDeviceConnection.java</code></td>
+      <td>
+        Add convenience pass-through to <code>DeviceConnectionService</code>.
+      </td>
+    </tr>
+    <tr>
+      <td><code>ScriptsFragment.java</code></td>
+      <td>
+        In <code>renderScript()</code>: call <code>beginTransportSession(deviceId)</code>
+        before <code>scriptEngine.execute()</code>.<br>
+        In <code>stopRunningScript()</code>: call <code>endTransportSession(deviceId)</code>.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.2 Phase 2 — macOS Lock Migration <span class="phase-badge macos">macOS</span></h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>MacUSBManager.swift</code></td>
+      <td>
+        Add <code>private let commandSemaphore = DispatchSemaphore(value: 1)</code>.<br>
+        Wrap <code>sendCommandInternal()</code> body in <code>commandSemaphore.wait() / .signal()</code>.<br>
+        Remove predicate from heartbeat's <code>sendTransportSessionCommandInternal()</code>
+        (or keep as no-op — the lock makes it unnecessary).<br>
+        Heartbeat's <code>sendCommandInternal</code> call automatically serializes.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 Why macOS doesn't need more changes</h3>
+
+<p>
+  The heartbeat already calls <code>sendTransportSessionCommandInternal</code> → <code>sendCommandInternal</code>.
+  Once <code>sendCommandInternal</code> is locked, the heartbeat automatically joins the serial bus.
+  The predicate can stay or be removed — the lock makes it redundant.
+</p>
+
+<!-- ================================================================== -->
+<h2>5. Heartbeat Design</h2>
+
+<h3>5.1 Timer lifecyle</h3>
+
+<table>
+  <thead>
+    <tr><th>Platform</th><th>Timer mechanism</th><th>Interval</th><th>Cancel trigger</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>macOS (existing)</td>
+      <td><code>DispatchSource.makeTimerSource</code> on <code>midiQueue</code></td>
+      <td>2.0s</td>
+      <td><code>endScriptTransportSession</code> or disconnect</td>
+    </tr>
+    <tr>
+      <td>Android (new)</td>
+      <td><code>Handler.postDelayed</code> on <code>HandlerThread</code></td>
+      <td>2.0s</td>
+      <td><code>endTransportSession</code> or disconnect</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.2 Heartbeat retry / session expiry</h3>
+
+<p>
+  If a heartbeat response is not <code>0x80</code> (or times out), the session is considered
+  expired. The timer is cancelled, the session is cleared, and an error is surfaced. The next
+  operational command will get BUSY — same behavior as if no session existed.
+</p>
+
+<h3>5.3 Why the lock doesn't break the heartbeat</h3>
+
+<p>
+  The heartbeat fires every 2s. The firmware session timeout is 5s. A worst-case script command
+  takes &lt;2s (timeout). Even if the heartbeat is delayed behind a max-duration command for
+  the full 2s, it still fires well within the 5s window. No session expiry unless the device
+  is actually unreachable.
+</p>
+
+<!-- ================================================================== -->
+<h2>6. Discovery Commands — No Session Needed</h2>
+
+<p>
+  These opcodes are always allowed by the firmware even without a session, so they don't need
+  to wait for <code>beginTransportSession</code>:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Opcode</th><th>Value</th><th>Command</th><th>Called by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>VERSION</td><td>0x01</td><td>Firmware version</td><td><code>queryFirmwareVersionAsync()</code> on connect</td></tr>
+    <tr><td>BOARD_GET</td><td>0x09</td><td>Board type</td><td><code>queryBoardTypeHint()</code> on connect</td></tr>
+    <tr><td>HARDWARE_UID_GET</td><td>0x08</td><td>Hardware UID</td><td>Connect handshake</td></tr>
+    <tr><td>TRANSPORT_SESSION STATUS</td><td>0x0B, 0x00</td><td>Session query</td><td>Optional status check</td></tr>
+    <tr><td>TRANSPORT_SESSION CONNECT</td><td>0x0B, 0x01</td><td>Claim session</td><td><code>beginTransportSession()</code> — allowed without session</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Note: <code>TRANSPORT_SESSION CONNECT</code> is explicitly allowed by the firmware even
+  when <code>s_active_source == NONE</code>, so it can establish the first session.
+</p>
+
+<!-- ================================================================== -->
+<h2>7. Source Byte Mapping</h2>
+
+<table>
+  <thead>
+    <tr><th>Transport</th><th>Source byte</th><th>How firmware sets it</th><th>How client determines it</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>USB MIDI</td><td>0x01</td><td><code>usb.c</code> sets <code>cmd.source = 1</code></td><td>Any ESP32 board over USB → source 0x01</td></tr>
+    <tr><td>BLE</td><td>0x02</td><td><code>ble_server.c:177</code> sets <code>cmd.source = 2</code></td><td><code>activeTransport == BLE</code> → source 0x02</td></tr>
+    <tr><td>Wi-Fi</td><td>0x03</td><td><code>wifi_ws.c</code> sets <code>cmd.source = 3</code></td><td><code>activeTransport == WIFI</code> → source 0x03</td></tr>
+  </tbody>
+</table>
+
+<p>
+  The source byte in the session command payload (byte 2 of <code>[0x0B, sub, source]</code>)
+  must match what the transport layer stamps on <code>cmd.source</code>. The firmware rejects
+  mismatches.
+</p>
+
+<!-- ================================================================== -->
+<h2>8. Session Scope</h2>
+
+<div class="callout ok">
+  <h4>Session = script execution, not device connection</h4>
+  <p>
+    A session is established when a script starts running and released when it stops.
+    The device can be connected without a session — discovery commands still work.
+    Only operational commands (SPI, GPIO, ADC, sample, PWM, I2C, UART, transmit) require it.
+  </p>
+</div>
+
+<h3>8.1 Lifecycle</h3>
+
+<pre>
+1. Device connects (BLE/WiFi/USB)         → no session yet
+2. User hits Run                          → beginTransportSession()
+3. Script runs                            → operational commands flow through lock
+4. Heartbeat fires every 2s               → keeps firmware session alive (5s timeout)
+5. User hits Stop / script ends           → endTransportSession()
+6. DISCONNECT sent                        → session released
+7. Heartbeat timer cancelled              → no more heartbeat traffic
+</pre>
+
+<!-- ================================================================== -->
+<h2>9. Files Affected — Full Map</h2>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Platform</th><th>Change type</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>android/.../USBService.java</code></td><td>Android</td><td>Add lock, session methods, heartbeat timer</td></tr>
+    <tr><td><code>android/.../DeviceConnectionService.java</code></td><td>Android</td><td>Add interface defaults</td></tr>
+    <tr><td><code>android/.../scripts/ScriptDeviceConnection.java</code></td><td>Android</td><td>Add pass-through methods</td></tr>
+    <tr><td><code>android/.../ui/scripts/ScriptsFragment.java</code></td><td>Android</td><td>Wire begin/end around script execution</td></tr>
+    <tr><td><code>macos/.../MacUSBManager.swift</code></td><td>macOS</td><td>Add DispatchSemaphore around sendCommandInternal</td></tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>10. Risk Assessment</h2>
+
+<table>
+  <thead>
+    <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Lock blocks UI thread</td>
+      <td>Low</td>
+      <td>All <code>sendCommand</code> calls already happen on background threads (MIDI handler, BLE callback, script executor). No UI thread access.</td>
+    </tr>
+    <tr>
+      <td>Deadlock</td>
+      <td>Low</td>
+      <td>Single lock, no nested acquires. Lock is released in <code>finally</code> block even on timeout.</td>
+    </tr>
+    <tr>
+      <td>Heartbeat delayed past 5s timeout</td>
+      <td>Very low</td>
+      <td>Each command has max ~2s timeout. Heartbeat interval is 2s. Worst case: 2s command + heartbeat = 2s delay, well within 5s.</td>
+    </tr>
+    <tr>
+      <td>macOS predicate removal breaks existing behavior</td>
+      <td>None</td>
+      <td>Lock makes predicates redundant. They can stay or be removed — no behavior change.</td>
+    </tr>
+    <tr>
+      <td>STM32 boards break</td>
+      <td>None</td>
+      <td>STM32 firmware doesn't compile <code>transport_session.c</code>. Session commands get no response or error. <code>requiresTransportSession()</code> returns false for STM32.</td>
+    </tr>
+  </tbody>
+</table>
+
+</main>
+</body>
+</html>
