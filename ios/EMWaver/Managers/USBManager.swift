@@ -907,7 +907,10 @@ final class USBManager: NSObject, ObservableObject {
                 self.cancelHeartbeat()
                 return
             }
-            self.sendHeartbeat(deviceId: deviceId, source: source)
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                guard let self else { return }
+                self.sendHeartbeat(deviceId: deviceId, source: source)
+            }
         }
         heartbeatTimer = timer
         timer.resume()
@@ -916,13 +919,17 @@ final class USBManager: NSObject, ObservableObject {
     private func sendHeartbeat(deviceId: String, source: UInt8) {
         let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionHeartbeat, source])
         guard let response = sendCommand(cmd, timeout: 1000, deviceId: deviceId) else {
-            cancelHeartbeat()
-            setError("Transport session ended for selected device")
+            midiQueue.async { [weak self] in
+                self?.cancelHeartbeat()
+                self?.setError("Transport session ended for selected device")
+            }
             return
         }
         guard let status = response.first, status == Self.emwResponseOK else {
-            cancelHeartbeat()
-            setError("Transport session ended for selected device")
+            midiQueue.async { [weak self] in
+                self?.cancelHeartbeat()
+                self?.setError("Transport session ended for selected device")
+            }
             return
         }
     }
