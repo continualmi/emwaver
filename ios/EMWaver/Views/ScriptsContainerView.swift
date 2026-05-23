@@ -19,6 +19,8 @@ protocol IOSTargetedScriptDeviceBase: AnyObject {
     func sendPacket(_ data: Data, deviceId: String)
     func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data?
     func transmitBuffer(deviceId: String)
+    func beginTransportSession(deviceId: String) -> Bool
+    func endTransportSession(deviceId: String)
 }
 
 extension USBManager: IOSTargetedScriptDeviceBase {}
@@ -70,8 +72,18 @@ final class IOSScriptSessionManager: ObservableObject {
     }
 
     func run(_ request: ScriptsRootView.ScriptRunRequest, device: IOSTargetedScriptDeviceBase, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
-        let manager = ScriptPreviewManager()
         let deviceId = Self.normalizeDeviceId(device.currentScriptDeviceId())
+
+        guard device.beginTransportSession(deviceId: deviceId) else {
+            return ScriptsRootView.ScriptRunResult(
+                scriptInstanceId: "",
+                name: request.name,
+                running: false,
+                errorMessage: "Cannot run script: transport claim failed"
+            )
+        }
+
+        let manager = ScriptPreviewManager()
         manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
 
         let session = IOSScriptSession(
@@ -81,6 +93,7 @@ final class IOSScriptSessionManager: ObservableObject {
             scriptName: request.name,
             deviceLabel: deviceLabel.isEmpty ? "active device" : deviceLabel
         )
+        session.deviceBase = device
         session.cancellable = manager.objectWillChange
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -155,6 +168,7 @@ private final class IOSScriptSession {
     let scriptId: String
     let scriptName: String
     let deviceLabel: String
+    weak var deviceBase: IOSTargetedScriptDeviceBase?
     var cancellable: AnyCancellable?
 
     init(manager: ScriptPreviewManager, deviceId: String, scriptId: String, scriptName: String, deviceLabel: String) {
@@ -166,6 +180,7 @@ private final class IOSScriptSession {
     }
 
     func stop() {
+        deviceBase?.endTransportSession(deviceId: deviceId)
         manager.exitPreview()
     }
 }

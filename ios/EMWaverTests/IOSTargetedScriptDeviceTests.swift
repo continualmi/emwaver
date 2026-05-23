@@ -71,4 +71,11 @@ private final class FakeTargetedScriptDeviceBase: IOSTargetedScriptDeviceBase {
     func transmitBuffer(deviceId: String) {
         lastTransmitDeviceId = deviceId
     }
+
+    func beginTransportSession(deviceId: String) -> Bool {
+        true
+    }
+
+    func endTransportSession(deviceId: String) {
+    }
 }

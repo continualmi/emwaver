@@ -114,4 +114,11 @@ private final class FakeScriptSessionDevice: IOSTargetedScriptDeviceBase {
     }
 
     func transmitBuffer(deviceId: String) {}
+
+    func beginTransportSession(deviceId: String) -> Bool {
+        true
+    }
+
+    func endTransportSession(deviceId: String) {
+    }
 }

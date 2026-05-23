@@ -43,10 +43,15 @@ Current guidance:
 - `USBManager.swift`
 - `USBManager+ScriptDevice.swift`
 - `UsbMidiSysex.swift`
+- `DeviceBufferSession.swift`
+- `TransportDeviceConnectionState.swift`
+- `TransportDeviceSessionRegistry.swift`
 - `HostSessionManager.swift` (local script-status state only).
 
 Responsibilities:
-- local device communication over USB MIDI and ESP32 BLE,
+- local device communication over USB MIDI, ESP32 BLE, and ESP32 Wi-Fi,
+- transport session management: before script execution, iOS now claims the ESP32 firmware transport session with CONNECT (0x0B, 0x01), keeps it alive with a 2-second heartbeat (0x0B, 0x03) while the script runs, and releases it with DISCONNECT (0x0B, 0x02) when the script stops,
+- serial command bus: a `DispatchSemaphore` wraps `sendCommand` so the heartbeat and script commands serialize through a single lock, preventing predicate-response races,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
 
 The iOS transport keeps the historical `USBManager` API as the app-facing device facade. USB MIDI remains preferred when a wired CoreMIDI source/destination is available. When no wired device is found, the manager scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same EMWaver SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
@@ -56,7 +61,7 @@ iOS also supports a manual ESP32 Wi-Fi runtime connection through the firmware W
 ## 2.3 Views
 
 `ios/EMWaver/Views/`:
-- scripts container.
+- `ScriptsContainerView.swift` — script UI shell, device toolbar, Wi-Fi connect/setup sheets. Owns `IOSScriptSessionManager` which manages per-script sessions and wires transport session begin/end around script execution through the `IOSTargetedScriptDeviceBase` protocol.
 - `FirmwareUpdateSheet.swift` exposes the local firmware surface from the iOS
   toolbar.
 
@@ -170,6 +175,8 @@ After the workflow completes, finish the release in App Store Connect by selecti
 2. Keep transport behavior compatible with firmware protocol contracts.
 3. Keep auth/token handling and secure storage paths explicit and reviewed.
 4. Update tests when changing managers used by device/transport.
+5. Transport session begin/end must be called through `IOSScriptSessionManager.run()` / `IOSScriptSession.stop()`. Do not add transport session claims outside the script lifecycle.
+6. All `sendCommand` callers share the same `commandSemaphore`; do not bypass the locked `sendCommand` entry points for operational commands during a session.
 
 ---
 

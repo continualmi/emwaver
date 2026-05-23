@@ -66,7 +66,19 @@ final class USBManager: NSObject, ObservableObject {
     
     // Legacy constant alias for code using it (usually referring to the lane/packet size)
     private static let packetSizeBytes: Int = 18
-    
+
+    // Transport session opcodes
+    private static let emwOpTransportSession: UInt8 = 0x0B
+    private static let emwOpSessionConnect: UInt8 = 0x01
+    private static let emwOpSessionDisconnect: UInt8 = 0x02
+    private static let emwOpSessionHeartbeat: UInt8 = 0x03
+    private static let emwSourceUSB: UInt8 = 0x01
+    private static let emwSourceBLE: UInt8 = 0x02
+    private static let emwSourceWiFi: UInt8 = 0x03
+    private static let emwResponseOK: UInt8 = 0x80
+    private static let emwResponseBusy: UInt8 = 0x82
+    private static let sessionHeartbeatIntervalMs = 2000
+
     private static let log = Logger(subsystem: "com.emwaver", category: "device-transport")
 
     private enum ActiveTransport {
@@ -140,6 +152,12 @@ final class USBManager: NSObject, ObservableObject {
     private var totalBytesReceived: Int = 0
     private var firstPacketTimeMillis: TimeInterval = 0
     private var lastPacketReceivedTime: TimeInterval = 0
+
+    // Transport session
+    private let commandSemaphore = DispatchSemaphore(value: 1)
+    private var heartbeatTimer: DispatchSourceTimer?
+    private var heartbeatDeviceId: String?
+    private var connectedBoardType: String? = nil
 
     // MARK: - Init
 
@@ -757,6 +775,9 @@ final class USBManager: NSObject, ObservableObject {
 
     // Send a command and wait for response
     @objc func sendCommand(_ command: Data, timeout: Int) -> Data? {
+        commandSemaphore.wait()
+        defer { commandSemaphore.signal() }
+
         guard isConnected else {
             setError("Cannot send command: Not connected")
             return nil
@@ -775,6 +796,9 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
+        commandSemaphore.wait()
+        defer { commandSemaphore.signal() }
+
         guard isConnected else {
             setError("Cannot send command: Not connected")
             return nil
@@ -794,6 +818,122 @@ final class USBManager: NSObject, ObservableObject {
         return session.awaitCommandResponse(timeout: timeout) {
             isConnected
         }
+    }
+
+    // MARK: - Transport Session
+
+    func beginTransportSession(deviceId: String) -> Bool {
+        guard isConnected else {
+            setError("Cannot begin transport session: Not connected")
+            return false
+        }
+        guard requireActiveDeviceSession(deviceId: deviceId, operation: "beginTransportSession") else {
+            return false
+        }
+        guard requiresTransportSession(deviceId: deviceId) else {
+            return true
+        }
+        guard let source = transportSessionSource() else {
+            setError("Cannot begin transport session: Unsupported transport")
+            return false
+        }
+
+        let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionConnect, source])
+        guard let response = sendCommand(cmd, timeout: 1500, deviceId: deviceId) else {
+            setError("Transport session CONNECT timed out")
+            return false
+        }
+        guard let status = response.first, status == Self.emwResponseOK else {
+            if response.first == Self.emwResponseBusy {
+                setError("Device is busy with another transport session")
+            } else {
+                setError("Device rejected transport session command")
+            }
+            return false
+        }
+
+        startHeartbeat(deviceId: deviceId, source: source)
+        return true
+    }
+
+    func endTransportSession(deviceId: String) {
+        cancelHeartbeat()
+        guard isConnected else { return }
+        guard requireActiveDeviceSession(deviceId: deviceId, operation: "endTransportSession") else {
+            return
+        }
+        guard requiresTransportSession(deviceId: deviceId) else { return }
+        guard let source = transportSessionSource() else { return }
+
+        let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionDisconnect, source])
+        _ = sendCommand(cmd, timeout: 1000, deviceId: deviceId)
+    }
+
+    private func requiresTransportSession(deviceId: String) -> Bool {
+        if activeTransport == .ble || activeTransport == .wifi {
+            return true
+        }
+        if let boardType = connectedBoardType?.lowercased() {
+            return boardType.hasPrefix("esp32")
+        }
+        return false
+    }
+
+    private func transportSessionSource() -> UInt8? {
+        switch activeTransport {
+        case .usbMidi:
+            return Self.emwSourceUSB
+        case .ble:
+            return Self.emwSourceBLE
+        case .wifi:
+            return Self.emwSourceWiFi
+        case .none:
+            return nil
+        }
+    }
+
+    private func startHeartbeat(deviceId: String, source: UInt8) {
+        cancelHeartbeat()
+        heartbeatDeviceId = deviceId
+
+        let timer = DispatchSource.makeTimerSource(queue: midiQueue)
+        timer.schedule(
+            deadline: .now() + .milliseconds(Self.sessionHeartbeatIntervalMs),
+            repeating: .milliseconds(Self.sessionHeartbeatIntervalMs)
+        )
+        timer.setEventHandler { [weak self] in
+            guard let self else { return }
+            guard self.heartbeatDeviceId == deviceId else {
+                self.cancelHeartbeat()
+                return
+            }
+            self.sendHeartbeat(deviceId: deviceId, source: source)
+        }
+        heartbeatTimer = timer
+        timer.resume()
+    }
+
+    private func sendHeartbeat(deviceId: String, source: UInt8) {
+        let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionHeartbeat, source])
+        guard let response = sendCommand(cmd, timeout: 1000, deviceId: deviceId) else {
+            cancelHeartbeat()
+            setError("Transport session ended for selected device")
+            return
+        }
+        guard let status = response.first, status == Self.emwResponseOK else {
+            cancelHeartbeat()
+            setError("Transport session ended for selected device")
+            return
+        }
+    }
+
+    private func cancelHeartbeat() {
+        if let timer = heartbeatTimer {
+            timer.setEventHandler {}
+            timer.cancel()
+            heartbeatTimer = nil
+        }
+        heartbeatDeviceId = nil
     }
 
     // MARK: - Self-test (no adapter)
@@ -917,14 +1057,14 @@ final class USBManager: NSObject, ObservableObject {
         }
 
         DispatchQueue.main.async {
+            self.connectedBoardType = self.inferBoardType(from: connection.name)
             self.connectedPortName = connection.name
             self.isConnected = true
             self.lastErrorText = nil
         }
-        return true
-    }
 
     private func disconnectInternal() {
+        cancelHeartbeat()
         if let connection = usbMidiConnection {
             _ = connection.disconnect(inPort: inPort)
         }
@@ -944,6 +1084,7 @@ final class USBManager: NSObject, ObservableObject {
         withBufferQueueSync { activeBufferSession.resetSamplerStreaming() }
 
         DispatchQueue.main.async {
+            self.connectedBoardType = nil
             self.isConnected = false
             self.connectedPortName = nil
         }
@@ -999,6 +1140,7 @@ final class USBManager: NSObject, ObservableObject {
             self.wifiConnection = connection
             self.activeConnectionState.setConnection(connection)
             DispatchQueue.main.async {
+                self.connectedBoardType = "esp32"
                 self.connectedPortName = connection.displayName
                 self.isConnected = true
                 self.lastErrorText = nil
@@ -1292,6 +1434,20 @@ final class USBManager: NSObject, ObservableObject {
         UInt64(Date().timeIntervalSince1970 * 1000)
     }
 
+    private func inferBoardType(from portName: String?) -> String {
+        let name = (portName ?? "").lowercased()
+        if name.contains("esp32-s2") || name.contains("esp32s2") {
+            return "esp32s2"
+        }
+        if name.contains("esp32-s3") || name.contains("esp32s3") || name.contains("s3") || name.contains("ble") {
+            return "esp32s3"
+        }
+        if name.contains("esp32") || name.contains("emwaver esp") {
+            return "esp32"
+        }
+        return "stm32f042"
+    }
+
     // MARK: - CoreMIDI callbacks
 
     private static let notifyProc: MIDINotifyProc = { _, refCon in
@@ -1434,6 +1590,7 @@ extension USBManager: CBCentralManagerDelegate, CBPeripheralDelegate {
             self.activeConnectionState.setConnection(connection)
             self.pendingBleConnection = nil
             DispatchQueue.main.async {
+                self.connectedBoardType = "esp32s3"
                 self.connectedPortName = connection.displayName
                 self.isConnected = true
                 self.lastErrorText = nil
