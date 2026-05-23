@@ -89,11 +89,8 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func dbg(_ msg: String) {
-        #if DEBUG
-        // Both: `print` always shows in Xcode debug console; Logger integrates with Console.app.
         print("[USBMIDI] \(msg)")
         Self.log.info("\(msg, privacy: .public)")
-        #endif
     }
 
     struct ReadPackets {
