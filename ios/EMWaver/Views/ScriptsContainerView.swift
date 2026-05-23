@@ -87,10 +87,12 @@ final class IOSScriptSessionManager: ObservableObject {
         print("[SCRIPT] run: transport session claimed, starting script engine")
 
         let manager = ScriptPreviewManager()
-        manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
+        let deviceBridge = IOSTargetedScriptDevice(base: device, deviceId: deviceId)
+        manager.attach(device: deviceBridge)
 
         let session = IOSScriptSession(
             manager: manager,
+            deviceBridge: deviceBridge,
             deviceId: deviceId,
             scriptId: request.scriptId,
             scriptName: request.name,
@@ -167,6 +169,7 @@ final class IOSScriptSessionManager: ObservableObject {
 @MainActor
 private final class IOSScriptSession {
     let manager: ScriptPreviewManager
+    let deviceBridge: IOSTargetedScriptDevice
     let deviceId: String
     let scriptId: String
     let scriptName: String
@@ -174,8 +177,9 @@ private final class IOSScriptSession {
     weak var deviceBase: IOSTargetedScriptDeviceBase?
     var cancellable: AnyCancellable?
 
-    init(manager: ScriptPreviewManager, deviceId: String, scriptId: String, scriptName: String, deviceLabel: String) {
+    init(manager: ScriptPreviewManager, deviceBridge: IOSTargetedScriptDevice, deviceId: String, scriptId: String, scriptName: String, deviceLabel: String) {
         self.manager = manager
+        self.deviceBridge = deviceBridge
         self.deviceId = deviceId
         self.scriptId = scriptId
         self.scriptName = scriptName
