@@ -7,6 +7,8 @@
 package com.emwaver.emwaverandroidapp.agent;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -210,12 +212,11 @@ public final class AgentEndpointApi {
                         return;
                     }
 
-                    // Regular text response
+                    // Regular text response — deliver in simulated streaming chunks
                     String content = formatResponse(parsed);
                     AgentChatMessage doneMsg = new AgentChatMessage(
                             AgentChatRole.ASSISTANT, content);
-                    listener.onDelta(content); // deliver full text at once (non-streaming backend)
-                    listener.onDone(doneMsg, null);
+                    deliverChunked(content, doneMsg, listener);
 
                 } catch (Exception e) {
                     listener.onError(e.toString());
@@ -224,6 +225,73 @@ public final class AgentEndpointApi {
                 }
             }
         });
+    }
+
+    // ── Chunked delivery (simulated streaming) ─────────────────────
+
+    private static final long CHUNK_DELAY_MS = 16; // ~60fps typing feel
+    private static final int WORDS_PER_CHUNK = 3;
+
+    private void deliverChunked(@NonNull String text, @NonNull AgentChatMessage doneMsg,
+                                @NonNull StreamListener listener) {
+        if (text.isEmpty()) {
+            listener.onDone(doneMsg, null);
+            return;
+        }
+
+        // Split into words, then group into chunks
+        String[] words = text.split(" ");
+        List<String> chunks = new ArrayList<>();
+        StringBuilder chunk = new StringBuilder();
+        for (int i = 0; i < words.length; i++) {
+            if (i > 0 && i % WORDS_PER_CHUNK == 0) {
+                chunks.add(chunk.toString().trim());
+                chunk.setLength(0);
+            }
+            if (chunk.length() > 0) chunk.append(' ');
+            chunk.append(words[i]);
+        }
+        if (chunk.length() > 0) {
+            chunks.add(chunk.toString().trim());
+        }
+
+        // Don't chunk short responses
+        if (chunks.size() <= 1) {
+            listener.onDelta(text);
+            listener.onDone(doneMsg, null);
+            return;
+        }
+
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        final int[] index = {0};
+        final StringBuilder accumulated = new StringBuilder();
+
+        Runnable deliver = new Runnable() {
+            @Override
+            public void run() {
+                if (index[0] >= chunks.size()) {
+                    listener.onDone(doneMsg, null);
+                    return;
+                }
+
+                String piece = chunks.get(index[0]);
+                if (accumulated.length() > 0) accumulated.append(' ');
+                accumulated.append(piece);
+                listener.onDelta(accumulated.toString());
+                index[0]++;
+
+                if (index[0] >= chunks.size()) {
+                    // Deliver final complete text via onDone
+                    mainHandler.postDelayed(() -> listener.onDone(doneMsg, null), CHUNK_DELAY_MS);
+                } else {
+                    mainHandler.postDelayed(this, CHUNK_DELAY_MS);
+                }
+            }
+        };
+
+        // Start with an empty delta so the UI knows streaming has begun
+        listener.onDelta("");
+        mainHandler.post(deliver);
     }
 
     // ── payload builders ────────────────────────────────────────────

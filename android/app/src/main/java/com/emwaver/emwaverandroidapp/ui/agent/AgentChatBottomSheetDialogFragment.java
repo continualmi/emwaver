@@ -268,27 +268,23 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
     }
 
     private void showConversationsPicker() {
-        List<AgentConversationInfo> list = viewModel.getConversations().getValue();
-        if (list == null || list.isEmpty()) {
-            viewModel.refreshConversations();
-            return;
-        }
+        ConversationPickerDialogFragment picker = new ConversationPickerDialogFragment();
+        picker.setListener(new ConversationPickerDialogFragment.Listener() {
+            @Override
+            public void onConversationSelected(@NonNull String conversationId) {
+                try {
+                    viewModel.selectConversation(UUID.fromString(conversationId));
+                } catch (Exception ignored) {}
+            }
 
-        String[] items = new String[list.size()];
-        for (int i = 0; i < list.size(); i++) {
-            items[i] = list.get(i).displayTitle();
-        }
-
-        new androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Conversations")
-                .setItems(items, (d, which) -> {
-                    if (which >= 0 && which < list.size()) {
-                        viewModel.selectConversation(list.get(which).id);
-                    }
-                })
-                .setPositiveButton("Refresh", (d, w) -> viewModel.refreshConversations())
-                .setNegativeButton("Close", null)
-                .show();
+            @Override
+            public void onConversationDelete(@NonNull String conversationId) {
+                try {
+                    viewModel.deleteConversation(UUID.fromString(conversationId));
+                } catch (Exception ignored) {}
+            }
+        });
+        picker.show(getChildFragmentManager(), "ConversationPicker");
     }
 
     private void sendNow() {
