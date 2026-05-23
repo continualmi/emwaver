@@ -10,11 +10,9 @@ The simulator should let every platform run hardware-touching `.emw` scripts in 
 
 Target consumers:
 
-- Rust CLI/runtime tests,
 - macOS and iOS Swift runtime tests,
 - Windows C# runtime tests,
 - Android Kotlin runtime tests,
-- gateway/browser protocol tests,
 - future Agent evals for generated `.emw` scripts.
 
 ## Architecture
@@ -28,7 +26,7 @@ The first simulator layer should sit behind the platform command bridge, not beh
   -> deterministic mock board state
 ```
 
-This keeps the simulator portable across macOS, Linux, Windows, iOS, Android, and CI environments.
+This keeps the simulator portable across macOS, Windows, iOS, Android, and CI environments.
 
 The first implementation should be protocol-level. It should emulate command replies that real firmware would return for the APIs exposed by `script_bootstrap.emw`.
 
@@ -70,18 +68,11 @@ Initial coverage should include:
 - minimal SPI/I2C/UART transfer stubs,
 - explicit unsupported-command errors.
 
-The first implementation exposes this fixture through Rust as `SimulatorCommandBridge`, which can be used by `emwaver-runtime` tests and by starting Gateway in simulator mode:
+Each platform exposes a simulator bridge that reads the shared fixture JSON and provides a `sendPacket`-compatible delegate for its native script engine:
 
-```bash
-emwaver gateway serve --sim-device
-emwaver run path/to/script.emw
-```
-
-The Apple shared package also exposes `SimulatorScriptDevice`, a Swift `ScriptDevice` implementation that reads the same fixture JSON for iOS/macOS runtime tests.
-
-The Windows app exposes `Scripting/SimulatorCommandBridge.cs`, which reads the same fixture JSON and provides a `sendPacket` delegate compatible with `ScriptEngine.Setup`.
-
-The Android app exposes `SimulatorScriptDeviceBridge`, which implements the same `ScriptDeviceBridge` seam used by the Rhino `ScriptEngine`.
+- Apple platforms (macOS/iOS): `SimulatorScriptDevice` (Swift)
+- Windows: `Scripting/SimulatorCommandBridge.cs` (C#)
+- Android: `SimulatorScriptDeviceBridge` (Kotlin)
 
 ## Non-Goals
 

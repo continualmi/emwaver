@@ -153,22 +153,24 @@ Use the local README first when working in a folder:
 
 - `README.md` (repo root) — public open-source overview, website links, repo map, and doc index
 - `README.txt` (repo root) — compatibility pointer to `README.md`
-- `docs/REBIRTH.md` — local-first/open-source rebirth plan and product pivot
-- `docs/REBIRTH_ISSUES.md` — durable issue backlog for the rebirth plan
-- `docs/REBIRTH_AUDIT.md` — completion audit and remaining gaps for the active rebirth objective
-- `docs/LAUNCH_MVP.md` — minimum launch checklist for the local-first rebirth
+- `docs/CURRENT.md` — current-state orientation: what the repo is, what's active, what's archived
+- `docs/DROP_GATEWAY_AND_LINUX.md` — decision record for Gateway/CLI/Linux removal (May 2026)
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
-- `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document covering script authoring, native hardware tools, and local/API boundaries
-- `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — cross-platform iOS, Android, macOS, and Windows migration plan for identical Agent/UI behavior, `.js`/`.jsx` authoring, and example/library/kernel separation
-- `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN/SSH remote access guidance for ESP32 Wi-Fi transport
-- `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read); motivation for removing get_ui_snapshot/send_ui_event and eval
-- `docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md` — superseded; Gateway/CLI snapshot slice remains valid, native Agent snapshot/eval direction was reversed (see AGENT_EVAL_RUNTIME.md)
-- `docs/TESTS_REBIRTH.md` — validation tracker for rebirth implementation work
-- `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, and next steps
-- `docs/SCHEDULE.md` — active weekly planning/scheduling tracker used in ongoing execution updates
+- `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read)
+- `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document
+- `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — cross-platform Agent/UI parity plan
+- `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
+- `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` — ESP32 Wi-Fi transport audit
+- `docs/ESP32_WIFI_TRANSPORT_PLAN.md` — ESP32 Wi-Fi transport plan
+- `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, next steps
+- `docs/SCHEDULE.md` — weekly planning/scheduling tracker
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
+- `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
+- `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
+- `docs/archive/` — archived docs from the Gateway/CLI/Linux era
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
+- `.agents/skills/archive/` — archived skills (Gateway/CLI)
 - `stm/README.md` — STM firmware workspace, protocol, runtime behavior, build/asset sync notes
 - `esp/README.md` — ESP32 firmware workspace, transport/runtime direction, and internal build notes
 - `../society/README.md` — Continual MI static site; EMWaver public pages live under `/emwaver`
@@ -185,15 +187,18 @@ If a folder has a README, detailed documentation should live there.
 
 ## 6) Repo Overview (high level)
 
-- `stm/` — firmware and firmware-related tooling (multi-board targets).
+- `android/`, `ios/`, `macos/`, `windows/` — native client apps (self-contained, local-first).
+- `apple/` — shared Swift package (cross-platform Apple modules).
+- `stm/` — STM32 firmware and firmware-related tooling.
 - `esp/` — ESP32 firmware workspace for autonomous and multi-transport board targets.
-- Public website/docs/downloads surface — owned by `../society` under `/emwaver`; this repo no longer carries a standalone `web/` app. Agent/API behavior should move to the focused Continual MI/MGPT backend instead of an EMWaver cloud runtime.
-- `android/`, `ios/`, `macos/`, `windows/` — client apps.
-- `apple/` — shared Apple code package.
 - `firmware/` — bundled firmware payloads consumed by apps (per-board binaries).
+- `crates/` — Rust crates (`emwaver-dfu`, `emwaver-dfu-helper`) for firmware flashing.
+- `simulator/` — shared device simulator fixtures and protocol adapters for cross-platform testing.
+- `hardware/` — imported hardware design repositories.
+- `web/` — public static website and docs (exports to `web/out-emwaver`, deployed to `emwaver.ai`).
 - `videos/` — video planning metadata, clip backlog, creative direction, and promo writing.
-- `hardware/` — target location for imported EMWaver hardware design repositories.
-- `.agents/skills/` — EMWaver-specific Codex skills that now live with the product repo.
+- `tools/` — ESP helper and other build tooling.
+- `.agents/skills/` — EMWaver-specific Codex skills for repo-local product guidance.
 
 ---
 

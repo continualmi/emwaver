@@ -17,14 +17,13 @@ The Agent helps with:
 
 The Agent must not be required for local hardware access.
 
-Each UI app should keep an Agent runtime/interface:
+Each native app should keep an Agent runtime/interface:
 
-- browser Gateway Agent panel implemented in TypeScript,
 - macOS/iOS Agent chat surfaces,
 - Windows Agent chat surface,
 - Android Agent chat surface.
 
-Those app runtimes are clients. They collect local script/device/UI/error context, manage chat UX, and call the Agent endpoint. They must not embed production system prompts or private Agent instructions. Rust Gateway code should stay focused on local device/backend communication.
+Those app runtimes are clients. They collect local script/device/UI/error context, manage chat UX, and call the Agent endpoint. They must not embed production system prompts or private Agent instructions.
 
 ## Authentication
 
@@ -41,8 +40,7 @@ Future persisted local configuration can use an app-local EMWaver config file or
 
 Missing key behavior:
 
-- UI clients: show an Agent setup state while leaving local script control available.
-- CLI: local hardware commands keep working without any Agent key. A future TypeScript Agent helper may add terminal Agent workflows outside the Rust device backend.
+- All clients: show an Agent setup state while leaving local script control available. Local hardware access must never require an Agent key.
 
 ## MGPT Endpoint Shape
 
@@ -118,14 +116,11 @@ Prompt secrecy is not the full moat. The real moat is the maintained Agent servi
 
 ## Client Integrations
 
-Gateway browser UI:
+Each native app Agent client:
 
-- add an Agent panel,
-- send only `universe` and `userInput` to the MGPT-facing endpoint,
-- fold any user-approved local context into `userInput` before the boundary when needed,
-- let users intentionally apply returned code or patch.
-
-Terminal Agent tooling should be implemented in TypeScript or another client layer outside the Rust device backend.
+- sends only `universe` and `userInput` to the MGPT-facing endpoint,
+- folds any user-approved local context into `userInput` before the boundary when needed,
+- lets users intentionally apply returned code or patch.
 
 ## Non-Goals
 
