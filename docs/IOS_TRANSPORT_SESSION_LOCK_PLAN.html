@@ -1,0 +1,752 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>iOS Transport Session Lock Plan</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #17212f;
+      --muted: #637187;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --accent: #1a5fb4;
+      --ok: #2c7a4b;
+      --err: #ad3434;
+      --warn: #e5a412;
+      --shadow: 0 2px 8px rgba(23,33,47,0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e4eaf3; --muted: #8a99b4; --paper: #0e141c;
+        --panel: #161e2b; --line: #252e3d; --shadow: 0 2px 12px rgba(0,0,0,0.32);
+      }
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink); background: var(--paper); line-height: 1.52;
+    }
+    main { max-width: 980px; margin: 0 auto; padding: 48px 24px 72px; }
+
+    h1 { font-size: 28px; font-weight: 760; margin: 0 0 6px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 48px 0 14px; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+    h3 { font-size: 17px; font-weight: 680; margin: 32px 0 10px; }
+    p, li { font-size: 15px; }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+
+    pre {
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      padding: 16px 20px; overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      font-size: 13px; line-height: 1.6; margin: 0 0 24px;
+    }
+    code { font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace; font-size: 13px; }
+
+    table {
+      width: 100%; border-collapse: collapse; margin: 0 0 28px;
+      background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+      overflow: hidden; box-shadow: var(--shadow);
+    }
+    th, td { text-align: left; padding: 10px 14px; font-size: 14px; border-bottom: 1px solid var(--line); }
+    th { font-weight: 680; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    td { color: var(--ink); }
+
+    .callout {
+      border-left: 4px solid var(--accent); background: var(--panel);
+      padding: 14px 18px; margin: 0 0 24px; border-radius: 0 8px 8px 0; box-shadow: var(--shadow);
+    }
+    .callout.warn { border-color: var(--warn); }
+    .callout.err { border-color: var(--err); }
+    .callout.ok { border-color: var(--ok); }
+    .callout h4 { margin: 0 0 4px; font-size: 14px; font-weight: 680; }
+    .callout p, .callout li { margin: 4px 0; font-size: 14px; }
+
+    hr { border: none; border-top: 1px solid var(--line); margin: 36px 0; }
+
+    .seq {
+      margin: 24px 0 36px;
+      display: grid;
+      grid-template-columns: 22px 1fr 1fr 1fr 1fr;
+      gap: 0; font-size: 13px; line-height: 1.5;
+    }
+    .seq-header { font-weight: 700; font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); padding: 0 0 8px 10px; }
+    .seq-step { grid-column: 1; color: var(--muted); font-size: 11px; text-align: right; padding: 3px 10px 3px 0; }
+    .seq-cell { padding: 3px 10px; border-left: 1px solid var(--line); white-space: nowrap; }
+    .seq-arrow { color: var(--accent); font-weight: 700; }
+    .seq-ok { color: var(--ok); }
+    .seq-err { color: var(--err); }
+    .seq-warn { color: var(--warn); }
+
+    .phase-badge {
+      display: inline-block; padding: 2px 10px; border-radius: 4px;
+      font-size: 12px; font-weight: 680; margin-right: 8px;
+    }
+    .phase-badge.ios { background: #0071e3; color: white; }
+  </style>
+</head>
+<body>
+
+<main>
+
+<h1>iOS Transport Session Lock Plan</h1>
+<p class="sub">
+  Porting the macOS &amp; Android transport session lock system to iOS.<br>
+  One serial command bus, one lock, zero races — now for iOS.
+</p>
+
+<!-- ================================================================== -->
+<h2>1. The Problem</h2>
+
+<h3>1.1 iOS: No Transport Session At All</h3>
+
+<p>
+  The iOS <code>USBManager</code> never sends <code>EMW_OP_TRANSPORT_SESSION</code>
+  (0x0B). ESP32 boards connected over BLE or Wi-Fi reject every operational command
+  with <strong>BUSY (error&nbsp;130)</strong>. Discovery commands (VERSION, BOARD_GET,
+  HARDWARE_UID) work, but script execution fails — SPI, GPIO, ADC, I2C, and
+  sample/transmit are all blocked.
+</p>
+
+<p>
+  macOS and Android already have full transport session implementations:
+  CONNECT → heartbeat loop (2s) → DISCONNECT. iOS has none of this.
+</p>
+
+<div class="callout err">
+  <h4>&#9888; iOS scripts on ESP32/BLE/Wi-Fi are broken by construction</h4>
+  <p>
+    Without a transport session, the firmware rejects operational commands.
+    This applies to every BLE-connected ESP32-S3 board and every Wi-Fi-connected
+    ESP32 board. STM32 over USB MIDI is unaffected (no session required).
+  </p>
+</div>
+
+<h3>1.2 iOS: No Command Lock</h3>
+
+<p>
+  The iOS <code>sendCommand()</code> calls <code>sendPacket(command)</code> then
+  <code>awaitCommandResponse(timeout:)</code> with <strong>no serialization</strong>.
+  Two concurrent callers (script command + heartbeat) would race on the RX buffer.
+</p>
+
+<pre>// iOS — current sendCommand (NO lock)
+func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
+    guard isConnected else { ... return nil }
+    let session = withBufferQueueSync {
+        let session = bufferSession(deviceId: deviceId)
+        session.prepareCommandResponseWait()
+        return session
+    }
+    sendPacket(command, deviceId: deviceId)      // fire-and-forget on midiQueue
+    return session.awaitCommandResponse(timeout: timeout) { isConnected }  // poll loop
+}</pre>
+
+<p>
+  Even if we add a heartbeat to iOS without fixing this, the heartbeat and script
+  command would steal each other's responses — the exact same predicate-race bug
+  described in the macOS/Android plan.
+</p>
+
+<h3>1.3 How macOS &amp; Android Already Fixed This</h3>
+
+<table>
+  <thead>
+    <tr><th>Platform</th><th>Lock mechanism</th><th>Heartbeat timer</th><th>Session lifecycle</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>macOS</td>
+      <td><code>DispatchSemaphore(value: 1)</code> in <code>sendCommandInternal</code></td>
+      <td><code>DispatchSource.makeTimerSource</code> on <code>midiQueue</code></td>
+      <td><code>beginScriptTransportSession</code> / <code>endScriptTransportSession</code> in <code>MacUSBManager</code></td>
+    </tr>
+    <tr>
+      <td>Android</td>
+      <td><code>synchronized (commandLock)</code> in <code>sendCommand</code></td>
+      <td><code>Handler.postDelayed</code> on <code>HandlerThread</code></td>
+      <td><code>beginTransportSession</code> / <code>endTransportSession</code> in <code>USBService</code></td>
+    </tr>
+    <tr>
+      <td><strong>iOS (target)</strong></td>
+      <td><strong>Add <code>DispatchSemaphore</code></strong></td>
+      <td><strong>Add <code>DispatchSourceTimer</code> on <code>midiQueue</code></strong></td>
+      <td><strong>Add to <code>USBManager</code>, wire in <code>IOSScriptSessionManager</code></strong></td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>2. iOS Architecture (Current State)</h2>
+
+<h3>2.1 Key files</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ios/EMWaver/Managers/USBManager.swift</code></td>
+      <td>Central transport manager: USB MIDI, BLE, Wi-Fi. Owns sendCommand, sendPacket, buffer sessions, connection state.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/USBManager+ScriptDevice.swift</code></td>
+      <td><code>extension USBManager: ScriptDevice {}</code> — delegates to shared Apple package.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/DeviceBufferSession.swift</code></td>
+      <td>RX/TX buffer with <code>prepareCommandResponseWait</code> / <code>awaitCommandResponse</code>.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Views/ScriptsContainerView.swift</code></td>
+      <td>Script UI shell. Owns <code>IOSScriptSessionManager</code> which creates <code>IOSTargetedScriptDevice</code> wrappers and manages <code>IOSScriptSession</code> lifecycle.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/BLETransport.swift</code></td>
+      <td>BLE scan, connect, write, notify plumbing. No transport session awareness.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/WiFiTransport.swift</code></td>
+      <td>Wi-Fi connect/discover, NWBrowser, WebSocket. No transport session awareness.</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/TransportDeviceConnectionState.swift</code></td>
+      <td>Active device target tracking (USB/BLE/WiFi).</td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Managers/TransportDeviceSessionRegistry.swift</code></td>
+      <td>Per-device buffer session registry.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>2.2 Current script execution flow</h3>
+
+<pre>
+1. User taps Run → ScriptsContainerView calls onRunScript closure
+2. IOSScriptSessionManager.run() creates IOSTargetedScriptDevice(base: bleManager, deviceId: ...)
+3. IOSTargetedScriptDevice wraps USBManager, routes to sendCommand(_:timeout:deviceId:)
+4. ScriptPreviewManager.render() → ScriptEngine.execute() → JS calls Device.sendCommand()
+5. USBManager.sendCommand(_:timeout:deviceId:) → sendPacket + awaitCommandResponse
+6. User taps Stop → IOSScriptSession.stop() → manager.exitPreview()
+</pre>
+
+<p>
+  <strong>Key insight:</strong> Step 4–5 has no transport session begin/end and no command lock.
+  The fix hooks into steps 2 (begin session) and 6 (end session).
+</p>
+
+<!-- ================================================================== -->
+<h2>3. The Solution</h2>
+
+<h3>3.1 Single serial command bus (iOS edition)</h3>
+
+<p>
+  Same principle as macOS and Android: a <code>DispatchSemaphore</code> wraps the
+  entire synchronous sendCommand body — prepare, send, wait. The heartbeat
+  acquires the same lock. Only one command+response cycle is in flight at any time.
+</p>
+
+<pre>// iOS — after fix
+private let commandSemaphore = DispatchSemaphore(value: 1)
+
+func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
+    commandSemaphore.wait()
+    defer { commandSemaphore.signal() }
+
+    guard isConnected else { ... return nil }
+    guard requireActiveDeviceSession(deviceId: deviceId, operation: "sendCommand") else { return nil }
+
+    let session = withBufferQueueSync {
+        let session = bufferSession(deviceId: deviceId)
+        session.prepareCommandResponseWait()
+        return session
+    }
+
+    sendPacket(command, deviceId: deviceId)
+
+    return session.awaitCommandResponse(timeout: timeout) { isConnected }
+}</pre>
+
+<div class="callout ok">
+  <h4>Why a semaphore and not a serial queue</h4>
+  <p>
+    The existing <code>sendCommand</code> is already a synchronous call (it blocks
+    waiting for a response). A serial queue would risk deadlocking if the heartbeat
+    (also on midiQueue or its own queue) called sendCommand. A semaphore works
+    across any calling queue — the heartbeat can be on any GCD queue and it just
+    waits its turn.
+  </p>
+</div>
+
+<h3>3.2 Transport session lifecycle</h3>
+
+<p>
+  Follow the macOS pattern exactly. The session is claimed when a script starts,
+  held by a 2s heartbeat, and released when the script stops.
+</p>
+
+<pre>
+1. Device connects (BLE/WiFi/USB)         → no session yet
+2. User taps Run → IOSScriptSessionManager.run() → beginTransportSession()
+3. Script runs → operational commands flow through lock
+4. Heartbeat fires every 2s → keeps firmware session alive (5s timeout)
+5. User taps Stop / script ends → endTransportSession()
+6. DISCONNECT sent → session released
+7. Heartbeat timer cancelled → no more heartbeat traffic
+</pre>
+
+<!-- ================================================================== -->
+<h2>4. Implementation Plan — Phase 1: USBManager Transport Core <span class="phase-badge ios">iOS</span></h2>
+
+<h3>4.1 Add transport session constants</h3>
+
+<p>Inside <code>USBManager</code>, add the same opcode constants used by macOS and Android:</p>
+
+<pre>// Transport session opcodes (add to USBManager)
+private static let emwOpTransportSession: UInt8  = 0x0B
+private static let emwOpSessionConnect: UInt8     = 0x01
+private static let emwOpSessionDisconnect: UInt8  = 0x02
+private static let emwOpSessionHeartbeat: UInt8   = 0x03
+private static let emwSourceUSB: UInt8            = 0x01
+private static let emwSourceBLE: UInt8            = 0x02
+private static let emwSourceWiFi: UInt8           = 0x03
+private static let responseOK: UInt8              = 0x80
+private static let sessionHeartbeatIntervalMs     = 2000</pre>
+
+<h3>4.2 Add command semaphore</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>USBManager.swift</code></td>
+      <td>
+        Add <code>private let commandSemaphore = DispatchSemaphore(value: 1)</code>
+        as a stored property.<br>
+        Wrap <code>sendCommand(_:timeout:deviceId:)</code> body in
+        <code>commandSemaphore.wait() / defer { commandSemaphore.signal() }</code>.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.3 Add transport session state and methods</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>USBManager.swift</code></td>
+      <td>
+        Add a <code>private var transportSessionHeartbeatTimer: DispatchSourceTimer?</code>
+        stored property.<br><br>
+        Add <code>func beginTransportSession(deviceId: String) -> Bool</code>:<br>
+        &nbsp;&nbsp;• Check connection<br>
+        &nbsp;&nbsp;• If <code>requiresTransportSession(deviceId:)</code> is false → return true (STM32)<br>
+        &nbsp;&nbsp;• Determine source byte from active transport<br>
+        &nbsp;&nbsp;• Send CONNECT with semaphore-protected <code>sendCommand</code><br>
+        &nbsp;&nbsp;• On OK → start heartbeat timer<br>
+        &nbsp;&nbsp;• Return success/failure<br><br>
+        Add <code>func endTransportSession(deviceId: String)</code>:<br>
+        &nbsp;&nbsp;• Cancel heartbeat timer<br>
+        &nbsp;&nbsp;• If not connected or session not required → return<br>
+        &nbsp;&nbsp;• Send DISCONNECT (best-effort, fire-and-forget)<br><br>
+        Add <code>func requiresTransportSession(deviceId: String) -> Bool</code>:<br>
+        &nbsp;&nbsp;• BLE → true<br>
+        &nbsp;&nbsp;• Wi-Fi → true<br>
+        &nbsp;&nbsp;• USB MIDI + ESP32 board type → true<br>
+        &nbsp;&nbsp;• USB MIDI + STM32 → false<br><br>
+        Add <code>private func transportSessionSource() -> UInt8?</code>:<br>
+        &nbsp;&nbsp;• Maps active transport to source byte (USB=0x01, BLE=0x02, WiFi=0x03)
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>4.4 Add heartbeat timer</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>USBManager.swift</code></td>
+      <td>
+        Add <code>private func startHeartbeat(deviceId: String, source: UInt8)</code>:<br>
+        &nbsp;&nbsp;• Cancel any existing heartbeat timer<br>
+        &nbsp;&nbsp;• Create <code>DispatchSource.makeTimerSource(queue: midiQueue)</code><br>
+        &nbsp;&nbsp;• Schedule repeating at 2s<br>
+        &nbsp;&nbsp;• Event handler: call <code>sendHeartbeat(deviceId:source:)</code><br>
+        &nbsp;&nbsp;• If heartbeat fails (not 0x80 response) → cancel timer, set error<br><br>
+        Add <code>private func sendHeartbeat(deviceId: String, source: UInt8)</code>:<br>
+        &nbsp;&nbsp;• Construct <code>[0x0B, 0x03, source]</code><br>
+        &nbsp;&nbsp;• Call <code>sendCommand(cmd, timeout: 1000, deviceId: deviceId)</code> which
+            automatically acquires the command semaphore<br>
+        &nbsp;&nbsp;• If response is nil or not 0x80 → session expired, cancel timer, notify<br><br>
+        Add <code>private func cancelHeartbeat()</code>:<br>
+        &nbsp;&nbsp;• Set event handler to no-op, cancel timer, nil out reference
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <h4>&#9888; Heartbeat thread safety</h4>
+  <p>
+    The heartbeat timer fires on <code>midiQueue</code>. Since <code>sendCommand</code>
+    is also called from <code>midiQueue</code> (via <code>sendPacket</code>), the
+    semaphore must be used from the calling queue — not from midiQueue exclusively.
+    The heartbeat's <code>sendCommand</code> call will block the midiQueue timer
+    event until the lock is free. This is safe because:
+  </p>
+  <ul>
+    <li>No other work on midiQueue depends on the heartbeat completing first.</li>
+    <li>The lock is released in a <code>defer</code> block even on timeout.</li>
+    <li>The worst-case 2s script command timeout + heartbeat = 2s delay, well within the 5s firmware session timeout.</li>
+  </ul>
+</div>
+
+<!-- ================================================================== -->
+<h2>5. Implementation Plan — Phase 2: Script Session Wiring <span class="phase-badge ios">iOS</span></h2>
+
+<h3>5.1 Add transport session methods to the device base protocol</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ios/EMWaver/Views/ScriptsContainerView.swift</code></td>
+      <td>
+        Add to <code>IOSTargetedScriptDeviceBase</code> protocol:<br>
+        &nbsp;&nbsp;<code>func beginTransportSession(deviceId: String) -> Bool</code><br>
+        &nbsp;&nbsp;<code>func endTransportSession(deviceId: String)</code><br><br>
+        These are already implemented on <code>USBManager</code> from Phase 1,
+        so the <code>extension USBManager: IOSTargetedScriptDeviceBase {}</code>
+        picks them up automatically.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.2 Wire begin/end into IOSScriptSessionManager</h3>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ios/EMWaver/Views/ScriptsContainerView.swift</code></td>
+      <td>
+        In <code>IOSScriptSessionManager.run()</code>:<br>
+        &nbsp;&nbsp;• Before creating the manager, call <code>device.beginTransportSession(deviceId:)</code><br>
+        &nbsp;&nbsp;• If it returns false, return a failure result with "transport claim failed"<br>
+        &nbsp;&nbsp;• Store the device reference and deviceId on <code>IOSScriptSession</code> for cleanup<br><br>
+        In <code>IOSScriptSession.stop()</code>:<br>
+        &nbsp;&nbsp;• Call <code>device.endTransportSession(deviceId:)</code> before <code>manager.exitPreview()</code>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>5.3 Updated IOSScriptSession</h3>
+
+<pre>// IOSScriptSession — after fix
+@MainActor
+private final class IOSScriptSession {
+    let manager: ScriptPreviewManager
+    let deviceId: String
+    let scriptId: String
+    let scriptName: String
+    let deviceLabel: String
+    <strong>weak var deviceBase: IOSTargetedScriptDeviceBase?   // NEW</strong>
+    var cancellable: AnyCancellable?
+
+    func stop() {
+        <strong>deviceBase?.endTransportSession(deviceId: deviceId)  // NEW — release session first</strong>
+        manager.exitPreview()
+    }
+}</pre>
+
+<h3>5.4 Updated IOSScriptSessionManager.run()</h3>
+
+<pre>func run(_ request: ScriptsRootView.ScriptRunRequest, device: IOSTargetedScriptDeviceBase, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
+    let deviceId = Self.normalizeDeviceId(device.currentScriptDeviceId())
+
+    <strong>// NEW — claim transport session before script execution
+    guard device.beginTransportSession(deviceId: deviceId) else {
+        return ScriptsRootView.ScriptRunResult(
+            scriptInstanceId: "",
+            name: request.name,
+            running: false,
+            errorMessage: "Cannot run script: transport claim failed"
+        )
+    }</strong>
+
+    let manager = ScriptPreviewManager()
+    manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
+
+    let session = IOSScriptSession(
+        manager: manager,
+        deviceId: deviceId,
+        scriptId: request.scriptId,
+        scriptName: request.name,
+        deviceLabel: deviceLabel.isEmpty ? "active device" : deviceLabel
+    )
+    <strong>session.deviceBase = device  // NEW — retain for cleanup</strong>
+
+    // ... rest unchanged ...
+}</pre>
+
+<!-- ================================================================== -->
+<h2>6. Source Byte Mapping</h2>
+
+<table>
+  <thead>
+    <tr><th>Transport</th><th>Source byte</th><th>How iOS determines it</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>USB MIDI</td><td>0x01</td><td><code>activeTransport == .usbMidi</code></td></tr>
+    <tr><td>BLE</td><td>0x02</td><td><code>activeTransport == .ble</code></td></tr>
+    <tr><td>Wi-Fi</td><td>0x03</td><td><code>activeTransport == .wifi</code></td></tr>
+  </tbody>
+</table>
+
+<p>
+  The source byte in the session command payload (byte 2 of <code>[0x0B, sub, source]</code>)
+  must match what the transport layer stamps on <code>cmd.source</code>. The firmware
+  rejects mismatches. iOS already tracks <code>activeTransport</code> as an enum
+  with <code>.usbMidi</code>, <code>.ble</code>, and <code>.wifi</code> cases.
+</p>
+
+<!-- ================================================================== -->
+<h2>7. requiresTransportSession Logic</h2>
+
+<p>
+  Follow the same logic as macOS and Android:
+</p>
+
+<pre>private func requiresTransportSession(deviceId: String) -> Bool {
+    // BLE and Wi-Fi always require a session.
+    if activeTransport == .ble || activeTransport == .wifi {
+        return true
+    }
+    // USB MIDI: ESP32 boards require a session; STM32 does not.
+    // iOS doesn't currently track boardType as a property, but we can
+    // inspect the last probed connected board.
+    // Simpler: if activeTransport is .usbMidi and we have an ESP32 port name → true.
+    if let portName = connectedPortName?.lowercased() {
+        if portName.contains("esp32") || portName.contains("s3") || portName.contains("s2") {
+            return true
+        }
+    }
+    return false
+}</pre>
+
+<div class="callout warn">
+  <h4>iOS board type detection note</h4>
+  <p>
+    iOS currently doesn't store a dedicated <code>connectedBoardType</code> property
+    like Android and macOS do. The simplest approach is to inspect the connected
+    port name (as macOS does in <code>inferBoardType(portName:)</code>) or add a
+    lightweight <code>connectedBoardType: String?</code> property populated during
+    connect. For the initial implementation, the port-name heuristic is sufficient
+    since all BLE/Wi-Fi connections already return true unconditionally.
+  </p>
+</div>
+
+<!-- ================================================================== -->
+<h2>8. Discovery Commands — No Session Needed</h2>
+
+<p>
+  These opcodes are allowed by the firmware without a session. iOS already calls
+  some of them during connection setup — no changes needed:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Opcode</th><th>Value</th><th>Command</th><th>Called by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>VERSION</td><td>0x01</td><td>Firmware version</td><td>Connect handshake</td></tr>
+    <tr><td>BOARD_GET</td><td>0x09</td><td>Board type</td><td>Connect handshake</td></tr>
+    <tr><td>HARDWARE_UID_GET</td><td>0x08</td><td>Hardware UID</td><td>Connect handshake</td></tr>
+    <tr><td>TRANSPORT_SESSION STATUS</td><td>0x0B, 0x00</td><td>Session query</td><td>Optional status check</td></tr>
+    <tr><td>TRANSPORT_SESSION CONNECT</td><td>0x0B, 0x01</td><td>Claim session</td><td><code>beginTransportSession()</code></td></tr>
+    <tr><td>Wi-Fi CONFIG</td><td>0x0A</td><td>Wi-Fi setup</td><td>Setup dialogs</td></tr>
+  </tbody>
+</table>
+
+<p>
+  Note: <code>TRANSPORT_SESSION CONNECT</code> (0x0B, 0x01) is explicitly allowed
+  by the firmware even when no session exists, so it can establish the first session.
+  Wi-Fi provisioning commands (0x0A) currently call <code>sendCommand</code> from
+  a background queue — those should now automatically acquire the command semaphore
+  via the locked <code>sendCommand</code> without any special handling.
+</p>
+
+<!-- ================================================================== -->
+<h2>9. Files Affected — Full Map</h2>
+
+<table>
+  <thead>
+    <tr><th>File</th><th>Change type</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>ios/EMWaver/Managers/USBManager.swift</code></td>
+      <td>
+        <strong>Primary changes:</strong><br>
+        • Add <code>commandSemaphore</code> stored property<br>
+        • Add transport session opcode constants<br>
+        • Wrap <code>sendCommand(_:timeout:deviceId:)</code> in semaphore<br>
+        • Add <code>beginTransportSession(deviceId:)</code><br>
+        • Add <code>endTransportSession(deviceId:)</code><br>
+        • Add <code>requiresTransportSession(deviceId:)</code><br>
+        • Add <code>transportSessionSource()</code><br>
+        • Add <code>startHeartbeat(deviceId:source:)</code><br>
+        • Add <code>sendHeartbeat(deviceId:source:)</code><br>
+        • Add <code>cancelHeartbeat()</code><br>
+        • Add <code>transportSessionHeartbeatTimer</code> property<br>
+        • Call <code>cancelHeartbeat()</code> in <code>disconnectInternal()</code>
+      </td>
+    </tr>
+    <tr>
+      <td><code>ios/EMWaver/Views/ScriptsContainerView.swift</code></td>
+      <td>
+        • Add <code>beginTransportSession</code> / <code>endTransportSession</code>
+          to <code>IOSTargetedScriptDeviceBase</code> protocol<br>
+        • Add <code>deviceBase</code> reference to <code>IOSScriptSession</code><br>
+        • Call <code>beginTransportSession</code> in <code>IOSScriptSessionManager.run()</code><br>
+        • Call <code>endTransportSession</code> in <code>IOSScriptSession.stop()</code>
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>10. Risk Assessment</h2>
+
+<table>
+  <thead>
+    <tr><th>Risk</th><th>Likelihood</th><th>Mitigation</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Lock blocks UI thread</td>
+      <td>Low</td>
+      <td>
+        <code>sendCommand</code> is already synchronous (blocks waiting for response).
+        It's called from script execution (background), Wi-Fi provisioning
+        (background), and heartbeat timer (midiQueue). No UI-thread callers.
+      </td>
+    </tr>
+    <tr>
+      <td>Deadlock (semaphore)</td>
+      <td>Low</td>
+      <td>
+        Single semaphore, no nested acquires. <code>defer { signal() }</code>
+        guarantees release even on timeout. Heartbeat is the only other
+        semaphore acquirer — no re-entrant paths.
+      </td>
+    </tr>
+    <tr>
+      <td>Heartbeat delayed past 5s firmware timeout</td>
+      <td>Very low</td>
+      <td>
+        Each command has max ~2s timeout. Heartbeat interval is 2s. Worst case:
+        a max-duration script command holds the lock for 2s, heartbeat fires
+        immediately after — 2s delay, well within 5s firmware timeout.
+      </td>
+    </tr>
+    <tr>
+      <td>STM32 boards break</td>
+      <td>None</td>
+      <td>
+        <code>requiresTransportSession</code> returns false for STM32.
+        <code>beginTransportSession</code> returns true immediately without
+        sending any session command. No behavior change for STM32.
+      </td>
+    </tr>
+    <tr>
+      <td><code>sendCommandBestEffort</code> race</td>
+      <td>None</td>
+      <td>
+        <code>sendCommandBestEffort</code> is used only for identity checks
+        during connection setup (before a script is running). It calls
+        <code>sendPacketBestEffortSync</code> + manual <code>awaitCommandResponse</code>
+        without the semaphore. This is intentional — it runs during
+        connect/discovery when no script or heartbeat is active.
+      </td>
+    </tr>
+    <tr>
+      <td>Wi-Fi provisioning during script run</td>
+      <td>Low</td>
+      <td>
+        Wi-Fi provisioning calls <code>sendCommand</code> from a background
+        queue. If a script is also running, both acquire the semaphore
+        serially — no race. The Wi-Fi setup will simply wait for the current
+        command to complete.
+      </td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>11. Differences from macOS Implementation</h2>
+
+<table>
+  <thead>
+    <tr><th>Aspect</th><th>macOS</th><th>iOS (this plan)</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Lock location</td>
+      <td><code>MacUSBManager.sendCommandInternal</code></td>
+      <td><code>USBManager.sendCommand(_:timeout:deviceId:)</code></td>
+    </tr>
+    <tr>
+      <td>Session claim API</td>
+      <td><code>beginScriptTransportSession(deviceID:)</code></td>
+      <td><code>beginTransportSession(deviceId:)</code> (matches Android naming)</td>
+    </tr>
+    <tr>
+      <td>Heartbeat timer queue</td>
+      <td>Heartbeat timer on <code>midiQueue</code>, but actual send on <code>DispatchQueue.global(qos: .utility)</code></td>
+      <td>Heartbeat sends directly via <code>sendCommand</code> (which acquires semaphore), timer on <code>midiQueue</code></td>
+    </tr>
+    <tr>
+      <td>Session scope check</td>
+      <td>Prevents running two scripts on same hardware UID</td>
+      <td>Single-script model (iOS <code>ScriptPreviewManager</code> is one-at-a-time). Defer multi-session to later.</td>
+    </tr>
+    <tr>
+      <td>Board type detection</td>
+      <td>Dedicated <code>connectedBoardType</code> property</td>
+      <td>Port-name heuristic. Can add <code>connectedBoardType</code> later.</td>
+    </tr>
+    <tr>
+      <td>Wi-Fi command path</td>
+      <td>Separate <code>wifiManager.sendCommand</code> path bypasses the shared session, then handles RX separately</td>
+      <td>Wi-Fi send flows through normal <code>sendPacket</code> → BLE/WiFi send switch; no separate path needed</td>
+    </tr>
+  </tbody>
+</table>
+
+</main>
+</body>
+</html>
