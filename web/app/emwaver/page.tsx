@@ -94,7 +94,7 @@ export default function HomePage() {
             <div className="mt-12 max-w-5xl overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-3 shadow-xl shadow-black/20">
               <Image
                 src="/emwaver/banner.jpeg"
-                alt="EMWaver platform across phone, desktop, and supported boards"
+                alt="EMWaver on phones and supported boards"
                 width={1600}
                 height={800}
                 priority

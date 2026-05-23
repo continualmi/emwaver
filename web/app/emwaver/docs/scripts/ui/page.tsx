@@ -5,7 +5,7 @@ export default function UiWidgetsDocPage() {
       <p>
         Scripts build a declarative UI tree using <code>UI.*</code> factory functions, then
         call <code>UI.render(rootNode)</code> to display it. The tree is serialized to JSON and
-        rendered as native views (SwiftUI on Apple, XAML on Windows, Compose on Android).
+        rendered as native views (SwiftUI on Apple platforms, Compose on Android).
       </p>
 
       <h2>Layout</h2>

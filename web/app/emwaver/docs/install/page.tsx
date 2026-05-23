@@ -2,63 +2,24 @@ import Link from "next/link";
 
 function PreviewDownloads() {
   return (
-    <div className="grid gap-3 md:grid-cols-3">
+    <div className="grid gap-3 md:grid-cols-2">
       <a
         href="/emwaver/downloads/EMWaver-android.apk"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android</div>
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Primary</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">APK</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct preview build.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct preview build. Google Play listing coming soon.</div>
       </a>
 
       <a
         href="/emwaver/downloads/EMWaver-macos.dmg"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">macOS</div>
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">macOS — Dev & Advanced</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">DMG</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Desktop preview build.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">For firmware flashing, multi-device bench testing, and advanced development.</div>
       </a>
-
-      <a
-        href="/emwaver/downloads/EMWaverSetup-windows-x64.exe"
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Installer EXE</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Recommended Windows x64 installer.</div>
-      </a>
-
-      <a
-        href="/emwaver/downloads/EMWaver-windows-x64.zip"
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">ZIP with EXE</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Portable Windows x64 package.</div>
-      </a>
-    </div>
-  );
-}
-
-function MobileStoreBadges() {
-  return (
-    <div className="grid gap-3 md:grid-cols-2">
-      {[
-        ["iOS", "App Store", "iPhone and iPad coming soon."],
-        ["Android", "Google Play", "Store listing coming soon. APK is also available."],
-      ].map(([platform, store, description]) => (
-        <div
-          key={platform}
-          className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
-        >
-          <div className="text-xs font-semibold text-[color:var(--ink-dim)]">{platform}</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">{store}</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">{description}</div>
-          <div className="pt-4 text-sm font-semibold text-[color:var(--ink-dim)]">Coming soon</div>
-        </div>
-      ))}
     </div>
   );
 }
@@ -69,17 +30,15 @@ export default function InstallDocPage() {
     <>
       <h1>Install and run locally</h1>
       <p>
-        Get the EMWaver app or CLI, connect your board, and start running scripts.
+        Get the EMWaver app on your phone, connect your board, and start running scripts.
       </p>
 
       <h2>1. Install the app</h2>
       <p>
-        macOS and Windows use native apps; an APK is available for Android. iOS and Android store listings are coming soon.
+        iOS and Android are the primary EMWaver platforms. iOS is available via TestFlight (App Store coming soon).
+        An APK is available for Android (Google Play coming soon). macOS is available for development and advanced use.
       </p>
       <PreviewDownloads />
-
-      <h3>Mobile stores</h3>
-      <MobileStoreBadges />
 
       <h2>2. Get a supported board</h2>
       <p>

@@ -30,9 +30,9 @@ export default function DocsIndex() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
               Step 2
             </div>
-            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Install the app or CLI</div>
+            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Install the app</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use the native app where it fits — macOS, Windows, Android, or iOS.
+              Use the native app where it fits — iOS, Android, or macOS.
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
@@ -100,8 +100,8 @@ export default function DocsIndex() {
           .
         </li>
         <li>
-          <strong>Install the app or CLI</strong> through the{" "}
-          <Link href="/emwaver/docs/install">Android APK, macOS DMG, or Windows installer</Link>.
+          <strong>Install the app</strong> through the{" "}
+          <Link href="/emwaver/docs/install">Android APK, iOS via TestFlight, or macOS DMG</Link>.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
@@ -114,10 +114,9 @@ export default function DocsIndex() {
 
       <h2>Apps</h2>
       <ul>
-        <li><strong>Android</strong> direct APK preview download</li>
-        <li><strong>macOS</strong> direct DMG preview download</li>
-        <li><strong>Windows</strong> direct installer preview, with ZIP available as an alternate package</li>
-        <li><strong>App Store and Google Play</strong> mobile listings coming soon</li>
+        <li><strong>iOS</strong> via TestFlight, App Store coming soon</li>
+        <li><strong>Android</strong> direct APK preview download, Google Play coming soon</li>
+        <li><strong>macOS</strong> direct DMG preview download for development and advanced use</li>
       </ul>
 
       <h2>What to read next</h2>

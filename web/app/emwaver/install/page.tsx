@@ -2,52 +2,45 @@ import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/latest/download";
 
-const MOBILE_STORES = [
+const MOBILE_PLATFORMS = [
   {
     platform: "iOS",
-    name: "App Store",
-    description: "iPhone and iPad coming soon.",
+    label: "Primary",
     badge: "/emwaver/badges/app-store.png",
+    badgeAlt: "App Store badge",
+    description: "Available now via TestFlight. App Store listing coming soon.",
+    downloadLabel: "iPhone & iPad",
+    downloadHref: undefined,
+    downloadCta: "TestFlight",
   },
   {
     platform: "Android",
-    name: "Google Play",
-    description: "Store listing coming soon. APK is also available.",
+    label: "Primary",
     badge: "/emwaver/badges/google-play.png",
+    badgeAlt: "Google Play badge",
+    description: "Google Play listing coming soon.",
+    downloadLabel: "APK preview build",
+    downloadHref: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
+    downloadCta: "Download APK",
+    downloadBadge: "/emwaver/badges/android-apk.png",
   },
 ];
 
-const DIRECT_DOWNLOADS = [
-  {
-    platform: "Android",
-    name: "APK",
-    description: "Direct Android preview build.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
-  },
+const DESKTOP_PLATFORMS = [
   {
     platform: "macOS",
-    name: "DMG",
-    description: "Desktop preview build for macOS.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
-  },
-  {
-    platform: "Windows",
-    name: "Installer EXE",
-    description: "Recommended Windows x64 installer.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
-  },
-  {
-    platform: "Windows",
-    name: "ZIP with EXE",
-    description: "Portable Windows x64 package containing EMWaver.exe.",
-    href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
+    label: "Dev & Advanced",
+    description: "Desktop build for firmware flashing, multi-device bench testing, and long automation runs.",
+    downloadLabel: "DMG preview build",
+    downloadHref: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
+    downloadCta: "Download DMG",
+    badge: "/emwaver/badges/macos.png",
   },
 ];
 
 export default function InstallPage() {
   return (
     <div className="install-mode relative min-h-dvh overflow-x-clip">
-      {/* Background */}
       <div className="pointer-events-none fixed inset-0 -z-10">
         <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,var(--aqua-tint-2),transparent_60%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(700px_480px_at_85%_18%,var(--sky-tint),transparent_62%)]" />
@@ -66,18 +59,19 @@ export default function InstallPage() {
           </div>
           <div>
             <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[color:var(--sky)]">
-              Direct downloads
+              Install
             </div>
             <h1 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
-              Install EMWaver on the device you already use.
+              Your phone is now an electronics lab.
             </h1>
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-              Install the native app for your platform, connect a supported board, and run
-              local scripts without an EMWaver account or cloud activation.
+              Install EMWaver on iOS or Android, connect a supported board via USB-C,
+              and run local scripts without accounts or cloud activation. macOS is also
+              available for development and advanced use.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["macOS", "Android", "Windows"].map((label) => (
+              {["iOS", "Android", "macOS"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
@@ -89,94 +83,119 @@ export default function InstallPage() {
           </div>
         </section>
 
+        {/* Mobile — primary */}
         <section className="mt-10">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
-                Choose a platform
+                Mobile
               </div>
               <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
-                Download EMWaver
+                Get EMWaver on your phone
               </h2>
             </div>
             <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              Desktop and mobile builds are available directly.
-            </p>
-          </div>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {DIRECT_DOWNLOADS.map((download) => (
-            <a
-              key={`${download.platform}-${download.name}`}
-              href={download.href}
-              className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 no-underline transition hover:bg-[color:var(--surface-2)]"
-            >
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">
-                {download.platform}
-              </div>
-              <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">
-                {download.name}
-              </div>
-              <div className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-                {download.description}
-              </div>
-              <div className="pt-4 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">
-                Download
-              </div>
-            </a>
-          ))}
-          </div>
-        </section>
-
-        <section className="mt-10">
-          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-                Mobile stores
-              </div>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
-                Coming soon
-              </h2>
-            </div>
-            <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
-              iPhone, iPad, and Android store listings are planned after the preview build track is ready.
+              iOS and Android are the primary EMWaver platforms.
             </p>
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {MOBILE_STORES.map((store) => (
+            {MOBILE_PLATFORMS.map((p) => (
               <div
-                key={store.platform}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
+                key={p.platform}
+                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
               >
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3">
                   <img
-                    src={store.badge}
-                    alt={`${store.platform} badge`}
-                    className="h-12 w-auto max-w-[8rem] shrink-0 object-contain"
+                    src={p.badge}
+                    alt={p.badgeAlt}
+                    className="h-10 w-auto shrink-0 object-contain"
                   />
                   <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">
-                      {store.platform}
-                    </div>
-                    <div className="pt-1 text-lg font-semibold text-[color:var(--ink)]">
-                      {store.name}
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
+                      {p.platform} — {p.label}
                     </div>
                     <div className="pt-0.5 text-sm text-[color:var(--ink-dim)]">
-                      {store.description}
+                      {p.description}
                     </div>
                   </div>
                 </div>
-                <div className="text-sm font-semibold text-[color:var(--ink-dim)]">
-                  Coming soon
-                </div>
+                {p.downloadHref ? (
+                  <a
+                    href={p.downloadHref}
+                    className="mt-4 flex items-center justify-center gap-3 w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] no-underline transition hover:bg-[color:var(--surface-3)]"
+                  >
+                    {p.downloadBadge && (
+                      <img src={p.downloadBadge} alt="" className="h-7 w-auto shrink-0" />
+                    )}
+                    {p.downloadCta}
+                  </a>
+                ) : (
+                  <div className="mt-4 w-full rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2.5 text-center text-sm font-semibold text-[color:var(--ink-dim)]">
+                    {p.downloadCta}
+                  </div>
+                )}
               </div>
             ))}
           </div>
         </section>
 
-      </main>
+        {/* Desktop */}
+        <section className="mt-10">
+          <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
+                Desktop
+              </div>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight text-[color:var(--ink)]">
+                Also available on macOS
+              </h2>
+            </div>
+            <p className="max-w-xl text-sm leading-6 text-[color:var(--ink-dim)]">
+              For firmware flashing, multi-device bench testing, and advanced development.
+            </p>
+          </div>
 
+          <div className="mt-6 grid gap-4 sm:grid-cols-1 lg:grid-cols-1">
+            {DESKTOP_PLATFORMS.map((p) => (
+              <div
+                key={p.platform}
+                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)]">
+                    <img
+                      src={p.badge}
+                      alt={p.platform}
+                      className="h-6 w-6 object-contain"
+                    />
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
+                      {p.platform} — {p.label}
+                    </div>
+                    <div className="pt-0.5 text-sm text-[color:var(--ink-dim)]">
+                      {p.description}
+                    </div>
+                  </div>
+                </div>
+                {p.downloadHref ? (
+                  <a
+                    href={p.downloadHref}
+                    className="mt-4 inline-flex items-center justify-center w-full rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2.5 text-sm font-semibold text-[color:var(--ink)] no-underline transition hover:bg-[color:var(--surface-3)]"
+                  >
+                    {p.downloadCta}
+                  </a>
+                ) : (
+                  <div className="mt-4 w-full rounded-xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-2.5 text-center text-sm font-semibold text-[color:var(--ink-dim)]">
+                    {p.downloadCta}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      </main>
     </div>
   );
 }

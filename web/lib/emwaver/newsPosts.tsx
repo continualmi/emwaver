@@ -29,7 +29,7 @@ export const NEWS_POSTS: NewsPost[] = [
             <li>One current-gen STM32 board</li>
             <li>USB is first-class today, with ESP32 multi-transport support returning</li>
             <li>One firmware binary for the platform</li>
-            <li>Apps on Android / iOS / macOS / Windows</li>
+            <li>Apps on iOS / Android / macOS</li>
           </ul>
 
           <h2>The core idea</h2>
