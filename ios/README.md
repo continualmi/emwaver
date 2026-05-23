@@ -51,8 +51,16 @@ Current guidance:
 Responsibilities:
 - local device communication over USB MIDI, ESP32 BLE, and ESP32 Wi-Fi,
 - transport session management: before script execution, iOS now claims the ESP32 firmware transport session with CONNECT (0x0B, 0x01), keeps it alive with a 2-second heartbeat (0x0B, 0x03) while the script runs, and releases it with DISCONNECT (0x0B, 0x02) when the script stops,
-- serial command bus: a `DispatchSemaphore` wraps `sendCommand` so the heartbeat and script commands serialize through a single lock, preventing predicate-response races,
 - sampler-compatible script transport behavior for built-in scripts like `sampler.emw`, including continuous all-zero stream-lane capture during active sampling.
+
+### Single serial command bus
+
+All command traffic (transport session CONNECT/DISCONNECT/HEARTBEAT, script opcodes like `gpio_read`/`spi_transfer`, and Agent hardware primitives) flows through a single serial bus:
+
+- **`commandSemaphore`** (`DispatchSemaphore(value: 1)`) wraps every `sendCommand` entry point. Only one command is in flight at any time — script commands, transport session commands, and heartbeat pings all serialize through the same lock.
+- **Commands are synchronous.** Every `sendCommand` acquires the semaphore, dispatches the outgoing packet via the I/O queue, and polls the response buffer until a reply arrives or the timeout expires. The caller blocks until the command completes.
+- **Stream lane is separate.** The sampler's `transmitBuffer` sends bulk data through the superframe stream lane asynchronously (fire-and-forget over `midiQueue`), consuming buffer-status packets for flow control. It never competes with command-lane traffic for the semaphore.
+- **`midiQueue` is the I/O dispatch queue**, not the command serialization queue. It serializes all packet reads/writes for CoreMIDI, BLE, and Wi-Fi transports. The heartbeat timer fires on `midiQueue` but hands off the actual command cycle to `DispatchQueue.global(qos: .utility)` — matching the macOS pattern — so `midiQueue` stays free to process incoming responses while a command is polling.
 
 The iOS transport keeps the historical `USBManager` API as the app-facing device facade. USB MIDI remains preferred when a wired CoreMIDI source/destination is available. When no wired device is found, the manager scans for the EMWaver BLE service and connects to ESP32 boards automatically. BLE carries the same EMWaver SysEx/superframe envelope as USB MIDI so command opcodes and script behavior remain shared across transports.
 
