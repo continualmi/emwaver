@@ -1,0 +1,639 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver Transport Session Protocol</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #17212f;
+      --muted: #637187;
+      --paper: #f5f7fb;
+      --panel: #ffffff;
+      --line: #dbe1eb;
+      --accent: #1a5fb4;
+      --ok: #2c7a4b;
+      --err: #ad3434;
+      --warn: #e5a412;
+      --shadow: 0 2px 8px rgba(23, 33, 47, 0.08);
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e4eaf3;
+        --muted: #8a99b4;
+        --paper: #0e141c;
+        --panel: #161e2b;
+        --line: #252e3d;
+        --shadow: 0 2px 12px rgba(0, 0, 0, 0.32);
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.52;
+    }
+
+    main {
+      width: 100%;
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 48px 24px 72px;
+    }
+
+    h1 { font-size: 28px; font-weight: 760; margin: 0 0 6px; }
+    h2 { font-size: 22px; font-weight: 700; margin: 48px 0 14px; border-bottom: 2px solid var(--line); padding-bottom: 6px; }
+    h3 { font-size: 17px; font-weight: 680; margin: 32px 0 10px; }
+    p, li { font-size: 15px; color: var(--ink); }
+    .sub { color: var(--muted); font-size: 14px; margin: 0 0 32px; }
+
+    pre {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      margin: 0 0 24px;
+    }
+
+    code {
+      font-family: "SF Mono", "Fira Code", "Cascadia Code", ui-monospace, monospace;
+      font-size: 13px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0 0 28px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+    }
+
+    th, td {
+      text-align: left;
+      padding: 10px 14px;
+      font-size: 14px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    th {
+      background: var(--panel);
+      font-weight: 680;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+    }
+
+    td { color: var(--ink); }
+    td.byte { font-family: "SF Mono", "Fira Code", ui-monospace, monospace; font-size: 13px; }
+
+    /* Sequence diagram */
+    .seq {
+      margin: 24px 0 36px;
+      display: grid;
+      grid-template-columns: 22px 1fr 1fr 1fr 1fr;
+      gap: 0;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .seq-header {
+      font-weight: 700;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      padding: 0 0 8px 10px;
+    }
+    .seq-step {
+      grid-column: 1;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: right;
+      padding: 3px 10px 3px 0;
+    }
+    .seq-cell {
+      padding: 3px 10px;
+      border-left: 1px solid var(--line);
+      white-space: nowrap;
+    }
+    .seq-arrow { color: var(--accent); font-weight: 700; }
+    .seq-ok { color: var(--ok); }
+    .seq-err { color: var(--err); }
+
+    /* Callout boxes */
+    .callout {
+      border-left: 4px solid var(--accent);
+      background: var(--panel);
+      padding: 14px 18px;
+      margin: 0 0 24px;
+      border-radius: 0 8px 8px 0;
+      box-shadow: var(--shadow);
+    }
+    .callout.warn {
+      border-color: var(--warn);
+    }
+    .callout h4 {
+      margin: 0 0 4px;
+      font-size: 14px;
+      font-weight: 680;
+    }
+    .callout p, .callout li {
+      margin: 4px 0;
+      font-size: 14px;
+    }
+
+    /* State diagram */
+    .state-machine {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin: 16px 0 28px;
+      font-size: 13px;
+    }
+    .state-node {
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 18px;
+      background: var(--panel);
+      text-align: center;
+      min-width: 100px;
+      box-shadow: var(--shadow);
+    }
+    .state-node.active { border-color: var(--ok); background: #eafff0; }
+    .state-arrow {
+      font-size: 18px;
+      color: var(--muted);
+    }
+    .state-label {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+      margin-top: 2px;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--line);
+      margin: 36px 0;
+    }
+  </style>
+</head>
+<body>
+
+<main>
+
+<h1>Transport Session Protocol</h1>
+<p class="sub">
+  How EMWaver clients claim exclusive command access to an ESP32 device.<br>
+  Reference implementation: macOS <code>MacUSBManager.swift</code> &amp; ESP32 firmware <code>transport_session.c</code>.
+</p>
+
+<!-- ================================================================== -->
+<h2>1. Why This Exists</h2>
+
+<p>
+  ESP32 devices support multiple simultaneous transports: USB MIDI, BLE, and Wi-Fi.
+  Without a session model, two apps (or two transports on the same device) could interleave
+  commands, corrupt response routing, and break sampler streams.
+</p>
+
+<p><strong>The rule is simple:</strong> before any operational command (SPI, GPIO, ADC, sample,
+transmit, PWM, etc.) is accepted, the client must <em>claim</em> the transport session by
+sending a <code>CONNECT</code> command.</p>
+
+<div class="callout warn">
+  <h4>&#9888; Android is currently missing this</h4>
+  <p>
+    The macOS app implements the full session lifecycle. The Android app does not send
+    <code>CONNECT</code>, which is why cc1101.js and other hardware scripts fail with
+    <strong>error 130</strong> (<code>EMW_RESP_STATUS_BUSY = 0x82</code>) on ESP32 boards.
+    See <a href="#android-gap">§7</a> for the gap analysis.
+  </p>
+</div>
+
+<!-- ================================================================== -->
+<h2>2. Protocol Constants</h2>
+
+<table>
+  <thead>
+    <tr><th>Name</th><th>Value</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>EMW_OP_TRANSPORT_SESSION</code></td><td class="byte">0x0B</td><td>Opcode for all session commands</td></tr>
+    <tr><td><code>EMW_TRANSPORT_SESSION_STATUS</code></td><td class="byte">0x00</td><td>Query current session owner</td></tr>
+    <tr><td><code>EMW_TRANSPORT_SESSION_CONNECT</code></td><td class="byte">0x01</td><td>Claim the session</td></tr>
+    <tr><td><code>EMW_TRANSPORT_SESSION_DISCONNECT</code></td><td class="byte">0x02</td><td>Release the session</td></tr>
+    <tr><td><code>EMW_TRANSPORT_SESSION_HEARTBEAT</code></td><td class="byte">0x03</td><td>Keep the session alive</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead>
+    <tr><th>Source</th><th>Value</th><th>Used by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>EMW_COMMAND_SOURCE_UNKNOWN</code></td><td class="byte">0x00</td><td>No source / unclaimed</td></tr>
+    <tr><td><code>EMW_COMMAND_SOURCE_USB</code></td><td class="byte">0x01</td><td>USB MIDI transport</td></tr>
+    <tr><td><code>EMW_COMMAND_SOURCE_BLE</code></td><td class="byte">0x02</td><td>BLE transport</td></tr>
+    <tr><td><code>EMW_COMMAND_SOURCE_WIFI</code></td><td class="byte">0x03</td><td>Wi-Fi transport</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead>
+    <tr><th>Response</th><th>Value</th><th>Decimal</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>EMW_RESP_STATUS_OK</code></td><td class="byte">0x80</td><td>128</td><td>Success</td></tr>
+    <tr><td><code>EMW_RESP_STATUS_ERR</code></td><td class="byte">0x81</td><td>129</td><td>Generic error</td></tr>
+    <tr><td><code>EMW_RESP_STATUS_BUSY</code></td><td class="byte">0x82</td><td><strong>130</strong></td><td>No session / wrong source</td></tr>
+  </tbody>
+</table>
+
+<!-- ================================================================== -->
+<h2>3. Command Format</h2>
+
+<p>
+  Every session command is a 3-byte payload inside the standard 18-byte command lane:
+</p>
+
+<pre>Byte 0:   0x0B          (EMW_OP_TRANSPORT_SESSION)
+Byte 1:   subcommand    (0x00 = STATUS, 0x01 = CONNECT, 0x02 = DISCONNECT, 0x03 = HEARTBEAT)
+Byte 2:   source        (0x01 = USB, 0x02 = BLE, 0x03 = Wi-Fi)
+Bytes 3-17: 0x00        (padding)</pre>
+
+<p>
+  The response is a single status byte in the response lane:
+</p>
+
+<pre>Byte 0:   0x80  &#8594;  OK
+          0x82  &#8594;  BUSY (no session, or wrong source)</pre>
+
+<!-- ================================================================== -->
+<h2>4. Full Lifecycle (macOS reference)</h2>
+
+<h3>4.1 Sequence Diagram — Script Run</h3>
+
+<div class="seq">
+  <div class="seq-header" style="grid-column:1">#</div>
+  <div class="seq-header">macOS App</div>
+  <div class="seq-header">Firmware</div>
+  <div class="seq-header" style="grid-column:4 / 6">Notes</div>
+
+  <!-- Connect -->
+  <div class="seq-step">1</div>
+  <div class="seq-cell seq-arrow">&#10132; CONNECT [0B,01,source]</div>
+  <div class="seq-cell">transport_session_connect()</div>
+  <div class="seq-cell seq-ok" style="grid-column:4 / 6">Allowed even with no active session</div>
+
+  <div class="seq-step">2</div>
+  <div class="seq-cell seq-arrow">&#10129; OK [80]</div>
+  <div class="seq-cell">&#8592; send_binary_ok()</div>
+  <div class="seq-cell seq-ok" style="grid-column:4 / 6">Session active. source field set.</div>
+
+  <!-- Heartbeat -->
+  <div class="seq-step">3</div>
+  <div class="seq-cell seq-arrow">&#10132; HEARTBEAT [0B,03,source]</div>
+  <div class="seq-cell">transport_session_heartbeat()</div>
+  <div class="seq-cell" style="grid-column:4 / 6">Every 2s. Resets the 5s timeout.</div>
+
+  <div class="seq-step">4</div>
+  <div class="seq-cell seq-arrow">&#10129; OK [80]</div>
+  <div class="seq-cell">&#8592; send_binary_ok()</div>
+  <div class="seq-cell" style="grid-column:4 / 6"></div>
+
+  <!-- Operational commands -->
+  <div class="seq-step">5</div>
+  <div class="seq-cell seq-arrow">&#10132; SPI XFER [50, CS, ...]</div>
+  <div class="seq-cell">handle_spi_opcode()</div>
+  <div class="seq-cell seq-ok" style="grid-column:4 / 6">Now allowed — session is active</div>
+
+  <div class="seq-step">6</div>
+  <div class="seq-cell seq-arrow">&#10129; OK + RX data [80, ...]</div>
+  <div class="seq-cell">&#8592; SPI response bytes</div>
+  <div class="seq-cell" style="grid-column:4 / 6"></div>
+
+  <!-- More commands... -->
+
+  <!-- Disconnect -->
+  <div class="seq-step">7</div>
+  <div class="seq-cell seq-arrow">&#10132; DISCONNECT [0B,02,source]</div>
+  <div class="seq-cell">transport_session_disconnect()</div>
+  <div class="seq-cell" style="grid-column:4 / 6">Script stopped or ended</div>
+
+  <div class="seq-step">8</div>
+  <div class="seq-cell seq-arrow">&#10129; OK [80]</div>
+  <div class="seq-cell">&#8592; send_binary_ok()</div>
+  <div class="seq-cell" style="grid-column:4 / 6">Session released. Heartbeat stops.</div>
+</div>
+
+<h3>4.2 What Happens Without a Session</h3>
+
+<p>
+  If a client sends an operational command (e.g. <code>EMW_OP_SPI_XFER = 0x50</code>)
+  without first claiming the session:
+</p>
+
+<pre>Client &#10132; SPI XFER [50, 0A, 02, 02, F1, 00]   &#8592; cc1101.js VERSION probe
+Firmware &#10132; BUSY [82]                            &#8592; transport_session_allows_command() returns false
+
+JS kernel:  __emwAssertOk() sees status=0x82  &#8594;  throws "Device error: 130"
+cc1101.js:  catch  &#8594;  "Load failed: Device error: 130"</pre>
+
+<!-- ================================================================== -->
+<h2>5. Firmware Decision Logic</h2>
+
+<p>
+  The gate lives in <code>esp/main/libraries/init.c</code>, <code>command_task()</code>.
+  Every command (USB, BLE, or Wi-Fi) hits this check:
+</p>
+
+<pre>// init.c — command_task()
+active_command_source = cmd.source;
+
+if (!transport_session_allows_command(&amp;cmd)) {
+    send_binary_busy();               // &#8594; 0x82
+    active_command_source = EMW_COMMAND_SOURCE_UNKNOWN;
+    continue;                          // drop the command
+}</pre>
+
+<p>
+  <code>transport_session_allows_command()</code> in <code>transport_session.c</code>
+  decides in this order:
+</p>
+
+<pre>1. Expire stale claims (if last activity > 5s ago, set session to NONE)
+
+2. Is this a CONNECT command?
+   &#8594; Allowed if: no active session OR same source already owns it
+
+3. Is this a STATUS command or a discovery command?
+   (VERSION, HARDWARE_UID_GET, BOARD_GET, NAME_GET, WIFI_CFG_STATUS, TRANSPORT_SESSION_STATUS)
+   &#8594; Always allowed — no session needed
+
+4. Is there an active session?
+   If NO  &#8594;  REJECT (BUSY)      &#8592; THIS IS THE ERROR PATH
+
+5. Does the command's source match the active session?
+   If NO  &#8594;  REJECT (BUSY)
+
+6. Update activity timestamp &#8594; ALLOW</pre>
+
+<h3>5.1 Discovery Commands (Always Allowed)</h3>
+
+<p>
+  These opcodes do <strong>not</strong> require a session. They are safe to query
+  even when no session is active or another source owns it:
+</p>
+
+<table>
+  <thead>
+    <tr><th>Opcode</th><th>Value</th><th>Command</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>EMW_OP_VERSION</code></td><td class="byte">0x01</td><td>Firmware version query</td></tr>
+    <tr><td><code>EMW_OP_HARDWARE_UID_GET</code></td><td class="byte">0x08</td><td>Read hardware UID</td></tr>
+    <tr><td><code>EMW_OP_BOARD_GET</code></td><td class="byte">0x09</td><td>Board type query</td></tr>
+    <tr><td><code>EMW_OP_NAME_GET</code></td><td class="byte">0x04</td><td>Device name query</td></tr>
+    <tr><td><code>EMW_OP_WIFI_CONFIG</code></td><td class="byte">0x0A</td><td>Wi-Fi <em>status only</em> (sub=0x04)</td></tr>
+    <tr><td><code>EMW_OP_TRANSPORT_SESSION</code></td><td class="byte">0x0B</td><td>Session <em>status query only</em> (sub=0x00)</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 Session Timeout</h3>
+
+<p>
+  The firmware auto-expires a session after <strong>5000ms</strong> of inactivity
+  (no command with a matching source). The macOS app sends a heartbeat every
+  <strong>2000ms</strong> to prevent this.
+</p>
+
+<!-- ================================================================== -->
+<h2>6. macOS App — Reference Implementation</h2>
+
+<h3>6.1 Which transports need a session?</h3>
+
+<pre>// MacUSBManager.swift
+private func requiresTransportSessionInternal(deviceID: String) -> Bool {
+    if deviceID.hasPrefix("ble:") || deviceID.hasPrefix("wifi:") {
+        return true              // BLE and Wi-Fi always require session
+    }
+    return boardTypeForDeviceIDInternal(deviceID)?
+        .lowercased()
+        .hasPrefix("esp32") == true   // USB-to-ESP32 also requires session
+                                       // USB-to-STM32 does NOT (no transport_session.c)
+}</pre>
+
+<h3>6.2 Script run entry point</h3>
+
+<pre>// MacScriptSessionManager.swift — run()
+guard device.beginScriptTransportSession(deviceID: targetID) else {
+    return runFailure("Cannot run script: transport claim failed")
+}
+
+let manager = ScriptPreviewManager()
+manager.attach(device: deviceBridge)
+manager.render(script: source, ...)
+
+// ... when script stops:
+device.endScriptTransportSession(deviceID: targetID)</pre>
+
+<h3>6.3 Session establishment</h3>
+
+<pre>// MacUSBManager.swift — beginScriptTransportSession()
+// 1. Determine source byte from transport type
+let source: UInt8 = deviceID.hasPrefix("midi:")  ? 0x01   // USB
+                  : deviceID.hasPrefix("ble:")   ? 0x02   // BLE
+                  : deviceID.hasPrefix("wifi:")  ? 0x03   // Wi-Fi
+
+// 2. Send CONNECT and wait for OK
+let ok = sendTransportSessionCommandInternal(
+    subcommand: EmwOpcode.transportSessionConnect,  // 0x01
+    source: source,
+    deviceID: targetID,
+    timeoutMs: 1500,
+    reportErrors: true
+)
+
+// 3. Start periodic heartbeat (every 2s)
+startTransportSessionHeartbeatInternal(deviceID: targetID, source: source)</pre>
+
+<h3>6.4 Heartbeat</h3>
+
+<pre>// MacUSBManager.swift — startTransportSessionHeartbeatInternal()
+let timer = DispatchSource.makeTimerSource(queue: midiQueue)
+timer.schedule(
+    deadline: .now() + 2.0,
+    repeating: 2.0          // 2000ms < 5000ms firmware timeout
+)
+timer.setEventHandler {
+    sendTransportSessionCommandInternal(
+        subcommand: EmwOpcode.transportSessionHeartbeat,  // 0x03
+        source: source,
+        deviceID: deviceID,
+        timeoutMs: 1000
+    )
+}</pre>
+
+<h3>6.5 Teardown</h3>
+
+<pre>// MacUSBManager.swift — endScriptTransportSession()
+sendTransportSessionCommandInternal(
+    subcommand: EmwOpcode.transportSessionDisconnect,  // 0x02
+    source: claim.source,
+    deviceID: targetID,
+    timeoutMs: 1000
+)
+// Heartbeat timer cancelled
+claim.heartbeatTimer.cancel()</pre>
+
+<!-- ================================================================== -->
+<h2 id="android-gap">7. Android Gap Analysis</h2>
+
+<div class="callout warn">
+  <h4>What's missing</h4>
+  <p>
+    The Android app (<code>USBService.java</code>, <code>AndroidBleProtocol.java</code>,
+    <code>AndroidWiFiTransport.java</code>) has <strong>zero</strong> references to
+    <code>EMW_OP_TRANSPORT_SESSION (0x0B)</code>, transport session connect/disconnect,
+    or heartbeat logic.
+  </p>
+  <p>
+    When a script runs on an ESP32 board via BLE or Wi-Fi, every operational command
+    (SPI, GPIO, ADC, etc.) is rejected with BUSY (130).
+  </p>
+</div>
+
+<h3>7.1 What needs to change</h3>
+
+<p>For BLE (the user's current transport), add these steps to <code>AndroidBleProtocol.java</code>:</p>
+
+<pre>// In onConnected() callback, after setActiveConnection():
+// 1. Send CONNECT
+byte[] connectCmd = {0x0B, 0x01, 0x02};  // TRANSPORT_SESSION, CONNECT, BLE source
+byte[] response = host.sendCommand(connectCmd, 1500);
+
+if (response == null || response.length == 0 || response[0] != (byte)0x80) {
+    // session claim failed — show error, disconnect
+}
+
+// 2. Start heartbeat timer (every 2s)
+// 3. On disconnect: send [0x0B, 0x02, 0x02]</pre>
+
+<p>The same pattern applies to <code>AndroidWiFiTransport.java</code> with source <code>0x03</code>.</p>
+
+<h3>7.2 Scope of affected commands</h3>
+
+<p>Every opcode that is <strong>not</strong> in the discovery allowlist (§5.1) is affected:</p>
+
+<table>
+  <thead>
+    <tr><th>Opcode</th><th>Value</th><th>Used by</th></tr>
+  </thead>
+  <tbody>
+    <tr><td><code>EMW_OP_GPIO</code></td><td class="byte">0x10</td><td>emw-gpio.js, any script using gpio.*</td></tr>
+    <tr><td><code>EMW_OP_ADC_READ</code></td><td class="byte">0x20</td><td>emw-adc.js</td></tr>
+    <tr><td><code>EMW_OP_SPI_XFER</code></td><td class="byte">0x50</td><td><strong>emw-spi.js, cc1101.js, rfm69.js, rfid.js</strong></td></tr>
+    <tr><td><code>EMW_OP_I2C</code></td><td class="byte">0x40</td><td>emw-i2c.js</td></tr>
+    <tr><td><code>EMW_OP_UART</code></td><td class="byte">0x30</td><td>emw-uart.js</td></tr>
+    <tr><td><code>EMW_OP_SAMPLE</code></td><td class="byte">0x60</td><td>Sampler.js, signal capture</td></tr>
+    <tr><td><code>EMW_OP_PWM</code></td><td class="byte">0x70</td><td>emw-pwm.js</td></tr>
+    <tr><td><code>EMW_OP_TRANSMIT</code></td><td class="byte">0x80</td><td>IR/signal transmit</td></tr>
+  </tbody>
+</table>
+
+<p>
+  <strong>STM32F042 boards are not affected</strong> — they don't compile
+  <code>transport_session.c</code>, so the gate doesn't exist in their firmware.
+</p>
+
+<!-- ================================================================== -->
+<h2>8. The 3-Byte Command in Context</h2>
+
+<p>
+  You asked: <em>"So the current system is we send EMW_OP_TRANSPORT_SESSION +
+  EMW_TRANSPORT_SESSION_CONNECT + EMW_COMMAND_SOURCE_BLE — these three commands
+  to establish a connection?"</em>
+</p>
+
+<p>
+  <strong>Close — but it's one command with 3 bytes</strong>, not three separate commands.
+  The packet is:
+</p>
+
+<pre>[0x0B, 0x01, 0x02]</pre>
+
+<table>
+  <thead>
+    <tr><th>Byte</th><th>Name</th><th>Value</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>0</td><td>Opcode</td><td class="byte">0x0B</td><td>Tells the firmware "this is a transport session command"</td></tr>
+    <tr><td>1</td><td>Subcommand</td><td class="byte">0x01</td><td>Tells the session module "I want to CONNECT"</td></tr>
+    <tr><td>2</td><td>Source</td><td class="byte">0x02</td><td>Tells the session module "I am BLE"</td></tr>
+  </tbody>
+</table>
+
+<p>
+  The firmware already knows the source from the transport layer (<code>cmd.source</code>
+  field is set by the BLE/USB/Wi-Fi receive path). Byte 2 must match that source
+  for the CONNECT to succeed:
+</p>
+
+<pre>// init.c — handle_transport_session_opcode()
+case EMW_TRANSPORT_SESSION_CONNECT:
+    if (requested_source != cmd.source     // byte 2 must match transport source
+        || !transport_session_connect(cmd.source)) {
+        send_binary_busy();
+        return;
+    }
+    send_binary_ok(NULL, 0);</pre>
+
+<p>
+  After that single 3-byte command succeeds, the session is active. The client
+  then needs periodic HEARTBEAT commands <code>[0x0B, 0x03, 0x02]</code> to prevent
+  the 5-second inactivity timeout from reclaiming the session.
+</p>
+
+<!-- ================================================================== -->
+<h2>9. Source Files</h2>
+
+<table>
+  <thead>
+    <tr><th>Layer</th><th>File</th><th>Role</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>Firmware</td><td><code>esp/main/libraries/transport_session.c</code></td><td>Session state machine, timeout, command gating</td></tr>
+    <tr><td>Firmware</td><td><code>esp/main/libraries/transport_session.h</code></td><td>Session constants (CONNECT, DISCONNECT, HEARTBEAT)</td></tr>
+    <tr><td>Firmware</td><td><code>esp/main/libraries/emw_proto.h</code></td><td>Response status bytes (OK=0x80, ERR=0x81, BUSY=0x82)</td></tr>
+    <tr><td>Firmware</td><td><code>esp/main/libraries/command_registry.h</code></td><td>Source constants (USB=1, BLE=2, Wi-Fi=3)</td></tr>
+    <tr><td>Firmware</td><td><code>esp/main/libraries/init.c</code></td><td>Command task loop, calls transport_session_allows_command()</td></tr>
+    <tr><td>macOS</td><td><code>macos/EMWaver/EMWaver/MacUSBManager.swift</code></td><td>Full session lifecycle reference implementation</td></tr>
+    <tr><td>macOS</td><td><code>macos/EMWaver/EMWaver/MacScriptSessionManager.swift</code></td><td>Calls begin/end transport session around script runs</td></tr>
+    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-kernel.js</code></td><td>__emwAssertOk() — where error 130 is surfaced to scripts</td></tr>
+    <tr><td>JS Kernel</td><td><code>assets/default-scripts/emw-protocol.js</code></td><td>Protocol constants used by module scripts</td></tr>
+    <tr><td>JS Module</td><td><code>assets/default-scripts/emw-spi.js</code></td><td>SPI module — builds EMW_OP_SPI_XFER packets</td></tr>
+    <tr><td>JS Module</td><td><code>assets/default-scripts/cc1101.js</code></td><td>CC1101 script — triggers the error on Initialize</td></tr>
+    <tr><td>Android</td><td><code>android/.../USBService.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>
+    <tr><td>Android</td><td><code>android/.../AndroidBleProtocol.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>
+    <tr><td>Android</td><td><code>android/.../AndroidWiFiTransport.java</code></td><td><strong>Missing</strong> transport session handling</td></tr>
+  </tbody>
+</table>
+
+</main>
+</body>
+</html>
