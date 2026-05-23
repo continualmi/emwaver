@@ -29,10 +29,7 @@ import com.emwaver.emwaverandroidapp.agent.AgentChatRole;
 import com.emwaver.emwaverandroidapp.agent.AgentChatToolMeta;
 import com.emwaver.emwaverandroidapp.agent.AgentConversationInfo;
 import com.emwaver.emwaverandroidapp.agent.AgentToolJSON;
-
-import java.util.Map;
-import java.util.UUID;
-import com.emwaver.emwaverandroidapp.agent.AgentToolJSON;
+import com.emwaver.emwaverandroidapp.ui.auth.SignInBottomSheetDialogFragment;
 import com.emwaver.emwaverandroidapp.ui.scripts.ScriptsViewModel;
 import com.google.android.material.bottomsheet.BottomSheetDialogFragment;
 import com.google.android.material.button.MaterialButton;
@@ -41,6 +38,7 @@ import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 import io.noties.markwon.Markwon;
 
@@ -207,8 +205,10 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         }
         if (getKeyButton != null) {
             getKeyButton.setOnClickListener(v -> {
-                // Navigate to settings / API key screen
+                // Dismiss agent chat and show sign-in dialog
                 dismiss();
+                SignInBottomSheetDialogFragment signIn = new SignInBottomSheetDialogFragment();
+                signIn.show(requireActivity().getSupportFragmentManager(), "SignIn");
             });
         }
         if (scrollFab != null) {
@@ -222,6 +222,13 @@ public class AgentChatBottomSheetDialogFragment extends BottomSheetDialogFragmen
         bindSuggestionCard(view, R.id.agent_suggestion_ir, "How do I capture and replay an IR remote?");
 
         viewModel.bootstrap();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        // Refresh pro notice when returning from API key configuration.
+        updateProNotice();
     }
 
     private void updateProNotice() {

@@ -6,12 +6,16 @@
 
 package com.emwaver.emwaverandroidapp;
 
+import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.view.MenuItem;
 
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.preference.EditTextPreference;
 import androidx.preference.PreferenceFragmentCompat;
+
+import com.emwaver.emwaverandroidapp.agent.AgentApiKeyStore;
 
 public class SettingsActivity extends AppCompatActivity {
 
@@ -46,6 +50,32 @@ public class SettingsActivity extends AppCompatActivity {
             // Keep settings in the app SharedPreferences file.
             getPreferenceManager().setSharedPreferencesName("emwaver");
             setPreferencesFromResource(R.xml.root_preferences, rootKey);
+
+            // Sync API key changes to AgentApiKeyStore.
+            SharedPreferences prefs = requireContext().getSharedPreferences("emwaver", 0);
+            prefs.registerOnSharedPreferenceChangeListener((sharedPrefs, key) -> {
+                if ("agent_api_key".equals(key)) {
+                    String val = sharedPrefs.getString(key, "");
+                    AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                    keyStore.ensureInitialized(requireContext());
+                    if (val != null && !val.trim().isEmpty()) {
+                        keyStore.saveApiKeyAsync(requireContext(), val, (success, msg) -> {});
+                    } else {
+                        keyStore.clear(requireContext());
+                    }
+                }
+            });
+
+            // Pre-populate the key from AgentApiKeyStore if set.
+            EditTextPreference keyPref = findPreference("agent_api_key");
+            if (keyPref != null) {
+                AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
+                keyStore.ensureInitialized(requireContext());
+                String existing = keyStore.getAgentApiKey();
+                if (existing != null && !existing.trim().isEmpty()) {
+                    keyPref.setText(existing);
+                }
+            }
         }
     }
 } 

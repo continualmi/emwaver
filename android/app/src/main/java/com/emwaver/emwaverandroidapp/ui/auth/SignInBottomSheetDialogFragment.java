@@ -1,5 +1,7 @@
 package com.emwaver.emwaverandroidapp.ui.auth;
 
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.TextWatcher;
@@ -60,6 +62,23 @@ public class SignInBottomSheetDialogFragment extends BottomSheetDialogFragment {
         }
 
         notNow.setOnClickListener(v -> dismiss());
+
+        MaterialButton createKeyButton = view.findViewById(R.id.sign_in_create_key);
+        MaterialButton buyCreditsButton = view.findViewById(R.id.sign_in_buy_credits);
+
+        if (createKeyButton != null) {
+            createKeyButton.setOnClickListener(v -> {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("https://mdl.continualmi.com/mgpt-api"));
+                startActivity(i);
+            });
+        }
+        if (buyCreditsButton != null) {
+            buyCreditsButton.setOnClickListener(v -> {
+                Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("https://mdl.continualmi.com/account"));
+                startActivity(i);
+            });
+        }
+
         AgentApiKeyStore keyStore = AgentApiKeyStore.getInstance();
         keyStore.ensureInitialized(requireContext());
 

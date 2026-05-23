@@ -20,9 +20,34 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Enter an Agent API key to enable Agent replies. Local scripts and hardware control do not require a key."
+        android:text="Create a Continual API key, add credits if needed, then store the key on this device. Local scripts and hardware control work without it."
         android:textColor="@color/textSecondary"
         android:textSize="13sp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sign_in_create_key"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Create Key"
+            android:textSize="13sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/sign_in_buy_credits"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Buy Credits"
+            android:textSize="13sp" />
+
+    </LinearLayout>
 
     <TextView
         android:id="@+id/sign_in_error"
