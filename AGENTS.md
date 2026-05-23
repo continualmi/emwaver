@@ -37,10 +37,22 @@ Core direction:
 - **Firmware:** per-board firmware targets managed by the platform. Users never build or flash firmware manually; apps should handle firmware setup and updates where practical.
 - **UX:** script-first hardware exploration (instant run; no user build/flash loop).
 - **AI:** Agent-assisted workflows are first-class and are the primary paid product direction. Each app may keep its own Agent interface/runtime, but those runtimes are API clients. The only planned network interface is an optional API key to a future Continual MI/MGPT Agent backend.
-- **Client surfaces:** Android, iOS, macOS, Windows.
-- **Distribution:** direct desktop installers/downloads for macOS and Windows; mobile store distribution for iOS and Android, with Android APK available as an alternate direct install path.
+- **Client surfaces:** iOS and Android (V1 primary), macOS (development/advanced surface), Windows (deferred to post-V1).
+- **UX:** script-first hardware exploration (instant run; no user build/flash loop). The phone is the primary device — users carry it already, and the Agent is the interface.
+- **Distribution:** mobile store distribution for iOS and Android (V1 primary), with Android APK as an alternate direct install path. macOS DMG for development/advanced use. Windows deferred past V1.
 
 ---
+
+### V1 Platform Priorities
+
+V1 is mobile-first. The phone is the tricorder — the device users always have with them. The Agent is the interface; users don't need a desktop editor if the Agent writes and debugs the scripts.
+
+- **iOS** — V1 primary. App Store distribution. USB-C iPhones and iPads for direct board connection.
+- **Android** — V1 primary. Google Play + APK direct download. USB host mode on all modern Android devices. Industrial field-service path through rugged Android devices (Zebra, Honeywell, Samsung Rugged).
+- **macOS** — V1 development/advanced surface. Firmware flashing, multi-device bench testing, long automation runs. DMG distribution.
+- **Windows** — deferred past V1. Source exists, parity contracts are written, but the WinUI app requires a separate Windows toolchain that blocks progress on this machine.
+
+Firmware strategy: boards should arrive pre-flashed or require a one-time desktop flash. After that, daily use is phone-only.
 
 ## 2) Platform Thesis
 
@@ -68,9 +80,10 @@ We intentionally give up:
 - Adoption from day one through an open-source local core.
 - Revenue through paid Agent API usage.
 - Multiple supported boards, one unified UX.
-- Cross-platform apps (Android/iOS/macOS/Windows).
+- Mobile-first platforms (iOS, Android) — the device users already carry.
 - Agent-driven exploration loops.
-- Larger addressable market (every compatible board owner).
+- Larger addressable market (every compatible board owner, every phone owner).
+- Industrial field adoption path through Android rugged devices (Zebra, Honeywell, Samsung Rugged).
 
 ---
 
@@ -112,9 +125,10 @@ We intentionally give up:
 
 ### Distribution and release posture
 
-- Desktop distribution is direct-download first: macOS DMG and Windows installer EXE, with Windows ZIP kept as an alternate install path.
-- Mobile distribution remains store-oriented: App Store for iPhone/iPad and Google Play for Android, with Android APK kept as an alternate direct install path.
-- GitHub Releases may host preview downloadable artifacts; the public install page should present the user-facing paths clearly.
+- Mobile is V1 primary: App Store for iPhone/iPad, Google Play for Android, with Android APK as an alternate direct install path.
+- macOS DMG for development and advanced use.
+- Windows deferred past V1; installer EXE and ZIP paths defined but not active.
+- GitHub Releases may host preview downloadable artifacts; the public install page should present mobile first.
 
 ### Long-term hardware direction
 

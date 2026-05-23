@@ -12,12 +12,14 @@ EMWaver is a **local-first, open-source, AI-assisted electronics platform** by C
 
 ## Supported Platforms
 
-| Platform | Surface | Status |
-|----------|---------|--------|
-| macOS | Native SwiftUI app | Active |
-| iOS | Native SwiftUI app | Active (TestFlight / store) |
-| Android | Native Kotlin app | Active (APK preview) |
-| Windows | Native WinUI 3 app | Active (source exists; build validation blocked on this machine) |
+| Platform | Surface | V1 Priority | Status |
+|----------|---------|-------------|--------|
+| iOS | Native SwiftUI app | **Primary** | Active (TestFlight / store) |
+| Android | Native Kotlin app | **Primary** | Active (APK preview) |
+| macOS | Native SwiftUI app | Dev/Advanced | Active |
+| Windows | Native WinUI 3 app | Deferred | Source exists; build blocked on this machine |
+
+V1 is mobile-first. The phone is the tricorder — the device users always carry. The Agent is the interface; users don't need a desktop editor if the Agent writes and debugs scripts. macOS stays as the development surface for firmware flashing and multi-device bench work. Windows is deferred past V1.
 
 ## What Was Removed (May 2026)
 
@@ -79,4 +81,4 @@ These docs are directionally valid but contain references to the removed Gateway
 
 ## Windows Development Note
 
-The Windows native app source exists and the parity contracts (`docs/parity/`) require Windows feature parity across transport, firmware, scripting, agent, and local-first policies. However, the Windows app cannot be built on this machine — it requires a Windows 11 workstation with Visual Studio 2022 and the WinUI 3 SDK. Real validation is pending.
+Windows is deferred past V1. The source exists and the parity contracts (`docs/parity/`) document the feature requirements, but the WinUI 3 app requires a Windows 11 workstation with Visual Studio 2022 that is not available on this machine. Windows will be revisited after V1 launch.
