@@ -1,0 +1,11 @@
+# dependencies
+node_modules/
+.next/
+
+# build output
+out/
+out-emwaver/
+
+# misc
+.DS_Store
+*.log

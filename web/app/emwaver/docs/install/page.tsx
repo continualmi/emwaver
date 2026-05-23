@@ -3,7 +3,7 @@ import Link from "next/link";
 function PreviewDownloads() {
   return (
     <div className="grid gap-3 md:grid-cols-3">
-      <
+      <a
         href="/emwaver/downloads/EMWaver-android.apk"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
