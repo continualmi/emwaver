@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMWaver — Android Release System</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --code-bg: #1c2128;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+  h1 { font-size: 2rem; margin-bottom: 8px; }
+  h2 { font-size: 1.4rem; margin-top: 40px; margin-bottom: 16px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+  h3 { font-size: 1.1rem; margin-top: 28px; margin-bottom: 10px; }
+  p, li { color: var(--muted); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 32px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    margin: 20px 0;
+  }
+  .card h3 { margin-top: 0; border: none; padding: 0; }
+
+  code {
+    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', Menlo, monospace;
+    font-size: 0.88em;
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+  }
+
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-size: 0.88em;
+    line-height: 1.5;
+    margin: 12px 0;
+  }
+  pre code { background: none; border: none; padding: 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 16px 0;
+    font-size: 0.92em;
+  }
+  th, td {
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    font-weight: 600;
+    color: var(--text);
+    background: var(--surface);
+    position: sticky;
+    top: 0;
+  }
+  td { color: var(--muted); }
+  td:first-child { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.88em; white-space: nowrap; }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.8em;
+    font-weight: 600;
+    margin-right: 6px;
+  }
+  .badge-green { background: rgba(63, 185, 80, 0.15); color: var(--green); }
+  .badge-orange { background: rgba(210, 153, 29, 0.15); color: var(--orange); }
+  .badge-blue { background: rgba(88, 166, 255, 0.15); color: var(--accent); }
+
+  .flow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin: 16px 0; }
+  .flow-step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.9em;
+    white-space: nowrap;
+  }
+  .flow-arrow { color: var(--muted); font-size: 1.2em; }
+
+  .note {
+    background: rgba(88, 166, 255, 0.08);
+    border-left: 3px solid var(--accent);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.92em;
+    color: var(--muted);
+  }
+
+  .warn {
+    background: rgba(210, 153, 29, 0.08);
+    border-left: 3px solid var(--orange);
+    padding: 12px 16px;
+    margin: 16px 0;
+    border-radius: 0 6px 6px 0;
+    font-size: 0.92em;
+    color: var(--muted);
+  }
+
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 0.8em;
+    font-weight: 700;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  details {
+    margin: 16px 0;
+  }
+  summary {
+    cursor: pointer;
+    color: var(--accent);
+    font-weight: 500;
+    padding: 4px 0;
+  }
+  summary:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+
+<h1>EMWaver — Android Release System</h1>
+<p class="subtitle">Reference for the three distribution paths: APK (direct), Play Store internal/testing, and Play Store production.</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>1. Overview</h2>
+
+<p>EMWaver Android releases travel through <strong>three distinct paths</strong>, each served by its own GitHub Actions workflow and triggered by different tag conventions:</p>
+
+<div class="card">
+<table>
+  <tr>
+    <th>Path</th>
+    <th>Workflow</th>
+    <th>Trigger tags</th>
+    <th>Artifact</th>
+    <th>Signing</th>
+    <th>Destination</th>
+  </tr>
+  <tr>
+    <td>APK</td>
+    <td><code>android-apk-release.yml</code></td>
+    <td><code>emwaver-v*</code></td>
+    <td>Unsigned APK</td>
+    <td><span class="badge badge-orange">None</span></td>
+    <td>GitHub Releases (prerelease)</td>
+  </tr>
+  <tr>
+    <td>Play Store · internal/testing</td>
+    <td><code>android-play-release.yml</code></td>
+    <td><code>android-v*</code> / <code>emwaver-android-v*</code></td>
+    <td>Signed AAB</td>
+    <td><span class="badge badge-green">Upload key</span></td>
+    <td>Google Play (internal / alpha / beta tracks)</td>
+  </tr>
+  <tr>
+    <td>Play Store · production</td>
+    <td><code>android-play-release.yml</code></td>
+    <td><code>android-v*</code> / <code>emwaver-android-v*</code></td>
+    <td>Signed AAB</td>
+    <td><span class="badge badge-green">Upload key</span></td>
+    <td>Google Play (production track)</td>
+  </tr>
+</table>
+</div>
+
+<div class="note">
+  <strong>Key distinction:</strong> The APK workflow and the Play Store workflow use <strong>different tag prefixes</strong> so they never collide. Pushing <code>emwaver-v1.0.0</code> builds an unsigned APK for GitHub Releases. Pushing <code>android-v1.0.0</code> or <code>emwaver-android-v1.0.0</code> triggers the signed Play Store upload.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>2. Path 1 — Direct APK Distribution</h2>
+
+<h3>Workflow: <code>android-apk-release.yml</code></h3>
+
+<div class="card">
+  <h3>Triggers</h3>
+  <ul>
+    <li><code>workflow_dispatch</code> — manual trigger with a <code>tag</code> input (default: <code>emwaver-preview</code>)</li>
+    <li>Push of any tag matching <code>emwaver-v*</code></li>
+  </ul>
+</div>
+
+<h3>What it does</h3>
+
+<div class="flow">
+  <div class="flow-step">Checkout</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">JDK 17</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Stage firmware</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><code>./gradlew assembleRelease</code></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Attach APK to GitHub Release</div>
+</div>
+
+<div class="card">
+  <h3>Characteristics</h3>
+  <ul>
+    <li><span class="badge badge-orange">Unsigned</span> — no code signing, so users must enable "Install unknown apps"</li>
+    <li><span class="badge badge-blue">No secrets</span> — zero secrets required; runs clean on any push</li>
+    <li><span class="badge badge-blue">Prerelease</span> — GitHub Release is always marked <code>prerelease: true</code></li>
+    <li>Output name: <code>EMWaver-android.apk</code></li>
+    <li>Works with any pre-existing GitHub Release tag (does not create the release itself)</li>
+  </ul>
+</div>
+
+<h3>How to release an APK</h3>
+
+<div class="card">
+  <p><span class="step-num">1</span> Create a tag: <code>git tag -a emwaver-v0.2.0 -m "Preview release 0.2.0"</code></p>
+  <p><span class="step-num">2</span> Push the tag: <code>git push origin emwaver-v0.2.0</code></p>
+  <p><span class="step-num">3</span> The workflow runs automatically and attaches the APK to the release.</p>
+  <p><span class="step-num">4</span> Or trigger manually from the Actions tab with <code>workflow_dispatch</code> and specify the tag.</p>
+</div>
+
+<div class="warn">
+  <strong>Prerequisite:</strong> The GitHub Release must already exist for the tag. The workflow attaches to an existing release — it does not create one. Create the release first from the GitHub Releases UI or push the tag with a release creation step.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>3. Path 2 — Play Store (internal / testing / production)</h2>
+
+<h3>Workflow: <code>android-play-release.yml</code></h3>
+
+<div class="card">
+  <h3>Triggers</h3>
+  <ul>
+    <li><code>workflow_dispatch</code> with optional inputs:
+      <ul>
+        <li><code>version_code</code> — overrides <code>build.gradle</code> versionCode</li>
+        <li><code>version_name</code> — overrides <code>build.gradle</code> versionName</li>
+        <li><code>changelog</code> — Google Play changelog for this release</li>
+        <li><code>track</code> — Play Store track (default: <code>internal</code>)</li>
+      </ul>
+    </li>
+    <li>Push of tags matching <code>android-v*</code> or <code>emwaver-android-v*</code></li>
+  </ul>
+</div>
+
+<h3>What it does</h3>
+
+<div class="flow">
+  <div class="flow-step">Checkout</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">JDK 17</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Ruby 3.1</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Stage firmware</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Install signing key</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Install Google service account</div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step"><code>fastlane android beta</code></div>
+  <div class="flow-arrow">→</div>
+  <div class="flow-step">Upload AAB to Play Console</div>
+</div>
+
+<h3>Secrets required</h3>
+
+<table>
+  <tr>
+    <th>Secret</th>
+    <th>Purpose</th>
+    <th>How to generate</th>
+  </tr>
+  <tr>
+    <td><code>ANDROID_KEYSTORE_BASE64</code></td>
+    <td>Upload signing key (JKS, base64-encoded)</td>
+    <td><code>base64 -w0 emwaver-upload.jks</code></td>
+  </tr>
+  <tr>
+    <td><code>ANDROID_KEYSTORE_PASSWORD</code></td>
+    <td>Keystore password</td>
+    <td>Set during key generation</td>
+  </tr>
+  <tr>
+    <td><code>ANDROID_KEY_ALIAS</code></td>
+    <td>Key alias (e.g. <code>emwaver-upload</code>)</td>
+    <td>Set during key generation</td>
+  </tr>
+  <tr>
+    <td><code>ANDROID_KEY_PASSWORD</code></td>
+    <td>Key password</td>
+    <td>Set during key generation</td>
+  </tr>
+  <tr>
+    <td><code>GOOGLE_PLAY_SERVICE_ACCOUNT_JSON</code></td>
+    <td>Google Play service account JSON key</td>
+    <td>Google Cloud Console → Service Accounts → Create key (JSON)</td>
+  </tr>
+</table>
+
+<h3>GitHub environment</h3>
+
+<div class="card">
+  <p>The workflow runs in the <code>play-store</code> GitHub environment. This must exist in the repo at:</p>
+  <p><strong>Settings → Environments → New environment → name: <code>play-store</code></strong></p>
+  <p>The five secrets above should be scoped to this environment.</p>
+</div>
+
+<h3>Fastlane lane: <code>beta</code></h3>
+
+<p>The workflow calls <code>bundle exec fastlane android beta</code> in the <code>android/</code> directory. The Fastlane configuration (<code>android/fastlane/Fastfile</code>) does:</p>
+
+<ol>
+  <li>Validates that all four signing environment variables are present and the keystore file exists</li>
+  <li>Validates that the Google Play service account JSON key exists</li>
+  <li>Runs <code>gradle bundleRelease</code> to build the signed AAB</li>
+  <li>Calls <code>upload_to_play_store</code> with:
+    <ul>
+      <li>Package: <code>com.emwaver.emwaverandroidapp</code></li>
+      <li>Track: <code>GOOGLE_PLAY_TRACK</code> env var (default: <code>internal</code>)</li>
+      <li>Release status: <code>draft</code></li>
+      <li>Metadata/changelogs: skipped (not uploaded)</li>
+    </ul>
+  </li>
+</ol>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>4. Track strategy</h2>
+
+<p>The <code>android-play-release.yml</code> workflow accepts a <code>track</code> input that maps directly to Google Play tracks. The default is <code>internal</code>.</p>
+
+<table>
+  <tr>
+    <th>Track</th>
+    <th>Workflow input</th>
+    <th>Typical use</th>
+  </tr>
+  <tr>
+    <td>Internal testing</td>
+    <td><code>internal</code> (default)</td>
+    <td>Fast internal distribution, up to 100 testers, no review</td>
+  </tr>
+  <tr>
+    <td>Closed testing (alpha)</td>
+    <td><code>alpha</code></td>
+    <td>Invited testers, pre-production validation</td>
+  </tr>
+  <tr>
+    <td>Open testing (beta)</td>
+    <td><code>beta</code></td>
+    <td>Public opt-in testing, larger audience</td>
+  </tr>
+  <tr>
+    <td>Production</td>
+    <td><code>production</code></td>
+    <td>Full public release on Google Play</td>
+  </tr>
+</table>
+
+<div class="note">
+  <strong>Recommended flow:</strong> Tag push → <code>internal</code> by default → promote manually in Play Console through alpha → beta → production. Or use <code>workflow_dispatch</code> with explicit <code>track: production</code> when the build is ready. All uploads arrive as <code>draft</code> and must be manually submitted/reviewed in Play Console before they go live.
+</div>
+
+<h3>Promotion example (step by step)</h3>
+
+<div class="card">
+  <p><span class="step-num">1</span> Push tag <code>android-v1.0.0</code> → AAB uploaded to <strong>internal</strong> track (draft)</p>
+  <p><span class="step-num">2</span> Review and promote to <strong>alpha</strong> in Play Console</p>
+  <p><span class="step-num">3</span> After alpha validation, promote to <strong>beta</strong></p>
+  <p><span class="step-num">4</span> When ready for production, either:
+    <ul>
+      <li>Promote from beta to production in Play Console, <strong>or</strong></li>
+      <li>Run a new <code>workflow_dispatch</code> with <code>track: production</code></li>
+    </ul>
+  </p>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>5. Pre-launch checklist</h2>
+
+<div class="card">
+  <h3>Google Play Console</h3>
+  <table>
+    <tr><td><input type="checkbox"> App created with package <code>com.emwaver.emwaverandroidapp</code></td></tr>
+    <tr><td><input type="checkbox"> Upload signing key registered in App Integrity</td></tr>
+    <tr><td><input type="checkbox"> Service account created and granted <strong>Release</strong> or <strong>Admin</strong> role</td></tr>
+    <tr><td><input type="checkbox"> Google Play Developer API enabled for the project</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>GitHub Repository</h3>
+  <table>
+    <tr><td><input type="checkbox"> <code>play-store</code> environment exists (Settings → Environments)</td></tr>
+    <tr><td><input type="checkbox"> <code>ANDROID_KEYSTORE_BASE64</code> secret set</td></tr>
+    <tr><td><input type="checkbox"> <code>ANDROID_KEYSTORE_PASSWORD</code> secret set</td></tr>
+    <tr><td><input type="checkbox"> <code>ANDROID_KEY_ALIAS</code> secret set</td></tr>
+    <tr><td><input type="checkbox"> <code>ANDROID_KEY_PASSWORD</code> secret set</td></tr>
+    <tr><td><input type="checkbox"> <code>GOOGLE_PLAY_SERVICE_ACCOUNT_JSON</code> secret set</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>App Store Listing</h3>
+  <table>
+    <tr><td><input type="checkbox"> App name, short description, full description</td></tr>
+    <tr><td><input type="checkbox"> App icon (512×512)</td></tr>
+    <tr><td><input type="checkbox"> Feature graphic (1024×500)</td></tr>
+    <tr><td><input type="checkbox"> Screenshots (phone + tablet, min 2 each)</td></tr>
+    <tr><td><input type="checkbox"> Privacy policy URL</td></tr>
+    <tr><td><input type="checkbox"> Content rating questionnaire completed</td></tr>
+    <tr><td><input type="checkbox"> App category selected</td></tr>
+    <tr><td><input type="checkbox"> Target audience and age rating</td></tr>
+    <tr><td><input type="checkbox"> Data safety section completed</td></tr>
+  </table>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>6. Tag convention reference</h2>
+
+<div class="card">
+  <table>
+    <tr><th>Prefix</th><th>Workflow triggered</th><th>Artifact</th><th>Destination</th></tr>
+    <tr><td><code>emwaver-v*</code></td><td><code>android-apk-release.yml</code></td><td>Unsigned APK</td><td>GitHub Releases</td></tr>
+    <tr><td><code>android-v*</code></td><td><code>android-play-release.yml</code></td><td>Signed AAB</td><td>Google Play (track from env)</td></tr>
+    <tr><td><code>emwaver-android-v*</code></td><td><code>android-play-release.yml</code></td><td>Signed AAB</td><td>Google Play (track from env)</td></tr>
+  </table>
+</div>
+
+<div class="warn">
+  <strong>Important:</strong> These prefixes must not overlap. The APK workflow fires on <code>emwaver-v*</code>. The Play Store workflow fires on <code>android-v*</code> and <code>emwaver-android-v*</code>. A single tag like <code>emwaver-v1.0.0</code> will <strong>only</strong> trigger the APK workflow, not the Play Store one.
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>7. How to generate an upload signing key</h2>
+
+<p>If you haven't created the upload key yet:</p>
+
+<pre><code>keytool -genkey -v \
+  -keystore emwaver-upload.jks \
+  -keyalg RSA \
+  -keysize 2048 \
+  -validity 10000 \
+  -alias emwaver-upload \
+  -storetype JKS</code></pre>
+
+<p>Then encode it for the GitHub secret:</p>
+
+<pre><code>base64 -w0 emwaver-upload.jks</code></pre>
+
+<p>Register the <strong>public certificate</strong> of this key in the Play Console under <strong>Setup → App Integrity → App signing</strong>. Google will use this to verify uploads and then re-sign with the Play App Signing key for distribution.</p>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<h2>8. Comparison with iOS release system</h2>
+
+<p>For reference, the iOS side has two separate workflows (mirroring what Android achieves with one workflow + track parameter):</p>
+
+<table>
+  <tr><th>iOS</th><th>Android</th></tr>
+  <tr>
+    <td><code>ios-testflight-release.yml</code> → TestFlight</td>
+    <td><code>android-play-release.yml</code> with <code>track: internal</code></td>
+  </tr>
+  <tr>
+    <td><code>ios-app-store-upload.yml</code> → App Store candidate</td>
+    <td><code>android-play-release.yml</code> with <code>track: production</code></td>
+  </tr>
+  <tr>
+    <td>No unsigned IPA distribution</td>
+    <td><code>android-apk-release.yml</code> → GitHub Releases APK</td>
+  </tr>
+</table>
+
+<div class="note">
+  <strong>Workflow files:</strong> All four live in <code>.github/workflows/</code>:
+  <ul>
+    <li><code>android-apk-release.yml</code></li>
+    <li><code>android-play-release.yml</code></li>
+    <li><code>ios-testflight-release.yml</code></li>
+    <li><code>ios-app-store-upload.yml</code></li>
+  </ul>
+  Fastlane config: <code>android/fastlane/Fastfile</code> and <code>ios/fastlane/Fastfile</code>.
+</div>
+
+</body>
+</html>
