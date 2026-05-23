@@ -73,8 +73,14 @@ final class IOSScriptSessionManager: ObservableObject {
 
     func run(_ request: ScriptsRootView.ScriptRunRequest, device: IOSTargetedScriptDeviceBase, deviceLabel: String) -> ScriptsRootView.ScriptRunResult? {
         let deviceId = Self.normalizeDeviceId(device.currentScriptDeviceId())
+        #if DEBUG
+        print("[SCRIPT] run: name=\(request.name) deviceId=\(deviceId)")
+        #endif
 
         guard device.beginTransportSession(deviceId: deviceId) else {
+            #if DEBUG
+            print("[SCRIPT] run: transport claim FAILED")
+            #endif
             return ScriptsRootView.ScriptRunResult(
                 scriptInstanceId: "",
                 name: request.name,
@@ -82,6 +88,9 @@ final class IOSScriptSessionManager: ObservableObject {
                 errorMessage: "Cannot run script: transport claim failed"
             )
         }
+        #if DEBUG
+        print("[SCRIPT] run: transport session claimed, starting script engine")
+        #endif
 
         let manager = ScriptPreviewManager()
         manager.attach(device: IOSTargetedScriptDevice(base: device, deviceId: deviceId))
@@ -180,6 +189,9 @@ private final class IOSScriptSession {
     }
 
     func stop() {
+        #if DEBUG
+        print("[SCRIPT] stop: name=\(scriptName) deviceId=\(deviceId)")
+        #endif
         deviceBase?.endTransportSession(deviceId: deviceId)
         manager.exitPreview()
     }

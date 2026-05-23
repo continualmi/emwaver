@@ -778,7 +778,11 @@ final class USBManager: NSObject, ObservableObject {
         commandSemaphore.wait()
         defer { commandSemaphore.signal() }
 
+        let hex = command.map { String(format: "%02X", $0) }.joined(separator: " ")
+        dbg("CMD TX: [\(hex)] timeout=\(timeout)ms")
+
         guard isConnected else {
+            dbg("CMD FAIL: Not connected")
             setError("Cannot send command: Not connected")
             return nil
         }
@@ -790,20 +794,32 @@ final class USBManager: NSObject, ObservableObject {
 
         sendPacket(command)
 
-        return session.awaitCommandResponse(timeout: timeout) {
+        let response = session.awaitCommandResponse(timeout: timeout) {
             isConnected
         }
+        if let r = response {
+            let rhex = r.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
+            dbg("CMD RX: [\(rhex)]")
+        } else {
+            dbg("CMD RX: nil (timeout)")
+        }
+        return response
     }
 
     func sendCommand(_ command: Data, timeout: Int, deviceId: String) -> Data? {
         commandSemaphore.wait()
         defer { commandSemaphore.signal() }
 
+        let hex = command.map { String(format: "%02X", $0) }.joined(separator: " ")
+        dbg("CMD TX: [\(hex)] timeout=\(timeout)ms deviceId=\(deviceId)")
+
         guard isConnected else {
+            dbg("CMD FAIL: Not connected")
             setError("Cannot send command: Not connected")
             return nil
         }
         guard requireActiveDeviceSession(deviceId: deviceId, operation: "sendCommand") else {
+            dbg("CMD FAIL: device session mismatch")
             return nil
         }
 
@@ -815,43 +831,62 @@ final class USBManager: NSObject, ObservableObject {
 
         sendPacket(command, deviceId: deviceId)
 
-        return session.awaitCommandResponse(timeout: timeout) {
+        let response = session.awaitCommandResponse(timeout: timeout) {
             isConnected
         }
+        if let r = response {
+            let rhex = r.prefix(8).map { String(format: "%02X", $0) }.joined(separator: " ")
+            dbg("CMD RX: [\(rhex)]")
+        } else {
+            dbg("CMD RX: nil (timeout after \(timeout)ms)")
+        }
+        return response
     }
 
     // MARK: - Transport Session
 
     func beginTransportSession(deviceId: String) -> Bool {
+        dbg("TRANSPORT: begin deviceId=\(deviceId) transport=\(activeTransport)")
+
         guard isConnected else {
+            dbg("TRANSPORT: not connected, abort")
             setError("Cannot begin transport session: Not connected")
             return false
         }
         guard requireActiveDeviceSession(deviceId: deviceId, operation: "beginTransportSession") else {
+            dbg("TRANSPORT: device session mismatch, abort")
             return false
         }
         guard requiresTransportSession(deviceId: deviceId) else {
+            dbg("TRANSPORT: board=\(connectedBoardType ?? "nil") transport=\(activeTransport) — transport session not required, skip")
             return true
         }
         guard let source = transportSessionSource() else {
+            dbg("TRANSPORT: no source byte for transport=\(activeTransport)")
             setError("Cannot begin transport session: Unsupported transport")
             return false
         }
 
+        dbg("TRANSPORT: sending CONNECT source=0x\(String(format: "%02X", source))")
         let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionConnect, source])
         guard let response = sendCommand(cmd, timeout: 1500, deviceId: deviceId) else {
+            dbg("TRANSPORT: CONNECT timeout")
             setError("Transport session CONNECT timed out")
             return false
         }
         guard let status = response.first, status == Self.emwResponseOK else {
             if response.first == Self.emwResponseBusy {
+                dbg("TRANSPORT: CONNECT BUSY")
                 setError("Device is busy with another transport session")
             } else {
+                let rhex = response.map { String(format: "%02X", $0) }.joined(separator: " ")
+                dbg("TRANSPORT: CONNECT rejected, response=[\(rhex)]")
                 setError("Device rejected transport session command")
             }
             return false
         }
 
+        dbg("TRANSPORT: CONNECT OK, starting heartbeat")
         startHeartbeat(deviceId: deviceId, source: source)
         return true
     }
@@ -917,8 +952,10 @@ final class USBManager: NSObject, ObservableObject {
     }
 
     private func sendHeartbeat(deviceId: String, source: UInt8) {
+        dbg("HEARTBEAT: pinging deviceId=\(deviceId)")
         let cmd = Data([Self.emwOpTransportSession, Self.emwOpSessionHeartbeat, source])
         guard let response = sendCommand(cmd, timeout: 1000, deviceId: deviceId) else {
+            dbg("HEARTBEAT: no response, ending session")
             midiQueue.async { [weak self] in
                 self?.cancelHeartbeat()
                 self?.setError("Transport session ended for selected device")
@@ -926,12 +963,14 @@ final class USBManager: NSObject, ObservableObject {
             return
         }
         guard let status = response.first, status == Self.emwResponseOK else {
+            dbg("HEARTBEAT: bad status, ending session")
             midiQueue.async { [weak self] in
                 self?.cancelHeartbeat()
                 self?.setError("Transport session ended for selected device")
             }
             return
         }
+        dbg("HEARTBEAT: OK")
     }
 
     private func cancelHeartbeat() {
