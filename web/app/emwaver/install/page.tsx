@@ -107,7 +107,7 @@ export default function InstallPage() {
           <div className="mt-6 grid gap-4 md:grid-cols-3">
           {DIRECT_DOWNLOADS.map((download) => (
             <a
-              key={download.platform}
+              key={`${download.platform}-${download.name}`}
               href={download.href}
               className="group rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 no-underline transition hover:bg-[color:var(--surface-2)]"
             >
