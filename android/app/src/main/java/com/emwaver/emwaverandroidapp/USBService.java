@@ -48,6 +48,16 @@ public class USBService extends Service implements DeviceConnectionService {
     private static final int EMW_OP_ENTER_DFU = 0x06;
     private static final int EMW_OP_BOARD_GET = 0x09;
 
+    // Transport session
+    private static final byte EMW_OP_TRANSPORT_SESSION = 0x0B;
+    private static final byte EMW_TRANSPORT_SESSION_CONNECT = 0x01;
+    private static final byte EMW_TRANSPORT_SESSION_DISCONNECT = 0x02;
+    private static final byte EMW_TRANSPORT_SESSION_HEARTBEAT = 0x03;
+    private static final byte EMW_COMMAND_SOURCE_USB = 0x01;
+    private static final byte EMW_COMMAND_SOURCE_BLE = 0x02;
+    private static final byte EMW_COMMAND_SOURCE_WIFI = 0x03;
+    private static final int TRANSPORT_SESSION_HEARTBEAT_MS = 2000;
+
     private final IBinder binder = new LocalBinder();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -69,8 +79,14 @@ public class USBService extends Service implements DeviceConnectionService {
     private final TransportDeviceConnectionState<ActiveTransport> activeConnectionState =
             new TransportDeviceConnectionState<>(ActiveTransport.NONE);
 
+    private final Object commandLock = new Object();
     private volatile String deviceFirmwareVersion = null;
     private volatile String connectedBoardType = null;
+
+    // Transport session state
+    private HandlerThread sessionThread;
+    private Handler sessionHandler;
+    private final java.util.Map<String, Runnable> heartbeatRunnables = new java.util.HashMap<>();
 
     private TransportDeviceSession activeBufferSession() {
         return bufferSessions.active();
@@ -667,19 +683,21 @@ public class USBService extends Service implements DeviceConnectionService {
             return null;
         }
 
-        TransportDeviceSession bufferSession = bufferSession(deviceId);
-        bufferSession.prepareCommandResponseWait();
+        synchronized (commandLock) {
+            TransportDeviceSession bufferSession = bufferSession(deviceId);
+            bufferSession.prepareCommandResponseWait();
 
-        // This calls write(), which sends on cmd lane.
-        byte[] packet = makeLanePacket(command);
-        if (packet == null) {
-            Log.e(TAG, "Command too large: " + command.length + " bytes (max " + UsbMidiSysex.LANE_SIZE + ")");
-            return null;
+            // This calls write(), which sends on cmd lane.
+            byte[] packet = makeLanePacket(command);
+            if (packet == null) {
+                Log.e(TAG, "Command too large: " + command.length + " bytes (max " + UsbMidiSysex.LANE_SIZE + ")");
+                return null;
+            }
+
+            write(packet, deviceId);
+
+            return bufferSession.awaitCommandResponse(timeout);
         }
-
-        write(packet, deviceId);
-
-        return bufferSession.awaitCommandResponse(timeout);
     }
 
     @Override
@@ -791,6 +809,10 @@ public class USBService extends Service implements DeviceConnectionService {
         midiThread.start();
         midiHandler = new Handler(midiThread.getLooper());
 
+        sessionThread = new HandlerThread("emw-transport-session");
+        sessionThread.start();
+        sessionHandler = new Handler(sessionThread.getLooper());
+
         // Register USB permission receiver
         IntentFilter filter = new IntentFilter(ACTION_CONNECT_USB);
         registerReceiver(usbPermissionReceiver, filter);
@@ -811,10 +833,18 @@ public class USBService extends Service implements DeviceConnectionService {
         bleProtocol.close();
         wifiProtocol.close();
 
+        stopAllHeartbeats();
+
         if (midiThread != null) {
             midiThread.quitSafely();
             midiThread = null;
             midiHandler = null;
+        }
+
+        if (sessionThread != null) {
+            sessionThread.quitSafely();
+            sessionThread = null;
+            sessionHandler = null;
         }
 
         Log.d(TAG, "USB Service destroyed");
@@ -882,11 +912,133 @@ public class USBService extends Service implements DeviceConnectionService {
 
     @Override
     public void disconnect() {
+        endTransportSession();
         synchronized (midiLock) {
             closeMidiLocked();
         }
         bleProtocol.close();
         wifiProtocol.close();
         Log.d(TAG, "Device disconnected");
+    }
+
+    // ── Transport session ──────────────────────────────────────────
+
+    @Override
+    public boolean beginTransportSession(String deviceId) {
+        if (!checkConnection()) {
+            Log.w(TAG, "beginTransportSession: device not connected");
+            return false;
+        }
+        if (!requiresTransportSession()) {
+            return true;
+        }
+        byte source = transportSessionSource();
+        byte[] cmd = {EMW_OP_TRANSPORT_SESSION, EMW_TRANSPORT_SESSION_CONNECT, source};
+        byte[] response = sendCommand(cmd, 1500, deviceId);
+        if (response == null || response.length == 0 || response[0] != (byte) 0x80) {
+            Log.w(TAG, "beginTransportSession: CONNECT rejected or timed out");
+            return false;
+        }
+        startHeartbeat(deviceId, source);
+        Log.d(TAG, "Transport session started (source=" + (source & 0xFF) + ")");
+        return true;
+    }
+
+    @Override
+    public void endTransportSession(String deviceId) {
+        stopHeartbeat(deviceId);
+        if (!checkConnection()) {
+            return;
+        }
+        if (!requiresTransportSession()) {
+            return;
+        }
+        byte source = transportSessionSource();
+        byte[] cmd = {EMW_OP_TRANSPORT_SESSION, EMW_TRANSPORT_SESSION_DISCONNECT, source};
+        sendCommand(cmd, 1000, deviceId);
+        Log.d(TAG, "Transport session ended");
+    }
+
+    private void endTransportSession() {
+        String deviceId = activeBufferSession().deviceId();
+        endTransportSession(deviceId);
+    }
+
+    @Override
+    public boolean requiresTransportSession() {
+        if (activeTransport == ActiveTransport.BLE || activeTransport == ActiveTransport.WIFI) {
+            return true;
+        }
+        String boardType = connectedBoardType;
+        return boardType != null && boardType.toLowerCase().startsWith("esp32");
+    }
+
+    private byte transportSessionSource() {
+        if (activeTransport == ActiveTransport.BLE) return EMW_COMMAND_SOURCE_BLE;
+        if (activeTransport == ActiveTransport.WIFI) return EMW_COMMAND_SOURCE_WIFI;
+        return EMW_COMMAND_SOURCE_USB;
+    }
+
+    private void startHeartbeat(String deviceId, byte source) {
+        if (sessionHandler == null) {
+            Log.w(TAG, "startHeartbeat: session handler not ready");
+            return;
+        }
+        stopHeartbeat(deviceId);
+        String key = deviceId != null ? deviceId : "active";
+        Runnable runnable = new Runnable() {
+            @Override
+            public void run() {
+                if (!checkConnection() || activeBufferSession().deviceId() == null
+                        || !activeBufferSession().deviceId().equals(deviceId)) {
+                    stopHeartbeat(deviceId);
+                    return;
+                }
+                sendHeartbeat(deviceId, source);
+                if (sessionHandler != null) {
+                    sessionHandler.postDelayed(this, TRANSPORT_SESSION_HEARTBEAT_MS);
+                }
+            }
+        };
+        heartbeatRunnables.put(key, runnable);
+        sessionHandler.postDelayed(runnable, TRANSPORT_SESSION_HEARTBEAT_MS);
+    }
+
+    private void sendHeartbeat(String deviceId, byte source) {
+        byte[] cmd = {EMW_OP_TRANSPORT_SESSION, EMW_TRANSPORT_SESSION_HEARTBEAT, source};
+        byte[] response;
+        synchronized (commandLock) {
+            if (!requireActiveDeviceSession(deviceId, "heartbeat")) {
+                return;
+            }
+            TransportDeviceSession bufferSession = bufferSession(deviceId);
+            bufferSession.prepareCommandResponseWait();
+            byte[] packet = makeLanePacket(cmd);
+            if (packet == null) return;
+            write(packet, deviceId);
+            response = bufferSession.awaitCommandResponse(1000);
+        }
+        if (response == null || response.length == 0 || response[0] != (byte) 0x80) {
+            Log.w(TAG, "Heartbeat failed — session expired");
+            stopHeartbeat(deviceId);
+            showToast("Transport session ended for selected device");
+        }
+    }
+
+    private void stopHeartbeat(String deviceId) {
+        String key = deviceId != null ? deviceId : "active";
+        Runnable runnable = heartbeatRunnables.remove(key);
+        if (runnable != null && sessionHandler != null) {
+            sessionHandler.removeCallbacks(runnable);
+        }
+    }
+
+    private void stopAllHeartbeats() {
+        if (sessionHandler != null) {
+            for (Runnable runnable : heartbeatRunnables.values()) {
+                sessionHandler.removeCallbacks(runnable);
+            }
+        }
+        heartbeatRunnables.clear();
     }
 }

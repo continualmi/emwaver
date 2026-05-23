@@ -197,6 +197,24 @@ public final class ScriptDeviceConnection implements ScriptDeviceBridge {
         service.loadBuffer(data);
     }
 
+    public boolean beginTransportSession() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return false;
+        }
+        String deviceId = capturedDeviceId();
+        return service.beginTransportSession(deviceId);
+    }
+
+    public void endTransportSession() {
+        DeviceConnectionService service = activeService();
+        if (service == null) {
+            return;
+        }
+        String deviceId = capturedDeviceId();
+        service.endTransportSession(deviceId);
+    }
+
     public void disconnect() {
         if (targetService != null) {
             targetService.disconnect();

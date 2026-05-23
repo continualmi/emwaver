@@ -2067,49 +2067,51 @@ public class ScriptsFragment extends Fragment {
             viewModel.setLastScriptId(currentScriptMetadata != null ? currentScriptMetadata.getId() : null);
             viewModel.setPreviewActive(true);
         }
+        final ScriptDeviceConnection capturedConnection;
         if (isAdded()) {
             String deviceLabel = currentDeviceLabel();
-            scriptDeviceConnection = ScriptDeviceConnection.captureActive(requireContext(), deviceLabel);
-            scriptSessions.stopSelectedRuntime();
-            scriptSessions.start(
-                    () -> {
-                        if (scriptEngine != null) {
-                            scriptEngine.shutdown();
-                            scriptEngine = null;
-                        }
-                    },
-                    currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
-                    currentScriptName,
-                    runningSessionLabel(deviceLabel),
-                    scriptDeviceConnection.capturedDeviceId()
-            );
-            if (scriptEngine != null) {
-                scriptEngine.setDeviceConnection(scriptDeviceConnection);
-            }
+            capturedConnection = ScriptDeviceConnection.captureActive(requireContext(), deviceLabel);
+            scriptDeviceConnection = capturedConnection;
         } else {
-            scriptSessions.stopSelectedRuntime();
-            scriptSessions.start(
-                    () -> {
-                        if (scriptEngine != null) {
-                            scriptEngine.shutdown();
-                            scriptEngine = null;
-                        }
-                    },
-                    currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
-                    currentScriptName,
-                    "active device",
-                    "active"
-            );
+            capturedConnection = null;
+            scriptDeviceConnection = null;
         }
+
+        if (capturedConnection != null && capturedConnection.isConnected()) {
+            boolean sessionOk = capturedConnection.beginTransportSession();
+            if (!sessionOk) {
+                showToast("Cannot run script: transport claim failed");
+                return;
+            }
+        }
+
         setupScriptEngineIfNeeded();
         if (scriptEngine == null) {
             Log.e(TAG, "Script engine is null!");
             showToast("Script engine not ready.");
             return;
         }
-        if (scriptDeviceConnection != null) {
-            scriptEngine.setDeviceConnection(scriptDeviceConnection);
+        if (capturedConnection != null) {
+            scriptEngine.setDeviceConnection(capturedConnection);
         }
+
+        String deviceLabel = currentDeviceLabel();
+        scriptSessions.stopSelectedRuntime();
+        scriptSessions.start(
+                () -> {
+                    if (capturedConnection != null && capturedConnection.isConnected()) {
+                        capturedConnection.endTransportSession();
+                    }
+                    if (scriptEngine != null) {
+                        scriptEngine.shutdown();
+                        scriptEngine = null;
+                    }
+                },
+                currentScriptMetadata != null ? currentScriptMetadata.getId() : null,
+                currentScriptName,
+                runningSessionLabel(deviceLabel),
+                capturedConnection != null ? capturedConnection.capturedDeviceId() : "active"
+        );
         isRenderingScript = true;
         activeScriptTree = null;
         showingPreview = true;

@@ -132,4 +132,29 @@ public interface DeviceConnectionService {
      * Disconnect from the device
      */
     void disconnect();
+
+    /**
+     * Begin a transport session for the given device.
+     * Required before sending operational commands to ESP32 boards.
+     * @param deviceId device identifier
+     * @return true if session established (or not needed)
+     */
+    default boolean beginTransportSession(String deviceId) {
+        return true;
+    }
+
+    /**
+     * End a transport session for the given device.
+     * @param deviceId device identifier
+     */
+    default void endTransportSession(String deviceId) {
+    }
+
+    /**
+     * Whether the currently connected device requires a transport session.
+     * @return true for BLE/WiFi/ESP32-USB, false for STM32
+     */
+    default boolean requiresTransportSession() {
+        return false;
+    }
 }

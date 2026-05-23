@@ -265,6 +265,8 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
         return UserDefaults.standard.bool(forKey: Self.transportDebugLoggingEnabledDefaultsKey)
     }
 
+    private let commandSemaphore = DispatchSemaphore(value: 1)
+
     @Published var isConnected: Bool = false
     @Published var connectedPortName: String? = nil
     @Published var availablePorts: [String] = []
@@ -920,6 +922,9 @@ final class MacUSBManager: NSObject, ObservableObject, ScriptDevice {
     }
 
     private func sendCommandInternal(_ command: Data, timeout: Int, responsePredicate: ((Data) -> Bool)?, deviceID: String?) -> Data? {
+        commandSemaphore.wait()
+        defer { commandSemaphore.signal() }
+
         guard isTransportConnectedInternal(deviceID: deviceID) else {
             setError("Cannot send command: Not connected")
             return nil
