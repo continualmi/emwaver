@@ -3,14 +3,6 @@ import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
 const VIDEOS = [
   {
-    title: "EMWaver Trailer",
-    summary:
-      "The fastest public introduction to EMWaver as a script-first electronics platform.",
-    href: "https://www.youtube.com/watch?v=6acoNgBqpe0",
-    embedUrl: "https://www.youtube-nocookie.com/embed/6acoNgBqpe0?rel=0",
-    eyebrow: "Launch intro",
-  },
-  {
     title: "EMWaver Platform Capabilities",
     summary:
       "A walkthrough of the software platform, agent workflows, and real hardware control flows.",
