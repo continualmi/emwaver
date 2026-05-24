@@ -14,6 +14,7 @@ use emwaver_linux_firmware::{
 };
 use emwaver_linux_runtime::execute_javascript;
 use emwaver_linux_transport::{
+    ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
     simulator::SimulatorTransport,
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
@@ -36,6 +37,7 @@ pub fn build_main_window(app: &adw::Application) {
     let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
     seed_simulator_device(&model);
     seed_usb_devices(&model);
+    seed_ble_devices(&model);
     seed_mdns_wifi_devices(&model);
     seed_manual_wifi_device(&model);
 
@@ -784,6 +786,22 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
                 Err(err) => vec![format!("Script failed: {err}")],
             }
         }),
+        TransportKind::Ble => runtime.block_on(async {
+            let target = match ble_target_from_device(device) {
+                Ok(target) => target,
+                Err(err) => return vec![err],
+            };
+            let mut transport = LinuxBleTransport::new(target);
+            if let Err(err) = transport.connect().await {
+                return vec![format!("BLE connect failed: {err}")];
+            }
+            let result = execute_javascript(source, &mut transport).await;
+            let _ = transport.close().await;
+            match result {
+                Ok(report) => report.log,
+                Err(err) => vec![format!("Script failed: {err}")],
+            }
+        }),
         _ => vec![format!(
             "{:?} script execution is not implemented yet.",
             device.transport
@@ -839,6 +857,28 @@ fn seed_mdns_wifi_devices(model: &Rc<RefCell<AppModel>>) {
     }
 }
 
+fn seed_ble_devices(model: &Rc<RefCell<AppModel>>) {
+    let Ok(candidates) = LinuxBleManager::default().scan() else {
+        return;
+    };
+    for candidate in candidates {
+        let descriptor = LinuxBleTransport::new(candidate.target.clone()).descriptor();
+        let display_name = match candidate.rssi {
+            Some(rssi) => format!("{} ({rssi} dBm)", descriptor.display_name),
+            None => descriptor.display_name,
+        };
+        let mut device = DeviceRecord::new(
+            descriptor.id.0,
+            display_name,
+            TransportKind::Ble,
+            descriptor.hardware_uid,
+        );
+        device.firmware_version = descriptor.firmware_version;
+        device.connected = true;
+        model.borrow_mut().upsert_device(device);
+    }
+}
+
 fn wifi_record_display_name(record: &emwaver_linux_transport::wifi::WifiDiscoveryRecord) -> String {
     let board = record
         .board_type
@@ -862,6 +902,19 @@ fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTar
         .parse::<u16>()
         .map_err(|_| format!("Wi-Fi device {} has an invalid port.", device.id))?;
     ManualWifiTarget::new(host, port).map_err(|err| err.to_string())
+}
+
+fn ble_target_from_device(device: &DeviceRecord) -> Result<BleTarget, String> {
+    let Some(rest) = device.id.strip_prefix("ble:") else {
+        return Err(format!("BLE device {} is missing a target.", device.id));
+    };
+    let Some((adapter, address)) = rest.split_once(':') else {
+        return Err(format!(
+            "BLE device {} is missing a BlueZ adapter and address.",
+            device.id
+        ));
+    };
+    BleTarget::new(adapter, address, device.display_name.clone()).map_err(|err| err.to_string())
 }
 
 fn display_board_type(board: &str) -> &'static str {
@@ -1853,7 +1906,7 @@ fn manual_wifi_card() -> gtk::Frame {
     root.append(&form);
 
     let status = gtk::Label::builder()
-        .label("Set EMWAVER_WIFI_HOST and optional EMWAVER_WIFI_PORT before launch to add this manual Wi-Fi target to the local device list. mDNS discovery is still pending behind Avahi/D-Bus.")
+        .label("Set EMWAVER_WIFI_HOST and optional EMWAVER_WIFI_PORT before launch to add this manual Wi-Fi target to the local device list. Live mDNS records are added automatically when the board advertises _emwaver._tcp.local.")
         .wrap(true)
         .xalign(0.0)
         .css_classes(vec!["dim-label"])
