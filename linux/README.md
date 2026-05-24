@@ -46,7 +46,7 @@ cargo test --manifest-path linux/Cargo.toml --workspace --exclude emwaver-linux-
 The GTK app requires Linux development packages for GTK4, libadwaita, and GtkSourceView 5. On Ubuntu/Debian:
 
 ```sh
-sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev pkg-config
+sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libgraphene-1.0-dev pkg-config
 cargo run --manifest-path linux/Cargo.toml -p emwaver-linux-app
 ```
 
