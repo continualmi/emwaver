@@ -24,10 +24,12 @@ The first native slice is M0/M1:
 - simulator device loads the shared `simulator/fixtures/basic-board.json`;
 - core registry deduplicates records by local hardware UID when present;
 - script sessions enforce selected-device claims and busy-device rejection;
+- USB discovery classifies STM32 run-mode USB MIDI, STM32 DFU, and common ESP32 serial adapters with permission diagnostics;
+- Rust USB MIDI SysEx/superframe codec matches the STM32 fixed 36-byte superframe, 48-byte SysEx, and 64-byte USB-MIDI transaction contract;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, firmware and Agent panels.
 
-USB, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
+USB packet I/O, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 
@@ -45,4 +47,3 @@ cargo run --manifest-path linux/Cargo.toml -p emwaver-linux-app
 ```
 
 Do not add a localhost daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`.
-

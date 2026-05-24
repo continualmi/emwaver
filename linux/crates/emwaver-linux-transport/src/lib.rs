@@ -1,6 +1,7 @@
 pub mod ble;
 pub mod simulator;
 pub mod usb;
+pub mod usb_midi_sysex;
 pub mod wifi;
 
 use async_trait::async_trait;
@@ -33,6 +34,8 @@ pub enum TransportError {
     NotConnected,
     #[error("fixture error: {0}")]
     Fixture(String),
+    #[error("USB discovery failed: {0}")]
+    Usb(String),
 }
 
 pub type TransportResult<T> = Result<T, TransportError>;
