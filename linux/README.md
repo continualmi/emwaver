@@ -13,6 +13,7 @@ Local-first rules:
 
 - `crates/emwaver-linux-app` - GTK4/libadwaita app shell.
 - `crates/emwaver-linux-core` - app model, local device registry, script-session lifecycle.
+- `crates/emwaver-linux-runtime` - JavaScript-facing runtime compiler and command-step generation.
 - `crates/emwaver-linux-transport` - common transport traits plus simulator/USB/BLE/Wi-Fi adapters.
 - `crates/emwaver-linux-firmware` - STM32 DFU and ESP32 serial flashing orchestration.
 - `crates/emwaver-linux-agent` - optional MGPT Agent API client and secret-store boundary.
@@ -29,11 +30,12 @@ The first native slice is M0/M1:
 - STM32 run-mode USB MIDI transport can open the discovered device, claim the MIDI interface, send encoded superframes, and read decoded response superframes;
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
+- JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, firmware and Agent panels.
 
-Full JavaScript runtime parity, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity beyond the initial command/gpio/device API, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 
