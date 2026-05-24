@@ -125,6 +125,7 @@ public partial class ScriptsView : UserControl
         {
             await _scripts.EnsureBootstrappedAsync();
             _scriptView.Refresh();
+            RestoreLastOpenScript();
             LoadAgentConversations();
         };
     }
@@ -434,6 +435,21 @@ public partial class ScriptsView : UserControl
         }
     }
 
+    private void RestoreLastOpenScript()
+    {
+        var last = AppServices.Settings.LastOpenScript;
+        var script = !string.IsNullOrWhiteSpace(last)
+            ? _scripts.All.FirstOrDefault(s => s.FileName.Equals(last, StringComparison.OrdinalIgnoreCase) || s.Name.Equals(last, StringComparison.OrdinalIgnoreCase))
+            : null;
+        script ??= _scripts.All.FirstOrDefault(s => s.KindLabel == "Example") ?? _scripts.All.FirstOrDefault();
+        if (script != null)
+        {
+            ScriptListBox.SelectedItem = script;
+            ScriptListBox.ScrollIntoView(script);
+            SelectScript(script);
+        }
+    }
+
     private void SelectScript(ScriptInfo? info)
     {
         _selectedScript = info;
@@ -465,6 +481,7 @@ public partial class ScriptsView : UserControl
         }
 
         ErrorBanner.Visibility = Visibility.Collapsed;
+        AppServices.Settings.LastOpenScript = info.FileName;
     }
 
     private void OnEditorTextChanged(object? sender, EventArgs e)

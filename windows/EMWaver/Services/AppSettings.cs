@@ -23,6 +23,7 @@ public sealed class AppSettings
         public string AppTheme { get; set; } = "system";
         public bool ShowTransportLog { get; set; } = false;
         public bool TransportDebugLoggingEnabled { get; set; } = true;
+        public string? LastOpenScript { get; set; }
 
     }
 
@@ -125,6 +126,29 @@ public sealed class AppSettings
             {
                 var m = Load();
                 m.TransportDebugLoggingEnabled = value;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public string? LastOpenScript
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().LastOpenScript;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                var next = string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+                if (string.Equals(m.LastOpenScript, next, StringComparison.OrdinalIgnoreCase)) return;
+                m.LastOpenScript = next;
                 Save(m);
             }
             Changed?.Invoke();
