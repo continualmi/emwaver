@@ -8,7 +8,7 @@ use emwaver_linux_transport::{
     },
     EmwaverTransport,
 };
-use gtk::{gio, Align, Orientation};
+use gtk::{gio, Align, Orientation, PolicyType};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -24,8 +24,21 @@ pub fn build_main_window(app: &adw::Application) {
         .default_height(780)
         .build();
 
+    let header_title = gtk::Box::new(Orientation::Vertical, 1);
+    header_title.append(
+        &gtk::Label::builder()
+            .label("EMWaver")
+            .css_classes(vec!["heading"])
+            .build(),
+    );
+    header_title.append(
+        &gtk::Label::builder()
+            .label("Scripts")
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
     let header = adw::HeaderBar::builder()
-        .title_widget(&gtk::Label::new(Some("EMWaver Linux")))
+        .title_widget(&header_title)
         .build();
 
     let run_button = gtk::Button::builder()
@@ -39,11 +52,40 @@ pub fn build_main_window(app: &adw::Application) {
     header.pack_start(&run_button);
     header.pack_start(&stop_button);
 
+    let selected_device_button = gtk::Button::builder()
+        .icon_name("network-wired-symbolic")
+        .tooltip_text("Select local device")
+        .build();
+    let selected_device_label = gtk::Label::builder()
+        .label(selected_device_title(&model.borrow().selected_device()))
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .xalign(0.0)
+        .build();
+    let selected_device_box = gtk::Box::new(Orientation::Horizontal, 6);
+    selected_device_box.append(&selected_device_button);
+    selected_device_box.append(&selected_device_label);
+    header.pack_end(&selected_device_box);
+
+    let firmware_button = gtk::Button::builder()
+        .icon_name("software-update-available-symbolic")
+        .tooltip_text("Firmware")
+        .build();
+    let settings_button = gtk::Button::builder()
+        .icon_name("emblem-system-symbolic")
+        .tooltip_text("Settings")
+        .build();
+    header.pack_end(&settings_button);
+    header.pack_end(&firmware_button);
+
     let device_list = gtk::ListBox::builder()
         .selection_mode(gtk::SelectionMode::Single)
         .css_classes(vec!["boxed-list"])
         .build();
-    refresh_device_list(&device_list, &model.borrow().devices());
+    let device_keys = Rc::new(RefCell::new(refresh_device_list(
+        &device_list,
+        &model.borrow().devices(),
+    )));
+    device_list.select_row(device_list.row_at_index(0).as_ref());
 
     let editor = gtk::TextView::builder()
         .monospace(true)
@@ -54,7 +96,14 @@ pub fn build_main_window(app: &adw::Application) {
         .build();
     editor
         .buffer()
-        .set_text("gpio.write(13, 1);\nawait delay(250);\ngpio.write(13, 0);\n");
+        .set_text("gpio.output(13);\ngpio.high(13);\nawait delay(250);\ngpio.low(13);\n");
+    let editor_scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .child(&editor)
+        .build();
 
     let log_view = gtk::TextView::builder()
         .editable(false)
@@ -67,15 +116,23 @@ pub fn build_main_window(app: &adw::Application) {
         .build();
     log_view
         .buffer()
-        .set_text("Simulator ready. Local scripts do not require an Agent key.\n");
+        .set_text("Simulator ready. Local scripts run without an Agent key.\n");
+    let log_scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .min_content_height(150)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .child(&log_view)
+        .build();
 
     let agent_panel = status_panel(
         "Agent",
-        "Optional public /api/mgpt endpoint. Missing API key disables Agent replies only.",
+        "Optional API-key Agent drawer. Local scripts and device control keep working without it.",
     );
     let firmware_panel = status_panel(
         "Firmware",
-        "STM32 DFU and ESP32 serial update flows are local and board-aware.",
+        "Managed STM32 DFU and ESP32 serial update flows stay local and board-aware.",
     );
 
     let sidebar = gtk::Box::new(Orientation::Vertical, 12);
@@ -88,21 +145,51 @@ pub fn build_main_window(app: &adw::Application) {
     sidebar.append(&agent_panel);
     sidebar.append(&firmware_panel);
 
+    let script_list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::Single)
+        .css_classes(vec!["boxed-list"])
+        .build();
+    append_script_row(&script_list, "Blink GPIO 13", "Unsaved draft");
+    append_script_row(&script_list, "Device Probe", "Example");
+    script_list.select_row(script_list.row_at_index(0).as_ref());
+
+    let library = gtk::Box::new(Orientation::Vertical, 10);
+    library.set_margin_top(12);
+    library.set_margin_bottom(12);
+    library.set_margin_start(12);
+    library.set_margin_end(12);
+    library.append(&section_label("Scripts"));
+    library.append(&script_list);
+
+    let new_script_button = gtk::Button::builder()
+        .icon_name("document-new-symbolic")
+        .tooltip_text("New script")
+        .halign(Align::Start)
+        .build();
+    library.append(&new_script_button);
+
     let content = gtk::Paned::new(Orientation::Horizontal);
-    content.set_start_child(Some(&sidebar));
+    content.set_start_child(Some(&library));
     content.set_resize_start_child(false);
     content.set_shrink_start_child(false);
 
+    let workspace = gtk::Paned::new(Orientation::Horizontal);
     let main_stack = gtk::Box::new(Orientation::Vertical, 10);
     main_stack.set_margin_top(12);
     main_stack.set_margin_bottom(12);
     main_stack.set_margin_start(12);
     main_stack.set_margin_end(12);
-    main_stack.append(&section_label("Script"));
-    main_stack.append(&editor);
-    main_stack.append(&section_label("Log"));
-    main_stack.append(&log_view);
-    content.set_end_child(Some(&main_stack));
+    main_stack.append(&editor_toolbar());
+    main_stack.append(&editor_scroll);
+    main_stack.append(&section_label("Run Log"));
+    main_stack.append(&log_scroll);
+    workspace.set_start_child(Some(&main_stack));
+    workspace.set_resize_start_child(true);
+    workspace.set_shrink_start_child(false);
+    workspace.set_end_child(Some(&sidebar));
+    workspace.set_resize_end_child(false);
+    workspace.set_shrink_end_child(false);
+    content.set_end_child(Some(&workspace));
 
     let root = gtk::Box::new(Orientation::Vertical, 0);
     root.append(&header);
@@ -110,6 +197,47 @@ pub fn build_main_window(app: &adw::Application) {
     window.set_content(Some(&root));
 
     let active_session = Rc::new(RefCell::new(None));
+    {
+        let model = Rc::clone(&model);
+        let selected_device_label = selected_device_label.clone();
+        let device_keys = Rc::clone(&device_keys);
+        device_list.connect_row_selected(move |_, row| {
+            let Some(row) = row else { return };
+            let Some(key) = device_keys.borrow().get(row.index() as usize).cloned() else {
+                return;
+            };
+            model.borrow_mut().select_device(key);
+            selected_device_label
+                .set_label(&selected_device_title(&model.borrow().selected_device()));
+        });
+    }
+    {
+        let window = window.clone();
+        let model = Rc::clone(&model);
+        selected_device_button.connect_clicked(move |_| {
+            present_device_dialog(&window, &model.borrow().devices());
+        });
+    }
+    {
+        let window = window.clone();
+        firmware_button.connect_clicked(move |_| {
+            present_status_dialog(
+                &window,
+                "Firmware",
+                "Linux firmware management is local and board-aware. STM32 DFU and ESP32 serial flashing are implemented behind the firmware crate boundary and will be surfaced here as the GTK flow is completed.",
+            );
+        });
+    }
+    {
+        let window = window.clone();
+        settings_button.connect_clicked(move |_| {
+            present_status_dialog(
+                &window,
+                "Settings",
+                "Settings will hold local-only preferences such as Agent endpoint/API key storage, script folder location, and transport diagnostics. Local hardware access must not depend on an account.",
+            );
+        });
+    }
     {
         let model = Rc::clone(&model);
         let editor = editor.clone();
@@ -124,7 +252,13 @@ pub fn build_main_window(app: &adw::Application) {
             match result {
                 Ok(session) => {
                     *active_session.borrow_mut() = Some(session.id);
-                    append_log(&log_view, "Started script session.");
+                    append_log(
+                        &log_view,
+                        &format!(
+                            "Started script session on {}.",
+                            selected_device_title(&model.borrow().selected_device())
+                        ),
+                    );
                     let execution_log = run_selected_script(
                         &model.borrow().selected_device(),
                         &buffer
@@ -285,11 +419,13 @@ fn probe_usb_candidate(
         .ok()
 }
 
-fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) {
+fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) -> Vec<String> {
     while let Some(row) = list.first_child() {
         list.remove(&row);
     }
+    let mut keys = Vec::new();
     for device in devices {
+        keys.push(device.identity_key());
         let row = gtk::Box::new(Orientation::Vertical, 2);
         row.set_margin_top(10);
         row.set_margin_bottom(10);
@@ -312,8 +448,12 @@ fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) {
                 .css_classes(vec!["dim-label"])
                 .build(),
         );
-        list.append(&row);
+        let item = gtk::ListBoxRow::builder().child(&row).build();
+        item.set_activatable(true);
+        item.set_selectable(true);
+        list.append(&item);
     }
+    keys
 }
 
 fn section_label(text: &str) -> gtk::Label {
@@ -322,6 +462,44 @@ fn section_label(text: &str) -> gtk::Label {
         .halign(Align::Start)
         .css_classes(vec!["heading"])
         .build()
+}
+
+fn editor_toolbar() -> gtk::Box {
+    let toolbar = gtk::Box::new(Orientation::Horizontal, 8);
+    toolbar.append(&section_label("Blink GPIO 13"));
+    toolbar.append(
+        &gtk::Label::builder()
+            .label("JavaScript")
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    toolbar
+}
+
+fn append_script_row(list: &gtk::ListBox, title: &str, subtitle: &str) {
+    let row = gtk::Box::new(Orientation::Vertical, 2);
+    row.set_margin_top(10);
+    row.set_margin_bottom(10);
+    row.set_margin_start(10);
+    row.set_margin_end(10);
+    row.append(
+        &gtk::Label::builder()
+            .label(title)
+            .xalign(0.0)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .build(),
+    );
+    row.append(
+        &gtk::Label::builder()
+            .label(subtitle)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    let item = gtk::ListBoxRow::builder().child(&row).build();
+    item.set_activatable(true);
+    item.set_selectable(true);
+    list.append(&item);
 }
 
 fn status_panel(title: &str, body: &str) -> gtk::Frame {
@@ -346,6 +524,129 @@ fn status_panel(title: &str, body: &str) -> gtk::Frame {
             .build(),
     );
     gtk::Frame::builder().child(&panel).build()
+}
+
+fn selected_device_title(device: &Option<DeviceRecord>) -> String {
+    device
+        .as_ref()
+        .map(|device| device.display_name.clone())
+        .unwrap_or_else(|| "No Device".to_string())
+}
+
+fn present_device_dialog(parent: &adw::ApplicationWindow, devices: &[DeviceRecord]) {
+    let dialog = gtk::Dialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title("Local Devices")
+        .default_width(620)
+        .default_height(460)
+        .build();
+    dialog.add_button("Close", gtk::ResponseType::Close);
+
+    let content = dialog.content_area();
+    let root = gtk::Box::new(Orientation::Vertical, 14);
+    root.set_margin_top(18);
+    root.set_margin_bottom(18);
+    root.set_margin_start(18);
+    root.set_margin_end(18);
+    root.append(
+        &gtk::Label::builder()
+            .label("Select a discovered local transport for the next script session.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+
+    let list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(vec!["boxed-list"])
+        .build();
+    for device in devices {
+        let row = gtk::Box::new(Orientation::Horizontal, 12);
+        row.set_margin_top(10);
+        row.set_margin_bottom(10);
+        row.set_margin_start(10);
+        row.set_margin_end(10);
+
+        let copy = gtk::Box::new(Orientation::Vertical, 2);
+        copy.append(
+            &gtk::Label::builder()
+                .label(&device.display_name)
+                .xalign(0.0)
+                .build(),
+        );
+        copy.append(
+            &gtk::Label::builder()
+                .label(device_detail_line(device))
+                .xalign(0.0)
+                .css_classes(vec!["dim-label"])
+                .build(),
+        );
+
+        row.append(&gtk::Image::from_icon_name(transport_icon_name(
+            &device.transport,
+        )));
+        row.append(&copy);
+        list.append(&gtk::ListBoxRow::builder().child(&row).build());
+    }
+    root.append(&list);
+    content.append(&root);
+
+    dialog.connect_response(|dialog, _| dialog.close());
+    dialog.present();
+}
+
+fn present_status_dialog(parent: &adw::ApplicationWindow, title: &str, body: &str) {
+    let dialog = gtk::Dialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title(title)
+        .default_width(520)
+        .build();
+    dialog.add_button("Close", gtk::ResponseType::Close);
+    let content = dialog.content_area();
+    let label = gtk::Label::builder()
+        .label(body)
+        .wrap(true)
+        .xalign(0.0)
+        .margin_top(18)
+        .margin_bottom(18)
+        .margin_start(18)
+        .margin_end(18)
+        .build();
+    content.append(&label);
+    dialog.connect_response(|dialog, _| dialog.close());
+    dialog.present();
+}
+
+fn device_detail_line(device: &DeviceRecord) -> String {
+    let mut parts = vec![format!("{:?}", device.transport)];
+    if let Some(version) = device.firmware_version.as_ref() {
+        parts.push(format!("EMWaver {version}"));
+    }
+    if let Some(uid) = device.hardware_uid.as_ref() {
+        parts.push(format!("UID {uid}"));
+    }
+    if device.busy {
+        parts.push("busy".to_string());
+    } else if device.connected {
+        parts.push("ready".to_string());
+    } else {
+        parts.push("unavailable".to_string());
+    }
+    parts.join("  ")
+}
+
+fn transport_icon_name(transport: &TransportKind) -> &'static str {
+    match transport {
+        TransportKind::Ble => "network-wireless-symbolic",
+        TransportKind::Wifi => "network-wireless-symbolic",
+        TransportKind::Simulator => "applications-engineering-symbolic",
+        TransportKind::UsbMidi | TransportKind::UsbSerial | TransportKind::UsbVendor => {
+            "network-wired-symbolic"
+        }
+    }
 }
 
 fn append_log(log_view: &gtk::TextView, line: &str) {
