@@ -1,8 +1,11 @@
 use adw::prelude::*;
 use emwaver_linux_core::{AppModel, DeviceRecord, TransportKind};
+use emwaver_linux_runtime::execute_javascript;
 use emwaver_linux_transport::{
     simulator::SimulatorTransport,
-    usb::{LinuxUsbManager, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole},
+    usb::{
+        LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
+    },
     EmwaverTransport,
 };
 use gtk::{gio, Align, Orientation};
@@ -121,7 +124,23 @@ pub fn build_main_window(app: &adw::Application) {
             match result {
                 Ok(session) => {
                     *active_session.borrow_mut() = Some(session.id);
-                    append_log(&log_view, "Started simulator script session.");
+                    append_log(&log_view, "Started script session.");
+                    let execution_log = run_selected_script(
+                        &model.borrow().selected_device(),
+                        &buffer
+                            .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                            .to_string(),
+                    );
+                    for line in execution_log {
+                        append_log(&log_view, &line);
+                    }
+                    match model.borrow_mut().stop_script(session.id) {
+                        Ok(_) => append_log(&log_view, "Script session completed."),
+                        Err(err) => {
+                            append_log(&log_view, &format!("Session cleanup failed: {err}"))
+                        }
+                    }
+                    *active_session.borrow_mut() = None;
                 }
                 Err(err) => append_log(&log_view, &format!("Run failed: {err}")),
             }
@@ -145,6 +164,62 @@ pub fn build_main_window(app: &adw::Application) {
 
     add_shortcuts(app, &window);
     window.present();
+}
+
+fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<String> {
+    let Some(device) = device else {
+        return vec!["No selected device.".to_string()];
+    };
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return vec!["Failed to create script runtime.".to_string()];
+    };
+
+    match device.transport {
+        TransportKind::Simulator => runtime.block_on(async {
+            let mut transport = match SimulatorTransport::default_fixture() {
+                Ok(transport) => transport,
+                Err(err) => return vec![format!("Simulator setup failed: {err}")],
+            };
+            if let Err(err) = transport.connect().await {
+                return vec![format!("Simulator connect failed: {err}")];
+            }
+            match execute_javascript(source, &mut transport).await {
+                Ok(report) => report.log,
+                Err(err) => vec![format!("Script failed: {err}")],
+            }
+        }),
+        TransportKind::UsbMidi => runtime.block_on(async {
+            let candidate = match LinuxUsbManager::default().discover() {
+                Ok(candidates) => candidates
+                    .into_iter()
+                    .find(|candidate| candidate.id == device.id),
+                Err(err) => return vec![format!("USB discovery failed: {err}")],
+            };
+            let Some(candidate) = candidate else {
+                return vec![format!("USB device {} is no longer present.", device.id)];
+            };
+            let mut transport = match LinuxUsbMidiTransport::new(candidate) {
+                Ok(transport) => transport,
+                Err(err) => return vec![format!("USB transport setup failed: {err}")],
+            };
+            if let Err(err) = transport.connect().await {
+                return vec![format!("USB connect failed: {err}")];
+            }
+            let result = execute_javascript(source, &mut transport).await;
+            let _ = transport.close().await;
+            match result {
+                Ok(report) => report.log,
+                Err(err) => vec![format!("Script failed: {err}")],
+            }
+        }),
+        _ => vec![format!(
+            "{:?} script execution is not implemented yet.",
+            device.transport
+        )],
+    }
 }
 
 fn seed_simulator_device(model: &Rc<RefCell<AppModel>>) {

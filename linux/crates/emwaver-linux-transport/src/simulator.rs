@@ -1,4 +1,6 @@
 use crate::{
+    command::{RESPONSE_ERR, RESPONSE_OK},
+    usb_midi_sysex::LANE_SIZE_BYTES,
     EmwFrame, EmwaverTransport, TransportDescriptor, TransportError, TransportId, TransportResult,
 };
 use async_trait::async_trait;
@@ -52,6 +54,51 @@ impl SimulatorTransport {
             "../../../../simulator/fixtures/basic-board.json"
         ))
     }
+
+    fn handle_frame(&self, superframe: &[u8]) -> TransportResult<EmwFrame> {
+        if superframe.len() < LANE_SIZE_BYTES {
+            return Err(TransportError::Fixture(format!(
+                "simulator frame is {} bytes; expected at least {LANE_SIZE_BYTES}",
+                superframe.len()
+            )));
+        }
+
+        let command_lane = &superframe[..LANE_SIZE_BYTES];
+        let response = match command_lane.first().copied().unwrap_or(0) {
+            0x01 => vec![
+                RESPONSE_OK,
+                self.fixture.board.firmware_version.major,
+                self.fixture.board.firmware_version.minor,
+            ],
+            0x08 => {
+                let mut out = vec![RESPONSE_OK];
+                out.extend(
+                    self.fixture
+                        .board
+                        .hardware_uid
+                        .as_bytes()
+                        .iter()
+                        .copied()
+                        .take(12),
+                );
+                out
+            }
+            0x09 => {
+                let mut out = vec![RESPONSE_OK];
+                out.extend(self.fixture.board.board_type.as_bytes());
+                out
+            }
+            0x10 => vec![RESPONSE_OK],
+            _ => vec![RESPONSE_ERR],
+        };
+
+        let mut response_frame = vec![0u8; superframe.len()];
+        let len = response.len().min(LANE_SIZE_BYTES);
+        response_frame[..len].copy_from_slice(&response[..len]);
+        Ok(EmwFrame {
+            bytes: response_frame,
+        })
+    }
 }
 
 #[async_trait]
@@ -72,13 +119,6 @@ impl EmwaverTransport for SimulatorTransport {
 
     async fn connect(&mut self) -> TransportResult<()> {
         self.connected = true;
-        self.frames.push_back(EmwFrame {
-            bytes: format!(
-                "connected:{}:proto{}",
-                self.fixture.board.hardware_uid, self.fixture.board.protocol_version
-            )
-            .into_bytes(),
-        });
         Ok(())
     }
 
@@ -86,9 +126,7 @@ impl EmwaverTransport for SimulatorTransport {
         if !self.connected {
             return Err(TransportError::NotConnected);
         }
-        self.frames.push_back(EmwFrame {
-            bytes: [b"sim-ack:".as_slice(), frame.bytes.as_slice()].concat(),
-        });
+        self.frames.push_back(self.handle_frame(&frame.bytes)?);
         Ok(())
     }
 
@@ -111,7 +149,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn simulator_loads_shared_fixture_and_echoes_frames() {
+    async fn simulator_loads_shared_fixture_and_handles_board_command() {
         let mut transport = SimulatorTransport::default_fixture().unwrap();
         let descriptor = transport.descriptor();
         assert_eq!(descriptor.hardware_uid.as_deref(), Some("SIM-00000001"));
@@ -119,17 +157,17 @@ mod tests {
         transport.connect().await.unwrap();
         transport
             .send_frame(EmwFrame {
-                bytes: b"run blink".to_vec(),
+                bytes: {
+                    let mut frame = vec![0u8; 36];
+                    frame[0] = 0x09;
+                    frame
+                },
             })
             .await
             .unwrap();
 
-        let connected = transport.next_frame().await.unwrap();
-        assert!(String::from_utf8(connected.bytes)
-            .unwrap()
-            .contains("connected:SIM-00000001"));
-
-        let ack = transport.next_frame().await.unwrap();
-        assert_eq!(ack.bytes, b"sim-ack:run blink".to_vec());
+        let response = transport.next_frame().await.unwrap();
+        assert_eq!(response.bytes[0], RESPONSE_OK);
+        assert_eq!(&response.bytes[1..12], b"emwaver-sim");
     }
 }

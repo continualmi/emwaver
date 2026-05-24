@@ -380,6 +380,7 @@ dependencies = [
  "emwaver-linux-agent",
  "emwaver-linux-core",
  "emwaver-linux-firmware",
+ "emwaver-linux-runtime",
  "emwaver-linux-transport",
  "gtk4",
  "libadwaita",
@@ -413,6 +414,7 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+ "tokio",
 ]
 
 [[package]]

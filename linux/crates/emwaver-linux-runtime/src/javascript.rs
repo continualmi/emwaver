@@ -1,5 +1,8 @@
 use boa_engine::{Context, Source};
-use emwaver_linux_transport::runtime::ScriptCommandStep;
+use emwaver_linux_transport::{
+    runtime::{run_script_commands, ScriptCommandStep, ScriptExecutionReport},
+    EmwaverTransport,
+};
 use serde::Deserialize;
 use thiserror::Error;
 
@@ -11,6 +14,8 @@ pub enum JavaScriptRuntimeError {
     Json(String),
     #[error("invalid generated command: {0}")]
     Command(String),
+    #[error("transport execution failed: {0}")]
+    Transport(String),
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,6 +44,16 @@ pub fn compile_javascript(source: &str) -> Result<Vec<ScriptCommandStep>, JavaSc
                 .map_err(|err| JavaScriptRuntimeError::Command(err.to_string()))
         })
         .collect()
+}
+
+pub async fn execute_javascript(
+    source: &str,
+    transport: &mut dyn EmwaverTransport,
+) -> Result<ScriptExecutionReport, JavaScriptRuntimeError> {
+    let steps = compile_javascript(source)?;
+    run_script_commands(transport, &steps)
+        .await
+        .map_err(|err| JavaScriptRuntimeError::Transport(err.to_string()))
 }
 
 const JS_PRELUDE: &str = r#"
@@ -123,5 +138,25 @@ mod tests {
     fn rejects_invalid_command_bytes() {
         let err = compile_javascript("emw.command([999]);").unwrap_err();
         assert!(err.to_string().contains("JavaScript evaluation failed"));
+    }
+
+    #[tokio::test]
+    async fn executes_javascript_against_simulator_transport() {
+        let mut transport =
+            emwaver_linux_transport::simulator::SimulatorTransport::default_fixture().unwrap();
+        transport.connect().await.unwrap();
+
+        let report = execute_javascript(
+            r#"
+            device.version();
+            gpio.write(13, true);
+            "#,
+            &mut transport,
+        )
+        .await
+        .unwrap();
+
+        assert!(report.completed);
+        assert_eq!(report.steps.len(), 3);
     }
 }

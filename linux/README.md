@@ -31,6 +31,7 @@ The first native slice is M0/M1:
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
+- the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, firmware and Agent panels.
