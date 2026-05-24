@@ -892,7 +892,14 @@ impl ScriptPacketBridge {
             .as_mut()
             .ok_or_else(|| "Script packet transport is not available.".to_string())?;
         runtime
-            .block_on(send_command(transport.as_mut(), packet))
+            .block_on(async {
+                tokio::time::timeout(
+                    Duration::from_secs(3),
+                    send_command(transport.as_mut(), packet),
+                )
+                .await
+            })
+            .map_err(|_| "Device command timed out waiting for a board response.".to_string())?
             .map_err(|err| format!("Device command failed: {err}"))
     }
 
