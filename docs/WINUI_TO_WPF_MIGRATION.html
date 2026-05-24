@@ -91,6 +91,68 @@
 
 <h1>EMWaver Windows<br><span class="muted">WinUI 3 → WPF Migration Plan</span></h1>
 
+<div style="background: var(--surface); border: 1px solid var(--accent); border-radius: 8px; padding: 24px; margin: 16px 0 24px;">
+  <h2 style="margin-top:0; color: var(--accent);">macOS Is the UX Reference</h2>
+  <p>The macOS app is the <strong>canonical, validated, and actively maintained</strong> EMWaver desktop experience. It is the UX target for the WPF rebuild.</p>
+  <p>Every WPF design decision starts with: <em>"What does macOS do?"</em></p>
+  <p><strong>Do not port the WinUI 3 UI.</strong> The WinUI shell was built against a framework that models cannot work with effectively and an architecture (multi-page Frame navigation) that the macOS app has already proven unnecessary. The WinUI code is a liability, not a reference.</p>
+
+  <h3 style="margin-top: 20px;">macOS files to study (in order)</h3>
+  <table>
+    <tr><th>File</th><th>What It Teaches</th></tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/ContentView.swift</code></td>
+      <td>Shell architecture: single-screen, no page navigation. Toolbar device picker, Agent key indicator, script session routing. How sheets are presented. This is the <strong>MainWindow</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/EMWaverApp.swift</code></td>
+      <td>App entry, service initialization, the Device menu bar commands (status, refresh, auto-connect, connect submenu, update mode). This is the <strong>App.xaml.cs</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/DeviceConnectionSheet.swift</code></td>
+      <td>Device management UX: UID-probe status, devices grouped by hardware UID, transport picker per device, Wi-Fi setup card (SSID/password/Send/Clear/Status), firmware card. This is the <strong>DeviceConnectionWindow</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/FirmwareUpdateSheet.swift</code></td>
+      <td>Board-aware firmware state machine: STM32 path (Enter Update Mode → flash → done) vs. ESP path (bootloader instructions → serial flash → done). Progress, error, and done states. This is the <strong>FirmwareUpdateWindow</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/SettingsView.swift</code></td>
+      <td>Settings surface: Agent section with MGPT link, device access info, transport debug toggle. This is the <strong>SettingsWindow</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>macos/EMWaver/EMWaver/Auth/SignInSheet.swift</code></td>
+      <td>Agent API key entry. This is the <strong>AgentKeyWindow</strong> blueprint.</td>
+    </tr>
+    <tr>
+      <td><code>apple/EMWaverAppleCore/</code> (shared package)</td>
+      <td><code>ScriptsRootView</code> — the primary scripts surface: list, editor, preview, Agent drawer. This is the <strong>ScriptsView</strong> blueprint.</td>
+    </tr>
+  </table>
+
+  <h3 style="margin-top: 20px;">The macOS Architecture (at a glance)</h3>
+  <pre><code>┌─────────────────────────────────────────────┐
+│  MainWindow (always visible)                │
+│  ┌───────────────────────────────────────┐  │
+│  │  Toolbar: [Device Picker ▼] [🔑]     │  │
+│  │           [Code|Preview] [Run] [Stop] │  │
+│  ├───────────────────────────────────────┤  │
+│  │  ScriptsView (fills window)           │  │
+│  │  ┌──────────┬──────────┬────────────┐ │  │
+│  │  │ Script   │ Editor / │ Agent Chat │ │  │
+│  │  │ List     │ Preview  │ (drawer)   │ │  │
+│  │  │          │          │            │ │  │
+│  │  └──────────┴──────────┴────────────┘ │  │
+│  └───────────────────────────────────────┘  │
+│                                              │
+│  Everything else is a modal Window:          │
+│  ┌─ DeviceConnectionWindow (ShowDialog)      │
+│  └─ FirmwareUpdateWindow  (ShowDialog)       │
+│  ┌─ SettingsWindow        (ShowDialog)       │
+│  └─ AgentKeyWindow        (ShowDialog)       │
+└─────────────────────────────────────────────┘</code></pre>
+</div>
+
 <div class="summary">
   <p><strong>Decision:</strong> WinUI 3 was a mistake. WPF is the right native framework for this product.</p>
   <p><strong>Good news:</strong> ~70% of the codebase is pure C# with zero WinUI dependencies. Only the UI shell (XAML pages, dialogs, navigation) needs rebuilding.</p>
