@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=EMWaver
+Comment=Local-first electronics scripting lab
+Exec=emwaver-linux-app
+Icon=com.continualmi.EMWaver
+Terminal=false
+Categories=Development;Electronics;GTK;
+StartupNotify=true
+

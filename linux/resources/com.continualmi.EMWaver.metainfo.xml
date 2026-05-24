@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.continualmi.EMWaver</id>
+  <name>EMWaver</name>
+  <summary>Local-first electronics scripting lab</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <description>
+    <p>EMWaver turns supported MCU boards into a scriptable local hardware lab through native apps, managed firmware, and optional Agent assistance.</p>
+  </description>
+  <launchable type="desktop-id">com.continualmi.EMWaver.desktop</launchable>
+  <developer_name>Continual MI</developer_name>
+  <url type="homepage">https://emwaver.ai</url>
+</component>
+

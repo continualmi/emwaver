@@ -1,0 +1,35 @@
+pub mod esp32_flash;
+pub mod stm32_dfu;
+
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub enum FirmwareTarget {
+    Stm32Dfu,
+    Esp32Serial,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FirmwareImage {
+    pub target: FirmwareTarget,
+    pub path: String,
+    pub offset: Option<u32>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct FirmwarePlan {
+    pub target: FirmwareTarget,
+    pub images: Vec<FirmwareImage>,
+    pub requires_manual_bootloader: bool,
+}
+
+#[derive(Debug, Error, Eq, PartialEq)]
+pub enum FirmwareError {
+    #[error("missing firmware image: {0}")]
+    MissingImage(String),
+    #[error("flashing backend is not implemented yet: {0}")]
+    NotImplemented(&'static str),
+}
+
+pub type FirmwareResult<T> = Result<T, FirmwareError>;

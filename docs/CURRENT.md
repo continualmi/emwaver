@@ -17,13 +17,14 @@ EMWaver is a **local-first, open-source, AI-assisted electronics platform** by C
 | iOS | Native SwiftUI app | **Primary** | Active (TestFlight / store) |
 | Android | Native Kotlin app | **Primary** | Active (APK preview) |
 | macOS | Native SwiftUI app | Dev/Advanced | Active |
+| Linux | Native Rust + GTK4/libadwaita app | Desktop port track | In progress (simulator/core slice) |
 | Windows | Native WinUI 3 app | Deferred | Source exists; build blocked on this machine |
 
 V1 is mobile-first. The phone is the tricorder — the device users always carry. The Agent is the interface; users don't need a desktop editor if the Agent writes and debugs scripts. macOS stays as the development surface for firmware flashing and multi-device bench work. Windows is deferred past V1.
 
 ## What Was Removed (May 2026)
 
-The Gateway, CLI, browser UI, and prior Linux support were removed. See `docs/DROP_GATEWAY_AND_LINUX.md` for the full decision record. If Linux is revisited, the candidate direction is a new native Rust + GTK4/libadwaita app; see `docs/LINUX_GTK4_PORT_PLAN.html`.
+The Gateway, CLI, browser UI, and prior Linux support were removed. See `docs/DROP_GATEWAY_AND_LINUX.md` for the full decision record. Linux is being revisited as a new native Rust + GTK4/libadwaita app under `linux/`; see `docs/LINUX_GTK4_PORT_PLAN.html`.
 
 In short: the Gateway was a three-layer architecture (browser → Node.js relay → Rust daemon → hardware) that was fundamentally unstable. It existed to paper over the absence of a native Linux app. Linux usage was negligible. The CLI's remaining use case (agent-driven scripting) is now built into the native apps.
 
@@ -36,6 +37,7 @@ emwaver/
 ├── android/          Native Android app (Kotlin, Gradle)
 ├── ios/              Native iOS app (Swift, SwiftUI)
 ├── macos/            Native macOS app (Swift, SwiftUI)
+├── linux/            Native Linux app workspace (Rust, GTK4/libadwaita; in progress)
 ├── windows/          Native Windows app (C#, WinUI 3)
 ├── apple/            Shared Swift package (macOS + iOS)
 ├── stm/              STM32 firmware workspace
