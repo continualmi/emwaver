@@ -4,6 +4,11 @@ use emwaver_linux_core::{
     default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
     TransportKind,
 };
+use emwaver_linux_firmware::{
+    esp32_flash::plan_bundled_esp32s3_serial,
+    stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
+    FirmwarePlan, FirmwareTarget,
+};
 use emwaver_linux_runtime::execute_javascript;
 use emwaver_linux_transport::{
     simulator::SimulatorTransport,
@@ -624,12 +629,9 @@ pub fn build_main_window(app: &adw::Application) {
     }
     {
         let window = window.clone();
+        let model = Rc::clone(&model);
         firmware_button.connect_clicked(move |_| {
-            present_status_dialog(
-                &window,
-                "Firmware",
-                "Linux firmware management is local and board-aware. STM32 DFU and ESP32 serial flashing are implemented behind the firmware crate boundary and will be surfaced here as the GTK flow is completed.",
-            );
+            present_firmware_dialog(&window, model.borrow().selected_device());
         });
     }
     {
@@ -1821,6 +1823,294 @@ fn present_status_dialog(parent: &adw::ApplicationWindow, title: &str, body: &st
     content.append(&label);
     dialog.connect_response(|dialog, _| dialog.close());
     dialog.present();
+}
+
+fn present_firmware_dialog(parent: &adw::ApplicationWindow, selected: Option<DeviceRecord>) {
+    let board = selected
+        .as_ref()
+        .map(inferred_board_type)
+        .unwrap_or_else(|| "STM32F042".to_string());
+    let is_esp = board.starts_with("ESP32");
+    let stm32_plan = plan_bundled_stm32_dfu();
+    let esp32_plan = plan_bundled_esp32s3_serial();
+    let dfu_connected = is_stm32_dfu_connected();
+
+    let dialog = gtk::Dialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title("Firmware")
+        .default_width(720)
+        .default_height(560)
+        .build();
+    dialog.add_button("Close", gtk::ResponseType::Close);
+
+    let content = dialog.content_area();
+    let root = gtk::Box::new(Orientation::Vertical, 14);
+    root.set_margin_top(20);
+    root.set_margin_bottom(20);
+    root.set_margin_start(20);
+    root.set_margin_end(20);
+
+    root.append(&firmware_status_card(
+        selected.as_ref(),
+        &board,
+        &stm32_plan,
+        &esp32_plan,
+        &dfu_connected,
+    ));
+    root.append(&firmware_plan_card(
+        if is_esp {
+            esp32_plan.as_ref().ok()
+        } else {
+            stm32_plan.as_ref().ok()
+        },
+        if is_esp {
+            "ESP32-S3 serial image plan"
+        } else {
+            "STM32 DFU image plan"
+        },
+    ));
+
+    let log_view = gtk::TextView::builder()
+        .editable(false)
+        .monospace(true)
+        .cursor_visible(false)
+        .top_margin(8)
+        .bottom_margin(8)
+        .left_margin(8)
+        .right_margin(8)
+        .build();
+    log_view.buffer().set_text(&firmware_initial_log(
+        &board,
+        &stm32_plan,
+        &esp32_plan,
+        &dfu_connected,
+    ));
+    let log_scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .min_content_height(170)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .child(&log_view)
+        .build();
+
+    let actions = gtk::Box::new(Orientation::Horizontal, 8);
+    let validate_button = gtk::Button::builder().label("Validate Bundle").build();
+    let flash_button = gtk::Button::builder()
+        .label(if is_esp { "Flash ESP32" } else { "Flash STM32" })
+        .sensitive(!is_esp && stm32_plan.is_ok())
+        .build();
+    actions.append(&validate_button);
+    actions.append(&flash_button);
+    root.append(&actions);
+    root.append(&section_label("Update Log"));
+    root.append(&log_scroll);
+
+    {
+        let log_view = log_view.clone();
+        validate_button.connect_clicked(move |_| {
+            append_log(&log_view, "Validating bundled firmware assets...");
+            match plan_bundled_stm32_dfu() {
+                Ok(plan) => append_log(
+                    &log_view,
+                    &format!("STM32 bundle OK: {}", firmware_plan_summary(&plan)),
+                ),
+                Err(err) => append_log(&log_view, &format!("STM32 bundle error: {err}")),
+            }
+            match plan_bundled_esp32s3_serial() {
+                Ok(plan) => append_log(
+                    &log_view,
+                    &format!("ESP32-S3 bundle OK: {}", firmware_plan_summary(&plan)),
+                ),
+                Err(err) => append_log(&log_view, &format!("ESP32-S3 bundle error: {err}")),
+            }
+        });
+    }
+    {
+        let log_view = log_view.clone();
+        flash_button.connect_clicked(move |button| {
+            button.set_sensitive(false);
+            append_log(&log_view, "Starting STM32 DFU flash with bundled firmware...");
+            match plan_bundled_stm32_dfu() {
+                Ok(plan) => match flash_stm32_dfu_with_progress(&plan, |line| {
+                    append_log(&log_view, line)
+                }) {
+                    Ok(()) => append_log(
+                        &log_view,
+                        "STM32 firmware installed. Disconnect and reconnect the device to continue.",
+                    ),
+                    Err(err) => append_log(&log_view, &format!("STM32 DFU flash failed: {err}")),
+                },
+                Err(err) => append_log(&log_view, &format!("STM32 plan failed: {err}")),
+            }
+            button.set_sensitive(true);
+        });
+    }
+
+    content.append(&root);
+    dialog.connect_response(|dialog, _| dialog.close());
+    dialog.present();
+}
+
+fn firmware_status_card(
+    selected: Option<&DeviceRecord>,
+    board: &str,
+    stm32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    esp32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    dfu_connected: &Result<bool, emwaver_linux_firmware::FirmwareError>,
+) -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Horizontal, 12);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&gtk::Image::from_icon_name(
+        "software-update-available-symbolic",
+    ));
+    let copy = gtk::Box::new(Orientation::Vertical, 4);
+    copy.set_hexpand(true);
+    copy.append(
+        &gtk::Label::builder()
+            .label(format!("{board} Firmware"))
+            .xalign(0.0)
+            .css_classes(vec!["heading"])
+            .build(),
+    );
+    copy.append(
+        &gtk::Label::builder()
+            .label(firmware_status_text(
+                selected,
+                board,
+                stm32_plan,
+                esp32_plan,
+                dfu_connected,
+            ))
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    root.append(&copy);
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn firmware_plan_card(plan: Option<&FirmwarePlan>, title: &str) -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Vertical, 8);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&section_label(title));
+    if let Some(plan) = plan {
+        root.append(
+            &gtk::Label::builder()
+                .label(firmware_plan_summary(plan))
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(vec!["dim-label"])
+                .build(),
+        );
+        for image in &plan.images {
+            root.append(
+                &gtk::Label::builder()
+                    .label(match image.offset {
+                        Some(offset) => format!("0x{offset:05x}  {}", image.path),
+                        None => image.path.clone(),
+                    })
+                    .wrap(true)
+                    .xalign(0.0)
+                    .monospace(true)
+                    .build(),
+            );
+        }
+    } else {
+        root.append(
+            &gtk::Label::builder()
+                .label("Bundled firmware assets are missing or invalid. Validate the bundle for details.")
+                .wrap(true)
+                .xalign(0.0)
+                .css_classes(vec!["dim-label"])
+                .build(),
+        );
+    }
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn firmware_status_text(
+    selected: Option<&DeviceRecord>,
+    board: &str,
+    stm32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    esp32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    dfu_connected: &Result<bool, emwaver_linux_firmware::FirmwareError>,
+) -> String {
+    let mut lines = Vec::new();
+    lines.push(
+        selected
+            .map(|device| format!("Selected device: {}", device.display_name))
+            .unwrap_or_else(|| "No run-mode device selected.".to_string()),
+    );
+    lines.push(match dfu_connected {
+        Ok(true) => "STM32 update mode detected.".to_string(),
+        Ok(false) => "STM32 update mode not detected.".to_string(),
+        Err(err) => format!("STM32 update-mode probe failed: {err}"),
+    });
+    if board.starts_with("ESP32") {
+        lines.push(match esp32_plan {
+            Ok(plan) => format!(
+                "ESP32 bundled image plan ready: {} images.",
+                plan.images.len()
+            ),
+            Err(err) => format!("ESP32 bundled image plan failed: {err}"),
+        });
+        lines.push("ESP32 serial flashing backend is still pending; the app validates bundled fixed-offset images and shows bootloader guidance now.".to_string());
+    } else {
+        lines.push(match stm32_plan {
+            Ok(plan) => format!("STM32 bundled DFU plan ready: {} image.", plan.images.len()),
+            Err(err) => format!("STM32 bundled DFU plan failed: {err}"),
+        });
+    }
+    lines.join("\n")
+}
+
+fn firmware_initial_log(
+    board: &str,
+    stm32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    esp32_plan: &Result<FirmwarePlan, emwaver_linux_firmware::FirmwareError>,
+    dfu_connected: &Result<bool, emwaver_linux_firmware::FirmwareError>,
+) -> String {
+    let mut lines = vec![format!("Firmware sheet opened for {board}.")];
+    lines.push(match dfu_connected {
+        Ok(true) => "STM32 DFU: update-mode device is present.".to_string(),
+        Ok(false) => "STM32 DFU: no update-mode device detected.".to_string(),
+        Err(err) => format!("STM32 DFU probe error: {err}"),
+    });
+    lines.push(match stm32_plan {
+        Ok(plan) => format!("STM32 plan: {}", firmware_plan_summary(plan)),
+        Err(err) => format!("STM32 plan error: {err}"),
+    });
+    lines.push(match esp32_plan {
+        Ok(plan) => format!("ESP32-S3 plan: {}", firmware_plan_summary(plan)),
+        Err(err) => format!("ESP32-S3 plan error: {err}"),
+    });
+    lines.join("\n") + "\n"
+}
+
+fn firmware_plan_summary(plan: &FirmwarePlan) -> String {
+    let target = match plan.target {
+        FirmwareTarget::Stm32Dfu => "STM32 DFU",
+        FirmwareTarget::Esp32Serial => "ESP32 serial",
+    };
+    format!(
+        "{target}, {} image{}, manual bootloader: {}",
+        plan.images.len(),
+        if plan.images.len() == 1 { "" } else { "s" },
+        if plan.requires_manual_bootloader {
+            "yes"
+        } else {
+            "no"
+        }
+    )
 }
 
 fn device_detail_line(device: &DeviceRecord) -> String {
