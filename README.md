@@ -24,7 +24,7 @@
 
 EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript or JSX-style scripts, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
 
-The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through local transports such as USB, BLE, and Wi-Fi. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
+The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through USB, BLE, and Wi-Fi transports. USB-C gives direct plug-in control, BLE enables cable-free mobile use, and Wi-Fi can support LAN/VPN-style remote hardware control for boards designed around it. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
 
 > Status: EMWaver is in an early open-source platform release. The architecture is working across the native apps, while packaging, documentation, supported-board coverage, and installer polish are still improving.
 
@@ -61,6 +61,7 @@ Use EMWaver when you want to:
 - iterate faster than traditional Arduino-style edit-build-flash workflows;
 - build instant UI panels for modules directly from scripts;
 - carry a compact USB-C hardware lab that plugs directly into phones, tablets, and laptops;
+- use BLE for cable-free sessions and Wi-Fi for networked or remote hardware control;
 - let an Agent inspect hardware, run primitive tools, probe modules, debug failures, and help with authorized security research.
 
 ## What Works Today
@@ -150,7 +151,7 @@ native app
 
 Core hardware control is designed to work without cloud activation, hosted device ownership checks, cloud script storage, or an account-required runtime.
 
-Remote access, when needed, should be user-owned: local network, SSH, VPN, Tailscale, or similar tools around the local app/runtime.
+Wi-Fi-capable boards can also be controlled over a local network or through user-owned remote access such as VPN, Tailscale, SSH tunneling, or port forwarding.
 
 ## Agent-Ready Hardware Interface
 
