@@ -13,8 +13,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 2. Script UI rendering
    - macOS executes default scripts through `ScriptPreviewManager`, transpiles imports/JSX, and renders `ScriptRenderView` nodes.
-   - Linux executes the early command/gpio/device JavaScript API and now has the first local module loader/import transform, but still does not render the default-script UI tree.
-   - Needed: port JSX transform or equivalent authoring transform, `__emwUI`/`__emwRender`, script tree model, GTK renderer, and handler invocation.
+   - Linux executes the early command/gpio/device JavaScript API and now has local module loading, JSX transform, `__emwUI`/`__emwRender`, and typed script tree capture.
+   - Needed: render captured script trees as real GTK widgets and invoke captured handler tokens back into the running script.
 
 3. Agent tool parity
    - macOS Agent exposes local tools for listing/reading/patching/running scripts, stopping scripts, device status, and hardware primitives.
@@ -45,6 +45,7 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 - Linux loads the shared `assets/default-scripts` bundle and separates examples, libraries, kernel files, and custom scripts.
 - Linux script execution can load bundled library/kernel module sources through a local `require` loader after import-line rewriting.
+- Linux runtime can transform uppercase JSX and capture the rendered script UI tree from the shared `emw-jsx.js`/`emw-ui.js` modules.
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.

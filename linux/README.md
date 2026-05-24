@@ -31,11 +31,11 @@ The first native slice is M0/M1:
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
-- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries;
+- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries plus uppercase JSX transform and script UI tree capture;
 - the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, and supports local New/Save/Make Copy behavior aligned with the macOS and Windows script workspace;
-- the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that does not pretend to be the macOS script renderer until the GTK `ScriptRenderView` port exists;
+- the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that can summarize the captured script UI tree while full GTK widget rendering is being ported;
 - the GTK shell has a toggleable right-side Agent drawer with local chat controls, suggestions, composer, setup notice, and current script/device/log context routed through the public MGPT Agent client when a Settings/Secret Service key or `EMWAVER_AGENT_ENDPOINT`/`EMWAVER_AGENT_API_KEY` development override is configured;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
@@ -46,7 +46,7 @@ The first native slice is M0/M1:
 - Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
-Full JavaScript runtime parity beyond the initial command/gpio/device API and local module loading, the JSX/script-render tree path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, and JSX/script-tree capture, the GTK script-render widget/event path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 

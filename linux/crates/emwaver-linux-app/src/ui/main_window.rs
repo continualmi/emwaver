@@ -12,7 +12,7 @@ use emwaver_linux_firmware::{
     stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
     FirmwarePlan, FirmwareTarget,
 };
-use emwaver_linux_runtime::execute_javascript_with_modules;
+use emwaver_linux_runtime::{execute_javascript_with_modules, render_javascript_ui, ScriptUiNode};
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
     simulator::SimulatorTransport,
@@ -602,6 +602,8 @@ pub fn build_main_window(app: &adw::Application) {
         let editor_stack = editor_stack.clone();
         let preview_label = preview_label.clone();
         let selected_script = Rc::clone(&selected_script);
+        let source_buffer = source_buffer.clone();
+        let script_repository = Rc::clone(&script_repository);
         preview_button.connect_toggled(move |button| {
             if button.is_active() {
                 let name = selected_script
@@ -609,9 +611,18 @@ pub fn build_main_window(app: &adw::Application) {
                     .as_ref()
                     .map(|script| script.name.clone())
                     .unwrap_or_else(|| "No script".to_string());
-                preview_label.set_label(&format!(
-                    "{name} runtime output\n\nLinux does not yet have the macOS ScriptRenderView port. Until that renderer lands, this pane only mirrors the selected script context and command execution stays in the local Run Log."
-                ));
+                let source = source_buffer
+                    .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
+                    .to_string();
+                let summary = match script_repository.module_sources() {
+                    Ok(modules) => match render_javascript_ui(&source, &modules) {
+                        Ok(Some(tree)) => script_tree_summary(&tree.root),
+                        Ok(None) => "No script UI tree was rendered.".to_string(),
+                        Err(err) => format!("Script UI render failed: {err}"),
+                    },
+                    Err(err) => format!("Module load failed: {err}"),
+                };
+                preview_label.set_label(&format!("{name} runtime output\n\n{summary}"));
                 editor_stack.set_visible_child_name("preview");
             } else {
                 editor_stack.set_visible_child_name("editor");
@@ -1081,6 +1092,34 @@ fn editor_toolbar(
     toolbar.append(line_wrap_button);
     toolbar.append(preview_button);
     toolbar
+}
+
+fn script_tree_summary(root: &ScriptUiNode) -> String {
+    let mut lines = vec![
+        "Captured script UI tree. GTK widget rendering and event invocation are still being ported."
+            .to_string(),
+        format!("Root: {}", root.node_type),
+    ];
+    append_script_tree_lines(root, 0, &mut lines);
+    lines.join("\n")
+}
+
+fn append_script_tree_lines(node: &ScriptUiNode, depth: usize, lines: &mut Vec<String>) {
+    if depth >= 4 || lines.len() >= 18 {
+        return;
+    }
+    for child in &node.children {
+        let indent = "  ".repeat(depth + 1);
+        let label = child
+            .props
+            .get("text")
+            .or_else(|| child.props.get("label"))
+            .and_then(serde_json::Value::as_str)
+            .map(|text| format!(" - {text}"))
+            .unwrap_or_default();
+        lines.push(format!("{indent}{}{}", child.node_type, label));
+        append_script_tree_lines(child, depth + 1, lines);
+    }
 }
 
 fn build_agent_panel(
