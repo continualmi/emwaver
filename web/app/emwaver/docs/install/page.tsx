@@ -2,6 +2,7 @@ import Link from "next/link";
 
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/download/emwaver-preview";
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
+const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";
 
 function InstallOptions() {
   return (
@@ -18,12 +19,23 @@ function InstallOptions() {
       </a>
 
       <a
-        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`}
+        href={PLAY_INTERNAL_TEST_URL}
+        target="_blank"
+        rel="noreferrer"
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
         <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Primary</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Google Play internal test</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Join internal testing to install EMWaver through Google Play.</div>
+      </a>
+
+      <a
+        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`}
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Direct</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">APK</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct APK download. Google Play is prepared for the public listing.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct APK download outside Google Play.</div>
       </a>
 
       <a
@@ -56,7 +68,7 @@ export default function InstallDocPage() {
       <h2>1. Install the app</h2>
       <p>
         iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
-        Android has a direct APK download, with Google Play prepared for the public listing. macOS is available
+        Android is available through the Google Play internal test and as a direct APK download. macOS is available
         for development and advanced use, and Windows is coming soon after V1.
       </p>
       <InstallOptions />

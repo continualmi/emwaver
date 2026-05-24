@@ -2,14 +2,34 @@ import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
 const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/download/emwaver-preview";
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
+const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.emwaver.emwaverandroidapp&hl=en-US&ah=xJ56ZZjMEPUbsS42586J-0pNhxQ";
+const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";
 
-const MOBILE_PLATFORMS = [
+type InstallAction = {
+  label: string;
+  href?: string;
+  badge?: string;
+  badgeAlt?: string;
+  note?: string;
+  muted?: boolean;
+};
+
+type PlatformCard = {
+  platform: string;
+  label: string;
+  icon: string;
+  accent: "aqua" | "sky";
+  description: string;
+  actions: InstallAction[];
+};
+
+const MOBILE_PLATFORMS: PlatformCard[] = [
   {
     platform: "iOS",
     label: "Primary",
-    badge: "/emwaver/badges/app-store.png",
-    badgeAlt: "Download on the App Store",
-    description: "Available on the App Store for iPhone and iPad.",
+    icon: "",
+    accent: "aqua",
+    description: "Install EMWaver on iPhone or iPad from the App Store.",
     actions: [
       {
         label: "Download on the App Store",
@@ -22,16 +42,20 @@ const MOBILE_PLATFORMS = [
   {
     platform: "Android",
     label: "Primary",
-    badge: "/emwaver/badges/google-play.png",
-    badgeAlt: "Get it on Google Play",
-    description: "Use the direct APK today. Google Play is prepared for the public listing.",
+    icon: "▶",
+    accent: "aqua",
+    description: "Join the Google Play internal test to install through Play, or use the direct APK.",
     actions: [
       {
-        label: "Get it on Google Play",
-        href: undefined,
+        label: "Join Google Play internal test",
+        href: PLAY_INTERNAL_TEST_URL,
         badge: "/emwaver/badges/google-play.png",
         badgeAlt: "Get it on Google Play",
-        comingSoon: true,
+        note: "Join internal testing",
+      },
+      {
+        label: "Open Play Store listing",
+        href: PLAY_STORE_URL,
       },
       {
         label: "Download APK",
@@ -43,12 +67,13 @@ const MOBILE_PLATFORMS = [
   },
 ];
 
-const DESKTOP_PLATFORMS = [
+const DESKTOP_PLATFORMS: PlatformCard[] = [
   {
     platform: "macOS",
     label: "Dev & Advanced",
+    icon: "Mac",
+    accent: "sky",
     description: "Desktop build for firmware flashing, multi-device bench testing, and long automation runs.",
-    badge: "/emwaver/badges/macos.png",
     actions: [
       {
         label: "Download DMG",
@@ -59,34 +84,40 @@ const DESKTOP_PLATFORMS = [
   {
     platform: "Windows",
     label: "Coming Soon",
+    icon: "Win",
+    accent: "sky",
     description: "Windows support is planned after the V1 mobile launch.",
-    badge: undefined,
     actions: [
       {
         label: "Coming soon",
-        href: undefined,
-        comingSoon: true,
+        muted: true,
       },
     ],
   },
 ];
 
-function ActionButton({ action }: { action: { label: string; href?: string; badge?: string; badgeAlt?: string; comingSoon?: boolean } }) {
-  const className = "flex min-h-12 items-center justify-center gap-3 rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-sm font-semibold text-[color:var(--ink)] no-underline transition hover:bg-[color:var(--surface-3)]";
+function ActionButton({ action }: { action: InstallAction }) {
+  const className = [
+    "flex min-h-12 items-center justify-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold no-underline transition",
+    action.muted || !action.href
+      ? "cursor-not-allowed border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink-dim)] opacity-70"
+      : "border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]",
+  ].join(" ");
 
   const content = (
     <>
       {action.badge ? (
-        <img src={action.badge} alt={action.badgeAlt || ""} className="h-9 w-auto shrink-0 object-contain" />
-      ) : null}
-      {!action.badge ? action.label : null}
-      {action.comingSoon ? <span className="text-xs text-[color:var(--ink-dim)]">Coming soon</span> : null}
+        <img src={action.badge} alt={action.badgeAlt || action.label} className="h-9 w-auto max-w-[190px] shrink-0 object-contain" />
+      ) : (
+        <span>{action.label}</span>
+      )}
+      {action.note ? <span className="text-xs text-[color:var(--ink-dim)]">{action.note}</span> : null}
     </>
   );
 
   if (!action.href) {
     return (
-      <div className={`${className} cursor-not-allowed border-dashed opacity-70`} aria-disabled="true">
+      <div className={className} aria-disabled="true">
         {content}
       </div>
     );
@@ -96,6 +127,33 @@ function ActionButton({ action }: { action: { label: string; href?: string; badg
     <a href={action.href} className={className} target="_blank" rel="noreferrer">
       {content}
     </a>
+  );
+}
+
+function PlatformCardView({ platform }: { platform: PlatformCard }) {
+  const accentClass = platform.accent === "aqua" ? "text-[color:var(--aqua)]" : "text-[color:var(--sky)]";
+
+  return (
+    <div className="flex h-full flex-col rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+      <div className="flex items-start gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] text-base font-semibold text-[color:var(--ink)]">
+          {platform.icon}
+        </div>
+        <div>
+          <div className={`text-[11px] font-semibold uppercase tracking-[0.16em] ${accentClass}`}>
+            {platform.platform} — {platform.label}
+          </div>
+          <p className="pt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+            {platform.description}
+          </p>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3">
+        {platform.actions.map((action) => (
+          <ActionButton key={action.label} action={action} />
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -132,7 +190,7 @@ export default function InstallPage() {
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["App Store", "Android APK", "Google Play", "macOS DMG", "Windows coming soon"].map((label) => (
+              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows coming soon"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
@@ -144,7 +202,6 @@ export default function InstallPage() {
           </div>
         </section>
 
-        {/* Mobile — primary */}
         <section className="mt-10">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
@@ -161,37 +218,12 @@ export default function InstallPage() {
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {MOBILE_PLATFORMS.map((p) => (
-              <div
-                key={p.platform}
-                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
-              >
-                <div className="flex items-center gap-3">
-                  <img
-                    src={p.badge}
-                    alt={p.badgeAlt}
-                    className="h-10 w-auto shrink-0 object-contain"
-                  />
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
-                      {p.platform} — {p.label}
-                    </div>
-                    <div className="pt-0.5 text-sm text-[color:var(--ink-dim)]">
-                      {p.description}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  {p.actions.map((action) => (
-                    <ActionButton key={action.label} action={action} />
-                  ))}
-                </div>
-              </div>
+            {MOBILE_PLATFORMS.map((platform) => (
+              <PlatformCardView key={platform.platform} platform={platform} />
             ))}
           </div>
         </section>
 
-        {/* Desktop */}
         <section className="mt-10">
           <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
             <div>
@@ -208,38 +240,8 @@ export default function InstallPage() {
           </div>
 
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
-            {DESKTOP_PLATFORMS.map((p) => (
-              <div
-                key={p.platform}
-                className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] text-sm font-semibold text-[color:var(--ink)]">
-                    {p.badge ? (
-                      <img
-                        src={p.badge}
-                        alt={p.platform}
-                        className="h-6 w-6 object-contain"
-                      />
-                    ) : (
-                      "Win"
-                    )}
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">
-                      {p.platform} — {p.label}
-                    </div>
-                    <div className="pt-0.5 text-sm text-[color:var(--ink-dim)]">
-                      {p.description}
-                    </div>
-                  </div>
-                </div>
-                <div className="mt-4 grid gap-3">
-                  {p.actions.map((action) => (
-                    <ActionButton key={action.label} action={action} />
-                  ))}
-                </div>
-              </div>
+            {DESKTOP_PLATFORMS.map((platform) => (
+              <PlatformCardView key={platform.platform} platform={platform} />
             ))}
           </div>
         </section>

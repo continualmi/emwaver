@@ -101,7 +101,7 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app</strong> through the{" "}
-          <Link href="/emwaver/docs/install">App Store, Android APK, Google Play status, or macOS DMG</Link>.
+          <Link href="/emwaver/docs/install">App Store, Google Play internal test, Android APK, or macOS DMG</Link>.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
@@ -115,7 +115,7 @@ export default function DocsIndex() {
       <h2>Apps</h2>
       <ul>
         <li><strong>iOS</strong> on the App Store</li>
-        <li><strong>Android</strong> direct APK download, with Google Play prepared for the public listing</li>
+        <li><strong>Android</strong> through the Google Play internal test or direct APK download</li>
         <li><strong>macOS</strong> direct DMG download for development and advanced use</li>
         <li><strong>Windows</strong> coming soon after V1</li>
       </ul>
