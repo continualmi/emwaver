@@ -1,5 +1,8 @@
 use adw::prelude::*;
-use emwaver_linux_agent::{AgentClient, AgentRequest};
+use emwaver_linux_agent::{
+    clear_agent_api_key_secret_tool, load_agent_configuration, save_agent_endpoint,
+    store_agent_api_key_secret_tool, AgentClient, AgentCredentialSource, AgentRequest,
+};
 use emwaver_linux_core::{
     default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
     TransportKind,
@@ -18,6 +21,7 @@ use emwaver_linux_transport::{
     wifi::{LinuxWifiTransport, ManualWifiTarget},
     EmwaverTransport,
 };
+use gtk::glib::object::IsA;
 use gtk::{gio, Align, Orientation, PolicyType};
 use sourceview5::prelude::*;
 use std::cell::RefCell;
@@ -638,11 +642,7 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let window = window.clone();
         settings_button.connect_clicked(move |_| {
-            present_status_dialog(
-                &window,
-                "Settings",
-                "Settings will hold local-only preferences such as Agent endpoint/API key storage, script folder location, and transport diagnostics. Local hardware access must not depend on an account.",
-            );
+            present_settings_dialog(&window);
         });
     }
     {
@@ -1025,7 +1025,7 @@ fn build_agent_panel(
     root.append(&conversation_row);
 
     let setup = gtk::Label::builder()
-        .label("Agent replies require EMWAVER_AGENT_ENDPOINT and EMWAVER_AGENT_API_KEY until the Secret Service settings UI lands. Local scripts, devices, and firmware remain available without them.")
+        .label("Agent replies require a public /api/mgpt/... endpoint and API key in Settings or environment. Local scripts, devices, and firmware remain available without them.")
         .wrap(true)
         .xalign(0.0)
         .css_classes(vec!["dim-label"])
@@ -1090,7 +1090,7 @@ fn build_agent_panel(
     {
         let setup = setup.clone();
         key_button.connect_clicked(move |_| {
-            setup.set_label("Set EMWAVER_AGENT_ENDPOINT to a public /api/mgpt/... route and EMWAVER_AGENT_API_KEY for this preview build. Secret Service settings UI is still pending.");
+            setup.set_label("Open Settings to store the Agent API key with Secret Service, or set EMWAVER_AGENT_ENDPOINT and EMWAVER_AGENT_API_KEY for development.");
             setup.set_visible(true);
         });
     }
@@ -1155,11 +1155,14 @@ fn append_agent_message(messages: &gtk::Box, role: &str, text: &str) {
 }
 
 fn agent_configured() -> bool {
-    env::var("EMWAVER_AGENT_API_KEY")
-        .ok()
+    let config = load_agent_configuration();
+    config
+        .api_key
+        .as_ref()
         .is_some_and(|key| !key.trim().is_empty())
-        && env::var("EMWAVER_AGENT_ENDPOINT")
-            .ok()
+        && config
+            .endpoint
+            .as_ref()
             .is_some_and(|endpoint| endpoint.contains("/api/mgpt/"))
 }
 
@@ -1178,17 +1181,16 @@ fn send_agent_message(
     selected_device: &Option<DeviceRecord>,
     log_view: &gtk::TextView,
 ) -> Result<String, String> {
-    let Some(api_key) = env::var("EMWAVER_AGENT_API_KEY")
-        .ok()
-        .filter(|key| !key.trim().is_empty())
-    else {
+    let config = load_agent_configuration();
+    let Some(api_key) = config.api_key.filter(|key| !key.trim().is_empty()) else {
         return Err(
             "Add an MGPT API key to enable Agent replies. Local scripts and hardware are still available."
                 .to_string(),
         );
     };
-    let endpoint = env::var("EMWAVER_AGENT_ENDPOINT")
-        .map_err(|_| "Set EMWAVER_AGENT_ENDPOINT to a public /api/mgpt/... route.".to_string())?;
+    let endpoint = config
+        .endpoint
+        .ok_or_else(|| "Set the Agent endpoint to a public /api/mgpt/... route.".to_string())?;
     let client = AgentClient::new(endpoint, Some(api_key)).map_err(|err| err.to_string())?;
     let selected_script = source_buffer
         .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
@@ -1447,6 +1449,158 @@ fn selected_device_title(device: &Option<DeviceRecord>) -> String {
         .as_ref()
         .map(|device| device.display_name.clone())
         .unwrap_or_else(|| "No Device".to_string())
+}
+
+fn present_settings_dialog(parent: &adw::ApplicationWindow) {
+    let config = load_agent_configuration();
+    let dialog = gtk::Dialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title("Settings")
+        .default_width(720)
+        .default_height(520)
+        .build();
+    dialog.add_button("Close", gtk::ResponseType::Close);
+    dialog.add_button("Clear Agent Key", gtk::ResponseType::Other(1));
+    dialog.add_button("Save", gtk::ResponseType::Accept);
+
+    let root = gtk::Box::new(Orientation::Vertical, 16);
+    root.set_margin_top(20);
+    root.set_margin_bottom(20);
+    root.set_margin_start(20);
+    root.set_margin_end(20);
+
+    let agent_card = gtk::Box::new(Orientation::Vertical, 10);
+    agent_card.set_margin_top(12);
+    agent_card.set_margin_bottom(12);
+    agent_card.set_margin_start(12);
+    agent_card.set_margin_end(12);
+    agent_card.append(&section_label("Agent"));
+    agent_card.append(
+        &gtk::Label::builder()
+            .label("Add an MGPT API key to enable Agent replies. Local scripts, device control, and firmware update remain available without a key.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+
+    let endpoint_entry = gtk::Entry::builder()
+        .placeholder_text("https://.../api/mgpt/respond")
+        .text(config.endpoint.as_deref().unwrap_or(""))
+        .hexpand(true)
+        .build();
+    let endpoint_row = settings_row("Endpoint", &endpoint_entry);
+    agent_card.append(&endpoint_row);
+
+    let key_entry = gtk::Entry::builder()
+        .placeholder_text(match config.api_key_source {
+            AgentCredentialSource::Env => "Configured by environment",
+            AgentCredentialSource::SecretService => "Stored in Secret Service",
+            AgentCredentialSource::Missing => "Paste API key to store locally",
+        })
+        .visibility(false)
+        .hexpand(true)
+        .build();
+    let key_row = settings_row("API Key", &key_entry);
+    agent_card.append(&key_row);
+
+    let key_source = match config.api_key_source {
+        AgentCredentialSource::Env => "Current key source: environment variable. Saving here stores a new Secret Service key, but the environment value keeps priority until unset.",
+        AgentCredentialSource::SecretService => "Current key source: Secret Service.",
+        AgentCredentialSource::Missing => "No Agent key is configured.",
+    };
+    let status = gtk::Label::builder()
+        .label(key_source)
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .build();
+    agent_card.append(&status);
+    root.append(&gtk::Frame::builder().child(&agent_card).build());
+
+    let device_card = gtk::Box::new(Orientation::Vertical, 8);
+    device_card.set_margin_top(12);
+    device_card.set_margin_bottom(12);
+    device_card.set_margin_start(12);
+    device_card.set_margin_end(12);
+    device_card.append(&section_label("Device Access"));
+    device_card.append(
+        &gtk::Label::builder()
+            .label("Local scripts and hardware control work immediately without an EMWaver account, cloud activation, subscription check, or Agent key.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    root.append(&gtk::Frame::builder().child(&device_card).build());
+
+    let diagnostics_card = gtk::Box::new(Orientation::Vertical, 8);
+    diagnostics_card.set_margin_top(12);
+    diagnostics_card.set_margin_bottom(12);
+    diagnostics_card.set_margin_start(12);
+    diagnostics_card.set_margin_end(12);
+    diagnostics_card.append(&section_label("Device Diagnostics"));
+    diagnostics_card.append(
+        &gtk::CheckButton::builder()
+            .label("Log transport packets on ESP serial")
+            .active(true)
+            .tooltip_text("Matches the macOS debug logging preference; Linux persistence for this toggle is staged with the settings store.")
+            .build(),
+    );
+    diagnostics_card.append(
+        &gtk::Label::builder()
+            .label("When enabled, ESP32-S3 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor. The app can turn firmware transport logging off after connection metadata checks.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    root.append(&gtk::Frame::builder().child(&diagnostics_card).build());
+
+    dialog.content_area().append(&root);
+
+    dialog.connect_response(move |dialog, response| match response {
+        gtk::ResponseType::Accept => {
+            let endpoint = endpoint_entry.text().to_string();
+            match save_agent_endpoint(Some(&endpoint)) {
+                Ok(()) => {
+                    let key = key_entry.text().to_string();
+                    if key.trim().is_empty() {
+                        status.set_label("Saved Agent endpoint. Existing Agent key was unchanged.");
+                    } else {
+                        match store_agent_api_key_secret_tool(&key) {
+                            Ok(()) => status
+                                .set_label("Saved Agent endpoint and API key to Secret Service."),
+                            Err(err) => status.set_label(&format!(
+                                "Saved endpoint, but Secret Service key storage failed: {err}"
+                            )),
+                        }
+                    }
+                }
+                Err(err) => status.set_label(&err.to_string()),
+            }
+        }
+        gtk::ResponseType::Other(1) => match clear_agent_api_key_secret_tool() {
+            Ok(()) => status.set_label("Cleared Agent API key from Secret Service."),
+            Err(err) => status.set_label(&format!("Secret Service clear failed: {err}")),
+        },
+        _ => dialog.close(),
+    });
+    dialog.present();
+}
+
+fn settings_row(label: &str, child: &impl IsA<gtk::Widget>) -> gtk::Box {
+    let row = gtk::Box::new(Orientation::Horizontal, 12);
+    row.append(
+        &gtk::Label::builder()
+            .label(label)
+            .width_chars(14)
+            .xalign(0.0)
+            .build(),
+    );
+    row.append(child);
+    row
 }
 
 fn present_device_dialog(parent: &adw::ApplicationWindow, devices: &[DeviceRecord]) {
