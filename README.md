@@ -22,7 +22,7 @@
   <img src="https://continualmi.com/emwaver/banner.jpeg" alt="EMWaver running across phone, desktop, and supported boards" width="860">
 </p>
 
-EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
+EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript or JSX-style scripts, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
 
 The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through local transports such as USB, BLE, and Wi-Fi. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
 
@@ -30,12 +30,26 @@ The core runtime is local-first: scripts run on your device, hardware access doe
 
 ## Why EMWaver
 
-Embedded development often means setting up toolchains, compiling firmware, flashing boards, and repeating that loop for every small hardware experiment. EMWaver moves the iteration loop into local scripts, closer to the speed of a software REPL than the usual edit-build-flash cycle:
+Embedded development often means setting up toolchains, compiling firmware, flashing boards, and repeating that loop for every small hardware experiment. EMWaver moves the iteration loop into local scripts, closer to the speed of a software REPL than the usual edit-build-flash cycle.
 
-```js
-// Example direction: script against a connected device immediately.
-const id = await spi.transfer([0x80 | 0x30, 0x00]);
-console.log("device id", id);
+Scripts can also define instant interfaces for connected modules, so a single file can probe hardware, expose controls, visualize state, and exercise the full feature set of a device:
+
+```jsx
+export default function CC1101Panel() {
+  const [partnum, setPartnum] = useState("--");
+
+  async function readPartnum() {
+    const reply = await spi_transfer([0x80 | 0x30, 0x00]);
+    setPartnum(`0x${reply[1].toString(16)}`);
+  }
+
+  return (
+    <panel title="CC1101">
+      <text>PARTNUM: {partnum}</text>
+      <button onPress={readPartnum}>Read register</button>
+    </panel>
+  );
+}
 ```
 
 Use EMWaver when you want to:
@@ -45,6 +59,7 @@ Use EMWaver when you want to:
 - control hardware directly from native apps;
 - use native apps instead of asking every user to install an MCU toolchain;
 - iterate faster than traditional Arduino-style edit-build-flash workflows;
+- build instant UI panels for modules directly from scripts;
 - carry a compact USB-C hardware lab that plugs directly into phones, tablets, and laptops;
 - let an Agent inspect hardware, run primitive tools, probe modules, debug failures, and help with authorized security research.
 
@@ -60,7 +75,7 @@ EMWaver currently includes native app work for:
 
 The platform is designed around:
 
-- local JavaScript scripts (`.js`);
+- local JavaScript and JSX-style scripts (`.js`, `.jsx`);
 - managed board firmware;
 - USB as a first-class transport;
 - BLE and Wi-Fi for board classes that support them;
