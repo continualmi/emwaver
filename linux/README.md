@@ -34,7 +34,7 @@ The first native slice is M0/M1:
 - the runtime crate exports both JavaScript compilation and execution entry points for the GTK app;
 - the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
-- the GTK shell is now script-workspace first, with a local script list, editor/log workspace, selected-device toolbar state, device options dialog, and Agent/firmware/settings entry points aligned with the macOS app shell;
+- the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, and supports local New/Save/Make Copy behavior aligned with the macOS and Windows script workspace;
 - the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, and flash STM32 DFU through the existing Rust DFU backend;
 - the Agent crate uses the public MGPT `universe`/`userInput` request shape, folds local context into user-visible input, and exposes typed hardware primitive command builders for `spi_transfer`, `gpio_mode`, `gpio_write`, `gpio_read`, and `analog_read`;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or gating local hardware access;

@@ -1,5 +1,8 @@
 use adw::prelude::*;
-use emwaver_linux_core::{AppModel, DeviceRecord, TransportKind};
+use emwaver_linux_core::{
+    default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
+    TransportKind,
+};
 use emwaver_linux_runtime::execute_javascript;
 use emwaver_linux_transport::{
     simulator::SimulatorTransport,
@@ -14,6 +17,10 @@ use std::rc::Rc;
 
 pub fn build_main_window(app: &adw::Application) {
     let model = Rc::new(RefCell::new(AppModel::default()));
+    let script_repository = Rc::new(ScriptRepository::default());
+    let script_items = Rc::new(RefCell::new(Vec::<ScriptListItem>::new()));
+    let script_row_indices = Rc::new(RefCell::new(Vec::<Option<usize>>::new()));
+    let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
     seed_simulator_device(&model);
     seed_usb_devices(&model);
 
@@ -94,15 +101,30 @@ pub fn build_main_window(app: &adw::Application) {
         .left_margin(12)
         .right_margin(12)
         .build();
-    editor
-        .buffer()
-        .set_text("gpio.output(13);\ngpio.high(13);\nawait delay(250);\ngpio.low(13);\n");
     let editor_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
         .child(&editor)
+        .build();
+    let script_title = gtk::Label::builder()
+        .label("No Script")
+        .xalign(0.0)
+        .ellipsize(gtk::pango::EllipsizeMode::End)
+        .css_classes(vec!["heading"])
+        .build();
+    let script_kind = gtk::Label::builder()
+        .label("JavaScript")
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .build();
+    let read_only_notice = gtk::Label::builder()
+        .label("Bundled scripts, libraries, and kernel files are read-only. Use Make Copy to edit a local version.")
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .visible(false)
         .build();
 
     let log_view = gtk::TextView::builder()
@@ -149,9 +171,6 @@ pub fn build_main_window(app: &adw::Application) {
         .selection_mode(gtk::SelectionMode::Single)
         .css_classes(vec!["boxed-list"])
         .build();
-    append_script_row(&script_list, "Blink GPIO 13", "Unsaved draft");
-    append_script_row(&script_list, "Device Probe", "Example");
-    script_list.select_row(script_list.row_at_index(0).as_ref());
 
     let library = gtk::Box::new(Orientation::Vertical, 10);
     library.set_margin_top(12);
@@ -166,7 +185,21 @@ pub fn build_main_window(app: &adw::Application) {
         .tooltip_text("New script")
         .halign(Align::Start)
         .build();
-    library.append(&new_script_button);
+    let copy_script_button = gtk::Button::builder()
+        .icon_name("edit-copy-symbolic")
+        .tooltip_text("Make editable copy")
+        .halign(Align::Start)
+        .build();
+    let save_script_button = gtk::Button::builder()
+        .icon_name("document-save-symbolic")
+        .tooltip_text("Save script")
+        .halign(Align::Start)
+        .build();
+    let script_actions = gtk::Box::new(Orientation::Horizontal, 8);
+    script_actions.append(&new_script_button);
+    script_actions.append(&copy_script_button);
+    script_actions.append(&save_script_button);
+    library.append(&script_actions);
 
     let content = gtk::Paned::new(Orientation::Horizontal);
     content.set_start_child(Some(&library));
@@ -179,7 +212,8 @@ pub fn build_main_window(app: &adw::Application) {
     main_stack.set_margin_bottom(12);
     main_stack.set_margin_start(12);
     main_stack.set_margin_end(12);
-    main_stack.append(&editor_toolbar());
+    main_stack.append(&editor_toolbar(&script_title, &script_kind));
+    main_stack.append(&read_only_notice);
     main_stack.append(&editor_scroll);
     main_stack.append(&section_label("Run Log"));
     main_stack.append(&log_scroll);
@@ -197,6 +231,136 @@ pub fn build_main_window(app: &adw::Application) {
     window.set_content(Some(&root));
 
     let active_session = Rc::new(RefCell::new(None));
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let selected_script = Rc::clone(&selected_script);
+        let editor = editor.clone();
+        let script_title = script_title.clone();
+        let script_kind = script_kind.clone();
+        let read_only_notice = read_only_notice.clone();
+        let run_button = run_button.clone();
+        let save_script_button = save_script_button.clone();
+        script_list.connect_row_selected(move |_, row| {
+            let Some(row) = row else { return };
+            let Some(Some(script_index)) = script_row_indices.borrow().get(row.index() as usize)
+            else {
+                return;
+            };
+            let Some(item) = script_items.borrow().get(*script_index).cloned() else {
+                return;
+            };
+            match script_repository.read_script(&item) {
+                Ok(source) => {
+                    editor.buffer().set_text(&source);
+                    editor.set_editable(item.is_editable());
+                    read_only_notice.set_visible(!item.is_editable());
+                    script_title.set_label(&item.name);
+                    script_kind.set_label(&format!(
+                        "{} · {}",
+                        item.kind_label(),
+                        item.kind_detail()
+                    ));
+                    run_button.set_sensitive(item.is_runnable());
+                    save_script_button.set_sensitive(item.is_editable());
+                    *selected_script.borrow_mut() = Some(item);
+                }
+                Err(err) => {
+                    script_title.set_label("Script Load Failed");
+                    script_kind.set_label(&err.to_string());
+                    run_button.set_sensitive(false);
+                    save_script_button.set_sensitive(false);
+                }
+            }
+        });
+    }
+    refresh_script_list(
+        &script_list,
+        &script_repository,
+        &script_items,
+        &script_row_indices,
+        &log_view,
+    );
+    script_list.select_row(first_script_row(&script_list, &script_row_indices).as_ref());
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let selected_script = Rc::clone(&selected_script);
+        let editor = editor.clone();
+        let log_view = log_view.clone();
+        new_script_button.connect_clicked(move |_| {
+            match script_repository.create_script("script.js", default_script_template()) {
+                Ok(item) => {
+                    append_log(&log_view, &format!("Created local script {}.", item.name));
+                    refresh_script_list(
+                        &script_list,
+                        &script_repository,
+                        &script_items,
+                        &script_row_indices,
+                        &log_view,
+                    );
+                    select_script_by_id(&script_list, &script_items, &script_row_indices, &item.id);
+                    editor.buffer().set_text(default_script_template());
+                    *selected_script.borrow_mut() = Some(item);
+                }
+                Err(err) => append_log(&log_view, &format!("New script failed: {err}")),
+            }
+        });
+    }
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let selected_script = Rc::clone(&selected_script);
+        let log_view = log_view.clone();
+        copy_script_button.connect_clicked(move |_| {
+            let Some(item) = selected_script.borrow().clone() else {
+                append_log(&log_view, "No selected script to copy.");
+                return;
+            };
+            match script_repository.copy_to_local(&item) {
+                Ok(copy) => {
+                    append_log(
+                        &log_view,
+                        &format!("Copied {} to {}.", item.name, copy.name),
+                    );
+                    refresh_script_list(
+                        &script_list,
+                        &script_repository,
+                        &script_items,
+                        &script_row_indices,
+                        &log_view,
+                    );
+                    select_script_by_id(&script_list, &script_items, &script_row_indices, &copy.id);
+                }
+                Err(err) => append_log(&log_view, &format!("Copy failed: {err}")),
+            }
+        });
+    }
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let selected_script = Rc::clone(&selected_script);
+        let editor = editor.clone();
+        let log_view = log_view.clone();
+        save_script_button.connect_clicked(move |_| {
+            let Some(item) = selected_script.borrow().clone() else {
+                append_log(&log_view, "No selected script to save.");
+                return;
+            };
+            let buffer = editor.buffer();
+            let source = buffer
+                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                .to_string();
+            match script_repository.save_script(&item, &source) {
+                Ok(()) => append_log(&log_view, &format!("Saved {}.", item.name)),
+                Err(err) => append_log(&log_view, &format!("Save failed: {err}")),
+            }
+        });
+    }
     {
         let model = Rc::clone(&model);
         let selected_device_label = selected_device_label.clone();
@@ -241,14 +405,23 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let model = Rc::clone(&model);
         let editor = editor.clone();
+        let selected_script = Rc::clone(&selected_script);
         let log_view = log_view.clone();
         let active_session = Rc::clone(&active_session);
         run_button.connect_clicked(move |_| {
+            let Some(item) = selected_script.borrow().clone() else {
+                append_log(&log_view, "No selected script.");
+                return;
+            };
+            if !item.is_runnable() {
+                append_log(&log_view, &format!("{} is not runnable.", item.name));
+                return;
+            }
             let buffer = editor.buffer();
             let source = buffer
                 .text(&buffer.start_iter(), &buffer.end_iter(), true)
                 .to_string();
-            let result = model.borrow_mut().run_script("Untitled.js", source);
+            let result = model.borrow_mut().run_script(&item.name, source);
             match result {
                 Ok(session) => {
                     *active_session.borrow_mut() = Some(session.id);
@@ -464,19 +637,75 @@ fn section_label(text: &str) -> gtk::Label {
         .build()
 }
 
-fn editor_toolbar() -> gtk::Box {
+fn editor_toolbar(title: &gtk::Label, detail: &gtk::Label) -> gtk::Box {
     let toolbar = gtk::Box::new(Orientation::Horizontal, 8);
-    toolbar.append(&section_label("Blink GPIO 13"));
-    toolbar.append(
-        &gtk::Label::builder()
-            .label("JavaScript")
-            .css_classes(vec!["dim-label"])
-            .build(),
-    );
+    toolbar.append(title);
+    toolbar.append(detail);
     toolbar
 }
 
-fn append_script_row(list: &gtk::ListBox, title: &str, subtitle: &str) {
+fn refresh_script_list(
+    list: &gtk::ListBox,
+    repository: &ScriptRepository,
+    items: &Rc<RefCell<Vec<ScriptListItem>>>,
+    row_indices: &Rc<RefCell<Vec<Option<usize>>>>,
+    log_view: &gtk::TextView,
+) {
+    while let Some(row) = list.first_child() {
+        list.remove(&row);
+    }
+    items.borrow_mut().clear();
+    row_indices.borrow_mut().clear();
+
+    let scripts = match repository.list_scripts() {
+        Ok(scripts) => scripts,
+        Err(err) => {
+            append_log(log_view, &format!("Script library load failed: {err}"));
+            return;
+        }
+    };
+
+    let mut current_section = String::new();
+    for script in scripts {
+        let section = script.section_title();
+        if section != current_section {
+            current_section = section.to_string();
+            let mut row_indices = row_indices.borrow_mut();
+            append_script_section(list, &mut row_indices, section);
+        }
+
+        let index = items.borrow().len();
+        {
+            let mut row_indices = row_indices.borrow_mut();
+            append_script_row(list, &mut row_indices, &script, index);
+        }
+        items.borrow_mut().push(script);
+    }
+}
+
+fn append_script_section(list: &gtk::ListBox, row_indices: &mut Vec<Option<usize>>, title: &str) {
+    let label = gtk::Label::builder()
+        .label(title)
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .margin_top(12)
+        .margin_bottom(4)
+        .margin_start(10)
+        .margin_end(10)
+        .build();
+    let item = gtk::ListBoxRow::builder().child(&label).build();
+    item.set_activatable(false);
+    item.set_selectable(false);
+    list.append(&item);
+    row_indices.push(None);
+}
+
+fn append_script_row(
+    list: &gtk::ListBox,
+    row_indices: &mut Vec<Option<usize>>,
+    script: &ScriptListItem,
+    index: usize,
+) {
     let row = gtk::Box::new(Orientation::Vertical, 2);
     row.set_margin_top(10);
     row.set_margin_bottom(10);
@@ -484,14 +713,18 @@ fn append_script_row(list: &gtk::ListBox, title: &str, subtitle: &str) {
     row.set_margin_end(10);
     row.append(
         &gtk::Label::builder()
-            .label(title)
+            .label(&script.name)
             .xalign(0.0)
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .build(),
     );
     row.append(
         &gtk::Label::builder()
-            .label(subtitle)
+            .label(format!(
+                "{} · {}",
+                script.kind_label(),
+                script.kind_detail()
+            ))
             .xalign(0.0)
             .css_classes(vec!["dim-label"])
             .build(),
@@ -500,6 +733,41 @@ fn append_script_row(list: &gtk::ListBox, title: &str, subtitle: &str) {
     item.set_activatable(true);
     item.set_selectable(true);
     list.append(&item);
+    row_indices.push(Some(index));
+}
+
+fn first_script_row(
+    list: &gtk::ListBox,
+    row_indices: &Rc<RefCell<Vec<Option<usize>>>>,
+) -> Option<gtk::ListBoxRow> {
+    row_indices
+        .borrow()
+        .iter()
+        .position(Option::is_some)
+        .and_then(|index| list.row_at_index(index as i32))
+}
+
+fn select_script_by_id(
+    list: &gtk::ListBox,
+    items: &Rc<RefCell<Vec<ScriptListItem>>>,
+    row_indices: &Rc<RefCell<Vec<Option<usize>>>>,
+    id: &str,
+) {
+    let items = items.borrow();
+    let row_indices = row_indices.borrow();
+    for (row_index, script_index) in row_indices.iter().enumerate() {
+        let Some(script_index) = script_index else {
+            continue;
+        };
+        if items
+            .get(*script_index)
+            .map(|script| script.id == id)
+            .unwrap_or(false)
+        {
+            list.select_row(list.row_at_index(row_index as i32).as_ref());
+            return;
+        }
+    }
 }
 
 fn status_panel(title: &str, body: &str) -> gtk::Frame {
