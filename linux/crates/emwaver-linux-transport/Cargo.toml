@@ -8,6 +8,7 @@ repository.workspace = true
 [dependencies]
 anyhow.workspace = true
 async-trait.workspace = true
+btleplug = "0.12"
 emwaver-linux-core = { path = "../emwaver-linux-core" }
 futures.workspace = true
 mdns-sd = "0.19"
@@ -17,3 +18,4 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 tokio-tungstenite.workspace = true
+uuid.workspace = true

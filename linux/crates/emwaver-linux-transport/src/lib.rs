@@ -40,6 +40,8 @@ pub enum TransportError {
     Usb(String),
     #[error("Wi-Fi transport failed: {0}")]
     Wifi(String),
+    #[error("BLE transport failed: {0}")]
+    Ble(String),
     #[error("command failed: {0}")]
     Command(String),
 }
