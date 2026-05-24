@@ -26,6 +26,14 @@ const VIDEOS = [
     embedUrl: "https://www.youtube-nocookie.com/embed/PNf2JGsF1Mk?rel=0",
     eyebrow: "Hardware + build",
   },
+  {
+    title: "EMWaver Trailer",
+    summary:
+      "The fastest public introduction to EMWaver as a script-first electronics platform.",
+    href: "https://www.youtube.com/watch?v=6acoNgBqpe0",
+    embedUrl: "https://www.youtube-nocookie.com/embed/6acoNgBqpe0?rel=0",
+    eyebrow: "Launch intro",
+  },
 ] as const;
 
 export default function VideosPage() {
@@ -69,9 +77,9 @@ EMWaver videos
         </section>
 
         <section className="mt-10 grid gap-8">
-          {VIDEOS.map((video) => (
+          {VIDEOS.map((video, index) => (
             <article
-              key={video.title}
+              key={`${video.title}-${index}`}
               className="overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_20px_50px_var(--shadow)]"
             >
               <div className="border-b border-[color:var(--line)] px-6 py-5">

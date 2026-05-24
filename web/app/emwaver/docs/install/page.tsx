@@ -105,9 +105,25 @@ export default function InstallDocPage() {
         </li>
       </ul>
 
-      <h2>3. Connect</h2>
+      <h2>3. Flash the EMWaver firmware</h2>
+      <p>
+        A supported board must be running the fixed EMWaver firmware for its target before the apps can
+        control hardware. Use the bundled firmware image for your board class — ESP32-S3 or STM32F042.
+        Do not build custom firmware as part of the normal setup flow.
+      </p>
       <ul>
-        <li>Plug the board into your phone (USB-C) or desktop (USB).</li>
+        <li><strong>Pre-flashed board</strong>: skip this step and connect directly.</li>
+        <li><strong>Blank or stock board</strong>: use the EMWaver app's firmware setup/update flow where available.</li>
+        <li><strong>Desktop setup</strong>: use macOS for one-time firmware setup when a phone cannot flash the board directly.</li>
+      </ul>
+      <blockquote>
+        The firmware is platform-managed and fixed for supported targets. Users should not need ESP-IDF,
+        STM32CubeIDE, Arduino, or a manual compile/upload loop for normal EMWaver use.
+      </blockquote>
+
+      <h2>4. Connect</h2>
+      <ul>
+        <li>Plug the flashed board into your phone (USB-C) or desktop (USB).</li>
         <li>Open the EMWaver app — the device should appear automatically.</li>
       </ul>
       <blockquote>
@@ -115,13 +131,13 @@ export default function InstallDocPage() {
         standard USB MIDI device.
       </blockquote>
 
-      <h2>4. Run local scripts</h2>
+      <h2>5. Run local scripts</h2>
       <p>
         Open the Scripts view in the app, pick a built-in script or create your own JSX-based <code>.js</code> file,
         and press Run. Local script execution should not require sign-in, cloud activation, or a hosted relay.
       </p>
 
-      <h2>5. Optional Agent key</h2>
+      <h2>6. Optional Agent key</h2>
       <p>
         The paid Agent can use an API key to help write and debug scripts, but that key should not be required
         for ordinary local hardware control. See the{" "}

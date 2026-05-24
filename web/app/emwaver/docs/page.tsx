@@ -16,7 +16,7 @@ export default function DocsIndex() {
           signals, and scripts without firmware builds or IDE setup.
         </p>
 
-        <div className="mt-8 grid gap-3 md:grid-cols-3">
+        <div className="mt-8 grid gap-3 md:grid-cols-4">
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
               Step 1
@@ -36,8 +36,17 @@ export default function DocsIndex() {
             </p>
           </div>
           <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
               Step 3
+            </div>
+            <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Flash fixed firmware</div>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
+              Use the bundled ESP32-S3 or STM32F042 EMWaver firmware image. No user build loop.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] px-4 py-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
+              Step 4
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Run or generate a script</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
@@ -102,6 +111,9 @@ export default function DocsIndex() {
         <li>
           <strong>Install the app</strong> through the{" "}
           <Link href="/emwaver/docs/install">App Store, Google Play internal test, Android APK, or macOS DMG</Link>.
+        </li>
+        <li>
+          <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled ESP32-S3 or STM32F042 target image rather than building firmware manually.
         </li>
         <li>
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
