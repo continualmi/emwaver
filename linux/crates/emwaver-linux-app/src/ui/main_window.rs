@@ -18,7 +18,7 @@ use emwaver_linux_transport::{
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
     },
-    wifi::{LinuxWifiTransport, ManualWifiTarget},
+    wifi::{LinuxWifiManager, LinuxWifiTransport, ManualWifiTarget},
     EmwaverTransport,
 };
 use gtk::glib::object::IsA;
@@ -36,6 +36,7 @@ pub fn build_main_window(app: &adw::Application) {
     let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
     seed_simulator_device(&model);
     seed_usb_devices(&model);
+    seed_mdns_wifi_devices(&model);
     seed_manual_wifi_device(&model);
 
     let window = adw::ApplicationWindow::builder()
@@ -811,6 +812,42 @@ fn seed_manual_wifi_device(model: &Rc<RefCell<AppModel>>) {
     model.borrow_mut().upsert_device(device);
 }
 
+fn seed_mdns_wifi_devices(model: &Rc<RefCell<AppModel>>) {
+    let Ok(runtime) = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    else {
+        return;
+    };
+    let Ok(records) = runtime.block_on(
+        LinuxWifiManager::default()
+            .discover_live_mdns_records(emwaver_linux_transport::wifi::WIFI_DISCOVERY_TIMEOUT),
+    ) else {
+        return;
+    };
+    for record in records {
+        let descriptor = record.descriptor();
+        let mut device = DeviceRecord::new(
+            descriptor.id.0,
+            wifi_record_display_name(&record),
+            TransportKind::Wifi,
+            descriptor.hardware_uid,
+        );
+        device.firmware_version = descriptor.firmware_version;
+        device.connected = true;
+        model.borrow_mut().upsert_device(device);
+    }
+}
+
+fn wifi_record_display_name(record: &emwaver_linux_transport::wifi::WifiDiscoveryRecord) -> String {
+    let board = record
+        .board_type
+        .as_deref()
+        .map(display_board_type)
+        .unwrap_or("ESP32");
+    format!("{board} Wi-Fi: {}", record.display_name)
+}
+
 fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTarget, String> {
     let Some(rest) = device.id.strip_prefix("wifi:") else {
         return Err(format!(
@@ -825,6 +862,15 @@ fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTar
         .parse::<u16>()
         .map_err(|_| format!("Wi-Fi device {} has an invalid port.", device.id))?;
     ManualWifiTarget::new(host, port).map_err(|err| err.to_string())
+}
+
+fn display_board_type(board: &str) -> &'static str {
+    match board.trim().to_ascii_lowercase().as_str() {
+        "esp32s3" | "esp32-s3" => "ESP32-S3",
+        "esp32s2" | "esp32-s2" => "ESP32-S2",
+        "esp32" => "ESP32",
+        _ => "ESP32",
+    }
 }
 
 fn seed_simulator_device(model: &Rc<RefCell<AppModel>>) {

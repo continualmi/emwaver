@@ -40,13 +40,13 @@ The first native slice is M0/M1:
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
 - the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, flash STM32 DFU through the existing Rust DFU backend, and orchestrate ESP32-S3 serial flashing with fixed offsets through the local helper;
-- the Wi-Fi transport crate can build manual LAN/VPN targets, expose them as selectable devices via `EMWAVER_WIFI_HOST`/`EMWAVER_WIFI_PORT`, and send/receive EMWaver SysEx superframes over WebSocket binary messages; mDNS discovery remains staged behind Avahi/D-Bus;
+- the Wi-Fi transport crate can build manual LAN/VPN targets, expose them as selectable devices via `EMWAVER_WIFI_HOST`/`EMWAVER_WIFI_PORT`, discover `_emwaver._tcp.local.` records over mDNS, filter TXT metadata for protocol `1` plus `wifi` capability, validate discovered records with a hardware UID WebSocket probe before showing them live, and send/receive EMWaver SysEx superframes over WebSocket binary messages;
 - the BLE transport crate now carries the same EMWaver service/command/notify UUID contract as macOS, validates BlueZ adapter/address targets, exposes BLE descriptors through the shared transport trait, and keeps GATT connect/write/notify explicitly staged behind the BlueZ D-Bus backend;
 - the Agent crate uses the public MGPT `universe`/`userInput` request shape, folds local context into user-visible input, stores the optional Agent key through Secret Service's `secret-tool` boundary when available, keeps the endpoint in XDG config, and exposes typed hardware primitive command builders for `spi_transfer`, `gpio_mode`, `gpio_write`, `gpio_read`, and `analog_read`;
 - Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
-Full JavaScript runtime parity beyond the initial command/gpio/device API, BLE GATT I/O, Wi-Fi mDNS discovery, ESP32 serial flashing hardware validation, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity beyond the initial command/gpio/device API, BLE GATT I/O, Wi-Fi provisioning UI/status, ESP32 serial flashing hardware validation, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 
