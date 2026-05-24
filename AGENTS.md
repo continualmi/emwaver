@@ -179,6 +179,7 @@ Use the local README first when working in a folder:
 - `docs/PLANNING.md` — durable working tracker for current priorities, active work, blockers, next steps
 - `docs/SCHEDULE.md` — weekly planning/scheduling tracker
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
+- `docs/RELEASES.md` — release workflows, signing expectations, and public preview assets
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
 - `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
 - `docs/archive/` — archived docs from the Gateway/CLI/Linux era and superseded script/UI planning passes

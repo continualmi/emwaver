@@ -82,6 +82,7 @@ Key contributor docs:
 | `docs/PLANNING.md` | Active priorities and next steps |
 | `docs/SCHEDULE.md` | Short-term execution tracker |
 | `docs/TESTS.md` | Hardware and app validation suite |
+| `docs/RELEASES.md` | Release workflows and public preview assets |
 | `docs/AGENT_EVAL_RUNTIME.md` | Agent hardware primitive model |
 | `docs/AGENT_RUNTIME_AND_TOOLS.html` | Visual Agent hardware-tool workflow |
 | `docs/LINUX_GTK4_PORT_PLAN.html` | Native Linux app port plan |

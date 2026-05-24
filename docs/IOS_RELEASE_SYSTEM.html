@@ -199,7 +199,7 @@
 </div>
 
 <div class="warn">
-  <strong>No unsigned IPA distribution.</strong> Unlike Android (which offers a direct APK download via GitHub Releases), iOS has no unsigned distribution path. All iOS builds are code-signed and must flow through Apple's App Store Connect infrastructure. External testers must be invited through TestFlight; there is no side-loading equivalent.
+  <strong>No unsigned IPA distribution.</strong> Unlike Android (which offers a signed direct APK download via GitHub Releases), iOS has no unsigned distribution path. All iOS builds are code-signed and must flow through Apple's App Store Connect infrastructure. External testers must be invited through TestFlight; there is no side-loading equivalent.
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
@@ -635,7 +635,7 @@
   </tr>
   <tr>
     <td>No unsigned distribution path</td>
-    <td><code>android-apk-release.yml</code> → unsigned APK on GitHub Releases</td>
+    <td><code>android-apk-release.yml</code> → signed APK on GitHub Releases</td>
   </tr>
   <tr>
     <td>Tag push → TestFlight only</td>

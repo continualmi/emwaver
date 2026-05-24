@@ -30,12 +30,13 @@ This is the durable working tracker for current EMWaver priorities. `SCHEDULE.md
 
 ## Next Up
 
-1. Clean the public website docs, especially script/UI docs and install/status pages.
-2. Replace Gateway-centered Wi-Fi docs with native-app USB/BLE/Wi-Fi transport docs.
-3. Rewrite `docs/TESTS.md` around native apps, real hardware scripts, Agent primitive tools, and simulator fixtures.
-4. Update platform READMEs where they still mention Gateway, UI snapshots as primary automation, or Windows as deferred.
-5. Capture concise CC1101 validation evidence for iOS, Android, macOS, and Windows.
-6. Continue the Linux native app port without reintroducing a Gateway/browser/CLI control plane.
+1. Run preview release workflows for signed Android APK, macOS DMG, and Windows installer/ZIP; verify all `emwaver-preview` release assets before opening the repo.
+2. Clean the public website docs, especially script/UI docs and install/status pages.
+3. Replace Gateway-centered Wi-Fi docs with native-app USB/BLE/Wi-Fi transport docs.
+4. Rewrite `docs/TESTS.md` around native apps, real hardware scripts, Agent primitive tools, and simulator fixtures.
+5. Update platform READMEs where they still mention Gateway, UI snapshots as primary automation, or Windows as deferred.
+6. Capture concise CC1101 validation evidence for iOS, Android, macOS, and Windows.
+7. Continue the Linux native app port without reintroducing a Gateway/browser/CLI control plane.
 
 ## Blockers / Risks
 

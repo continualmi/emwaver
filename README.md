@@ -135,9 +135,9 @@ For users:
 1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
 2. Install an app from the [install page](https://continualmi.com/emwaver/install):
    - [iPhone and iPad on the App Store](https://apps.apple.com/us/app/emwaver/id6747035939)
-   - Android through Google Play internal testing or the direct [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
-   - [macOS DMG](https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg)
-   - Windows installer or [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
+   - Android through Google Play internal testing or the direct [Android APK](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-android.apk)
+   - [macOS DMG](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-macos.dmg)
+   - [Windows installer](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaverSetup-windows-x64.exe) or [Windows ZIP with `EMWaver.exe`](https://github.com/continualmi/emwaver/releases/download/emwaver-preview/EMWaver-windows-x64.zip)
 3. Connect a supported board.
 4. Open or write a JavaScript hardware script and run it locally.
 
@@ -150,6 +150,7 @@ cd emwaver
 
 Then read the README closest to the subsystem you are changing:
 
+- [docs/RELEASES.md](docs/RELEASES.md) for release workflows and public preview assets
 - [android/README.md](android/README.md)
 - [ios/README.md](ios/README.md)
 - [macos/README.md](macos/README.md)
