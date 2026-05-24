@@ -10,6 +10,7 @@ use emwaver_linux_transport::{
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
     },
+    wifi::ManualWifiTarget,
     EmwaverTransport,
 };
 use gtk::{gio, Align, Orientation, PolicyType};
@@ -1396,64 +1397,407 @@ fn present_device_dialog(parent: &adw::ApplicationWindow, devices: &[DeviceRecor
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
         .modal(true)
-        .title("Local Devices")
-        .default_width(620)
-        .default_height(460)
+        .title("Devices")
+        .default_width(720)
+        .default_height(620)
         .build();
     dialog.add_button("Close", gtk::ResponseType::Close);
 
     let content = dialog.content_area();
-    let root = gtk::Box::new(Orientation::Vertical, 14);
-    root.set_margin_top(18);
-    root.set_margin_bottom(18);
-    root.set_margin_start(18);
-    root.set_margin_end(18);
+    let scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .hscrollbar_policy(PolicyType::Never)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .build();
+    let root = gtk::Box::new(Orientation::Vertical, 16);
+    root.set_margin_top(20);
+    root.set_margin_bottom(20);
+    root.set_margin_start(20);
+    root.set_margin_end(20);
+
+    let selected = devices.iter().find(|device| device.connected);
+    root.append(&device_status_card(selected));
+    root.append(&local_devices_card(devices));
+    root.append(&manual_wifi_card());
+    root.append(&firmware_device_card(selected));
+    root.append(&linux_permissions_card());
+
+    scroll.set_child(Some(&root));
+    content.append(&scroll);
+
+    dialog.connect_response(|dialog, _| dialog.close());
+    dialog.present();
+}
+
+fn device_status_card(selected: Option<&DeviceRecord>) -> gtk::Frame {
+    let card = gtk::Box::new(Orientation::Horizontal, 12);
+    card.set_margin_top(12);
+    card.set_margin_bottom(12);
+    card.set_margin_start(12);
+    card.set_margin_end(12);
+    let icon = selected
+        .map(|device| transport_icon_name(&device.transport))
+        .unwrap_or("network-wired-disconnected-symbolic");
+    card.append(&gtk::Image::from_icon_name(icon));
+    let copy = gtk::Box::new(Orientation::Vertical, 3);
+    copy.set_hexpand(true);
+    copy.append(
+        &gtk::Label::builder()
+            .label(selected.map_or("Disconnected", |device| {
+                if device.connected {
+                    "Connected"
+                } else {
+                    "Discovered"
+                }
+            }))
+            .xalign(0.0)
+            .css_classes(vec!["heading"])
+            .build(),
+    );
+    copy.append(
+        &gtk::Label::builder()
+            .label(
+                selected.map(device_status_summary).unwrap_or_else(|| {
+                    "No local EMWaver device is currently selected.".to_string()
+                }),
+            )
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    card.append(&copy);
+    gtk::Frame::builder().child(&card).build()
+}
+
+fn local_devices_card(devices: &[DeviceRecord]) -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Vertical, 10);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&section_label("Local Devices"));
     root.append(
         &gtk::Label::builder()
-            .label("Select a discovered local transport for the next script session.")
+            .label("Discovered USB, BLE, Wi-Fi, and simulator transports are grouped by local hardware UID when available.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    let list = gtk::ListBox::builder()
+        .selection_mode(gtk::SelectionMode::None)
+        .css_classes(vec!["boxed-list"])
+        .build();
+    if devices.is_empty() {
+        let empty = gtk::Label::builder()
+            .label("No EMWaver devices discovered yet.")
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .margin_top(10)
+            .margin_bottom(10)
+            .margin_start(10)
+            .margin_end(10)
+            .build();
+        list.append(&gtk::ListBoxRow::builder().child(&empty).build());
+    } else {
+        for group in grouped_devices(devices) {
+            list.append(
+                &gtk::ListBoxRow::builder()
+                    .child(&device_group_row(&group))
+                    .build(),
+            );
+        }
+    }
+    root.append(&list);
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn device_group_row(group: &[DeviceRecord]) -> gtk::Box {
+    let preferred = group
+        .iter()
+        .min_by_key(|device| transport_sort_key(&device.transport))
+        .expect("device group is non-empty");
+    let row = gtk::Box::new(Orientation::Horizontal, 12);
+    row.set_margin_top(10);
+    row.set_margin_bottom(10);
+    row.set_margin_start(10);
+    row.set_margin_end(10);
+
+    row.append(&gtk::Image::from_icon_name(transport_icon_name(
+        &preferred.transport,
+    )));
+
+    let copy = gtk::Box::new(Orientation::Vertical, 3);
+    copy.set_hexpand(true);
+    copy.append(
+        &gtk::Label::builder()
+            .label(&preferred.display_name)
+            .xalign(0.0)
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .build(),
+    );
+    copy.append(
+        &gtk::Label::builder()
+            .label(device_group_detail_line(group))
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    row.append(&copy);
+
+    let transports = gtk::Box::new(Orientation::Horizontal, 6);
+    for device in group {
+        let badge = gtk::Label::builder()
+            .label(transport_label(&device.transport))
+            .tooltip_text(device_detail_line(device))
+            .css_classes(vec!["dim-label"])
+            .build();
+        transports.append(&badge);
+    }
+    row.append(&transports);
+    row
+}
+
+fn manual_wifi_card() -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Vertical, 10);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&section_label("Manual Wi-Fi"));
+    root.append(
+        &gtk::Label::builder()
+            .label("Connect to a user-owned LAN/VPN host. Enter a bare hostname or IP address; do not include ws://, paths, or a port in the host field.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(vec!["dim-label"])
             .build(),
     );
 
-    let list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::None)
-        .css_classes(vec!["boxed-list"])
+    let form = gtk::Box::new(Orientation::Horizontal, 8);
+    let host_entry = gtk::Entry::builder()
+        .placeholder_text("emwaver.local or 192.168.1.42")
+        .hexpand(true)
         .build();
-    for device in devices {
-        let row = gtk::Box::new(Orientation::Horizontal, 12);
-        row.set_margin_top(10);
-        row.set_margin_bottom(10);
-        row.set_margin_start(10);
-        row.set_margin_end(10);
+    let port_entry = gtk::Entry::builder()
+        .text("3922")
+        .width_chars(6)
+        .input_purpose(gtk::InputPurpose::Number)
+        .build();
+    let validate_button = gtk::Button::builder().label("Validate").build();
+    form.append(&host_entry);
+    form.append(&port_entry);
+    form.append(&validate_button);
+    root.append(&form);
 
-        let copy = gtk::Box::new(Orientation::Vertical, 2);
-        copy.append(
-            &gtk::Label::builder()
-                .label(&device.display_name)
-                .xalign(0.0)
-                .build(),
-        );
-        copy.append(
-            &gtk::Label::builder()
-                .label(device_detail_line(device))
-                .xalign(0.0)
-                .css_classes(vec!["dim-label"])
-                .build(),
-        );
+    let status = gtk::Label::builder()
+        .label("Wi-Fi mDNS/WebSocket transport is still behind the Linux transport boundary; validation keeps the same manual-host rules as macOS.")
+        .wrap(true)
+        .xalign(0.0)
+        .css_classes(vec!["dim-label"])
+        .build();
+    root.append(&status);
 
-        row.append(&gtk::Image::from_icon_name(transport_icon_name(
-            &device.transport,
-        )));
-        row.append(&copy);
-        list.append(&gtk::ListBoxRow::builder().child(&row).build());
+    {
+        let host_entry = host_entry.clone();
+        let port_entry = port_entry.clone();
+        let status = status.clone();
+        validate_button.connect_clicked(move |_| {
+            let port = port_entry.text().trim().parse::<u16>().unwrap_or(0);
+            match ManualWifiTarget::new(host_entry.text().trim(), port) {
+                Ok(target) if target.port > 0 => status.set_label(&format!(
+                    "Manual Wi-Fi target accepted: {}:{}. WebSocket connection will become active when the Wi-Fi transport implementation lands.",
+                    target.host, target.port
+                )),
+                Ok(_) => status.set_label("Wi-Fi port must be between 1 and 65535."),
+                Err(err) => status.set_label(&err.to_string()),
+            }
+        });
     }
-    root.append(&list);
-    content.append(&root);
 
-    dialog.connect_response(|dialog, _| dialog.close());
-    dialog.present();
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn firmware_device_card(selected: Option<&DeviceRecord>) -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Horizontal, 12);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&gtk::Image::from_icon_name(
+        "software-update-available-symbolic",
+    ));
+    let copy = gtk::Box::new(Orientation::Vertical, 3);
+    copy.set_hexpand(true);
+    copy.append(
+        &gtk::Label::builder()
+            .label("Firmware")
+            .xalign(0.0)
+            .css_classes(vec!["heading"])
+            .build(),
+    );
+    copy.append(
+        &gtk::Label::builder()
+            .label(firmware_device_summary(selected))
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    root.append(&copy);
+    let action = gtk::Button::builder()
+        .label(
+            if selected
+                .map(|device| inferred_board_type(device).starts_with("ESP32"))
+                .unwrap_or(false)
+            {
+                "Flash Firmware"
+            } else {
+                "Update Firmware"
+            },
+        )
+        .sensitive(selected.is_some())
+        .build();
+    root.append(&action);
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn linux_permissions_card() -> gtk::Frame {
+    let root = gtk::Box::new(Orientation::Vertical, 8);
+    root.set_margin_top(12);
+    root.set_margin_bottom(12);
+    root.set_margin_start(12);
+    root.set_margin_end(12);
+    root.append(&section_label("Linux Permissions"));
+    root.append(
+        &gtk::Label::builder()
+            .label("Install linux/resources/udev/99-emwaver.rules, reload udev rules, then reconnect the board if USB access is unavailable. Core local control remains account-free.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    gtk::Frame::builder().child(&root).build()
+}
+
+fn grouped_devices(devices: &[DeviceRecord]) -> Vec<Vec<DeviceRecord>> {
+    let mut groups: Vec<Vec<DeviceRecord>> = Vec::new();
+    for device in devices {
+        let key = device
+            .hardware_uid
+            .as_ref()
+            .map(|uid| format!("uid:{uid}"))
+            .unwrap_or_else(|| format!("transport:{}:{:?}", device.id, device.transport));
+        if let Some(group) = groups.iter_mut().find(|group| {
+            group
+                .first()
+                .map(|existing| {
+                    existing
+                        .hardware_uid
+                        .as_ref()
+                        .map(|uid| format!("uid:{uid}"))
+                        .unwrap_or_else(|| {
+                            format!("transport:{}:{:?}", existing.id, existing.transport)
+                        })
+                        == key
+                })
+                .unwrap_or(false)
+        }) {
+            group.push(device.clone());
+        } else {
+            groups.push(vec![device.clone()]);
+        }
+    }
+    for group in groups.iter_mut() {
+        group.sort_by_key(|device| transport_sort_key(&device.transport));
+    }
+    groups.sort_by(|left, right| {
+        left.first()
+            .map(|device| device.display_name.to_lowercase())
+            .cmp(
+                &right
+                    .first()
+                    .map(|device| device.display_name.to_lowercase()),
+            )
+    });
+    groups
+}
+
+fn device_status_summary(device: &DeviceRecord) -> String {
+    format!(
+        "{} over {}. {}",
+        inferred_board_type(device),
+        transport_label(&device.transport),
+        device_detail_line(device)
+    )
+}
+
+fn device_group_detail_line(group: &[DeviceRecord]) -> String {
+    let Some(preferred) = group.first() else {
+        return String::new();
+    };
+    let mut parts = vec![inferred_board_type(preferred)];
+    if let Some(uid) = preferred.hardware_uid.as_ref() {
+        parts.push(format!("UID {}", uid_suffix(uid)));
+    } else {
+        parts.push("UID unavailable".to_string());
+    }
+    if let Some(version) = preferred.firmware_version.as_ref() {
+        parts.push(format!("EMWaver {version}"));
+    }
+    parts.push(format!(
+        "{} transport{}",
+        group.len(),
+        if group.len() == 1 { "" } else { "s" }
+    ));
+    parts.join("  ")
+}
+
+fn firmware_device_summary(selected: Option<&DeviceRecord>) -> String {
+    let Some(device) = selected else {
+        return "Connect a supported board to enable board-aware STM32 DFU or ESP32 serial firmware actions.".to_string();
+    };
+    if inferred_board_type(device).starts_with("ESP32") {
+        "ESP32 firmware uses bundled bootloader, partition table, OTA data, and app images; no ESP-IDF end-user workflow.".to_string()
+    } else {
+        "STM32 firmware update uses the local Rust DFU backend with bundled firmware and udev diagnostics.".to_string()
+    }
+}
+
+fn inferred_board_type(device: &DeviceRecord) -> String {
+    let text = format!(
+        "{} {}",
+        device.display_name.to_lowercase(),
+        device
+            .firmware_version
+            .as_deref()
+            .unwrap_or_default()
+            .to_lowercase()
+    );
+    if text.contains("esp32-s3") || text.contains("esp32s3") {
+        "ESP32-S3".to_string()
+    } else if text.contains("esp32") {
+        "ESP32".to_string()
+    } else if text.contains("stm32") || matches!(device.transport, TransportKind::UsbMidi) {
+        "STM32F042".to_string()
+    } else if matches!(device.transport, TransportKind::Simulator) {
+        "Simulator".to_string()
+    } else {
+        "Unknown board".to_string()
+    }
+}
+
+fn uid_suffix(uid: &str) -> String {
+    uid.chars()
+        .rev()
+        .take(12)
+        .collect::<String>()
+        .chars()
+        .rev()
+        .collect()
 }
 
 fn present_status_dialog(parent: &adw::ApplicationWindow, title: &str, body: &str) {
@@ -1480,12 +1824,12 @@ fn present_status_dialog(parent: &adw::ApplicationWindow, title: &str, body: &st
 }
 
 fn device_detail_line(device: &DeviceRecord) -> String {
-    let mut parts = vec![format!("{:?}", device.transport)];
+    let mut parts = vec![transport_label(&device.transport).to_string()];
     if let Some(version) = device.firmware_version.as_ref() {
         parts.push(format!("EMWaver {version}"));
     }
     if let Some(uid) = device.hardware_uid.as_ref() {
-        parts.push(format!("UID {uid}"));
+        parts.push(format!("UID {}", uid_suffix(uid)));
     }
     if device.busy {
         parts.push("busy".to_string());
@@ -1495,6 +1839,26 @@ fn device_detail_line(device: &DeviceRecord) -> String {
         parts.push("unavailable".to_string());
     }
     parts.join("  ")
+}
+
+fn transport_label(transport: &TransportKind) -> &'static str {
+    match transport {
+        TransportKind::Ble => "BLE",
+        TransportKind::Wifi => "Wi-Fi",
+        TransportKind::Simulator => "Simulator",
+        TransportKind::UsbMidi => "USB MIDI",
+        TransportKind::UsbSerial => "USB Serial",
+        TransportKind::UsbVendor => "USB",
+    }
+}
+
+fn transport_sort_key(transport: &TransportKind) -> u8 {
+    match transport {
+        TransportKind::UsbMidi | TransportKind::UsbSerial | TransportKind::UsbVendor => 0,
+        TransportKind::Wifi => 1,
+        TransportKind::Ble => 2,
+        TransportKind::Simulator => 3,
+    }
 }
 
 fn transport_icon_name(transport: &TransportKind) -> &'static str {
