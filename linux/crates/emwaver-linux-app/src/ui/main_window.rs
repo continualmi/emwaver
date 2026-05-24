@@ -18,7 +18,6 @@ use emwaver_linux_runtime::{
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
     command::send_command,
-    simulator::SimulatorTransport,
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
     },
@@ -68,7 +67,6 @@ pub fn build_main_window(app: &adw::Application) {
     let script_items = Rc::new(RefCell::new(Vec::<ScriptListItem>::new()));
     let script_row_indices = Rc::new(RefCell::new(Vec::<Option<usize>>::new()));
     let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
-    seed_simulator_device(&model);
     seed_usb_devices(&model);
     seed_ble_devices(&model);
     seed_mdns_wifi_devices(&model);
@@ -225,9 +223,9 @@ pub fn build_main_window(app: &adw::Application) {
         .right_margin(10)
         .build();
     log_view.add_css_class("monospace");
-    log_view
-        .buffer()
-        .set_text("Simulator ready. Local scripts run without an Agent key.\n");
+    log_view.buffer().set_text(
+        "Local scripts run without an Agent key. Select a local device to run hardware scripts.\n",
+    );
     let run_log_visible = load_run_log_visible();
     let log_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -911,10 +909,9 @@ impl ScriptPacketBridge {
             .build()
             .map_err(|err| format!("Failed to create script packet runtime: {err}"))?;
         let mut transport: Box<dyn EmwaverTransport> = match device.transport {
-            TransportKind::Simulator => Box::new(
-                SimulatorTransport::default_fixture()
-                    .map_err(|err| format!("Simulator setup failed: {err}"))?,
-            ),
+            TransportKind::Simulator => {
+                return Err("Simulator is an internal test transport and is not available in the Linux app UI.".to_string());
+            }
             TransportKind::UsbMidi => {
                 let candidate = LinuxUsbManager::default()
                     .discover()
@@ -972,19 +969,10 @@ fn run_selected_script(
     };
 
     match device.transport {
-        TransportKind::Simulator => runtime.block_on(async {
-            let mut transport = match SimulatorTransport::default_fixture() {
-                Ok(transport) => transport,
-                Err(err) => return vec![format!("Simulator setup failed: {err}")],
-            };
-            if let Err(err) = transport.connect().await {
-                return vec![format!("Simulator connect failed: {err}")];
-            }
-            match execute_javascript_with_modules(source, module_sources, &mut transport).await {
-                Ok(report) => report.log,
-                Err(err) => vec![format!("Script failed: {err}")],
-            }
-        }),
+        TransportKind::Simulator => vec![
+            "Simulator is an internal test transport and is not available in the Linux app UI."
+                .to_string(),
+        ],
         TransportKind::UsbMidi => runtime.block_on(async {
             let candidate = match LinuxUsbManager::default().discover() {
                 Ok(candidates) => candidates
@@ -1166,22 +1154,6 @@ fn display_board_type(board: &str) -> &'static str {
         "esp32" => "ESP32",
         _ => "ESP32",
     }
-}
-
-fn seed_simulator_device(model: &Rc<RefCell<AppModel>>) {
-    let Ok(transport) = SimulatorTransport::default_fixture() else {
-        return;
-    };
-    let descriptor = transport.descriptor();
-    let mut device = DeviceRecord::new(
-        descriptor.id.0,
-        descriptor.display_name,
-        TransportKind::Simulator,
-        descriptor.hardware_uid,
-    );
-    device.firmware_version = descriptor.firmware_version;
-    device.connected = true;
-    model.borrow_mut().upsert_device(device);
 }
 
 fn seed_usb_devices(model: &Rc<RefCell<AppModel>>) {
@@ -2668,7 +2640,16 @@ fn settings_row(label: &str, child: &impl IsA<gtk::Widget>) -> gtk::Box {
     row
 }
 
+fn user_visible_devices(devices: &[DeviceRecord]) -> Vec<DeviceRecord> {
+    devices
+        .iter()
+        .filter(|device| device.transport != TransportKind::Simulator)
+        .cloned()
+        .collect()
+}
+
 fn present_device_dialog(parent: &adw::ApplicationWindow, devices: &[DeviceRecord]) {
+    let visible_devices = user_visible_devices(devices);
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
         .modal(true)
@@ -2691,9 +2672,9 @@ fn present_device_dialog(parent: &adw::ApplicationWindow, devices: &[DeviceRecor
     root.set_margin_start(20);
     root.set_margin_end(20);
 
-    let selected = devices.iter().find(|device| device.connected);
+    let selected = visible_devices.iter().find(|device| device.connected);
     root.append(&device_status_card(selected));
-    root.append(&local_devices_card(devices));
+    root.append(&local_devices_card(&visible_devices));
     root.append(&manual_wifi_card());
     root.append(&firmware_device_card(selected));
     root.append(&linux_permissions_card());
@@ -2755,7 +2736,7 @@ fn local_devices_card(devices: &[DeviceRecord]) -> gtk::Frame {
     root.append(&section_label("Local Devices"));
     root.append(
         &gtk::Label::builder()
-            .label("Discovered USB, BLE, Wi-Fi, and simulator transports are grouped by local hardware UID when available.")
+            .label("Discovered USB, BLE, and Wi-Fi transports are grouped by local hardware UID when available.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(vec!["dim-label"])
@@ -3058,8 +3039,6 @@ fn inferred_board_type(device: &DeviceRecord) -> String {
         "ESP32".to_string()
     } else if text.contains("stm32") || matches!(device.transport, TransportKind::UsbMidi) {
         "STM32F042".to_string()
-    } else if matches!(device.transport, TransportKind::Simulator) {
-        "Simulator".to_string()
     } else {
         "Unknown board".to_string()
     }
@@ -3415,7 +3394,7 @@ fn transport_label(transport: &TransportKind) -> &'static str {
     match transport {
         TransportKind::Ble => "BLE",
         TransportKind::Wifi => "Wi-Fi",
-        TransportKind::Simulator => "Simulator",
+        TransportKind::Simulator => "Internal test transport",
         TransportKind::UsbMidi => "USB MIDI",
         TransportKind::UsbSerial => "USB Serial",
         TransportKind::UsbVendor => "USB",
@@ -3435,7 +3414,7 @@ fn transport_icon_name(transport: &TransportKind) -> &'static str {
     match transport {
         TransportKind::Ble => "network-wireless-symbolic",
         TransportKind::Wifi => "network-wireless-symbolic",
-        TransportKind::Simulator => "applications-engineering-symbolic",
+        TransportKind::Simulator => "dialog-information-symbolic",
         TransportKind::UsbMidi | TransportKind::UsbSerial | TransportKind::UsbVendor => {
             "network-wired-symbolic"
         }

@@ -5,7 +5,7 @@ Native Linux EMWaver application workspace.
 This is the Rust + GTK4/libadwaita port track described in `docs/LINUX_GTK4_PORT_PLAN.html`. It is a new native app, not a revival of the removed Gateway, browser UI, or CLI control plane.
 
 Local-first rules:
-- local scripts, simulator mode, device discovery, and firmware setup must not require an EMWaver account, cloud activation, hosted relay, subscription check, device registration, or hardware ownership gate;
+- local scripts, device discovery, and firmware setup must not require an EMWaver account, cloud activation, hosted relay, subscription check, device registration, or hardware ownership gate;
 - optional Agent replies use a user-provided API key and public `/api/mgpt/...` endpoints;
 - scripts and app state stay on the user's Linux machine by default.
 
@@ -30,7 +30,7 @@ Script UI session worker
   - invokes actions and performs device I/O away from the GTK loop
 
 Selected transport
-  - simulator, USB MIDI, BLE, or Wi-Fi
+  - USB MIDI, BLE, or Wi-Fi
   - receives packets from the script bridge and returns actual board responses
 ```
 
@@ -50,7 +50,7 @@ Important constraints:
 - `crates/emwaver-linux-app` - GTK4/libadwaita app shell.
 - `crates/emwaver-linux-core` - app model, local device registry, script-session lifecycle.
 - `crates/emwaver-linux-runtime` - JavaScript-facing runtime compiler and command-step generation.
-- `crates/emwaver-linux-transport` - common transport traits plus simulator/USB/BLE/Wi-Fi adapters.
+- `crates/emwaver-linux-transport` - common transport traits plus USB/BLE/Wi-Fi adapters; simulator support is internal test infrastructure, not a user-facing device choice.
 - `crates/emwaver-linux-firmware` - STM32 DFU and ESP32 serial flashing orchestration.
 - `crates/emwaver-linux-agent` - optional MGPT Agent API client and secret-store boundary.
 - `resources/udev/99-emwaver.rules` - Linux device access rules for supported run/update modes.
@@ -58,7 +58,6 @@ Important constraints:
 ## Current implementation status
 
 The first native slice is M0/M1:
-- simulator device loads the shared `simulator/fixtures/basic-board.json`;
 - core registry deduplicates records by local hardware UID when present;
 - script sessions enforce selected-device claims and busy-device rejection;
 - USB discovery classifies STM32 run-mode USB MIDI, STM32 DFU, and common ESP32 serial adapters with permission diagnostics;
@@ -68,8 +67,8 @@ The first native slice is M0/M1:
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
 - the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries plus uppercase JSX transform, script UI tree capture, and a live script UI runtime that can invoke captured script actions;
-- the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
-- the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
+- the GTK Run button routes selected local devices through the JavaScript runtime and transport runner;
+- the GTK shell seeds discovered USB candidates into the local device list and probes accessible STM32 run-mode boards for local metadata;
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, defaults the main content to runtime preview, supports local New/Save/Make Copy behavior, and exposes row-level Run/Edit/Stop controls with inline running state aligned with the macOS script workspace direction;
 - the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
 - script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
@@ -81,7 +80,7 @@ The first native slice is M0/M1:
 - the BLE transport crate now carries the same EMWaver service/command/notify UUID contract as macOS, validates BlueZ adapter/address targets, scans BlueZ adapters through `btleplug`, connects matching peripherals, writes command frames to the command characteristic, and reads notification frames from the notify characteristic;
 - the Agent crate uses the public MGPT `universe`/`userInput` request shape, folds local context into user-visible input, stores the optional Agent key through Secret Service's `secret-tool` boundary when available, keeps the endpoint in XDG config, and exposes typed hardware primitive command builders for `spi_transfer`, `gpio_mode`, `gpio_write`, `gpio_read`, and `analog_read`;
 - Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
-- the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
+- the app crate contains a GTK4/libadwaita shell that shows script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
 Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, JSX/script-tree capture, initial GTK script-tree rendering, and first script UI action invocation path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
