@@ -140,8 +140,11 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock x:Name="EditorTitle" Text="No script selected" FontSize="12" VerticalAlignment="Center" />
+                    <Button Grid.Column="1" Content="Find" Width="52" Height="24" Margin="8,0,0,0" Click="OnFindClick" />
+                    <Button Grid.Column="2" Content="Go to Line" Width="76" Height="24" Margin="4,0,0,0" Click="OnGoToLineClick" />
                 </Grid>
             </Border>
 

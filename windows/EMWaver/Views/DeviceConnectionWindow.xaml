@@ -26,8 +26,8 @@
                         BorderThickness="1" CornerRadius="10" Padding="16" Margin="0,0,0,16">
                     <StackPanel>
                         <TextBlock Text="Local devices" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,12" />
-                        <TextBlock x:Name="NoDevicesText" Text="No EMWaver devices discovered yet."
-                                   FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                        <TextBlock x:Name="NoDevicesText" Text="Scanning for USB, BLE, and Wi-Fi EMWaver devices… Plug in a board or make sure BLE/Wi-Fi advertising is enabled."
+                                   FontSize="13" TextWrapping="Wrap" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                    Visibility="Visible" />
                         <ItemsControl x:Name="DeviceList" Visibility="Collapsed">
                             <ItemsControl.ItemTemplate>

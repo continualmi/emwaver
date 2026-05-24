@@ -74,6 +74,10 @@ public partial class DeviceConnectionWindow : Window
         NoDevicesText.Visibility = ports.Count == 0 && bleDevices.Count == 0 && wifiDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         DeviceList.Items.Clear();
+        if (ports.Count > 0)
+        {
+            AddDeviceSection("USB devices", "Direct local USB connection. Best for setup, flashing, and reliable bench use.");
+        }
         foreach (var port in ports)
         {
             var isConnected = _device.IsConnected && _device.ConnectedPort?.DisplayName == port.DisplayName;
@@ -130,6 +134,10 @@ public partial class DeviceConnectionWindow : Window
             DeviceList.Items.Add(panel);
         }
 
+        if (bleDevices.Count > 0)
+        {
+            AddDeviceSection("BLE devices", "Nearby ESP32-class boards discovered over Bluetooth Low Energy.");
+        }
         foreach (var ble in bleDevices)
         {
             var isConnected = _device.IsConnected && _device.ActiveTransport == DeviceTransport.Ble && _device.ConnectedPort?.DisplayName == ble.DisplayName;
@@ -139,6 +147,10 @@ public partial class DeviceConnectionWindow : Window
                 async () => await _device.ConnectBleAsync(ble)));
         }
 
+        if (wifiDevices.Count > 0)
+        {
+            AddDeviceSection("Wi-Fi devices", "Boards discovered on your local network. Use VPN/Tailscale/SSH for user-owned remote access.");
+        }
         foreach (var wifi in wifiDevices)
         {
             var isConnected = _device.IsConnected && _device.ActiveTransport == DeviceTransport.Wifi && _device.ConnectedPort?.DisplayName?.Contains(wifi.Host, StringComparison.OrdinalIgnoreCase) == true;
@@ -149,6 +161,30 @@ public partial class DeviceConnectionWindow : Window
         }
 
         DeviceList.Visibility = DeviceList.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void AddDeviceSection(string title, string detail)
+    {
+        DeviceList.Items.Add(new StackPanel
+        {
+            Margin = new Thickness(0, DeviceList.Items.Count == 0 ? 0 : 10, 0, 6),
+            Children =
+            {
+                new TextBlock
+                {
+                    Text = title,
+                    FontSize = 12,
+                    FontWeight = FontWeights.SemiBold,
+                },
+                new TextBlock
+                {
+                    Text = detail,
+                    FontSize = 11,
+                    TextWrapping = TextWrapping.Wrap,
+                    Foreground = FindResource("AppTextSecondaryBrush") as System.Windows.Media.Brush,
+                }
+            }
+        });
     }
 
     private static string DisplayBoard(string? boardType)

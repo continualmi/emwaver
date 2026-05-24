@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
+using ICSharpCode.AvalonEdit.Search;
 using EMWaver.Models;
 using EMWaver.Scripting;
 using EMWaver.Scripting.Render;
@@ -81,6 +82,7 @@ public partial class ScriptsView : UserControl
         RefreshTransportLogVisibility();
 
         EditorTextBox.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("JavaScript");
+        SearchPanel.Install(EditorTextBox.TextArea);
         _scriptView = CollectionViewSource.GetDefaultView(_scripts.All);
         _scriptView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ScriptInfo.SectionTitle)));
         _scriptView.Filter = FilterScript;
@@ -327,6 +329,7 @@ public partial class ScriptsView : UserControl
         _agentChatId = id;
         _agentMessages.Clear();
         AgentMessagesPanel.Children.Clear();
+        AgentMessagesPanel.Children.Add(AgentSuggestionsPanel);
         AgentSuggestionsPanel.Visibility = Visibility.Visible;
 
         foreach (var message in _agentChats.ListMessages(id))
@@ -372,6 +375,7 @@ public partial class ScriptsView : UserControl
         _agentChats.ArchiveConversation(_agentChatId);
         _agentChatId = "";
         AgentMessagesPanel.Children.Clear();
+        AgentMessagesPanel.Children.Add(AgentSuggestionsPanel);
         AgentSuggestionsPanel.Visibility = Visibility.Visible;
         LoadAgentConversations();
         if (AgentConversationBox.SelectedItem is AgentApi.Conversation conversation)
@@ -450,6 +454,23 @@ public partial class ScriptsView : UserControl
             _suppressTextChanged = false;
             return;
         }
+    }
+
+    private void OnFindClick(object sender, RoutedEventArgs e)
+    {
+        EditorTextBox.Focus();
+        SearchPanel.Install(EditorTextBox.TextArea).Open();
+    }
+
+    private void OnGoToLineClick(object sender, RoutedEventArgs e)
+    {
+        var raw = Microsoft.VisualBasic.Interaction.InputBox("Line number:", "Go to Line", "1");
+        if (!int.TryParse(raw, out var line)) return;
+        line = Math.Clamp(line, 1, Math.Max(1, EditorTextBox.Document.LineCount));
+        EditorTextBox.ScrollToLine(line);
+        var docLine = EditorTextBox.Document.GetLineByNumber(line);
+        EditorTextBox.Select(docLine.Offset, 0);
+        EditorTextBox.Focus();
     }
 
     // --- Script execution ---

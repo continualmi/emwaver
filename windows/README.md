@@ -108,6 +108,8 @@ endpoint, and local scripts/hardware remain usable without that key. The WPF
 Agent drawer includes macOS-like starter cards, local conversation selection,
 rename/delete controls, cancellable sends, code block rendering, copy actions,
 and best-effort apply actions for full code blocks and simple unified patches.
+The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
+Go to Line controls.
 
 ## 3.6 Current parity status vs macOS
 
