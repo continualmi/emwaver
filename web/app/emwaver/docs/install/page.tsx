@@ -1,25 +1,45 @@
 import Link from "next/link";
 
-function PreviewDownloads() {
+const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/download/emwaver-preview";
+const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
+
+function InstallOptions() {
   return (
     <div className="grid gap-3 md:grid-cols-2">
       <a
-        href="/emwaver/downloads/EMWaver-android.apk"
+        href={APP_STORE_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">iOS — Primary</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">App Store</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Install EMWaver on iPhone or iPad through the App Store.</div>
+      </a>
+
+      <a
+        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`}
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
         <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Primary</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">APK</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct preview build. Google Play listing coming soon.</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct APK download. Google Play is prepared for the public listing.</div>
       </a>
 
       <a
-        href="/emwaver/downloads/EMWaver-macos.dmg"
+        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`}
         className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
       >
         <div className="text-xs font-semibold text-[color:var(--ink-dim)]">macOS — Dev & Advanced</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">DMG</div>
         <div className="pt-2 text-sm text-[color:var(--ink-dim)]">For firmware flashing, multi-device bench testing, and advanced development.</div>
       </a>
+
+      <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Windows support is planned after the V1 mobile launch.</div>
+      </div>
     </div>
   );
 }
@@ -35,10 +55,11 @@ export default function InstallDocPage() {
 
       <h2>1. Install the app</h2>
       <p>
-        iOS and Android are the primary EMWaver platforms. iOS is available via TestFlight (App Store coming soon).
-        An APK is available for Android (Google Play coming soon). macOS is available for development and advanced use.
+        iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
+        Android has a direct APK download, with Google Play prepared for the public listing. macOS is available
+        for development and advanced use, and Windows is coming soon after V1.
       </p>
-      <PreviewDownloads />
+      <InstallOptions />
 
       <h2>2. Get a supported board</h2>
       <p>
