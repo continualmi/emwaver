@@ -7,7 +7,6 @@ import { usePathname } from "next/navigation";
 import { societyRouteUrl } from "@/lib/emwaver/societySite";
 
 const nav = [
-  { href: "/", label: "EMWaver" },
   { href: "/emwaver/build", label: "Build" },
   { href: "/emwaver/install", label: "Install" },
   { href: "/emwaver/docs", label: "Documentation" },
