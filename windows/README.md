@@ -108,6 +108,11 @@ endpoint, and local scripts/hardware remain usable without that key. The WPF
 Agent drawer includes macOS-like starter cards, local conversation selection,
 rename/delete controls, cancellable sends, code block rendering, copy actions,
 and best-effort apply actions for full code blocks and simple unified patches.
+It also ports the native Agent hardware primitive model for Windows: the Agent
+can request local `list_scripts`, `read_script`, `apply_patch_to_script`,
+`run_script`, `stop_script`, `get_device_status`, `spi_transfer`, `gpio_mode`,
+`gpio_write`, `gpio_read`, `analog_read`, and `sleep` tool calls through
+`emw-tool` JSON blocks; Windows renders the local tool result cards inline.
 The WPF script editor uses AvalonEdit syntax highlighting plus visible Find and
 Go to Line controls.
 

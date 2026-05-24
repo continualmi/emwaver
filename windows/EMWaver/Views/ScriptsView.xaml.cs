@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -50,6 +51,25 @@ public partial class ScriptsView : UserControl
     private bool _isAgentSending;
     private bool _suppressAgentConversationChange;
     private readonly List<(string role, string message)> _agentMessages = new();
+
+    private static class AgentHardwareProtocol
+    {
+        internal const byte ResponseOk = 0x80;
+        internal const byte ResponseErr = 0x81;
+        internal const byte ResponseBusy = 0x82;
+        internal const byte NameGet = 0x04;
+        internal const byte BoardGet = 0x09;
+        internal const byte Gpio = 0x10;
+        internal const byte GpioInput = 0x00;
+        internal const byte GpioOutput = 0x01;
+        internal const byte GpioRead = 0x02;
+        internal const byte GpioHigh = 0x03;
+        internal const byte GpioLow = 0x04;
+        internal const byte GpioPull = 0x05;
+        internal const byte AdcRead = 0x20;
+        internal const byte AdcPin = 0x00;
+        internal const byte SpiTransfer = 0x50;
+    }
 
     public ScriptsView()
         : this(AppServices.Scripts, AppServices.ScriptEngine, AppServices.Device, AppServices.AgentApi, AppServices.AgentChats)
@@ -601,15 +621,24 @@ public partial class ScriptsView : UserControl
 
         try
         {
+            if (TryParseLocalAgentToolInput(input, out var directToolName, out var directToolArguments))
+            {
+                var result = await ExecuteAgentToolAsync(directToolName, directToolArguments, _agentCts.Token);
+                AddAgentToolCard(result);
+                return;
+            }
+
+            var assistantReply = string.Empty;
             var scriptName = _selectedScript?.FileName ?? "current-script.js";
             await _agentApi.ChatStreamWithToolsAsync(
                 _agentChatId,
                 input,
-                new AgentApi.ScriptContext(scriptName, EditorTextBox.Text),
+                new AgentApi.ScriptContext(scriptName, EditorTextBox.Text, BuildAgentToolContext()),
                 ev =>
                 {
                     if (ev.Kind == AgentApi.StreamEventKind.Done && ev.DoneMessage is not null)
                     {
+                        assistantReply = ev.DoneMessage.Content;
                         Dispatcher.BeginInvoke((Action)(() => AddAgentMessage("assistant", ev.DoneMessage.Content, persist: false)));
                     }
                     else if (ev.Kind == AgentApi.StreamEventKind.Error)
@@ -618,6 +647,8 @@ public partial class ScriptsView : UserControl
                     }
                 },
                 _agentCts.Token);
+
+            await ExecuteAssistantToolBlocksAsync(assistantReply, _agentCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -635,6 +666,17 @@ public partial class ScriptsView : UserControl
             LoadAgentConversations();
             UpdateAgentPanelState();
         }
+    }
+
+    private string BuildAgentToolContext()
+    {
+        var connected = _device.IsConnected ? "connected" : "not connected";
+        var board = _device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? "unknown";
+        var script = _selectedScript?.FileName ?? "none";
+        return "Windows local Agent tools are available. Device=" + connected + "; transport=" + _device.ActiveTransport + "; boardType=" + board + "; selectedScript=" + script + ".\n" +
+               "To request local hardware/tool execution, reply with an emw-tool fenced JSON block containing one object or an array of objects: ```emw-tool\n[{\"name\":\"gpio_read\",\"arguments\":{\"pin\":2}}]\n```. " +
+               "Available tools: list_scripts, read_script, apply_patch_to_script, run_script, stop_script, get_device_status, spi_transfer(bytes,cs,rx_length), gpio_mode(pin,mode INPUT|OUTPUT|INPUT_PULLUP), gpio_write(pin,value HIGH|LOW), gpio_read(pin), analog_read(pin), sleep(ms). " +
+               "Do not ask the user to manually run JavaScript for primitive hardware checks; use these named tools.";
     }
 
     private void AddAgentMessage(string role, string text, bool persist = false)
@@ -697,6 +739,307 @@ public partial class ScriptsView : UserControl
         AgentMessagesScroll.ScrollToEnd();
     }
 
+    private sealed record AgentToolCall(string Name, Dictionary<string, JsonElement> Arguments);
+    private sealed record AgentToolResult(string Name, bool Ok, string Json, string? Error = null);
+
+    private async Task ExecuteAssistantToolBlocksAsync(string assistantReply, CancellationToken ct)
+    {
+        List<AgentToolCall> calls;
+        try
+        {
+            calls = ExtractAgentToolCalls(assistantReply).ToList();
+        }
+        catch (Exception ex)
+        {
+            AddAgentToolCard(ToolError("tool_parse", "Could not parse Agent tool request: " + ex.Message));
+            return;
+        }
+
+        foreach (var call in calls)
+        {
+            ct.ThrowIfCancellationRequested();
+            var result = await ExecuteAgentToolAsync(call.Name, call.Arguments, ct);
+            AddAgentToolCard(result);
+        }
+    }
+
+    private void AddAgentToolCard(AgentToolResult result)
+    {
+        var panel = new StackPanel();
+        panel.Children.Add(new TextBlock
+        {
+            Text = (result.Ok ? "✓ " : "⚠ ") + result.Name,
+            FontWeight = FontWeights.SemiBold,
+            FontSize = 12,
+            Foreground = result.Ok ? FindResource("AppTextForegroundBrush") as System.Windows.Media.Brush : FindResource("AppErrorTextBrush") as System.Windows.Media.Brush,
+        });
+        panel.Children.Add(new TextBox
+        {
+            Text = result.Ok ? result.Json : (result.Error ?? result.Json),
+            IsReadOnly = true,
+            TextWrapping = TextWrapping.Wrap,
+            AcceptsReturn = true,
+            MaxHeight = 140,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            FontSize = 11,
+            Background = FindResource("EditorSurfaceBackgroundBrush") as System.Windows.Media.Brush,
+            Foreground = FindResource("EditorTextForegroundBrush") as System.Windows.Media.Brush,
+            Margin = new Thickness(0, 4, 0, 0),
+        });
+
+        AgentMessagesPanel.Children.Add(new Border
+        {
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(10, 6, 10, 6),
+            Margin = new Thickness(0, 0, 0, 8),
+            MaxWidth = 280,
+            Background = FindResource(result.Ok ? "StatusSuccessBackgroundBrush" : "StatusErrorBackgroundBrush") as System.Windows.Media.Brush,
+            Child = panel,
+        });
+        AgentMessagesScroll.ScrollToEnd();
+    }
+
+    private static IEnumerable<AgentToolCall> ExtractAgentToolCalls(string text)
+    {
+        var matches = Regex.Matches(text ?? string.Empty, "```(?:emw-tool|tool|json)\\s*(?<json>.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        foreach (Match match in matches)
+        {
+            foreach (var call in ParseAgentToolCalls(match.Groups["json"].Value)) yield return call;
+        }
+    }
+
+    private static bool TryParseLocalAgentToolInput(string input, out string name, out Dictionary<string, JsonElement> arguments)
+    {
+        name = string.Empty;
+        arguments = new Dictionary<string, JsonElement>();
+        var trimmed = (input ?? string.Empty).Trim();
+        if (!trimmed.StartsWith("/", StringComparison.Ordinal)) return false;
+        var split = trimmed.IndexOf(' ');
+        name = (split > 0 ? trimmed[1..split] : trimmed[1..]).Trim();
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var json = split > 0 ? trimmed[(split + 1)..].Trim() : "{}";
+        if (string.IsNullOrWhiteSpace(json)) json = "{}";
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object)
+            {
+                arguments = doc.RootElement.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+            }
+            return true;
+        }
+        catch
+        {
+            arguments = new Dictionary<string, JsonElement>();
+            return true;
+        }
+    }
+
+    private static IEnumerable<AgentToolCall> ParseAgentToolCalls(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in doc.RootElement.EnumerateArray())
+            {
+                if (TryParseAgentToolCall(item, out var call)) yield return call;
+            }
+        }
+        else if (TryParseAgentToolCall(doc.RootElement, out var call))
+        {
+            yield return call;
+        }
+    }
+
+    private static bool TryParseAgentToolCall(JsonElement item, out AgentToolCall call)
+    {
+        call = new AgentToolCall("", new Dictionary<string, JsonElement>());
+        if (item.ValueKind != JsonValueKind.Object) return false;
+        if (!item.TryGetProperty("name", out var n) && !item.TryGetProperty("tool", out n)) return false;
+        var name = n.GetString() ?? "";
+        if (string.IsNullOrWhiteSpace(name)) return false;
+        var args = new Dictionary<string, JsonElement>(StringComparer.OrdinalIgnoreCase);
+        if (item.TryGetProperty("arguments", out var a) && a.ValueKind == JsonValueKind.Object)
+        {
+            args = a.EnumerateObject().ToDictionary(p => p.Name, p => p.Value.Clone(), StringComparer.OrdinalIgnoreCase);
+        }
+        call = new AgentToolCall(name, args);
+        return true;
+    }
+
+    private async Task<AgentToolResult> ExecuteAgentToolAsync(string name, Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var toolName = (name ?? string.Empty).Trim();
+        try
+        {
+            switch (toolName)
+            {
+                case "list_scripts":
+                    return ToolOk(toolName, new { scripts = _scripts.All.Select(s => new { id = s.FileName, name = s.DisplayName, kind = s.KindLabel, runnable = s.KindLabel != "Library" && s.KindLabel != "Kernel", isAsset = s.IsBundled, readOnly = s.IsBundled }) });
+                case "read_script":
+                    {
+                        var script = FindAgentScript(GetString(args, "scriptId") ?? GetString(args, "id"));
+                        if (script == null) return ToolError(toolName, "Script not found.");
+                        return ToolOk(toolName, new { id = script.FileName, name = script.DisplayName, source = File.ReadAllText(script.FilePath), kind = script.KindLabel, readOnly = script.IsBundled });
+                    }
+                case "apply_patch_to_script":
+                    return ApplyAgentPatchTool(toolName, args);
+                case "run_script":
+                    {
+                        var script = FindAgentScript(GetString(args, "scriptId") ?? GetString(args, "id"));
+                        if (script != null) SelectScript(script);
+                        if (_selectedScript == null) return ToolError(toolName, "No script selected.");
+                        HandleTogglePreview(true);
+                        return ToolOk(toolName, new { scriptId = _selectedScript.FileName, name = _selectedScript.DisplayName, running = _isRunning });
+                    }
+                case "stop_script":
+                    StopScript();
+                    return ToolOk(toolName, new { stopped = true });
+                case "get_device_status":
+                    return ToolOk(toolName, new { connected = _device.IsConnected, transport = _device.ActiveTransport.ToString(), boardType = _device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? "", activeScriptName = _isRunning ? _selectedScript?.DisplayName ?? "" : "", isRendering = _isPreviewMode, lastError = ErrorBanner.Visibility == Visibility.Visible ? ErrorText.Text : "" });
+                case "spi_transfer":
+                    return await AgentToolSpiTransfer(args, ct);
+                case "gpio_mode":
+                    return await AgentToolGpioMode(args, ct);
+                case "gpio_write":
+                    return await AgentToolGpioWrite(args, ct);
+                case "gpio_read":
+                    return await AgentToolGpioRead(args, ct);
+                case "analog_read":
+                    return await AgentToolAnalogRead(args, ct);
+                case "sleep":
+                    var ms = Math.Clamp(GetInt(args, "ms") ?? 0, 0, 30000);
+                    await Task.Delay(ms, ct);
+                    return ToolOk(toolName, new { slept_ms = ms });
+                default:
+                    return ToolError(toolName, "Unknown EMWaver tool: " + toolName);
+            }
+        }
+        catch (Exception ex)
+        {
+            return ToolError(toolName, ex.Message);
+        }
+    }
+
+    private AgentToolResult ApplyAgentPatchTool(string name, Dictionary<string, JsonElement> args)
+    {
+        var script = FindAgentScript(GetString(args, "scriptId") ?? GetString(args, "id"));
+        if (script != null) SelectScript(script);
+        if (_selectedScript == null) return ToolError(name, "No script selected.");
+        if (_selectedScript.IsBundled) return ToolError(name, "Script is bundled/read-only. Use Make Copy first.");
+        var content = GetString(args, "content");
+        if (!string.IsNullOrWhiteSpace(content))
+        {
+            EditorTextBox.Text = content;
+            return ToolOk(name, new { scriptId = _selectedScript.FileName, bytes = content.Length, saved = false });
+        }
+        var patch = GetString(args, "patch");
+        if (string.IsNullOrWhiteSpace(patch)) return ToolError(name, "patch or content is required.");
+        if (!TryApplyUnifiedPatch(EditorTextBox.Text, patch, out var updated, out var error)) return ToolError(name, error ?? "Patch failed.");
+        EditorTextBox.Text = updated;
+        return ToolOk(name, new { scriptId = _selectedScript.FileName, bytes = updated.Length, saved = false });
+    }
+
+    private ScriptInfo? FindAgentScript(string? id)
+    {
+        if (string.IsNullOrWhiteSpace(id)) return _selectedScript;
+        return _scripts.All.FirstOrDefault(s => s.FileName.Equals(id, StringComparison.OrdinalIgnoreCase) || s.DisplayName.Equals(id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private async Task<AgentToolResult> AgentToolSpiTransfer(Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var tx = GetByteArray(args, "bytes");
+        if (tx == null) return ToolError("spi_transfer", "bytes must be an array of 0-255 numbers.");
+        if (tx.Length > 14) return ToolError("spi_transfer", $"bytes is too long ({tx.Length}, max 14).");
+        var cs = GetByte(args, "cs");
+        if (cs == null) return ToolError("spi_transfer", "cs is required.");
+        var rxLength = Math.Clamp(GetInt(args, "rx_length") ?? tx.Length, 0, 17);
+        var command = new byte[] { AgentHardwareProtocol.SpiTransfer, cs.Value, (byte)rxLength, (byte)tx.Length }.Concat(tx).ToArray();
+        var payload = await AgentHardwareSend(command, ct);
+        if (payload.Error != null) return ToolError("spi_transfer", payload.Error);
+        return ToolOk("spi_transfer", new { rx = payload.Payload.Take(rxLength).ToArray() });
+    }
+
+    private async Task<AgentToolResult> AgentToolGpioMode(Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var pin = GetByte(args, "pin");
+        if (pin == null) return ToolError("gpio_mode", "pin is required.");
+        var mode = (GetString(args, "mode") ?? "").ToUpperInvariant();
+        byte sub = mode switch { "INPUT" => AgentHardwareProtocol.GpioInput, "OUTPUT" => AgentHardwareProtocol.GpioOutput, "INPUT_PULLUP" => AgentHardwareProtocol.GpioPull, _ => 0xff };
+        if (sub == 0xff) return ToolError("gpio_mode", "mode must be INPUT, OUTPUT, or INPUT_PULLUP.");
+        var command = sub == AgentHardwareProtocol.GpioPull ? new[] { AgentHardwareProtocol.Gpio, sub, pin.Value, (byte)1 } : new[] { AgentHardwareProtocol.Gpio, sub, pin.Value };
+        var payload = await AgentHardwareSend(command, ct);
+        return payload.Error == null ? ToolOk("gpio_mode", new { pin = pin.Value, mode }) : ToolError("gpio_mode", payload.Error);
+    }
+
+    private async Task<AgentToolResult> AgentToolGpioWrite(Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var pin = GetByte(args, "pin");
+        if (pin == null) return ToolError("gpio_write", "pin is required.");
+        var value = (GetString(args, "value") ?? "").ToUpperInvariant();
+        var sub = value switch { "HIGH" => AgentHardwareProtocol.GpioHigh, "LOW" => AgentHardwareProtocol.GpioLow, _ => (byte)0xff };
+        if (sub == 0xff) return ToolError("gpio_write", "value must be HIGH or LOW.");
+        var payload = await AgentHardwareSend(new[] { AgentHardwareProtocol.Gpio, sub, pin.Value }, ct);
+        return payload.Error == null ? ToolOk("gpio_write", new { pin = pin.Value, value }) : ToolError("gpio_write", payload.Error);
+    }
+
+    private async Task<AgentToolResult> AgentToolGpioRead(Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var pin = GetByte(args, "pin");
+        if (pin == null) return ToolError("gpio_read", "pin is required.");
+        var payload = await AgentHardwareSend(new[] { AgentHardwareProtocol.Gpio, AgentHardwareProtocol.GpioRead, pin.Value }, ct);
+        if (payload.Error != null) return ToolError("gpio_read", payload.Error);
+        return ToolOk("gpio_read", new { pin = pin.Value, level = payload.Payload.FirstOrDefault() == 0 ? 0 : 1 });
+    }
+
+    private async Task<AgentToolResult> AgentToolAnalogRead(Dictionary<string, JsonElement> args, CancellationToken ct)
+    {
+        var pin = GetByte(args, "pin");
+        if (pin == null) return ToolError("analog_read", "pin is required.");
+        var payload = await AgentHardwareSend(new[] { AgentHardwareProtocol.AdcRead, AgentHardwareProtocol.AdcPin, pin.Value, (byte)1 }, ct);
+        if (payload.Error != null) return ToolError("analog_read", payload.Error);
+        var lo = payload.Payload.Length > 0 ? payload.Payload[0] : 0;
+        var hi = payload.Payload.Length > 1 ? payload.Payload[1] : 0;
+        return ToolOk("analog_read", new { pin = pin.Value, value = (hi << 8) | lo });
+    }
+
+    private async Task<(byte[] Payload, string? Error)> AgentHardwareSend(byte[] command, CancellationToken ct)
+    {
+        if (!_device.IsConnected) return (Array.Empty<byte>(), "No device connected.");
+        if (command.Length > 18) return (Array.Empty<byte>(), $"Command too large ({command.Length}, max 18).");
+        var response = await _device.SendPacketAsync(command, 1500);
+        ct.ThrowIfCancellationRequested();
+        if (response == null || response.Length == 0) return (Array.Empty<byte>(), _device.LastErrorText ?? "Device did not respond.");
+        return response[0] switch
+        {
+            AgentHardwareProtocol.ResponseOk => (response.Skip(1).ToArray(), null),
+            AgentHardwareProtocol.ResponseBusy => (Array.Empty<byte>(), "Device busy (0x82): another transport session owns runtime control."),
+            AgentHardwareProtocol.ResponseErr => (Array.Empty<byte>(), "Device returned ERR (0x81)."),
+            var other => (Array.Empty<byte>(), $"Device error: {other}.")
+        };
+    }
+
+    private static string? GetString(Dictionary<string, JsonElement> args, string key) => args.TryGetValue(key, out var e) && e.ValueKind == JsonValueKind.String ? e.GetString() : null;
+    private static int? GetInt(Dictionary<string, JsonElement> args, string key) => args.TryGetValue(key, out var e) && e.TryGetInt32(out var v) ? v : null;
+    private static byte? GetByte(Dictionary<string, JsonElement> args, string key)
+    {
+        var v = GetInt(args, key);
+        return v is >= 0 and <= 255 ? (byte)v.Value : null;
+    }
+    private static byte[]? GetByteArray(Dictionary<string, JsonElement> args, string key)
+    {
+        if (!args.TryGetValue(key, out var e) || e.ValueKind != JsonValueKind.Array) return null;
+        var list = new List<byte>();
+        foreach (var item in e.EnumerateArray())
+        {
+            if (!item.TryGetInt32(out var v) || v < 0 || v > 255) return null;
+            list.Add((byte)v);
+        }
+        return list.ToArray();
+    }
+    private static AgentToolResult ToolOk(string name, object payload) => new(name, true, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+    private static AgentToolResult ToolError(string name, string error) => new(name, false, JsonSerializer.Serialize(new { error }, new JsonSerializerOptions { WriteIndented = true }), error);
+
     private FrameworkElement BuildAgentMessageContent(string role, string text)
     {
         var panel = new StackPanel { Orientation = Orientation.Vertical };
@@ -716,14 +1059,33 @@ public partial class ScriptsView : UserControl
     {
         var cleaned = (segment ?? string.Empty).Trim();
         if (string.IsNullOrWhiteSpace(cleaned)) return;
-        panel.Children.Add(new TextBlock
+        var lines = cleaned.Replace("\r\n", "\n").Split('\n');
+        foreach (var raw in lines)
         {
-            Text = cleaned,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 12,
-            Foreground = role == "user" ? FindResource("PlotLineBrush") as System.Windows.Media.Brush : FindResource("AppTextForegroundBrush") as System.Windows.Media.Brush,
-            Margin = new Thickness(0, 0, 0, 4),
-        });
+            var line = raw.TrimEnd();
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var isHeading = line.StartsWith("#", StringComparison.Ordinal);
+            var isBullet = line.TrimStart().StartsWith("- ", StringComparison.Ordinal) || line.TrimStart().StartsWith("* ", StringComparison.Ordinal);
+            var text = isHeading ? line.TrimStart('#', ' ') : isBullet ? "• " + line.TrimStart().Substring(2) : line;
+            panel.Children.Add(new TextBlock
+            {
+                Text = StripInlineMarkdown(text),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = isHeading ? 13 : 12,
+                FontWeight = isHeading ? FontWeights.SemiBold : FontWeights.Normal,
+                Foreground = role == "user" ? FindResource("PlotLineBrush") as System.Windows.Media.Brush : FindResource("AppTextForegroundBrush") as System.Windows.Media.Brush,
+                Margin = new Thickness(isBullet ? 8 : 0, 0, 0, 4),
+            });
+        }
+    }
+
+    private static string StripInlineMarkdown(string value)
+    {
+        var text = value ?? string.Empty;
+        text = Regex.Replace(text, @"\*\*(.*?)\*\*", "$1");
+        text = Regex.Replace(text, @"`([^`]+)`", "$1");
+        text = Regex.Replace(text, @"\[([^\]]+)\]\(([^\)]+)\)", "$1 ($2)");
+        return text;
     }
 
     private void AddAgentCodeSegment(Panel panel, string code, string language)
@@ -808,6 +1170,9 @@ public partial class ScriptsView : UserControl
 
         if (TryApplyUnifiedPatch(EditorTextBox.Text, patch, out var updated, out var error))
         {
+            var changed = CountChangedLines(EditorTextBox.Text, updated);
+            var confirm = MessageBox.Show($"Apply this Agent patch to the current editor?\n\nChanged lines: {changed}", "Apply Agent Patch", MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (confirm != MessageBoxResult.Yes) return;
             EditorTextBox.Text = updated;
             HandleTogglePreview(false);
         }
@@ -919,5 +1284,20 @@ public partial class ScriptsView : UserControl
         }
         updated = string.Join(Environment.NewLine, output);
         return true;
+    }
+
+    private static int CountChangedLines(string before, string after)
+    {
+        var a = (before ?? string.Empty).Replace("\r\n", "\n").Split('\n');
+        var b = (after ?? string.Empty).Replace("\r\n", "\n").Split('\n');
+        var max = Math.Max(a.Length, b.Length);
+        var changed = 0;
+        for (var i = 0; i < max; i++)
+        {
+            var av = i < a.Length ? a[i] : null;
+            var bv = i < b.Length ? b[i] : null;
+            if (av != bv) changed++;
+        }
+        return changed;
     }
 }

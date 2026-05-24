@@ -23,7 +23,7 @@ public sealed class AgentApi
 
     internal sealed record Message(string Id, string Role, string Content, long CreatedAtMs);
 
-    internal sealed record ScriptContext(string Name, string Source);
+    internal sealed record ScriptContext(string Name, string Source, string? ToolContext = null);
 
     internal enum StreamEventKind { Delta, Done, Tool, Error }
 
@@ -182,7 +182,13 @@ public sealed class AgentApi
         }
 
         var name = string.IsNullOrWhiteSpace(script.Name) ? "script.js" : script.Name.Trim();
-        return text + "\n\nScript `" + name + "`:\n```emw\n" + script.Source.Trim() + "\n```";
+        var parts = new List<string> { text };
+        if (!string.IsNullOrWhiteSpace(script.ToolContext))
+        {
+            parts.Add(script.ToolContext!.Trim());
+        }
+        parts.Add("Script `" + name + "`:\n```emw\n" + script.Source.Trim() + "\n```");
+        return string.Join("\n\n", parts);
     }
 
     private static string? ResolveUniverse()

@@ -212,14 +212,14 @@ public partial class FirmwareUpdateWindow : Window
         if (IsEspWorkflow)
         {
             EspErrorCard.Visibility = Visibility.Visible;
-            EspErrorText.Text = error;
+            EspErrorText.Text = ExplainFirmwareError(error, esp: true);
             EspProgressPanel.Visibility = Visibility.Collapsed;
             EspDoneCard.Visibility = Visibility.Collapsed;
         }
         else
         {
             StmErrorCard.Visibility = Visibility.Visible;
-            StmErrorText.Text = error;
+            StmErrorText.Text = ExplainFirmwareError(error, esp: false);
             StmProgressPanel.Visibility = Visibility.Collapsed;
             StmPromptCard.Visibility = Visibility.Collapsed;
             StmStatusCard.Visibility = Visibility.Collapsed;
@@ -259,6 +259,34 @@ public partial class FirmwareUpdateWindow : Window
             PrimaryButton.Visibility = Visibility.Collapsed;
             TryAgainButton.Visibility = Visibility.Collapsed;
         }
+    }
+
+    private static string ExplainFirmwareError(string error, bool esp)
+    {
+        var text = (error ?? string.Empty).Trim();
+        var lower = text.ToLowerInvariant();
+        if (esp)
+        {
+            if (lower.Contains("asset") || lower.Contains("file") || lower.Contains("not found"))
+            {
+                return text + "\n\nFirmware asset missing. Rebuild the app so Assets/Firmware contains the bundled ESP images.";
+            }
+            if (lower.Contains("port") || lower.Contains("serial") || lower.Contains("boot"))
+            {
+                return text + "\n\nRecovery: hold BOOT, press/release RESET, release BOOT, click Refresh, then Flash firmware again.";
+            }
+            return text + "\n\nIf flashing does not start, put the board back into bootloader mode and click Refresh.";
+        }
+
+        if (lower.Contains("dfu") || lower.Contains("update mode"))
+        {
+            return text + "\n\nRecovery: reconnect the board, enter Update Mode again, then click Try again.";
+        }
+        if (lower.Contains("asset") || lower.Contains("firmware") || lower.Contains("not found"))
+        {
+            return text + "\n\nFirmware asset missing. Rebuild the app so the bundled firmware payload is copied to the app output.";
+        }
+        return text;
     }
 
     private async void OnPrimaryClick(object sender, RoutedEventArgs e)
