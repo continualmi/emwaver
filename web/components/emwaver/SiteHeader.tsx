@@ -26,17 +26,21 @@ export function SiteHeader() {
     <>
       <header className="fixed inset-x-0 top-0 z-50 border-b border-[color:var(--line)] bg-[color:var(--glass)] backdrop-blur">
         <div className="flex w-full items-center justify-between gap-4 px-5 py-4">
-          <Link href="/" className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1">
-                <Image
-                  src="/emwaver/continuous-logo.png"
-                  alt="Continual MI"
-                  width={36}
-                  height={36}
-                  className="h-full w-full object-contain"
-                />
-              </div>
+          <div className="flex items-center gap-3">
+            <a
+              href="https://continualmi.com"
+              className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] p-1"
+              aria-label="Continual MI"
+            >
+              <Image
+                src="/emwaver/continuous-logo.png"
+                alt="Continual MI"
+                width={36}
+                height={36}
+                className="h-full w-full object-contain"
+              />
+            </a>
+            <Link href="/emwaver" className="flex items-center gap-3">
               <div className="h-9 w-9 overflow-hidden rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)]">
                 <Image
                   src="/emwaver/logo.png"
@@ -46,16 +50,16 @@ export function SiteHeader() {
                   className="h-full w-full object-cover"
                 />
               </div>
-            </div>
-            <div className="leading-tight">
-              <div className="text-[15px] font-semibold tracking-tight text-[color:var(--ink)]">
-                EMWaver
+              <div className="leading-tight">
+                <div className="text-[15px] font-semibold tracking-tight text-[color:var(--ink)]">
+                  EMWaver
+                </div>
+                <div className="text-[12px] text-[color:var(--ink-dim)]">
+                  A Continual MI platform
+                </div>
               </div>
-              <div className="text-[12px] text-[color:var(--ink-dim)]">
-                A Continual MI platform
-              </div>
-            </div>
-          </Link>
+            </Link>
+          </div>
 
           <nav className="hidden items-center gap-2 text-[13px] text-[color:var(--ink-dim)] md:flex">
             {nav.map((item) => {
