@@ -172,6 +172,7 @@ Use the local README first when working in a folder:
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read)
 - `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document
+- `docs/LINUX_MACOS_PARITY_AUDIT.md` — working checklist of macOS-vs-Linux native parity gaps
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
 - `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` — ESP32 Wi-Fi transport audit
 - `docs/ESP32_WIFI_TRANSPORT_PLAN.md` — ESP32 Wi-Fi transport plan

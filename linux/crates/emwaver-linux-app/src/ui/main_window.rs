@@ -140,7 +140,7 @@ pub fn build_main_window(app: &adw::Application) {
         .child(&editor)
         .build();
     let preview_label = gtk::Label::builder()
-        .label("Run a script to preview its UI here.")
+        .label("Run a script to see its runtime output here.")
         .wrap(true)
         .xalign(0.0)
         .yalign(0.0)
@@ -202,7 +202,7 @@ pub fn build_main_window(app: &adw::Application) {
         .build();
     let preview_button = gtk::ToggleButton::builder()
         .icon_name("view-reveal-symbolic")
-        .tooltip_text("Toggle script preview")
+        .tooltip_text("Toggle runtime output")
         .build();
 
     let log_view = gtk::TextView::builder()
@@ -609,7 +609,7 @@ pub fn build_main_window(app: &adw::Application) {
                     .map(|script| script.name.clone())
                     .unwrap_or_else(|| "No script".to_string());
                 preview_label.set_label(&format!(
-                    "{name} preview\n\nScript UI rendering will appear here after the Linux ScriptRenderView parity layer is ported. Running a script still uses the local runtime and selected device."
+                    "{name} runtime output\n\nLinux does not yet have the macOS ScriptRenderView port. Until that renderer lands, this pane only mirrors the selected script context and command execution stays in the local Run Log."
                 ));
                 editor_stack.set_visible_child_name("preview");
             } else {

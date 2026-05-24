@@ -1,0 +1,50 @@
+# Linux/macOS Native Parity Audit
+
+Last updated: 2026-05-24
+
+This is the working checklist for the native Linux GTK4 port against the macOS app and shared Apple script UI. It should stay honest: incomplete Linux surfaces are gaps, not parity.
+
+## Current high-priority gaps
+
+1. Script workspace flow
+   - macOS opens to the script list, runs/restores scripts from rows, and opens the editor as a secondary action.
+   - Linux still opens as a three-pane workspace with the editor always visible and script rows mainly selecting editor content.
+   - Needed: make the script list the primary workflow, add per-row run/edit/stop controls, and show running session state inline beside script names.
+
+2. Script UI rendering
+   - macOS executes default scripts through `ScriptPreviewManager`, transpiles imports/JSX, and renders `ScriptRenderView` nodes.
+   - Linux executes only the early command/gpio/device JavaScript API and does not yet render the default-script UI tree.
+   - Needed: port module loading, JSX transform or equivalent authoring transform, `__emwUI`/`__emwRender`, script tree model, GTK renderer, and handler invocation.
+
+3. Agent tool parity
+   - macOS Agent exposes local tools for listing/reading/patching/running scripts, stopping scripts, device status, and hardware primitives.
+   - Linux Agent can send context and has hardware primitive builders in the agent crate, but the GTK Agent drawer does not yet expose the full local tool runtime loop.
+   - Needed: persistent local conversations, tool call rendering/results, script list/read/patch/run/stop tools, and hardware primitive execution through the selected Linux transport.
+
+4. Device sheet behavior
+   - macOS groups transports by hardware UID, supports transport switching, manual Wi-Fi, ESP32 Wi-Fi provisioning/clear/status, and shows UID probe freshness.
+   - Linux groups transports and validates manual Wi-Fi, but does not yet perform Wi-Fi provisioning/clear/status from the GTK sheet.
+   - Needed: add ESP32 provisioning commands over selected USB/BLE/Wi-Fi, persist SSID/host/port locally, store Wi-Fi password via Secret Service, and show live status.
+
+5. Background discovery and session ownership
+   - macOS polls every 5 seconds, refreshes USB/BLE/Wi-Fi liveness, prunes stale records, keeps BLE discovery active, and rejects active transport switches for busy devices.
+   - Linux seeds devices at launch and has the core busy-device guard, but the GTK app does not yet run the continuous discovery/reconcile loop.
+   - Needed: GLib/Tokio discovery task, periodic USB/BLE/Wi-Fi refresh, stale pruning, selected-device preservation, and busy-session UI disable states.
+
+6. Firmware update UX
+   - macOS presents board-specific next steps, auto-prompts for DFU/update mode, and distinguishes STM32 DFU from ESP32 serial bootloader flows.
+   - Linux has board-aware STM32/ESP32 flashing paths and logs, but lacks auto-prompting and complete Linux hardware validation.
+   - Needed: automatic update-mode prompt parity, ESP serial candidate selection UX, and validation on a real Linux machine.
+
+7. Settings persistence
+   - macOS settings cover Agent key, endpoint, and transport debug preference with native persistence.
+   - Linux has Agent endpoint/key handling and a debug toggle surface, but discovery/debug preferences are not yet fully persisted.
+   - Needed: XDG-backed discovery/debug settings and live application of those settings.
+
+## Recently closed or improved
+
+- Linux loads the shared `assets/default-scripts` bundle and separates examples, libraries, kernel files, and custom scripts.
+- Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
+- Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
+- Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.
+- Linux Agent settings use local Secret Service/environment credentials and public `/api/mgpt/...` endpoint validation.

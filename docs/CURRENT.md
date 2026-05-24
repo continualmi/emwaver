@@ -85,6 +85,7 @@ Key contributor docs:
 | `docs/AGENT_EVAL_RUNTIME.md` | Agent hardware primitive model |
 | `docs/AGENT_RUNTIME_AND_TOOLS.html` | Visual Agent hardware-tool workflow |
 | `docs/LINUX_GTK4_PORT_PLAN.html` | Native Linux app port plan |
+| `docs/LINUX_MACOS_PARITY_AUDIT.md` | Current macOS-vs-Linux native parity checklist |
 | `docs/SIMULATOR.md` | Shared simulator direction |
 | `docs/parity/` | Cross-platform parity contracts |
 | `docs/archive/` | Historical Gateway/CLI/rebirth-era docs |
