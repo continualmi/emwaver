@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMWaver Windows: WinUI 3 → WPF Migration Plan</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d2991d;
+    --red: #f85149;
+    --purple: #a371f7;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    max-width: 960px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+  h1 { font-size: 2rem; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 8px; }
+  h2 { font-size: 1.4rem; margin-top: 40px; margin-bottom: 12px; color: var(--accent); }
+  h3 { font-size: 1.1rem; margin-top: 24px; margin-bottom: 8px; }
+  p { margin: 8px 0; color: var(--text); }
+  .muted { color: var(--muted); }
+  .summary { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; margin: 16px 0; }
+  .summary strong { color: var(--green); }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; }
+  th, td { border: 1px solid var(--border); padding: 10px 14px; text-align: left; vertical-align: top; }
+  th { background: var(--surface); font-weight: 600; }
+  .keep { color: var(--green); font-weight: 600; }
+  .adapt { color: var(--orange); font-weight: 600; }
+  .rebuild { color: var(--red); font-weight: 600; }
+  .new { color: var(--purple); font-weight: 600; }
+  code {
+    font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 0.9em;
+    background: var(--surface);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px;
+    overflow-x: auto;
+    margin: 12px 0;
+    font-size: 0.85rem;
+  }
+  pre code { background: none; padding: 0; }
+  ul, ol { padding-left: 24px; margin: 8px 0; }
+  li { margin: 4px 0; }
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+  .badge-keep { background: rgba(63,185,80,0.15); color: var(--green); }
+  .badge-adapt { background: rgba(210,153,29,0.15); color: var(--orange); }
+  .badge-rebuild { background: rgba(248,81,73,0.15); color: var(--red); }
+  .step-number {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px; height: 28px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .step { display: flex; align-items: flex-start; margin: 12px 0; }
+  .step-content { flex: 1; }
+</style>
+</head>
+<body>
+
+<h1>EMWaver Windows<br><span class="muted">WinUI 3 → WPF Migration Plan</span></h1>
+
+<div class="summary">
+  <p><strong>Decision:</strong> WinUI 3 was a mistake. WPF is the right native framework for this product.</p>
+  <p><strong>Good news:</strong> ~70% of the codebase is pure C# with zero WinUI dependencies. Only the UI shell (XAML pages, dialogs, navigation) needs rebuilding.</p>
+  <p><strong>Target:</strong> Windows 11, .NET 10, WPF, x64.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>1. Why WinUI 3 Failed Us</h2>
+<table>
+  <tr><th>Problem</th><th>Impact</th></tr>
+  <tr>
+    <td>Models are terrible at WinUI 3</td>
+    <td>Every UI change requires fighting both the framework <em>and</em> the agent. WinUI 3 has ~3 years of training data vs. WPF's ~20 years.</td>
+  </tr>
+  <tr>
+    <td>Can't build or test on this machine</td>
+    <td>WinUI requires Windows 11 + Visual Studio. All Windows edits are blind — committed without compilation or verification.</td>
+  </tr>
+  <tr>
+    <td>SDK churn</td>
+    <td>Windows App SDK previews break between versions. The project already pins <code>Microsoft.WindowsAppSDK 1.8.260101001</code> and <code>net10.0-windows10.0.22621.0</code>.</td>
+  </tr>
+  <tr>
+    <td>Sparse community</td>
+    <td>Few open-source examples, few Stack Overflow answers, few blog posts. When something doesn't work, you're on your own.</td>
+  </tr>
+  <tr>
+    <td>WinRT interop pain</td>
+    <td>WinUI 3 wraps WinRT, adding layers of indirection for things WPF does directly via P/Invoke or standard .NET APIs.</td>
+  </tr>
+</table>
+
+<h2>2. Why WPF Is the Right Answer</h2>
+<table>
+  <tr><th>Strength</th><th>Why It Matters</th></tr>
+  <tr><td>20 years of training data</td><td>Models know WPF deeply. XAML + MVVM + data binding patterns are thoroughly represented in training corpora.</td></tr>
+  <tr><td>Same .NET ecosystem</td><td>All existing C# services compile as-is. Jint, SQLite, HttpClient, Windows.Devices.* — none of it changes.</td></tr>
+  <tr><td>XAML-based</td><td>Mental model transfers from WinUI. Same markup language, different namespaces. Bindings, templates, styles all work the same way.</td></tr>
+  <tr><td>Mature tooling</td><td>Visual Studio designer, live visual tree, hot reload — all battle-tested.</td></tr>
+  <tr><td>Direct Win32 interop</td><td>P/Invoke, window handles, hardware access — no WinRT sandbox impedance for the things EMWaver actually does.</td></tr>
+  <tr><td>Predictable behavior</td><td>No SDK churn. WPF in .NET 10 is the same WPF that shipped in .NET 5, 6, 7, 8.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>3. File Inventory: Keep, Adapt, Rebuild</h2>
+
+<h3>3.1 Keep As-Is <span class="badge badge-keep">~70%</span></h3>
+<p>These files have <strong>zero WinUI dependencies</strong> and compile unchanged into a WPF project.</p>
+
+<table>
+  <tr><th>File</th><th>What It Does</th><th>Framework Deps</th></tr>
+  <tr><td><code>Services/UsbMidiSysex.cs</code></td><td>7-bit SysEx superframe encode/decode</td><td>None (pure C#)</td></tr>
+  <tr><td><code>Services/Dfu.cs</code></td><td>STM32 ROM DFU (0483:DF11) — mass erase, write, readback</td><td><code>Windows.Devices.Usb</code> (standard WinRT)</td></tr>
+  <tr><td><code>Services/WindowsUsbMidiTransport.cs</code></td><td>USB MIDI port enumeration, pairing, connect, send</td><td><code>Windows.Devices.Midi</code>, <code>Windows.Devices.Enumeration</code></td></tr>
+  <tr><td><code>Services/WindowsBleTransport.cs</code></td><td>BLE scan, connect, notify, send superframe</td><td><code>Windows.Devices.Bluetooth</code></td></tr>
+  <tr><td><code>Services/WindowsWiFiTransport.cs</code></td><td>WebSocket transport, mDNS discovery, Wi-Fi provisioning</td><td><code>System.Net.WebSockets</code></td></tr>
+  <tr><td><code>Services/DeviceBufferSession.cs</code></td><td>Per-device RX/TX buffer with response-wait signaling</td><td>None</td></tr>
+  <tr><td><code>Services/TransportDeviceConnectionState.cs</code></td><td>Active connection target tracking</td><td>None</td></tr>
+  <tr><td><code>Services/TransportDeviceSessionRegistry.cs</code></td><td>Multi-session buffer registry</td><td>None</td></tr>
+  <tr><td><code>Services/AppSettings.cs</code></td><td>JSON settings file I/O</td><td>None (pure C#)</td></tr>
+  <tr><td><code>Services/AppServices.cs</code></td><td>Service locator / DI container</td><td>None</td></tr>
+  <tr><td><code>Services/ScriptRepository.cs</code></td><td>Script file storage</td><td>None</td></tr>
+  <tr><td><code>Services/HostSessionManager.cs</code></td><td>Host session management</td><td>None</td></tr>
+  <tr><td><code>Services/FirmwareUpdateManager.cs</code></td><td>Board-aware firmware flashing (STM32 DFU + ESP serial)</td><td>Uses Dfu.cs + process launch (standard .NET)</td></tr>
+  <tr><td><code>Services/Agent/AgentApi.cs</code></td><td>Agent HTTP client — endpoint, key auth, conversation CRUD</td><td><code>System.Net.Http</code></td></tr>
+  <tr><td><code>Services/Agent/AgentApiKeyStore.cs</code></td><td>API key secure storage</td><td>None</td></tr>
+  <tr><td><code>Services/Agent/AgentChatStore.cs</code></td><td>SQLite chat history</td><td><code>Microsoft.Data.Sqlite</code></td></tr>
+  <tr><td><code>Scripting/ScriptEngine.cs</code></td><td>Jint JS runtime, host primitives, render pipeline</td><td><code>Jint</code> (NuGet)</td></tr>
+  <tr><td><code>Scripting/ScriptModel.cs</code></td><td>Script tree/node/props data classes</td><td>None</td></tr>
+  <tr><td><code>Scripting/ScriptSourceTranspiler.cs</code></td><td>JSX-like → JS transpiler</td><td>None</td></tr>
+  <tr><td><code>Scripting/PlotBufferStore.cs</code></td><td>Named plot buffer registry with live providers</td><td>None</td></tr>
+  <tr><td><code>Scripting/SimulatorCommandBridge.cs</code></td><td>Shared simulator (JSON fixtures → hardware command responses)</td><td>None</td></tr>
+  <tr><td><code>Scripting/TargetedScriptDeviceConnection.cs</code></td><td>Per-device script target binding</td><td>None</td></tr>
+  <tr><td><code>Interop/NativeBufferRust.cs</code></td><td>Managed buffer logic (no actual Rust dependency)</td><td>None</td></tr>
+  <tr><td>All <code>Models/*.cs</code></td><td>DevicePort, ScriptInfo, ScriptListSection, etc.</td><td>None</td></tr>
+  <tr><td>All <code>Models/ScriptSession*.cs</code></td><td>Script session types</td><td>None</td></tr>
+</table>
+
+<h3>3.2 Adapt (Minimal Changes) <span class="badge badge-adapt">~2%</span></h3>
+
+<table>
+  <tr><th>File</th><th>What Changes</th><th>Effort</th></tr>
+  <tr>
+    <td><code>Services/WindowsDeviceManager.cs</code></td>
+    <td>
+      <strong>Only WinUI dep:</strong> <code>Microsoft.UI.Dispatching.DispatcherQueue</code> used for <code>RunOnUi(Action)</code>.<br>
+      <strong>Fix:</strong> Replace with <code>System.Windows.Threading.Dispatcher</code>.<br>
+      <strong>Two callers:</strong> <code>AttachUiDispatcher(DispatcherQueue)</code> → <code>AttachUiDispatcher(Dispatcher)</code><br>
+      <strong>Internal:</strong> <code>RunOnUi</code> uses <code>Dispatcher.CheckAccess()</code> / <code>Dispatcher.Invoke()</code> — same pattern.
+    </td>
+    <td>~10 lines</td>
+  </tr>
+  <tr>
+    <td><code>EMWaver.csproj</code></td>
+    <td>
+      Remove WinUI packages and SDK props. Add WPF SDK reference.<br>
+      Remove <code>UseWinUI</code>, <code>WindowsAppSdkBootstrapInitialize</code>.<br>
+      Change <code>OutputType</code> from <code>WinExe</code> to <code>WinExe</code> (same value, but WPF uses it differently).<br>
+      Add <code>&lt;UseWPF&gt;true&lt;/UseWPF&gt;</code>.
+    </td>
+    <td>~20 lines</td>
+  </tr>
+  <tr>
+    <td><code>Services/AppServices.cs</code></td>
+    <td>
+      May need minor adjustments if it references WinUI-specific dispatcher setup. Likely just removing the dispatcher attachment calls since WPF handles this differently.
+    </td>
+    <td>~5 lines</td>
+  </tr>
+</table>
+
+<h3>3.3 Rebuild (WinUI Shell) <span class="badge badge-rebuild">~28%</span></h3>
+
+<table>
+  <tr><th>File(s)</th><th>WPF Replacement</th></tr>
+  <tr><td><code>App.xaml / App.xaml.cs</code></td><td>WPF <code>Application</code> — startup, theme loading, service init</td></tr>
+  <tr><td><code>Program.cs</code></td><td>WPF entry point — simpler, no WinUI bootstrap</td></tr>
+  <tr><td><code>MainWindow.xaml / .xaml.cs / .ScriptModes.cs</code></td><td>WPF <code>Window</code> — navigation frame, toolbar, device status bar</td></tr>
+  <tr><td><code>Pages/ScriptsPage.xaml / .xaml.cs</code></td><td>WPF <code>Page</code> — script list, code editor, preview pane, Agent panel</td></tr>
+  <tr><td><code>Pages/DevicePage.xaml / .xaml.cs</code></td><td>WPF <code>Page</code> — device info, firmware update, Wi-Fi setup</td></tr>
+  <tr><td><code>Pages/SettingsPage.xaml / .xaml.cs</code></td><td>WPF <code>Page</code> — theme toggle, Agent API key config</td></tr>
+  <tr><td><code>Dialogs/FirmwareUpdateDialog.xaml / .xaml.cs</code></td><td>WPF <code>Window</code> (modal) — STM32/ESP flash progress</td></tr>
+  <tr><td><code>Dialogs/AccountDialog.xaml / .xaml.cs</code></td><td>Likely removed (account-free direction) or replaced with Agent key dialog</td></tr>
+  <tr><td><code>Converters/*.cs</code></td><td>WPF <code>IValueConverter</code> — same pattern, different namespace</td></tr>
+  <tr><td><code>Services/ThemeResources.cs</code></td><td>WPF <code>ResourceDictionary</code> — light/dark theme switching</td></tr>
+</table>
+
+<h3>3.4 New Files <span class="badge" style="background:rgba(163,113,247,0.15);color:var(--purple)">~new</span></h3>
+
+<table>
+  <tr><th>File</th><th>Purpose</th></tr>
+  <tr><td><code>ViewModels/MainViewModel.cs</code></td><td>Main window state — device status, toolbar state, navigation</td></tr>
+  <tr><td><code>ViewModels/ScriptsViewModel.cs</code></td><td>Script list, selection, run state, Agent chat</td></tr>
+  <tr><td><code>ViewModels/DeviceViewModel.cs</code></td><td>Device info, firmware update state, Wi-Fi setup</td></tr>
+  <tr><td><code>ViewModels/SettingsViewModel.cs</code></td><td>Theme, Agent key, app settings</td></tr>
+  <tr><td><code>Themes/Light.xaml</code></td><td>Light theme resource dictionary</td></tr>
+  <tr><td><code>Themes/Dark.xaml</code></td><td>Dark theme resource dictionary</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>4. Adaptation Detail: WindowsDeviceManager.cs</h2>
+
+<p>This is the only file in the entire services layer that touches WinUI. The change is surgical:</p>
+
+<pre><code>// BEFORE (WinUI)
+using Microsoft.UI.Dispatching;
+// ...
+private DispatcherQueue? _ui;
+internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue) { _ui = dispatcherQueue; }
+private void RunOnUi(Action action)
+{
+    var ui = _ui;
+    if (ui == null) { action(); return; }
+    _ = ui.TryEnqueue(() => action());
+}
+
+// AFTER (WPF)
+using System.Windows.Threading;
+// ...
+private Dispatcher? _ui;
+internal void AttachUiDispatcher(Dispatcher dispatcher) { _ui = dispatcher; }
+private void RunOnUi(Action action)
+{
+    var ui = _ui;
+    if (ui == null) { action(); return; }
+    if (ui.CheckAccess()) { action(); }
+    else { ui.Invoke(action); }
+}</code></pre>
+
+<p>All other code in this 500+ line file — device enumeration, USB/BLE/Wi-Fi connect/disconnect,
+command/response protocol, DFU entry, Wi-Fi provisioning — is pure .NET + standard WinRT.
+None of it changes.</p>
+
+<!-- ============================================================ -->
+<h2>5. WPF Architecture</h2>
+
+<h3>5.1 Project Structure (after migration)</h3>
+<pre><code>windows/
+├── EMWaver.sln
+├── EMWaver/                          # WPF app project
+│   ├── EMWaver.csproj                # &lt;UseWPF&gt;true&lt;/UseWPF&gt;, net10.0-windows
+│   ├── App.xaml / App.xaml.cs        # Application entry, theme loading
+│   ├── MainWindow.xaml / .xaml.cs    # Shell: navigation frame, toolbar, device bar
+│   ├── Program.cs                    # WPF entry point
+│   ├── ViewModels/
+│   │   ├── MainViewModel.cs
+│   │   ├── ScriptsViewModel.cs
+│   │   ├── DeviceViewModel.cs
+│   │   └── SettingsViewModel.cs
+│   ├── Pages/
+│   │   ├── ScriptsPage.xaml / .xaml.cs
+│   │   ├── DevicePage.xaml / .xaml.cs
+│   │   └── SettingsPage.xaml / .xaml.cs
+│   ├── Dialogs/
+│   │   └── FirmwareUpdateDialog.xaml / .xaml.cs
+│   ├── Converters/                   # IValueConverter implementations
+│   ├── Themes/
+│   │   ├── Light.xaml
+│   │   └── Dark.xaml
+│   ├── Services/                     # ★ ALL KEPT AS-IS (except DeviceManager 3-line fix)
+│   │   ├── UsbMidiSysex.cs
+│   │   ├── Dfu.cs
+│   │   ├── WindowsUsbMidiTransport.cs
+│   │   ├── WindowsBleTransport.cs
+│   │   ├── WindowsWiFiTransport.cs
+│   │   ├── WindowsDeviceManager.cs   # ★ 3-line adaptation
+│   │   ├── DeviceBufferSession.cs
+│   │   ├── TransportDeviceConnectionState.cs
+│   │   ├── TransportDeviceSessionRegistry.cs
+│   │   ├── FirmwareUpdateManager.cs
+│   │   ├── AppSettings.cs
+│   │   ├── AppServices.cs
+│   │   ├── ScriptRepository.cs
+│   │   ├── HostSessionManager.cs
+│   │   ├── ActiveDeviceTarget.cs
+│   │   ├── DeviceTransport.cs
+│   │   ├── ITransportDeviceSession.cs
+│   │   ├── EnvBootstrap.cs
+│   │   └── Agent/
+│   │       ├── AgentApi.cs
+│   │       ├── AgentApiKeyStore.cs
+│   │       └── AgentChatStore.cs
+│   ├── Scripting/                    # ★ ALL KEPT AS-IS
+│   │   ├── ScriptEngine.cs
+│   │   ├── ScriptModel.cs
+│   │   ├── ScriptSourceTranspiler.cs
+│   │   ├── PlotBufferStore.cs
+│   │   ├── SimulatorCommandBridge.cs
+│   │   ├── TargetedScriptDeviceConnection.cs
+│   │   └── Render/
+│   │       ├── ScriptPlotControl.cs   # May need WPF adaptation
+│   │       ├── ScriptPropParsers.cs
+│   │       └── ScriptRenderer.cs      # May need WPF adaptation
+│   ├── Models/                       # ★ ALL KEPT AS-IS
+│   ├── Interop/
+│   │   └── NativeBufferRust.cs       # ★ KEPT AS-IS
+│   ├── Assets/
+│   │   ├── emwaver.ico
+│   │   ├── DefaultScripts/
+│   │   └── Firmware/
+│   └── Native/                       # Native DLLs
+└── EMWaver.Tests/                    # ★ MOSTLY KEPT (simulator tests unchanged)
+</code></pre>
+
+<h3>5.2 MVVM Pattern</h3>
+
+<p>WPF is MVVM-native. The existing code already uses <code>INotifyPropertyChanged</code> extensively
+in <code>WindowsDeviceManager</code> and <code>FirmwareUpdateManager</code>. WPF bindings consume this directly.</p>
+
+<table>
+  <tr><th>Layer</th><th>Existing</th><th>WPF Equivalent</th></tr>
+  <tr><td>Model</td><td>All <code>Models/*.cs</code>, service classes</td><td>Same — bound directly via <code>{Binding}</code></td></tr>
+  <tr><td>ViewModel</td><td><code>WindowsDeviceManager</code> already has <code>INotifyPropertyChanged</code></td><td>New <code>ViewModels/</code> wrap services for UI consumption</td></tr>
+  <tr><td>View</td><td>WinUI XAML pages, dialogs</td><td>WPF XAML pages, windows — same XAML language, different namespaces</td></tr>
+  <tr><td>Commands</td><td>Code-behind <code>Click</code> handlers</td><td><code>ICommand</code> (<code>RelayCommand</code>) bindings</td></tr>
+</table>
+
+<h3>5.3 Navigation</h3>
+
+<p>WPF uses the same <code>Frame</code> + <code>Page</code> model as WinUI. The existing navigation pattern
+(<code>ContentFrame.Navigate(typeof(ScriptsPage))</code>) maps directly to WPF.</p>
+
+<pre><code>// WPF Frame navigation — identical API to WinUI
+ContentFrame.Navigate(new Uri("Pages/ScriptsPage.xaml", UriKind.Relative));
+// or
+ContentFrame.Navigate(new ScriptsPage());
+
+// Back navigation
+if (ContentFrame.CanGoBack) ContentFrame.GoBack();
+</code></pre>
+
+<h3>5.4 Theming</h3>
+
+<p>WPF doesn't have WinUI's built-in <code>ElementTheme</code> system. We use <code>ResourceDictionary</code> swapping:</p>
+
+<pre><code>// App.xaml.cs
+public static void ApplyTheme(AppThemeMode theme)
+{
+    var dict = theme switch
+    {
+        AppThemeMode.Light => new ResourceDictionary { Source = new Uri("Themes/Light.xaml", UriKind.Relative) },
+        AppThemeMode.Dark  => new ResourceDictionary { Source = new Uri("Themes/Dark.xaml", UriKind.Relative) },
+        _ => null  // System: detect from Windows settings
+    };
+    if (dict != null)
+        Application.Current.Resources.MergedDictionaries.Add(dict);
+}</code></pre>
+
+<!-- ============================================================ -->
+<h2>6. Page-by-Page Rebuild Plan</h2>
+
+<h3>6.1 MainWindow <span class="badge badge-rebuild">rebuild</span></h3>
+<table>
+  <tr><th>Current WinUI Feature</th><th>WPF Implementation</th></tr>
+  <tr><td>Top bar: back button, device menu button, toolbar</td><td><code>ToolBar</code> + <code>Menu</code> in a <code>Grid</code> header row</td></tr>
+  <tr><td>Device flyout menu (connect, refresh, auto-connect, update mode)</td><td><code>ContextMenu</code> on a <code>Button</code></td></tr>
+  <tr><td>Frame-based page navigation</td><td>Same: <code>&lt;Frame x:Name="ContentFrame" /&gt;</code></td></tr>
+  <tr><td>Running script pulse indicator</td><td><code>DispatcherTimer</code> (WPF) instead of <code>DispatcherQueueTimer</code> (WinUI)</td></tr>
+  <tr><td>Wi-Fi connect dialog (inline TextBox)</td><td>WPF <code>Window</code> as modal dialog</td></tr>
+  <tr><td>Window icon</td><td>Set via <code>Window.Icon</code> property — simpler than WinUI's P/Invoke</td></tr>
+</table>
+
+<h3>6.2 ScriptsPage <span class="badge badge-rebuild">rebuild</span></h3>
+<table>
+  <tr><th>Feature</th><th>WPF Implementation</th></tr>
+  <tr><td>Script list (left panel)</td><td><code>ListBox</code> with <code>ItemTemplate</code>, bound to <code>ObservableCollection&lt;ScriptInfo&gt;</code></td></tr>
+  <tr><td>Code editor</td><td><code>TextBox</code> with <code>AcceptsReturn="True"</code> and monospace font. (Monaco/WebView2 was already removed.)</td></tr>
+  <tr><td>Preview pane (JSX render output)</td><td><code>ItemsControl</code> with a <code>DataTemplateSelector</code> for different node types</td></tr>
+  <tr><td>Agent chat panel</td><td><code>ListBox</code> for messages + <code>TextBox</code> for input, bound to <code>ScriptsViewModel</code></td></tr>
+  <tr><td>Mode toggle (Code / Preview)</td><td><code>ToggleButton</code> pair, bound to <code>bool IsPreviewMode</code></td></tr>
+  <tr><td>Error display</td><td><code>TextBlock</code> with red foreground, bound to <code>ViewModel.ErrorMessage</code></td></tr>
+  <tr><td>Script toolbar (new, save, copy, rename, delete)</td><td><code>ToolBar</code> or <code>Ribbon</code> with <code>ICommand</code> bindings</td></tr>
+</table>
+
+<h3>6.3 DevicePage <span class="badge badge-rebuild">rebuild</span></h3>
+<table>
+  <tr><th>Feature</th><th>WPF Implementation</th></tr>
+  <tr><td>Device info (type, version, status)</td><td><code>TextBlock</code> bound to <code>WindowsDeviceManager</code> properties</td></tr>
+  <tr><td>Firmware update button (board-aware)</td><td><code>Button</code> → opens <code>FirmwareUpdateDialog</code> modal</td></tr>
+  <tr><td>ESP bootloader detection</td><td>Bound to <code>FirmwareUpdateManager.EspBootloaderConnected</code></td></tr>
+  <tr><td>Wi-Fi provisioning (SSID, password, status)</td><td><code>TextBox</code> inputs + <code>Button</code> → calls <code>DeviceManager.ProvisionWiFiAsync()</code></td></tr>
+  <tr><td>Wi-Fi discovery list</td><td><code>ListBox</code> bound to <code>WiFiDiscoveredDevices</code></td></tr>
+  <tr><td>Activity logs</td><td><code>TextBox</code> (read-only, scrollable)</td></tr>
+</table>
+
+<h3>6.4 SettingsPage <span class="badge badge-rebuild">rebuild</span></h3>
+<table>
+  <tr><th>Feature</th><th>WPF Implementation</th></tr>
+  <tr><td>Theme toggle (System / Light / Dark)</td><td><code>ComboBox</code> bound to <code>AppSettings.Theme</code></td></tr>
+  <tr><td>Agent API key input</td><td><code>PasswordBox</code> + <code>Button</code> → calls <code>AgentApiKeyStore</code></td></tr>
+  <tr><td>About section (version, licenses)</td><td><code>TextBlock</code> + <code>Hyperlink</code></td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>7. Project File Changes</h2>
+
+<p>Primary changes to <code>EMWaver.csproj</code>:</p>
+
+<pre><code>&lt;Project Sdk="Microsoft.NET.Sdk"&gt;
+  &lt;PropertyGroup&gt;
+    &lt;OutputType&gt;WinExe&lt;/OutputType&gt;
+    &lt;TargetFramework&gt;net10.0-windows&lt;/TargetFramework&gt;
+    &lt;UseWPF&gt;true&lt;/UseWPF&gt;
+    &lt;!-- REMOVED: UseWinUI, WindowsAppSdkBootstrapInitialize, TargetPlatformMinVersion --&gt;
+    &lt;Platforms&gt;x64&lt;/Platforms&gt;
+    &lt;ApplicationIcon&gt;Assets\emwaver.ico&lt;/ApplicationIcon&gt;
+    &lt;Nullable&gt;enable&lt;/Nullable&gt;
+    &lt;ImplicitUsings&gt;enable&lt;/ImplicitUsings&gt;
+    &lt;PackageLicenseExpression&gt;Apache-2.0&lt;/PackageLicenseExpression&gt;
+  &lt;/PropertyGroup&gt;
+
+  &lt;ItemGroup&gt;
+    &lt;!-- REMOVED: Microsoft.WindowsAppSDK --&gt;
+    &lt;!-- KEPT: --&gt;
+    &lt;PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" /&gt;
+    &lt;PackageReference Include="Jint" Version="3.1.6" /&gt;
+    &lt;PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" /&gt;
+  &lt;/ItemGroup&gt;
+
+  &lt;!-- Content items (scripts, firmware, assets) — unchanged --&gt;
+&lt;/Project&gt;</code></pre>
+
+<p>Key NuGet changes:</p>
+<table>
+  <tr><th>Remove</th><th>Reason</th></tr>
+  <tr><td><code>Microsoft.WindowsAppSDK</code></td><td>WinUI framework — not needed in WPF</td></tr>
+  <tr><td><code>System.Security.Permissions</code></td><td>Was only needed for WinUI XAML compiler</td></tr>
+  <tr><th>Keep</th><th>Reason</th></tr>
+  <tr><td><code>Jint</code></td><td>JavaScript runtime — pure .NET, no WinUI dependency</td></tr>
+  <tr><td><code>Microsoft.Data.Sqlite</code></td><td>Agent chat storage — pure .NET</td></tr>
+  <tr><td><code>BouncyCastle.Cryptography</code></td><td>Ed25519 signature verification — pure .NET</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>8. Migration Steps</h2>
+
+<div class="step">
+  <span class="step-number">1</span>
+  <div class="step-content">
+    <strong>Tag and archive the WinUI project.</strong>
+    <code>git tag archive/windows-winui-pre-wpf</code><br>
+    This preserves the WinUI code in git history without cluttering the active branch.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">2</span>
+  <div class="step-content">
+    <strong>Scaffold the WPF project structure.</strong><br>
+    Create <code>EMWaver.csproj</code> with <code>&lt;UseWPF&gt;true&lt;/UseWPF&gt;</code>.<br>
+    Create <code>App.xaml</code>, <code>MainWindow.xaml</code>, <code>Program.cs</code> with minimal shell.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">3</span>
+  <div class="step-content">
+    <strong>Copy all kept files.</strong><br>
+    Copy the entire <code>Services/</code>, <code>Scripting/</code>, <code>Models/</code>, <code>Interop/</code> trees into the new project.<br>
+    These compile as-is — verify with <code>dotnet build</code>.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">4</span>
+  <div class="step-content">
+    <strong>Adapt WindowsDeviceManager.cs.</strong><br>
+    Swap <code>DispatcherQueue</code> for <code>System.Windows.Threading.Dispatcher</code>.<br>
+    Update <code>AttachUiDispatcher</code> signature and <code>RunOnUi</code> implementation.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">5</span>
+  <div class="step-content">
+    <strong>Build and verify compilation.</strong><br>
+    <code>dotnet build</code> — should succeed with all services and scripting intact.<br>
+    This confirms the services layer is clean.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">6</span>
+  <div class="step-content">
+    <strong>Build the ViewModels.</strong><br>
+    Create <code>MainViewModel</code>, <code>ScriptsViewModel</code>, <code>DeviceViewModel</code>, <code>SettingsViewModel</code>.<br>
+    These wrap the existing services and expose <code>INotifyPropertyChanged</code> properties + <code>ICommand</code> commands.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">7</span>
+  <div class="step-content">
+    <strong>Rebuild the pages (one at a time).</strong><br>
+    Start with <code>SettingsPage</code> (simplest — just theme + key).<br>
+    Then <code>DevicePage</code> (display-only, no heavy interaction).<br>
+    Then <code>ScriptsPage</code> (most complex — editor, preview, Agent chat).<br>
+    Then <code>MainWindow</code> (shell — ties everything together).
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">8</span>
+  <div class="step-content">
+    <strong>Rebuild the dialogs.</strong><br>
+    <code>FirmwareUpdateDialog</code> as a WPF modal <code>Window</code>.<br>
+    Wi-Fi connect as a simple modal dialog.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">9</span>
+  <div class="step-content">
+    <strong>Add theming.</strong><br>
+    Create <code>Light.xaml</code> and <code>Dark.xaml</code> resource dictionaries with color/solid brushes.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">10</span>
+  <div class="step-content">
+    <strong>Adapt the test project.</strong><br>
+    The simulator-backed tests (<code>SimulatorScriptEngineTests</code>) use <code>ScriptEngine</code> + <code>SimulatorCommandBridge</code> directly — no WinUI dependency.<br>
+    These should pass unchanged. Only UI-specific tests need attention.
+  </div>
+</div>
+
+<div class="step">
+  <span class="step-number">11</span>
+  <div class="step-content">
+    <strong>Update documentation.</strong><br>
+    Update <code>windows/README.md</code> to reflect WPF architecture.<br>
+    Update <code>docs/PLANNING.md</code> to note Windows is now WPF, no longer deferred.<br>
+    Update <code>AGENTS.md</code> Windows section.<br>
+    Update the Windows skill (<code>.agents/skills/emwaver-windows/SKILL.md</code>).<br>
+    Update parity docs if they reference WinUI.
+  </div>
+</div>
+
+<!-- ============================================================ -->
+<h2>9. Test Project Impact</h2>
+
+<table>
+  <tr><th>Test File</th><th>Status</th><th>Notes</th></tr>
+  <tr><td><code>SimulatorScriptEngineTests.cs</code></td><td class="keep">Keep</td><td>Uses <code>ScriptEngine</code> + <code>SimulatorCommandBridge</code>. Zero UI dependency.</td></tr>
+  <tr><td><code>ScriptSourceTranspilerTests.cs</code></td><td class="keep">Keep</td><td>Pure C# transpiler test.</td></tr>
+  <tr><td><code>ScriptSessionRegistryTests.cs</code></td><td class="keep">Keep</td><td>Pure C# session logic.</td></tr>
+  <tr><td><code>DeviceBufferSessionTests.cs</code></td><td class="keep">Keep</td><td>Pure C# buffer logic.</td></tr>
+  <tr><td><code>TransportDeviceConnectionStateTests.cs</code></td><td class="keep">Keep</td><td>Pure C# state machine.</td></tr>
+  <tr><td><code>TransportDeviceSessionRegistryTests.cs</code></td><td class="keep">Keep</td><td>Pure C# registry.</td></tr>
+  <tr><td><code>ActiveDeviceTargetTests.cs</code></td><td class="keep">Keep</td><td>Pure C# target selection.</td></tr>
+  <tr><td><code>TargetedScriptDeviceConnectionTests.cs</code></td><td class="keep">Keep</td><td>Pure C# connection targeting.</td></tr>
+  <tr><td><code>WindowsBleTransportTests.cs</code></td><td class="adapt">Adapt</td><td>May reference WinUI BLE types — verify</td></tr>
+  <tr><td><code>WindowsWiFiTransportTests.cs</code></td><td class="adapt">Adapt</td><td>May reference WinUI-specific mDNS types — verify</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>10. Risk Assessment</h2>
+
+<table>
+  <tr><th>Risk</th><th>Severity</th><th>Mitigation</th></tr>
+  <tr>
+    <td>ScriptRenderer / ScriptPlotControl may have hidden WinUI deps</td>
+    <td class="adapt">Medium</td>
+    <td>These render JSX trees into UI elements. The tree model is framework-agnostic but the rendering uses framework controls. WPF equivalents exist (<code>ItemsControl</code>, <code>DataTemplate</code>). Adaptation needed but pattern is the same.</td>
+  </tr>
+  <tr>
+    <td>ESP helper process launch may need adjustment</td>
+    <td class="adapt">Low</td>
+    <td><code>System.Diagnostics.Process</code> is the same in both. Paths to bundled binaries don't change.</td>
+  </tr>
+  <tr>
+    <td>SQLite path resolution</td>
+    <td class="keep">None</td>
+    <td><code>%LOCALAPPDATA%/EMWaver/agent-chat.sqlite</code> is resolved the same way.</td>
+  </tr>
+  <tr>
+    <td>P/Invoke signatures (window icon)</td>
+    <td class="keep">None</td>
+    <td>WPF's <code>Window.Icon</code> property replaces the manual P/Invoke approach. Simpler, not harder.</td>
+  </tr>
+  <tr>
+    <td>BLE/Wi-Fi WinRT APIs</td>
+    <td class="keep">None</td>
+    <td><code>Windows.Devices.Bluetooth</code> and <code>System.Net.WebSockets</code> are standard WinRT/.NET APIs. They work identically in WPF.</td>
+  </tr>
+  <tr>
+    <td>Can't validate on this machine</td>
+    <td class="adapt">Medium</td>
+    <td>Still requires a Windows 11 workstation. But WPF edits will be more correct on first try due to model familiarity and framework stability. Less iteration needed.</td>
+  </tr>
+</table>
+
+<!-- ============================================================ -->
+<h2>11. What We Gain</h2>
+
+<table>
+  <tr><th>Before (WinUI 3)</th><th>After (WPF)</th></tr>
+  <tr><td>Models are bad at the framework</td><td>Models are excellent at WPF</td></tr>
+  <tr><td>SDK churn breaks builds</td><td>Stable framework, no surprises</td></tr>
+  <tr><td>Sparse docs and community</td><td>20 years of Stack Overflow, GitHub, docs</td></tr>
+  <tr><td>WinRT layers for basic things</td><td>Direct .NET APIs for file I/O, processes, UI</td></tr>
+  <tr><td>Unknown framework bugs</td><td>Known, documented, workaroundable</td></tr>
+  <tr><td>Blind commits to untestable code</td><td>Still blind, but much higher first-try correctness</td></tr>
+  <tr><td>Dead framework (Microsoft pivoting away)</td><td>Active, supported, shipped in .NET 10</td></tr>
+</table>
+
+</body>
+</html>
