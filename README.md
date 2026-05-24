@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  <strong>Local-first, open-source electronics scripting by Continual MI.</strong>
+  <strong>Zero-compile electronics scripting for phones, desktops, and supported MCU boards.</strong>
 </p>
 
 <p align="center">
@@ -22,57 +22,85 @@
   <img src="https://continualmi.com/emwaver/banner.jpeg" alt="EMWaver running across phone, desktop, and supported boards" width="860">
 </p>
 
-EMWaver turns supported MCU boards into a scriptable hardware lab. It is built around local apps, local JavaScript scripts, managed firmware, and an optional Agent workflow for writing and debugging hardware scripts.
+EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
 
-The core hardware-control path is open and local-first: no EMWaver account, no cloud activation, no hosted relay, no subscription check, and no cloud script storage requirement.
+The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through local transports such as USB, BLE, and Wi-Fi.
 
-## What EMWaver Is
+> Status: EMWaver is in an early open-source platform release. The architecture is working across the native apps, while packaging, documentation, supported-board coverage, and installer polish are still improving.
 
-- A script-first electronics platform for running local JavaScript scripts against real hardware.
-- A managed multi-transport runtime where USB is first-class, with BLE and Wi-Fi available for board classes designed around them.
-- Native client surfaces for Android, iOS, macOS, and Windows.
-- A software-first platform where users bring a supported board and EMWaver manages the runtime and firmware setup where practical.
-- A Continual MI project with optional paid Agent API usage as the business model, not paid local hardware access.
+## Why EMWaver
 
-## What EMWaver Is Not
+Embedded development often means setting up toolchains, compiling firmware, flashing boards, and repeating that loop for every small hardware experiment. EMWaver moves the iteration loop into local scripts:
 
-- Not a cloud-gated hardware platform.
-- Not an account-required local runtime.
-- Not a hosted remote-control relay for open-source core use.
-- Not a workflow that expects end users to build and flash firmware manually for normal operation.
-- Not dependent on EMWaver hardware sales. Third-party supported boards are first-class.
+```js
+// Example direction: script against a connected device immediately.
+const id = await spi.transfer([0x80 | 0x30, 0x00]);
+console.log("device id", id);
+```
+
+Use EMWaver when you want to:
+
+- explore sensors, radios, GPIO, SPI, I2C, ADC, and board peripherals quickly;
+- run repeatable hardware scripts from a phone, tablet, or desktop;
+- keep hardware control local instead of depending on a hosted relay;
+- use native apps instead of asking every user to install an MCU toolchain;
+- bring AI assistance into hardware scripting while keeping the local runtime useful on its own.
+
+## What Works Today
+
+EMWaver currently includes native app work for:
+
+- Android
+- iOS / iPadOS
+- macOS
+- Windows
+- Linux, in progress
+
+The platform is designed around:
+
+- local JavaScript scripts (`.js`);
+- managed board firmware;
+- USB as a first-class transport;
+- BLE and Wi-Fi for board classes that support them;
+- STM32 and ESP32-family firmware targets;
+- shared example scripts under [`assets/default-scripts/`](assets/default-scripts/).
+
+A current cross-platform validation path is `cc1101.js`, which exercises register-level reads and writes against a CC1101 radio through supported hardware.
 
 ## Repository Map
 
 ```text
 android/                 Android app
-apple/                   Shared Swift package used by iOS and macOS
 ios/                     iPhone and iPad app
 macos/                   macOS app
 windows/                 Windows 11 app
+linux/                   Linux app port, in progress
+apple/                   Shared Swift package used by iOS and macOS
 stm/                     STM32 firmware workspace
 esp/                     ESP32 firmware workspace
 firmware/                Bundled firmware payloads consumed by apps
-hardware/                Imported hardware design repositories
 assets/default-scripts/  Bundled example .js scripts and emw-* libraries
-simulator/               Mock and virtual transport direction
+simulator/               Shared simulator and protocol fixtures
+hardware/                Imported hardware design repositories
+crates/                  Rust firmware/update helper crates
+tools/                   Build and firmware support tooling
 videos/                  Video planning and launch media notes
+web/                     Static website sources and exports
 ```
-
-Public website pages and static EMWaver media live in the sibling Continual MI site repository under `../society/app/emwaver` and `../society/public/emwaver`.
 
 ## Getting Started
 
-For end users:
+For users:
 
 1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
-2. Install the app for your platform from the [install page](https://continualmi.com/emwaver/install) or use the direct preview downloads:
+2. Install an app from the [install page](https://continualmi.com/emwaver/install), or use a preview download when available:
    - [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
    - [macOS DMG](https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg)
    - [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
-3. Open the [documentation](https://continualmi.com/emwaver/docs) and run local scripts.
+3. Connect a supported board.
+4. Open or write a JavaScript hardware script and run it locally.
 
-App Store, Google Play, and Microsoft Store listings are coming soon.
+App Store, Google Play, and Microsoft Store listings are planned.
 
 For local development:
 
@@ -81,53 +109,61 @@ git clone https://github.com/continualmi/emwaver.git
 cd emwaver
 ```
 
-Then use the README for the subsystem you are changing:
+Then read the README closest to the subsystem you are changing:
 
-- [android/README.md](android/README.md), [ios/README.md](ios/README.md), [macos/README.md](macos/README.md), or [windows/README.md](windows/README.md) for app-specific work.
-- [stm/README.md](stm/README.md) and [esp/README.md](esp/README.md) for firmware work.
-- [hardware/README.md](hardware/README.md) for imported hardware repositories.
+- [android/README.md](android/README.md)
+- [ios/README.md](ios/README.md)
+- [macos/README.md](macos/README.md)
+- [windows/README.md](windows/README.md)
+- [stm/README.md](stm/README.md)
+- [esp/README.md](esp/README.md)
+- [hardware/README.md](hardware/README.md)
 
-## Local-First Runtime
+## Local-First Design
 
-The target local flow is:
+EMWaver's normal hardware-control path is:
 
 ```text
 native app
-  -> local runtime
+  -> local script runtime
   -> local transport
   -> supported board firmware
+  -> electronics
 ```
 
-## Agent Direction
+Core hardware control is designed to work without cloud activation, hosted device ownership checks, cloud script storage, or an account-required runtime.
 
-EMWaver's Agent is optional. It should help users write, explain, debug, and improve local JavaScript scripts using local script/device/UI/error context when the user chooses to ask for help.
+Remote access, when needed, should be user-owned: local network, SSH, VPN, Tailscale, or similar tools around the local app/runtime.
 
-Agent usage is the planned paid product direction through a future Continual MI/MGPT backend API key. Local hardware control must continue to work without that key.
+## Agent Assistance
 
-Agent clients must use the public Agent API surface, such as `/api/mgpt/...` on the configured host. MDL-only `/backend-api/...` routes are not an EMWaver client contract.
+EMWaver is built to work well with an optional Agent that can help write, explain, debug, and improve hardware scripts. The local scripting and hardware-control path remains useful without Agent assistance.
 
-Production Agent prompts, hidden board recipes, provider routing, and metering policy do not belong in this open-source repository.
+Agent features may use an API key and network access when enabled by the user. Scripts and device control remain local by default.
 
-## Release Trackers
+## Documentation
 
-- [REBIRTH.md](docs/REBIRTH.md) captures the local-first open-source product pivot.
-- [LAUNCH_MVP.md](docs/LAUNCH_MVP.md) defines the minimum launch checklist.
-- [REBIRTH_ISSUES.md](docs/REBIRTH_ISSUES.md) tracks the durable rebirth backlog.
-- [REBIRTH_AUDIT.md](docs/REBIRTH_AUDIT.md) audits completion and remaining gaps.
-- [TESTS_REBIRTH.md](docs/TESTS_REBIRTH.md) tracks validation.
-- [UI_SNAPSHOT_RUNTIME_MIGRATION.md](docs/UI_SNAPSHOT_RUNTIME_MIGRATION.md) controls the removal of script-visible logging in favor of UI snapshots/events.
-- [ESP32_WIFI_TRANSPORT_AUDIT.md](docs/ESP32_WIFI_TRANSPORT_AUDIT.md) audits implementation evidence and remaining hardware gates for the ESP32 Wi-Fi transport plan.
-- [ESP32_WIFI_REMOTE_ACCESS.md](docs/ESP32_WIFI_REMOTE_ACCESS.md) documents user-owned LAN/VPN access for ESP32 Wi-Fi transport.
-- [AGENT_API.md](docs/AGENT_API.md) defines the optional paid Agent API boundary.
-- [AGENT_RUNTIME_AND_TOOLS.html](docs/AGENT_RUNTIME_AND_TOOLS.html) visually documents the Agent's script-authoring and hardware-tool workflow.
-- [CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html](docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html) plans the iOS, Android, macOS, and Windows migration to one Agent/UI/script experience with `.js` and `.jsx` authoring.
-- [AGENTS.md](AGENTS.md) is the repository-wide source of truth for product vision, platform constraints, and contribution guardrails.
+Start here:
+
+- [docs/CURRENT.md](docs/CURRENT.md) — current repository orientation
+- [docs/TESTS.md](docs/TESTS.md) — active hardware validation notes
+- [docs/SIMULATOR.md](docs/SIMULATOR.md) — simulator direction
+- [docs/AGENT_API.md](docs/AGENT_API.md) — optional Agent API boundary
+- [docs/ESP32_WIFI_TRANSPORT_PLAN.md](docs/ESP32_WIFI_TRANSPORT_PLAN.md) — ESP32 Wi-Fi transport plan
+- [docs/parity/](docs/parity/) — cross-platform parity contracts
+- [AGENTS.md](AGENTS.md) — repository-wide contributor guidance
 
 ## Contributing
 
-Keep changes focused and local-first. When behavior changes, update the relevant folder README in the same change. Do not add account gates, cloud activation, hosted relay dependency, subscription checks, device ownership checks, cloud script sync, or backend policy to core local hardware access.
+EMWaver is open source and local-first. Contributions should preserve these principles:
 
-Before opening work, read [AGENTS.md](AGENTS.md) and the README closest to the subsystem you are touching.
+- local scripts should run without account sign-in;
+- local hardware access should not require cloud activation or subscription checks;
+- scripts should stay local by default;
+- normal users should not need to build or flash firmware manually for everyday scripting;
+- behavior changes should update the relevant README or documentation file.
+
+Before larger changes, read [AGENTS.md](AGENTS.md) and the README for the subsystem you are touching.
 
 ## License
 
