@@ -1,10 +1,25 @@
 use crate::{FirmwareError, FirmwareImage, FirmwarePlan, FirmwareResult, FirmwareTarget};
 use emwaver_dfu::{DfuDevice, DfuOpenOptions, DEFAULT_USB_PRODUCT_ID, DEFAULT_USB_VENDOR_ID};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
-pub const BUNDLED_STM32_FIRMWARE_PATH: &str =
+pub const REPO_STM32_FIRMWARE_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/../../../firmware/emwaver.bin");
+pub const SYSTEM_STM32_FIRMWARE_PATH: &str = "/usr/share/emwaver/firmware/emwaver.bin";
+
+pub fn bundled_stm32_firmware_path() -> PathBuf {
+    if let Ok(dir) = std::env::var("EMWAVER_FIRMWARE_DIR") {
+        let path = PathBuf::from(dir).join("emwaver.bin");
+        if path.is_file() {
+            return path;
+        }
+    }
+    let system_path = PathBuf::from(SYSTEM_STM32_FIRMWARE_PATH);
+    if system_path.is_file() {
+        return system_path;
+    }
+    PathBuf::from(REPO_STM32_FIRMWARE_PATH)
+}
 
 pub fn plan_stm32_dfu(image_path: impl AsRef<Path>) -> FirmwareResult<FirmwarePlan> {
     let path = image_path.as_ref();
@@ -23,7 +38,7 @@ pub fn plan_stm32_dfu(image_path: impl AsRef<Path>) -> FirmwareResult<FirmwarePl
 }
 
 pub fn plan_bundled_stm32_dfu() -> FirmwareResult<FirmwarePlan> {
-    plan_stm32_dfu(BUNDLED_STM32_FIRMWARE_PATH)
+    plan_stm32_dfu(bundled_stm32_firmware_path())
 }
 
 pub fn is_stm32_dfu_connected() -> FirmwareResult<bool> {

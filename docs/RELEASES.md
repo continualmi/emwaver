@@ -16,8 +16,10 @@ Expected preview assets:
 - `EMWaver-macos.dmg` — macOS preview DMG
 - `EMWaverSetup-windows-x64.exe` — Windows installer
 - `EMWaver-windows-x64.zip` — Windows portable package
+- `EMWaver-linux-amd64.deb` — Linux Debian/Ubuntu preview package, published only when Linux packaging is ready for preview
+- `EMWaver-linux-x64.tar.gz` — Linux generic tarball, published only when Linux packaging is ready for preview
 
-Linux is intentionally omitted from the public install buttons until the native GTK4/libadwaita app is ready.
+Linux remains omitted from the public install buttons until the native GTK4/libadwaita app is ready for users.
 
 ## Workflows to run before opening the repo
 
@@ -27,6 +29,8 @@ Run these from the GitHub Actions UI or with `gh workflow run ...`:
 gh workflow run android-apk-release.yml -f tag=emwaver-preview
 gh workflow run macos-dmg-release.yml -f tag=emwaver-preview
 gh workflow run windows-exe-release.yml -f tag=emwaver-preview
+# Optional once Linux is ready for preview:
+gh workflow run linux-release.yml -f tag=emwaver-preview -f version=0.1.0-preview
 ```
 
 Then verify assets:
@@ -59,6 +63,17 @@ Use `.github/workflows/ios-testflight-release.yml` for TestFlight and `.github/w
 ## macOS
 
 `.github/workflows/macos-dmg-release.yml` builds and publishes `EMWaver-macos.dmg`. Treat this as the preview desktop artifact unless/until Developer ID signing and notarization are added.
+
+## Linux
+
+`.github/workflows/linux-release.yml` builds the native Rust + GTK4/libadwaita app on Ubuntu, runs Linux support-crate tests, and publishes:
+
+- `EMWaver-linux-amd64.deb`
+- `EMWaver-linux-x64.tar.gz`
+
+The packages install the app binary, desktop entry, AppStream metadata, hicolor icon, default scripts, STM32 firmware payload, ESP helper source when available, and udev rules. ESP32 firmware images are included only when the ESP build outputs are present.
+
+Linux release packages are preview artifacts for now; keep Linux off public install buttons until app-level validation is complete.
 
 ## Windows
 

@@ -324,6 +324,11 @@ fn default_bundled_dir() -> PathBuf {
         return PathBuf::from(path);
     }
 
+    let system_dir = PathBuf::from("/usr/share/emwaver/default-scripts");
+    if system_dir.is_dir() {
+        return system_dir;
+    }
+
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     manifest_dir
         .ancestors()

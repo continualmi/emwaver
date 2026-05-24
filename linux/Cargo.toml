@@ -12,7 +12,7 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "Apache-2.0"
-repository = "https://github.com/continual-mi/emwaver"
+repository = "https://github.com/continualmi/emwaver"
 
 [workspace.dependencies]
 anyhow = "1.0"

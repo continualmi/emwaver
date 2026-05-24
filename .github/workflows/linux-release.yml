@@ -1,0 +1,81 @@
+name: Linux Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to publish assets to"
+        required: true
+        default: "emwaver-preview"
+      version:
+        description: "Package version"
+        required: false
+        default: "0.1.0-preview"
+        type: string
+  push:
+    tags:
+      - "emwaver-v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            pkg-config \
+            libgtk-4-dev \
+            libadwaita-1-dev \
+            libgtksourceview-5-dev \
+            libgraphene-1.0-dev \
+            libdbus-1-dev \
+            desktop-file-utils \
+            appstream \
+            dpkg-dev
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: linux -> target
+
+      - name: Test Linux support crates
+        run: cargo test --manifest-path linux/Cargo.toml --workspace --exclude emwaver-linux-app
+
+      - name: Build Linux app
+        run: cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
+
+      - name: Package Linux app
+        env:
+          EMWAVER_LINUX_VERSION: ${{ inputs.version || '0.1.0-preview' }}
+        run: linux/scripts/package-linux.sh
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: EMWaver-linux-packages
+          path: |
+            dist/EMWaver-linux-x64.tar.gz
+            dist/EMWaver-linux-amd64.deb
+
+      - name: Publish release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          prerelease: true
+          files: |
+            dist/EMWaver-linux-x64.tar.gz
+            dist/EMWaver-linux-amd64.deb

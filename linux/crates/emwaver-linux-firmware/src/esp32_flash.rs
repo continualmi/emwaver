@@ -1,5 +1,5 @@
 use crate::{FirmwareError, FirmwareImage, FirmwarePlan, FirmwareResult, FirmwareTarget};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 pub const ESP_HELPER_DIST_PATH: &str = concat!(
@@ -10,20 +10,21 @@ pub const ESP_HELPER_SOURCE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../tools/emwaver-esp-helper/emwaver_esp_helper.py"
 );
+pub const SYSTEM_ESP_HELPER_SOURCE_PATH: &str = "/usr/share/emwaver/tools/emwaver_esp_helper.py";
 
-pub const BUNDLED_ESP32S3_BOOTLOADER_PATH: &str = concat!(
+pub const REPO_ESP32S3_BOOTLOADER_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../esp/build/bootloader/bootloader.bin"
 );
-pub const BUNDLED_ESP32S3_PARTITION_TABLE_PATH: &str = concat!(
+pub const REPO_ESP32S3_PARTITION_TABLE_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../esp/build/partition_table/partition-table.bin"
 );
-pub const BUNDLED_ESP32S3_OTA_DATA_PATH: &str = concat!(
+pub const REPO_ESP32S3_OTA_DATA_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../esp/build/ota_data_initial.bin"
 );
-pub const BUNDLED_ESP32S3_APP_PATH: &str = concat!(
+pub const REPO_ESP32S3_APP_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/../../../esp/build/emwaveresp.bin"
 );
@@ -33,6 +34,20 @@ pub const ESP32S3_PARTITION_TABLE_OFFSET: u32 = 0x8000;
 pub const ESP32S3_OTA_DATA_OFFSET: u32 = 0x10000;
 pub const ESP32S3_APP_OFFSET: u32 = 0x20000;
 pub const ESP32_FLASH_BAUD: u32 = 115200;
+
+fn bundled_esp32s3_image_path(file_name: &str, repo_path: &str) -> PathBuf {
+    if let Ok(dir) = std::env::var("EMWAVER_FIRMWARE_DIR") {
+        let path = PathBuf::from(dir).join("esp32s3").join(file_name);
+        if path.is_file() {
+            return path;
+        }
+    }
+    let system_path = PathBuf::from("/usr/share/emwaver/firmware/esp32s3").join(file_name);
+    if system_path.is_file() {
+        return system_path;
+    }
+    PathBuf::from(repo_path)
+}
 
 pub fn plan_esp32_serial(images: Vec<(String, u32)>) -> FirmwarePlan {
     FirmwarePlan {
@@ -52,19 +67,26 @@ pub fn plan_esp32_serial(images: Vec<(String, u32)>) -> FirmwarePlan {
 pub fn plan_bundled_esp32s3_serial() -> FirmwareResult<FirmwarePlan> {
     let images = vec![
         (
-            BUNDLED_ESP32S3_BOOTLOADER_PATH.to_string(),
+            bundled_esp32s3_image_path("bootloader.bin", REPO_ESP32S3_BOOTLOADER_PATH),
             ESP32S3_BOOTLOADER_OFFSET,
         ),
         (
-            BUNDLED_ESP32S3_PARTITION_TABLE_PATH.to_string(),
+            bundled_esp32s3_image_path("partition-table.bin", REPO_ESP32S3_PARTITION_TABLE_PATH),
             ESP32S3_PARTITION_TABLE_OFFSET,
         ),
         (
-            BUNDLED_ESP32S3_OTA_DATA_PATH.to_string(),
+            bundled_esp32s3_image_path("ota_data_initial.bin", REPO_ESP32S3_OTA_DATA_PATH),
             ESP32S3_OTA_DATA_OFFSET,
         ),
-        (BUNDLED_ESP32S3_APP_PATH.to_string(), ESP32S3_APP_OFFSET),
+        (
+            bundled_esp32s3_image_path("emwaveresp.bin", REPO_ESP32S3_APP_PATH),
+            ESP32S3_APP_OFFSET,
+        ),
     ];
+    let images = images
+        .into_iter()
+        .map(|(path, offset)| (path.display().to_string(), offset))
+        .collect::<Vec<_>>();
     for (path, _) in &images {
         if !Path::new(path).exists() {
             return Err(FirmwareError::MissingImage(path.clone()));
@@ -281,20 +303,37 @@ struct HelperOutput {
 }
 
 fn resolve_helper_command() -> FirmwareResult<HelperCommand> {
+    if let Ok(path) = std::env::var("EMWAVER_ESP_HELPER_PATH") {
+        if Path::new(&path).is_file() {
+            return Ok(HelperCommand {
+                program: path,
+                leading_args: Vec::new(),
+            });
+        }
+    }
     if Path::new(ESP_HELPER_DIST_PATH).is_file() {
         return Ok(HelperCommand {
             program: ESP_HELPER_DIST_PATH.to_string(),
             leading_args: Vec::new(),
         });
     }
-    if Path::new(ESP_HELPER_SOURCE_PATH).is_file() {
-        return Ok(HelperCommand {
-            program: "python3".to_string(),
-            leading_args: vec![ESP_HELPER_SOURCE_PATH.to_string()],
-        });
+
+    let source_candidates = [
+        std::env::var("EMWAVER_ESP_HELPER_SOURCE").ok(),
+        Some(SYSTEM_ESP_HELPER_SOURCE_PATH.to_string()),
+        Some(ESP_HELPER_SOURCE_PATH.to_string()),
+    ];
+    for candidate in source_candidates.into_iter().flatten() {
+        if Path::new(&candidate).is_file() {
+            return Ok(HelperCommand {
+                program: "python3".to_string(),
+                leading_args: vec![candidate],
+            });
+        }
     }
+
     Err(FirmwareError::MissingHelper(format!(
-        "Expected frozen helper at {ESP_HELPER_DIST_PATH} or source helper at {ESP_HELPER_SOURCE_PATH}."
+        "Expected frozen helper at {ESP_HELPER_DIST_PATH}, source helper at {ESP_HELPER_SOURCE_PATH}, or packaged helper at {SYSTEM_ESP_HELPER_SOURCE_PATH}."
     )))
 }
 

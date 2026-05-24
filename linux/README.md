@@ -84,6 +84,19 @@ The first native slice is M0/M1:
 
 Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, JSX/script-tree capture, initial GTK script-tree rendering, and first script UI action invocation path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
+## Packaging
+
+Linux preview packaging is owned by `.github/workflows/linux-release.yml` and `linux/scripts/package-linux.sh`.
+
+The packaging path currently produces:
+
+- `EMWaver-linux-amd64.deb` for Debian/Ubuntu-style systems;
+- `EMWaver-linux-x64.tar.gz` as a generic staged `/usr` tree.
+
+Packages install the GTK app binary, desktop entry, AppStream metadata, hicolor icon, default scripts, STM32 firmware payload, optional ESP helper source, and udev rules. The launcher sets `EMWAVER_DEFAULT_SCRIPTS_DIR`, `EMWAVER_FIRMWARE_DIR`, and `EMWAVER_ESP_HELPER_SOURCE` so packaged builds do not depend on a source checkout.
+
+Linux remains a preview channel until hardware validation and installer UX are complete.
+
 ## Build and validation
 
 Core crates can be validated on any Rust host:
@@ -97,6 +110,13 @@ The GTK app requires Linux development packages for GTK4, libadwaita, and GtkSou
 ```sh
 sudo apt install libgtk-4-dev libadwaita-1-dev libgtksourceview-5-dev libgraphene-1.0-dev pkg-config
 cargo run --manifest-path linux/Cargo.toml -p emwaver-linux-app
+```
+
+Build release packages locally on Linux after building the app:
+
+```sh
+cargo build --manifest-path linux/Cargo.toml --release -p emwaver-linux-app
+EMWAVER_LINUX_VERSION=0.1.0-preview linux/scripts/package-linux.sh
 ```
 
 Do not add a localhost daemon or browser relay to make the app run. Hardware transports belong in-process behind `emwaver-linux-transport`.
