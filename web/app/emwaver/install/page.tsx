@@ -12,6 +12,8 @@ type InstallAction = {
   badgeAlt?: string;
   note?: string;
   muted?: boolean;
+  fileExt?: string;
+  detail?: string;
 };
 
 type PlatformCard = {
@@ -20,6 +22,8 @@ type PlatformCard = {
   icon: string;
   accent: "aqua" | "sky";
   description: string;
+  badge?: string;
+  badgeAlt?: string;
   actions: InstallAction[];
 };
 
@@ -74,12 +78,14 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
     icon: "Mac",
     accent: "sky",
     description: "Desktop build for firmware flashing, multi-device bench testing, and long automation runs.",
+    badge: "/emwaver/badges/macos.png",
+    badgeAlt: "Available for Mac",
     actions: [
       {
-        label: "Download DMG",
+        label: "Download macOS app",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
-        badge: "/emwaver/badges/macos.png",
-        badgeAlt: "Download for Mac",
+        fileExt: "DMG",
+        detail: "Disk image installer",
       },
     ],
   },
@@ -89,16 +95,20 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
     icon: "Win",
     accent: "sky",
     description: "Windows preview build for testing local EMWaver workflows on Windows 11.",
+    badge: "/emwaver/badges/windows.png",
+    badgeAlt: "Available for Windows",
     actions: [
       {
-        label: "Download EXE installer",
+        label: "Download installer",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
-        badge: "/emwaver/badges/windows.png",
-        badgeAlt: "Available for Windows",
+        fileExt: "EXE",
+        detail: "Recommended Windows installer",
       },
       {
-        label: "Download ZIP",
+        label: "Download portable package",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
+        fileExt: "ZIP",
+        detail: "Portable build archive",
       },
     ],
   },
@@ -116,6 +126,15 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
     ],
   },
 ];
+
+function DownloadIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3v11m0 0 4-4m-4 4-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 function ActionButton({ action }: { action: InstallAction }) {
   if (action.badge) {
@@ -146,23 +165,44 @@ function ActionButton({ action }: { action: InstallAction }) {
   }
 
   const className = [
-    "inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-semibold no-underline transition",
+    action.fileExt
+      ? "group inline-flex min-h-16 min-w-[220px] items-center gap-3 rounded-2xl border px-4 py-3 text-left no-underline transition"
+      : "inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-semibold no-underline transition",
     action.muted || !action.href
       ? "cursor-not-allowed border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink-dim)] opacity-70"
       : "border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]",
   ].join(" ");
 
+  const content = action.fileExt ? (
+    <>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color:var(--sky-tint-2)] text-[color:var(--sky)] transition group-hover:bg-[color:var(--sky-tint)]">
+        <DownloadIcon />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+          <span>{action.label}</span>
+          <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[color:var(--sky)]">
+            .{action.fileExt}
+          </span>
+        </div>
+        {action.detail ? <div className="mt-1 text-xs leading-5 text-[color:var(--ink-dim)]">{action.detail}</div> : null}
+      </div>
+    </>
+  ) : (
+    action.label
+  );
+
   if (!action.href) {
     return (
       <div className={className} aria-disabled="true">
-        {action.label}
+        {content}
       </div>
     );
   }
 
   return (
     <a href={action.href} className={className} target="_blank" rel="noreferrer">
-      {action.label}
+      {content}
     </a>
   );
 }
@@ -185,6 +225,15 @@ function PlatformCardView({ platform }: { platform: PlatformCard }) {
           </p>
         </div>
       </div>
+      {platform.badge ? (
+        <div className="mt-5 rounded-2xl border border-[color:var(--line)] bg-black/45 px-4 py-3">
+          <img
+            src={platform.badge}
+            alt={platform.badgeAlt || `${platform.platform} download`}
+            className="h-11 w-auto max-w-[210px] object-contain opacity-95"
+          />
+        </div>
+      ) : null}
       <div className="mt-5 flex flex-wrap items-center gap-4">
         {platform.actions.map((action) => (
           <ActionButton key={action.label} action={action} />
