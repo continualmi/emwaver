@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EMWaver Linux GTK4 Port Plan</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #627086;
+      --paper: #f4f7fb;
+      --panel: #ffffff;
+      --line: #dbe3ef;
+      --accent: #3157d5;
+      --native: #2b7a4b;
+      --hardware: #9a5c00;
+      --agent: #753fb5;
+      --risk: #ad3434;
+      --code: #101827;
+      --shadow: 0 18px 46px rgba(23, 32, 51, 0.10);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: var(--ink);
+      background: var(--paper);
+      line-height: 1.48;
+    }
+
+    header {
+      padding: 56px 24px 42px;
+      color: white;
+      background:
+        radial-gradient(circle at 15% 20%, rgba(80, 160, 255, 0.32), transparent 32%),
+        radial-gradient(circle at 82% 12%, rgba(96, 211, 148, 0.24), transparent 26%),
+        linear-gradient(135deg, #101827 0%, #17233a 52%, #203153 100%);
+    }
+
+    .hero, main { width: 100%; max-width: 1180px; margin: 0 auto; }
+    main { padding: 28px 24px 80px; }
+    section { padding: 42px 0; border-bottom: 1px solid var(--line); }
+    section:last-child { border-bottom: 0; }
+
+    .eyebrow {
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.13em;
+      font-size: 12px;
+      font-weight: 800;
+      opacity: 0.82;
+    }
+
+    h1 {
+      max-width: 980px;
+      margin: 0;
+      font-size: clamp(40px, 7vw, 82px);
+      line-height: 0.98;
+      letter-spacing: -0.035em;
+    }
+
+    h2 { margin: 0 0 14px; font-size: clamp(28px, 4vw, 44px); line-height: 1.05; }
+    h3 { margin: 0 0 8px; font-size: 19px; }
+    h4 { margin: 18px 0 6px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+    p { margin: 0; color: var(--muted); }
+    .hero p { max-width: 820px; margin-top: 22px; color: rgba(255,255,255,0.84); font-size: clamp(18px, 2vw, 23px); }
+    ul, ol { margin: 12px 0 0; padding-left: 20px; color: var(--muted); }
+    li + li { margin-top: 8px; }
+    code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+    pre { overflow: auto; padding: 16px; border-radius: 16px; color: #d7e4ff; background: var(--code); box-shadow: var(--shadow); }
+
+    .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+    .grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .card { padding: 18px; border: 1px solid var(--line); border-radius: 22px; background: var(--panel); box-shadow: 0 10px 28px rgba(23, 32, 51, 0.06); }
+    .card p, .card li { font-size: 14px; }
+    .tag { display: inline-flex; align-items: center; margin: 0 6px 8px 0; padding: 5px 9px; border-radius: 999px; font-size: 12px; font-weight: 760; background: #e8eefb; color: var(--accent); }
+    .tag.native { background: #e5f4eb; color: var(--native); }
+    .tag.hardware { background: #fff2d8; color: var(--hardware); }
+    .tag.agent { background: #f0e7fb; color: var(--agent); }
+    .tag.risk { background: #fde7e7; color: var(--risk); }
+    .callout { margin-top: 18px; padding: 18px; border-left: 5px solid var(--accent); border-radius: 18px; background: #ffffff; box-shadow: 0 10px 28px rgba(23, 32, 51, 0.06); }
+    .callout.risk { border-left-color: var(--risk); }
+    .callout.ok { border-left-color: var(--native); }
+
+    table { width: 100%; margin-top: 18px; border-collapse: collapse; overflow: hidden; border-radius: 18px; background: var(--panel); box-shadow: 0 10px 28px rgba(23, 32, 51, 0.05); }
+    th, td { padding: 13px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; font-size: 14px; }
+    th { color: var(--ink); background: #edf2fb; }
+    tr:last-child td { border-bottom: 0; }
+
+    @media (max-width: 880px) {
+      .grid, .grid.two, .grid.four { grid-template-columns: 1fr; }
+      header { padding-top: 42px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="hero">
+      <div class="eyebrow">EMWaver planning / Linux native app</div>
+      <h1>Complete macOS-to-Linux GTK4 port plan</h1>
+      <p>
+        A native Linux desktop implementation that keeps EMWaver local-first, hardware-integrated, and self-contained while porting the macOS app's runtime, transport, script, firmware update, and optional Agent workflows to Rust + GTK4/libadwaita.
+      </p>
+    </div>
+  </header>
+
+  <main>
+    <section id="decision">
+      <h2>1. Decision and product boundary</h2>
+      <p>
+        If EMWaver adds a Linux desktop application again, it should be a real native app rather than a revived Gateway/browser/CLI stack. The target framework is <strong>Rust + GTK4 + libadwaita</strong>, using Linux-native hardware APIs underneath.
+      </p>
+      <div class="grid four">
+        <div class="card"><span class="tag native">UI</span><h3>GTK4/libadwaita</h3><p>GNOME-class native UI, adaptive layouts, settings, dialogs, toasts, device sheets, and polished desktop behavior.</p></div>
+        <div class="card"><span class="tag native">Language</span><h3>Rust</h3><p>One language for UI glue, async runtime, protocol, USB, BLE, Wi-Fi, Agent client, helpers, tests, and packaging scripts where practical.</p></div>
+        <div class="card"><span class="tag hardware">Hardware</span><h3>Linux APIs</h3><p>libusb/udev/serial/HID, BlueZ D-Bus, NetworkManager D-Bus when Wi-Fi configuration is needed, and native sockets/WebSockets.</p></div>
+        <div class="card"><span class="tag agent">Business</span><h3>Local-first + optional Agent</h3><p>No account, activation, hosted relay, device registration, or subscription check for local scripts or firmware setup.</p></div>
+      </div>
+      <div class="callout risk">
+        <h3>Do not restore the removed Linux architecture</h3>
+        <p>This plan is not a Gateway revival. No browser UI, localhost daemon requirement, hosted relay, or CLI-first control plane. The Linux app owns its own native runtime just like macOS owns its native runtime.</p>
+      </div>
+    </section>
+
+    <section id="goals">
+      <h2>2. Goals, non-goals, and parity target</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Goals</h3>
+          <ul>
+            <li>Port the macOS app's local script execution model to Linux with equivalent UX and diagnostics.</li>
+            <li>Support USB, BLE, and Wi-Fi transports through native Linux APIs.</li>
+            <li>Support STM32 DFU and ESP32 serial flashing with bundled firmware images.</li>
+            <li>Implement the same optional Agent API-key workflow using the public <code>/api/mgpt/...</code> endpoint family.</li>
+            <li>Keep scripts and local app state on the user's machine.</li>
+            <li>Use reusable Rust crates so protocol/runtime logic can be tested without GTK.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Non-goals</h3>
+          <ul>
+            <li>No EMWaver account system or cloud activation.</li>
+            <li>No cloud script storage or sync by default.</li>
+            <li>No hosted device ownership, UID minting, subscription gating, or device limit checks.</li>
+            <li>No dependency on ESP-IDF as an end-user runtime.</li>
+            <li>No system-wide daemon unless a narrowly scoped helper becomes unavoidable for firmware flashing permissions.</li>
+            <li>No Flatpak-only first release; hardware permissions are too important for the initial Linux target.</li>
+          </ul>
+        </div>
+      </div>
+      <table>
+        <thead><tr><th>macOS concept</th><th>Linux equivalent</th><th>Parity requirement</th></tr></thead>
+        <tbody>
+          <tr><td>SwiftUI app shell</td><td>GTK4/libadwaita application</td><td>Native navigation, sidebar/content panes, settings, dialogs, keyboard shortcuts, and state restoration.</td></tr>
+          <tr><td><code>MacUSBManager</code></td><td><code>LinuxUsbManager</code></td><td>Discover supported USB MIDI/HID/serial/libusb devices, route command packets, and handle reconnects.</td></tr>
+          <tr><td>CoreBluetooth BLE</td><td>BlueZ D-Bus via <code>zbus</code> or <code>bluer</code></td><td>Scan, connect, discover GATT service/characteristics, notify/write EMWaver payloads, reconnect and prune stale devices.</td></tr>
+          <tr><td><code>MacWiFiManager</code></td><td><code>LinuxWifiManager</code></td><td>mDNS discovery, manual host/IP, WebSocket payload transport, UID liveness checks, LAN/VPN trust model.</td></tr>
+          <tr><td>Keychain Agent key</td><td>Secret Service/libsecret</td><td>Store optional Agent API key locally; local scripts must work without it.</td></tr>
+          <tr><td>DFU helper</td><td>Rust <code>emwaver-dfu</code> crate/helper</td><td>Flash STM32 firmware with progress, diagnostics, udev guidance, and no account gate.</td></tr>
+          <tr><td>ESP helper</td><td>Rust or bundled Python/esptool-compatible helper</td><td>Flash prebuilt ESP32 images at fixed offsets; no bundled ESP-IDF.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="architecture">
+      <h2>3. Proposed repository layout</h2>
+      <p>The Linux app should have a thin GTK layer over reusable Rust crates. Protocol and transport logic should not be trapped inside UI widgets.</p>
+      <pre><code>linux/
+  README.md
+  Cargo.toml
+  crates/
+    emwaver-linux-app/          # GTK4/libadwaita binary crate
+    emwaver-linux-core/         # app state, sessions, settings, orchestration
+    emwaver-linux-transport/    # USB, BLE, Wi-Fi transport implementations
+    emwaver-linux-firmware/     # STM32 DFU + ESP32 serial flashing orchestration
+    emwaver-linux-agent/        # optional MGPT Agent API client + secret storage
+  resources/
+    com.continualmi.EMWaver.desktop
+    com.continualmi.EMWaver.metainfo.xml
+    icons/
+    udev/99-emwaver.rules
+  packaging/
+    debian/
+    rpm/
+    appimage/
+  tests/
+    fixtures/
+    integration/
+</code></pre>
+      <div class="grid two">
+        <div class="card">
+          <h3>Core Rust crates</h3>
+          <ul>
+            <li><code>emwaver-protocol</code>: shared packet encode/decode, opcodes, SysEx/superframe framing, simulator fixtures.</li>
+            <li><code>emwaver-session</code>: script sessions, buffer isolation, device claims, heartbeats, stop/run lifecycle.</li>
+            <li><code>emwaver-transport</code>: common transport traits and device identity/deduplication model.</li>
+            <li><code>emwaver-agent-client</code>: public Agent API client, request context builder, streaming response support.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>GTK app responsibilities</h3>
+          <ul>
+            <li>Render state, route user actions, display logs, show progress, and collect settings.</li>
+            <li>Own no hardware protocol constants directly.</li>
+            <li>Use async actions and message passing instead of blocking the GTK main loop.</li>
+            <li>Keep local scripts available even when Agent setup is missing or offline.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="runtime">
+      <h2>4. Runtime and state model</h2>
+      <p>The Linux app should mirror the self-contained macOS model: one native app process owns discovery, selected device state, script execution, logs, Agent calls, and firmware update flows.</p>
+      <table>
+        <thead><tr><th>Component</th><th>Implementation detail</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td>App runtime</td><td>GTK main context + Rust async tasks; prefer <code>glib</code> futures and a Tokio runtime for I/O-heavy transport work.</td><td>Never block UI on USB/BLE/network I/O.</td></tr>
+          <tr><td>State store</td><td>Central <code>AppModel</code> with observable GTK properties or message-driven reducers.</td><td>Keep enough separation to unit test without GTK.</td></tr>
+          <tr><td>Device registry</td><td>Deduplicate USB/BLE/Wi-Fi records by fresh local hardware UID when available.</td><td>UID is local diagnostics only, never activation.</td></tr>
+          <tr><td>Script sessions</td><td>Per-session capture buffers, device claim, run token, heartbeat, stop signal, and timeout policy.</td><td>Prevent concurrent runs against the same hardware UID.</td></tr>
+          <tr><td>Persistence</td><td>XDG config/data dirs via <code>directories</code> crate.</td><td>Scripts remain local files or app-local examples; no cloud sync.</td></tr>
+          <tr><td>Secrets</td><td>Secret Service via <code>libsecret</code>/<code>oo7</code> where available; fallback to explicit file-based dev mode only.</td><td>Agent key is optional and local.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="ui">
+      <h2>5. GTK4/libadwaita UI plan</h2>
+      <div class="grid three">
+        <div class="card"><h3>Main window</h3><p><code>AdwApplicationWindow</code> with navigation split view: sidebar for scripts/devices/examples, main pane for Agent/editor/runtime, bottom or side log drawer.</p></div>
+        <div class="card"><h3>Device sheet</h3><p>Unified USB/BLE/Wi-Fi list, transport badges, UID suffix, firmware version, busy state, manual Wi-Fi host/port, provisioning and recovery actions.</p></div>
+        <div class="card"><h3>Script editor</h3><p>Use GtkSourceView for JavaScript/JSX syntax highlighting, run/stop controls, examples, local save/open, and inline active session status.</p></div>
+        <div class="card"><h3>Agent panel</h3><p>Conversation + action cards. Agent can propose scripts, modify local editor content, request hardware primitives, and explain errors.</p></div>
+        <div class="card"><h3>Firmware update</h3><p>Board-aware STM32 vs ESP32 update flow, logs, progress, port/device chooser, udev permission diagnostics, and recovery instructions.</p></div>
+        <div class="card"><h3>Settings</h3><p>Agent endpoint/key, discovery toggles, Wi-Fi defaults, log level, firmware image overrides, simulator mode, privacy/local data copy.</p></div>
+      </div>
+      <div class="callout ok">
+        <h3>Native Linux feel target</h3>
+        <p>Follow GNOME/libadwaita patterns: header bars, adaptive split views, toasts, preferences window, app menu actions, dark-mode support, keyboard shortcuts, and high-DPI icons. Avoid webviews for core UI.</p>
+      </div>
+    </section>
+
+    <section id="transports">
+      <h2>6. Transport implementation details</h2>
+      <table>
+        <thead><tr><th>Transport</th><th>Crates/APIs</th><th>Implementation requirements</th></tr></thead>
+        <tbody>
+          <tr>
+            <td>USB MIDI / USB class path</td>
+            <td><code>alsa</code> for MIDI if using ALSA sequencer/rawmidi; evaluate PipeWire/JACK only if required.</td>
+            <td>Discover EMWaver USB endpoints, send/receive 48-byte EMWaver SysEx payloads, recover on unplug, and merge with UID reads.</td>
+          </tr>
+          <tr>
+            <td>USB raw/vendor</td>
+            <td><code>rusb</code> / libusb, <code>udev</code></td>
+            <td>Support direct command transports or DFU/update mode where applicable. Ship udev rules for non-root access.</td>
+          </tr>
+          <tr>
+            <td>USB serial</td>
+            <td><code>serialport</code>, <code>tokio-serial</code></td>
+            <td>ESP32 flash port discovery, optional run-mode serial support if firmware exposes it, user-friendly port labels.</td>
+          </tr>
+          <tr>
+            <td>HID</td>
+            <td><code>hidapi</code></td>
+            <td>Only implement if a supported board uses HID. Keep behind the same transport trait.</td>
+          </tr>
+          <tr>
+            <td>BLE</td>
+            <td>BlueZ D-Bus through <code>zbus</code>, <code>bluer</code>, or <code>btleplug</code></td>
+            <td>Scan for EMWaver service UUIDs, connect, subscribe notifications, write payloads, detect busy sessions, and keep multi-device discovery alive.</td>
+          </tr>
+          <tr>
+            <td>Wi-Fi</td>
+            <td><code>mdns-sd</code> or Avahi D-Bus, <code>tokio-tungstenite</code>, standard TCP/IP</td>
+            <td>mDNS discovery, manual hostname/IP + port validation, WebSocket payload transport, UID liveness poll, LAN/VPN trust boundary, no hosted relay.</td>
+          </tr>
+          <tr>
+            <td>Wi-Fi provisioning</td>
+            <td>Existing binary command lane over USB/BLE/Wi-Fi</td>
+            <td>Send SSID/password locally to ESP32, query status, clear provisioning, show reconnect and IP diagnostics.</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="callout">
+        <h3>Transport trait sketch</h3>
+        <pre><code>#[async_trait]
+pub trait EmwaverTransport: Send + Sync {
+    fn id(&self) -> TransportId;
+    fn kind(&self) -> TransportKind; // UsbMidi, UsbSerial, Ble, Wifi, Simulator
+    async fn connect(&self) -> Result&lt;ConnectedTransport&gt;;
+    async fn send_frame(&self, frame: EmwFrame) -> Result&lt;()&gt;;
+    async fn next_frame(&self) -> Result&lt;EmwFrame&gt;;
+    async fn close(&self) -> Result&lt;()&gt;;
+}
+</code></pre>
+      </div>
+    </section>
+
+    <section id="firmware">
+      <h2>7. Firmware/update flows</h2>
+      <div class="grid two">
+        <div class="card">
+          <span class="tag hardware">STM32</span>
+          <h3>DFU update path</h3>
+          <ul>
+            <li>Detect run-mode board over the normal USB transport when possible.</li>
+            <li>Offer board-aware "Enter Update Mode" for STM32 only.</li>
+            <li>Use existing Rust DFU crates/helper from <code>crates/</code> where possible.</li>
+            <li>Bundle canonical <code>firmware/emwaver.bin</code>.</li>
+            <li>Show udev permission errors with exact fix instructions.</li>
+            <li>Never require UID/account/activation to flash.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <span class="tag hardware">ESP32</span>
+          <h3>Serial flashing path</h3>
+          <ul>
+            <li>Detect flash-capable serial ports and present candidate labels.</li>
+            <li>Bundle prebuilt bootloader, partition table, app, and OTA images from <code>esp/build/</code>.</li>
+            <li>Use a small Rust flasher or bundled esptool-compatible helper.</li>
+            <li>Present BOOT/RESET instructions where automatic bootloader entry is unreliable.</li>
+            <li>Do not bundle ESP-IDF or ask end users to run <code>idf.py</code>.</li>
+            <li>Return user to Run Mode instructions after flashing.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="agent">
+      <h2>8. Agent API integration</h2>
+      <p>The Linux Agent client should match the native app direction: an optional API-key client for public MGPT Agent endpoints. Provider selection, private prompts, tools policy, and metering stay server-side.</p>
+      <table>
+        <thead><tr><th>Area</th><th>Linux behavior</th></tr></thead>
+        <tbody>
+          <tr><td>Endpoint</td><td>Configured public endpoint using <code>/api/mgpt/...</code>; never MDL-only <code>/backend-api/...</code>.</td></tr>
+          <tr><td>Credential</td><td>User-provided bearer key stored with Secret Service. Missing key disables Agent replies only.</td></tr>
+          <tr><td>Context</td><td>Send selected script, errors, device type, transport kind, firmware version, capabilities, recent logs, and requested hardware primitive result summaries.</td></tr>
+          <tr><td>Hardware tools</td><td>Agent may request named local primitives such as <code>spi_transfer</code>, <code>gpio_read</code>, <code>gpio_write</code>, <code>analog_read</code>; app asks/runs locally through the selected device.</td></tr>
+          <tr><td>Failure mode</td><td>Network/API errors are shown in Agent panel but never block local script editor, device connection, or firmware update.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="security">
+      <h2>9. Linux permissions, security, and privacy</h2>
+      <div class="grid three">
+        <div class="card"><h3>udev rules</h3><p>Ship <code>99-emwaver.rules</code> for supported VID/PID pairs and DFU/serial access. Installer should reload rules and explain group/logout requirements.</p></div>
+        <div class="card"><h3>Polkit helper</h3><p>Avoid by default. Consider only for narrow firmware operations that cannot be made reliable with udev rules. Keep source auditable and local-only.</p></div>
+        <div class="card"><h3>Sandboxing</h3><p>Initial packages should prioritize hardware access. Flatpak can be evaluated later with documented USB/BLE portal limitations.</p></div>
+      </div>
+      <ul>
+        <li>Local scripts remain local files/app data.</li>
+        <li>Hardware UID is a local label/deduplication/diagnostic value only.</li>
+        <li>Wi-Fi control uses LAN/VPN reachability as the trust boundary.</li>
+        <li>No telemetry by default. If diagnostics export is added, it must be explicit and user-owned.</li>
+      </ul>
+    </section>
+
+    <section id="packaging">
+      <h2>10. Packaging and distribution</h2>
+      <table>
+        <thead><tr><th>Package</th><th>Priority</th><th>Purpose</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>.deb</code></td><td>P0</td><td>Ubuntu/Debian first release</td><td>Install binary, desktop file, icons, metainfo, udev rules, bundled firmware.</td></tr>
+          <tr><td><code>.rpm</code></td><td>P1</td><td>Fedora/openSUSE</td><td>Good fit for GTK/libadwaita users; validate BlueZ/udev packaging differences.</td></tr>
+          <tr><td>AppImage</td><td>P1</td><td>Portable preview</td><td>Still requires separate udev rules install for hardware access.</td></tr>
+          <tr><td>Flatpak</td><td>P2</td><td>Store/sandbox channel</td><td>Evaluate after hardware paths are stable; USB/BLE permissions may constrain UX.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="validation">
+      <h2>11. Validation plan</h2>
+      <div class="grid two">
+        <div class="card">
+          <h3>Automated validation</h3>
+          <ul>
+            <li>Protocol encode/decode unit tests.</li>
+            <li>Transport trait simulator tests.</li>
+            <li>Script session lifecycle tests: run, stop, timeout, busy device, reconnect.</li>
+            <li>Agent client request/response fixture tests with no real secrets.</li>
+            <li>Firmware flasher dry-run/argument construction tests.</li>
+            <li>GTK action/state tests where practical.</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>Manual hardware gates</h3>
+          <ul>
+            <li>STM32 USB run-mode script execution.</li>
+            <li>STM32 DFU flash and return-to-run-mode.</li>
+            <li>ESP32 BLE connection and script execution.</li>
+            <li>ESP32 Wi-Fi mDNS discovery and LAN script execution.</li>
+            <li>ESP32 manual IP/VPN script execution.</li>
+            <li>ESP32 serial flashing with prebuilt images.</li>
+            <li>Two-device bench: concurrent discovery, selected-device run isolation, busy-session behavior.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="milestones">
+      <h2>12. Implementation milestones</h2>
+      <table>
+        <thead><tr><th>Milestone</th><th>Deliverable</th><th>Exit criteria</th></tr></thead>
+        <tbody>
+          <tr><td>M0 — Spike</td><td>GTK4/libadwaita shell + simulator transport</td><td>App opens, shows simulator device, runs a fixture script, logs output.</td></tr>
+          <tr><td>M1 — Core crates</td><td>Protocol/session/transport traits split from UI</td><td>Unit-tested script session lifecycle and device registry without GTK.</td></tr>
+          <tr><td>M2 — USB STM32</td><td>USB discovery + command path + udev rules</td><td>Real STM32 board runs local JavaScript without root and without account setup.</td></tr>
+          <tr><td>M3 — Firmware STM32</td><td>DFU update UI using bundled firmware</td><td>Flash succeeds with progress and recovery diagnostics.</td></tr>
+          <tr><td>M4 — BLE ESP32</td><td>BlueZ scan/connect/GATT command transport</td><td>ESP32-S3 script execution and reconnect behavior validated.</td></tr>
+          <tr><td>M5 — Wi-Fi ESP32</td><td>mDNS/manual IP + WebSocket transport + provisioning UI</td><td>LAN and VPN/private-IP script execution validated, no relay/account path.</td></tr>
+          <tr><td>M6 — Agent</td><td>API key settings + public MGPT Agent client + hardware primitives</td><td>Agent proposes/runs/debugs scripts while local use still works offline.</td></tr>
+          <tr><td>M7 — Packaging</td><td>.deb preview with udev, desktop file, icons, firmware assets</td><td>Fresh Ubuntu install can connect, run, and flash supported boards.</td></tr>
+          <tr><td>M8 — Beta</td><td>Multi-device bench, docs, tests, release notes</td><td>Parity checklist against macOS passes for agreed Linux V1 scope.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="risks">
+      <h2>13. Key risks</h2>
+      <div class="grid two">
+        <div class="card"><span class="tag risk">Risk</span><h3>Linux fragmentation</h3><p>BlueZ, udev, ALSA, NetworkManager, and desktop packaging differ by distro. Start with Ubuntu LTS and Fedora as validation targets.</p></div>
+        <div class="card"><span class="tag risk">Risk</span><h3>BLE reliability</h3><p>BlueZ behavior can vary by adapter. Build strong diagnostics and keep USB/Wi-Fi first-class fallback paths.</p></div>
+        <div class="card"><span class="tag risk">Risk</span><h3>Permissions</h3><p>Hardware access fails if udev rules are missing. Installer and UI must detect and explain exact fixes.</p></div>
+        <div class="card"><span class="tag risk">Risk</span><h3>Scope creep</h3><p>Linux should not distract from V1 mobile-first priorities unless explicitly prioritized. Keep this as a staged native desktop port.</p></div>
+      </div>
+    </section>
+
+    <section id="first-files">
+      <h2>14. First implementation files</h2>
+      <pre><code># create workspace
+linux/Cargo.toml
+linux/README.md
+linux/crates/emwaver-linux-app/Cargo.toml
+linux/crates/emwaver-linux-app/src/main.rs
+linux/crates/emwaver-linux-app/src/ui/main_window.rs
+linux/crates/emwaver-linux-core/src/lib.rs
+linux/crates/emwaver-linux-core/src/app_model.rs
+linux/crates/emwaver-linux-core/src/device_registry.rs
+linux/crates/emwaver-linux-core/src/script_session.rs
+linux/crates/emwaver-linux-transport/src/lib.rs
+linux/crates/emwaver-linux-transport/src/simulator.rs
+linux/crates/emwaver-linux-transport/src/usb.rs
+linux/crates/emwaver-linux-transport/src/ble.rs
+linux/crates/emwaver-linux-transport/src/wifi.rs
+linux/crates/emwaver-linux-firmware/src/stm32_dfu.rs
+linux/crates/emwaver-linux-firmware/src/esp32_flash.rs
+linux/crates/emwaver-linux-agent/src/client.rs
+linux/resources/udev/99-emwaver.rules
+</code></pre>
+    </section>
+  </main>
+</body>
+</html>

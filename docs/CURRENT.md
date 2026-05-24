@@ -23,7 +23,7 @@ V1 is mobile-first. The phone is the tricorder — the device users always carry
 
 ## What Was Removed (May 2026)
 
-The Gateway, CLI, browser UI, and Linux support were removed. See `docs/DROP_GATEWAY_AND_LINUX.md` for the full decision record.
+The Gateway, CLI, browser UI, and prior Linux support were removed. See `docs/DROP_GATEWAY_AND_LINUX.md` for the full decision record. If Linux is revisited, the candidate direction is a new native Rust + GTK4/libadwaita app; see `docs/LINUX_GTK4_PORT_PLAN.html`.
 
 In short: the Gateway was a three-layer architecture (browser → Node.js relay → Rust daemon → hardware) that was fundamentally unstable. It existed to paper over the absence of a native Linux app. Linux usage was negligible. The CLI's remaining use case (agent-driven scripting) is now built into the native apps.
 
@@ -65,6 +65,7 @@ emwaver/
 | `docs/AGENT_API.md` | Agent API contract and client integration |
 | `docs/AGENT_EVAL_RUNTIME.md` | Hardware primitive tools (current agent model) |
 | `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` | Cross-platform Agent/UI parity plan |
+| `docs/LINUX_GTK4_PORT_PLAN.html` | Candidate native Linux Rust + GTK4 port plan |
 | `docs/SIMULATOR.md` | Shared device simulator |
 | `docs/parity/` | Cross-platform feature parity contracts |
 
