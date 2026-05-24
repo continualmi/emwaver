@@ -281,17 +281,20 @@ fn append_log(log_view: &gtk::TextView, line: &str) {
 
 fn add_shortcuts(app: &adw::Application, window: &adw::ApplicationWindow) {
     let quit = gio::SimpleAction::new("quit", None);
-    let window = window.clone();
-    quit.connect_activate(move |_, _| window.close());
+    let quit_window = window.clone();
+    quit.connect_activate(move |_, _| quit_window.close());
     app.add_action(&quit);
     app.set_accels_for_action("app.quit", &["<primary>q"]);
 
     let about = gio::SimpleAction::new("about", None);
+    let about_parent = window.clone();
     about.connect_activate(move |_, _| {
-        let dialog = adw::AboutWindow::builder()
-            .application_name("EMWaver")
-            .application_icon("com.continualmi.EMWaver")
-            .developer_name("Continual MI")
+        let dialog = gtk::AboutDialog::builder()
+            .transient_for(&about_parent)
+            .modal(true)
+            .program_name("EMWaver")
+            .logo_icon_name("com.continualmi.EMWaver")
+            .authors(vec!["Continual MI"])
             .version(env!("CARGO_PKG_VERSION"))
             .build();
         dialog.present();
