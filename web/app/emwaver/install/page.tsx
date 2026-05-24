@@ -114,14 +114,22 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
   },
   {
     platform: "Linux",
-    label: "Coming Soon",
+    label: "Preview",
     icon: "Linux",
     accent: "sky",
-    description: "Linux packaging is planned after the V1 mobile launch.",
+    description: "Native Linux build for Ubuntu 24.04+. Install via DEB package or portable tarball.",
     actions: [
       {
-        label: "Coming soon",
-        muted: true,
+        label: "Download DEB package",
+        href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-amd64.deb`,
+        fileExt: "DEB",
+        detail: "Recommended Debian/Ubuntu installer",
+      },
+      {
+        label: "Download portable tarball",
+        href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-linux-x64.tar.gz`,
+        fileExt: "tar.gz",
+        detail: "Portable build archive",
       },
     ],
   },
@@ -272,11 +280,11 @@ export default function InstallPage() {
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
               Install EMWaver on iOS or Android, connect a supported board via USB-C,
               and run local scripts directly from your device. macOS and Windows downloads are
-              also available for desktop use, and the native Linux app is in progress.
+              also available for desktop use, and the native Linux app is now available for download.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows EXE", "Windows ZIP", "Linux in progress"].map((label) => (
+              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows EXE", "Windows ZIP", "Linux tar.gz", "Linux DEB"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"
