@@ -61,6 +61,43 @@ public final class SimulatorScriptDevice: ScriptDevice {
         try self.init(fixtureData: Data(contentsOf: fixtureURL))
     }
 
+    public static func basicBoard() throws -> SimulatorScriptDevice {
+        let fixture = """
+        {
+          "board": {
+            "type": "emwaver-sim",
+            "name": "EMWaver Simulator",
+            "firmwareVersion": { "major": 1, "minor": 0 },
+            "hardwareUid": "SIM-00000001",
+            "protocolVersion": 1
+          },
+          "gpio": {
+            "pins": [
+              { "number": 0, "name": "D0", "modes": ["input", "output", "pwm", "adc"], "initialLevel": 0 },
+              { "number": 1, "name": "D1", "modes": ["input", "output", "pwm"], "initialLevel": 0 },
+              { "number": 2, "name": "D2", "modes": ["input", "output"], "initialLevel": 1 },
+              { "number": 13, "name": "LED", "modes": ["input", "output", "pwm"], "initialLevel": 0 }
+            ]
+          },
+          "adc": {
+            "pinValues": { "0": 2048, "1": 1024, "2": 3072, "13": 512 },
+            "internalSources": { "temp": 1450, "vrefint": 1210, "vbat": 3300 }
+          },
+          "pwm": { "defaultFrequencyHz": 1000, "pins": [0, 1, 13] },
+          "serial": { "readBytes": [115, 105, 109] },
+          "i2c": {
+            "defaultReadByte": 0,
+            "addresses": { "64": { "readBytes": [18, 52, 86, 120] } }
+          },
+          "spi": {
+            "defaultReadByte": 0,
+            "transfers": { "9F": [239, 64, 22] }
+          }
+        }
+        """
+        return try SimulatorScriptDevice(fixtureData: Data(fixture.utf8))
+    }
+
     public func getBuffer() -> Data {
         lock.lock()
         defer { lock.unlock() }

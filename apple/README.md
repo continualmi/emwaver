@@ -63,7 +63,7 @@ imports while native SwiftUI rendering still consumes the same cross-platform
 tree. This is intentionally an authoring layer, not a replacement for the
 render protocol.
 
-`SimulatorScriptDevice` is the shared iOS/macOS test adapter for `simulator/fixtures/*.json`. It implements `ScriptDevice` so Apple runtime tests can execute hardware-touching scripts without a physical board.
+`SimulatorScriptDevice` is the shared iOS/macOS test adapter for `simulator/fixtures/*.json`. It implements `ScriptDevice` so Apple runtime tests can execute hardware-touching scripts without a physical board, and exposes `basicBoard()` for app UI previews that need a no-hardware fallback.
 
 ## 2.4 `EMWaverScriptSwiftUI`
 

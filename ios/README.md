@@ -69,7 +69,7 @@ iOS also supports a manual ESP32 Wi-Fi runtime connection through the firmware W
 ## 2.3 Views
 
 `ios/EMWaver/Views/`:
-- `ScriptsContainerView.swift` — script UI shell, device toolbar, Wi-Fi connect/setup sheets. Owns `IOSScriptSessionManager` which manages per-script sessions and wires transport session begin/end around script execution through the `IOSTargetedScriptDeviceBase` protocol.
+- `ScriptsContainerView.swift` — script UI shell, compact device/transport toolbar, Wi-Fi connect/setup sheets. Owns `IOSScriptSessionManager` which manages per-script sessions and wires transport session begin/end around script execution through the `IOSTargetedScriptDeviceBase` protocol. When no physical device is connected, the script UI previews against the shared basic simulator so UI rendering remains available on iOS without hardware attached.
 - `FirmwareUpdateSheet.swift` exposes the local firmware surface from the iOS
   toolbar.
 

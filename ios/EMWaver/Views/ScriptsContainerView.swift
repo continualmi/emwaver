@@ -204,11 +204,12 @@ struct ScriptsContainerView: View {
     @State private var wifiPort = String(WiFiTransport.defaultPort)
     @State private var wifiSSID = ""
     @State private var wifiPassword = ""
+    private let previewDevice = try? SimulatorScriptDevice.basicBoard()
 
     var body: some View {
         NavigationStack {
             ScriptsRootView(
-                device: bleManager,
+                device: scriptDevice,
                 agentEndpointProvider: {
                     auth.agentEndpointConfig
                 },
@@ -220,14 +221,8 @@ struct ScriptsContainerView: View {
                 onRequestAgentUpgrade: {
                     auth.isSignInSheetPresented = true
                 },
-                onRunScript: { request in
-                    let result = scriptSessions.run(request, device: bleManager, deviceLabel: selectedDeviceLabel)
-                    hostSessions.setScriptStatus(running: result?.running == true, activeScriptName: result?.name)
-                    return result
-                },
-                activePreviewManagerProvider: {
-                    scriptSessions.activePreviewManager
-                },
+                onRunScript: runScriptHandler,
+                activePreviewManagerProvider: activePreviewManagerProvider,
                 onStopActiveScript: {
                     scriptSessions.stopActiveSession()
                     hostSessions.setScriptStatus(
@@ -294,12 +289,8 @@ struct ScriptsContainerView: View {
                                 Circle()
                                     .fill(connectionStatusColor)
                                     .frame(width: 8, height: 8)
-                                Image(systemName: "cable.connector")
-                                Text(selectedDeviceLabel)
-                                    .font(.caption)
-                                    .lineLimit(1)
-                                    .truncationMode(.middle)
-                                    .frame(maxWidth: 140, alignment: .leading)
+                                Image(systemName: bleManager.activeTransportSystemImage)
+                                    .imageScale(.large)
                             }
                             .contentShape(Rectangle())
                             .accessibilityLabel("\(connectionStatusText), target \(selectedDeviceLabel)")
@@ -444,6 +435,24 @@ struct ScriptsContainerView: View {
             .presentationDetents([.medium, .large])
             .presentationDragIndicator(.visible)
         }
+    }
+
+    private var scriptDevice: (any ScriptDevice)? {
+        bleManager.isConnected ? bleManager : previewDevice
+    }
+
+    private var runScriptHandler: ((ScriptsRootView.ScriptRunRequest) async -> ScriptsRootView.ScriptRunResult?)? {
+        guard bleManager.isConnected else { return nil }
+        return { request in
+            let result = scriptSessions.run(request, device: bleManager, deviceLabel: selectedDeviceLabel)
+            hostSessions.setScriptStatus(running: result?.running == true, activeScriptName: result?.name)
+            return result
+        }
+    }
+
+    private var activePreviewManagerProvider: (() -> ScriptPreviewManager?)? {
+        guard bleManager.isConnected else { return nil }
+        return { scriptSessions.activePreviewManager }
     }
 
     private func connectManualWiFi() {

@@ -116,6 +116,19 @@ final class USBManager: NSObject, ObservableObject {
     @Published var isWiFiDiscovering: Bool = false
     @Published var wifiDiscoveredDevices: [WiFiTransport.DiscoveredDevice] = []
 
+    var activeTransportSystemImage: String {
+        switch activeTransport {
+        case .none:
+            return "cable.connector"
+        case .usbMidi:
+            return "cable.connector"
+        case .ble:
+            return "dot.radiowaves.left.and.right"
+        case .wifi:
+            return "wifi"
+        }
+    }
+
     // MARK: - MIDI plumbing
 
     private let midiQueue = DispatchQueue(label: "com.emwaver.midi", qos: .userInitiated)
