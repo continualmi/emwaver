@@ -19,6 +19,7 @@
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
 
@@ -27,11 +28,32 @@
                     <TextBlock Text="Scripts" FontWeight="SemiBold" FontSize="13" />
                 </Border>
 
+                <TextBox x:Name="ScriptSearchBox" Grid.Row="1"
+                         Margin="8"
+                         Height="28"
+                         TextChanged="OnScriptSearchChanged"
+                         ToolTip="Filter scripts"
+                         Background="{DynamicResource EditorSurfaceBackgroundBrush}"
+                         Foreground="{DynamicResource EditorTextForegroundBrush}" />
+
                 <!-- Script list items -->
-                <ListBox x:Name="ScriptListBox" Grid.Row="1"
+                <ListBox x:Name="ScriptListBox" Grid.Row="2"
                          SelectionChanged="OnScriptSelected"
                          BorderThickness="0"
                          Background="Transparent">
+                    <ListBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding Name}"
+                                               FontSize="10"
+                                               FontWeight="SemiBold"
+                                               Margin="10,10,8,2"
+                                               Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListBox.GroupStyle>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Grid Margin="8,6">
@@ -186,6 +208,7 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
@@ -207,7 +230,22 @@
                     </Grid>
                 </Border>
 
-                <Border x:Name="AgentSetupPanel" Grid.Row="1"
+                <Border Grid.Row="1" BorderBrush="{DynamicResource EditorSurfaceBorderBrush}" BorderThickness="0,0,0,1" Padding="8">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="AgentConversationBox"
+                                  Grid.Column="0"
+                                  Height="26"
+                                  DisplayMemberPath="DisplayTitle"
+                                  SelectionChanged="OnAgentConversationChanged" />
+                        <Button Grid.Column="1" Content="New" Width="48" Height="26" Margin="6,0,0,0" Click="OnAgentNewChatClick" />
+                    </Grid>
+                </Border>
+
+                <Border x:Name="AgentSetupPanel" Grid.Row="2"
                         Background="{DynamicResource StatusWarningBackgroundBrush}"
                         BorderBrush="{DynamicResource StatusWarningBorderBrush}"
                         BorderThickness="0,0,0,1"
@@ -219,23 +257,45 @@
                                Foreground="{DynamicResource AppTextForegroundBrush}" />
                 </Border>
 
-                <ScrollViewer x:Name="AgentMessagesScroll" Grid.Row="2"
+                <ScrollViewer x:Name="AgentMessagesScroll" Grid.Row="3"
                               VerticalScrollBarVisibility="Auto">
-                    <StackPanel x:Name="AgentMessagesPanel" Margin="8" />
+                    <StackPanel x:Name="AgentMessagesPanel" Margin="8">
+                        <UniformGrid x:Name="AgentSuggestionsPanel" Columns="2" Margin="0,0,0,8">
+                            <Button Tag="How do I connect an EMWaver device over USB?" Click="OnAgentSuggestionClick" Margin="0,0,6,6" Padding="8">
+                                <TextBlock Text="🔌 Connect over USB" TextWrapping="Wrap" />
+                            </Button>
+                            <Button Tag="Help me write a script for a connected board." Click="OnAgentSuggestionClick" Margin="0,0,0,6" Padding="8">
+                                <TextBlock Text="💻 Script a board" TextWrapping="Wrap" />
+                            </Button>
+                            <Button Tag="Help me write a script to blink a GPIO pin." Click="OnAgentSuggestionClick" Margin="0,0,6,0" Padding="8">
+                                <TextBlock Text="💡 Blink GPIO" TextWrapping="Wrap" />
+                            </Button>
+                            <Button Tag="How do I capture and replay an IR remote?" Click="OnAgentSuggestionClick" Margin="0,0,0,0" Padding="8">
+                                <TextBlock Text="📡 IR capture/replay" TextWrapping="Wrap" />
+                            </Button>
+                        </UniformGrid>
+                    </StackPanel>
                 </ScrollViewer>
 
-                <Border Grid.Row="3" BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
+                <Border Grid.Row="4" BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
                         BorderThickness="0,1,0,0" Padding="8">
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
-                        <TextBlock Grid.Row="0"
-                                   Text="The Agent sees your message and the current script text."
-                                   FontSize="10"
-                                   Margin="0,0,0,5"
-                                   Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                        <Grid Grid.Row="0" Margin="0,0,0,5">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="AgentStatusText"
+                                       Text="The Agent sees your message and the current script text."
+                                       FontSize="10"
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                            <Button x:Name="AgentStopButton" Grid.Column="1" Content="Stop" Width="48" Height="22"
+                                    Visibility="Collapsed" Click="OnAgentStopClick" />
+                        </Grid>
                         <Grid Grid.Row="1">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />

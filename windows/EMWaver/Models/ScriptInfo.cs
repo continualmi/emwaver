@@ -27,6 +27,15 @@ public sealed record ScriptInfo(
         }
     }
 
+    public string SectionTitle => KindLabel switch
+    {
+        "Example" => "Examples",
+        "Library" => "Libraries",
+        "Kernel" => "Kernel",
+        "Override" => "Custom Scripts",
+        _ => "Custom Scripts",
+    };
+
     public int KindSortRank
     {
         get

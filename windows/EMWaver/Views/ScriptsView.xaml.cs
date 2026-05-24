@@ -3,9 +3,12 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Highlighting;
@@ -28,6 +31,7 @@ public partial class ScriptsView : UserControl
 
     private readonly DispatcherTimer _runTimer;
     private readonly DispatcherTimer _versionCheckTimer;
+    private readonly ICollectionView _scriptView;
     private readonly object _renderCoalesceLock = new();
     private ScriptTree? _pendingRenderTree;
     private bool _renderRefreshPending;
@@ -41,6 +45,9 @@ public partial class ScriptsView : UserControl
 
     // Agent state
     private string _agentChatId = "";
+    private CancellationTokenSource? _agentCts;
+    private bool _isAgentSending;
+    private bool _suppressAgentConversationChange;
     private readonly List<(string role, string message)> _agentMessages = new();
 
     public ScriptsView()
@@ -74,7 +81,10 @@ public partial class ScriptsView : UserControl
         RefreshTransportLogVisibility();
 
         EditorTextBox.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("JavaScript");
-        ScriptListBox.ItemsSource = _scripts.All;
+        _scriptView = CollectionViewSource.GetDefaultView(_scripts.All);
+        _scriptView.GroupDescriptions.Add(new PropertyGroupDescription(nameof(ScriptInfo.SectionTitle)));
+        _scriptView.Filter = FilterScript;
+        ScriptListBox.ItemsSource = _scriptView;
         PreviewScrollViewer.PreviewMouseWheel += OnPreviewMouseWheel;
         _engine.Setup(
             ScheduleRender,
@@ -89,7 +99,12 @@ public partial class ScriptsView : UserControl
         _versionCheckTimer.Tick += OnVersionCheckTick;
         _versionCheckTimer.Start();
 
-        Loaded += async (_, __) => await _scripts.EnsureBootstrappedAsync();
+        Loaded += async (_, __) =>
+        {
+            await _scripts.EnsureBootstrappedAsync();
+            _scriptView.Refresh();
+            LoadAgentConversations();
+        };
     }
 
     private void ScheduleRender(ScriptTree tree)
@@ -114,6 +129,20 @@ public partial class ScriptsView : UserControl
             if (!_isPreviewMode || latest == null) return;
             PreviewContent.Content = _renderer.Render(latest);
         }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private bool FilterScript(object item)
+    {
+        if (item is not ScriptInfo script) return false;
+        var query = (ScriptSearchBox?.Text ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(query)) return true;
+        return script.FileName.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || script.KindLabel.Contains(query, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void OnScriptSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        _scriptView.Refresh();
     }
 
     private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
@@ -167,6 +196,7 @@ public partial class ScriptsView : UserControl
     {
         var name = "new-script-" + DateTimeOffset.UtcNow.ToUnixTimeSeconds();
         _scripts.Create(name, "// New script\n\nconsole.log('hello EMWaver');\n");
+        _scriptView.Refresh();
         var info = _scripts.All.FirstOrDefault(s => s.FileName == name);
         if (info != null) SelectScript(info);
     }
@@ -180,6 +210,7 @@ public partial class ScriptsView : UserControl
             return;
         }
         _scripts.Save(_selectedScript.FileName, EditorTextBox.Text);
+        _scriptView.Refresh();
         _suppressTextChanged = true;
         _pendingSaveScript = _selectedScript.FileName;
     }
@@ -188,7 +219,9 @@ public partial class ScriptsView : UserControl
     {
         if (_selectedScript == null) return;
         var copyName = _selectedScript.FileName + "-copy";
-        _scripts.Create(copyName, EditorTextBox.Text);
+        var copy = _scripts.Create(copyName, EditorTextBox.Text);
+        _scriptView.Refresh();
+        SelectScript(copy);
     }
 
     public void HandleRename()
@@ -196,7 +229,9 @@ public partial class ScriptsView : UserControl
         if (_selectedScript == null) return;
         var newName = Microsoft.VisualBasic.Interaction.InputBox("New name:", "Rename Script", _selectedScript.FileName);
         if (string.IsNullOrWhiteSpace(newName) || newName == _selectedScript.FileName) return;
-        _scripts.Rename(_selectedScript.FileName, newName);
+        var renamed = _scripts.Rename(_selectedScript.FileName, newName);
+        _scriptView.Refresh();
+        SelectScript(renamed);
     }
 
     public void HandleDelete()
@@ -207,6 +242,7 @@ public partial class ScriptsView : UserControl
         if (result == MessageBoxResult.Yes)
         {
             _scripts.Delete(_selectedScript.FileName);
+            _scriptView.Refresh();
             SelectScript(null);
         }
     }
@@ -238,13 +274,13 @@ public partial class ScriptsView : UserControl
         }
         else
         {
-            AgentPanelColumn.Width = new GridLength(300);
+            AgentPanelColumn.Width = new GridLength(340);
             AgentPanel.Visibility = Visibility.Visible;
 
+            LoadAgentConversations();
             if (string.IsNullOrWhiteSpace(_agentChatId))
             {
-                _agentChatId = Guid.NewGuid().ToString("N");
-                _agentMessages.Clear();
+                StartNewAgentConversation("Chat");
             }
 
             UpdateAgentPanelState();
@@ -255,9 +291,67 @@ public partial class ScriptsView : UserControl
     {
         var hasKey = AppServices.AgentKeys.HasAgentKey;
         AgentSetupPanel.Visibility = hasKey ? Visibility.Collapsed : Visibility.Visible;
-        AgentInputBox.IsEnabled = hasKey;
-        AgentSendButton.IsEnabled = hasKey;
+        AgentInputBox.IsEnabled = hasKey && !_isAgentSending;
+        AgentSendButton.IsEnabled = hasKey && !_isAgentSending;
+        AgentStopButton.Visibility = _isAgentSending ? Visibility.Visible : Visibility.Collapsed;
+        AgentStatusText.Text = _isAgentSending
+            ? "Thinking…"
+            : "The Agent sees your message and the current script text.";
         AgentInputBox.ToolTip = hasKey ? "Ask the Agent about the current script" : "Add an MGPT API key to enable Agent replies";
+    }
+
+    private void LoadAgentConversations()
+    {
+        var selected = _agentChatId;
+        var conversations = _agentChats.ListConversations();
+        _suppressAgentConversationChange = true;
+        AgentConversationBox.ItemsSource = conversations;
+        AgentConversationBox.SelectedItem = conversations.FirstOrDefault(c => c.Id == selected) ?? conversations.FirstOrDefault();
+        _suppressAgentConversationChange = false;
+
+        if (AgentConversationBox.SelectedItem is AgentApi.Conversation conversation && string.IsNullOrWhiteSpace(_agentChatId))
+        {
+            LoadAgentConversation(conversation.Id);
+        }
+    }
+
+    private void StartNewAgentConversation(string? title = null)
+    {
+        var conversation = _agentChats.CreateConversation(title);
+        LoadAgentConversations();
+        LoadAgentConversation(conversation.Id);
+    }
+
+    private void LoadAgentConversation(string id)
+    {
+        _agentChatId = id;
+        _agentMessages.Clear();
+        AgentMessagesPanel.Children.Clear();
+        AgentSuggestionsPanel.Visibility = Visibility.Visible;
+
+        foreach (var message in _agentChats.ListMessages(id))
+        {
+            AddAgentMessage(message.Role, message.Content, persist: false);
+        }
+
+        _suppressAgentConversationChange = true;
+        AgentConversationBox.SelectedItem = AgentConversationBox.Items.Cast<AgentApi.Conversation>().FirstOrDefault(c => c.Id == id);
+        _suppressAgentConversationChange = false;
+    }
+
+    private void OnAgentConversationChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressAgentConversationChange) return;
+        if (AgentConversationBox.SelectedItem is AgentApi.Conversation conversation)
+        {
+            LoadAgentConversation(conversation.Id);
+        }
+    }
+
+    private void OnAgentNewChatClick(object sender, RoutedEventArgs e)
+    {
+        StartNewAgentConversation("Chat");
+        UpdateAgentPanelState();
     }
 
     private void OnAgentOpenKeyClick(object sender, RoutedEventArgs e)
@@ -421,46 +515,86 @@ public partial class ScriptsView : UserControl
         SendAgentMessage();
     }
 
+    private void OnAgentSuggestionClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string prompt)
+        {
+            AgentInputBox.Text = prompt;
+            AgentInputBox.Focus();
+        }
+    }
+
+    private void OnAgentStopClick(object sender, RoutedEventArgs e)
+    {
+        _agentCts?.Cancel();
+    }
+
     private async void SendAgentMessage()
     {
         UpdateAgentPanelState();
-        if (!AppServices.AgentKeys.HasAgentKey) return;
+        if (!AppServices.AgentKeys.HasAgentKey || _isAgentSending) return;
 
         var input = AgentInputBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(input)) return;
 
         if (string.IsNullOrWhiteSpace(_agentChatId))
         {
-            _agentChatId = Guid.NewGuid().ToString("N");
+            StartNewAgentConversation(input);
         }
 
         AgentInputBox.Text = "";
-        AgentInputBox.IsEnabled = false;
-        AgentSendButton.IsEnabled = false;
-        AddAgentMessage("user", input);
+        _isAgentSending = true;
+        _agentCts = new CancellationTokenSource();
+        UpdateAgentPanelState();
+        AddAgentMessage("user", input, persist: false);
 
         try
         {
             var scriptName = _selectedScript?.FileName ?? "current-script.js";
-            var response = await _agentApi.SendMessageAsync(_agentChatId, input, "// " + scriptName + "\n" + EditorTextBox.Text);
-            if (!string.IsNullOrWhiteSpace(response))
-            {
-                AddAgentMessage("assistant", response);
-            }
+            await _agentApi.ChatStreamWithToolsAsync(
+                _agentChatId,
+                input,
+                new AgentApi.ScriptContext(scriptName, EditorTextBox.Text),
+                ev =>
+                {
+                    if (ev.Kind == AgentApi.StreamEventKind.Done && ev.DoneMessage is not null)
+                    {
+                        Dispatcher.BeginInvoke((Action)(() => AddAgentMessage("assistant", ev.DoneMessage.Content, persist: false)));
+                    }
+                    else if (ev.Kind == AgentApi.StreamEventKind.Error)
+                    {
+                        Dispatcher.BeginInvoke((Action)(() => AddAgentMessage("error", ev.Text, persist: false)));
+                    }
+                },
+                _agentCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            AddAgentMessage("error", "Agent request stopped.", persist: false);
         }
         catch (Exception ex)
         {
-            AddAgentMessage("error", ex.Message);
+            AddAgentMessage("error", ex.Message, persist: false);
         }
         finally
         {
+            _isAgentSending = false;
+            _agentCts?.Dispose();
+            _agentCts = null;
+            LoadAgentConversations();
             UpdateAgentPanelState();
         }
     }
 
-    private void AddAgentMessage(string role, string text)
+    private void AddAgentMessage(string role, string text, bool persist = false)
     {
+        if (persist && !string.IsNullOrWhiteSpace(_agentChatId))
+        {
+            _agentChats.AppendMessage(_agentChatId, role, text);
+        }
+
         _agentMessages.Add((role, text));
+        AgentSuggestionsPanel.Visibility = Visibility.Collapsed;
 
         var bubble = new Border
         {
@@ -498,6 +632,43 @@ public partial class ScriptsView : UserControl
 
         bubble.Child = tb;
         AgentMessagesPanel.Children.Add(bubble);
+
+        if (role == "assistant" && TryExtractCodeBlock(text, out var code))
+        {
+            var applyButton = new Button
+            {
+                Content = "Apply code to editor",
+                Margin = new Thickness(0, -4, 0, 8),
+                Padding = new Thickness(8, 3, 8, 3),
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Tag = code,
+            };
+            applyButton.Click += OnApplyAgentCodeClick;
+            AgentMessagesPanel.Children.Add(applyButton);
+        }
+
         AgentMessagesScroll.ScrollToEnd();
+    }
+
+    private void OnApplyAgentCodeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string code || string.IsNullOrWhiteSpace(code)) return;
+        if (_selectedScript?.IsBundled == true)
+        {
+            ShowError("This is a bundled read-only script. Use Make Copy before applying Agent code.");
+            return;
+        }
+
+        EditorTextBox.Text = code.Trim();
+        HandleTogglePreview(false);
+    }
+
+    private static bool TryExtractCodeBlock(string text, out string code)
+    {
+        code = string.Empty;
+        var match = Regex.Match(text ?? string.Empty, "```(?:emw|javascript|js)?\\s*(.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        if (!match.Success) return false;
+        code = match.Groups[1].Value.Trim();
+        return !string.IsNullOrWhiteSpace(code);
     }
 }
