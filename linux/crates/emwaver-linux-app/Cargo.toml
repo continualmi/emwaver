@@ -12,4 +12,4 @@ emwaver-linux-core = { path = "../emwaver-linux-core" }
 emwaver-linux-firmware = { path = "../emwaver-linux-firmware" }
 emwaver-linux-transport = { path = "../emwaver-linux-transport" }
 gtk = { package = "gtk4", version = "0.9" }
-
+tokio.workspace = true

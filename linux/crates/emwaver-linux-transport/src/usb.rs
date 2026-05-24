@@ -1,3 +1,4 @@
+use crate::command;
 use crate::usb_midi_sysex::{
     decode_usb_midi_to_superframe, encode_superframe_to_usb_midi, LANE_SIZE_BYTES,
     SUPERFRAME_SIZE_BYTES, USB_MIDI_PACKET_SIZE_BYTES,
@@ -146,6 +147,17 @@ impl LinuxUsbManager {
         }
 
         Ok(candidates)
+    }
+
+    pub async fn probe_run_mode_candidate(
+        &self,
+        candidate: UsbDeviceCandidate,
+    ) -> TransportResult<command::DeviceProbe> {
+        let mut transport = LinuxUsbMidiTransport::new(candidate)?;
+        transport.connect().await?;
+        let probe = command::probe_device(&mut transport).await;
+        let _ = transport.close().await;
+        Ok(probe)
     }
 }
 

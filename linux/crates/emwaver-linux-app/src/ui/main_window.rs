@@ -2,7 +2,7 @@ use adw::prelude::*;
 use emwaver_linux_core::{AppModel, DeviceRecord, TransportKind};
 use emwaver_linux_transport::{
     simulator::SimulatorTransport,
-    usb::{LinuxUsbManager, UsbAccessState},
+    usb::{LinuxUsbManager, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole},
     EmwaverTransport,
 };
 use gtk::{gio, Align, Orientation};
@@ -175,10 +175,39 @@ fn seed_usb_devices(model: &Rc<RefCell<AppModel>>) {
             display_name = format!("{display_name} ({access:?})");
         }
 
-        let mut device = DeviceRecord::new(candidate.id, display_name, candidate.transport, None);
+        let probe = probe_usb_candidate(&candidate);
+        if let Some(board_type) = probe.as_ref().and_then(|probe| probe.board_type.as_ref()) {
+            display_name = format!("{display_name} - {board_type}");
+        }
+
+        let mut device = DeviceRecord::new(
+            candidate.id,
+            display_name,
+            candidate.transport,
+            probe.as_ref().and_then(|probe| probe.hardware_uid.clone()),
+        );
+        device.firmware_version = probe.and_then(|probe| probe.firmware_version);
         device.connected = access == UsbAccessState::Accessible;
         model.borrow_mut().upsert_device(device);
     }
+}
+
+fn probe_usb_candidate(
+    candidate: &UsbDeviceCandidate,
+) -> Option<emwaver_linux_transport::command::DeviceProbe> {
+    if candidate.role != UsbDeviceRole::Stm32RunModeMidi
+        || candidate.access != UsbAccessState::Accessible
+    {
+        return None;
+    }
+
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .ok()?;
+    runtime
+        .block_on(LinuxUsbManager::default().probe_run_mode_candidate(candidate.clone()))
+        .ok()
 }
 
 fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) {

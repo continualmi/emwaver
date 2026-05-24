@@ -140,6 +140,7 @@ dependencies = [
  "emwaver-linux-transport",
  "gtk4",
  "libadwaita",
+ "tokio",
 ]
 
 [[package]]

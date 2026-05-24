@@ -1,4 +1,5 @@
 pub mod ble;
+pub mod command;
 pub mod simulator;
 pub mod usb;
 pub mod usb_midi_sysex;
@@ -36,6 +37,8 @@ pub enum TransportError {
     Fixture(String),
     #[error("USB discovery failed: {0}")]
     Usb(String),
+    #[error("command failed: {0}")]
+    Command(String),
 }
 
 pub type TransportResult<T> = Result<T, TransportError>;
