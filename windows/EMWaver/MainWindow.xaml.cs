@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using EMWaver.Services;
 using EMWaver.Services.Agent;
@@ -37,6 +38,8 @@ public partial class MainWindow : Window
         _device.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
         _firmwareUpdater.PropertyChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
         _device.AvailablePorts.CollectionChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
+        _device.BleDiscoveredDevices.CollectionChanged += (_, __) => Dispatcher.Invoke(UpdateDeviceStatus);
+        AppServices.Settings.Changed += OnSettingsChanged;
 
         // Script view events.
         _scriptsView.PreviewModeChanged += OnPreviewModeChanged;
@@ -55,10 +58,22 @@ public partial class MainWindow : Window
             UpdateAgentKeyIndicator();
         };
 
-        Closed += (_, __) => _runningPulseTimer.Stop();
+        Closed += (_, __) =>
+        {
+            _runningPulseTimer.Stop();
+            AppServices.Settings.Changed -= OnSettingsChanged;
+        };
     }
 
     // --- Toolbar handlers ---
+
+    private void OnSettingsChanged()
+    {
+        if (_device.IsConnected)
+        {
+            _device.ApplyTransportDebugPreference();
+        }
+    }
 
     private void OnDeviceMenuClick(object sender, RoutedEventArgs e)
     {
@@ -118,6 +133,14 @@ public partial class MainWindow : Window
 
     private void OnNewClick(object sender, RoutedEventArgs e) => _scriptsView.HandleNewScript();
     private void OnSaveClick(object sender, RoutedEventArgs e) => _scriptsView.HandleSaveScript();
+    private void OnMakeCopyClick(object sender, RoutedEventArgs e) => _scriptsView.HandleMakeCopy();
+    private void OnRenameClick(object sender, RoutedEventArgs e) => _scriptsView.HandleRename();
+    private void OnDeleteClick(object sender, RoutedEventArgs e) => _scriptsView.HandleDelete();
+    private void OnMoreClick(object sender, RoutedEventArgs e)
+    {
+        MoreButton.ContextMenu.PlacementTarget = MoreButton;
+        MoreButton.ContextMenu.IsOpen = true;
+    }
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         var vm = new ViewModels.SettingsViewModel(AppServices.Settings);
@@ -141,13 +164,23 @@ public partial class MainWindow : Window
         }
         else if (device.IsConnected)
         {
-            DeviceStatusText.Text = device.ConnectedPort?.DisplayName ?? "Connected";
-            DeviceIconText.Text = "🔌";
+            DeviceStatusText.Text = BoardDisplayName(device.ConnectedBoardType ?? device.LastDetectedBoardType) ?? (device.ConnectedPort?.DisplayName ?? "Connected");
+            DeviceIconText.Text = device.ActiveTransport switch
+            {
+                DeviceTransport.Ble => "📡",
+                DeviceTransport.Wifi => "📶",
+                _ => "🔌",
+            };
         }
         else if (_firmwareUpdater.DfuConnected || device.DfuConnected)
         {
             DeviceStatusText.Text = "Update Mode";
             DeviceIconText.Text = "🔄";
+        }
+        else if (device.IsBleScanning)
+        {
+            DeviceStatusText.Text = "Scanning";
+            DeviceIconText.Text = "📡";
         }
         else
         {
@@ -155,9 +188,22 @@ public partial class MainWindow : Window
             DeviceIconText.Text = "⚡";
         }
 
-        DeviceVersionText.Text = device.IsConnected && !string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion)
-            ? $"{(device.ConnectedBoardType ?? device.LastDetectedBoardType ?? "device")} | EMWaver {device.DeviceEmwaverVersion}"
+        DeviceVersionText.Text = device.IsConnected
+            ? $"{device.ActiveTransport}{(string.IsNullOrWhiteSpace(device.DeviceEmwaverVersion) ? "" : $" | EMWaver {device.DeviceEmwaverVersion}")}"
             : "";
+    }
+
+    private static string? BoardDisplayName(string? boardType)
+    {
+        return (boardType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "stm32f042" => "STM32F042",
+            "esp32s2" => "ESP32-S2",
+            "esp32s3" => "ESP32-S3",
+            "esp32" => "ESP32",
+            "" => null,
+            var other => other.ToUpperInvariant(),
+        };
     }
 
     private void UpdateAgentKeyIndicator()
@@ -215,7 +261,7 @@ public partial class MainWindow : Window
             }
             if (File.Exists(iconPath))
             {
-                Icon = System.Drawing.Icon.ExtractAssociatedIcon(iconPath);
+                Icon = BitmapFrame.Create(new Uri(iconPath, UriKind.Absolute));
             }
         }
         catch

@@ -17,7 +17,7 @@
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel Margin="20">
                 <!-- Status line -->
-                <TextBlock x:Name="StatusLine" FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                <TextBlock x:Name="StatusLine" FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"
                            Margin="0,0,0,16" />
 
                 <!-- Device list card -->
@@ -27,7 +27,7 @@
                     <StackPanel>
                         <TextBlock Text="Local devices" FontWeight="SemiBold" FontSize="15" Margin="0,0,0,12" />
                         <TextBlock x:Name="NoDevicesText" Text="No EMWaver devices discovered yet."
-                                   FontSize="13" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                    Visibility="Visible" />
                         <ItemsControl x:Name="DeviceList" Visibility="Collapsed">
                             <ItemsControl.ItemTemplate>
@@ -47,7 +47,7 @@
                     <StackPanel>
                         <TextBlock Text="Wi-Fi Setup" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4" />
                         <TextBlock Text="Provision this ESP32 for local network control."
-                                   FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                                   FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                    Margin="0,0,0,12" />
 
                         <Grid>
@@ -94,7 +94,7 @@
                         <StackPanel Grid.Column="0">
                             <TextBlock Text="Firmware" FontWeight="SemiBold" FontSize="14" Margin="0,0,0,4" />
                             <TextBlock x:Name="FirmwareDescText" FontSize="12"
-                                       Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                                       Foreground="{DynamicResource AppTextSecondaryBrush}" />
                         </StackPanel>
                         <Button Grid.Column="1" x:Name="FirmwareButton" Content="Update firmware"
                                 Width="130" Height="32" VerticalAlignment="Center"

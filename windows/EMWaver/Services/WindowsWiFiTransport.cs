@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace EMWaver.Services;
 
-internal static class WindowsWiFiTransport
+public static class WindowsWiFiTransport
 {
     internal const string TransportName = "Wi-Fi";
     internal const int DefaultPort = 3922;
@@ -26,7 +26,7 @@ internal static class WindowsWiFiTransport
     private const int MaxSsidBytes = 32;
     private const int MaxPasswordBytes = 64;
 
-    internal sealed record DiscoveredDevice(
+    public sealed record DiscoveredDevice(
         string Id,
         string DisplayName,
         string Host,

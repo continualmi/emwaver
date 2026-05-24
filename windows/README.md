@@ -1,6 +1,6 @@
 # EMWaver Windows App (`/windows`)
 
-Native Windows desktop app (WinUI 3 / Windows App SDK) for EMWaver.
+Native Windows desktop app (WPF) for EMWaver.
 
 Target: Windows 11 only.
 
@@ -31,10 +31,12 @@ Primary app shell:
 - `App.xaml` / `App.xaml.cs`
 - `MainWindow.xaml` / `MainWindow.xaml.cs`
 
-UI pages:
-- `Pages/ScriptsPage*`
-- `Pages/DevicePage*`
-- `Pages/SettingsPage*`
+WPF views:
+- `Views/ScriptsView*`
+- `Views/DeviceConnectionWindow*`
+- `Views/SettingsWindow*`
+- `Views/FirmwareUpdateWindow*`
+- `Views/AgentKeyWindow*`
 
 Core service layer:
 - `Services/UsbMidiSysex.cs` (shared SysEx/superframe transport codec)
@@ -50,9 +52,9 @@ Scripting/runtime:
 - `Scripting/SimulatorCommandBridge.cs`
 
 Auxiliary:
-- `Dialogs/*`
 - `Converters/*`
 - `Models/*`
+- `ViewModels/*`
 
 ---
 
@@ -80,8 +82,8 @@ The Windows app is self-contained and does not connect to the Gateway as a runti
 
 ## 3.4 Firmware update path
 
-Firmware update dialogs/managers are present:
-- `Dialogs/FirmwareUpdateDialog*`
+Firmware update windows/managers are present:
+- `Views/FirmwareUpdateWindow*`
 - `Services/FirmwareUpdateManager.cs`
 - `Services/Dfu.cs`
 
@@ -136,7 +138,7 @@ The parity work in this folder specifically addressed the older Windows gaps rel
 - ESP32-S3 setup/update uses the bundled helper + bundled image set when present.
 
 3. Device UI / wording
-- `Pages/DevicePage*` and `Dialogs/FirmwareUpdateDialog*` are board-aware and local-first.
+- `Views/DeviceConnectionWindow*` and `Views/FirmwareUpdateWindow*` are board-aware and local-first.
 
 4. ESP32-S3 support
 - Windows now detects ESP bootloader availability, resolves flash-capable serial ports, and guides the user toward the serial flashing path instead of forcing STM32 DFU semantics onto ESP boards.
@@ -209,7 +211,7 @@ Windows should expose:
 The main remaining work after the parity code changes is validation on a real Windows workstation:
 
 1. Build validation
-- confirm the WinUI project builds cleanly on Windows 11 with the expected SDK/toolchain.
+- confirm the WPF project builds cleanly on Windows 11 with the expected SDK/toolchain.
 - confirm `scripts/rebirth-windows-validation.ps1 -Ci` passes on hosted Windows CI, including the simulator-backed script-engine test.
 - confirm ESP32 BLE scan/connect and notification delivery on a Bluetooth-capable Windows 11 machine.
 
@@ -241,7 +243,7 @@ Required:
 - Windows 11
 - Visual Studio 2022
   - .NET desktop workload
-  - Windows App SDK / WinUI 3 tooling
+  - .NET WPF tooling
 - .NET SDK 10.x
 
 Open `EMWaver.sln` in Visual Studio for build/run/debug.

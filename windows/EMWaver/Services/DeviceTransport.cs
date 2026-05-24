@@ -1,6 +1,6 @@
 namespace EMWaver.Services;
 
-internal enum DeviceTransport
+public enum DeviceTransport
 {
     None = 0,
     UsbMidi = 1,

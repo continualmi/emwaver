@@ -2,6 +2,29 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- App-wide contrast -->
+    <SolidColorBrush x:Key="AppWindowBackgroundBrush" Color="#FFFFFFFF" />
+    <SolidColorBrush x:Key="AppTextForegroundBrush" Color="#FF1F2328" />
+    <SolidColorBrush x:Key="AppTextSecondaryBrush" Color="#FF57606A" />
+    <Style TargetType="{x:Type Window}">
+        <Setter Property="Background" Value="{DynamicResource AppWindowBackgroundBrush}" />
+    </Style>
+    <Style TargetType="{x:Type TextBlock}">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextForegroundBrush}" />
+    </Style>
+    <Style TargetType="{x:Type Label}">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextForegroundBrush}" />
+    </Style>
+    <Style TargetType="{x:Type GroupBox}">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextForegroundBrush}" />
+    </Style>
+    <Style TargetType="{x:Type CheckBox}">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextForegroundBrush}" />
+    </Style>
+    <Style TargetType="{x:Type RadioButton}">
+        <Setter Property="Foreground" Value="{DynamicResource AppTextForegroundBrush}" />
+    </Style>
+
     <!-- Editor surfaces -->
     <SolidColorBrush x:Key="EditorSurfaceBackgroundBrush" Color="#FFF7F8FA" />
     <SolidColorBrush x:Key="EditorSurfaceBorderBrush" Color="#FFD8DEE4" />
@@ -19,7 +42,17 @@
     <!-- Plot -->
     <SolidColorBrush x:Key="PlotLineBrush" Color="#FF005FB8" />
 
-    <!-- Read-only banner -->
+    <!-- Script list pills / read-only banner -->
+    <SolidColorBrush x:Key="ScriptPillExampleBackgroundBrush" Color="#FFEAF4FF" />
+    <SolidColorBrush x:Key="ScriptPillExampleForegroundBrush" Color="#FF005FB8" />
+    <SolidColorBrush x:Key="ScriptPillLibraryBackgroundBrush" Color="#FFF3E8FF" />
+    <SolidColorBrush x:Key="ScriptPillLibraryForegroundBrush" Color="#FF6F2DA8" />
+    <SolidColorBrush x:Key="ScriptPillKernelBackgroundBrush" Color="#FFFFF4CE" />
+    <SolidColorBrush x:Key="ScriptPillKernelForegroundBrush" Color="#FF7A4D00" />
+    <SolidColorBrush x:Key="ScriptPillCustomBackgroundBrush" Color="#FFE8F5E9" />
+    <SolidColorBrush x:Key="ScriptPillCustomForegroundBrush" Color="#FF1E6B37" />
+    <SolidColorBrush x:Key="ScriptPillOverrideBackgroundBrush" Color="#FFFFECE8" />
+    <SolidColorBrush x:Key="ScriptPillOverrideForegroundBrush" Color="#FFB42318" />
     <SolidColorBrush x:Key="ReadOnlyBannerBackgroundBrush" Color="#FFF3F4F6" />
     <SolidColorBrush x:Key="ReadOnlyBannerBorderBrush" Color="#FFD0D7DE" />
 

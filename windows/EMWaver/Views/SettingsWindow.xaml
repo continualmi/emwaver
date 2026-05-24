@@ -2,11 +2,16 @@
     x:Class="EMWaver.Views.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:converters="clr-namespace:EMWaver.Converters"
     Title="Settings"
-    Width="500" Height="420"
+    Width="560" Height="560"
     WindowStartupLocation="CenterOwner"
     WindowStyle="ToolWindow"
     ResizeMode="NoResize">
+
+    <Window.Resources>
+        <converters:ThemeToIndexConverter x:Key="ThemeToIndexConverter" />
+    </Window.Resources>
 
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -19,7 +24,7 @@
             <GroupBox Header="Agent" Padding="12" Margin="0,0,0,12">
                 <StackPanel>
                     <TextBlock Text="Add an MGPT API key to enable Agent replies. Local scripts and hardware control work without a key."
-                               FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                TextWrapping="Wrap" Margin="0,0,0,8" />
                     <TextBlock>
                         <Hyperlink NavigateUri="https://mdl.continualmi.com/mgpt-api" Click="OnMgptLinkClick">
@@ -31,9 +36,24 @@
 
             <!-- Device access section -->
             <GroupBox Header="Device access" Padding="12" Margin="0,0,0,12">
-                <TextBlock Text="Local scripts and hardware control work immediately."
-                           FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
-                           TextWrapping="Wrap" />
+                <StackPanel>
+                    <TextBlock Text="Local scripts and hardware control work immediately."
+                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <CheckBox Content="Show transport log in Scripts"
+                              IsChecked="{Binding ShowTransportLog, Mode=TwoWay}" />
+                </StackPanel>
+            </GroupBox>
+
+            <!-- Device diagnostics section -->
+            <GroupBox Header="Device diagnostics" Padding="12" Margin="0,0,0,12">
+                <StackPanel>
+                    <CheckBox Content="Log transport packets on ESP serial"
+                              IsChecked="{Binding TransportDebugLoggingEnabled, Mode=TwoWay}" />
+                    <TextBlock Text="When enabled, ESP32 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor."
+                               FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
+                               TextWrapping="Wrap" Margin="0,8,0,0" />
+                </StackPanel>
             </GroupBox>
 
             <!-- Theme section -->

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
@@ -7,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Threading;
+using ICSharpCode.AvalonEdit.Highlighting;
 using EMWaver.Models;
 using EMWaver.Scripting;
 using EMWaver.Scripting.Render;
@@ -26,6 +28,10 @@ public partial class ScriptsView : UserControl
 
     private readonly DispatcherTimer _runTimer;
     private readonly DispatcherTimer _versionCheckTimer;
+    private readonly object _renderCoalesceLock = new();
+    private ScriptTree? _pendingRenderTree;
+    private bool _renderRefreshPending;
+    private bool _transportLogRefreshPending;
 
     private ScriptInfo? _selectedScript;
     private bool _isPreviewMode;
@@ -36,6 +42,11 @@ public partial class ScriptsView : UserControl
     // Agent state
     private string _agentChatId = "";
     private readonly List<(string role, string message)> _agentMessages = new();
+
+    public ScriptsView()
+        : this(AppServices.Scripts, AppServices.ScriptEngine, AppServices.Device, AppServices.AgentApi, AppServices.AgentChats)
+    {
+    }
 
     public ScriptsView(
         ScriptRepository scripts,
@@ -53,7 +64,23 @@ public partial class ScriptsView : UserControl
         _agentApi = agentApi;
         _agentChats = agentChats;
 
+        _device.PropertyChanged += OnDevicePropertyChanged;
+        AppServices.Settings.Changed += OnSettingsChanged;
+        Unloaded += (_, __) =>
+        {
+            _device.PropertyChanged -= OnDevicePropertyChanged;
+            AppServices.Settings.Changed -= OnSettingsChanged;
+        };
+        RefreshTransportLogVisibility();
+
+        EditorTextBox.SyntaxHighlighting = HighlightingManager.Instance.GetDefinition("JavaScript");
         ScriptListBox.ItemsSource = _scripts.All;
+        PreviewScrollViewer.PreviewMouseWheel += OnPreviewMouseWheel;
+        _engine.Setup(
+            ScheduleRender,
+            (payload, timeoutMs) => _device.SendPacket(payload, timeoutMs),
+            message => Dispatcher.BeginInvoke((Action)(() => ShowError(message))),
+            getBoardType: () => _device.ConnectedBoardType ?? _device.LastDetectedBoardType);
 
         _runTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(100) };
         _runTimer.Tick += OnRunTick;
@@ -63,6 +90,72 @@ public partial class ScriptsView : UserControl
         _versionCheckTimer.Start();
 
         Loaded += async (_, __) => await _scripts.EnsureBootstrappedAsync();
+    }
+
+    private void ScheduleRender(ScriptTree tree)
+    {
+        lock (_renderCoalesceLock)
+        {
+            _pendingRenderTree = tree;
+            if (_renderRefreshPending) return;
+            _renderRefreshPending = true;
+        }
+
+        Dispatcher.BeginInvoke((Action)(() =>
+        {
+            ScriptTree? latest;
+            lock (_renderCoalesceLock)
+            {
+                latest = _pendingRenderTree;
+                _pendingRenderTree = null;
+                _renderRefreshPending = false;
+            }
+
+            if (!_isPreviewMode || latest == null) return;
+            PreviewContent.Content = _renderer.Render(latest);
+        }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnPreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        // WPF nested ScrollViewers/controls can swallow wheel input in generated script UI.
+        // Route wheel movement to the main script preview scroller so users do not have to drag the bar.
+        if (!_isPreviewMode) return;
+
+        PreviewScrollViewer.ScrollToVerticalOffset(PreviewScrollViewer.VerticalOffset - e.Delta);
+        e.Handled = true;
+    }
+
+    private void OnDevicePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName != nameof(WindowsDeviceManager.ActivityLogText)) return;
+        if (!AppServices.Settings.ShowTransportLog) return;
+        if (_transportLogRefreshPending) return;
+
+        _transportLogRefreshPending = true;
+        Dispatcher.BeginInvoke((Action)(() =>
+        {
+            _transportLogRefreshPending = false;
+            if (!AppServices.Settings.ShowTransportLog) return;
+            TransportLogTextBox.Text = _device.ActivityLogText;
+            TransportLogTextBox.ScrollToEnd();
+        }), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
+    private void OnSettingsChanged()
+    {
+        Dispatcher.BeginInvoke((Action)RefreshTransportLogVisibility);
+    }
+
+    private void RefreshTransportLogVisibility()
+    {
+        var show = AppServices.Settings.ShowTransportLog;
+        TransportLogExpander.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        if (show)
+        {
+            TransportLogTextBox.Text = _device.ActivityLogText;
+            TransportLogTextBox.ScrollToEnd();
+        }
     }
 
     // --- Public API for MainWindow ---
@@ -81,6 +174,11 @@ public partial class ScriptsView : UserControl
     public void HandleSaveScript()
     {
         if (_selectedScript == null) return;
+        if (_selectedScript.IsBundled)
+        {
+            ShowError("This is a bundled read-only script. Use Make Copy before editing.");
+            return;
+        }
         _scripts.Save(_selectedScript.FileName, EditorTextBox.Text);
         _suppressTextChanged = true;
         _pendingSaveScript = _selectedScript.FileName;
@@ -148,7 +246,28 @@ public partial class ScriptsView : UserControl
                 _agentChatId = Guid.NewGuid().ToString("N");
                 _agentMessages.Clear();
             }
+
+            UpdateAgentPanelState();
         }
+    }
+
+    private void UpdateAgentPanelState()
+    {
+        var hasKey = AppServices.AgentKeys.HasAgentKey;
+        AgentSetupPanel.Visibility = hasKey ? Visibility.Collapsed : Visibility.Visible;
+        AgentInputBox.IsEnabled = hasKey;
+        AgentSendButton.IsEnabled = hasKey;
+        AgentInputBox.ToolTip = hasKey ? "Ask the Agent about the current script" : "Add an MGPT API key to enable Agent replies";
+    }
+
+    private void OnAgentOpenKeyClick(object sender, RoutedEventArgs e)
+    {
+        var window = new AgentKeyWindow(AppServices.AgentKeys)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        window.ShowDialog();
+        UpdateAgentPanelState();
     }
 
     public async Task HandleStopRunning()
@@ -170,16 +289,23 @@ public partial class ScriptsView : UserControl
     private void SelectScript(ScriptInfo? info)
     {
         _selectedScript = info;
+        if (_isPreviewMode)
+        {
+            HandleTogglePreview(false);
+        }
+
         if (info == null)
         {
             EditorTitle.Text = "No script selected";
             EditorTextBox.Text = "";
             EditorTextBox.IsEnabled = false;
+            EditorTextBox.IsReadOnly = false;
             return;
         }
 
-        EditorTitle.Text = info.DisplayName;
+        EditorTitle.Text = string.IsNullOrWhiteSpace(info.KindLabel) ? info.DisplayName : $"{info.DisplayName} — {info.KindLabel}";
         EditorTextBox.IsEnabled = true;
+        EditorTextBox.IsReadOnly = info.IsBundled;
 
         try
         {
@@ -193,7 +319,7 @@ public partial class ScriptsView : UserControl
         ErrorBanner.Visibility = Visibility.Collapsed;
     }
 
-    private void OnEditorTextChanged(object sender, TextChangedEventArgs e)
+    private void OnEditorTextChanged(object? sender, EventArgs e)
     {
         if (_suppressTextChanged)
         {
@@ -211,7 +337,7 @@ public partial class ScriptsView : UserControl
 
         try
         {
-            _engine.Run(EditorTextBox.Text);
+            _engine.Execute(EditorTextBox.Text);
             _isRunning = true;
             _runTimer.Start();
 
@@ -236,19 +362,7 @@ public partial class ScriptsView : UserControl
     {
         if (!_isRunning) return;
 
-        var state = _engine.PollState();
-        var tree = state?.Tree;
-
-        if (tree != null && _isPreviewMode)
-        {
-            var element = _renderer.Render(tree);
-            PreviewContent.Content = element;
-        }
-
-        if (state?.IsComplete == true)
-        {
-            StopScript();
-        }
+        // Script render updates arrive through ScriptEngine.Setup's render callback.
     }
 
     private void InvokeScriptHandler(string handlerId, IReadOnlyList<object?> args)
@@ -256,7 +370,7 @@ public partial class ScriptsView : UserControl
         if (_selectedScript == null) return;
         try
         {
-            _engine.FireHandler(handlerId, args);
+            _engine.Invoke(handlerId, args);
         }
         catch (Exception ex)
         {
@@ -309,6 +423,9 @@ public partial class ScriptsView : UserControl
 
     private async void SendAgentMessage()
     {
+        UpdateAgentPanelState();
+        if (!AppServices.AgentKeys.HasAgentKey) return;
+
         var input = AgentInputBox.Text.Trim();
         if (string.IsNullOrWhiteSpace(input)) return;
 
@@ -318,11 +435,14 @@ public partial class ScriptsView : UserControl
         }
 
         AgentInputBox.Text = "";
+        AgentInputBox.IsEnabled = false;
+        AgentSendButton.IsEnabled = false;
         AddAgentMessage("user", input);
 
         try
         {
-            var response = await _agentApi.SendMessageAsync(_agentChatId, input, EditorTextBox.Text);
+            var scriptName = _selectedScript?.FileName ?? "current-script.js";
+            var response = await _agentApi.SendMessageAsync(_agentChatId, input, "// " + scriptName + "\n" + EditorTextBox.Text);
             if (!string.IsNullOrWhiteSpace(response))
             {
                 AddAgentMessage("assistant", response);
@@ -331,6 +451,10 @@ public partial class ScriptsView : UserControl
         catch (Exception ex)
         {
             AddAgentMessage("error", ex.Message);
+        }
+        finally
+        {
+            UpdateAgentPanelState();
         }
     }
 

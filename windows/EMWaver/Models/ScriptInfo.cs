@@ -11,13 +11,44 @@ public sealed record ScriptInfo(
         ? Name
         : Name + ".js";
 
+    public string DisplayName => Name;
+
+    public string FilePath => FullPath;
+
     public string KindLabel
     {
         get
         {
-            if (IsBundled) return "Read-only";
-            if (ShadowsBundled) return "Overrides read-only";
-            return string.Empty;
+            if (IsBundled && (Name.Equals("emw-kernel", System.StringComparison.OrdinalIgnoreCase) || Name.Equals("emw-protocol", System.StringComparison.OrdinalIgnoreCase))) return "Kernel";
+            if (IsBundled && Name.StartsWith("emw-", System.StringComparison.OrdinalIgnoreCase)) return "Library";
+            if (IsBundled) return "Example";
+            if (ShadowsBundled) return "Override";
+            return "Custom";
+        }
+    }
+
+    public int KindSortRank
+    {
+        get
+        {
+            return KindLabel switch
+            {
+                "Example" => 0,
+                "Library" => 1,
+                "Kernel" => 2,
+                "Override" => 3,
+                _ => 3,
+            };
+        }
+    }
+
+    public string KindDetail
+    {
+        get
+        {
+            if (IsBundled) return "Bundled · read-only";
+            if (ShadowsBundled) return "Local editable override";
+            return "Local editable script";
         }
     }
 }

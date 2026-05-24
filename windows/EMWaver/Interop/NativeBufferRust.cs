@@ -3,8 +3,8 @@ using System;
 namespace EMWaver.Interop;
 
 // Windows: intentionally avoid the Rust buffer-core DLL.
-// This file keeps the same API surface that the rest of the WinUI app expects,
-// but implements the minimal buffer logic in managed C#.
+// This file keeps the transport buffer API surface local to the WPF app,
+// and implements the minimal buffer logic in managed C#.
 internal static class NativeBufferRust
 {
     internal const int PacketSizeBytes = 18;

@@ -156,17 +156,40 @@ public sealed class ScriptRenderer
     {
         var raw = node.Props.Raw;
         var spacing = ScriptPropParsers.GetSpacing(raw, fallback: 8);
-        var panel = new StackPanel { Orientation = orientation };
-
         var children = node.Children.Select(RenderNode).ToList();
+
+        if (orientation == System.Windows.Controls.Orientation.Horizontal)
+        {
+            // Avoid WPF StackPanel's infinite horizontal measure, which causes script UIs
+            // to overflow and create horizontal scrolling. A star grid keeps row children
+            // inside the preview viewport, matching the macOS adaptive layout more closely.
+            var grid = new System.Windows.Controls.Grid { HorizontalAlignment = HorizontalAlignment.Stretch };
+            for (var i = 0; i < children.Count; i++)
+            {
+                grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                var child = children[i];
+                var positioned = child as FrameworkElement ?? new ContentControl { Content = child };
+                positioned.HorizontalAlignment = HorizontalAlignment.Stretch;
+                if (i > 0) positioned.Margin = new Thickness(spacing, 0, 0, 0);
+                System.Windows.Controls.Grid.SetColumn(positioned, i);
+                grid.Children.Add(positioned);
+            }
+            return grid;
+        }
+
+        var panel = new StackPanel
+        {
+            Orientation = orientation,
+            HorizontalAlignment = HorizontalAlignment.Stretch,
+        };
+
         for (var i = 0; i < children.Count; i++)
         {
             var child = children[i];
-            if (child is FrameworkElement fe && i > 0)
+            if (child is FrameworkElement fe)
             {
-                fe.Margin = orientation == System.Windows.Controls.Orientation.Vertical
-                    ? new Thickness(0, spacing, 0, 0)
-                    : new Thickness(spacing, 0, 0, 0);
+                fe.HorizontalAlignment = HorizontalAlignment.Stretch;
+                if (i > 0) fe.Margin = new Thickness(0, spacing, 0, 0);
             }
             panel.Children.Add(child);
         }
@@ -404,8 +427,12 @@ public sealed class ScriptRenderer
         return new ScrollViewer
         {
             Content = content,
-            HorizontalScrollBarVisibility = showsIndicators ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden,
-            VerticalScrollBarVisibility = showsIndicators ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden,
+            HorizontalScrollBarVisibility = axis == "horizontal"
+                ? (showsIndicators ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden)
+                : ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = axis == "horizontal"
+                ? ScrollBarVisibility.Disabled
+                : (showsIndicators ? ScrollBarVisibility.Auto : ScrollBarVisibility.Hidden),
         };
     }
 

@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace EMWaver.Services;
 
-internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
+public sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
     private System.Windows.Threading.Dispatcher? _ui;
     private Timer? _dfuPollTimer;
@@ -717,13 +717,13 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
     private void RunOnUi(Action fn)
     {
         var ui = _ui;
-        if (ui == null || ui.HasThreadAccess)
+        if (ui == null || ui.CheckAccess())
         {
             fn();
             return;
         }
 
-        _ = ui.Invoke(fn);
+        ui.Invoke(fn);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

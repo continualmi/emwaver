@@ -17,6 +17,13 @@ internal static class WindowsBleTransport
 
     internal const int WriteChunkBytes = 20;
 
+    public sealed record DiscoveredDevice(
+        string Id,
+        ulong BluetoothAddress,
+        string DisplayName,
+        string BoardType,
+        DateTime LastSeen);
+
     internal sealed class ScanSession : IDisposable
     {
         private readonly BluetoothLEAdvertisementWatcher _watcher;
@@ -270,20 +277,17 @@ internal static class WindowsBleTransport
 
         Debug.WriteLine($"[EMWaver][BLE][TX] superframe36={superframe36.Length} sysex={sysex.Length} cmd0=0x{superframe36[0]:X2}");
 
-        for (int offset = 0; offset < sysex.Length; offset += WriteChunkBytes)
+        // ESP32 firmware expects one complete 48-byte SysEx superframe per GATT write.
+        // Splitting into 20-byte ATT chunks makes the peripheral see partial writes and
+        // reject/drop the command before it reaches the command queue.
+        var status = characteristic
+            .WriteValueAsync(bufferFromBytes(sysex), GattWriteOption.WriteWithResponse)
+            .AsTask()
+            .GetAwaiter()
+            .GetResult();
+        if (status != GattCommunicationStatus.Success)
         {
-            var count = Math.Min(WriteChunkBytes, sysex.Length - offset);
-            var chunk = new byte[count];
-            System.Buffer.BlockCopy(sysex, offset, chunk, 0, count);
-            var status = characteristic
-                .WriteValueAsync(bufferFromBytes(chunk), GattWriteOption.WriteWithResponse)
-                .AsTask()
-                .GetAwaiter()
-                .GetResult();
-            if (status != GattCommunicationStatus.Success)
-            {
-                return $"BLE write failed: {status}";
-            }
+            return $"BLE write failed: {status}";
         }
 
         return null;

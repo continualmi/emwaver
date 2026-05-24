@@ -3,13 +3,11 @@ using System.IO;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using Windows.Storage;
 
 namespace EMWaver.Services.Agent;
 
-internal sealed class AgentApiKeyStore
+public sealed class AgentApiKeyStore
 {
-    private const string KeyApiKey = "agent.emwaver.apiKey";
     private const string PersistFileName = "agent_api_key.json";
 
     private string? _apiKey;
@@ -23,9 +21,8 @@ internal sealed class AgentApiKeyStore
         TryLoadPersisted(PersistFileName);
         if (string.IsNullOrWhiteSpace(_apiKey))
         {
-            _apiKey = TryReadLocalSetting(KeyApiKey);
+            _apiKey = Environment.GetEnvironmentVariable("EMWAVER_AGENT_API_KEY")?.Trim();
         }
-
         if (!string.IsNullOrWhiteSpace(_apiKey))
         {
             PersistCredential();
@@ -34,6 +31,11 @@ internal sealed class AgentApiKeyStore
 
     internal bool HasAgentKey => !string.IsNullOrWhiteSpace(GetApiKey());
 
+    public void SetApiKey(string apiKey)
+    {
+        SaveApiKeyAsync(apiKey, CancellationToken.None).GetAwaiter().GetResult();
+    }
+
     internal string? GetApiKey()
     {
         if (!string.IsNullOrWhiteSpace(_apiKey))
@@ -41,8 +43,7 @@ internal sealed class AgentApiKeyStore
             return _apiKey;
         }
 
-        _apiKey = TryReadLocalSetting(KeyApiKey);
-        return string.IsNullOrWhiteSpace(_apiKey) ? null : _apiKey;
+        return null;
     }
 
     internal async Task<string> SaveApiKeyAsync(string apiKey, CancellationToken ct)
@@ -64,47 +65,13 @@ internal sealed class AgentApiKeyStore
     internal void Clear()
     {
         _apiKey = null;
-        TryRemoveLocalSetting(KeyApiKey);
         TryDeletePersisted(PersistFileName);
         Changed?.Invoke();
     }
 
     private void PersistCredential()
     {
-        TryWriteLocalSetting(KeyApiKey, _apiKey);
         TrySavePersisted(PersistFileName);
-    }
-
-    private static string? TryReadLocalSetting(string key)
-    {
-        try
-        {
-            var ls = ApplicationData.Current.LocalSettings;
-            return ls.Values.TryGetValue(key, out var v) ? v as string : null;
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private static void TryWriteLocalSetting(string key, string? value)
-    {
-        try
-        {
-            var ls = ApplicationData.Current.LocalSettings;
-            if (string.IsNullOrWhiteSpace(value)) ls.Values.Remove(key);
-            else ls.Values[key] = value;
-        }
-        catch
-        {
-        }
-    }
-
-    private static void TryRemoveLocalSetting(string key)
-    {
-        try { ApplicationData.Current.LocalSettings.Values.Remove(key); }
-        catch { }
     }
 
     private static string PersistPath(string fileName)

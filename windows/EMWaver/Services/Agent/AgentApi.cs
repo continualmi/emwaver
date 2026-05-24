@@ -12,8 +12,10 @@ using EMWaver;
 
 namespace EMWaver.Services.Agent;
 
-internal sealed class AgentApi
+public sealed class AgentApi
 {
+    private const string DefaultMgptResponsesEndpoint = "https://mdl.continualmi.com/api/mgpt/responses";
+
     internal sealed record Conversation(string Id, string? Title, long CreatedAtMs, long UpdatedAtMs)
     {
         public string DisplayTitle => !string.IsNullOrWhiteSpace(Title) ? Title!.Trim() : Id;
@@ -78,6 +80,32 @@ internal sealed class AgentApi
         return ChatStreamWithToolsAsync(conversationId, message, null, onEvent, ct);
     }
 
+    public async Task<string> SendMessageAsync(string conversationId, string message, string scriptSource)
+    {
+        string response = string.Empty;
+        await ChatStreamWithToolsAsync(
+            conversationId,
+            message,
+            new ScriptContext("current-script.js", scriptSource ?? string.Empty),
+            ev =>
+            {
+                if (ev.Kind == StreamEventKind.Done && ev.DoneMessage is not null)
+                {
+                    response = ev.DoneMessage.Content;
+                }
+                else if (ev.Kind == StreamEventKind.Delta || ev.Kind == StreamEventKind.Tool)
+                {
+                    response += ev.Text;
+                }
+                else if (ev.Kind == StreamEventKind.Error)
+                {
+                    response = ev.Text;
+                }
+            },
+            CancellationToken.None);
+        return response;
+    }
+
     internal async Task ChatStreamWithToolsAsync(
         string conversationId,
         string message,
@@ -132,9 +160,14 @@ internal sealed class AgentApi
             .Select(v => (v ?? "").Trim())
             .FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
 
-        if (string.IsNullOrWhiteSpace(active) || !Uri.TryCreate(active, UriKind.Absolute, out var endpoint))
+        if (string.IsNullOrWhiteSpace(active))
         {
-            throw new InvalidOperationException("Agent endpoint is not configured. Set EMWAVER_AGENT_ENDPOINT.");
+            active = DefaultMgptResponsesEndpoint;
+        }
+
+        if (!Uri.TryCreate(active, UriKind.Absolute, out var endpoint))
+        {
+            throw new InvalidOperationException("Agent endpoint is invalid. Set EMWAVER_AGENT_ENDPOINT to the public MGPT /api/mgpt/responses route.");
         }
 
         return endpoint;

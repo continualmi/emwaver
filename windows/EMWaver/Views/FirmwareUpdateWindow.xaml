@@ -18,7 +18,7 @@
             <TextBlock x:Name="StmTitle" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
 
             <!-- Subtitle / status -->
-            <TextBlock x:Name="StmSubtitle" FontSize="14" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+            <TextBlock x:Name="StmSubtitle" FontSize="14" Foreground="{DynamicResource AppTextSecondaryBrush}"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
 
             <!-- Error card -->
@@ -47,7 +47,7 @@
                     Padding="12" Margin="0,0,0,16">
                 <StackPanel>
                     <TextBlock x:Name="StmPromptTitle" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4" />
-                    <TextBlock x:Name="StmPromptBody" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                    <TextBlock x:Name="StmPromptBody" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}"
                                TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
@@ -59,12 +59,12 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="StmProgressText" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                    <TextBlock x:Name="StmProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock x:Name="StmProgressText" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                    <TextBlock x:Name="StmProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" />
                 </Grid>
                 <ProgressBar x:Name="StmProgressBar" Height="6" Margin="0,4,0,8" />
                 <TextBlock Text="Keep the device connected until flashing completes."
-                           FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                           FontSize="11" Foreground="{DynamicResource AppTextSecondaryBrush}"
                            TextWrapping="Wrap" />
             </StackPanel>
         </StackPanel>
@@ -73,7 +73,7 @@
         <StackPanel x:Name="EspPanel" Visibility="Collapsed" Grid.Row="0">
             <TextBlock Text="Flash ESP32" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4" />
             <TextBlock Text="Use the board's flash-capable serial USB connection."
-                       FontSize="13" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       FontSize="13" Foreground="{DynamicResource AppTextSecondaryBrush}"
                        TextWrapping="Wrap" Margin="0,0,0,16" />
 
             <Border Background="{DynamicResource EditorSurfaceBackgroundBrush}"
@@ -111,8 +111,8 @@
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
-                    <TextBlock x:Name="EspProgressText" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
-                    <TextBlock x:Name="EspProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock x:Name="EspProgressText" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" />
+                    <TextBlock x:Name="EspProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource AppTextSecondaryBrush}" />
                 </Grid>
                 <ProgressBar x:Name="EspProgressBar" Height="6" Margin="0,4,0,0" />
             </StackPanel>

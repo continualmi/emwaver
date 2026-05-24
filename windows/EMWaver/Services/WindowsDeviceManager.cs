@@ -12,17 +12,19 @@ using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Devices.Midi;
 using Windows.Storage.Streams;
 using System.Diagnostics;
+using System.Linq;
+using System.Text;
 
 namespace EMWaver.Services;
 
-internal enum DeviceMode
+public enum DeviceMode
 {
     Disconnected = 0,
     RunMode = 1,
     UpdateMode = 2,
 }
 
-internal sealed class WindowsDeviceManager : INotifyPropertyChanged
+public sealed class WindowsDeviceManager : INotifyPropertyChanged
 {
     private static readonly int LaneSizeBytes = 18;
     private static readonly int SuperframeSizeBytes = 36;
@@ -30,9 +32,26 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         internal const byte Version = 0x01;
         internal const byte EnterDfu = 0x06;
+        internal const byte TransportSession = 0x0B;
+    }
+
+    private static class TransportSessionOpcode
+    {
+        internal const byte Status = 0x00;
+        internal const byte Connect = 0x01;
+        internal const byte Disconnect = 0x02;
+        internal const byte Heartbeat = 0x03;
+    }
+
+    private static class TransportSource
+    {
+        internal const byte Usb = 0x01;
+        internal const byte Ble = 0x02;
+        internal const byte Wifi = 0x03;
     }
 
     public ObservableCollection<DevicePort> AvailablePorts { get; } = new();
+    internal ObservableCollection<WindowsBleTransport.DiscoveredDevice> BleDiscoveredDevices { get; } = new();
     public ObservableCollection<WindowsWiFiTransport.DiscoveredDevice> WiFiDiscoveredDevices { get; } = new();
     private readonly WindowsWiFiDiscovery _wifiDiscovery = new();
 
@@ -122,6 +141,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
         }
     }
+
+    private readonly ObservableCollection<string> _activityLogLines = new();
+    public string ActivityLogText => string.Join(Environment.NewLine, _activityLogLines);
 
     private string? _wifiProvisioningStatus;
     public string? WiFiProvisioningStatus
@@ -230,6 +252,22 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private WindowsWiFiTransport.Connection? _wifiConnection;
     private readonly TransportDeviceConnectionState _activeConnectionState = new();
     private bool _bleConnecting;
+    private bool _isBleScanning;
+    public bool IsBleScanning
+    {
+        get => _isBleScanning;
+        private set
+        {
+            if (_isBleScanning != value)
+            {
+                _isBleScanning = value;
+                OnPropertyChanged();
+            }
+        }
+    }
+    private System.Threading.Timer? _transportHeartbeatTimer;
+    private int _transportHeartbeatInFlight;
+    private readonly SemaphoreSlim _commandSemaphore = new(1, 1);
     private readonly TransportDeviceSessionRegistry _bufferSessions = new();
 
     private ITransportDeviceSession ActiveBufferSession => _bufferSessions.Active;
@@ -263,7 +301,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
 
         LastErrorText = $"{operation}: target device session is not active";
-        Debug.WriteLine($"[EMWaver][Windows][Device] {operation}: target session is not active: {deviceId}");
+        AppendActivityLog($"Device {operation}: target session is not active: {deviceId}");
         return false;
     }
 
@@ -272,7 +310,67 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         var target = _activeConnectionState.SetTarget(deviceId, transport);
         var session = SetActiveBufferSession(target.DeviceId, resetSession: true);
         ActiveTransport = target.Transport;
+        AppendActivityLog($"Active transport: {target.Transport} session={target.DeviceId}");
         return session;
+    }
+
+    private void AppendActivityLog(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return;
+        var line = $"{DateTime.Now:HH:mm:ss.fff} {text.Trim()}";
+        Debug.WriteLine("[EMWaver][Transport] " + line);
+
+        void Apply()
+        {
+            _activityLogLines.Add(line);
+            while (_activityLogLines.Count > 300)
+            {
+                _activityLogLines.RemoveAt(0);
+            }
+            OnPropertyChanged(nameof(ActivityLogText));
+        }
+
+        var ui = _ui;
+        if (ui == null || ui.CheckAccess()) Apply();
+        else ui.BeginInvoke((Action)Apply);
+    }
+
+    internal void ClearActivityLog()
+    {
+        void Apply()
+        {
+            _activityLogLines.Clear();
+            OnPropertyChanged(nameof(ActivityLogText));
+        }
+
+        var ui = _ui;
+        if (ui == null || ui.CheckAccess()) Apply();
+        else ui.BeginInvoke((Action)Apply);
+    }
+
+    private static string Hex(byte[] bytes, int max = 18)
+    {
+        if (bytes == null || bytes.Length == 0) return "<empty>";
+        var take = Math.Min(bytes.Length, max);
+        var text = string.Join(" ", bytes.Take(take).Select(b => b.ToString("X2")));
+        return bytes.Length > take ? text + $" … (+{bytes.Length - take})" : text;
+    }
+
+    private void AppendIncomingSysexLog(byte[] bytes, string transportLabel)
+    {
+        var superframe = UsbMidiSysex.DecodeSysexToSuperframe(bytes);
+        if (superframe == null || superframe.Length < SuperframeSizeBytes)
+        {
+            AppendActivityLog($"RX {transportLabel} sysex={bytes.Length} decode=<invalid>");
+            return;
+        }
+
+        var cmdLane = new byte[LaneSizeBytes];
+        var streamLane = new byte[LaneSizeBytes];
+        Array.Copy(superframe, 0, cmdLane, 0, LaneSizeBytes);
+        Array.Copy(superframe, LaneSizeBytes, streamLane, 0, LaneSizeBytes);
+        if (cmdLane.Any(b => b != 0)) AppendActivityLog($"RX {transportLabel} cmd={Hex(cmdLane)}");
+        if (streamLane.Any(b => b != 0)) AppendActivityLog($"RX {transportLabel} stream={Hex(streamLane)}");
     }
 
     private void ClearActiveDeviceTarget()
@@ -334,6 +432,10 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
                     StartBleScan();
                 }
             }
+            else
+            {
+                StartBleScan();
+            }
         }
         catch (Exception ex)
         {
@@ -365,6 +467,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             ConnectedPort = port;
+            await ClaimTransportSessionAsync(DeviceTransport.UsbMidi);
 
             // Validate the device by querying its EMWaver version (same handshake as macOS).
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
@@ -382,6 +485,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             }
 
             DeviceEmwaverVersion = version;
+            ApplyTransportDebugPreference();
 
             _ = Task.Run(async () =>
             {
@@ -424,6 +528,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
 
         CloseBleDevice();
         CloseWiFiDevice();
+        StopTransportSessionHeartbeat();
 
         ActiveBufferSession.CancelResponseWait();
         ClearActiveDeviceTarget();
@@ -528,20 +633,39 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             return null;
         }
 
-        var tcs = session.BeginResponseWait(responsePredicate);
-
-        using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
-        using var reg = cts.Token.Register(() => tcs.TrySetResult(null));
+        var opcode = commandLane.Length > 0 ? commandLane[0] : (byte)0;
+        await _commandSemaphore.WaitAsync();
         try
         {
-            var pkt = MakeLanePacket(commandLane);
-            var sf = MakeSuperframe(cmdLane: pkt, streamLane: null);
-            SendSuperframe(sf, session);
-            return await tcs.Task;
+            var tcs = session.BeginResponseWait(responsePredicate);
+
+            using var cts = new CancellationTokenSource(Math.Max(1, timeoutMs));
+            using var reg = cts.Token.Register(() => tcs.TrySetResult(null));
+            try
+            {
+                var pkt = MakeLanePacket(commandLane);
+                var sf = MakeSuperframe(cmdLane: pkt, streamLane: null);
+                AppendActivityLog($"TX {ActiveTransport} opcode=0x{opcode:X2} timeout={timeoutMs}ms bytes={Hex(commandLane)}");
+                SendSuperframe(sf, session);
+                var response = await tcs.Task;
+                if (response == null)
+                {
+                    AppendActivityLog($"TIMEOUT {ActiveTransport} opcode=0x{opcode:X2} after {timeoutMs}ms");
+                }
+                else
+                {
+                    AppendActivityLog($"RX {ActiveTransport} opcode=0x{opcode:X2} bytes={Hex(response)}");
+                }
+                return response;
+            }
+            finally
+            {
+                session.ClearResponseWait(tcs);
+            }
         }
         finally
         {
-            session.ClearResponseWait(tcs);
+            _commandSemaphore.Release();
         }
     }
 
@@ -580,6 +704,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     private void ProcessIncomingSysex(byte[] bytes, string transportLabel, string? deviceId = null)
     {
         Debug.WriteLine($"[EMWaver][{transportLabel}][RX] sysex={bytes.Length}");
+        AppendIncomingSysexLog(bytes, transportLabel);
         var session = string.IsNullOrWhiteSpace(deviceId)
             ? ActiveBufferSession
             : BufferSession(deviceId);
@@ -593,6 +718,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         string? fallbackDeviceId = null)
     {
         Debug.WriteLine($"[EMWaver][{transportLabel}][RX] sysex={bytes.Length}");
+        AppendIncomingSysexLog(bytes, transportLabel);
         var session = transportSession
             ?? (string.IsNullOrWhiteSpace(fallbackDeviceId) ? ActiveBufferSession : BufferSession(fallbackDeviceId));
         session.FeedSysexBytes(bytes, NowMs());
@@ -685,9 +811,14 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         LastErrorText = connection.SendSuperframe(superframe36, BufferFromBytes);
     }
 
+    internal void StartBleDiscovery()
+    {
+        StartBleScan();
+    }
+
     private void StartBleScan()
     {
-        if (_bleScanSession != null || _bleConnecting || IsConnected)
+        if (_bleScanSession != null || _bleConnecting)
         {
             return;
         }
@@ -697,6 +828,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             var scanSession = WindowsBleTransport.OpenScanSession(OnBleAdvertisementReceived);
             _bleScanSession = scanSession;
             scanSession.Start();
+            IsBleScanning = true;
             Debug.WriteLine("[EMWaver][BLE] scan started");
         }
         catch (Exception ex)
@@ -709,24 +841,44 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
     {
         WindowsBleTransport.CloseHandles(_bleScanSession);
         _bleScanSession = null;
+        IsBleScanning = false;
     }
 
     private void OnBleAdvertisementReceived(BluetoothLEAdvertisementWatcher sender, BluetoothLEAdvertisementReceivedEventArgs args)
     {
-        if (_bleConnecting || IsConnected)
-        {
-            return;
-        }
-
         var name = args.Advertisement.LocalName ?? string.Empty;
         if (!WindowsBleTransport.MatchesAdvertisementName(name))
         {
             return;
         }
 
+        var discovered = new WindowsBleTransport.DiscoveredDevice(
+            WindowsBleTransport.SessionId(args.BluetoothAddress),
+            args.BluetoothAddress,
+            WindowsBleTransport.DisplayName(args),
+            WindowsBleTransport.BoardType(),
+            DateTime.Now);
+
+        RunOnUi(() =>
+        {
+            var existing = BleDiscoveredDevices.FirstOrDefault(d => d.BluetoothAddress == discovered.BluetoothAddress);
+            if (existing != null) BleDiscoveredDevices.Remove(existing);
+            BleDiscoveredDevices.Add(discovered);
+        });
+
+        if (_bleConnecting || IsConnected || !AutoConnectEnabled)
+        {
+            return;
+        }
+
         _bleConnecting = true;
         StopBleScan();
-        _ = ConnectBleAsync(args.BluetoothAddress, WindowsBleTransport.DisplayName(args));
+        _ = ConnectBleAsync(args.BluetoothAddress, discovered.DisplayName);
+    }
+
+    internal Task ConnectBleAsync(WindowsBleTransport.DiscoveredDevice device)
+    {
+        return ConnectBleAsync(device.BluetoothAddress, device.DisplayName);
     }
 
     private async Task ConnectBleAsync(ulong bluetoothAddress, string displayName)
@@ -750,6 +902,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             _bleConnection = opened.Connection;
             _activeConnectionState.SetConnection(_bleConnection);
             ConnectedPort = new DevicePort(_bleConnection.DisplayName, string.Empty, string.Empty);
+            await ClaimTransportSessionAsync(DeviceTransport.Ble);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
@@ -761,6 +914,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             DeviceEmwaverVersion = version;
             ConnectedBoardType = WindowsBleTransport.BoardType();
             LastDetectedBoardType = ConnectedBoardType;
+            ApplyTransportDebugPreference();
         }
         catch (Exception ex)
         {
@@ -817,6 +971,99 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         _bleConnecting = false;
     }
 
+    private static byte TransportSourceFor(DeviceTransport transport)
+    {
+        return transport switch
+        {
+            DeviceTransport.UsbMidi => TransportSource.Usb,
+            DeviceTransport.Ble => TransportSource.Ble,
+            DeviceTransport.Wifi => TransportSource.Wifi,
+            _ => 0,
+        };
+    }
+
+    private async Task<bool> ClaimTransportSessionAsync(DeviceTransport transport)
+    {
+        var source = TransportSourceFor(transport);
+        if (source == 0) return false;
+
+        var response = await SendCommandAsync(
+            new byte[] { EmwOpcode.TransportSession, TransportSessionOpcode.Connect, source },
+            timeoutMs: 1000,
+            ActiveBufferSession,
+            lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81 || lane[0] == 0x82));
+
+        var ok = response != null && response.Length > 0 && response[0] == 0x80;
+        AppendActivityLog(ok
+            ? $"Transport session claimed for {transport}"
+            : $"Transport session claim failed for {transport} response={(response == null ? "<timeout>" : Hex(response))}");
+
+        if (ok)
+        {
+            StartTransportSessionHeartbeat(transport);
+        }
+        return ok;
+    }
+
+    private void StartTransportSessionHeartbeat(DeviceTransport transport)
+    {
+        StopTransportSessionHeartbeat();
+        var source = TransportSourceFor(transport);
+        if (source == 0) return;
+
+        _transportHeartbeatTimer = new System.Threading.Timer(async _ =>
+        {
+            if (Interlocked.Exchange(ref _transportHeartbeatInFlight, 1) == 1) return;
+            try
+            {
+                if (!IsConnected) return;
+                _ = await SendCommandAsync(
+                    new byte[] { EmwOpcode.TransportSession, TransportSessionOpcode.Heartbeat, source },
+                    timeoutMs: 1000,
+                    ActiveBufferSession,
+                    lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81 || lane[0] == 0x82));
+            }
+            catch (Exception ex)
+            {
+                AppendActivityLog("Transport session heartbeat failed: " + ex.Message);
+            }
+            finally
+            {
+                Interlocked.Exchange(ref _transportHeartbeatInFlight, 0);
+            }
+        }, null, dueTime: 2500, period: 2500);
+    }
+
+    private void StopTransportSessionHeartbeat()
+    {
+        var timer = _transportHeartbeatTimer;
+        _transportHeartbeatTimer = null;
+        timer?.Dispose();
+    }
+
+    internal void ApplyTransportDebugPreference()
+    {
+        // Parity with macOS: ask firmware to emit/stop transport diagnostics when supported.
+        // Older firmware may ignore this; command logging above still records TX/RX/timeout locally.
+        var enabled = AppServices.Settings.TransportDebugLoggingEnabled;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var command = Encoding.UTF8.GetBytes(enabled ? "debug transport 1" : "debug transport 0");
+                _ = await SendCommandAsync(
+                    command,
+                    timeoutMs: 1000,
+                    ActiveBufferSession,
+                    lane => lane.Length > 0 && (lane[0] == 0x80 || lane[0] == 0x81 || lane[0] == 0x82));
+            }
+            catch (Exception ex)
+            {
+                AppendActivityLog("Transport debug enable failed: " + ex.Message);
+            }
+        });
+    }
+
     internal async Task ConnectWiFiAsync(string host, int port)
     {
         var trimmedHost = host?.Trim() ?? string.Empty;
@@ -846,6 +1093,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             _wifiConnection = connection;
             _activeConnectionState.SetConnection(connection);
             ConnectedPort = new DevicePort(connection.DisplayName, string.Empty, string.Empty);
+            await ClaimTransportSessionAsync(DeviceTransport.Wifi);
 
             var version = await QueryDeviceVersionAsync(timeoutMs: 1500);
             if (version == null)
@@ -864,6 +1112,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             DeviceEmwaverVersion = version;
             ConnectedBoardType = "esp32s3";
             LastDetectedBoardType = ConnectedBoardType;
+            ApplyTransportDebugPreference();
         }
         catch (Exception ex)
         {

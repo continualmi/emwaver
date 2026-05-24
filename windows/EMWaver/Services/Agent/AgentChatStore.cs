@@ -5,7 +5,7 @@ using Microsoft.Data.Sqlite;
 
 namespace EMWaver.Services.Agent;
 
-internal sealed class AgentChatStore
+public sealed class AgentChatStore
 {
     private readonly string _dbPath;
 

@@ -4,14 +4,14 @@ using System.Text.Json;
 
 namespace EMWaver.Services;
 
-internal enum AppThemeMode
+public enum AppThemeMode
 {
     System,
     Light,
     Dark
 }
 
-internal sealed class AppSettings
+public sealed class AppSettings
 {
     private static readonly object _lock = new();
 
@@ -21,6 +21,8 @@ internal sealed class AppSettings
     {
         // App appearance selection.
         public string AppTheme { get; set; } = "system";
+        public bool ShowTransportLog { get; set; } = false;
+        public bool TransportDebugLoggingEnabled { get; set; } = true;
 
     }
 
@@ -84,6 +86,48 @@ internal sealed class AppSettings
         {
             // Best effort.
             try { File.Move(tmp, path, overwrite: true); } catch { }
+        }
+    }
+
+    public bool ShowTransportLog
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().ShowTransportLog;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.ShowTransportLog = value;
+                Save(m);
+            }
+            Changed?.Invoke();
+        }
+    }
+
+    public bool TransportDebugLoggingEnabled
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return Load().TransportDebugLoggingEnabled;
+            }
+        }
+        set
+        {
+            lock (_lock)
+            {
+                var m = Load();
+                m.TransportDebugLoggingEnabled = value;
+                Save(m);
+            }
+            Changed?.Invoke();
         }
     }
 

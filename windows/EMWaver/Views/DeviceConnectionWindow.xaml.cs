@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
@@ -23,6 +24,8 @@ public partial class DeviceConnectionWindow : Window
         _device.PropertyChanged += OnDevicePropertyChanged;
         _updater.PropertyChanged += OnFirmwarePropertyChanged;
         _device.AvailablePorts.CollectionChanged += (_, __) => Dispatcher.Invoke(RefreshDeviceList);
+        _device.BleDiscoveredDevices.CollectionChanged += (_, __) => Dispatcher.Invoke(RefreshDeviceList);
+        _device.WiFiDiscoveredDevices.CollectionChanged += (_, __) => Dispatcher.Invoke(RefreshDeviceList);
 
         _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
         _refreshTimer.Tick += async (_, __) => await _device.RefreshPortsAsync();
@@ -32,6 +35,7 @@ public partial class DeviceConnectionWindow : Window
             _device.PropertyChanged -= OnDevicePropertyChanged;
             _updater.PropertyChanged -= OnFirmwarePropertyChanged;
             _refreshTimer.Stop();
+            _device.StopWiFiDiscovery();
         };
 
         Loaded += (_, __) =>
@@ -39,6 +43,8 @@ public partial class DeviceConnectionWindow : Window
             RefreshDeviceList();
             RefreshFirmwareState();
             _refreshTimer.Start();
+            _device.StartBleDiscovery();
+            _device.StartWiFiDiscovery();
         };
     }
 
@@ -62,8 +68,10 @@ public partial class DeviceConnectionWindow : Window
     private void RefreshDeviceList()
     {
         var ports = _device.AvailablePorts.ToList();
+        var bleDevices = _device.BleDiscoveredDevices.ToList();
+        var wifiDevices = _device.WiFiDiscoveredDevices.ToList();
 
-        NoDevicesText.Visibility = ports.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        NoDevicesText.Visibility = ports.Count == 0 && bleDevices.Count == 0 && wifiDevices.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
 
         DeviceList.Items.Clear();
         foreach (var port in ports)
@@ -122,7 +130,69 @@ public partial class DeviceConnectionWindow : Window
             DeviceList.Items.Add(panel);
         }
 
-        DeviceList.Visibility = ports.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var ble in bleDevices)
+        {
+            var isConnected = _device.IsConnected && _device.ActiveTransport == DeviceTransport.Ble && _device.ConnectedPort?.DisplayName == ble.DisplayName;
+            DeviceList.Items.Add(MakeDeviceRow(
+                $"{ble.DisplayName}  ·  BLE  ·  {DisplayBoard(ble.BoardType)}",
+                isConnected,
+                async () => await _device.ConnectBleAsync(ble)));
+        }
+
+        foreach (var wifi in wifiDevices)
+        {
+            var isConnected = _device.IsConnected && _device.ActiveTransport == DeviceTransport.Wifi && _device.ConnectedPort?.DisplayName?.Contains(wifi.Host, StringComparison.OrdinalIgnoreCase) == true;
+            DeviceList.Items.Add(MakeDeviceRow(
+                $"{wifi.DisplayName}  ·  Wi-Fi  ·  {DisplayBoard(wifi.BoardType)}",
+                isConnected,
+                async () => await _device.ConnectWiFiAsync(wifi.Host, wifi.Port)));
+        }
+
+        DeviceList.Visibility = DeviceList.Items.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private static string DisplayBoard(string? boardType)
+    {
+        return (boardType ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "esp32s3" => "ESP32-S3",
+            "esp32s2" => "ESP32-S2",
+            "esp32" => "ESP32",
+            "stm32f042" => "STM32F042",
+            "" => "Unknown",
+            var other => other.ToUpperInvariant(),
+        };
+    }
+
+    private UIElement MakeDeviceRow(string text, bool isConnected, Func<Task> connectAction)
+    {
+        var panel = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var infoText = new TextBlock
+        {
+            Text = isConnected ? text + "  (Connected)" : text,
+            VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 13,
+            Margin = new Thickness(0, 0, 12, 0),
+            FontWeight = isConnected ? FontWeights.SemiBold : FontWeights.Normal,
+        };
+        DockPanel.SetDock(infoText, Dock.Left);
+        panel.Children.Add(infoText);
+
+        var button = new Button
+        {
+            Content = isConnected ? "Disconnect" : "Use",
+            Width = 80,
+            Height = 26,
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        button.Click += async (_, __) =>
+        {
+            if (isConnected) _device.Disconnect();
+            else await connectAction();
+        };
+        DockPanel.SetDock(button, Dock.Right);
+        panel.Children.Add(button);
+        return panel;
     }
 
     private void RefreshWifiState()

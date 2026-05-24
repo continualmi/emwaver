@@ -30,7 +30,7 @@ public partial class App : Application
         {
             AppThemeMode.Light => "Themes/Light.xaml",
             AppThemeMode.Dark => "Themes/Dark.xaml",
-            _ => "Themes/Dark.xaml",
+            _ => "Themes/Light.xaml",
         };
 
         var uri = new Uri(themePath, UriKind.Relative);

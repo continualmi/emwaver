@@ -32,6 +32,7 @@ public sealed class ScriptEngine : IDisposable
     private Func<byte[], int, byte[]?>? _sendPacket;
     private Func<byte[]>? _getSamplerBytes;
     private Action? _clearSamplerBuffer;
+    private Func<string?>? _getBoardType;
     private int _samplerPacketSizeBytes = NativeBufferRust.PacketSizeBytes;
 
     private bool _haltedUntilNextExecute;
@@ -55,13 +56,15 @@ public sealed class ScriptEngine : IDisposable
         Action<string>? errorHandler = null,
         Func<byte[]>? getSamplerBytes = null,
         Action? clearSamplerBuffer = null,
-        int? samplerPacketSizeBytes = null)
+        int? samplerPacketSizeBytes = null,
+        Func<string?>? getBoardType = null)
     {
         _renderHandler = renderHandler;
         _sendPacket = sendPacket;
         _errorHandler = errorHandler;
         _getSamplerBytes = getSamplerBytes;
         _clearSamplerBuffer = clearSamplerBuffer;
+        _getBoardType = getBoardType;
         _samplerPacketSizeBytes = Math.Max(1, samplerPacketSizeBytes ?? NativeBufferRust.PacketSizeBytes);
 
         Enqueue(() =>
@@ -105,6 +108,7 @@ public sealed class ScriptEngine : IDisposable
                 // Re-inject host primitives before every run.
                 InstallHostPrimitives(_engine);
                 _engine.Execute(_bootstrapSource);
+                SeedHostBoardType(_engine);
 
                 InstallRequire(_engine);
                 var transformed = ScriptSourceTranspiler.Transpile(trimmed);
@@ -283,6 +287,21 @@ public sealed class ScriptEngine : IDisposable
               return module.exports;
             }
             """);
+    }
+
+    private void SeedHostBoardType(Engine engine)
+    {
+        var board = (_getBoardType?.Invoke() ?? string.Empty).Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(board)) return;
+        var safeBoard = board.Replace("\\", "\\\\").Replace("'", "\\'");
+        try
+        {
+            engine.Execute($"try {{ __scriptGlobal.__scriptDeviceBoardType = '{safeBoard}'; }} catch (e) {{}} ");
+        }
+        catch
+        {
+            // Non-fatal; device.boardType() can still query firmware.
+        }
     }
 
     private void InstallHostPrimitives(Engine engine)

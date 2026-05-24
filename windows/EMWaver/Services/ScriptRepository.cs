@@ -1,15 +1,18 @@
 using EMWaver.Models;
 using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 
 namespace EMWaver.Services;
 
-internal sealed class ScriptRepository
+public sealed class ScriptRepository
 {
     private static readonly string[] ScriptExtensions = [".js"];
+
+    public ObservableCollection<ScriptInfo> All { get; } = new();
 
     internal string LocalScriptsDir { get; } = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -28,25 +31,8 @@ internal sealed class ScriptRepository
             return baseDir;
         }
 
-        // Packaged (MSIX/Store) runs: prefer the installed package location.
-        try
-        {
-            var installed = Windows.ApplicationModel.Package.Current?.InstalledLocation?.Path;
-            if (!string.IsNullOrWhiteSpace(installed))
-            {
-                var packaged = Path.Combine(installed, "Assets", "DefaultScripts");
-                if (Directory.Exists(packaged))
-                {
-                    return packaged;
-                }
-            }
-        }
-        catch
-        {
-            // Accessing Package.Current can throw in unpackaged contexts.
-        }
-
-        // Fall back to baseDir even if it doesn't exist (callers handle missing dir).
+        // WPF runs unpackaged for the current Windows migration path. Avoid Package.Current
+        // probes here because they raise noisy first-chance FileNotFoundException events.
         return baseDir;
     }
 
@@ -57,6 +43,7 @@ internal sealed class ScriptRepository
         // Bundled/example scripts are read-only and live in BundledScriptsDir.
         // Users can copy them into LocalScriptsDir to edit.
         await Task.CompletedTask;
+        RefreshAll();
     }
 
     internal Task<IReadOnlyList<ScriptInfo>> ListScriptsAsync()
@@ -66,7 +53,6 @@ internal sealed class ScriptRepository
         var localRaw = Directory
             .EnumerateFiles(LocalScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
             .Where(p => ScriptExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-            .Where(p => !IsBundledLibraryOrKernel(p))
             .ToList();
 
         var bundledRaw = new List<string>();
@@ -75,7 +61,6 @@ internal sealed class ScriptRepository
             bundledRaw = Directory
                 .EnumerateFiles(BundledScriptsDir, "*.*", SearchOption.TopDirectoryOnly)
                 .Where(p => ScriptExtensions.Contains(Path.GetExtension(p), StringComparer.OrdinalIgnoreCase))
-                .Where(p => !IsBundledLibraryOrKernel(p))
                 .ToList();
         }
 
@@ -140,10 +125,11 @@ internal sealed class ScriptRepository
             .Select(p => new ScriptInfo(Path.GetFileNameWithoutExtension(p), p, IsBundled: true, ShadowsBundled: false))
             .ToList();
 
-        // Show bundled scripts first.
+        // Match the Apple script list ordering: bundled examples first, then libraries,
+        // then kernel/runtime files, then local custom/override scripts.
         var scripts = bundledVisible
             .Concat(local)
-            .OrderByDescending(s => s.IsBundled)
+            .OrderBy(s => s.KindSortRank)
             .ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
@@ -232,6 +218,48 @@ internal sealed class ScriptRepository
         return Task.FromResult(new ScriptInfo(Path.GetFileNameWithoutExtension(dest), dest, IsBundled: false, ShadowsBundled: false));
     }
 
+    public void RefreshAll()
+    {
+        var scripts = ListScriptsAsync().GetAwaiter().GetResult();
+        All.Clear();
+        foreach (var script in scripts)
+        {
+            All.Add(script);
+        }
+    }
+
+    public ScriptInfo Create(string name, string content)
+    {
+        var script = CreateLocalScriptAsync(name, content).GetAwaiter().GetResult();
+        RefreshAll();
+        return script;
+    }
+
+    public void Save(string fileName, string content)
+    {
+        var script = All.FirstOrDefault(s => string.Equals(s.FileName, fileName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new FileNotFoundException("Script not found", fileName);
+        SaveScriptTextAsync(script, content).GetAwaiter().GetResult();
+        RefreshAll();
+    }
+
+    public ScriptInfo Rename(string fileName, string newName)
+    {
+        var script = All.FirstOrDefault(s => string.Equals(s.FileName, fileName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new FileNotFoundException("Script not found", fileName);
+        var renamed = RenameLocalScriptAsync(script, newName).GetAwaiter().GetResult();
+        RefreshAll();
+        return renamed;
+    }
+
+    public void Delete(string fileName)
+    {
+        var script = All.FirstOrDefault(s => string.Equals(s.FileName, fileName, StringComparison.OrdinalIgnoreCase))
+            ?? throw new FileNotFoundException("Script not found", fileName);
+        DeleteLocalScriptAsync(script).GetAwaiter().GetResult();
+        RefreshAll();
+    }
+
     private static string SanitizeFileName(string name)
     {
         var trimmed = (name ?? string.Empty).Trim();
@@ -248,9 +276,4 @@ internal sealed class ScriptRepository
         return trimmed;
     }
 
-    private static bool IsBundledLibraryOrKernel(string path)
-    {
-        var name = Path.GetFileNameWithoutExtension(path);
-        return name.StartsWith("emw-", StringComparison.OrdinalIgnoreCase);
-    }
 }
