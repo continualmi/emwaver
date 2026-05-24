@@ -1,4 +1,6 @@
-use crate::usb_midi_sysex::{decode_sysex_to_superframe, encode_superframe_to_sysex};
+use crate::usb_midi_sysex::{
+    decode_sysex_to_superframe, encode_superframe_to_sysex, UsbMidiSysexAccumulator,
+};
 use crate::{
     EmwFrame, EmwaverTransport, TransportDescriptor, TransportError, TransportId, TransportResult,
 };
@@ -128,6 +130,7 @@ pub struct LinuxBleTransport {
     command_characteristic: Option<Characteristic>,
     notify_characteristic: Option<Characteristic>,
     notifications: Mutex<Option<NotificationStream>>,
+    sysex_accumulator: UsbMidiSysexAccumulator,
 }
 
 impl std::fmt::Debug for LinuxBleTransport {
@@ -148,6 +151,7 @@ impl LinuxBleTransport {
             command_characteristic: None,
             notify_characteristic: None,
             notifications: Mutex::new(None),
+            sysex_accumulator: UsbMidiSysexAccumulator::new(),
         }
     }
 }
@@ -242,13 +246,14 @@ impl EmwaverTransport for LinuxBleTransport {
         let stream = notifications.as_mut().ok_or(TransportError::NotConnected)?;
         while let Some(notification) = stream.next().await {
             if notification.uuid == notify_uuid {
-                let superframe =
-                    decode_sysex_to_superframe(&notification.value).map_err(|err| {
+                for sysex in self.sysex_accumulator.feed(&notification.value) {
+                    let superframe = decode_sysex_to_superframe(&sysex).map_err(|err| {
                         TransportError::Ble(format!("BLE SysEx decode failed: {err}"))
                     })?;
-                return Ok(EmwFrame {
-                    bytes: superframe.to_vec(),
-                });
+                    return Ok(EmwFrame {
+                        bytes: superframe.to_vec(),
+                    });
+                }
             }
         }
         Err(TransportError::NotConnected)

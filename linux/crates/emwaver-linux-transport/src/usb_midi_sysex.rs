@@ -85,6 +85,41 @@ pub fn pack_sysex_to_usb_midi(
     Ok(out)
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct UsbMidiSysexAccumulator {
+    buffer: Vec<u8>,
+    in_sysex: bool,
+}
+
+impl UsbMidiSysexAccumulator {
+    pub fn new() -> Self {
+        Self {
+            buffer: Vec::with_capacity(SYSEX_SIZE_BYTES),
+            in_sysex: false,
+        }
+    }
+
+    pub fn feed(&mut self, data: &[u8]) -> Vec<Vec<u8>> {
+        let mut frames = Vec::new();
+        for byte in data.iter().copied() {
+            if byte == SYSEX_START {
+                self.buffer.clear();
+                self.in_sysex = true;
+            }
+            if !self.in_sysex {
+                continue;
+            }
+            self.buffer.push(byte);
+            if byte == SYSEX_END {
+                frames.push(self.buffer.clone());
+                self.buffer.clear();
+                self.in_sysex = false;
+            }
+        }
+        frames
+    }
+}
+
 pub fn unpack_usb_midi_to_sysex(
     packet: &[u8],
 ) -> Result<[u8; SYSEX_SIZE_BYTES], UsbMidiSysexError> {
@@ -220,6 +255,20 @@ mod tests {
         let sysex = encode_superframe_to_sysex(&superframe).unwrap();
         let decoded = decode_sysex_to_superframe(&sysex).unwrap();
         assert_eq!(decoded, superframe);
+    }
+
+    #[test]
+    fn accumulator_reassembles_chunked_sysex_frames() {
+        let superframe = patterned_superframe();
+        let sysex = encode_superframe_to_sysex(&superframe).unwrap();
+        let mut accumulator = UsbMidiSysexAccumulator::new();
+
+        assert!(accumulator.feed(&sysex[..13]).is_empty());
+        assert!(accumulator.feed(&sysex[13..31]).is_empty());
+        let frames = accumulator.feed(&sysex[31..]);
+
+        assert_eq!(frames, vec![sysex.to_vec()]);
+        assert_eq!(decode_sysex_to_superframe(&frames[0]).unwrap(), superframe);
     }
 
     #[test]
