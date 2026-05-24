@@ -424,7 +424,12 @@ mod tests {
             }
             Err(FirmwareError::MissingImage(path)) => {
                 // ESP-IDF build outputs are generated and may be absent in clean CI clones.
-                assert!(path.ends_with("bootloader.bin") || path.ends_with("partition-table.bin") || path.ends_with("ota_data_initial.bin") || path.ends_with("emwaveresp.bin"));
+                assert!(
+                    path.ends_with("bootloader.bin")
+                        || path.ends_with("partition-table.bin")
+                        || path.ends_with("ota_data_initial.bin")
+                        || path.ends_with("emwaveresp.bin")
+                );
             }
             Err(err) => panic!("unexpected ESP bundled-plan error: {err}"),
         }
