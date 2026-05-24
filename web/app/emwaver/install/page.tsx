@@ -93,6 +93,8 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
       {
         label: "Download EXE installer",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
+        badge: "/emwaver/badges/windows.png",
+        badgeAlt: "Available for Windows",
       },
       {
         label: "Download ZIP",
