@@ -5,246 +5,202 @@ export default function ScriptsDocPage() {
     <>
       <h1>Scripting guide</h1>
       <p>
-        EMWaver scripts are <code>.emw</code> files written in JavaScript. Each script combines
-        hardware I/O and UI in one file — run it and you get a native interface on your phone or
-        desktop that talks directly to the board.
+        EMWaver scripts are local JavaScript programs. Current bundled scripts use <code>.js</code> files,
+        extensionless imports such as <code>"emw-ui"</code>, JSX components, and small hardware modules
+        such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
       </p>
+      <blockquote>
+        The older <code>UI.render(UI.column(...))</code> examples still describe the underlying tree,
+        but they are no longer the preferred authoring style. Write JSX components and call
+        <code> render(&lt;App /&gt;)</code> from <code>emw-jsx</code>.
+      </blockquote>
+
+      <h2>What was outdated</h2>
+      <ul>
+        <li>Examples referred to <code>.emw</code> files even though default assets are now <code>.js</code>.</li>
+        <li>UI examples omitted JSX and imported components, which is how the shipped scripts are written.</li>
+        <li>Device examples used legacy globals such as <code>digitalWrite</code>, <code>SPI</code>, <code>Wire</code>, and <code>Serial</code>.</li>
+        <li>The built-in script list missed the current signal/radio-focused defaults and their module dependencies.</li>
+        <li>The docs under-described the local-first contract: UI snapshots and events, not terminal logging, are the script automation surface.</li>
+      </ul>
 
       <h2>How scripts run</h2>
       <ol>
-        <li>The app injects the EMWaver runtime (device APIs, UI system, pin constants).</li>
-        <li>Your script executes synchronously — all device calls block until the board responds.</li>
-        <li>
-          Call <code>UI.render()</code> to display a UI tree. Register callbacks (
-          <code>onTap</code>, <code>onChange</code>) for interactivity.
-        </li>
-        <li>
-          Use <code>every(ms, fn)</code> for periodic updates (polling sensors, refreshing
-          readings).
-        </li>
+        <li>The app loads the visible runtime libraries from the bundled script assets.</li>
+        <li>Imports are resolved from EMWaver modules such as <code>emw-ui</code>, <code>emw-jsx</code>, <code>emw-gpio</code>, and <code>emw-spi</code>.</li>
+        <li>JSX is transpiled into EMWaver UI nodes.</li>
+        <li>Your script renders a UI snapshot with <code>render(&lt;App /&gt;)</code>.</li>
+        <li>Callbacks such as <code>onTap</code>, <code>onChange</code>, and <code>onViewportChange</code> handle user events and then re-render.</li>
       </ol>
+      <p>
+        Hardware calls are synchronous from the script authoring point of view: a GPIO, SPI, I2C,
+        UART, ADC, PWM, or sampler call returns after the local app/board path responds or throws.
+      </p>
 
-      <blockquote>
-        Scripts are synchronous only — no <code>async</code>/<code>await</code> or Promises.
-        Device commands block until a response is received from the board.
-      </blockquote>
-
-      <h2>Script structure</h2>
-      <p>A typical script follows this pattern:</p>
+      <h2>Minimal JSX script</h2>
       <pre>
-        <code className="language-javascript">{`// State
-let count = 0;
-let pin = A0;
+        <code className="language-javascript">{`import { JSX, render } from "emw-jsx";
+import { Column, Text, Button } from "emw-ui";
 
-// Actions
-function toggle() {
-  count++;
-  digitalWrite(pin, count % 2 ? HIGH : LOW);
-  render();
+let count = 0;
+
+function increment() {
+  count += 1;
+  rerender();
 }
 
-// UI
-function render() {
-  UI.render(
-    UI.column({
-      children: [
-        UI.text({ text: "Toggle count: " + count }),
-        UI.button({ label: "Toggle", onTap: toggle }),
-      ],
-    })
+function reset() {
+  count = 0;
+  rerender();
+}
+
+function App() {
+  return (
+    <Column padding={16} spacing={12}>
+      <Text font="title2" fontWeight="semibold">Hello</Text>
+      <Text>Count: {count}</Text>
+      <Button onTap={increment}>Increment</Button>
+      <Button onTap={reset}>Reset</Button>
+    </Column>
   );
 }
 
-render();`}</code>
-      </pre>
-      <p>
-        State is plain JavaScript variables. When something changes, mutate state and call your
-        render function to rebuild the UI. The pattern is similar to immediate-mode UI — you
-        rebuild the full tree on every update.
-      </p>
+function rerender() {
+  render(<App />);
+}
 
-      <h2>Board detection</h2>
-      <p>
-        Scripts can detect the connected board type at runtime to adapt pin lists and behavior:
-      </p>
+rerender();`}</code>
+      </pre>
+
+      <h2>Script structure</h2>
+      <ul>
+        <li><strong>Imports</strong>: bring in the UI renderer, JSX factory, components, and hardware modules.</li>
+        <li><strong>State</strong>: keep state in normal JavaScript variables.</li>
+        <li><strong>Actions</strong>: callbacks mutate state, perform device work, then re-render.</li>
+        <li><strong>App component</strong>: returns a JSX tree made from EMWaver UI components.</li>
+        <li><strong>Render function</strong>: one small <code>render(&lt;App /&gt;)</code> wrapper is the UI snapshot contract.</li>
+      </ul>
+
+      <h2>Board-aware GPIO example</h2>
       <pre>
-        <code className="language-javascript">{`const board = device.boardType();
-// "stm32f042", "esp32s3", etc.
+        <code className="language-javascript">{`import { JSX, render } from "emw-jsx";
+import { Column, Text, Button, Picker } from "emw-ui";
+import { pin, gpio } from "emw-gpio";
 
-if (board === "esp32s3") {
-  // different pin assignments
-}`}</code>
+function boardType() {
+  try { return device.boardType(); } catch (e) { return "stm32f042"; }
+}
+
+const board = boardType();
+const options = board === "esp32s3"
+  ? [{ label: "GPIO4", value: "4" }, { label: "GPIO37", value: "37" }]
+  : [{ label: "A0", value: "0" }, { label: "A1", value: "1" }];
+
+let selected = options[0].value;
+let high = false;
+
+function target() {
+  const n = Number(selected);
+  return board === "esp32s3" ? pin({ gpio: n }) : pin({ port: "A", number: n });
+}
+
+function toggle() {
+  high = !high;
+  gpio.mode(target(), "output");
+  gpio.write(target(), high);
+  rerender();
+}
+
+function App() {
+  return (
+    <Column padding={16} spacing={12}>
+      <Text font="title2" fontWeight="semibold">GPIO</Text>
+      <Text font="caption">Detected: {board}</Text>
+      <Picker
+        style="menu"
+        selected={selected}
+        options={options}
+        onChange={(value) => { selected = String(value); rerender(); }}
+      />
+      <Button onTap={toggle}>{high ? "Write LOW" : "Write HIGH"}</Button>
+    </Column>
+  );
+}
+
+function rerender() { render(<App />); }
+rerender();`}</code>
       </pre>
 
-      <h2>Pin constants</h2>
-      <p>Pins are addressed by named constants that resolve to firmware pin indices:</p>
+      <h2>Bundled modules</h2>
       <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
         <table className="m-0 w-full text-sm">
           <thead>
             <tr>
-              <th className="px-4 py-3 text-left">Constant</th>
-              <th className="px-4 py-3 text-left">Pin</th>
-              <th className="px-4 py-3 text-left">Notes</th>
+              <th className="px-4 py-3 text-left">Module</th>
+              <th className="px-4 py-3 text-left">Exports</th>
+              <th className="px-4 py-3 text-left">Use</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="px-4 py-3"><code>IR_RX</code></td>
-              <td className="px-4 py-3">A0</td>
-              <td className="px-4 py-3">Infrared receiver</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>IR_TX</code></td>
-              <td className="px-4 py-3">A1</td>
-              <td className="px-4 py-3">Infrared transmitter</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>GDO0</code>, <code>GDO2</code></td>
-              <td className="px-4 py-3">A2, A3</td>
-              <td className="px-4 py-3">CC1101 GPIO lines</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>NSS</code> / <code>CC1101_CS</code></td>
-              <td className="px-4 py-3">A4</td>
-              <td className="px-4 py-3">SPI chip select</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>SCK</code>, <code>MISO</code>, <code>MOSI</code></td>
-              <td className="px-4 py-3">A5, A6, A7</td>
-              <td className="px-4 py-3">SPI bus</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>I2C_SCL</code> / <code>UART_TX</code></td>
-              <td className="px-4 py-3">B6</td>
-              <td className="px-4 py-3">Shared I2C/UART</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>I2C_SDA</code> / <code>UART_RX</code></td>
-              <td className="px-4 py-3">B7</td>
-              <td className="px-4 py-3">Shared I2C/UART</td>
-            </tr>
+            <tr><td className="px-4 py-3"><code>emw-jsx</code></td><td className="px-4 py-3"><code>JSX</code>, <code>h</code>, <code>render</code></td><td className="px-4 py-3">JSX transform target and UI rendering.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-ui</code></td><td className="px-4 py-3">UI components</td><td className="px-4 py-3">Native UI tree components such as <code>Column</code>, <code>Button</code>, and <code>Plot</code>.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-gpio</code></td><td className="px-4 py-3"><code>pin</code>, <code>gpio</code></td><td className="px-4 py-3">Pin encoding, GPIO mode/read/write.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-spi</code></td><td className="px-4 py-3"><code>spi</code></td><td className="px-4 py-3">SPI transfers with optional chip select.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-i2c</code></td><td className="px-4 py-3"><code>i2c</code></td><td className="px-4 py-3">I2C open/read/write/write-then-read flows.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-uart</code></td><td className="px-4 py-3"><code>uart</code></td><td className="px-4 py-3">UART open/read/write flows.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-adc</code></td><td className="px-4 py-3"><code>adc</code></td><td className="px-4 py-3">ADC pin/internal-source reads and resolution setting.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-pwm</code></td><td className="px-4 py-3"><code>pwm</code></td><td className="px-4 py-3">PWM writes and resolution setting.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-fs</code></td><td className="px-4 py-3"><code>FS</code></td><td className="px-4 py-3">App-local file helpers.</td></tr>
+            <tr><td className="px-4 py-3"><code>emw-sampler</code></td><td className="px-4 py-3"><code>Sampler</code>, <code>SamplerSignals</code></td><td className="px-4 py-3">Signal capture, buffers, replay, and saved signal access.</td></tr>
           </tbody>
         </table>
       </div>
-      <p>
-        Direction constants: <code>INPUT</code>, <code>OUTPUT</code>.
-        Level constants: <code>HIGH</code> (1), <code>LOW</code> (0).
-      </p>
 
       <h2>Built-in scripts</h2>
       <p>
-        The app ships with default scripts covering common workflows. These serve as both tools
-        and reference implementations:
+        The app bundles local examples as JavaScript source. They are both tools and reference implementations.
       </p>
       <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
         <table className="m-0 w-full text-sm">
           <thead>
             <tr>
               <th className="px-4 py-3 text-left">Script</th>
-              <th className="px-4 py-3 text-left">What it does</th>
+              <th className="px-4 py-3 text-left">What it demonstrates</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="px-4 py-3"><code>hello.emw</code></td>
-              <td className="px-4 py-3">Minimal example — renders text and blinks a pin</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>blink.emw</code></td>
-              <td className="px-4 py-3">Configurable blink with period slider and pin picker</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>gpio.emw</code></td>
-              <td className="px-4 py-3">Digital output control with pin selection</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>adc.emw</code></td>
-              <td className="px-4 py-3">ADC readings with source picker and sample averaging</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>pwm.emw</code></td>
-              <td className="px-4 py-3">PWM output with frequency and duty cycle controls</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>sampler.emw</code></td>
-              <td className="px-4 py-3">
-                Signal capture, waveform plot, retransmit, save/load
-              </td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>uart.emw</code></td>
-              <td className="px-4 py-3">UART terminal with baud config and TX/RX log</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>i2c.emw</code></td>
-              <td className="px-4 py-3">I2C explorer — scan, read, write, transfer</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>cc1101.emw</code></td>
-              <td className="px-4 py-3">CC1101 sub-GHz radio — registers, presets, packet TX</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>rfid.emw</code></td>
-              <td className="px-4 py-3">MFRC522 RFID reader — scan UIDs, read/write blocks</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>rfm69.emw</code></td>
-              <td className="px-4 py-3">RFM69 radio — profiles, RX/TX modes, RSSI</td>
-            </tr>
+            <tr><td className="px-4 py-3"><code>hello.js</code></td><td className="px-4 py-3">JSX/import smoke test with buttons and state.</td></tr>
+            <tr><td className="px-4 py-3"><code>blink.js</code></td><td className="px-4 py-3">Board-aware pin selection, timer-based output, GPIO module use.</td></tr>
+            <tr><td className="px-4 py-3"><code>sampler.js</code></td><td className="px-4 py-3">Signal capture, plot viewport callbacks, retransmit, local save/load.</td></tr>
+            <tr><td className="px-4 py-3"><code>cc1101.js</code></td><td className="px-4 py-3">CC1101 radio register control, presets, SPI transfers, logs, grids, cards, tiles.</td></tr>
+            <tr><td className="px-4 py-3"><code>rfid.js</code></td><td className="px-4 py-3">MFRC522 probe/UID/read/write workflows over SPI and GPIO reset/IRQ pins.</td></tr>
+            <tr><td className="px-4 py-3"><code>rfm69.js</code></td><td className="px-4 py-3">Profile-driven RFM69/RFM69HW radio control and RSSI/status UI.</td></tr>
           </tbody>
         </table>
       </div>
 
-      <h2>Timing</h2>
+      <h2>Timing and UI snapshots</h2>
       <pre>
         <code className="language-javascript">{`delay(500);          // blocking sleep (ms)
 sleep(100);          // alias for delay
-millis();            // ms since script engine start
+millis();            // milliseconds since the script engine started
 
-// periodic timer — returns { stop() }
 const timer = every(1000, () => {
-  // runs every 1s
-  render();
+  // periodic work; return false to stop, or call timer.stop()
+  rerender();
 });
-timer.stop();        // cancel`}</code>
+timer.stop();`}</code>
       </pre>
-
-      <h2>File system</h2>
-      <p>Scripts can read and write files on the host device:</p>
-      <pre>
-        <code className="language-javascript">{`const dir = FS.appDataDir();
-FS.ensureDir(FS.join(dir, "captures"));
-
-FS.writeText(FS.join(dir, "log.txt"), "hello");
-const text = FS.readText(FS.join(dir, "log.txt"));
-
-FS.writeBytes(FS.join(dir, "data.bin"), [0x01, 0x02]);
-const bytes = FS.readBytes(FS.join(dir, "data.bin"));`}</code>
-      </pre>
+      <p>
+        Agent, CLI, browser, and native automation should inspect rendered UI snapshots and dispatch
+        UI events. Do not rely on <code>console.log</code> as a parallel automation contract.
+      </p>
 
       <h2>Next</h2>
-      <div className="mt-4 grid gap-3 md:grid-cols-2">
-        <Link
-          href="/emwaver/docs/scripts/device-api"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-        >
-          <div className="text-xs font-semibold text-[color:var(--aqua)]">Reference</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Device API</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            GPIO, SPI, I2C, UART, ADC, PWM, Sampler.
-          </div>
-        </Link>
-        <Link
-          href="/emwaver/docs/scripts/ui"
-          className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-        >
-          <div className="text-xs font-semibold text-[color:var(--copper)]">Reference</div>
-          <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">UI widgets</div>
-          <div className="pt-2 text-sm text-[color:var(--ink-dim)]">
-            Buttons, sliders, plots, text fields, modals, and layout.
-          </div>
-        </Link>
-      </div>
+      <ul>
+        <li><Link href="/emwaver/docs/scripts/ui">UI widgets</Link> for every JSX component and prop shape.</li>
+        <li><Link href="/emwaver/docs/scripts/device-api">Device API</Link> for GPIO, buses, sampler, files, and device info.</li>
+      </ul>
     </>
   );
 }

@@ -41,7 +41,7 @@ export default function DocsIndex() {
             </div>
             <div className="mt-2 text-base font-semibold text-[color:var(--ink)]">Run or generate a script</div>
             <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">
-              Use built-in examples, write your own <code>.emw</code> file, or let the Agent assemble the flow.
+              Use built-in examples, write your own JSX-based <code>.js</code> script, or let the Agent assemble the flow.
             </p>
           </div>
         </div>
@@ -81,8 +81,8 @@ export default function DocsIndex() {
 
       <h2>How it works</h2>
       <p>
-        Everything runs through <strong>scripts</strong> using small <code>.emw</code> files that define
-        both hardware logic and UI in one place. When you run a script, the app renders controls, plots,
+        Everything runs through <strong>scripts</strong> using local JavaScript files that define
+        both hardware logic and JSX UI in one place. When you run a script, the app renders controls, plots,
         and inputs directly on your device. Edit the file and run again for immediate feedback.
       </p>
       <p>
@@ -107,7 +107,7 @@ export default function DocsIndex() {
           <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
         </li>
         <li>
-          <strong>Open a script</strong> such as <code>sampler.emw</code>, <code>cc1101.emw</code>, or <code>rfid.emw</code>,
+          <strong>Open a script</strong> such as <code>sampler.js</code>, <code>cc1101.js</code>, or <code>rfid.js</code>,
           then adapt it or generate a new one.
         </li>
       </ol>
@@ -130,7 +130,7 @@ export default function DocsIndex() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">Scripts</div>
             <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Learn the scripting model</div>
             <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
-              Device APIs, UI widgets, script structure, and the built-in examples.
+              JSX components, imported device modules, script structure, and the built-in examples.
             </div>
           </div>
           <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">

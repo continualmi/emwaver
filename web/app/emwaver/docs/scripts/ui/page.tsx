@@ -3,185 +3,239 @@ export default function UiWidgetsDocPage() {
     <>
       <h1>UI widgets</h1>
       <p>
-        Scripts build a declarative UI tree using <code>UI.*</code> factory functions, then
-        call <code>UI.render(rootNode)</code> to display it. The tree is serialized to JSON and
-        rendered as native views (SwiftUI on Apple platforms, Compose on Android).
+        Current EMWaver UI scripts import components from <code>emw-ui</code>, import
+        <code> JSX</code> and <code>render</code> from <code>emw-jsx</code>, then render JSX.
+        The JSX is converted to the same serializable UI tree used by the native renderers.
       </p>
+      <blockquote>
+        Preferred style: <code>&lt;Column&gt;...&lt;/Column&gt;</code>. Factory calls such as
+        <code> UI.column(&#123; children: [...] &#125;)</code> are useful for internals and dynamic helpers,
+        but should not be the primary public documentation style.
+      </blockquote>
+
+      <h2>Imports and render</h2>
+      <pre>
+        <code className="language-javascript">{`import { JSX, render } from "emw-jsx";
+import {
+  Button,
+  Card,
+  Column,
+  Divider,
+  Grid,
+  LogViewer,
+  Modal,
+  Picker,
+  Plot,
+  Progress,
+  Row,
+  Scroll,
+  Slider,
+  Spacer,
+  Text,
+  TextEditor,
+  TextField,
+  Tile,
+  Toggle,
+} from "emw-ui";
+
+function App() {
+  return <Text>Hello from EMWaver</Text>;
+}
+
+render(<App />);`}</code>
+      </pre>
 
       <h2>Layout</h2>
       <pre>
-        <code className="language-javascript">{`UI.column({ spacing: 12, padding: 16, children: [...] })
-UI.row({ spacing: 8, children: [...] })
-UI.grid({ columns: 3, spacing: 8, children: [...] })
-UI.scroll({ axis: "vertical", children: [...] })
-UI.spacer({ minLength: 20 })
-UI.divider({})`}</code>
+        <code className="language-javascript">{`<Column padding={16} spacing={12}>
+  <Text>Stacked vertically</Text>
+  <Row spacing={8}>
+    <Button>Left</Button>
+    <Button>Right</Button>
+  </Row>
+  <Grid columns={3} spacing={8}>
+    <Tile title="A" value="1" />
+    <Tile title="B" value="2" />
+    <Tile title="C" value="3" />
+  </Grid>
+  <Divider />
+  <Spacer minLength={20} />
+</Column>
+
+<Scroll padding={16} spacing={14}>
+  <Text>Scrollable page content</Text>
+</Scroll>`}</code>
       </pre>
 
       <h2>Card</h2>
-      <p>Groups content with an optional title and subtitle:</p>
       <pre>
-        <code className="language-javascript">{`UI.card({
-  title: "GPIO Control",
-  subtitle: "Pin A0",
-  children: [
-    UI.button({ label: "Toggle", onTap: toggle }),
-  ],
-})`}</code>
+        <code className="language-javascript">{`<Card title="GPIO Control" subtitle="Pin A0">
+  <Button onTap={toggle}>Toggle</Button>
+</Card>`}</code>
       </pre>
 
       <h2>Text</h2>
       <pre>
-        <code className="language-javascript">{`UI.text({ text: "Hello" })
-UI.text({
-  text: "Status: OK",
-  font: "headline",
-  fontWeight: "bold",
-  foregroundColor: "green",
-})`}</code>
+        <code className="language-javascript">{`<Text>Hello</Text>
+<Text font="title2" fontWeight="semibold">Sampler</Text>
+<Text font="caption" foregroundColor="#6B7280">
+  Last reading: {String(reading)}
+</Text>`}</code>
       </pre>
 
       <h2>Button</h2>
       <pre>
-        <code className="language-javascript">{`UI.button({
-  label: "Start capture",
-  buttonStyle: "borderedProminent",
-  controlSize: "large",
-  onTap: startCapture,
-})`}</code>
+        <code className="language-javascript">{`<Button id="capture.start" onTap={startCapture}>Start capture</Button>
+<Button buttonStyle="borderedProminent" controlSize="large" onTap={save}>
+  Save
+</Button>`}</code>
       </pre>
 
       <h2>Tile</h2>
-      <p>A tappable card-like element with title, value, and optional subtitle:</p>
       <pre>
-        <code className="language-javascript">{`UI.tile({
-  title: "Temperature",
-  value: "23.4 °C",
-  monospaceValue: true,
-  subtitle: "Last reading",
-  onTap: refresh,
-})`}</code>
+        <code className="language-javascript">{`<Tile
+  title="Temperature"
+  value={temperatureText}
+  monospaceValue={true}
+  subtitle="Last reading"
+  onTap={refresh}
+/>`}</code>
       </pre>
 
       <h2>Slider</h2>
       <pre>
-        <code className="language-javascript">{`UI.slider({
-  value: duty,
-  min: 0,
-  max: 4095,
-  step: 1,
-  label: "Duty cycle",
-  onChange: (v) => { duty = v; render(); },
-  onSubmit: (v) => { analogWrite(pin, v); },
-})`}</code>
+        <code className="language-javascript">{`<Slider
+  id="pwm.duty"
+  value={duty}
+  min={0}
+  max={4095}
+  step={1}
+  label="Duty cycle"
+  onChange={(value) => { duty = Number(value); rerender(); }}
+  onSubmit={(value) => { writeDuty(Number(value)); }}
+/>`}</code>
       </pre>
 
       <h2>TextField</h2>
       <pre>
-        <code className="language-javascript">{`UI.textField({
-  value: input,
-  placeholder: "Enter command...",
-  onChange: (v) => { input = v; render(); },
-  onSubmit: (v) => { sendCommand(v); },
-})
+        <code className="language-javascript">{`<TextField
+  value={command}
+  placeholder="Enter command..."
+  onChange={(value) => { command = String(value || ""); }}
+  onSubmit={(value) => { sendCommand(String(value || "")); }}
+/>
 
-// Secure (password) field
-UI.textField({ value: pw, secure: true })`}</code>
+<TextField value={apiKey} secure={true} placeholder="API key" />`}</code>
       </pre>
 
       <h2>TextEditor</h2>
-      <p>Multi-line text input:</p>
       <pre>
-        <code className="language-javascript">{`UI.textEditor({
-  value: log,
-  placeholder: "Output log...",
-  minHeight: 200,
-  onChange: (v) => { log = v; render(); },
-})`}</code>
+        <code className="language-javascript">{`<TextEditor
+  value={hexData}
+  placeholder="Data bytes..."
+  minHeight={120}
+  onChange={(value) => { hexData = String(value || ""); rerender(); }}
+/>`}</code>
       </pre>
 
       <h2>Picker</h2>
       <pre>
-        <code className="language-javascript">{`UI.picker({
-  selected: selectedPin,
-  options: [
+        <code className="language-javascript">{`<Picker
+  id="gpio.pin"
+  selected={selectedPin}
+  options={[
     { label: "A0", value: "0" },
     { label: "A1", value: "1" },
-    { label: "B6", value: "22" },
-  ],
-  style: "segmented",  // or "menu", "automatic"
-  onChange: (v) => { selectedPin = v; render(); },
-})`}</code>
+    { label: "GPIO4", value: "4" },
+  ]}
+  style="menu"
+  onChange={(value) => { selectedPin = String(value); rerender(); }}
+/>
+
+<Picker
+  style="segmented"
+  selected={mode}
+  options={[{ label: "RX", value: "rx" }, { label: "TX", value: "tx" }]}
+/>`}</code>
       </pre>
 
       <h2>Toggle</h2>
       <pre>
-        <code className="language-javascript">{`UI.toggle({
-  label: "Enable output",
-  value: enabled,
-  onChange: (v) => { enabled = v; render(); },
-})`}</code>
+        <code className="language-javascript">{`<Toggle
+  label="Enable output"
+  value={enabled}
+  onChange={(value) => { enabled = Boolean(value); rerender(); }}
+/>`}</code>
       </pre>
 
       <h2>Plot</h2>
       <p>
-        Interactive chart with pan/zoom. Supports inline data or buffer sources for rendering
-        large captured signals efficiently.
+        <code>Plot</code> can render inline data or a named/buffer-backed source. The sampler UI uses
+        <code> source="samplerBits"</code> with viewport callbacks for pan/zoom.
       </p>
       <pre>
-        <code className="language-javascript">{`// Inline data
-UI.plot({
-  height: 300,
-  dataX: [0, 1, 2, 3, 4],
-  dataY: [0, 1, 0, 1, 0],
-})
+        <code className="language-javascript">{`<Plot
+  height={240}
+  dataX={[0, 1, 2, 3, 4]}
+  dataY={[0, 1, 0, 1, 0]}
+/>
 
-// Live sampler view
-UI.plot({
-  height: 300,
-  source: "samplerBits",
-  onViewportChange: (vp) => { /* pan/zoom state */ },
-  onSelectRange: (range) => { /* shift+drag selection */ },
-})
+<Plot
+  height={240}
+  source="samplerBits"
+  bins={400}
+  xMin={xMin}
+  xMax={xMax}
+  yMin={-10}
+  yMax={265}
+  errorText={chartErr}
+  onViewportChange={(rangeValue) => {
+    const range = parseViewportRange(rangeValue);
+    if (range) scheduleViewport(range.min, range.max);
+  }}
+/>
 
-// Pre-stored buffer
-const bufId = UI.buffer(capturedBytes);
-UI.plot({
-  height: 300,
-  source: { kind: "buffer", id: bufId },
-})`}</code>
+const bufId = buffer(capturedBytes);
+<Plot height={240} source={{ kind: "buffer", id: bufId }} />`}</code>
       </pre>
 
       <h2>LogViewer</h2>
-      <p>Read-only scrolling text log:</p>
       <pre>
-        <code className="language-javascript">{`UI.logViewer({
-  text: logOutput,
-  minHeight: 150,
-})`}</code>
+        <code className="language-javascript">{`<LogViewer text={logLines.join("\n")} minHeight={220} />`}</code>
       </pre>
 
       <h2>Progress</h2>
       <pre>
-        <code className="language-javascript">{`UI.progress({ value: 42, total: 100, label: "Flashing..." })
-UI.progress({ label: "Scanning..." })  // indeterminate`}</code>
+        <code className="language-javascript">{`<Progress value={42} total={100} label="Flashing..." />
+<Progress label="Scanning..." />`}</code>
       </pre>
 
       <h2>Modal</h2>
       <pre>
-        <code className="language-javascript">{`UI.modal({
-  open: showModal,
-  title: "Confirm",
-  subtitle: "Are you sure?",
-  onClose: () => { showModal = false; render(); },
-  children: [
-    UI.button({ label: "OK", onTap: confirm }),
-  ],
-})`}</code>
+        <code className="language-javascript">{`<Modal
+  open={showModal}
+  title="Confirm"
+  subtitle="Are you sure?"
+  onClose={() => { showModal = false; rerender(); }}
+>
+  <Button onTap={confirm}>OK</Button>
+</Modal>`}</code>
+      </pre>
+
+      <h2>Dynamic children and nulls</h2>
+      <p>
+        Components ignore <code>null</code>, <code>undefined</code>, and <code>false</code> children, so conditional UI
+        can be written naturally.
+      </p>
+      <pre>
+        <code className="language-javascript">{`<Column spacing={10}>
+  <Text font="title2">Radio</Text>
+  {statusText ? <Text font="caption">{statusText}</Text> : null}
+  {items.map((item) => <Tile title={item.name} value={item.value} />)}
+</Column>`}</code>
       </pre>
 
       <h2>Common style props</h2>
-      <p>These can be applied to any widget:</p>
       <div className="overflow-hidden rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)]">
         <table className="m-0 w-full text-sm">
           <thead>
@@ -192,46 +246,14 @@ UI.progress({ label: "Scanning..." })  // indeterminate`}</code>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="px-4 py-3"><code>padding</code></td>
-              <td className="px-4 py-3">number</td>
-              <td className="px-4 py-3">All-sides padding</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>width</code>, <code>height</code></td>
-              <td className="px-4 py-3">number</td>
-              <td className="px-4 py-3">Fixed size</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>minWidth</code>, <code>maxWidth</code></td>
-              <td className="px-4 py-3">number</td>
-              <td className="px-4 py-3">Size constraints</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>cornerRadius</code></td>
-              <td className="px-4 py-3">number</td>
-              <td className="px-4 py-3">Rounded corners</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>backgroundColor</code></td>
-              <td className="px-4 py-3">string</td>
-              <td className="px-4 py-3">Background color</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>foregroundColor</code></td>
-              <td className="px-4 py-3">string</td>
-              <td className="px-4 py-3">Text/icon color</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>fillsWidth</code></td>
-              <td className="px-4 py-3">boolean</td>
-              <td className="px-4 py-3">Expand to fill (default: true)</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>alignment</code></td>
-              <td className="px-4 py-3">string</td>
-              <td className="px-4 py-3">leading, center, trailing</td>
-            </tr>
+            <tr><td className="px-4 py-3"><code>padding</code></td><td className="px-4 py-3">number or edge object</td><td className="px-4 py-3">Use <code>16</code> or <code>&#123; top, bottom, leading, trailing &#125;</code>.</td></tr>
+            <tr><td className="px-4 py-3"><code>spacing</code></td><td className="px-4 py-3">number</td><td className="px-4 py-3">Gap between children for layout nodes.</td></tr>
+            <tr><td className="px-4 py-3"><code>width</code>, <code>height</code></td><td className="px-4 py-3">number</td><td className="px-4 py-3">Fixed size.</td></tr>
+            <tr><td className="px-4 py-3"><code>minWidth</code>, <code>maxWidth</code>, <code>minHeight</code>, <code>maxHeight</code></td><td className="px-4 py-3">number</td><td className="px-4 py-3">Size constraints.</td></tr>
+            <tr><td className="px-4 py-3"><code>cornerRadius</code></td><td className="px-4 py-3">number</td><td className="px-4 py-3">Rounded corners.</td></tr>
+            <tr><td className="px-4 py-3"><code>backgroundColor</code>, <code>foregroundColor</code></td><td className="px-4 py-3">string</td><td className="px-4 py-3">Native/platform color string.</td></tr>
+            <tr><td className="px-4 py-3"><code>fillsWidth</code></td><td className="px-4 py-3">boolean</td><td className="px-4 py-3">Stretch to available width.</td></tr>
+            <tr><td className="px-4 py-3"><code>alignment</code></td><td className="px-4 py-3">string</td><td className="px-4 py-3">Common values: <code>leading</code>, <code>center</code>, <code>trailing</code>.</td></tr>
           </tbody>
         </table>
       </div>
@@ -243,40 +265,16 @@ UI.progress({ label: "Scanning..." })  // indeterminate`}</code>
             <tr>
               <th className="px-4 py-3 text-left">Prop</th>
               <th className="px-4 py-3 text-left">Used by</th>
-              <th className="px-4 py-3 text-left">Callback argument</th>
+              <th className="px-4 py-3 text-left">Payload</th>
             </tr>
           </thead>
           <tbody>
-            <tr>
-              <td className="px-4 py-3"><code>onTap</code></td>
-              <td className="px-4 py-3">button, tile</td>
-              <td className="px-4 py-3">none</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>onChange</code></td>
-              <td className="px-4 py-3">slider, picker, textField, toggle, textEditor</td>
-              <td className="px-4 py-3">new value</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>onSubmit</code></td>
-              <td className="px-4 py-3">textField, slider</td>
-              <td className="px-4 py-3">final value</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>onViewportChange</code></td>
-              <td className="px-4 py-3">plot</td>
-              <td className="px-4 py-3">viewport state</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>onSelectRange</code></td>
-              <td className="px-4 py-3">plot</td>
-              <td className="px-4 py-3">selection range</td>
-            </tr>
-            <tr>
-              <td className="px-4 py-3"><code>onClose</code></td>
-              <td className="px-4 py-3">modal</td>
-              <td className="px-4 py-3">none</td>
-            </tr>
+            <tr><td className="px-4 py-3"><code>onTap</code></td><td className="px-4 py-3">Button, Tile</td><td className="px-4 py-3">No payload.</td></tr>
+            <tr><td className="px-4 py-3"><code>onChange</code></td><td className="px-4 py-3">Picker, Slider, Toggle, TextField, TextEditor</td><td className="px-4 py-3">New value.</td></tr>
+            <tr><td className="px-4 py-3"><code>onSubmit</code></td><td className="px-4 py-3">TextField, Slider</td><td className="px-4 py-3">Committed value.</td></tr>
+            <tr><td className="px-4 py-3"><code>onViewportChange</code></td><td className="px-4 py-3">Plot</td><td className="px-4 py-3">Viewport range with <code>min</code> and <code>max</code>.</td></tr>
+            <tr><td className="px-4 py-3"><code>onSelectRange</code></td><td className="px-4 py-3">Plot</td><td className="px-4 py-3">Selected range.</td></tr>
+            <tr><td className="px-4 py-3"><code>onClose</code></td><td className="px-4 py-3">Modal</td><td className="px-4 py-3">No payload.</td></tr>
           </tbody>
         </table>
       </div>

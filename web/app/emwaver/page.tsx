@@ -16,7 +16,7 @@ const capabilityCards = [
   {
     label: "Agent-ready",
     title: "AI helps when you ask",
-    body: "The optional Agent can write, explain, debug, and improve .emw scripts while the open local hardware path remains useful on its own.",
+    body: "The optional Agent can write, explain, debug, and improve local JSX-based JavaScript scripts while the open hardware path remains useful on its own.",
   },
 ];
 
@@ -24,7 +24,7 @@ const comparisonRows = [
   ["Interface", "Full host screen", "128x64 monochrome", "External serial monitor or add-on display"],
   ["Storage", "Local host filesystem", "SD card", "Limited board flash unless you add storage"],
   ["AI workflow", "Optional Agent-assisted scripts", "None built in", "External tools only"],
-  ["Development", "Instant .emw scripts", "Firmware build/flash for deeper changes", "Sketch compile/upload loop"],
+  ["Development", "Instant local JavaScript scripts", "Firmware build/flash for deeper changes", "Sketch compile/upload loop"],
   ["Hardware model", "Multiple supported boards", "Single handheld device", "Many boards, fragmented workflows"],
   ["Core access", "Account-free local control", "Device-local", "Account-free local control"],
 ];
@@ -53,7 +53,7 @@ const gettingStarted = [
   {
     step: "3",
     title: "Run scripts",
-    body: "Explore GPIO, buses, sensors, IR, RFID, and module workflows with local .emw scripts.",
+    body: "Explore GPIO, buses, sensors, IR, RFID, and module workflows with local JavaScript scripts.",
     href: "/emwaver/scripts",
     cta: "Browse scripts",
   },
@@ -78,7 +78,7 @@ export default function HomePage() {
               </h1>
               <p className="mt-6 max-w-2xl text-[17px] leading-8 text-[color:var(--ink-dim)]">
                 EMWaver turns supported MCU boards into a scriptable hardware lab.
-                Plug in, run local .emw scripts, and explore real electronics without
+                Plug in, run local JavaScript scripts, and explore real electronics without
                 accounts, cloud activation, or firmware toolchains.
               </p>
               <div className="mt-8 flex flex-wrap gap-3">

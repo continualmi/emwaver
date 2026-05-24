@@ -117,7 +117,7 @@ export default function InstallDocPage() {
 
       <h2>4. Run local scripts</h2>
       <p>
-        Open the Scripts view in the app, pick a built-in script or create your own <code>.emw</code> file,
+        Open the Scripts view in the app, pick a built-in script or create your own JSX-based <code>.js</code> file,
         and press Run. Local script execution should not require sign-in, cloud activation, or a hosted relay.
       </p>
 
