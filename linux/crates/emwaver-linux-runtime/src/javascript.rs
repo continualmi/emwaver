@@ -4,6 +4,7 @@ use emwaver_linux_transport::{
     EmwaverTransport,
 };
 use serde::Deserialize;
+use std::collections::BTreeMap;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -14,6 +15,8 @@ pub enum JavaScriptRuntimeError {
     Json(String),
     #[error("invalid generated command: {0}")]
     Command(String),
+    #[error("JavaScript transform failed: {0}")]
+    Transform(String),
     #[error("transport execution failed: {0}")]
     Transport(String),
 }
@@ -25,7 +28,17 @@ struct RawCommand {
 }
 
 pub fn compile_javascript(source: &str) -> Result<Vec<ScriptCommandStep>, JavaScriptRuntimeError> {
-    let wrapped = format!("{JS_PRELUDE}\n{source}\nJSON.stringify(__emwCommands);");
+    compile_javascript_with_modules(source, &BTreeMap::new())
+}
+
+pub fn compile_javascript_with_modules(
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+) -> Result<Vec<ScriptCommandStep>, JavaScriptRuntimeError> {
+    let source = transform_imports(source)?;
+    let module_loader = module_loader_script(module_sources)?;
+    let wrapped =
+        format!("{JS_PRELUDE}\n{module_loader}\n{source}\nJSON.stringify(__emwCommands);");
     let mut context = Context::default();
     let value = context
         .eval(Source::from_bytes(wrapped.as_bytes()))
@@ -50,10 +63,191 @@ pub async fn execute_javascript(
     source: &str,
     transport: &mut dyn EmwaverTransport,
 ) -> Result<ScriptExecutionReport, JavaScriptRuntimeError> {
-    let steps = compile_javascript(source)?;
+    execute_javascript_with_modules(source, &BTreeMap::new(), transport).await
+}
+
+pub async fn execute_javascript_with_modules(
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+    transport: &mut dyn EmwaverTransport,
+) -> Result<ScriptExecutionReport, JavaScriptRuntimeError> {
+    let steps = compile_javascript_with_modules(source, module_sources)?;
     run_script_commands(transport, &steps)
         .await
         .map_err(|err| JavaScriptRuntimeError::Transport(err.to_string()))
+}
+
+fn transform_imports(source: &str) -> Result<String, JavaScriptRuntimeError> {
+    source
+        .lines()
+        .map(transform_import_line)
+        .collect::<Result<Vec<_>, _>>()
+        .map(|lines| lines.join("\n"))
+}
+
+fn transform_import_line(line: &str) -> Result<String, JavaScriptRuntimeError> {
+    let trimmed = line.trim();
+    if !trimmed.starts_with("import ") {
+        return Ok(line.to_string());
+    }
+    let leading = line
+        .chars()
+        .take_while(|ch| *ch == ' ' || *ch == '\t')
+        .collect::<String>();
+    let statement = trimmed.strip_suffix(';').unwrap_or(trimmed).trim();
+
+    if let Some(rest) = statement.strip_prefix("import {") {
+        let Some((bindings, module)) = rest.split_once("} from ") else {
+            return Err(JavaScriptRuntimeError::Transform(format!(
+                "unsupported import syntax: {trimmed}"
+            )));
+        };
+        let names = transform_import_bindings(bindings)?;
+        let module = quoted_module_name(module)?;
+        return Ok(format!(
+            "{leading}const {{ {names} }} = require(\"{module}\");"
+        ));
+    }
+
+    if let Some(rest) = statement.strip_prefix("import * as ") {
+        let Some((name, module)) = rest.split_once(" from ") else {
+            return Err(JavaScriptRuntimeError::Transform(format!(
+                "unsupported import syntax: {trimmed}"
+            )));
+        };
+        let name = name.trim();
+        if !is_identifier(name) {
+            return Err(JavaScriptRuntimeError::Transform(format!(
+                "unsupported import binding: {name}"
+            )));
+        }
+        let module = quoted_module_name(module)?;
+        return Ok(format!("{leading}const {name} = require(\"{module}\");"));
+    }
+
+    if let Some(module) = statement.strip_prefix("import ") {
+        let module = quoted_module_name(module)?;
+        return Ok(format!("{leading}require(\"{module}\");"));
+    }
+
+    Err(JavaScriptRuntimeError::Transform(format!(
+        "unsupported import syntax: {trimmed}"
+    )))
+}
+
+fn transform_import_bindings(bindings: &str) -> Result<String, JavaScriptRuntimeError> {
+    let mut transformed = Vec::new();
+    for binding in bindings.split(',') {
+        let binding = binding.trim();
+        if binding.is_empty() {
+            continue;
+        }
+        let parts = binding.split_whitespace().collect::<Vec<_>>();
+        match parts.as_slice() {
+            [name] if is_identifier(name) => transformed.push((*name).to_string()),
+            [source, "as", alias] if is_identifier(source) && is_identifier(alias) => {
+                transformed.push(format!("{source}: {alias}"));
+            }
+            _ => {
+                return Err(JavaScriptRuntimeError::Transform(format!(
+                    "unsupported import binding: {binding}"
+                )));
+            }
+        }
+    }
+    if transformed.is_empty() {
+        return Err(JavaScriptRuntimeError::Transform(
+            "import list cannot be empty".to_string(),
+        ));
+    }
+    Ok(transformed.join(", "))
+}
+
+fn quoted_module_name(value: &str) -> Result<String, JavaScriptRuntimeError> {
+    let value = value.trim();
+    let Some(quote) = value.chars().next() else {
+        return Err(JavaScriptRuntimeError::Transform(
+            "missing module name".to_string(),
+        ));
+    };
+    if quote != '"' && quote != '\'' {
+        return Err(JavaScriptRuntimeError::Transform(format!(
+            "unsupported module name: {value}"
+        )));
+    }
+    let Some(end) = value[1..].find(quote) else {
+        return Err(JavaScriptRuntimeError::Transform(format!(
+            "unterminated module name: {value}"
+        )));
+    };
+    if !value[1 + end + 1..].trim().is_empty() {
+        return Err(JavaScriptRuntimeError::Transform(format!(
+            "unsupported trailing import content: {value}"
+        )));
+    }
+    Ok(value[1..1 + end].to_string())
+}
+
+fn is_identifier(value: &str) -> bool {
+    let mut chars = value.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    (first == '_' || first == '$' || first.is_ascii_alphabetic())
+        && chars.all(|ch| ch == '_' || ch == '$' || ch.is_ascii_alphanumeric())
+}
+
+fn module_loader_script(
+    module_sources: &BTreeMap<String, String>,
+) -> Result<String, JavaScriptRuntimeError> {
+    if module_sources.is_empty() {
+        return Ok(String::new());
+    }
+    let transformed = module_sources
+        .iter()
+        .map(|(name, source)| transform_imports(source).map(|source| (name.clone(), source)))
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    let json = serde_json::to_string(&transformed)
+        .map_err(|err| JavaScriptRuntimeError::Json(err.to_string()))?;
+    Ok(format!(
+        r#"
+globalThis.__emwModuleSources = {json};
+(function(global) {{
+  const sources = global.__emwModuleSources || {{}};
+  const cache = {{}};
+  function normalize(name) {{
+    return String(name || '').trim();
+  }}
+  function candidates(name) {{
+    const n = normalize(name);
+    const out = [n];
+    if (n.slice(-3) !== '.js') out.push(n + '.js');
+    if (n.indexOf('./') === 0) {{
+      const bare = n.slice(2);
+      out.push(bare);
+      if (bare.slice(-3) !== '.js') out.push(bare + '.js');
+    }}
+    return out;
+  }}
+  function resolve(name) {{
+    const list = candidates(name);
+    for (let i = 0; i < list.length; i += 1) {{
+      if (Object.prototype.hasOwnProperty.call(sources, list[i])) return list[i];
+    }}
+    throw new Error('Module not found: ' + name);
+  }}
+  global.require = function(name) {{
+    const id = resolve(name);
+    if (cache[id]) return cache[id].exports;
+    const module = {{ id, exports: {{}} }};
+    cache[id] = module;
+    const fn = new Function('require', 'module', 'exports', sources[id]);
+    fn(global.require, module, module.exports);
+    return module.exports;
+  }};
+}})(globalThis);
+"#
+    ))
 }
 
 const JS_PRELUDE: &str = r#"
@@ -132,6 +326,64 @@ mod tests {
         assert_eq!(steps.len(), 1);
         assert_eq!(steps[0].label, "board probe");
         assert_eq!(steps[0].command_lane, vec![0x09]);
+    }
+
+    #[test]
+    fn compiles_imports_through_local_module_loader() {
+        let modules = BTreeMap::from([(
+            "board-tools.js".to_string(),
+            r#"
+            const value = 0x09;
+            module.exports = {
+                boardProbe(label) {
+                    emw.command([value], label);
+                }
+            };
+            "#
+            .to_string(),
+        )]);
+        let steps = compile_javascript_with_modules(
+            r#"
+            import { boardProbe as probe } from "board-tools";
+            probe("module board probe");
+            "#,
+            &modules,
+        )
+        .unwrap();
+
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].label, "module board probe");
+        assert_eq!(steps[0].command_lane, vec![0x09]);
+    }
+
+    #[test]
+    fn compiles_nested_imports_in_modules() {
+        let modules = BTreeMap::from([
+            (
+                "inner.js".to_string(),
+                "module.exports = { command: [0x01] };".to_string(),
+            ),
+            (
+                "outer.js".to_string(),
+                r#"
+                import { command } from "./inner";
+                module.exports = { run() { emw.command(command, "nested"); } };
+                "#
+                .to_string(),
+            ),
+        ]);
+        let steps = compile_javascript_with_modules(
+            r#"
+            import * as outer from 'outer';
+            outer.run();
+            "#,
+            &modules,
+        )
+        .unwrap();
+
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].label, "nested");
+        assert_eq!(steps[0].command_lane, vec![0x01]);
     }
 
     #[test]

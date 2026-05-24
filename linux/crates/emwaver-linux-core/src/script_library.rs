@@ -192,6 +192,17 @@ impl ScriptRepository {
         fs::read_to_string(&item.path).map_err(ScriptLibraryError::from)
     }
 
+    pub fn module_sources(&self) -> Result<BTreeMap<String, String>, ScriptLibraryError> {
+        let mut modules = BTreeMap::new();
+        for item in self.list_scripts()? {
+            if item.kind == ScriptKind::Script {
+                continue;
+            }
+            modules.insert(item.name.clone(), self.read_script(&item)?);
+        }
+        Ok(modules)
+    }
+
     pub fn save_script(
         &self,
         item: &ScriptListItem,
@@ -461,5 +472,27 @@ mod tests {
         assert_eq!(copy.name, "blink_copy_1.js");
         assert!(!copy.is_bundled);
         assert_eq!(fs::read_to_string(copy.path).unwrap(), "source");
+    }
+
+    #[test]
+    fn returns_library_and_kernel_module_sources() {
+        let bundled = temp_dir("module-sources-bundled");
+        let local = temp_dir("module-sources-local");
+        fs::write(bundled.join("blink.js"), "script").unwrap();
+        fs::write(bundled.join("emw-ui.js"), "ui").unwrap();
+        fs::write(bundled.join("emw-kernel.js"), "kernel").unwrap();
+        fs::write(local.join("custom.js"), "custom").unwrap();
+
+        let modules = ScriptRepository::new(&bundled, &local)
+            .module_sources()
+            .unwrap();
+
+        assert_eq!(modules.get("emw-ui.js").map(String::as_str), Some("ui"));
+        assert_eq!(
+            modules.get("emw-kernel.js").map(String::as_str),
+            Some("kernel")
+        );
+        assert!(!modules.contains_key("blink.js"));
+        assert!(!modules.contains_key("custom.js"));
     }
 }

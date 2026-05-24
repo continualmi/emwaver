@@ -12,7 +12,7 @@ use emwaver_linux_firmware::{
     stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
     FirmwarePlan, FirmwareTarget,
 };
-use emwaver_linux_runtime::execute_javascript;
+use emwaver_linux_runtime::execute_javascript_with_modules;
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
     simulator::SimulatorTransport,
@@ -26,6 +26,7 @@ use gtk::glib::object::IsA;
 use gtk::{gio, Align, Orientation, PolicyType};
 use sourceview5::prelude::*;
 use std::cell::RefCell;
+use std::collections::BTreeMap;
 use std::env;
 use std::rc::Rc;
 
@@ -655,6 +656,7 @@ pub fn build_main_window(app: &adw::Application) {
         let model = Rc::clone(&model);
         let source_buffer = source_buffer.clone();
         let selected_script = Rc::clone(&selected_script);
+        let script_repository = Rc::clone(&script_repository);
         let log_view = log_view.clone();
         let active_session = Rc::clone(&active_session);
         run_button.connect_clicked(move |_| {
@@ -669,6 +671,13 @@ pub fn build_main_window(app: &adw::Application) {
             let source = source_buffer
                 .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                 .to_string();
+            let module_sources = match script_repository.module_sources() {
+                Ok(modules) => modules,
+                Err(err) => {
+                    append_log(&log_view, &format!("Module load failed: {err}"));
+                    BTreeMap::new()
+                }
+            };
             let result = model.borrow_mut().run_script(&item.name, source);
             match result {
                 Ok(session) => {
@@ -685,6 +694,7 @@ pub fn build_main_window(app: &adw::Application) {
                         &source_buffer
                             .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                             .to_string(),
+                        &module_sources,
                     );
                     for line in execution_log {
                         append_log(&log_view, &line);
@@ -721,7 +731,11 @@ pub fn build_main_window(app: &adw::Application) {
     window.present();
 }
 
-fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<String> {
+fn run_selected_script(
+    device: &Option<DeviceRecord>,
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+) -> Vec<String> {
     let Some(device) = device else {
         return vec!["No selected device.".to_string()];
     };
@@ -741,7 +755,7 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
             if let Err(err) = transport.connect().await {
                 return vec![format!("Simulator connect failed: {err}")];
             }
-            match execute_javascript(source, &mut transport).await {
+            match execute_javascript_with_modules(source, module_sources, &mut transport).await {
                 Ok(report) => report.log,
                 Err(err) => vec![format!("Script failed: {err}")],
             }
@@ -763,7 +777,8 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
             if let Err(err) = transport.connect().await {
                 return vec![format!("USB connect failed: {err}")];
             }
-            let result = execute_javascript(source, &mut transport).await;
+            let result =
+                execute_javascript_with_modules(source, module_sources, &mut transport).await;
             let _ = transport.close().await;
             match result {
                 Ok(report) => report.log,
@@ -779,7 +794,8 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
             if let Err(err) = transport.connect().await {
                 return vec![format!("Wi-Fi connect failed: {err}")];
             }
-            let result = execute_javascript(source, &mut transport).await;
+            let result =
+                execute_javascript_with_modules(source, module_sources, &mut transport).await;
             let _ = transport.close().await;
             match result {
                 Ok(report) => report.log,
@@ -795,7 +811,8 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
             if let Err(err) = transport.connect().await {
                 return vec![format!("BLE connect failed: {err}")];
             }
-            let result = execute_javascript(source, &mut transport).await;
+            let result =
+                execute_javascript_with_modules(source, module_sources, &mut transport).await;
             let _ = transport.close().await;
             match result {
                 Ok(report) => report.log,

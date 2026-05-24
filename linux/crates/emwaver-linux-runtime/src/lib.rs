@@ -1,3 +1,6 @@
 pub mod javascript;
 
-pub use javascript::{compile_javascript, execute_javascript, JavaScriptRuntimeError};
+pub use javascript::{
+    compile_javascript, compile_javascript_with_modules, execute_javascript,
+    execute_javascript_with_modules, JavaScriptRuntimeError,
+};

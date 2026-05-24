@@ -31,7 +31,7 @@ The first native slice is M0/M1:
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
-- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app;
+- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries;
 - the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, and supports local New/Save/Make Copy behavior aligned with the macOS and Windows script workspace;
@@ -46,7 +46,7 @@ The first native slice is M0/M1:
 - Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
-Full JavaScript runtime parity beyond the initial command/gpio/device API, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity beyond the initial command/gpio/device API and local module loading, the JSX/script-render tree path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 
