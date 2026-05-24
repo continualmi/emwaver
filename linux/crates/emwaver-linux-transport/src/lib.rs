@@ -38,6 +38,8 @@ pub enum TransportError {
     Fixture(String),
     #[error("USB discovery failed: {0}")]
     Usb(String),
+    #[error("Wi-Fi transport failed: {0}")]
+    Wifi(String),
     #[error("command failed: {0}")]
     Command(String),
 }

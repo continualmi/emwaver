@@ -15,7 +15,7 @@ use emwaver_linux_transport::{
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
     },
-    wifi::ManualWifiTarget,
+    wifi::{LinuxWifiTransport, ManualWifiTarget},
     EmwaverTransport,
 };
 use gtk::{gio, Align, Orientation, PolicyType};
@@ -32,6 +32,7 @@ pub fn build_main_window(app: &adw::Application) {
     let selected_script = Rc::new(RefCell::new(None::<ScriptListItem>));
     seed_simulator_device(&model);
     seed_usb_devices(&model);
+    seed_manual_wifi_device(&model);
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -763,11 +764,64 @@ fn run_selected_script(device: &Option<DeviceRecord>, source: &str) -> Vec<Strin
                 Err(err) => vec![format!("Script failed: {err}")],
             }
         }),
+        TransportKind::Wifi => runtime.block_on(async {
+            let target = match manual_wifi_target_from_device(device) {
+                Ok(target) => target,
+                Err(err) => return vec![err],
+            };
+            let mut transport = LinuxWifiTransport::new(target);
+            if let Err(err) = transport.connect().await {
+                return vec![format!("Wi-Fi connect failed: {err}")];
+            }
+            let result = execute_javascript(source, &mut transport).await;
+            let _ = transport.close().await;
+            match result {
+                Ok(report) => report.log,
+                Err(err) => vec![format!("Script failed: {err}")],
+            }
+        }),
         _ => vec![format!(
             "{:?} script execution is not implemented yet.",
             device.transport
         )],
     }
+}
+
+fn seed_manual_wifi_device(model: &Rc<RefCell<AppModel>>) {
+    let Ok(host) = env::var("EMWAVER_WIFI_HOST") else {
+        return;
+    };
+    let port = env::var("EMWAVER_WIFI_PORT")
+        .ok()
+        .and_then(|raw| raw.parse::<u16>().ok())
+        .unwrap_or(emwaver_linux_transport::wifi::DEFAULT_WIFI_PORT);
+    let Ok(target) = ManualWifiTarget::new(host, port) else {
+        return;
+    };
+    let mut device = DeviceRecord::new(
+        target.id(),
+        target.display_name(),
+        TransportKind::Wifi,
+        None,
+    );
+    device.connected = true;
+    model.borrow_mut().upsert_device(device);
+}
+
+fn manual_wifi_target_from_device(device: &DeviceRecord) -> Result<ManualWifiTarget, String> {
+    let Some(rest) = device.id.strip_prefix("wifi:") else {
+        return Err(format!(
+            "Wi-Fi device {} is missing a manual target.",
+            device.id
+        ));
+    };
+    let Some((host, port)) = rest.rsplit_once(':') else {
+        return Err(format!("Wi-Fi device {} is missing a port.", device.id));
+    };
+    let port = port
+        .parse::<u16>()
+        .map_err(|_| format!("Wi-Fi device {} has an invalid port.", device.id))?;
+    ManualWifiTarget::new(host, port).map_err(|err| err.to_string())
 }
 
 fn seed_simulator_device(model: &Rc<RefCell<AppModel>>) {
@@ -1596,7 +1650,7 @@ fn manual_wifi_card() -> gtk::Frame {
     root.append(&form);
 
     let status = gtk::Label::builder()
-        .label("Wi-Fi mDNS/WebSocket transport is still behind the Linux transport boundary; validation keeps the same manual-host rules as macOS.")
+        .label("Set EMWAVER_WIFI_HOST and optional EMWAVER_WIFI_PORT before launch to add this manual Wi-Fi target to the local device list. mDNS discovery is still pending behind Avahi/D-Bus.")
         .wrap(true)
         .xalign(0.0)
         .css_classes(vec!["dim-label"])
@@ -1611,8 +1665,8 @@ fn manual_wifi_card() -> gtk::Frame {
             let port = port_entry.text().trim().parse::<u16>().unwrap_or(0);
             match ManualWifiTarget::new(host_entry.text().trim(), port) {
                 Ok(target) if target.port > 0 => status.set_label(&format!(
-                    "Manual Wi-Fi target accepted: {}:{}. WebSocket connection will become active when the Wi-Fi transport implementation lands.",
-                    target.host, target.port
+                    "Manual Wi-Fi target accepted: {}:{}. Restart with EMWAVER_WIFI_HOST={} EMWAVER_WIFI_PORT={} to add it as a selectable Wi-Fi device.",
+                    target.host, target.port, target.host, target.port
                 )),
                 Ok(_) => status.set_label("Wi-Fi port must be between 1 and 65535."),
                 Err(err) => status.set_label(&err.to_string()),

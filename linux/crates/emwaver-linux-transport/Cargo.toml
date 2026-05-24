@@ -9,8 +9,10 @@ repository.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
 emwaver-linux-core = { path = "../emwaver-linux-core" }
+futures.workspace = true
 rusb = { version = "0.9", features = ["vendored"] }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-tungstenite.workspace = true
