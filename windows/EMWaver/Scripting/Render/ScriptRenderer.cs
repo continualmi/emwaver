@@ -1,12 +1,11 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Microsoft.UI.Xaml.Media;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
 using EMWaver.Services;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using Windows.UI;
 
 namespace EMWaver.Scripting.Render;
 
@@ -50,8 +49,8 @@ public sealed class ScriptRenderer
     {
         UIElement baseElement = node.Type switch
         {
-            ScriptNodeType.Column => RenderStack(node, Orientation.Vertical),
-            ScriptNodeType.Row => RenderStack(node, Orientation.Horizontal),
+            ScriptNodeType.Column => RenderStack(node, System.Windows.Controls.Orientation.Vertical),
+            ScriptNodeType.Row => RenderStack(node, System.Windows.Controls.Orientation.Horizontal),
             ScriptNodeType.Card => RenderCard(node),
             ScriptNodeType.Tile => RenderTile(node),
             ScriptNodeType.Text => RenderText(node),
@@ -65,11 +64,11 @@ public sealed class ScriptRenderer
             ScriptNodeType.Toggle => RenderToggle(node),
             ScriptNodeType.Grid => RenderGrid(node),
             ScriptNodeType.Plot => RenderPlot(node),
-            ScriptNodeType.Modal => new Grid(), // handled separately
+            ScriptNodeType.Modal => new System.Windows.Controls.Grid(), // handled separately
             ScriptNodeType.Spacer => RenderSpacer(node),
-            ScriptNodeType.Divider => new Border { Height = 1, Background = ThemeResources.Brush("GeneratedDividerBrush", Color.FromArgb(40, 255, 255, 255)) },
+            ScriptNodeType.Divider => new System.Windows.Controls.Border { Height = 1, Background = ThemeResources.Brush("GeneratedDividerBrush", Color.FromArgb(40, 255, 255, 255)) },
             ScriptNodeType.Progress => RenderProgress(node),
-            _ => new Grid(),
+            _ => new System.Windows.Controls.Grid(),
         };
 
         return ApplyModifiers(baseElement, node);
@@ -83,11 +82,11 @@ public sealed class ScriptRenderer
         var foreground = ScriptPropParsers.ParseBrush(raw, "foregroundColor");
         if (foreground != null)
         {
-            if (element is TextBlock tb)
+            if (element is System.Windows.Controls.TextBlock tb)
             {
                 tb.Foreground = foreground;
             }
-            else if (element is Control c)
+            else if (element is System.Windows.Controls.Control c)
             {
                 c.Foreground = foreground;
             }
@@ -120,7 +119,7 @@ public sealed class ScriptRenderer
             return element;
         }
 
-        var wrapper = new Border
+        var wrapper = new System.Windows.Controls.Border
         {
             Padding = padding ?? new Thickness(0),
             Background = background,
@@ -153,7 +152,7 @@ public sealed class ScriptRenderer
         return wrapper;
     }
 
-    private UIElement RenderStack(ScriptNode node, Orientation orientation)
+    private UIElement RenderStack(ScriptNode node, System.Windows.Controls.Orientation orientation)
     {
         var raw = node.Props.Raw;
         var spacing = ScriptPropParsers.GetSpacing(raw, fallback: 8);
@@ -165,7 +164,7 @@ public sealed class ScriptRenderer
             var child = children[i];
             if (child is FrameworkElement fe && i > 0)
             {
-                fe.Margin = orientation == Orientation.Vertical
+                fe.Margin = orientation == System.Windows.Controls.Orientation.Vertical
                     ? new Thickness(0, spacing, 0, 0)
                     : new Thickness(spacing, 0, 0, 0);
             }
@@ -180,20 +179,20 @@ public sealed class ScriptRenderer
         var padding = ScriptPropParsers.GetPadding(raw) ?? new Thickness(16);
         var spacing = ScriptPropParsers.GetSpacing(raw, fallback: 12);
 
-        var content = new StackPanel { Orientation = Orientation.Vertical };
+        var content = new StackPanel { Orientation = System.Windows.Controls.Orientation.Vertical };
 
         var title = ScriptPropParsers.GetString(raw, "title");
         var subtitle = ScriptPropParsers.GetString(raw, "subtitle");
         if (!string.IsNullOrWhiteSpace(title) || !string.IsNullOrWhiteSpace(subtitle))
         {
-            var header = new StackPanel { Orientation = Orientation.Vertical, Spacing = 3, Margin = new Thickness(0, 0, 0, 10) };
+            var header = new StackPanel { Orientation = System.Windows.Controls.Orientation.Vertical, Margin = new Thickness(0, 0, 0, 10) };
             if (!string.IsNullOrWhiteSpace(title))
             {
-                header.Children.Add(new TextBlock { Text = title, FontSize = 18, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } });
+                header.Children.Add(new System.Windows.Controls.TextBlock { Text = title, FontSize = 18, FontWeight = FontWeights.SemiBold });
             }
             if (!string.IsNullOrWhiteSpace(subtitle))
             {
-                header.Children.Add(new TextBlock { Text = subtitle, FontSize = 12, Opacity = 0.75 });
+                header.Children.Add(new System.Windows.Controls.TextBlock { Text = subtitle, FontSize = 12, Opacity = 0.75 });
             }
             content.Children.Add(header);
         }
@@ -208,7 +207,7 @@ public sealed class ScriptRenderer
             content.Children.Add(child);
         }
 
-        var border = new Border
+        var border = new System.Windows.Controls.Border
         {
             Padding = padding,
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 10),
@@ -232,26 +231,23 @@ public sealed class ScriptRenderer
         var token = node.Props.HandlerId(ScriptEventType.Tap);
         var canTap = !disabled && !string.IsNullOrWhiteSpace(token);
 
-        var stack = new StackPanel { Orientation = Orientation.Vertical, Spacing = 2 };
+        var stack = new StackPanel { Orientation = System.Windows.Controls.Orientation.Vertical };
         if (!string.IsNullOrWhiteSpace(title))
         {
-            stack.Children.Add(new TextBlock { Text = title.ToUpperInvariant(), FontSize = 11, Opacity = 0.75 });
+            stack.Children.Add(new System.Windows.Controls.TextBlock { Text = title.ToUpperInvariant(), FontSize = 11, Opacity = 0.75 });
         }
         if (!string.IsNullOrWhiteSpace(value))
         {
-            stack.Children.Add(new TextBlock
-            {
-                Text = value,
-                FontSize = 14,
-                FontFamily = monospace ? new FontFamily("Consolas") : null,
-            });
+            var valueTb = new System.Windows.Controls.TextBlock { Text = value, FontSize = 14 };
+            if (monospace) valueTb.FontFamily = new FontFamily("Consolas");
+            stack.Children.Add(valueTb);
         }
         if (!string.IsNullOrWhiteSpace(subtitle))
         {
-            stack.Children.Add(new TextBlock { Text = subtitle, FontSize = 12, Opacity = 0.75 });
+            stack.Children.Add(new System.Windows.Controls.TextBlock { Text = subtitle, FontSize = 12, Opacity = 0.75 });
         }
 
-        var tileBody = new Border
+        var tileBody = new System.Windows.Controls.Border
         {
             Padding = new Thickness(10),
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 10),
@@ -264,7 +260,7 @@ public sealed class ScriptRenderer
 
         if (canTap)
         {
-            var btn = new Button
+            var btn = new System.Windows.Controls.Button
             {
                 Content = tileBody,
                 Padding = new Thickness(0),
@@ -282,7 +278,7 @@ public sealed class ScriptRenderer
     {
         var raw = node.Props.Raw;
         var text = ScriptPropParsers.GetString(raw, "text") ?? ScriptPropParsers.GetString(raw, "label") ?? string.Empty;
-        var tb = new TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
+        var tb = new System.Windows.Controls.TextBlock { Text = text, TextWrapping = TextWrapping.Wrap };
         ScriptPropParsers.ApplyTextProps(tb, raw);
         return tb;
     }
@@ -293,7 +289,7 @@ public sealed class ScriptRenderer
         var label = ScriptPropParsers.GetString(raw, "label") ?? "Button";
         var token = node.Props.HandlerId(ScriptEventType.Tap);
 
-        var btn = new Button { Content = label };
+        var btn = new System.Windows.Controls.Button { Content = label };
         if (!string.IsNullOrWhiteSpace(token))
         {
             btn.Click += (_, __) => _invokeHandler(token!, Array.Empty<object?>());
@@ -310,41 +306,28 @@ public sealed class ScriptRenderer
         var max = ScriptPropParsers.GetDouble(raw, "max") ?? 1;
         if (min > max) (min, max) = (max, min);
 
-        // Scripts often use slider "onSubmit" semantics (commit value), not continuous change.
-        // Prefer submit when present; fall back to change.
         var tokenSubmit = node.Props.HandlerId(ScriptEventType.Submit);
         var tokenChange = node.Props.HandlerId(ScriptEventType.Change);
 
-        var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max) };
+        var slider = new System.Windows.Controls.Slider { Minimum = min, Maximum = max, Value = Math.Clamp(value, min, max) };
 
         // Windows quirk: many scripts call render() from slider handlers.
-        // If we invoke on every ValueChanged tick while the user is dragging, the UI tree is rebuilt
-        // and the slider thumb appears to "fight" the user (doesn't move smoothly / snaps back).
-        //
-        // So: treat Windows sliders as commit-on-release.
+        // Treat sliders as commit-on-release to avoid UI rebuild fighting the drag.
         var isDragging = false;
 
-        // NOTE: Slider internally handles pointer events; use AddHandler(..., handledEventsToo: true)
-        // so we still observe drag start/end.
-        slider.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler((_, __) =>
-        {
-            isDragging = true;
-        }), handledEventsToo: true);
-
-        slider.AddHandler(UIElement.PointerReleasedEvent, new PointerEventHandler((_, __) =>
+        // WPF: use Preview mouse events so we get them even if the thumb captures the mouse.
+        slider.PreviewMouseLeftButtonDown += (_, __) => { isDragging = true; };
+        slider.PreviewMouseLeftButtonUp += (_, __) =>
         {
             var wasDragging = isDragging;
             isDragging = false;
-
-            // Commit-on-release for submit sliders.
             if (!wasDragging) return;
             var token = tokenSubmit ?? tokenChange;
             if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { slider.Value });
-        }), handledEventsToo: true);
+        };
 
-        slider.PointerCaptureLost += (_, __) =>
+        slider.LostMouseCapture += (_, __) =>
         {
-            // If capture is lost mid-drag, treat it as a commit.
             var wasDragging = isDragging;
             isDragging = false;
             if (!wasDragging) return;
@@ -354,13 +337,8 @@ public sealed class ScriptRenderer
 
         slider.ValueChanged += (_, e) =>
         {
-            // While dragging: let the UI update without spamming the script/render loop.
             if (isDragging) return;
-
-            // For "submit" sliders, do not fire continuously.
             if (!string.IsNullOrWhiteSpace(tokenSubmit)) return;
-
-            // Value changed by keyboard / tapping the track.
             if (!string.IsNullOrWhiteSpace(tokenChange)) _invokeHandler(tokenChange!, new object?[] { e.NewValue });
         };
 
@@ -371,11 +349,10 @@ public sealed class ScriptRenderer
 
         return new StackPanel
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 8,
+            Orientation = System.Windows.Controls.Orientation.Vertical,
             Children =
             {
-                new TextBlock { Text = label, FontSize = 12, Opacity = 0.75 },
+                new System.Windows.Controls.TextBlock { Text = label, FontSize = 12, Opacity = 0.75 },
                 slider,
             }
         };
@@ -386,7 +363,7 @@ public sealed class ScriptRenderer
         var raw = node.Props.Raw;
         var text = ScriptPropParsers.GetString(raw, "text") ?? string.Empty;
 
-        var tb = new TextBlock
+        var tb = new System.Windows.Controls.TextBlock
         {
             Text = text,
             FontFamily = new FontFamily("Consolas"),
@@ -394,7 +371,7 @@ public sealed class ScriptRenderer
             TextWrapping = TextWrapping.Wrap,
         };
 
-        return new Border
+        return new System.Windows.Controls.Border
         {
             Padding = new Thickness(8),
             CornerRadius = new CornerRadius(ScriptPropParsers.GetDouble(raw, "cornerRadius") ?? 8),
@@ -417,11 +394,11 @@ public sealed class ScriptRenderer
         UIElement content;
         if (axis == "horizontal")
         {
-            content = RenderStack(node, Orientation.Horizontal);
+            content = RenderStack(node, System.Windows.Controls.Orientation.Horizontal);
         }
         else
         {
-            content = RenderStack(node, Orientation.Vertical);
+            content = RenderStack(node, System.Windows.Controls.Orientation.Vertical);
         }
 
         return new ScrollViewer
@@ -446,7 +423,9 @@ public sealed class ScriptRenderer
         UIElement input;
         if (!multiline && isSecure)
         {
-            var pb = new PasswordBox { PlaceholderText = placeholder, Password = value };
+            // WPF PasswordBox doesn't have PlaceholderText natively; use a small workaround.
+            var pb = new System.Windows.Controls.PasswordBox { Password = value };
+            PlaceholderHelper.SetPlaceholder(pb, placeholder);
             pb.PasswordChanged += (_, __) =>
             {
                 if (!string.IsNullOrWhiteSpace(changeToken)) _invokeHandler(changeToken!, new object?[] { pb.Password });
@@ -455,20 +434,20 @@ public sealed class ScriptRenderer
         }
         else
         {
-            var tb = new TextBox
+            var tb = new System.Windows.Controls.TextBox
             {
-                PlaceholderText = placeholder,
                 Text = value,
                 AcceptsReturn = multiline,
                 TextWrapping = multiline ? TextWrapping.Wrap : TextWrapping.NoWrap,
             };
+            PlaceholderHelper.SetPlaceholder(tb, placeholder);
             tb.TextChanged += (_, __) =>
             {
                 if (!string.IsNullOrWhiteSpace(changeToken)) _invokeHandler(changeToken!, new object?[] { tb.Text });
             };
             tb.KeyDown += (_, e) =>
             {
-                if (e.Key == Windows.System.VirtualKey.Enter && !string.IsNullOrWhiteSpace(submitToken))
+                if (e.Key == Key.Enter && !string.IsNullOrWhiteSpace(submitToken))
                 {
                     _invokeHandler(submitToken!, new object?[] { tb.Text });
                 }
@@ -483,11 +462,10 @@ public sealed class ScriptRenderer
 
         return new StackPanel
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 6,
+            Orientation = System.Windows.Controls.Orientation.Vertical,
             Children =
             {
-                new TextBlock { Text = label, FontSize = 14, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } },
+                new System.Windows.Controls.TextBlock { Text = label, FontSize = 14, FontWeight = FontWeights.SemiBold },
                 input,
             }
         };
@@ -500,7 +478,7 @@ public sealed class ScriptRenderer
         var selected = ScriptPropParsers.GetString(raw, "selected") ?? string.Empty;
         var token = node.Props.HandlerId(ScriptEventType.Change);
 
-        var combo = new ComboBox();
+        var combo = new System.Windows.Controls.ComboBox();
         if (raw.TryGetValue("options", out var optRaw) && optRaw is List<object?> opts)
         {
             foreach (var item in opts)
@@ -515,11 +493,6 @@ public sealed class ScriptRenderer
             }
         }
 
-        // Important: setting SelectedItem programmatically can fire SelectionChanged.
-        // If a script re-renders in its onChange handler, that can create an infinite render loop
-        // (open script -> set selection -> SelectionChanged -> script render -> recreate picker -> ...).
-        //
-        // So: set initial selection first, then wire the event, and only invoke when the value truly changes.
         foreach (var it in combo.Items.OfType<ComboBoxItem>())
         {
             if (string.Equals(it.Tag?.ToString(), selected, StringComparison.Ordinal))
@@ -546,11 +519,10 @@ public sealed class ScriptRenderer
 
         return new StackPanel
         {
-            Orientation = Orientation.Vertical,
-            Spacing = 6,
+            Orientation = System.Windows.Controls.Orientation.Vertical,
             Children =
             {
-                new TextBlock { Text = label, FontSize = 14, FontWeight = new Windows.UI.Text.FontWeight { Weight = 600 } },
+                new System.Windows.Controls.TextBlock { Text = label, FontSize = 14, FontWeight = FontWeights.SemiBold },
                 combo,
             }
         };
@@ -566,15 +538,20 @@ public sealed class ScriptRenderer
             ?? false;
         var token = node.Props.HandlerId(ScriptEventType.Change);
 
-        var toggle = new ToggleSwitch
+        // WPF doesn't have ToggleSwitch natively; use CheckBox with toggle styling or just CheckBox.
+        var toggle = new System.Windows.Controls.CheckBox
         {
-            Header = string.IsNullOrWhiteSpace(label) ? null : label,
-            IsOn = selected,
+            Content = string.IsNullOrWhiteSpace(label) ? null : label,
+            IsChecked = selected,
             IsEnabled = !disabled,
         };
-        toggle.Toggled += (_, __) =>
+        toggle.Checked += (_, __) =>
         {
-            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { toggle.IsOn });
+            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { true });
+        };
+        toggle.Unchecked += (_, __) =>
+        {
+            if (!string.IsNullOrWhiteSpace(token)) _invokeHandler(token!, new object?[] { false });
         };
         return toggle;
     }
@@ -586,7 +563,7 @@ public sealed class ScriptRenderer
         var spacing = ScriptPropParsers.GetSpacing(raw, fallback: 8);
         var minColWidth = ScriptPropParsers.GetDouble(raw, "minColumnWidth");
 
-        var grid = new Grid();
+        var grid = new System.Windows.Controls.Grid();
         for (var c = 0; c < columns; c++)
         {
             var cd = new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) };
@@ -603,7 +580,7 @@ public sealed class ScriptRenderer
         for (var i = 0; i < node.Children.Count; i++)
         {
             var child = RenderNode(node.Children[i]);
-            var positioned = child as FrameworkElement ?? new ContentControl { Content = child };
+            var positioned = child as FrameworkElement ?? new System.Windows.Controls.ContentControl { Content = child };
             var r = i / columns;
             var c = i % columns;
             if (positioned is FrameworkElement fe)
@@ -612,8 +589,8 @@ public sealed class ScriptRenderer
                 var top = r == 0 ? 0 : spacing;
                 fe.Margin = new Thickness(left, top, 0, 0);
             }
-            Grid.SetRow(positioned, r);
-            Grid.SetColumn(positioned, c);
+            System.Windows.Controls.Grid.SetRow(positioned, r);
+            System.Windows.Controls.Grid.SetColumn(positioned, c);
             grid.Children.Add(positioned);
         }
 
@@ -631,7 +608,7 @@ public sealed class ScriptRenderer
     {
         var raw = node.Props.Raw;
         var minLength = ScriptPropParsers.GetDouble(raw, "minLength") ?? 0;
-        return new Border { Height = minLength };
+        return new System.Windows.Controls.Border { Height = minLength };
     }
 
     private UIElement RenderProgress(ScriptNode node)
@@ -642,7 +619,7 @@ public sealed class ScriptRenderer
         var label = ScriptPropParsers.GetString(raw, "label");
         var detail = ScriptPropParsers.GetString(raw, "detail");
 
-        var pb = new ProgressBar
+        var pb = new System.Windows.Controls.ProgressBar
         {
             IsIndeterminate = !value.HasValue,
             Minimum = 0,
@@ -650,15 +627,17 @@ public sealed class ScriptRenderer
             Value = value.HasValue ? Math.Min(value.Value, total ?? 1) : 0,
         };
 
-        var panel = new StackPanel { Orientation = Orientation.Vertical, Spacing = 6 };
+        if (pb.IsIndeterminate && pb.Value == 0) pb.Value = double.NaN;
+
+        var panel = new StackPanel { Orientation = System.Windows.Controls.Orientation.Vertical };
         if (!string.IsNullOrWhiteSpace(label))
         {
-            panel.Children.Add(new TextBlock { Text = label });
+            panel.Children.Add(new System.Windows.Controls.TextBlock { Text = label, Margin = new Thickness(0, 0, 0, 4) });
         }
         panel.Children.Add(pb);
         if (!string.IsNullOrWhiteSpace(detail))
         {
-            panel.Children.Add(new TextBlock { Text = detail, FontSize = 12, Opacity = 0.75 });
+            panel.Children.Add(new System.Windows.Controls.TextBlock { Text = detail, FontSize = 12, Opacity = 0.75, Margin = new Thickness(0, 2, 0, 0) });
         }
         return panel;
     }

@@ -1,9 +1,7 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
+using System.Windows;
+using System.Windows.Media;
 using System;
 using System.Collections.Generic;
-using Windows.UI;
-using Windows.UI.Text;
 
 namespace EMWaver.Scripting.Render;
 
@@ -187,7 +185,7 @@ internal static class ScriptPropParsers
         if (align.HasValue) element.HorizontalAlignment = align.Value;
     }
 
-    internal static void ApplyTextProps(Microsoft.UI.Xaml.Controls.TextBlock text, Dictionary<string, object?> raw)
+    internal static void ApplyTextProps(System.Windows.Controls.TextBlock text, Dictionary<string, object?> raw)
     {
         var font = GetString(raw, "font");
         if (!string.IsNullOrWhiteSpace(font))
@@ -213,15 +211,15 @@ internal static class ScriptPropParsers
         {
             switch (weight.Trim().ToLowerInvariant())
             {
-            case "ultralight": text.FontWeight = new FontWeight { Weight = 200 }; break;
-            case "thin": text.FontWeight = new FontWeight { Weight = 250 }; break;
-            case "light": text.FontWeight = new FontWeight { Weight = 300 }; break;
-            case "regular": text.FontWeight = new FontWeight { Weight = 400 }; break;
-            case "medium": text.FontWeight = new FontWeight { Weight = 500 }; break;
-            case "semibold": text.FontWeight = new FontWeight { Weight = 600 }; break;
-            case "bold": text.FontWeight = new FontWeight { Weight = 700 }; break;
-            case "heavy": text.FontWeight = new FontWeight { Weight = 800 }; break;
-            case "black": text.FontWeight = new FontWeight { Weight = 900 }; break;
+            case "ultralight": text.FontWeight = FontWeights.UltraLight; break;
+            case "thin": text.FontWeight = FontWeights.Thin; break;
+            case "light": text.FontWeight = FontWeights.Light; break;
+            case "regular": text.FontWeight = FontWeights.Normal; break;
+            case "medium": text.FontWeight = FontWeights.Medium; break;
+            case "semibold": text.FontWeight = FontWeights.SemiBold; break;
+            case "bold": text.FontWeight = FontWeights.Bold; break;
+            case "heavy": text.FontWeight = FontWeights.Heavy; break;
+            case "black": text.FontWeight = FontWeights.Black; break;
             }
         }
 

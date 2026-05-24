@@ -1,11 +1,11 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml.Shapes;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Shapes;
 using EMWaver.Services;
 using System;
 using System.Collections.Generic;
-using Windows.UI;
 
 namespace EMWaver.Scripting.Render;
 
@@ -51,10 +51,10 @@ public sealed class ScriptPlotControl : UserControl
 
         SizeChanged += (_, __) => Redraw();
 
-        PointerPressed += OnPointerPressed;
-        PointerMoved += OnPointerMoved;
-        PointerReleased += OnPointerReleased;
-        PointerWheelChanged += OnPointerWheelChanged;
+        MouseLeftButtonDown += OnMouseLeftButtonDown;
+        MouseMove += OnMouseMove;
+        MouseLeftButtonUp += OnMouseLeftButtonUp;
+        MouseWheel += OnMouseWheel;
     }
 
     public void Apply(ScriptNode node, Action<string, IReadOnlyList<object?>> invokeHandler)
@@ -72,9 +72,6 @@ public sealed class ScriptPlotControl : UserControl
         var height = ScriptPropParsers.GetDouble(raw, "height");
         if (height.HasValue) Height = height.Value;
 
-        // Source can be:
-        // - string (e.g. "samplerBits")
-        // - object { kind: 'buffer', id: '<id>' }
         _sourceKey = ResolveSourceKey(raw);
 
         var errorText = ScriptPropParsers.GetString(raw, "errorText");
@@ -141,7 +138,6 @@ public sealed class ScriptPlotControl : UserControl
         var compressed = CompressBits(bytes, startBit, endBit, bins);
         var points = new PointCollection();
 
-        // Add a little padding so the signal doesn't draw right on the border.
         var padX = 6.0;
         var padY = 6.0;
         var plotW = Math.Max(1.0, width - padX * 2);
@@ -160,7 +156,7 @@ public sealed class ScriptPlotControl : UserControl
             norm = Math.Clamp(norm, 0.0, 1.0);
             var px = padX + norm * plotW;
             var py = padY + (1.0 - (v / 255.0)) * plotH;
-            points.Add(new Windows.Foundation.Point(px, py));
+            points.Add(new Point(px, py));
         }
 
         _line.Points = points;
@@ -183,7 +179,6 @@ public sealed class ScriptPlotControl : UserControl
             return ((src[byteIndex] >> bitIndex) & 1) == 1 ? 1 : 0;
         }
 
-        // Match macOS behavior: for narrow spans draw every bit.
         if (span <= bins * 2)
         {
             outPoints.Capacity = span;
@@ -245,17 +240,16 @@ public sealed class ScriptPlotControl : UserControl
         return outPoints;
     }
 
-    private void OnPointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         _isDragging = true;
-        var p = e.GetCurrentPoint(this);
-        _dragStartX = p.Position.X;
+        _dragStartX = e.GetPosition(this).X;
         _dragStartMin = _xMin;
         _dragStartMax = _xMax;
-        CapturePointer(e.Pointer);
+        CaptureMouse();
     }
 
-    private void OnPointerMoved(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnMouseMove(object sender, MouseEventArgs e)
     {
         if (!_isDragging) return;
         if (_node == null) return;
@@ -264,8 +258,8 @@ public sealed class ScriptPlotControl : UserControl
         var maxBits = bytes.Length * 8.0;
         if (maxBits <= 0) return;
 
-        var p = e.GetCurrentPoint(this);
-        var dxPx = p.Position.X - _dragStartX;
+        var px = e.GetPosition(this).X;
+        var dxPx = px - _dragStartX;
         var w = Math.Max(1.0, ActualWidth);
         var span = _dragStartMax - _dragStartMin;
 
@@ -273,7 +267,6 @@ public sealed class ScriptPlotControl : UserControl
         var min = _dragStartMin + dxBits;
         var max = _dragStartMax + dxBits;
 
-        // Clamp.
         if (min < 0)
         {
             max -= min;
@@ -292,15 +285,15 @@ public sealed class ScriptPlotControl : UserControl
         Redraw();
     }
 
-    private void OnPointerReleased(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
         if (!_isDragging) return;
         _isDragging = false;
-        ReleasePointerCapture(e.Pointer);
+        ReleaseMouseCapture();
         FireViewportChange();
     }
 
-    private void OnPointerWheelChanged(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+    private void OnMouseWheel(object sender, MouseWheelEventArgs e)
     {
         if (_node == null) return;
 
@@ -308,16 +301,13 @@ public sealed class ScriptPlotControl : UserControl
         var maxBits = bytes.Length * 8.0;
         if (maxBits <= 0) return;
 
-        // We implement our own horizontal zooming. Mark the event handled so parent
-        // containers (e.g. ScrollViewer with ZoomMode enabled) don't also apply a
-        // uniform zoom/scroll that feels like the chart is zooming vertically.
         e.Handled = true;
 
-        var delta = e.GetCurrentPoint(this).Properties.MouseWheelDelta;
+        var delta = e.Delta;
         var zoom = delta > 0 ? 0.85 : 1.15;
 
         var w = Math.Max(1.0, ActualWidth);
-        var px = e.GetCurrentPoint(this).Position.X;
+        var px = e.GetPosition(this).X;
         var t = Math.Clamp(px / w, 0.0, 1.0);
         var center = _xMin + (_xMax - _xMin) * t;
         var span = (_xMax - _xMin) * zoom;
@@ -326,7 +316,6 @@ public sealed class ScriptPlotControl : UserControl
         var min = center - span * t;
         var max = min + span;
 
-        // Clamp.
         if (min < 0)
         {
             max -= min;

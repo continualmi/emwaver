@@ -2,59 +2,39 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net10.0-windows10.0.22621.0</TargetFramework>
-    <TargetPlatformMinVersion>10.0.22621.0</TargetPlatformMinVersion>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
     <Platforms>x64</Platforms>
-    <UseWinUI>true</UseWinUI>
-    <WindowsAppSdkBootstrapInitialize>true</WindowsAppSdkBootstrapInitialize>
     <ApplicationIcon>Assets\emwaver.ico</ApplicationIcon>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
     <ApplicationManifest>app.manifest</ApplicationManifest>
 
-    <!-- CI/dev shells may not have full VC toolchain installed; avoid vcmeta-based fingerprinting. -->
+    <!-- CI/dev shells may not have full VC toolchain installed. -->
     <UseVCMetaManaged>false</UseVCMetaManaged>
-    <XAMLFingerprint>false</XAMLFingerprint>
-
-    <!-- Use in-proc XAML compiler (avoids net472 XamlCompiler.exe). -->
-    <UseXamlCompilerExecutable>false</UseXamlCompilerExecutable>
-
-    <!-- Help WinUI XamlCompiler find VC toolchain (for GenXbf). -->
-    <!-- Use ProgramW6432 so this works under 32-bit MSBuild too. -->
-    <VsInstallRoot Condition="'$(VsInstallRoot)' == '' and Exists('$(ProgramW6432)\Microsoft Visual Studio\18\Community')">$(ProgramW6432)\Microsoft Visual Studio\18\Community</VsInstallRoot>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260101001" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
-    <!-- WebView2 removed (Monaco editor removed on Windows). -->
     <PackageReference Include="Jint" Version="3.1.6" />
-    <!-- Ed25519 signature verification (secure connection + secure update gating). -->
     <PackageReference Include="BouncyCastle.Cryptography" Version="2.4.0" />
-    <!-- Required for WinUI XAML compiler tasks under dotnet msbuild. -->
-    <PackageReference Include="System.Security.Permissions" Version="6.0.0" />
   </ItemGroup>
 
   <ItemGroup>
     <Manifest Include="app.manifest" />
   </ItemGroup>
 
-
   <ItemGroup>
     <None Include="Native\*.dll">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <!-- Place native DLLs in the app root so DllImport can find them. -->
       <TargetPath>%(Filename)%(Extension)</TargetPath>
     </None>
   </ItemGroup>
 
-  <!-- Sync bundled example scripts from repo assets into the Windows project folder.
-       This makes the packaged path deterministic (Assets/DefaultScripts).
-  -->
+  <!-- Sync bundled example scripts from repo assets into the Windows project folder. -->
   <Target Name="SyncDefaultScripts" BeforeTargets="BeforeBuild">
     <ItemGroup>
       <_SrcDefaultScripts Include="..\..\assets\default-scripts\*.js" />
@@ -68,27 +48,24 @@
   </Target>
 
   <ItemGroup>
-    <!-- App icon asset (runtime). Keep as None (not PRI-indexed) but copy to output. -->
+    <!-- App icon asset (runtime). -->
     <None Include="Assets\emwaver.ico">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </None>
 
-    <!-- Ensure .gitkeep doesn't participate in PRI/resource indexing. -->
+    <!-- Ensure .gitkeep doesn't participate in resource indexing. -->
     <None Remove="Assets\DefaultScripts\.gitkeep" />
 
-    <!-- Bundled (read-only) default scripts. Required in both unpackaged dev runs and packaged (MSIX/Store) builds. -->
+    <!-- Bundled default scripts. -->
     <Content Include="Assets\DefaultScripts\*.js">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
-      <!-- Treat script assets as plain content rather than PRI-indexed app resources. -->
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Monaco removed on Windows. -->
-
-    <!-- Bundled firmware payload (read-only). -->
+    <!-- Bundled firmware payload. -->
     <Content Include="..\..\firmware\emwaver.bin">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <CopyToPublishDirectory>PreserveNewest</CopyToPublishDirectory>
@@ -96,7 +73,7 @@
       <ExcludeFromResourceIndexing>true</ExcludeFromResourceIndexing>
     </Content>
 
-    <!-- Optional ESP helper + managed firmware bundle for Windows parity with macOS. -->
+    <!-- Optional ESP helper + managed firmware bundle. -->
     <Content Include="..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe"
              Condition="Exists('..\..\tools\emwaver-esp-helper\dist\emwaver-esp-helper.exe')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

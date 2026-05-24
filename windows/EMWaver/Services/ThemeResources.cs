@@ -1,39 +1,22 @@
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Media;
-using Windows.UI;
+using System.Windows;
+using System.Windows.Media;
 
 namespace EMWaver.Services;
 
 internal static class ThemeResources
 {
+    /// <summary>
+    /// Looks up a theme-aware brush by key from the current application resources.
+    /// Falls back to a solid color brush using the provided fallback color.
+    /// </summary>
     public static Brush Brush(string key, Color fallbackColor)
     {
         try
         {
             var resources = Application.Current?.Resources;
-            if (resources != null)
+            if (resources != null && resources.Contains(key) && resources[key] is Brush brush)
             {
-                var themeKey = ResolveThemeKey();
-                if (resources.ThemeDictionaries.ContainsKey(themeKey) &&
-                    resources.ThemeDictionaries[themeKey] is ResourceDictionary themeResources &&
-                    themeResources.ContainsKey(key) &&
-                    themeResources[key] is Brush themedBrush)
-                {
-                    return themedBrush;
-                }
-
-                if (resources.ThemeDictionaries.ContainsKey("Default") &&
-                    resources.ThemeDictionaries["Default"] is ResourceDictionary defaultThemeResources &&
-                    defaultThemeResources.ContainsKey(key) &&
-                    defaultThemeResources[key] is Brush defaultBrush)
-                {
-                    return defaultBrush;
-                }
-
-                if (resources.ContainsKey(key) && resources[key] is Brush brush)
-                {
-                    return brush;
-                }
+                return brush;
             }
         }
         catch
@@ -41,18 +24,5 @@ internal static class ThemeResources
         }
 
         return new SolidColorBrush(fallbackColor);
-    }
-
-    private static string ResolveThemeKey()
-    {
-        try
-        {
-            var root = App.MainWindow?.Content as FrameworkElement;
-            return root?.ActualTheme == ElementTheme.Dark ? "Dark" : "Light";
-        }
-        catch
-        {
-            return "Light";
-        }
     }
 }

@@ -1,0 +1,138 @@
+<Window
+    x:Class="EMWaver.Views.FirmwareUpdateWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Firmware Update"
+    Width="520" Height="440"
+    WindowStartupLocation="CenterOwner"
+    WindowStyle="ToolWindow">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <StackPanel x:Name="StmPanel" Visibility="Collapsed" Grid.Row="0">
+            <!-- Title -->
+            <TextBlock x:Name="StmTitle" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,8" />
+
+            <!-- Subtitle / status -->
+            <TextBlock x:Name="StmSubtitle" FontSize="14" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       TextWrapping="Wrap" Margin="0,0,0,16" />
+
+            <!-- Error card -->
+            <Border x:Name="StmErrorCard" Visibility="Collapsed"
+                    Background="{DynamicResource StatusErrorBackgroundBrush}"
+                    BorderBrush="{DynamicResource StatusErrorBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,0,0,16">
+                <TextBlock x:Name="StmErrorText" FontSize="13" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Status card -->
+            <Border x:Name="StmStatusCard" Visibility="Collapsed"
+                    Background="{DynamicResource StatusSuccessBackgroundBrush}"
+                    BorderBrush="{DynamicResource StatusSuccessBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,0,0,16">
+                <TextBlock x:Name="StmStatusText" FontSize="13" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- Prompt card -->
+            <Border x:Name="StmPromptCard" Visibility="Visible"
+                    Background="{DynamicResource EditorSurfaceBackgroundBrush}"
+                    BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,0,0,16">
+                <StackPanel>
+                    <TextBlock x:Name="StmPromptTitle" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <TextBlock x:Name="StmPromptBody" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                               TextWrapping="Wrap" />
+                </StackPanel>
+            </Border>
+
+            <!-- Progress -->
+            <StackPanel x:Name="StmProgressPanel" Visibility="Collapsed" Margin="0,0,0,16">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="StmProgressText" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock x:Name="StmProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                </Grid>
+                <ProgressBar x:Name="StmProgressBar" Height="6" Margin="0,4,0,8" />
+                <TextBlock Text="Keep the device connected until flashing completes."
+                           FontSize="11" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                           TextWrapping="Wrap" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- ESP panel -->
+        <StackPanel x:Name="EspPanel" Visibility="Collapsed" Grid.Row="0">
+            <TextBlock Text="Flash ESP32" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,4" />
+            <TextBlock Text="Use the board's flash-capable serial USB connection."
+                       FontSize="13" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}"
+                       TextWrapping="Wrap" Margin="0,0,0,16" />
+
+            <Border Background="{DynamicResource EditorSurfaceBackgroundBrush}"
+                    BorderBrush="{DynamicResource EditorSurfaceBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,0,0,12">
+                <StackPanel>
+                    <TextBlock Text="Bootloader" FontWeight="SemiBold" FontSize="13" Margin="0,0,0,6" />
+                    <TextBlock x:Name="EspBootloaderText" FontSize="12" />
+                    <TextBlock Text="1. Hold BOOT" FontSize="11" Margin="0,6,0,0" />
+                    <TextBlock Text="2. Press and release RESET" FontSize="11" />
+                    <TextBlock Text="3. Release BOOT" FontSize="11" Margin="0,0,0,8" />
+
+                    <StackPanel Orientation="Horizontal">
+                        <Button Content="Refresh" Width="80" Margin="0,0,8,0" Click="OnEspRefreshClick" />
+                        <Button x:Name="EspFlashButton" Content="Flash firmware" Width="120"
+                                Style="{StaticResource AccentButtonStyle}" Click="OnEspFlashClick" />
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- ESP Error -->
+            <Border x:Name="EspErrorCard" Visibility="Collapsed"
+                    Background="{DynamicResource StatusErrorBackgroundBrush}"
+                    BorderBrush="{DynamicResource StatusErrorBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,0,0,12">
+                <TextBlock x:Name="EspErrorText" FontSize="12" TextWrapping="Wrap" />
+            </Border>
+
+            <!-- ESP Progress -->
+            <StackPanel x:Name="EspProgressPanel" Visibility="Collapsed">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock x:Name="EspProgressText" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                    <TextBlock x:Name="EspProgressPct" Grid.Column="1" FontSize="12" Foreground="{DynamicResource {x:Static SystemColors.GrayTextBrushKey}}" />
+                </Grid>
+                <ProgressBar x:Name="EspProgressBar" Height="6" Margin="0,4,0,0" />
+            </StackPanel>
+
+            <!-- ESP Done -->
+            <Border x:Name="EspDoneCard" Visibility="Collapsed"
+                    Background="{DynamicResource StatusSuccessBackgroundBrush}"
+                    BorderBrush="{DynamicResource StatusSuccessBorderBrush}"
+                    BorderThickness="1" CornerRadius="8"
+                    Padding="12" Margin="0,12,0,0">
+                <TextBlock x:Name="EspDoneText" FontSize="13" TextWrapping="Wrap" />
+            </Border>
+        </StackPanel>
+
+        <!-- Footer buttons -->
+        <StackPanel x:Name="FooterPanel" Grid.Row="1" HorizontalAlignment="Right" Orientation="Horizontal" Margin="0,16,0,0">
+            <Button x:Name="CancelButton" Content="Close" Width="80" Margin="0,0,8,0" Click="OnCloseClick" />
+            <Button x:Name="NotNowButton" Content="Not now" Width="90" Margin="0,0,8,0" Click="OnCloseClick" Visibility="Collapsed" />
+            <Button x:Name="PrimaryButton" Content="Enter Update Mode" Width="140" Click="OnPrimaryClick" Visibility="Collapsed" />
+            <Button x:Name="TryAgainButton" Content="Try again" Width="90" Click="OnPrimaryClick" Visibility="Collapsed" />
+        </StackPanel>
+    </Grid>
+</Window>

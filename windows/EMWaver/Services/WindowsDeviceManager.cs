@@ -1,6 +1,5 @@
 using EMWaver.Models;
 using EMWaver.Interop;
-using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -223,7 +222,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         }
     }
 
-    private DispatcherQueue? _ui;
+    private System.Windows.Threading.Dispatcher? _ui;
 
     private WindowsUsbMidiTransport.Connection? _usbMidiConnection;
     private WindowsBleTransport.ScanSession? _bleScanSession;
@@ -287,9 +286,9 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
         return _activeConnectionState.MatchesTransport(transport) ? _activeConnectionState.CurrentScriptDeviceId : null;
     }
 
-    internal void AttachUiDispatcher(DispatcherQueue dispatcherQueue)
+    internal void AttachUiDispatcher(System.Windows.Threading.Dispatcher dispatcher)
     {
-        _ui = dispatcherQueue;
+        _ui = dispatcher;
     }
 
     private void RunOnUi(Action action)
@@ -300,7 +299,7 @@ internal sealed class WindowsDeviceManager : INotifyPropertyChanged
             action();
             return;
         }
-        _ = ui.TryEnqueue(() => action());
+        ui.Invoke(action);
     }
 
     internal async Task RefreshPortsAsync()

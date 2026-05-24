@@ -17,14 +17,80 @@ platform :android do
     )
   end
 
+  desc "Query the highest version code across all tracks and export NEXT_VERSION_CODE"
+  lane :next_version_code do
+    google_play_json_key_from_env
+
+    require "google/apis/androidpublisher_v3"
+
+    service = Google::Apis::AndroidpublisherV3::AndroidPublisherService.new
+    service.authorization = Google::Auth::ServiceAccountCredentials.make_creds(
+      json_key_io: File.open(ENV.fetch("GOOGLE_PLAY_JSON_KEY_PATH")),
+      scope: "https://www.googleapis.com/auth/androidpublisher"
+    )
+
+    package_name = "com.emwaver.emwaverandroidapp"
+    max_code = 0
+
+    %w[internal alpha beta production].each do |track|
+      begin
+        resp = service.get_edit_track(package_name, "dummy", track)
+        # get_edit_track requires an edit to exist, so this may fail for tracks with no edits
+      rescue
+        next
+      end
+      (resp&.releases || []).each do |release|
+        (release.version_codes || []).each do |vc|
+          max_code = [max_code, vc.to_i].max
+        end
+      end
+    end
+
+    # Also try the simpler approach: create a temp edit and read tracks
+    edit = service.insert_edit(package_name)
+    %w[internal alpha beta production].each do |track|
+      begin
+        resp = service.get_edit_track(package_name, edit.id, track)
+        (resp&.releases || []).each do |release|
+          (release.version_codes || []).each do |vc|
+            max_code = [max_code, vc.to_i].max
+          end
+        end
+      rescue => e
+        UI.verbose("Skipping track #{track}: #{e.message}")
+      end
+    end
+    service.delete_edit(package_name, edit.id)
+
+    next_code = max_code + 1
+    UI.header("Highest version code found: #{max_code} → next: #{next_code}")
+
+    # Export for Gradle
+    ENV["EMWAVER_ANDROID_VERSION_CODE"] = next_code.to_s
+    File.write("../.emwaver_next_version_code", next_code.to_s)
+  end
+
   desc "Upload an Android App Bundle to Google Play internal testing"
   lane :beta do
     google_play_json_key_from_env
     validate_release_signing!
 
+    version_code = ENV["EMWAVER_ANDROID_VERSION_CODE"]
+    if version_code.nil? || version_code.empty?
+      # Auto-detect next version code
+      UI.message("No version_code provided — auto-detecting from Play Console...")
+      next_version_code
+      version_code = ENV["EMWAVER_ANDROID_VERSION_CODE"]
+    end
+
+    UI.header("Building version code #{version_code}")
+
     gradle(
       task: "bundleRelease",
-      project_dir: "."
+      project_dir: ".",
+      properties: {
+        "android.injected.version.code" => version_code
+      }
     )
 
     upload_to_play_store(

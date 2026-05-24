@@ -1,0 +1,41 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <!-- Editor surfaces -->
+    <SolidColorBrush x:Key="EditorSurfaceBackgroundBrush" Color="#FFF7F8FA" />
+    <SolidColorBrush x:Key="EditorSurfaceBorderBrush" Color="#FFD8DEE4" />
+    <SolidColorBrush x:Key="EditorTextForegroundBrush" Color="#FF1F2328" />
+
+    <!-- Preview surfaces -->
+    <SolidColorBrush x:Key="PreviewSurfaceBackgroundBrush" Color="#FFFBFCFD" />
+    <SolidColorBrush x:Key="PreviewSurfaceBorderBrush" Color="#FFD8DEE4" />
+
+    <!-- Generated content surfaces -->
+    <SolidColorBrush x:Key="GeneratedSurfaceBackgroundBrush" Color="#FFF7F8FA" />
+    <SolidColorBrush x:Key="GeneratedSurfaceBorderBrush" Color="#FFD8DEE4" />
+    <SolidColorBrush x:Key="GeneratedDividerBrush" Color="#FFD8DEE4" />
+
+    <!-- Plot -->
+    <SolidColorBrush x:Key="PlotLineBrush" Color="#FF005FB8" />
+
+    <!-- Read-only banner -->
+    <SolidColorBrush x:Key="ReadOnlyBannerBackgroundBrush" Color="#FFF3F4F6" />
+    <SolidColorBrush x:Key="ReadOnlyBannerBorderBrush" Color="#FFD0D7DE" />
+
+    <!-- Agent chat bubbles -->
+    <SolidColorBrush x:Key="AgentUserBubbleBrush" Color="#1F0078D4" />
+    <SolidColorBrush x:Key="AgentAssistantBubbleBrush" Color="#14808080" />
+    <SolidColorBrush x:Key="AgentToolBubbleBrush" Color="#198C8C8C" />
+    <SolidColorBrush x:Key="AgentBubbleBorderBrush" Color="#1E6B7280" />
+
+    <!-- Status colors -->
+    <SolidColorBrush x:Key="AppErrorTextBrush" Color="#FFB42318" />
+    <SolidColorBrush x:Key="StatusWarningBackgroundBrush" Color="#FFFFF4CE" />
+    <SolidColorBrush x:Key="StatusWarningBorderBrush" Color="#FFE5C365" />
+    <SolidColorBrush x:Key="StatusErrorBackgroundBrush" Color="#FFFDECEC" />
+    <SolidColorBrush x:Key="StatusErrorBorderBrush" Color="#FFF2B8B5" />
+    <SolidColorBrush x:Key="StatusSuccessBackgroundBrush" Color="#FFE8F5E9" />
+    <SolidColorBrush x:Key="StatusSuccessBorderBrush" Color="#FFA5D6A7" />
+
+</ResourceDictionary>

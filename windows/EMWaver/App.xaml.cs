@@ -1,24 +1,45 @@
-using Microsoft.UI.Xaml;
+using System.Windows;
 using EMWaver.Services;
 
 namespace EMWaver;
 
 public partial class App : Application
 {
-    private Window? _window;
+    public static App Instance => (App)Current;
 
-    public static Window? MainWindow { get; private set; }
-
-    public App()
+    private void OnStartup(object sender, StartupEventArgs e)
     {
         EnvBootstrap.LoadForDevIfAvailable();
-        InitializeComponent();
+        ApplyTheme(AppServices.Settings.Theme);
+        AppServices.Settings.Changed += OnSettingsChanged;
+
+        var mainWindow = new MainWindow();
+        mainWindow.Show();
     }
 
-    protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+    private void OnSettingsChanged()
     {
-        _window = new MainWindow();
-        MainWindow = _window;
-        _window.Activate();
+        Dispatcher.Invoke(() => ApplyTheme(AppServices.Settings.Theme));
+    }
+
+    internal void ApplyTheme(AppThemeMode theme)
+    {
+        // Clear existing theme dictionaries and reload.
+        Resources.MergedDictionaries.Clear();
+        var themePath = theme switch
+        {
+            AppThemeMode.Light => "Themes/Light.xaml",
+            AppThemeMode.Dark => "Themes/Dark.xaml",
+            _ => "Themes/Dark.xaml",
+        };
+
+        var uri = new Uri(themePath, UriKind.Relative);
+        Resources.MergedDictionaries.Add(new ResourceDictionary { Source = uri });
+    }
+
+    protected override void OnExit(ExitEventArgs e)
+    {
+        AppServices.Settings.Changed -= OnSettingsChanged;
+        base.OnExit(e);
     }
 }

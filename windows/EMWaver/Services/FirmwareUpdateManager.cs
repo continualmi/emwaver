@@ -1,4 +1,3 @@
-using Microsoft.UI.Dispatching;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
@@ -13,7 +12,7 @@ namespace EMWaver.Services;
 
 internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 {
-    private DispatcherQueue? _ui;
+    private System.Windows.Threading.Dispatcher? _ui;
     private Timer? _dfuPollTimer;
     private readonly List<string> _logLines = new();
 
@@ -139,7 +138,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
 
     internal string LogText => string.Join(Environment.NewLine, _logLines);
 
-    internal void AttachUiDispatcher(DispatcherQueue ui)
+    internal void AttachUiDispatcher(System.Windows.Threading.Dispatcher ui)
     {
         _ui = ui;
 
@@ -724,7 +723,7 @@ internal sealed class FirmwareUpdateManager : INotifyPropertyChanged
             return;
         }
 
-        _ = ui.TryEnqueue(new DispatcherQueueHandler(fn));
+        _ = ui.Invoke(fn);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
