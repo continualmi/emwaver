@@ -133,14 +133,13 @@ web/                     Static website sources and exports
 For users:
 
 1. Choose a supported board from the [hardware catalog](https://continualmi.com/emwaver/build).
-2. Install an app from the [install page](https://continualmi.com/emwaver/install), or use a preview download when available:
-   - [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
+2. Install an app from the [install page](https://continualmi.com/emwaver/install):
+   - [iPhone and iPad on the App Store](https://apps.apple.com/us/app/emwaver/id6747035939)
+   - Android through Google Play internal testing or the direct [Android APK](https://continualmi.com/emwaver/downloads/EMWaver-android.apk)
    - [macOS DMG](https://continualmi.com/emwaver/downloads/EMWaver-macos.dmg)
-   - [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
+   - Windows installer or [Windows ZIP with `EMWaver.exe`](https://continualmi.com/emwaver/downloads/EMWaver-windows-x64.zip)
 3. Connect a supported board.
 4. Open or write a JavaScript hardware script and run it locally.
-
-App Store, Google Play, and Microsoft Store listings are planned.
 
 For local development:
 
