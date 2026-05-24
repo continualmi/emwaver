@@ -1,9 +1,10 @@
-use boa_engine::{Context, Source};
+use boa_engine::{js_string, Context, JsNativeError, JsValue, NativeFunction, Source};
 use emwaver_linux_transport::{
     runtime::{run_script_commands, ScriptCommandStep, ScriptExecutionReport},
     EmwaverTransport,
 };
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
@@ -35,6 +36,12 @@ pub struct ScriptUiNode {
     pub handlers: BTreeMap<String, String>,
     #[serde(default)]
     pub children: Vec<ScriptUiNode>,
+}
+
+pub type PacketHandler = Box<dyn FnMut(Vec<u8>, u32) -> Result<Vec<u8>, String>>;
+
+thread_local! {
+    static ACTIVE_PACKET_HANDLER: RefCell<Option<PacketHandler>> = RefCell::new(None);
 }
 
 pub struct ScriptUiRuntime {
@@ -87,8 +94,10 @@ pub fn compile_javascript_with_modules(
 ) -> Result<Vec<ScriptCommandStep>, JavaScriptRuntimeError> {
     let source = transform_script_source(source)?;
     let module_loader = module_loader_script(module_sources)?;
-    let wrapped =
-        format!("{JS_PRELUDE}\n{module_loader}\n{source}\nJSON.stringify(__emwCommands);");
+    let wrapped = format!(
+        "{JS_PRELUDE}\n{module_loader}\n{}\nJSON.stringify(__emwCommands);",
+        wrap_user_source(&source)
+    );
     let mut context = Context::default();
     let value = context
         .eval(Source::from_bytes(wrapped.as_bytes()))
@@ -122,10 +131,33 @@ impl ScriptUiRuntime {
         source: &str,
         module_sources: &BTreeMap<String, String>,
     ) -> Result<Self, JavaScriptRuntimeError> {
+        Self::new_with_optional_packet_handler(source, module_sources, None)
+    }
+
+    pub fn new_with_packet_handler(
+        source: &str,
+        module_sources: &BTreeMap<String, String>,
+        packet_handler: PacketHandler,
+    ) -> Result<Self, JavaScriptRuntimeError> {
+        Self::new_with_optional_packet_handler(source, module_sources, Some(packet_handler))
+    }
+
+    fn new_with_optional_packet_handler(
+        source: &str,
+        module_sources: &BTreeMap<String, String>,
+        packet_handler: Option<PacketHandler>,
+    ) -> Result<Self, JavaScriptRuntimeError> {
+        ACTIVE_PACKET_HANDLER.with(|handler| {
+            *handler.borrow_mut() = packet_handler;
+        });
         let source = transform_script_source(source)?;
         let module_loader = module_loader_script(module_sources)?;
-        let wrapped = format!("{JS_PRELUDE}\n{module_loader}\n{source}");
+        let wrapped = format!(
+            "{JS_PRELUDE}\n{module_loader}\n{}",
+            wrap_user_source(&source)
+        );
         let mut context = Context::default();
+        install_packet_bridge(&mut context)?;
         context
             .eval(Source::from_bytes(wrapped.as_bytes()))
             .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
@@ -203,8 +235,66 @@ pub async fn execute_javascript_with_modules(
         .map_err(|err| JavaScriptRuntimeError::Transport(err.to_string()))
 }
 
+fn install_packet_bridge(context: &mut Context) -> Result<(), JavaScriptRuntimeError> {
+    context
+        .register_global_callable(
+            js_string!("__rustSendPacket"),
+            2,
+            NativeFunction::from_fn_ptr(rust_send_packet),
+        )
+        .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))
+}
+
+fn rust_send_packet(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let packet = args
+        .first()
+        .and_then(|value| value.to_json(context).ok().flatten())
+        .ok_or_else(|| JsNativeError::typ().with_message("packet must be an array"))?;
+    let bytes = packet
+        .as_array()
+        .ok_or_else(|| JsNativeError::typ().with_message("packet must be an array"))?
+        .iter()
+        .map(|value| {
+            value
+                .as_u64()
+                .filter(|byte| *byte <= 255)
+                .map(|byte| byte as u8)
+                .ok_or_else(|| JsNativeError::typ().with_message("packet bytes must be 0...255"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    let timeout_ms = args
+        .get(1)
+        .and_then(|value| value.to_number(context).ok())
+        .map(|value| value.max(0.0) as u32)
+        .unwrap_or(1500);
+
+    let response = ACTIVE_PACKET_HANDLER.with(|handler| {
+        let mut handler = handler.borrow_mut();
+        let Some(handler) = handler.as_mut() else {
+            return Err("Device send unavailable (missing Linux script packet bridge)".to_string());
+        };
+        handler(bytes, timeout_ms)
+    });
+    match response {
+        Ok(bytes) => {
+            let json = serde_json::to_string(&bytes)
+                .map_err(|err| JsNativeError::typ().with_message(err.to_string()))?;
+            Ok(JsValue::from(js_string!(json.as_str())))
+        }
+        Err(err) => Err(JsNativeError::typ().with_message(err).into()),
+    }
+}
+
 fn transform_script_source(source: &str) -> Result<String, JavaScriptRuntimeError> {
     transform_jsx(&transform_imports(source)?)
+}
+
+fn wrap_user_source(source: &str) -> String {
+    format!("{{\n{source}\n}}")
 }
 
 fn transform_imports(source: &str) -> Result<String, JavaScriptRuntimeError> {
@@ -741,11 +831,52 @@ globalThis.__emwModuleSources = {json};
 }
 
 const JS_PRELUDE: &str = r#"
-const __emwCommands = [];
-let __emwRenderedTree = null;
-let __emwRenderVersion = 0;
-let __emwNextHandlerId = 1;
-const __emwHandlers = {};
+var EMW_OP_VERSION = 0x01;
+var EMW_OP_RESET = 0x02;
+var EMW_OP_HELP = 0x03;
+var EMW_OP_NAME_GET = 0x04;
+var EMW_OP_NAME_SET = 0x05;
+var EMW_OP_BOARD_GET = 0x09;
+var EMW_OP_GPIO = 0x10;
+var EMW_GPIO_IN = 0x00;
+var EMW_GPIO_OUT = 0x01;
+var EMW_GPIO_READ = 0x02;
+var EMW_GPIO_HIGH = 0x03;
+var EMW_GPIO_LOW = 0x04;
+var EMW_GPIO_PULL = 0x05;
+var EMW_GPIO_INFO = 0x06;
+var EMW_OP_ADC_READ = 0x20;
+var EMW_ADC_SRC_PIN = 0x00;
+var EMW_ADC_SRC_TEMP = 0x01;
+var EMW_ADC_SRC_VREFINT = 0x02;
+var EMW_ADC_SRC_VBAT = 0x03;
+var EMW_OP_UART = 0x30;
+var EMW_UART_OPEN = 0x00;
+var EMW_UART_CLOSE = 0x01;
+var EMW_UART_WRITE = 0x02;
+var EMW_UART_READ = 0x03;
+var EMW_OP_I2C = 0x40;
+var EMW_I2C_OPEN = 0x00;
+var EMW_I2C_CLOSE = 0x01;
+var EMW_I2C_WRITE = 0x02;
+var EMW_I2C_READ = 0x03;
+var EMW_I2C_XFER = 0x04;
+var EMW_OP_SPI_XFER = 0x50;
+var EMW_OP_SAMPLE = 0x60;
+var EMW_SAMPLE_START = 0x00;
+var EMW_SAMPLE_STOP = 0x01;
+var EMW_OP_PWM = 0x70;
+var EMW_PWM_FREQ = 0x00;
+var EMW_PWM_WRITE = 0x01;
+var EMW_PWM_STOP = 0x02;
+var EMW_OP_TRANSMIT = 0x80;
+var EMW_TRANSMIT_START = 0x00;
+var EMW_TRANSMIT_STOP = 0x01;
+var __emwCommands = [];
+var __emwRenderedTree = null;
+var __emwRenderVersion = 0;
+var __emwNextHandlerId = 1;
+var __emwHandlers = {};
 function __emwByte(value, name) {
   if (!Number.isInteger(value) || value < 0 || value > 255) {
     throw new Error(name + " must be an integer byte");
@@ -761,7 +892,33 @@ function __emwBytes(bytes) {
   }
   return bytes.map((value, index) => __emwByte(value, "byte[" + index + "]"));
 }
-const emw = {
+function __emwWriteU16LE(out, offset, value) {
+  var v = Number(value) >>> 0;
+  out[offset] = v & 0xff;
+  out[offset + 1] = (v >>> 8) & 0xff;
+}
+function __emwWriteU32LE(out, offset, value) {
+  var v = Number(value) >>> 0;
+  out[offset] = v & 0xff;
+  out[offset + 1] = (v >>> 8) & 0xff;
+  out[offset + 2] = (v >>> 16) & 0xff;
+  out[offset + 3] = (v >>> 24) & 0xff;
+}
+function __emwPayload(resp) {
+  if (!resp || resp.length < 1) return new Uint8Array();
+  return resp.slice ? resp.slice(1) : Array.prototype.slice.call(resp, 1);
+}
+function __emwAssertOk(resp) {
+  var st = resp && resp.length ? (resp[0] & 0xff) : 0xff;
+  if (st !== 0x80) throw new Error(st === 0xff ? 'Device not connected or no response from device (status 255)' : 'Device error: ' + st);
+  return resp;
+}
+function __emwSendPacket(packet, timeoutMs) {
+  var bytes = Array.from(packet || []).map(function(value) { return __emwByte(value, 'packet byte'); });
+  var responseJson = __rustSendPacket(bytes, timeoutMs || 1500);
+  return new Uint8Array(JSON.parse(String(responseJson || '[]')));
+}
+var emw = {
   command(bytes, label = "command") {
     __emwCommands.push({ label, bytes: __emwBytes(bytes) });
   }
@@ -809,7 +966,7 @@ function __emwNode(type, props, children) {
   });
   return { type: type, props: cleanProps, handlers: handlers, children: __emwFlattenChildren(children || [], []) };
 }
-const __emwUI = {};
+var __emwUI = {};
 [
   'column', 'row', 'card', 'tile', 'text', 'button', 'slider', 'logViewer', 'scroll',
   'textField', 'textEditor', 'picker', 'toggle', 'grid', 'plot', 'modal', 'spacer',
@@ -824,7 +981,7 @@ const __emwUI = {};
 __emwUI.buffer = function(bytes) {
   return Array.from(bytes || []);
 };
-const __emwJSX = {
+var __emwJSX = {
   h(type, props) {
     const children = Array.prototype.slice.call(arguments, 2);
     const assigned = Object.assign({}, props || {});
@@ -845,16 +1002,16 @@ function __emwRender(node) {
 function __emwInvokeHandler(token, args) {
   const handler = __emwHandlers[token];
   if (typeof handler !== 'function') {
-    throw new Error('Script handler not found: ' + token);
+    throw new Error('Script action not found: ' + token);
   }
   return handler.apply(null, Array.isArray(args) ? args : []);
 }
-const device = {
+var device = {
   version() { emw.command([0x01], "device.version"); },
   hardwareUid() { emw.command([0x08], "device.hardwareUid"); },
   board() { emw.command([0x09], "device.board"); }
 };
-const gpio = {
+var gpio = {
   input(pin) { emw.command([0x10, 0x00, __emwPin(pin)], "gpio.input"); },
   out(pin) { emw.command([0x10, 0x01, __emwPin(pin)], "gpio.out"); },
   output(pin) { this.out(pin); },
@@ -1010,6 +1167,82 @@ mod tests {
                 .map(String::as_str),
             Some("handler:1")
         );
+    }
+
+    #[test]
+    fn renders_cc1101_bundled_ui_smoke() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(3)
+            .expect("workspace root")
+            .join("assets/default-scripts");
+        let mut modules = BTreeMap::new();
+        for name in [
+            "emw-adc.js",
+            "emw-gpio.js",
+            "emw-i2c.js",
+            "emw-jsx.js",
+            "emw-protocol.js",
+            "emw-pwm.js",
+            "emw-spi.js",
+            "emw-ui.js",
+            "emw-uart.js",
+        ] {
+            modules.insert(
+                name.to_string(),
+                std::fs::read_to_string(root.join(name)).expect("bundled module"),
+            );
+        }
+        let source = std::fs::read_to_string(root.join("cc1101.js")).expect("cc1101 script");
+
+        let tree = render_javascript_ui(&source, &modules).unwrap();
+
+        assert!(tree.is_some());
+    }
+
+    #[test]
+    fn invokes_cc1101_initialize_handler_smoke() {
+        fn find_button_token(node: &ScriptUiNode, label: &str) -> Option<String> {
+            if node.node_type == "button"
+                && node.props.get("label").and_then(serde_json::Value::as_str) == Some(label)
+            {
+                return node.handlers.get("tap").cloned();
+            }
+            node.children
+                .iter()
+                .find_map(|child| find_button_token(child, label))
+        }
+
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .ancestors()
+            .nth(3)
+            .expect("workspace root")
+            .join("assets/default-scripts");
+        let mut modules = BTreeMap::new();
+        for name in [
+            "emw-adc.js",
+            "emw-gpio.js",
+            "emw-i2c.js",
+            "emw-jsx.js",
+            "emw-protocol.js",
+            "emw-pwm.js",
+            "emw-spi.js",
+            "emw-ui.js",
+            "emw-uart.js",
+        ] {
+            modules.insert(
+                name.to_string(),
+                std::fs::read_to_string(root.join(name)).expect("bundled module"),
+            );
+        }
+        let source = std::fs::read_to_string(root.join("cc1101.js")).expect("cc1101 script");
+        let mut runtime = ScriptUiRuntime::new(&source, &modules).unwrap();
+        let tree = runtime.tree().unwrap().unwrap();
+        let token = find_button_token(&tree.root, "Initialize & Read").expect("initialize button");
+
+        let updated = runtime.invoke_handler(&token, &[]).unwrap();
+
+        assert!(updated.is_some());
     }
 
     #[test]

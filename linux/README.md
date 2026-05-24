@@ -9,6 +9,38 @@ Local-first rules:
 - optional Agent replies use a user-provided API key and public `/api/mgpt/...` endpoints;
 - scripts and app state stay on the user's Linux machine by default.
 
+## Script UI runtime architecture goal
+
+The Linux app must match the working native architecture used by the rest of the platform, especially macOS: script UI is not a fake preview. A rendered script UI is backed by a live script session that can invoke JavaScript actions and send real packets through the selected local device transport.
+
+Target shape:
+
+```text
+GTK main thread
+  - owns GTK widgets only
+  - sends script UI actions to a session worker
+  - receives render trees/status/logs and updates widgets
+
+Script UI session worker
+  - owns the Boa JavaScript context
+  - owns captured script UI action tokens
+  - owns the script/device packet bridge
+  - invokes actions and performs device I/O away from the GTK loop
+
+Selected transport
+  - simulator, USB MIDI, BLE, or Wi-Fi
+  - receives packets from the script bridge and returns actual board responses
+```
+
+Important constraints:
+- GTK widgets must stay on the GTK main thread.
+- Boa `Context`/`ScriptUiRuntime` is not `Send`; create and keep it inside the session worker instead of moving it between threads.
+- Script UI action buttons must call the live packet bridge (`__emwSendPacket` -> Rust -> selected transport), never synthetic success responses.
+- The rendered script UI must remain visible while an action runs. Do not clear the script UI and replace it with a generic "running" placeholder; show busy/status/log feedback around the live view and update the tree when the session emits a new render.
+- Do not build Linux-only preview shims. If behavior is meant to match macOS, implement the same session/device-bridge concept rather than patching the GTK widget layer.
+- User-facing UI should say "script action" or describe the action itself; internal terms like "handler" should not leak into normal UI.
+- The end state is parity with macOS `_scriptSendPacket`/`ScriptDeviceWrapper.sendCommand(...)`: local, account-free, real device I/O, with the UI remaining responsive.
+
 ## Workspace layout
 
 - `crates/emwaver-linux-app` - GTK4/libadwaita app shell.
@@ -31,11 +63,12 @@ The first native slice is M0/M1:
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
-- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries plus uppercase JSX transform, script UI tree capture, and a live script UI runtime that can invoke captured handler tokens;
+- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app, including the first macOS-aligned local module loader/import transform for bundled script libraries plus uppercase JSX transform, script UI tree capture, and a live script UI runtime that can invoke captured script actions;
 - the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - the GTK shell is now script-workspace first, loads the shared `assets/default-scripts` bundle, groups scripts as Examples/Libraries/Kernel/Custom Scripts, keeps bundled scripts read-only, defaults the main content to runtime preview, supports local New/Save/Make Copy behavior, and exposes row-level Run/Edit/Stop controls with inline running state aligned with the macOS script workspace direction;
-- the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes and routes common tap/change/submit events back into the live script UI runtime;
+- the GTK script workspace uses GtkSourceView for JavaScript editing with line numbers, syntax highlighting, find, go-to-line, line wrap, script search, and a runtime output switch that renders captured script UI trees with native GTK widgets for common layout/control nodes;
+- script UI rendering now uses a macOS-style live session boundary: GTK keeps widgets on the main thread, a worker owns the Boa runtime and script action invocation, and the packet bridge keeps the selected local transport connected for action-driven device I/O;
 - the GTK shell has a toggleable right-side Agent drawer with local chat controls, suggestions, composer, setup notice, and current script/device/log context routed through the public MGPT Agent client when a Settings/Secret Service key or `EMWAVER_AGENT_ENDPOINT`/`EMWAVER_AGENT_API_KEY` development override is configured;
 - the GTK device sheet now follows the macOS device workflow more closely with selected-device status, grouped local transports, transport badges, board/firmware/UID metadata, manual Wi-Fi target validation, firmware action context, and udev permission guidance;
 - the GTK firmware sheet is board-aware, validates bundled STM32 and ESP32-S3 firmware image plans, probes STM32 DFU presence, shows image offsets/paths, routes STM32 flashing through the local Rust DFU backend, and routes ESP32-S3 serial flashing through the bundled esptool-compatible helper with BOOT/RESET guidance and progress logs;
@@ -46,7 +79,7 @@ The first native slice is M0/M1:
 - Agent and firmware crates expose local-first orchestration boundaries without gating local hardware access;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
-Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, JSX/script-tree capture, initial GTK script-tree rendering, and first script UI event-handler invocation path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity beyond the initial command/gpio/device API, local module loading, JSX/script-tree capture, initial GTK script-tree rendering, and first script UI action invocation path, Linux hardware validation for BLE GATT I/O and ESP32 serial flashing, Wi-Fi provisioning UI/status, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 

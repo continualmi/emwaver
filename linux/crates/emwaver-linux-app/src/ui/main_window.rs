@@ -1,7 +1,7 @@
 use adw::prelude::*;
 use emwaver_linux_agent::{
-    clear_agent_api_key_secret_tool, load_agent_configuration, save_agent_endpoint,
-    store_agent_api_key_secret_tool, AgentClient, AgentCredentialSource, AgentRequest,
+    clear_agent_api_key_secret_tool, load_agent_configuration, store_agent_api_key_secret_tool,
+    AgentClient, AgentCredentialSource, AgentRequest,
 };
 use emwaver_linux_core::{
     default_script_template, AppModel, DeviceRecord, ScriptListItem, ScriptRepository,
@@ -12,9 +12,12 @@ use emwaver_linux_firmware::{
     stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
     FirmwarePlan, FirmwareTarget,
 };
-use emwaver_linux_runtime::{execute_javascript_with_modules, ScriptUiNode, ScriptUiRuntime};
+use emwaver_linux_runtime::{
+    execute_javascript_with_modules, PacketHandler, ScriptUiNode, ScriptUiRuntime,
+};
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
+    command::send_command,
     simulator::SimulatorTransport,
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
@@ -24,12 +27,38 @@ use emwaver_linux_transport::{
 };
 use gtk::glib::object::IsA;
 use gtk::glib::variant::{StaticVariantType, ToVariant};
+use gtk::glib::{self, ControlFlow};
 use gtk::{gio, Align, Orientation, PolicyType};
 use sourceview5::prelude::*;
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 use std::env;
+use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
+
+#[derive(Clone)]
+struct ScriptUiSessionHandle {
+    command_tx: mpsc::Sender<ScriptUiSessionCommand>,
+    status_label: gtk::Label,
+    busy: Cell<bool>,
+}
+
+enum ScriptUiSessionCommand {
+    Invoke {
+        token: String,
+        arguments: Vec<serde_json::Value>,
+    },
+}
+
+enum ScriptUiSessionEvent {
+    Rendered { root: ScriptUiNode, status: String },
+    Empty { status: String },
+    Failed(String),
+}
 
 pub fn build_main_window(app: &adw::Application) {
     let model = Rc::new(RefCell::new(AppModel::default()));
@@ -47,7 +76,7 @@ pub fn build_main_window(app: &adw::Application) {
         .application(app)
         .title("EMWaver")
         .default_width(1180)
-        .default_height(780)
+        .default_height(680)
         .build();
 
     let header_title = gtk::Box::new(Orientation::Vertical, 1);
@@ -67,22 +96,6 @@ pub fn build_main_window(app: &adw::Application) {
         .title_widget(&header_title)
         .build();
 
-    let run_button = gtk::Button::builder()
-        .icon_name("media-playback-start-symbolic")
-        .tooltip_text("Run selected script")
-        .build();
-    let stop_button = gtk::Button::builder()
-        .icon_name("media-playback-stop-symbolic")
-        .tooltip_text("Stop active script")
-        .build();
-    header.pack_start(&run_button);
-    header.pack_start(&stop_button);
-    let agent_toggle_button = gtk::ToggleButton::builder()
-        .icon_name("chat-message-new-symbolic")
-        .tooltip_text("Show Agent")
-        .build();
-    header.pack_start(&agent_toggle_button);
-
     let selected_device_button = gtk::Button::builder()
         .icon_name("network-wired-symbolic")
         .tooltip_text("Select local device")
@@ -95,7 +108,7 @@ pub fn build_main_window(app: &adw::Application) {
     let selected_device_box = gtk::Box::new(Orientation::Horizontal, 6);
     selected_device_box.append(&selected_device_button);
     selected_device_box.append(&selected_device_label);
-    header.pack_end(&selected_device_box);
+    header.pack_start(&selected_device_box);
 
     let firmware_button = gtk::Button::builder()
         .icon_name("software-update-available-symbolic")
@@ -105,18 +118,13 @@ pub fn build_main_window(app: &adw::Application) {
         .icon_name("emblem-system-symbolic")
         .tooltip_text("Settings")
         .build();
+    let agent_toggle_button = gtk::ToggleButton::builder()
+        .icon_name("chat-message-new-symbolic")
+        .tooltip_text("Show Agent")
+        .build();
+    header.pack_end(&agent_toggle_button);
     header.pack_end(&settings_button);
     header.pack_end(&firmware_button);
-
-    let device_list = gtk::ListBox::builder()
-        .selection_mode(gtk::SelectionMode::Single)
-        .css_classes(vec!["boxed-list"])
-        .build();
-    let device_keys = Rc::new(RefCell::new(refresh_device_list(
-        &device_list,
-        &model.borrow().devices(),
-    )));
-    device_list.select_row(device_list.row_at_index(0).as_ref());
 
     let source_buffer = make_source_buffer();
     let editor = sourceview5::View::builder()
@@ -149,7 +157,7 @@ pub fn build_main_window(app: &adw::Application) {
     preview_root.append(&runtime_status_label(
         "Run a script to see its runtime output here.",
     ));
-    let preview_runtime = Rc::new(RefCell::new(None::<ScriptUiRuntime>));
+    let preview_session = Rc::new(RefCell::new(None::<Rc<ScriptUiSessionHandle>>));
     let preview_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
@@ -225,21 +233,8 @@ pub fn build_main_window(app: &adw::Application) {
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
         .child(&log_view)
+        .visible(load_run_log_visible())
         .build();
-
-    let firmware_panel = status_panel(
-        "Firmware",
-        "Managed STM32 DFU and ESP32 serial update flows stay local and board-aware.",
-    );
-
-    let sidebar = gtk::Box::new(Orientation::Vertical, 12);
-    sidebar.set_margin_top(12);
-    sidebar.set_margin_bottom(12);
-    sidebar.set_margin_start(12);
-    sidebar.set_margin_end(12);
-    sidebar.append(&section_label("Devices"));
-    sidebar.append(&device_list);
-    sidebar.append(&firmware_panel);
 
     let agent_messages = gtk::Box::new(Orientation::Vertical, 8);
     agent_messages.set_margin_top(8);
@@ -292,13 +287,22 @@ pub fn build_main_window(app: &adw::Application) {
         .build();
 
     let library = gtk::Box::new(Orientation::Vertical, 10);
+    library.set_vexpand(true);
     library.set_margin_top(12);
     library.set_margin_bottom(12);
     library.set_margin_start(12);
     library.set_margin_end(12);
+    let script_list_scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .hscrollbar_policy(PolicyType::Never)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .child(&script_list)
+        .build();
+
     library.append(&section_label("Scripts"));
     library.append(&script_search_entry);
-    library.append(&script_list);
+    library.append(&script_list_scroll);
 
     let new_script_button = gtk::Button::builder()
         .icon_name("document-new-symbolic")
@@ -322,11 +326,11 @@ pub fn build_main_window(app: &adw::Application) {
     library.append(&script_actions);
 
     let content = gtk::Paned::new(Orientation::Horizontal);
+    content.set_vexpand(true);
     content.set_start_child(Some(&library));
     content.set_resize_start_child(false);
     content.set_shrink_start_child(false);
 
-    let workspace = gtk::Paned::new(Orientation::Horizontal);
     let main_stack = gtk::Box::new(Orientation::Vertical, 10);
     main_stack.set_margin_top(12);
     main_stack.set_margin_bottom(12);
@@ -342,18 +346,14 @@ pub fn build_main_window(app: &adw::Application) {
     ));
     main_stack.append(&search_entry);
     main_stack.append(&read_only_notice);
+    let run_log_label = section_label("Run Log");
+    run_log_label.set_visible(log_scroll.is_visible());
     main_stack.append(&editor_stack);
-    main_stack.append(&section_label("Run Log"));
+    main_stack.append(&run_log_label);
     main_stack.append(&log_scroll);
-    workspace.set_start_child(Some(&main_stack));
-    workspace.set_resize_start_child(true);
-    workspace.set_shrink_start_child(false);
-    workspace.set_end_child(Some(&sidebar));
-    workspace.set_resize_end_child(false);
-    workspace.set_shrink_end_child(false);
 
     let agent_workspace = gtk::Paned::new(Orientation::Horizontal);
-    agent_workspace.set_start_child(Some(&workspace));
+    agent_workspace.set_start_child(Some(&main_stack));
     agent_workspace.set_resize_start_child(true);
     agent_workspace.set_shrink_start_child(false);
     agent_workspace.set_end_child(Some(&agent_panel));
@@ -423,7 +423,7 @@ pub fn build_main_window(app: &adw::Application) {
         let active_script_id = Rc::clone(&active_script_id);
         let editor_stack = editor_stack.clone();
         let preview_root = preview_root.clone();
-        let preview_runtime = Rc::clone(&preview_runtime);
+        let preview_session = Rc::clone(&preview_session);
         let preview_button = preview_button.clone();
         let action = gio::SimpleAction::new("script-run", Some(&String::static_variant_type()));
         action.connect_activate(move |_, parameter| {
@@ -460,7 +460,8 @@ pub fn build_main_window(app: &adw::Application) {
             };
             render_source_preview(
                 &preview_root,
-                &preview_runtime,
+                &preview_session,
+                &model.borrow().selected_device(),
                 &item.name,
                 &source,
                 &module_sources,
@@ -595,7 +596,6 @@ pub fn build_main_window(app: &adw::Application) {
         let script_title = script_title.clone();
         let script_kind = script_kind.clone();
         let read_only_notice = read_only_notice.clone();
-        let run_button = run_button.clone();
         let save_script_button = save_script_button.clone();
         script_list.connect_row_selected(move |_, row| {
             let Some(row) = row else { return };
@@ -624,14 +624,12 @@ pub fn build_main_window(app: &adw::Application) {
                         item.kind_label(),
                         item.kind_detail()
                     ));
-                    run_button.set_sensitive(item.is_runnable());
                     save_script_button.set_sensitive(item.is_editable());
                     *selected_script.borrow_mut() = Some(item);
                 }
                 Err(err) => {
                     script_title.set_label("Script Load Failed");
                     script_kind.set_label(&err.to_string());
-                    run_button.set_sensitive(false);
                     save_script_button.set_sensitive(false);
                 }
             }
@@ -788,10 +786,11 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let editor_stack = editor_stack.clone();
         let preview_root = preview_root.clone();
-        let preview_runtime = Rc::clone(&preview_runtime);
+        let preview_session = Rc::clone(&preview_session);
         let selected_script = Rc::clone(&selected_script);
         let source_buffer = source_buffer.clone();
         let script_repository = Rc::clone(&script_repository);
+        let model = Rc::clone(&model);
         preview_button.connect_toggled(move |button| {
             if button.is_active() {
                 let name = selected_script
@@ -802,12 +801,13 @@ pub fn build_main_window(app: &adw::Application) {
                 let source = source_buffer
                     .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                     .to_string();
-                *preview_runtime.borrow_mut() = None;
+                clear_preview_session(&preview_session);
                 match script_repository.module_sources() {
                     Ok(modules) => {
                         render_source_preview(
                             &preview_root,
-                            &preview_runtime,
+                            &preview_session,
+                            &model.borrow().selected_device(),
                             &name,
                             &source,
                             &modules,
@@ -820,23 +820,9 @@ pub fn build_main_window(app: &adw::Application) {
                 }
                 editor_stack.set_visible_child_name("preview");
             } else {
-                *preview_runtime.borrow_mut() = None;
+                clear_preview_session(&preview_session);
                 editor_stack.set_visible_child_name("editor");
             }
-        });
-    }
-    {
-        let model = Rc::clone(&model);
-        let selected_device_label = selected_device_label.clone();
-        let device_keys = Rc::clone(&device_keys);
-        device_list.connect_row_selected(move |_, row| {
-            let Some(row) = row else { return };
-            let Some(key) = device_keys.borrow().get(row.index() as usize).cloned() else {
-                return;
-            };
-            model.borrow_mut().select_device(key);
-            selected_device_label
-                .set_label(&selected_device_title(&model.borrow().selected_device()));
         });
     }
     {
@@ -855,56 +841,107 @@ pub fn build_main_window(app: &adw::Application) {
     }
     {
         let window = window.clone();
+        let run_log_label = run_log_label.clone();
+        let log_scroll = log_scroll.clone();
         settings_button.connect_clicked(move |_| {
-            present_settings_dialog(&window);
+            present_settings_dialog(&window, &run_log_label, &log_scroll);
         });
     }
-    {
-        let window = window.clone();
-        let selected_script = Rc::clone(&selected_script);
-        let log_view = log_view.clone();
-        run_button.connect_clicked(move |_| {
-            let Some(item) = selected_script.borrow().clone() else {
-                append_log(&log_view, "No selected script.");
-                return;
-            };
-            let _ = window.activate_action("script-run", Some(&item.id.to_variant()));
-        });
-    }
-    {
-        let model = Rc::clone(&model);
-        let script_repository = Rc::clone(&script_repository);
-        let script_items = Rc::clone(&script_items);
-        let script_row_indices = Rc::clone(&script_row_indices);
-        let script_list = script_list.clone();
-        let script_search_entry = script_search_entry.clone();
-        let log_view = log_view.clone();
-        let active_session = Rc::clone(&active_session);
-        let active_script_id = Rc::clone(&active_script_id);
-        stop_button.connect_clicked(move |_| {
-            let Some(session_id) = active_session.borrow_mut().take() else {
-                append_log(&log_view, "No active script session.");
-                return;
-            };
-            match model.borrow_mut().stop_script(session_id) {
-                Ok(_) => append_log(&log_view, "Stopped script session."),
-                Err(err) => append_log(&log_view, &format!("Stop failed: {err}")),
-            }
-            *active_script_id.borrow_mut() = None;
-            refresh_script_list(
-                &script_list,
-                &script_repository,
-                &script_items,
-                &script_row_indices,
-                &log_view,
-                script_search_entry.text().as_str(),
-                active_script_id.borrow().as_deref(),
-            );
-        });
-    }
-
     add_shortcuts(app, &window);
     window.present();
+}
+
+fn script_packet_handler(device: Option<DeviceRecord>) -> PacketHandler {
+    let mut bridge = ScriptPacketBridge::new(device);
+    Box::new(move |packet, _timeout_ms| bridge.send(&packet))
+}
+
+struct ScriptPacketBridge {
+    device: Option<DeviceRecord>,
+    runtime: Option<tokio::runtime::Runtime>,
+    transport: Option<Box<dyn EmwaverTransport>>,
+}
+
+impl ScriptPacketBridge {
+    fn new(device: Option<DeviceRecord>) -> Self {
+        Self {
+            device,
+            runtime: None,
+            transport: None,
+        }
+    }
+
+    fn send(&mut self, packet: &[u8]) -> Result<Vec<u8>, String> {
+        self.ensure_connected()?;
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or_else(|| "Script packet runtime is not available.".to_string())?;
+        let transport = self
+            .transport
+            .as_mut()
+            .ok_or_else(|| "Script packet transport is not available.".to_string())?;
+        runtime
+            .block_on(send_command(transport.as_mut(), packet))
+            .map_err(|err| format!("Device command failed: {err}"))
+    }
+
+    fn ensure_connected(&mut self) -> Result<(), String> {
+        if self.transport.is_some() {
+            return Ok(());
+        }
+        let device = self
+            .device
+            .as_ref()
+            .ok_or_else(|| "No selected device for script packet send.".to_string())?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|err| format!("Failed to create script packet runtime: {err}"))?;
+        let mut transport: Box<dyn EmwaverTransport> = match device.transport {
+            TransportKind::Simulator => Box::new(
+                SimulatorTransport::default_fixture()
+                    .map_err(|err| format!("Simulator setup failed: {err}"))?,
+            ),
+            TransportKind::UsbMidi => {
+                let candidate = LinuxUsbManager::default()
+                    .discover()
+                    .map_err(|err| format!("USB discovery failed: {err}"))?
+                    .into_iter()
+                    .find(|candidate| candidate.id == device.id)
+                    .ok_or_else(|| format!("USB device {} is no longer present.", device.id))?;
+                Box::new(
+                    LinuxUsbMidiTransport::new(candidate)
+                        .map_err(|err| format!("USB transport setup failed: {err}"))?,
+                )
+            }
+            TransportKind::Wifi => Box::new(LinuxWifiTransport::new(
+                manual_wifi_target_from_device(device)?,
+            )),
+            TransportKind::Ble => Box::new(LinuxBleTransport::new(ble_target_from_device(device)?)),
+            _ => {
+                return Err(format!(
+                    "{:?} script packet transport is not implemented yet.",
+                    device.transport
+                ));
+            }
+        };
+        runtime
+            .block_on(transport.connect())
+            .map_err(|err| format!("Device connect failed: {err}"))?;
+        self.runtime = Some(runtime);
+        self.transport = Some(transport);
+        Ok(())
+    }
+}
+
+impl Drop for ScriptPacketBridge {
+    fn drop(&mut self) {
+        if let (Some(runtime), Some(mut transport)) = (self.runtime.as_ref(), self.transport.take())
+        {
+            let _ = runtime.block_on(transport.close());
+        }
+    }
 }
 
 fn run_selected_script(
@@ -1182,43 +1219,6 @@ fn probe_usb_candidate(
         .ok()
 }
 
-fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) -> Vec<String> {
-    while let Some(row) = list.first_child() {
-        list.remove(&row);
-    }
-    let mut keys = Vec::new();
-    for device in devices {
-        keys.push(device.identity_key());
-        let row = gtk::Box::new(Orientation::Vertical, 2);
-        row.set_margin_top(10);
-        row.set_margin_bottom(10);
-        row.set_margin_start(10);
-        row.set_margin_end(10);
-        row.append(
-            &gtk::Label::builder()
-                .label(&device.display_name)
-                .xalign(0.0)
-                .build(),
-        );
-        row.append(
-            &gtk::Label::builder()
-                .label(format!(
-                    "{:?}  {}",
-                    device.transport,
-                    device.hardware_uid.as_deref().unwrap_or("no uid")
-                ))
-                .xalign(0.0)
-                .css_classes(vec!["dim-label"])
-                .build(),
-        );
-        let item = gtk::ListBoxRow::builder().child(&row).build();
-        item.set_activatable(true);
-        item.set_selectable(true);
-        list.append(&item);
-    }
-    keys
-}
-
 fn section_label(text: &str) -> gtk::Label {
     gtk::Label::builder()
         .label(text)
@@ -1274,95 +1274,182 @@ fn clear_box(container: &gtk::Box) {
     }
 }
 
+fn clear_preview_session(session: &Rc<RefCell<Option<Rc<ScriptUiSessionHandle>>>>) {
+    *session.borrow_mut() = None;
+}
+
 fn render_script_preview_tree(
     preview_root: &gtk::Box,
-    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    session: &Rc<ScriptUiSessionHandle>,
     root: &ScriptUiNode,
     status: &str,
 ) {
     clear_box(preview_root);
+    session.status_label.set_label(status);
     preview_root.append(&section_label("Runtime Output"));
-    preview_root.append(&runtime_status_label(status));
-    preview_root.append(&render_script_node(root, runtime, preview_root));
+    preview_root.append(&session.status_label);
+    preview_root.append(&render_script_node(root, session, preview_root));
+}
+
+fn start_script_ui_session(
+    device: Option<DeviceRecord>,
+    source: String,
+    module_sources: BTreeMap<String, String>,
+) -> (
+    Rc<ScriptUiSessionHandle>,
+    mpsc::Receiver<ScriptUiSessionEvent>,
+) {
+    let (command_tx, command_rx) = mpsc::channel::<ScriptUiSessionCommand>();
+    let (event_tx, event_rx) = mpsc::channel::<ScriptUiSessionEvent>();
+    thread::spawn(move || {
+        let mut runtime = match ScriptUiRuntime::new_with_packet_handler(
+            &source,
+            &module_sources,
+            script_packet_handler(device),
+        ) {
+            Ok(runtime) => runtime,
+            Err(err) => {
+                let _ = event_tx.send(ScriptUiSessionEvent::Failed(format!(
+                    "Script UI render failed: {err}"
+                )));
+                return;
+            }
+        };
+        match runtime.tree() {
+            Ok(Some(tree)) => {
+                let _ = event_tx.send(ScriptUiSessionEvent::Rendered {
+                    root: tree.root,
+                    status: "Rendered from the live script UI runtime.".to_string(),
+                });
+            }
+            Ok(None) => {
+                let _ = event_tx.send(ScriptUiSessionEvent::Empty {
+                    status: "No script UI tree was rendered.".to_string(),
+                });
+            }
+            Err(err) => {
+                let _ = event_tx.send(ScriptUiSessionEvent::Failed(format!(
+                    "Script UI render failed: {err}"
+                )));
+            }
+        }
+
+        while let Ok(command) = command_rx.recv() {
+            match command {
+                ScriptUiSessionCommand::Invoke { token, arguments } => {
+                    let result = runtime.invoke_handler(&token, &arguments);
+                    match result {
+                        Ok(Some(tree)) => {
+                            let _ = event_tx.send(ScriptUiSessionEvent::Rendered {
+                                root: tree.root,
+                                status: "Updated after script action.".to_string(),
+                            });
+                        }
+                        Ok(None) => {
+                            let _ = event_tx.send(ScriptUiSessionEvent::Empty {
+                                status: "Script action completed.".to_string(),
+                            });
+                        }
+                        Err(err) => {
+                            let _ = event_tx.send(ScriptUiSessionEvent::Failed(format!(
+                                "Script action failed: {err}"
+                            )));
+                        }
+                    }
+                }
+            }
+        }
+    });
+    let status_label = runtime_status_label("Starting live script UI runtime…");
+    (
+        Rc::new(ScriptUiSessionHandle {
+            command_tx,
+            status_label,
+            busy: Cell::new(false),
+        }),
+        event_rx,
+    )
 }
 
 fn render_source_preview(
     preview_root: &gtk::Box,
-    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    session_slot: &Rc<RefCell<Option<Rc<ScriptUiSessionHandle>>>>,
+    device: &Option<DeviceRecord>,
     name: &str,
     source: &str,
     module_sources: &BTreeMap<String, String>,
 ) {
-    *runtime.borrow_mut() = None;
+    clear_preview_session(session_slot);
     clear_box(preview_root);
     preview_root.append(&section_label(&format!("{name} Runtime Output")));
-    match ScriptUiRuntime::new(source, module_sources) {
-        Ok(mut script_runtime) => match script_runtime.tree() {
-            Ok(Some(tree)) => {
-                *runtime.borrow_mut() = Some(script_runtime);
-                render_script_preview_tree(
-                    preview_root,
-                    runtime,
-                    &tree.root,
-                    "Rendered from the live script UI runtime.",
-                );
-            }
-            Ok(None) => {
-                *runtime.borrow_mut() = Some(script_runtime);
-                preview_root.append(&runtime_status_label("No script UI tree was rendered."));
-            }
-            Err(err) => {
-                preview_root.append(&runtime_status_label(&format!(
-                    "Script UI render failed: {err}"
-                )));
-            }
-        },
-        Err(err) => {
-            preview_root.append(&runtime_status_label(&format!(
-                "Script UI render failed: {err}"
-            )));
-        }
-    }
+
+    let (session, event_rx) =
+        start_script_ui_session(device.clone(), source.to_string(), module_sources.clone());
+    preview_root.append(&session.status_label);
+    *session_slot.borrow_mut() = Some(Rc::clone(&session));
+    poll_script_ui_session_events(preview_root.clone(), Rc::downgrade(&session), event_rx);
 }
 
-fn invoke_script_handler(
-    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
-    preview_root: &gtk::Box,
+fn poll_script_ui_session_events(
+    preview_root: gtk::Box,
+    session: std::rc::Weak<ScriptUiSessionHandle>,
+    event_rx: mpsc::Receiver<ScriptUiSessionEvent>,
+) {
+    let event_rx = Rc::new(RefCell::new(event_rx));
+    glib::timeout_add_local(Duration::from_millis(30), move || {
+        let Some(session) = session.upgrade() else {
+            return ControlFlow::Break;
+        };
+        while let Ok(event) = event_rx.borrow_mut().try_recv() {
+            match event {
+                ScriptUiSessionEvent::Rendered { root, status } => {
+                    session.busy.set(false);
+                    render_script_preview_tree(&preview_root, &session, &root, &status);
+                }
+                ScriptUiSessionEvent::Empty { status } => {
+                    session.busy.set(false);
+                    session.status_label.set_label(&status);
+                }
+                ScriptUiSessionEvent::Failed(message) => {
+                    session.busy.set(false);
+                    session.status_label.set_label(&message);
+                }
+            }
+        }
+        ControlFlow::Continue
+    });
+}
+
+fn invoke_script_action(
+    session: &Rc<ScriptUiSessionHandle>,
     token: String,
+    action_label: String,
     arguments: Vec<serde_json::Value>,
 ) {
-    let result = {
-        let mut runtime = runtime.borrow_mut();
-        let Some(runtime) = runtime.as_mut() else {
-            clear_box(preview_root);
-            preview_root.append(&runtime_status_label("No active script UI runtime."));
-            return;
-        };
-        runtime.invoke_handler(&token, &arguments)
-    };
-
-    match result {
-        Ok(Some(tree)) => {
-            render_script_preview_tree(
-                preview_root,
-                runtime,
-                &tree.root,
-                "Updated after script handler invocation.",
-            );
-        }
-        Ok(None) => {}
-        Err(err) => {
-            clear_box(preview_root);
-            preview_root.append(&runtime_status_label(&format!(
-                "Script handler failed: {err}"
-            )));
-        }
+    if session.busy.replace(true) {
+        session
+            .status_label
+            .set_label("A script action is already running.");
+        return;
+    }
+    session
+        .status_label
+        .set_label(&format!("Running {action_label}…"));
+    if session
+        .command_tx
+        .send(ScriptUiSessionCommand::Invoke { token, arguments })
+        .is_err()
+    {
+        session.busy.set(false);
+        session
+            .status_label
+            .set_label("Script UI runtime is no longer available.");
     }
 }
 
 fn render_script_node(
     node: &ScriptUiNode,
-    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    session: &Rc<ScriptUiSessionHandle>,
     preview_root: &gtk::Box,
 ) -> gtk::Widget {
     match node.node_type.as_str() {
@@ -1370,7 +1457,7 @@ fn render_script_node(
             let column = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&column, node);
             for child in &node.children {
-                column.append(&render_script_node(child, runtime, preview_root));
+                column.append(&render_script_node(child, session, preview_root));
             }
             column.upcast()
         }
@@ -1378,7 +1465,7 @@ fn render_script_node(
             let row = gtk::Box::new(Orientation::Horizontal, node_spacing(node));
             apply_node_padding(&row, node);
             for child in &node.children {
-                row.append(&render_script_node(child, runtime, preview_root));
+                row.append(&render_script_node(child, session, preview_root));
             }
             row.upcast()
         }
@@ -1386,7 +1473,7 @@ fn render_script_node(
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child, runtime, preview_root));
+                content.append(&render_script_node(child, session, preview_root));
             }
             gtk::Frame::builder().child(&content).build().upcast()
         }
@@ -1394,14 +1481,14 @@ fn render_script_node(
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child, runtime, preview_root));
+                content.append(&render_script_node(child, session, preview_root));
             }
             let button = gtk::Button::builder().child(&content).build();
             if let Some(token) = node.handlers.get("tap").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 button.connect_clicked(move |_| {
-                    invoke_script_handler(&runtime, &preview_root, token.clone(), Vec::new());
+                    invoke_script_action(&session, token.clone(), action_label.clone(), Vec::new());
                 });
             }
             button.upcast()
@@ -1425,13 +1512,13 @@ fn render_script_node(
             label.upcast()
         }
         "button" => {
-            let button = gtk::Button::builder().label(node_label(node)).build();
+            let action_label = node_label(node);
+            let button = gtk::Button::builder().label(&action_label).build();
             if let Some(token) = node.handlers.get("tap").cloned() {
-                button.set_tooltip_text(Some(&format!("Script handler {token}")));
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                button.set_tooltip_text(Some(&format!("Script action {token}")));
+                let session = Rc::clone(session);
                 button.connect_clicked(move |_| {
-                    invoke_script_handler(&runtime, &preview_root, token.clone(), Vec::new());
+                    invoke_script_action(&session, token.clone(), action_label.clone(), Vec::new());
                 });
             }
             button.upcast()
@@ -1443,13 +1530,13 @@ fn render_script_node(
             let scale = gtk::Scale::with_range(Orientation::Horizontal, min, max, step);
             scale.set_value(node_prop_f64(node, "value").unwrap_or(min));
             if let Some(token) = node.handlers.get("change").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 scale.connect_value_changed(move |scale| {
-                    invoke_script_handler(
-                        &runtime,
-                        &preview_root,
+                    invoke_script_action(
+                        &session,
                         token.clone(),
+                        action_label.clone(),
                         vec![serde_json::json!(scale.value())],
                     );
                 });
@@ -1479,7 +1566,7 @@ fn render_script_node(
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child, runtime, preview_root));
+                content.append(&render_script_node(child, session, preview_root));
             }
             gtk::ScrolledWindow::builder()
                 .hexpand(true)
@@ -1496,25 +1583,25 @@ fn render_script_node(
                 .placeholder_text(node_prop_string(node, "placeholder").unwrap_or_default())
                 .build();
             if let Some(token) = node.handlers.get("change").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 entry.connect_changed(move |entry| {
-                    invoke_script_handler(
-                        &runtime,
-                        &preview_root,
+                    invoke_script_action(
+                        &session,
                         token.clone(),
+                        action_label.clone(),
                         vec![serde_json::json!(entry.text().to_string())],
                     );
                 });
             }
             if let Some(token) = node.handlers.get("submit").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 entry.connect_activate(move |entry| {
-                    invoke_script_handler(
-                        &runtime,
-                        &preview_root,
+                    invoke_script_action(
+                        &session,
                         token.clone(),
+                        action_label.clone(),
                         vec![serde_json::json!(entry.text().to_string())],
                     );
                 });
@@ -1565,14 +1652,14 @@ fn render_script_node(
                 }
             }
             if let Some(token) = node.handlers.get("change").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 combo.connect_changed(move |combo| {
                     let value = combo.active_id().map(|value| value.to_string());
-                    invoke_script_handler(
-                        &runtime,
-                        &preview_root,
+                    invoke_script_action(
+                        &session,
                         token.clone(),
+                        action_label.clone(),
                         vec![serde_json::json!(value.unwrap_or_default())],
                     );
                 });
@@ -1585,13 +1672,13 @@ fn render_script_node(
                 .active(node_prop_bool(node, "value").unwrap_or(false))
                 .build();
             if let Some(token) = node.handlers.get("change").cloned() {
-                let runtime = Rc::clone(runtime);
-                let preview_root = preview_root.clone();
+                let session = Rc::clone(session);
+                let action_label = node_label(node);
                 toggle.connect_toggled(move |toggle| {
-                    invoke_script_handler(
-                        &runtime,
-                        &preview_root,
+                    invoke_script_action(
+                        &session,
                         token.clone(),
+                        action_label.clone(),
                         vec![serde_json::json!(toggle.is_active())],
                     );
                 });
@@ -1600,13 +1687,13 @@ fn render_script_node(
         }
         "grid" => {
             let grid = gtk::Grid::builder()
-                .column_spacing(node_spacing(node) as u32)
-                .row_spacing(node_spacing(node) as u32)
+                .column_spacing(node_spacing(node))
+                .row_spacing(node_spacing(node))
                 .build();
             let columns = node_prop_i32(node, "columns").unwrap_or(2).max(1);
             for (index, child) in node.children.iter().enumerate() {
                 grid.attach(
-                    &render_script_node(child, runtime, preview_root),
+                    &render_script_node(child, session, preview_root),
                     (index as i32) % columns,
                     (index as i32) / columns,
                     1,
@@ -1626,7 +1713,7 @@ fn render_script_node(
                     .build(),
             );
             for child in &node.children {
-                content.append(&render_script_node(child, runtime, preview_root));
+                content.append(&render_script_node(child, session, preview_root));
             }
             gtk::Frame::builder().child(&content).build().upcast()
         }
@@ -2233,30 +2320,6 @@ fn select_script_by_id(
     }
 }
 
-fn status_panel(title: &str, body: &str) -> gtk::Frame {
-    let panel = gtk::Box::new(Orientation::Vertical, 4);
-    panel.set_margin_top(10);
-    panel.set_margin_bottom(10);
-    panel.set_margin_start(10);
-    panel.set_margin_end(10);
-    panel.append(
-        &gtk::Label::builder()
-            .label(title)
-            .xalign(0.0)
-            .css_classes(vec!["heading"])
-            .build(),
-    );
-    panel.append(
-        &gtk::Label::builder()
-            .label(body)
-            .wrap(true)
-            .xalign(0.0)
-            .css_classes(vec!["dim-label"])
-            .build(),
-    );
-    gtk::Frame::builder().child(&panel).build()
-}
-
 fn selected_device_title(device: &Option<DeviceRecord>) -> String {
     device
         .as_ref()
@@ -2264,18 +2327,59 @@ fn selected_device_title(device: &Option<DeviceRecord>) -> String {
         .unwrap_or_else(|| "No Device".to_string())
 }
 
-fn present_settings_dialog(parent: &adw::ApplicationWindow) {
+fn load_run_log_visible() -> bool {
+    let Ok(body) = fs::read_to_string(app_settings_path()) else {
+        return true;
+    };
+    serde_json::from_str::<serde_json::Value>(&body)
+        .ok()
+        .and_then(|value| {
+            value
+                .get("runLogVisible")
+                .and_then(serde_json::Value::as_bool)
+        })
+        .unwrap_or(true)
+}
+
+fn save_run_log_visible(visible: bool) -> std::io::Result<()> {
+    let path = app_settings_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let body = serde_json::json!({
+        "runLogVisible": visible,
+    });
+    fs::write(path, serde_json::to_string_pretty(&body)?)
+}
+
+fn app_settings_path() -> PathBuf {
+    if let Some(config_home) = env::var_os("XDG_CONFIG_HOME").filter(|value| !value.is_empty()) {
+        return PathBuf::from(config_home).join("emwaver").join("app.json");
+    }
+    env::var_os("HOME")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config")
+        .join("emwaver")
+        .join("app.json")
+}
+
+fn present_settings_dialog(
+    parent: &adw::ApplicationWindow,
+    run_log_label: &gtk::Label,
+    run_log_scroll: &gtk::ScrolledWindow,
+) {
     let config = load_agent_configuration();
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
         .modal(true)
         .title("Settings")
-        .default_width(720)
-        .default_height(520)
+        .default_width(620)
+        .default_height(420)
         .build();
     dialog.add_button("Close", gtk::ResponseType::Close);
     dialog.add_button("Clear Agent Key", gtk::ResponseType::Other(1));
-    dialog.add_button("Save", gtk::ResponseType::Accept);
+    dialog.add_button("Store Agent Key", gtk::ResponseType::Accept);
 
     let root = gtk::Box::new(Orientation::Vertical, 16);
     root.set_margin_top(20);
@@ -2291,20 +2395,12 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow) {
     agent_card.append(&section_label("Agent"));
     agent_card.append(
         &gtk::Label::builder()
-            .label("Add an MGPT API key to enable Agent replies. Local scripts, device control, and firmware update remain available without a key.")
+            .label("Add an MGPT API key to enable Agent replies. The public Agent endpoint is app-managed; local scripts and device control remain available without a key.")
             .wrap(true)
             .xalign(0.0)
             .css_classes(vec!["dim-label"])
             .build(),
     );
-
-    let endpoint_entry = gtk::Entry::builder()
-        .placeholder_text("https://.../api/mgpt/respond")
-        .text(config.endpoint.as_deref().unwrap_or(""))
-        .hexpand(true)
-        .build();
-    let endpoint_row = settings_row("Endpoint", &endpoint_entry);
-    agent_card.append(&endpoint_row);
 
     let key_entry = gtk::Entry::builder()
         .placeholder_text(match config.api_key_source {
@@ -2315,11 +2411,10 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow) {
         .visibility(false)
         .hexpand(true)
         .build();
-    let key_row = settings_row("API Key", &key_entry);
-    agent_card.append(&key_row);
+    agent_card.append(&settings_row("API Key", &key_entry));
 
     let key_source = match config.api_key_source {
-        AgentCredentialSource::Env => "Current key source: environment variable. Saving here stores a new Secret Service key, but the environment value keeps priority until unset.",
+        AgentCredentialSource::Env => "Current key source: environment variable. Storing a key here will not override the environment until it is unset.",
         AgentCredentialSource::SecretService => "Current key source: Secret Service.",
         AgentCredentialSource::Missing => "No Agent key is configured.",
     };
@@ -2331,6 +2426,27 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow) {
         .build();
     agent_card.append(&status);
     root.append(&gtk::Frame::builder().child(&agent_card).build());
+
+    let workspace_card = gtk::Box::new(Orientation::Vertical, 8);
+    workspace_card.set_margin_top(12);
+    workspace_card.set_margin_bottom(12);
+    workspace_card.set_margin_start(12);
+    workspace_card.set_margin_end(12);
+    workspace_card.append(&section_label("Workspace"));
+    let show_run_log = gtk::CheckButton::builder()
+        .label("Show Run Log")
+        .active(run_log_scroll.is_visible())
+        .build();
+    workspace_card.append(&show_run_log);
+    workspace_card.append(
+        &gtk::Label::builder()
+            .label("This applies immediately to the current window.")
+            .wrap(true)
+            .xalign(0.0)
+            .css_classes(vec!["dim-label"])
+            .build(),
+    );
+    root.append(&gtk::Frame::builder().child(&workspace_card).build());
 
     let device_card = gtk::Box::new(Orientation::Vertical, 8);
     device_card.set_margin_top(12);
@@ -2348,50 +2464,31 @@ fn present_settings_dialog(parent: &adw::ApplicationWindow) {
     );
     root.append(&gtk::Frame::builder().child(&device_card).build());
 
-    let diagnostics_card = gtk::Box::new(Orientation::Vertical, 8);
-    diagnostics_card.set_margin_top(12);
-    diagnostics_card.set_margin_bottom(12);
-    diagnostics_card.set_margin_start(12);
-    diagnostics_card.set_margin_end(12);
-    diagnostics_card.append(&section_label("Device Diagnostics"));
-    diagnostics_card.append(
-        &gtk::CheckButton::builder()
-            .label("Log transport packets on ESP serial")
-            .active(true)
-            .tooltip_text("Matches the macOS debug logging preference; Linux persistence for this toggle is staged with the settings store.")
-            .build(),
-    );
-    diagnostics_card.append(
-        &gtk::Label::builder()
-            .label("When enabled, ESP32-S3 firmware logs BLE, USB, and Wi-Fi command packets on the serial monitor. The app can turn firmware transport logging off after connection metadata checks.")
-            .wrap(true)
-            .xalign(0.0)
-            .css_classes(vec!["dim-label"])
-            .build(),
-    );
-    root.append(&gtk::Frame::builder().child(&diagnostics_card).build());
+    {
+        let run_log_label = run_log_label.clone();
+        let run_log_scroll = run_log_scroll.clone();
+        show_run_log.connect_toggled(move |button| {
+            let visible = button.is_active();
+            run_log_label.set_visible(visible);
+            run_log_scroll.set_visible(visible);
+            let _ = save_run_log_visible(visible);
+        });
+    }
 
     dialog.content_area().append(&root);
 
     dialog.connect_response(move |dialog, response| match response {
         gtk::ResponseType::Accept => {
-            let endpoint = endpoint_entry.text().to_string();
-            match save_agent_endpoint(Some(&endpoint)) {
-                Ok(()) => {
-                    let key = key_entry.text().to_string();
-                    if key.trim().is_empty() {
-                        status.set_label("Saved Agent endpoint. Existing Agent key was unchanged.");
-                    } else {
-                        match store_agent_api_key_secret_tool(&key) {
-                            Ok(()) => status
-                                .set_label("Saved Agent endpoint and API key to Secret Service."),
-                            Err(err) => status.set_label(&format!(
-                                "Saved endpoint, but Secret Service key storage failed: {err}"
-                            )),
-                        }
+            let key = key_entry.text().to_string();
+            if key.trim().is_empty() {
+                status.set_label("Paste an Agent API key before storing it.");
+            } else {
+                match store_agent_api_key_secret_tool(&key) {
+                    Ok(()) => status.set_label("Stored Agent API key in Secret Service."),
+                    Err(err) => {
+                        status.set_label(&format!("Secret Service key storage failed: {err}"))
                     }
                 }
-                Err(err) => status.set_label(&err.to_string()),
             }
         }
         gtk::ResponseType::Other(1) => match clear_agent_api_key_secret_tool() {
@@ -2821,29 +2918,6 @@ fn uid_suffix(uid: &str) -> String {
         .chars()
         .rev()
         .collect()
-}
-
-fn present_status_dialog(parent: &adw::ApplicationWindow, title: &str, body: &str) {
-    let dialog = gtk::Dialog::builder()
-        .transient_for(parent)
-        .modal(true)
-        .title(title)
-        .default_width(520)
-        .build();
-    dialog.add_button("Close", gtk::ResponseType::Close);
-    let content = dialog.content_area();
-    let label = gtk::Label::builder()
-        .label(body)
-        .wrap(true)
-        .xalign(0.0)
-        .margin_top(18)
-        .margin_bottom(18)
-        .margin_start(18)
-        .margin_end(18)
-        .build();
-    content.append(&label);
-    dialog.connect_response(|dialog, _| dialog.close());
-    dialog.present();
 }
 
 fn present_firmware_dialog(parent: &adw::ApplicationWindow, selected: Option<DeviceRecord>) {
