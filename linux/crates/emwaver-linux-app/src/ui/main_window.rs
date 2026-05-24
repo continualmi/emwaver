@@ -120,7 +120,6 @@ pub fn build_main_window(app: &adw::Application) {
     let source_buffer = make_source_buffer();
     let editor = sourceview5::View::builder()
         .buffer(&source_buffer)
-        .monospace(true)
         .show_line_numbers(true)
         .highlight_current_line(true)
         .auto_indent(true)
@@ -133,6 +132,7 @@ pub fn build_main_window(app: &adw::Application) {
         .right_margin(12)
         .wrap_mode(gtk::WrapMode::None)
         .build();
+    editor.add_css_class("monospace");
     let editor_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
@@ -205,13 +205,13 @@ pub fn build_main_window(app: &adw::Application) {
 
     let log_view = gtk::TextView::builder()
         .editable(false)
-        .monospace(true)
         .cursor_visible(false)
         .top_margin(10)
         .bottom_margin(10)
         .left_margin(10)
         .right_margin(10)
         .build();
+    log_view.add_css_class("monospace");
     log_view
         .buffer()
         .set_text("Simulator ready. Local scripts run without an Agent key.\n");
@@ -421,13 +421,18 @@ pub fn build_main_window(app: &adw::Application) {
         let save_script_button = save_script_button.clone();
         script_list.connect_row_selected(move |_, row| {
             let Some(row) = row else { return };
-            let Some(script_index) = ({
+            let script_index = {
                 let rows = script_row_indices.borrow();
                 rows.get(row.index() as usize).copied().flatten()
-            }) else {
+            };
+            let Some(script_index) = script_index else {
                 return;
             };
-            let Some(item) = script_items.borrow().get(script_index).cloned() else {
+            let item = {
+                let items = script_items.borrow();
+                items.get(script_index).cloned()
+            };
+            let Some(item) = item else {
                 return;
             };
             match script_repository.read_script(&item) {
@@ -1155,10 +1160,8 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             gtk::Button::builder().child(&content).build().upcast()
         }
         "text" => {
-            let mut builder = gtk::Label::builder()
-                .label(node_text(node))
-                .wrap(true)
-                .xalign(0.0);
+            let text = node_text(node);
+            let mut builder = gtk::Label::builder().label(text).wrap(true).xalign(0.0);
             if matches!(
                 node_prop_string(node, "font").as_deref(),
                 Some("title" | "title2" | "title3" | "headline")
@@ -1192,13 +1195,13 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
         "logViewer" => {
             let view = gtk::TextView::builder()
                 .editable(false)
-                .monospace(true)
                 .cursor_visible(false)
                 .top_margin(8)
                 .bottom_margin(8)
                 .left_margin(8)
                 .right_margin(8)
                 .build();
+            view.add_css_class("monospace");
             view.buffer().set_text(&node_text(node));
             gtk::ScrolledWindow::builder()
                 .min_content_height(node_prop_i32(node, "minHeight").unwrap_or(120))
@@ -2516,13 +2519,13 @@ fn present_firmware_dialog(parent: &adw::ApplicationWindow, selected: Option<Dev
 
     let log_view = gtk::TextView::builder()
         .editable(false)
-        .monospace(true)
         .cursor_visible(false)
         .top_margin(8)
         .bottom_margin(8)
         .left_margin(8)
         .right_margin(8)
         .build();
+    log_view.add_css_class("monospace");
     log_view.buffer().set_text(&firmware_initial_log(
         &board,
         &stm32_plan,
