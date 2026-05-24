@@ -83,7 +83,7 @@ function createUiApi(setRoot: (n: EmwUiNode) => void) {
   };
 }
 
-// UI-only evaluation of an .emw script.
+// UI-only evaluation of a local EMWaver JavaScript script.
 // - Runs in the browser.
 // - Stubs hardware APIs so scripts can be evaluated without a device.
 // - Captures the last UI.render(root) call.

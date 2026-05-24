@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { SiteHeader } from "@/components/emwaver/SiteHeader";
 
@@ -31,32 +30,26 @@ const VIDEOS = [
 
 export default function VideosPage() {
   return (
-    <div className="relative min-h-dvh overflow-x-clip">
+    <div className="install-mode relative min-h-dvh overflow-x-clip">
       <div className="pointer-events-none fixed inset-0 -z-10">
-        <Image
-          src="/emwaver/2015_upscale.jpg"
-          alt=""
-          fill
-          priority
-          className="object-cover opacity-[0.58]"
-        />
-        <div className="absolute inset-0 bg-[radial-gradient(900px_600px_at_15%_0%,var(--hero-glow-white),transparent_60%),radial-gradient(900px_600px_at_85%_10%,var(--hero-glow-aqua),transparent_62%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(800px_500px_at_50%_0%,var(--aqua-tint-2),transparent_60%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(700px_480px_at_85%_18%,var(--sky-tint),transparent_62%)]" />
       </div>
 
       <SiteHeader />
 
-      <main className="mx-auto max-w-6xl px-5 pb-16 pt-10">
-        <section className="rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--surface)] p-8 shadow-[0_30px_80px_var(--shadow-heavy)] backdrop-blur-md">
+      <main className="mx-auto max-w-6xl px-5 pb-20 pt-16">
+        <section className="rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--glass)] p-8 shadow-[0_24px_70px_var(--shadow)]">
           <div className="max-w-3xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
               Media
             </div>
             <h1 className="mt-5 text-4xl font-semibold tracking-tight text-[color:var(--ink)] md:text-5xl">
-              EMWaver videos now live on the product site
+EMWaver videos
             </h1>
             <p className="mt-5 max-w-2xl text-base leading-8 text-[color:var(--ink-dim)]">
-              This is the canonical home for launch videos, platform walkthroughs, and hardware
-              build media. Society no longer carries an EMWaver media surface.
+              Watch the launch trailer, platform walkthroughs, and hardware build videos for
+              the local-first EMWaver electronics platform.
             </p>
             <div className="mt-6 flex flex-wrap gap-3">
               <Link
@@ -79,7 +72,7 @@ export default function VideosPage() {
           {VIDEOS.map((video) => (
             <article
               key={video.title}
-              className="overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_20px_50px_var(--shadow)] backdrop-blur-md"
+              className="overflow-hidden rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--surface)] shadow-[0_20px_50px_var(--shadow)]"
             >
               <div className="border-b border-[color:var(--line)] px-6 py-5">
                 <div className="text-xs font-semibold uppercase tracking-[0.18em] text-[color:var(--aqua)]">
@@ -105,7 +98,7 @@ export default function VideosPage() {
                 </div>
                 <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-sm text-[color:var(--ink-dim)]">
-                    Canonical EMWaver media lives here on `emwaver.ai`.
+                    EMWaver media on the product site.
                   </div>
                   <a
                     href={video.href}

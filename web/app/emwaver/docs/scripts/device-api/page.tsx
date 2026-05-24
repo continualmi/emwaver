@@ -6,11 +6,10 @@ export default function DeviceApiDocPage() {
         Device APIs are imported from local EMWaver modules. Calls are synchronous from the script
         point of view and talk to the connected board through the native app transport.
       </p>
-      <blockquote>
-        Prefer module imports over legacy globals. The current default scripts use
-        <code>{`import { pin, gpio } from "emw-gpio"`}</code>, <code>{`import { spi } from "emw-spi"`}</code>,
-        and similar module imports.
-      </blockquote>
+      <p>
+        Current scripts use imports such as <code>{`import { pin, gpio } from "emw-gpio"`}</code>,
+        <code>{` import { spi } from "emw-spi"`}</code>, and similar module imports.
+      </p>
 
       <h2>Pins</h2>
       <p>
@@ -171,12 +170,6 @@ const board = device.boardType(); // e.g. "stm32f042", "esp32s2", "esp32s3"
 device.reset();`}</code>
       </pre>
 
-      <h2>Legacy names to avoid in new docs</h2>
-      <p>
-        Some older pages and snippets used Arduino-style globals such as <code>pinMode</code>,
-        <code> digitalWrite</code>, <code>analogRead</code>, <code>analogWrite</code>, <code>SPI</code>,
-        <code> Wire</code>, and <code>Serial</code>. New examples should use imported modules instead.
-      </p>
     </>
   );
 }

@@ -7,12 +7,6 @@ export default function UiWidgetsDocPage() {
         <code> JSX</code> and <code>render</code> from <code>emw-jsx</code>, then render JSX.
         The JSX is converted to the same serializable UI tree used by the native renderers.
       </p>
-      <blockquote>
-        Preferred style: <code>&lt;Column&gt;...&lt;/Column&gt;</code>. Factory calls such as
-        <code> UI.column(&#123; children: [...] &#125;)</code> are useful for internals and dynamic helpers,
-        but should not be the primary public documentation style.
-      </blockquote>
-
       <h2>Imports and render</h2>
       <pre>
         <code className="language-javascript">{`import { JSX, render } from "emw-jsx";

@@ -9,21 +9,6 @@ export default function ScriptsDocPage() {
         extensionless imports such as <code>"emw-ui"</code>, JSX components, and small hardware modules
         such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
       </p>
-      <blockquote>
-        The older <code>UI.render(UI.column(...))</code> examples still describe the underlying tree,
-        but they are no longer the preferred authoring style. Write JSX components and call
-        <code> render(&lt;App /&gt;)</code> from <code>emw-jsx</code>.
-      </blockquote>
-
-      <h2>What was outdated</h2>
-      <ul>
-        <li>Examples referred to <code>.emw</code> files even though default assets are now <code>.js</code>.</li>
-        <li>UI examples omitted JSX and imported components, which is how the shipped scripts are written.</li>
-        <li>Device examples used legacy globals such as <code>digitalWrite</code>, <code>SPI</code>, <code>Wire</code>, and <code>Serial</code>.</li>
-        <li>The built-in script list missed the current signal/radio-focused defaults and their module dependencies.</li>
-        <li>The docs under-described the local-first contract: UI snapshots and events, not terminal logging, are the script automation surface.</li>
-      </ul>
-
       <h2>How scripts run</h2>
       <ol>
         <li>The app loads the visible runtime libraries from the bundled script assets.</li>

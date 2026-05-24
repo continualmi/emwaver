@@ -109,11 +109,8 @@ export default function SupportPage() {
                 q: "What does the Agent do?",
                 a: (
                   <>
-                    The Agent assists with writing, debugging, explaining, and improving{" "}
-                    <code className="font-mono text-sm bg-[color:var(--code-bg)] border border-[color:var(--code-border)] rounded-md px-1.5 py-0.5 text-[color:var(--code-text)]">
-                      .emw
-                    </code>{" "}
-                    scripts. It can also help configure hardware peripherals and
+                    The Agent assists with writing, debugging, explaining, and improving local
+                    JavaScript scripts. It can also help configure hardware peripherals and
                     troubleshoot signal issues. Agent usage is optional and metered
                     through the paid Continual MI API. See{" "}
                     <Link href="/emwaver/docs/scripts" className="text-[color:var(--sky)] underline decoration-[color:var(--link-underline)] hover:decoration-[color:var(--link-underline-hover)]">
