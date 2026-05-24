@@ -8,7 +8,7 @@ use emwaver_linux_core::{
     TransportKind,
 };
 use emwaver_linux_firmware::{
-    esp32_flash::plan_bundled_esp32s3_serial,
+    esp32_flash::{flash_esp32_serial_with_progress, plan_bundled_esp32s3_serial},
     stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
     FirmwarePlan, FirmwareTarget,
 };
@@ -2107,7 +2107,11 @@ fn present_firmware_dialog(parent: &adw::ApplicationWindow, selected: Option<Dev
     let validate_button = gtk::Button::builder().label("Validate Bundle").build();
     let flash_button = gtk::Button::builder()
         .label(if is_esp { "Flash ESP32" } else { "Flash STM32" })
-        .sensitive(!is_esp && stm32_plan.is_ok())
+        .sensitive(if is_esp {
+            esp32_plan.is_ok()
+        } else {
+            stm32_plan.is_ok()
+        })
         .build();
     actions.append(&validate_button);
     actions.append(&flash_button);
@@ -2137,20 +2141,46 @@ fn present_firmware_dialog(parent: &adw::ApplicationWindow, selected: Option<Dev
     }
     {
         let log_view = log_view.clone();
+        let is_esp = is_esp;
         flash_button.connect_clicked(move |button| {
             button.set_sensitive(false);
-            append_log(&log_view, "Starting STM32 DFU flash with bundled firmware...");
-            match plan_bundled_stm32_dfu() {
-                Ok(plan) => match flash_stm32_dfu_with_progress(&plan, |line| {
-                    append_log(&log_view, line)
-                }) {
-                    Ok(()) => append_log(
-                        &log_view,
-                        "STM32 firmware installed. Disconnect and reconnect the device to continue.",
-                    ),
-                    Err(err) => append_log(&log_view, &format!("STM32 DFU flash failed: {err}")),
-                },
-                Err(err) => append_log(&log_view, &format!("STM32 plan failed: {err}")),
+            if is_esp {
+                append_log(
+                    &log_view,
+                    "Starting ESP32 serial flash with bundled firmware...",
+                );
+                append_log(
+                    &log_view,
+                    "Hold BOOT/RESET as needed so the flash-capable serial port is in bootloader mode.",
+                );
+                match plan_bundled_esp32s3_serial() {
+                    Ok(plan) => match flash_esp32_serial_with_progress(&plan, None, |line| {
+                        append_log(&log_view, line)
+                    }) {
+                        Ok(()) => append_log(
+                            &log_view,
+                            "ESP32 firmware installed. Reconnect the device in Run Mode.",
+                        ),
+                        Err(err) => append_log(&log_view, &format!("ESP32 serial flash failed: {err}")),
+                    },
+                    Err(err) => append_log(&log_view, &format!("ESP32 plan failed: {err}")),
+                }
+            } else {
+                append_log(&log_view, "Starting STM32 DFU flash with bundled firmware...");
+                match plan_bundled_stm32_dfu() {
+                    Ok(plan) => match flash_stm32_dfu_with_progress(&plan, |line| {
+                        append_log(&log_view, line)
+                    }) {
+                        Ok(()) => append_log(
+                            &log_view,
+                            "STM32 firmware installed. Disconnect and reconnect the device to continue.",
+                        ),
+                        Err(err) => {
+                            append_log(&log_view, &format!("STM32 DFU flash failed: {err}"))
+                        }
+                    },
+                    Err(err) => append_log(&log_view, &format!("STM32 plan failed: {err}")),
+                }
             }
             button.set_sensitive(true);
         });
@@ -2271,7 +2301,7 @@ fn firmware_status_text(
             ),
             Err(err) => format!("ESP32 bundled image plan failed: {err}"),
         });
-        lines.push("ESP32 serial flashing backend is still pending; the app validates bundled fixed-offset images and shows bootloader guidance now.".to_string());
+        lines.push("ESP32 serial flashing uses the bundled esptool-compatible helper with fixed-offset images. Manual BOOT/RESET may be required on development boards.".to_string());
     } else {
         lines.push(match stm32_plan {
             Ok(plan) => format!("STM32 bundled DFU plan ready: {} image.", plan.images.len()),

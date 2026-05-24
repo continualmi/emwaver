@@ -34,6 +34,12 @@ pub enum FirmwareError {
     DfuUnavailable(String),
     #[error("dfu flash failed: {0}")]
     DfuFlash(String),
+    #[error("missing firmware helper: {0}")]
+    MissingHelper(String),
+    #[error("firmware helper failed: {0}")]
+    HelperFailed(String),
+    #[error("esp serial port unavailable: {0}")]
+    EspSerialUnavailable(String),
     #[error("flashing backend is not implemented yet: {0}")]
     NotImplemented(&'static str),
 }
