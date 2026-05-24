@@ -1,7 +1,7 @@
 "use client";
 /* eslint-disable @next/next/no-img-element */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { getCatalogImageFallbackPath } from "@/lib/emwaver/catalogImageFallback";
 
 export function CatalogImage({
@@ -15,6 +15,10 @@ export function CatalogImage({
 }) {
   const preferredSrc = getCatalogImageFallbackPath(src) ?? src;
   const [currentSrc, setCurrentSrc] = useState(preferredSrc);
+
+  useEffect(() => {
+    setCurrentSrc(preferredSrc);
+  }, [preferredSrc]);
 
   return (
     <img
