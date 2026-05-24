@@ -164,7 +164,7 @@ pub fn build_main_window(app: &adw::Application) {
         .build();
     editor_stack.add_named(&editor_scroll, Some("editor"));
     editor_stack.add_named(&preview_scroll, Some("preview"));
-    editor_stack.set_visible_child_name("editor");
+    editor_stack.set_visible_child_name("preview");
     let script_title = gtk::Label::builder()
         .label("No Script")
         .xalign(0.0)
@@ -203,6 +203,7 @@ pub fn build_main_window(app: &adw::Application) {
     let preview_button = gtk::ToggleButton::builder()
         .icon_name("view-reveal-symbolic")
         .tooltip_text("Toggle runtime output")
+        .active(true)
         .build();
 
     let log_view = gtk::TextView::builder()
@@ -420,12 +421,17 @@ pub fn build_main_window(app: &adw::Application) {
         let log_view = log_view.clone();
         let active_session = Rc::clone(&active_session);
         let active_script_id = Rc::clone(&active_script_id);
+        let editor_stack = editor_stack.clone();
+        let preview_root = preview_root.clone();
+        let preview_runtime = Rc::clone(&preview_runtime);
+        let preview_button = preview_button.clone();
         let action = gio::SimpleAction::new("script-run", Some(&String::static_variant_type()));
         action.connect_activate(move |_, parameter| {
             let Some(script_id) = parameter.and_then(|value| value.get::<String>()) else {
                 append_log(&log_view, "No script was provided to run.");
                 return;
             };
+            select_script_by_id(&script_list, &script_items, &script_row_indices, &script_id);
             let item = script_repository
                 .list_scripts()
                 .ok()
@@ -452,6 +458,22 @@ pub fn build_main_window(app: &adw::Application) {
                     BTreeMap::new()
                 }
             };
+            render_source_preview(
+                &preview_root,
+                &preview_runtime,
+                &item.name,
+                &source,
+                &module_sources,
+            );
+            editor_stack.set_visible_child_name("preview");
+            preview_button.set_active(true);
+            if active_script_id.borrow().as_deref() == Some(item.id.as_str()) {
+                append_log(
+                    &log_view,
+                    &format!("Restored running script {}.", item.name),
+                );
+                return;
+            }
             let result = model.borrow_mut().run_script(&item.name, source.clone());
             match result {
                 Ok(session) => {
@@ -781,38 +803,16 @@ pub fn build_main_window(app: &adw::Application) {
                     .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                     .to_string();
                 *preview_runtime.borrow_mut() = None;
-                clear_box(&preview_root);
-                preview_root.append(&section_label(&format!("{name} Runtime Output")));
                 match script_repository.module_sources() {
-                    Ok(modules) => match ScriptUiRuntime::new(&source, &modules) {
-                        Ok(mut runtime) => match runtime.tree() {
-                            Ok(Some(tree)) => {
-                                *preview_runtime.borrow_mut() = Some(runtime);
-                                render_script_preview_tree(
-                                    &preview_root,
-                                    &preview_runtime,
-                                    &tree.root,
-                                    "Rendered from the live script UI runtime.",
-                                );
-                            }
-                            Ok(None) => {
-                                *preview_runtime.borrow_mut() = Some(runtime);
-                                preview_root.append(&runtime_status_label(
-                                    "No script UI tree was rendered.",
-                                ));
-                            }
-                            Err(err) => {
-                                preview_root.append(&runtime_status_label(&format!(
-                                    "Script UI render failed: {err}"
-                                )));
-                            }
-                        },
-                        Err(err) => {
-                            preview_root.append(&runtime_status_label(&format!(
-                                "Script UI render failed: {err}"
-                            )));
-                        }
-                    },
+                    Ok(modules) => {
+                        render_source_preview(
+                            &preview_root,
+                            &preview_runtime,
+                            &name,
+                            &source,
+                            &modules,
+                        );
+                    }
                     Err(err) => {
                         preview_root
                             .append(&runtime_status_label(&format!("Module load failed: {err}")));
@@ -1284,6 +1284,45 @@ fn render_script_preview_tree(
     preview_root.append(&section_label("Runtime Output"));
     preview_root.append(&runtime_status_label(status));
     preview_root.append(&render_script_node(root, runtime, preview_root));
+}
+
+fn render_source_preview(
+    preview_root: &gtk::Box,
+    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    name: &str,
+    source: &str,
+    module_sources: &BTreeMap<String, String>,
+) {
+    *runtime.borrow_mut() = None;
+    clear_box(preview_root);
+    preview_root.append(&section_label(&format!("{name} Runtime Output")));
+    match ScriptUiRuntime::new(source, module_sources) {
+        Ok(mut script_runtime) => match script_runtime.tree() {
+            Ok(Some(tree)) => {
+                *runtime.borrow_mut() = Some(script_runtime);
+                render_script_preview_tree(
+                    preview_root,
+                    runtime,
+                    &tree.root,
+                    "Rendered from the live script UI runtime.",
+                );
+            }
+            Ok(None) => {
+                *runtime.borrow_mut() = Some(script_runtime);
+                preview_root.append(&runtime_status_label("No script UI tree was rendered."));
+            }
+            Err(err) => {
+                preview_root.append(&runtime_status_label(&format!(
+                    "Script UI render failed: {err}"
+                )));
+            }
+        },
+        Err(err) => {
+            preview_root.append(&runtime_status_label(&format!(
+                "Script UI render failed: {err}"
+            )));
+        }
+    }
 }
 
 fn invoke_script_handler(
@@ -2120,7 +2159,7 @@ fn append_script_row(
         } else {
             "Run script"
         })
-        .sensitive(script.is_runnable() && !is_running)
+        .sensitive(script.is_runnable())
         .build();
     run_button.set_action_name(Some("win.script-run"));
     run_button.set_action_target_value(Some(&script.id.to_variant()));
