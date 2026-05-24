@@ -85,14 +85,18 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
   },
   {
     platform: "Windows",
-    label: "Coming Soon",
+    label: "Preview",
     icon: "Win",
     accent: "sky",
-    description: "Windows support is planned after the V1 mobile launch.",
+    description: "Windows preview build for testing local EMWaver workflows on Windows 11.",
     actions: [
       {
-        label: "Coming soon",
-        muted: true,
+        label: "Download EXE installer",
+        href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
+      },
+      {
+        label: "Download ZIP",
+        href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
       },
     ],
   },
@@ -217,11 +221,12 @@ export default function InstallPage() {
             <p className="mt-4 max-w-2xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
               Install EMWaver on iOS or Android, connect a supported board via USB-C,
               and run local scripts without accounts or cloud activation. macOS is also
-              available for development and advanced use, with Windows and Linux planned after V1.
+              available for development and advanced use. Windows preview downloads are available,
+              with Linux planned after V1.
             </p>
 
             <div className="mt-6 flex flex-wrap gap-2">
-              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows coming soon", "Linux coming soon"].map((label) => (
+              {["App Store", "Google Play internal test", "Android APK", "macOS DMG", "Windows EXE", "Windows ZIP", "Linux coming soon"].map((label) => (
                 <div
                   key={label}
                   className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface)] px-3 py-1.5 text-xs font-medium text-[color:var(--ink-dim)]"

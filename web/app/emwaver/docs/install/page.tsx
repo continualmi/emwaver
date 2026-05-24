@@ -47,11 +47,23 @@ function InstallOptions() {
         <div className="pt-2 text-sm text-[color:var(--ink-dim)]">For firmware flashing, multi-device bench testing, and advanced development.</div>
       </a>
 
-      <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Windows support is planned after the V1 mobile launch.</div>
-      </div>
+      <a
+        href={`${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`}
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows — Preview</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">EXE installer</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Preview Windows installer for testing local EMWaver workflows.</div>
+      </a>
+
+      <a
+        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`}
+        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
+      >
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows — Preview</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">ZIP</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Portable Windows preview package from the release assets.</div>
+      </a>
 
       <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
         <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Linux</div>
@@ -75,7 +87,7 @@ export default function InstallDocPage() {
       <p>
         iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
         Android is available through the Google Play internal test and as a direct APK download. macOS is available
-        for development and advanced use, and Windows and Linux are coming soon after V1.
+        for development and advanced use. Windows preview downloads are available, and Linux is coming soon after V1.
       </p>
       <InstallOptions />
 
