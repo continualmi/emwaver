@@ -11,7 +11,7 @@ const nav = [
   { href: "/emwaver/install", label: "Install" },
   { href: "/emwaver/docs", label: "Documentation" },
   { href: "/emwaver/videos", label: "Videos" },
-  { href: societyRouteUrl("/community"), label: "Community" },
+  { href: societyRouteUrl("/society"), label: "Community" },
 ];
 
 export function SiteHeader() {

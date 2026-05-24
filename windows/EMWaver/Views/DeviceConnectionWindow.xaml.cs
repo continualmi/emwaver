@@ -1,0 +1,200 @@
+using System;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
+using EMWaver.Models;
+using EMWaver.Services;
+
+namespace EMWaver.Views;
+
+public partial class DeviceConnectionWindow : Window
+{
+    private readonly WindowsDeviceManager _device;
+    private readonly FirmwareUpdateManager _updater;
+    private readonly DispatcherTimer _refreshTimer;
+
+    public DeviceConnectionWindow(WindowsDeviceManager device, FirmwareUpdateManager updater)
+    {
+        InitializeComponent();
+        _device = device;
+        _updater = updater;
+
+        _device.PropertyChanged += OnDevicePropertyChanged;
+        _updater.PropertyChanged += OnFirmwarePropertyChanged;
+        _device.AvailablePorts.CollectionChanged += (_, __) => Dispatcher.Invoke(RefreshDeviceList);
+
+        _refreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _refreshTimer.Tick += async (_, __) => await _device.RefreshPortsAsync();
+
+        Closed += (_, __) =>
+        {
+            _device.PropertyChanged -= OnDevicePropertyChanged;
+            _updater.PropertyChanged -= OnFirmwarePropertyChanged;
+            _refreshTimer.Stop();
+        };
+
+        Loaded += (_, __) =>
+        {
+            RefreshDeviceList();
+            RefreshFirmwareState();
+            _refreshTimer.Start();
+        };
+    }
+
+    private bool IsEspDevice =>
+        (_device.ConnectedBoardType ?? _device.LastDetectedBoardType ?? "").StartsWith("esp", StringComparison.OrdinalIgnoreCase);
+
+    private void OnDevicePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            RefreshDeviceList();
+            RefreshWifiState();
+        });
+    }
+
+    private void OnFirmwarePropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        Dispatcher.Invoke(RefreshFirmwareState);
+    }
+
+    private void RefreshDeviceList()
+    {
+        var ports = _device.AvailablePorts.ToList();
+
+        NoDevicesText.Visibility = ports.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+
+        DeviceList.Items.Clear();
+        foreach (var port in ports)
+        {
+            var isConnected = _device.IsConnected && _device.ConnectedPort?.DisplayName == port.DisplayName;
+            var panel = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+
+            var infoText = new TextBlock
+            {
+                Text = port.DisplayName,
+                VerticalAlignment = VerticalAlignment.Center,
+                FontSize = 13,
+                Margin = new Thickness(0, 0, 12, 0),
+            };
+
+            if (isConnected)
+            {
+                infoText.Text += "  (Connected)";
+                infoText.FontWeight = System.Windows.FontWeights.SemiBold;
+            }
+
+            DockPanel.SetDock(infoText, Dock.Left);
+            panel.Children.Add(infoText);
+
+            if (!isConnected)
+            {
+                var connectBtn = new Button
+                {
+                    Content = "Connect",
+                    Width = 80,
+                    Height = 26,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                };
+                var capturedPort = port;
+                connectBtn.Click += async (_, __) =>
+                {
+                    await _device.ConnectAsync(capturedPort);
+                };
+                DockPanel.SetDock(connectBtn, Dock.Right);
+                panel.Children.Add(connectBtn);
+            }
+            else
+            {
+                var disconnectBtn = new Button
+                {
+                    Content = "Disconnect",
+                    Width = 80,
+                    Height = 26,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                };
+                disconnectBtn.Click += (_, __) => _device.Disconnect();
+                DockPanel.SetDock(disconnectBtn, Dock.Right);
+                panel.Children.Add(disconnectBtn);
+            }
+
+            DeviceList.Items.Add(panel);
+        }
+
+        DeviceList.Visibility = ports.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void RefreshWifiState()
+    {
+        WifiCard.Visibility = IsEspDevice ? Visibility.Visible : Visibility.Collapsed;
+
+        // Update status
+        if (!string.IsNullOrWhiteSpace(_device.WiFiProvisioningStatus))
+        {
+            WifiStatusText.Text = _device.WiFiProvisioningStatus;
+            WifiStatusText.Foreground = _device.IsWiFiProvisioningError
+                ? FindResource("AppErrorTextBrush") as System.Windows.Media.Brush
+                : System.Windows.SystemColors.GrayTextBrush;
+            WifiStatusText.Visibility = Visibility.Visible;
+        }
+
+        WifiSendButton.IsEnabled = _device.IsConnected && !_device.IsWiFiProvisioning;
+    }
+
+    private void RefreshFirmwareState()
+    {
+        var isEsp = IsEspDevice;
+
+        FirmwareDescText.Text = isEsp
+            ? "Flash the bundled ESP32 firmware."
+            : "Update the connected board firmware.";
+
+        FirmwareButton.Content = isEsp ? "Flash firmware" : "Update firmware";
+
+        var canUpdate = _device.IsConnected ||
+                        _updater.DfuConnected ||
+                        _updater.EspBootloaderConnected ||
+                        !string.IsNullOrWhiteSpace(_updater.EspBootloaderPort);
+
+        FirmwareButton.IsEnabled = canUpdate;
+    }
+
+    private async void OnWifiSendClick(object sender, RoutedEventArgs e)
+    {
+        var ssid = WifiSSIDBox.Text.Trim();
+        var password = WifiPasswordBox.Password;
+
+        if (string.IsNullOrWhiteSpace(ssid))
+        {
+            WifiStatusText.Text = "SSID is required.";
+            WifiStatusText.Foreground = FindResource("AppErrorTextBrush") as System.Windows.Media.Brush;
+            WifiStatusText.Visibility = Visibility.Visible;
+            return;
+        }
+
+        await _device.ProvisionWiFiAsync(ssid, password);
+    }
+
+    private async void OnWifiClearClick(object sender, RoutedEventArgs e)
+    {
+        await _device.ClearWiFiProvisioningAsync();
+    }
+
+    private async void OnWifiStatusClick(object sender, RoutedEventArgs e)
+    {
+        await _device.RefreshWiFiProvisioningStatusAsync();
+    }
+
+    private void OnFirmwareClick(object sender, RoutedEventArgs e)
+    {
+        var boardType = _device.ConnectedBoardType ?? _device.LastDetectedBoardType;
+        var fwWindow = new FirmwareUpdateWindow(_device, _updater, boardType)
+        {
+            Owner = this,
+        };
+        fwWindow.ShowDialog();
+    }
+
+    private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+}
