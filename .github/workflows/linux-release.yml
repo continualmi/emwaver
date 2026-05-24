@@ -42,7 +42,9 @@ jobs:
             libdbus-1-dev \
             desktop-file-utils \
             appstream \
-            dpkg-dev
+            dbus-x11 \
+            dpkg-dev \
+            xvfb
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
@@ -59,6 +61,15 @@ jobs:
         env:
           EMWAVER_LINUX_VERSION: ${{ inputs.version || '0.1.0-preview' }}
         run: linux/scripts/package-linux.sh
+
+      - name: Verify Linux packages
+        run: linux/scripts/verify-linux-package.sh dist
+
+      - name: Install and smoke-test Linux package
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y ./dist/EMWaver-linux-amd64.deb
+          linux/scripts/verify-linux-install.sh
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
