@@ -228,14 +228,21 @@ pub fn build_main_window(app: &adw::Application) {
     log_view
         .buffer()
         .set_text("Simulator ready. Local scripts run without an Agent key.\n");
+    let run_log_visible = load_run_log_visible();
     let log_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
-        .vexpand(true)
+        .vexpand(false)
         .min_content_height(150)
+        .max_content_height(180)
         .hscrollbar_policy(PolicyType::Automatic)
         .vscrollbar_policy(PolicyType::Automatic)
         .child(&log_view)
-        .visible(load_run_log_visible())
+        .build();
+    let run_log_expander = gtk::Expander::builder()
+        .label("Run Log")
+        .expanded(run_log_visible)
+        .visible(run_log_visible)
+        .child(&log_scroll)
         .build();
 
     let agent_messages = gtk::Box::new(Orientation::Vertical, 8);
@@ -348,11 +355,8 @@ pub fn build_main_window(app: &adw::Application) {
     ));
     main_stack.append(&search_entry);
     main_stack.append(&read_only_notice);
-    let run_log_label = section_label("Run Log");
-    run_log_label.set_visible(log_scroll.is_visible());
     main_stack.append(&editor_stack);
-    main_stack.append(&run_log_label);
-    main_stack.append(&log_scroll);
+    main_stack.append(&run_log_expander);
 
     let agent_workspace = gtk::Paned::new(Orientation::Horizontal);
     agent_workspace.set_start_child(Some(&main_stack));
@@ -844,11 +848,15 @@ pub fn build_main_window(app: &adw::Application) {
         });
     }
     {
+        run_log_expander.connect_expanded_notify(|expander| {
+            let _ = save_run_log_visible(expander.is_expanded());
+        });
+    }
+    {
         let window = window.clone();
-        let run_log_label = run_log_label.clone();
-        let log_scroll = log_scroll.clone();
+        let run_log_expander = run_log_expander.clone();
         settings_button.connect_clicked(move |_| {
-            present_settings_dialog(&window, &run_log_label, &log_scroll);
+            present_settings_dialog(&window, &run_log_expander);
         });
     }
     add_shortcuts(app, &window);
@@ -2396,11 +2404,7 @@ fn app_settings_path() -> PathBuf {
         .join("app.json")
 }
 
-fn present_settings_dialog(
-    parent: &adw::ApplicationWindow,
-    run_log_label: &gtk::Label,
-    run_log_scroll: &gtk::ScrolledWindow,
-) {
+fn present_settings_dialog(parent: &adw::ApplicationWindow, run_log_expander: &gtk::Expander) {
     let config = load_agent_configuration();
     let dialog = gtk::Dialog::builder()
         .transient_for(parent)
@@ -2467,7 +2471,7 @@ fn present_settings_dialog(
     workspace_card.append(&section_label("Workspace"));
     let show_run_log = gtk::CheckButton::builder()
         .label("Show Run Log")
-        .active(run_log_scroll.is_visible())
+        .active(run_log_expander.is_visible())
         .build();
     workspace_card.append(&show_run_log);
     workspace_card.append(
@@ -2497,12 +2501,11 @@ fn present_settings_dialog(
     root.append(&gtk::Frame::builder().child(&device_card).build());
 
     {
-        let run_log_label = run_log_label.clone();
-        let run_log_scroll = run_log_scroll.clone();
+        let run_log_expander = run_log_expander.clone();
         show_run_log.connect_toggled(move |button| {
             let visible = button.is_active();
-            run_log_label.set_visible(visible);
-            run_log_scroll.set_visible(visible);
+            run_log_expander.set_visible(visible);
+            run_log_expander.set_expanded(visible);
             let _ = save_run_log_visible(visible);
         });
     }
