@@ -104,7 +104,10 @@ Settings surface includes app-level preferences such as:
 The Agent pane stores local chat conversations and messages in SQLite at
 `%LOCALAPPDATA%/EMWaver/agent-chat.sqlite`. The stored chats are local UI state;
 Agent requests still use the user-provided API key and the configured MGPT
-endpoint, and local scripts/hardware remain usable without that key.
+endpoint, and local scripts/hardware remain usable without that key. The WPF
+Agent drawer includes macOS-like starter cards, local conversation selection,
+rename/delete controls, cancellable sends, code block rendering, copy actions,
+and best-effort apply actions for full code blocks and simple unified patches.
 
 ## 3.6 Current parity status vs macOS
 

@@ -354,6 +354,36 @@ public partial class ScriptsView : UserControl
         UpdateAgentPanelState();
     }
 
+    private void OnAgentRenameChatClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_agentChatId)) return;
+        var current = (AgentConversationBox.SelectedItem as AgentApi.Conversation)?.DisplayTitle ?? "Chat";
+        var title = Microsoft.VisualBasic.Interaction.InputBox("Conversation name:", "Rename Agent Chat", current);
+        if (string.IsNullOrWhiteSpace(title)) return;
+        _agentChats.RenameConversation(_agentChatId, title);
+        LoadAgentConversations();
+    }
+
+    private void OnAgentDeleteChatClick(object sender, RoutedEventArgs e)
+    {
+        if (string.IsNullOrWhiteSpace(_agentChatId)) return;
+        var result = MessageBox.Show("Delete this Agent conversation?", "Delete Agent Chat", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+        _agentChats.ArchiveConversation(_agentChatId);
+        _agentChatId = "";
+        AgentMessagesPanel.Children.Clear();
+        AgentSuggestionsPanel.Visibility = Visibility.Visible;
+        LoadAgentConversations();
+        if (AgentConversationBox.SelectedItem is AgentApi.Conversation conversation)
+        {
+            LoadAgentConversation(conversation.Id);
+        }
+        else
+        {
+            StartNewAgentConversation("Chat");
+        }
+    }
+
     private void OnAgentOpenKeyClick(object sender, RoutedEventArgs e)
     {
         var window = new AgentKeyWindow(AppServices.AgentKeys)
@@ -503,7 +533,7 @@ public partial class ScriptsView : UserControl
 
     private void OnAgentInputKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
+        if (e.Key == Key.Enter && Keyboard.Modifiers != ModifierKeys.Shift)
         {
             SendAgentMessage();
             e.Handled = true;
@@ -604,12 +634,7 @@ public partial class ScriptsView : UserControl
             MaxWidth = 280,
         };
 
-        var tb = new TextBlock
-        {
-            Text = text,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 12,
-        };
+        var content = BuildAgentMessageContent(role, text);
 
         if (role == "user")
         {
@@ -617,7 +642,6 @@ public partial class ScriptsView : UserControl
             bubble.BorderBrush = FindResource("AgentBubbleBorderBrush") as System.Windows.Media.Brush;
             bubble.BorderThickness = new Thickness(1);
             bubble.HorizontalAlignment = HorizontalAlignment.Right;
-            tb.Foreground = FindResource("PlotLineBrush") as System.Windows.Media.Brush;
         }
         else if (role == "error")
         {
@@ -630,24 +654,113 @@ public partial class ScriptsView : UserControl
             bubble.BorderThickness = new Thickness(0);
         }
 
-        bubble.Child = tb;
+        bubble.Child = content;
         AgentMessagesPanel.Children.Add(bubble);
 
-        if (role == "assistant" && TryExtractCodeBlock(text, out var code))
+        if (role == "assistant")
         {
-            var applyButton = new Button
+            if (TryExtractPatch(text, out var patch))
             {
-                Content = "Apply code to editor",
-                Margin = new Thickness(0, -4, 0, 8),
-                Padding = new Thickness(8, 3, 8, 3),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Tag = code,
-            };
-            applyButton.Click += OnApplyAgentCodeClick;
-            AgentMessagesPanel.Children.Add(applyButton);
+                var patchButton = MakeAgentActionButton("Apply patch to editor", patch);
+                patchButton.Click += OnApplyAgentPatchClick;
+                AgentMessagesPanel.Children.Add(patchButton);
+            }
+            else if (TryExtractCodeBlock(text, out var code))
+            {
+                var applyButton = MakeAgentActionButton("Apply code to editor", code);
+                applyButton.Click += OnApplyAgentCodeClick;
+                AgentMessagesPanel.Children.Add(applyButton);
+            }
         }
 
         AgentMessagesScroll.ScrollToEnd();
+    }
+
+    private FrameworkElement BuildAgentMessageContent(string role, string text)
+    {
+        var panel = new StackPanel { Orientation = Orientation.Vertical };
+        var pattern = new Regex("```(?<lang>[a-zA-Z0-9_-]+)?\\s*(?<code>.*?)```", RegexOptions.Singleline);
+        var index = 0;
+        foreach (Match match in pattern.Matches(text ?? string.Empty))
+        {
+            AddAgentTextSegment(panel, (text ?? string.Empty)[index..match.Index], role);
+            AddAgentCodeSegment(panel, match.Groups["code"].Value.Trim(), match.Groups["lang"].Value.Trim());
+            index = match.Index + match.Length;
+        }
+        AddAgentTextSegment(panel, (text ?? string.Empty)[index..], role);
+        return panel;
+    }
+
+    private void AddAgentTextSegment(Panel panel, string segment, string role)
+    {
+        var cleaned = (segment ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(cleaned)) return;
+        panel.Children.Add(new TextBlock
+        {
+            Text = cleaned,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 12,
+            Foreground = role == "user" ? FindResource("PlotLineBrush") as System.Windows.Media.Brush : FindResource("AppTextForegroundBrush") as System.Windows.Media.Brush,
+            Margin = new Thickness(0, 0, 0, 4),
+        });
+    }
+
+    private void AddAgentCodeSegment(Panel panel, string code, string language)
+    {
+        if (string.IsNullOrWhiteSpace(code)) return;
+        var header = new DockPanel { Margin = new Thickness(0, 4, 0, 2) };
+        header.Children.Add(new TextBlock
+        {
+            Text = string.IsNullOrWhiteSpace(language) ? "code" : language,
+            FontSize = 10,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = FindResource("AppTextSecondaryBrush") as System.Windows.Media.Brush,
+        });
+        var copy = new Button
+        {
+            Content = "Copy",
+            Tag = code,
+            Padding = new Thickness(6, 1, 6, 1),
+            HorizontalAlignment = HorizontalAlignment.Right,
+        };
+        DockPanel.SetDock(copy, Dock.Right);
+        copy.Click += OnCopyAgentCodeClick;
+        header.Children.Add(copy);
+        panel.Children.Add(header);
+        panel.Children.Add(new TextBox
+        {
+            Text = code,
+            IsReadOnly = true,
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.NoWrap,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            MaxHeight = 180,
+            FontFamily = new System.Windows.Media.FontFamily("Consolas"),
+            FontSize = 11,
+            Background = FindResource("EditorSurfaceBackgroundBrush") as System.Windows.Media.Brush,
+            Foreground = FindResource("EditorTextForegroundBrush") as System.Windows.Media.Brush,
+        });
+    }
+
+    private Button MakeAgentActionButton(string title, string payload)
+    {
+        return new Button
+        {
+            Content = title,
+            Margin = new Thickness(0, -4, 0, 8),
+            Padding = new Thickness(8, 3, 8, 3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Tag = payload,
+        };
+    }
+
+    private void OnCopyAgentCodeClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string code)
+        {
+            Clipboard.SetText(code);
+        }
     }
 
     private void OnApplyAgentCodeClick(object sender, RoutedEventArgs e)
@@ -663,12 +776,127 @@ public partial class ScriptsView : UserControl
         HandleTogglePreview(false);
     }
 
+    private void OnApplyAgentPatchClick(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button button || button.Tag is not string patch || string.IsNullOrWhiteSpace(patch)) return;
+        if (_selectedScript?.IsBundled == true)
+        {
+            ShowError("This is a bundled read-only script. Use Make Copy before applying Agent patches.");
+            return;
+        }
+
+        if (TryApplyUnifiedPatch(EditorTextBox.Text, patch, out var updated, out var error))
+        {
+            EditorTextBox.Text = updated;
+            HandleTogglePreview(false);
+        }
+        else
+        {
+            ShowError(error ?? "Could not apply patch.");
+        }
+    }
+
     private static bool TryExtractCodeBlock(string text, out string code)
     {
         code = string.Empty;
         var match = Regex.Match(text ?? string.Empty, "```(?:emw|javascript|js)?\\s*(.*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         if (!match.Success) return false;
         code = match.Groups[1].Value.Trim();
-        return !string.IsNullOrWhiteSpace(code);
+        return !string.IsNullOrWhiteSpace(code) && !code.StartsWith("--- ", StringComparison.Ordinal);
+    }
+
+    private static bool TryExtractPatch(string text, out string patch)
+    {
+        patch = string.Empty;
+        var match = Regex.Match(text ?? string.Empty, "```(?:diff|patch)?\\s*(?<patch>--- .*?)```", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+            patch = match.Groups["patch"].Value.Trim();
+            return true;
+        }
+
+        var idx = (text ?? string.Empty).IndexOf("--- ", StringComparison.Ordinal);
+        if (idx >= 0 && (text ?? string.Empty).IndexOf("@@", idx, StringComparison.Ordinal) >= 0)
+        {
+            patch = (text ?? string.Empty)[idx..].Trim();
+            return true;
+        }
+        return false;
+    }
+
+    private static bool TryApplyUnifiedPatch(string original, string patch, out string updated, out string? error)
+    {
+        updated = original;
+        error = null;
+        var source = original.Replace("\r\n", "\n").Split('\n').ToList();
+        var lines = patch.Replace("\r\n", "\n").Split('\n');
+        var output = new List<string>();
+        var sourceIndex = 0;
+        var i = 0;
+        while (i < lines.Length)
+        {
+            if (!lines[i].StartsWith("@@", StringComparison.Ordinal))
+            {
+                i++;
+                continue;
+            }
+
+            var header = Regex.Match(lines[i], @"@@\s+-(\d+)(?:,\d+)?\s+\+(\d+)(?:,\d+)?\s+@@");
+            if (!header.Success)
+            {
+                error = "Unsupported patch hunk header.";
+                return false;
+            }
+
+            var oldStart = Math.Max(0, int.Parse(header.Groups[1].Value) - 1);
+            while (sourceIndex < oldStart && sourceIndex < source.Count)
+            {
+                output.Add(source[sourceIndex++]);
+            }
+
+            i++;
+            while (i < lines.Length && !lines[i].StartsWith("@@", StringComparison.Ordinal))
+            {
+                var line = lines[i];
+                if (line.Length == 0)
+                {
+                    i++;
+                    continue;
+                }
+
+                var marker = line[0];
+                var body = line.Length > 1 ? line[1..] : string.Empty;
+                if (marker == ' ')
+                {
+                    if (sourceIndex >= source.Count || source[sourceIndex] != body)
+                    {
+                        error = "Patch context did not match the current editor text.";
+                        return false;
+                    }
+                    output.Add(source[sourceIndex++]);
+                }
+                else if (marker == '-')
+                {
+                    if (sourceIndex >= source.Count || source[sourceIndex] != body)
+                    {
+                        error = "Patch removal did not match the current editor text.";
+                        return false;
+                    }
+                    sourceIndex++;
+                }
+                else if (marker == '+')
+                {
+                    output.Add(body);
+                }
+                i++;
+            }
+        }
+
+        while (sourceIndex < source.Count)
+        {
+            output.Add(source[sourceIndex++]);
+        }
+        updated = string.Join(Environment.NewLine, output);
+        return true;
     }
 }

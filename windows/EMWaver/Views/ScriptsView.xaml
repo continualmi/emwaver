@@ -235,13 +235,17 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <ComboBox x:Name="AgentConversationBox"
                                   Grid.Column="0"
                                   Height="26"
                                   DisplayMemberPath="DisplayTitle"
                                   SelectionChanged="OnAgentConversationChanged" />
-                        <Button Grid.Column="1" Content="New" Width="48" Height="26" Margin="6,0,0,0" Click="OnAgentNewChatClick" />
+                        <Button Grid.Column="1" Content="New" Width="44" Height="26" Margin="6,0,0,0" Click="OnAgentNewChatClick" />
+                        <Button Grid.Column="2" Content="Rename" Width="58" Height="26" Margin="4,0,0,0" Click="OnAgentRenameChatClick" />
+                        <Button Grid.Column="3" Content="Delete" Width="50" Height="26" Margin="4,0,0,0" Click="OnAgentDeleteChatClick" />
                     </Grid>
                 </Border>
 
@@ -301,7 +305,10 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="AgentInputBox" Grid.Column="0" Height="28"
+                            <TextBox x:Name="AgentInputBox" Grid.Column="0" MinHeight="34" MaxHeight="96"
+                                     AcceptsReturn="True"
+                                     TextWrapping="Wrap"
+                                     VerticalScrollBarVisibility="Auto"
                                      KeyDown="OnAgentInputKeyDown" />
                             <Button x:Name="AgentSendButton" Grid.Column="1" Content="Send" Width="50" Height="28"
                                     Margin="4,0,0,0" Click="OnAgentSendClick" />

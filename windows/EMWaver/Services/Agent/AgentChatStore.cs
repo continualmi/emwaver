@@ -79,6 +79,21 @@ public sealed class AgentChatStore
         cmd.ExecuteNonQuery();
     }
 
+    internal void RenameConversation(string conversationId, string title)
+    {
+        var trimmed = (title ?? string.Empty).Trim();
+        if (trimmed.Length > 48) trimmed = trimmed[..48].Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) trimmed = "Chat";
+
+        using var db = Open();
+        using var cmd = db.CreateCommand();
+        cmd.CommandText = "update agent_conversations set title = $title, updated_at_ms = $updated where id = $id";
+        cmd.Parameters.AddWithValue("$title", trimmed);
+        cmd.Parameters.AddWithValue("$updated", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
+        cmd.Parameters.AddWithValue("$id", conversationId);
+        cmd.ExecuteNonQuery();
+    }
+
     internal void ArchiveConversation(string conversationId)
     {
         using var db = Open();
