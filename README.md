@@ -85,6 +85,28 @@ The platform is designed around:
 
 A current cross-platform validation path is `cc1101.js`, which exercises register-level reads and writes against a CC1101 radio through supported hardware.
 
+## Hardware
+
+EMWaver is not one fixed device. The repository includes nine hardware designs for different form factors and capabilities, from compact USB-C controllers to radio, infrared, GPIO, RFID, and ESP32-S3 wireless builds.
+
+See the public build page for the hardware catalog:
+
+- [emwaver.ai/emwaver/build](https://emwaver.ai/emwaver/build/)
+
+The hardware sources live under [`hardware/`](hardware/):
+
+- EMWaver Air — ESP32-S3 all-in-one wireless board with CC1101-class radio, IR, and expansion
+- EMWaver Carrier — ESP32-S3 DevKit carrier for modular builds
+- EMWaver Core — compact STM32 USB control board
+- EMWaver Link — integrated STM32 USB radio board
+- EMWaver Shield — ESP32-S3 shield-style prototyping board
+- GPIO Waver — GPIO, SPI, UART, and I2C prototyping board
+- Infrared Waver — IR capture and replay board
+- ISM Waver — sub-GHz ISM / CC1101 board
+- RFID Waver — 13.56 MHz RFID add-on
+
+Each hardware folder can include schematics, PCB previews, Gerbers, BOMs, pick-and-place files, and case files where available.
+
 ## Repository Map
 
 ```text
