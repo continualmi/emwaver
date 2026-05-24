@@ -27,7 +27,7 @@ use emwaver_linux_transport::{
 };
 use gtk::glib::object::IsA;
 use gtk::glib::variant::{StaticVariantType, ToVariant};
-use gtk::glib::{self, ControlFlow};
+use gtk::glib::{self, ControlFlow, Propagation};
 use gtk::{gio, Align, Orientation, PolicyType};
 use sourceview5::prelude::*;
 use std::cell::{Cell, RefCell};
@@ -1511,27 +1511,90 @@ fn render_script_node(
         }
         "card" => {
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
-            apply_node_padding(&content, node);
+            apply_node_padding_or_default(&content, node, 16);
+            if node.props.contains_key("title") || node.props.contains_key("subtitle") {
+                let header = gtk::Box::new(Orientation::Vertical, 3);
+                if let Some(title) = node_prop_string(node, "title") {
+                    header.append(
+                        &gtk::Label::builder()
+                            .label(title)
+                            .xalign(0.0)
+                            .css_classes(vec!["heading"])
+                            .build(),
+                    );
+                }
+                if let Some(subtitle) = node_prop_string(node, "subtitle") {
+                    header.append(
+                        &gtk::Label::builder()
+                            .label(subtitle)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(vec!["dim-label"])
+                            .build(),
+                    );
+                }
+                content.append(&header);
+            }
             for child in &node.children {
                 content.append(&render_script_node(child, session, preview_root));
             }
             gtk::Frame::builder().child(&content).build().upcast()
         }
         "tile" => {
-            let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
-            apply_node_padding(&content, node);
-            for child in &node.children {
-                content.append(&render_script_node(child, session, preview_root));
+            let content = gtk::Box::new(Orientation::Vertical, 2);
+            apply_node_padding_or_default(&content, node, 10);
+            if node.children.is_empty() {
+                if let Some(title) = node_prop_string(node, "title") {
+                    content.append(
+                        &gtk::Label::builder()
+                            .label(title.to_uppercase())
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(vec!["dim-label"])
+                            .build(),
+                    );
+                }
+                if let Some(value) = node_prop_string(node, "value") {
+                    let value_label = gtk::Label::builder()
+                        .label(value)
+                        .wrap(true)
+                        .xalign(0.0)
+                        .build();
+                    if node_prop_bool(node, "monospaceValue").unwrap_or(false) {
+                        value_label.add_css_class("monospace");
+                    }
+                    content.append(&value_label);
+                }
+                if let Some(subtitle) = node_prop_string(node, "subtitle") {
+                    content.append(
+                        &gtk::Label::builder()
+                            .label(subtitle)
+                            .wrap(true)
+                            .xalign(0.0)
+                            .css_classes(vec!["dim-label"])
+                            .build(),
+                    );
+                }
+            } else {
+                for child in &node.children {
+                    content.append(&render_script_node(child, session, preview_root));
+                }
             }
-            let button = gtk::Button::builder().child(&content).build();
-            if let Some(token) = node.handlers.get("tap").cloned() {
+            content.set_hexpand(true);
+            let disabled = node_prop_bool(node, "disabled").unwrap_or(false);
+            if let Some(token) = node.handlers.get("tap").cloned().filter(|_| !disabled) {
+                let button = gtk::Button::builder().child(&content).build();
+                button.add_css_class("flat");
                 let session = Rc::clone(session);
                 let action_label = node_label(node);
                 button.connect_clicked(move |_| {
                     invoke_script_action(&session, token.clone(), action_label.clone(), Vec::new());
                 });
+                button.upcast()
+            } else {
+                content.set_sensitive(!disabled);
+                gtk::Frame::builder().child(&content).build().upcast()
             }
-            button.upcast()
         }
         "text" => {
             let text = node_text(node);
@@ -1665,7 +1728,19 @@ fn render_script_node(
                 .upcast()
         }
         "picker" => {
+            let container = gtk::Box::new(Orientation::Vertical, 6);
+            if let Some(label) = node_prop_string(node, "label") {
+                container.append(
+                    &gtk::Label::builder()
+                        .label(label)
+                        .xalign(0.0)
+                        .css_classes(vec!["heading"])
+                        .build(),
+                );
+            }
             let combo = gtk::ComboBoxText::new();
+            combo.set_hexpand(true);
+            block_combo_scroll_changes(&combo);
             let selected = node_prop_string(node, "selected").unwrap_or_default();
             if let Some(options) = node
                 .props
@@ -1704,7 +1779,8 @@ fn render_script_node(
                     );
                 });
             }
-            combo.upcast()
+            container.append(&combo);
+            container.upcast()
         }
         "toggle" => {
             let toggle = gtk::CheckButton::builder()
@@ -1726,21 +1802,40 @@ fn render_script_node(
             toggle.upcast()
         }
         "grid" => {
-            let grid = gtk::Grid::builder()
-                .column_spacing(node_spacing(node))
-                .row_spacing(node_spacing(node))
-                .build();
-            let columns = node_prop_i32(node, "columns").unwrap_or(2).max(1);
-            for (index, child) in node.children.iter().enumerate() {
-                grid.attach(
-                    &render_script_node(child, session, preview_root),
-                    (index as i32) % columns,
-                    (index as i32) / columns,
-                    1,
-                    1,
-                );
+            if let Some(min_width) = node_prop_i32(node, "minColumnWidth") {
+                let flow = gtk::FlowBox::builder()
+                    .column_spacing(node_spacing(node) as u32)
+                    .row_spacing(node_spacing(node) as u32)
+                    .selection_mode(gtk::SelectionMode::None)
+                    .homogeneous(true)
+                    .min_children_per_line(1)
+                    .max_children_per_line(6)
+                    .build();
+                flow.set_hexpand(true);
+                for child in &node.children {
+                    let widget = render_script_node(child, session, preview_root);
+                    widget.set_size_request(min_width, -1);
+                    widget.set_hexpand(true);
+                    flow.insert(&widget, -1);
+                }
+                flow.upcast()
+            } else {
+                let grid = gtk::Grid::builder()
+                    .column_spacing(node_spacing(node))
+                    .row_spacing(node_spacing(node))
+                    .build();
+                let columns = node_prop_i32(node, "columns").unwrap_or(2).max(1);
+                for (index, child) in node.children.iter().enumerate() {
+                    grid.attach(
+                        &render_script_node(child, session, preview_root),
+                        (index as i32) % columns,
+                        (index as i32) / columns,
+                        1,
+                        1,
+                    );
+                }
+                grid.upcast()
             }
-            grid.upcast()
         }
         "plot" => runtime_status_label("Plot rendering is pending for Linux GTK.").upcast(),
         "modal" => {
@@ -1775,6 +1870,31 @@ fn render_script_node(
         _ => runtime_status_label(&format!("Unsupported script UI node: {}", node.node_type))
             .upcast(),
     }
+}
+
+fn apply_node_padding_or_default(
+    widget: &impl IsA<gtk::Widget>,
+    node: &ScriptUiNode,
+    fallback: i32,
+) {
+    apply_node_padding(widget, node);
+    if !node.props.contains_key("padding") {
+        widget.set_margin_top(fallback);
+        widget.set_margin_bottom(fallback);
+        widget.set_margin_start(fallback);
+        widget.set_margin_end(fallback);
+    }
+}
+
+fn block_combo_scroll_changes(combo: &gtk::ComboBoxText) {
+    let scroll = gtk::EventControllerScroll::new(
+        gtk::EventControllerScrollFlags::VERTICAL
+            | gtk::EventControllerScrollFlags::HORIZONTAL
+            | gtk::EventControllerScrollFlags::DISCRETE,
+    );
+    scroll.set_propagation_phase(gtk::PropagationPhase::Capture);
+    scroll.connect_scroll(|_, _, _| Propagation::Stop);
+    combo.add_controller(scroll);
 }
 
 fn apply_node_padding(widget: &impl IsA<gtk::Widget>, node: &ScriptUiNode) {
