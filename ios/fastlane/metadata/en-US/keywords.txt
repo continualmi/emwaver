@@ -1,1 +1,1 @@
-electronics,microcontroller,stm32,esp32,firmware,scripting,hardware
+electronics,microcontroller,esp32,stm32,usb-midi,firmware,scripting,hardware,agent

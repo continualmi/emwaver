@@ -1,1 +1,1 @@
-Improves the EMWaver iOS app for local script and device workflows.
+Improves local script, device connection, firmware asset, and optional Agent-key workflows for the iOS launch.
