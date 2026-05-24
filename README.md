@@ -42,7 +42,7 @@ Use EMWaver when you want to:
 
 - explore sensors, radios, GPIO, SPI, I2C, ADC, and board peripherals quickly;
 - run repeatable hardware scripts from a phone, tablet, or desktop;
-- keep hardware control local instead of depending on a hosted relay;
+- control hardware directly from native apps;
 - use native apps instead of asking every user to install an MCU toolchain;
 - bring AI assistance into hardware scripting while keeping the local runtime useful on its own.
 
