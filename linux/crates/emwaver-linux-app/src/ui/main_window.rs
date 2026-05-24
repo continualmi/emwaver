@@ -17,7 +17,7 @@ use emwaver_linux_runtime::{
 };
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
-    command::send_command,
+    command::{send_command, RESPONSE_BUSY, RESPONSE_ERR, RESPONSE_OK},
     usb::{
         LinuxUsbManager, LinuxUsbMidiTransport, UsbAccessState, UsbDeviceCandidate, UsbDeviceRole,
     },
@@ -37,7 +37,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 struct ScriptUiSessionHandle {
@@ -874,7 +874,17 @@ struct ScriptPacketBridge {
     log_tx: mpsc::Sender<ScriptUiSessionEvent>,
     runtime: Option<tokio::runtime::Runtime>,
     transport: Option<Box<dyn EmwaverTransport>>,
+    transport_session_source: Option<u8>,
+    last_transport_session_heartbeat: Option<Instant>,
 }
+
+const EMW_OP_TRANSPORT_SESSION: u8 = 0x0B;
+const EMW_TRANSPORT_SESSION_CONNECT: u8 = 0x01;
+const EMW_TRANSPORT_SESSION_DISCONNECT: u8 = 0x02;
+const EMW_TRANSPORT_SESSION_HEARTBEAT: u8 = 0x03;
+const EMW_COMMAND_SOURCE_BLE: u8 = 0x02;
+const EMW_COMMAND_SOURCE_WIFI: u8 = 0x03;
+const TRANSPORT_SESSION_HEARTBEAT_INTERVAL: Duration = Duration::from_secs(2);
 
 impl ScriptPacketBridge {
     fn new(device: Option<DeviceRecord>, log_tx: mpsc::Sender<ScriptUiSessionEvent>) -> Self {
@@ -883,6 +893,8 @@ impl ScriptPacketBridge {
             log_tx,
             runtime: None,
             transport: None,
+            transport_session_source: None,
+            last_transport_session_heartbeat: None,
         }
     }
 
@@ -903,6 +915,7 @@ impl ScriptPacketBridge {
             "TX {transport_name} opcode=0x{opcode:02X} timeout={timeout_ms}ms bytes={}",
             hex_bytes(packet, 18)
         ));
+        self.send_transport_session_heartbeat_if_due()?;
         let runtime = self
             .runtime
             .as_ref()
@@ -943,6 +956,94 @@ impl ScriptPacketBridge {
                 Err(message)
             }
         }
+    }
+
+    fn send_transport_session_command(
+        &mut self,
+        subcommand: u8,
+        source: u8,
+        timeout_ms: u64,
+    ) -> Result<Vec<u8>, String> {
+        let runtime = self
+            .runtime
+            .as_ref()
+            .ok_or_else(|| "Script packet runtime is not available.".to_string())?;
+        let transport = self
+            .transport
+            .as_mut()
+            .ok_or_else(|| "Script packet transport is not available.".to_string())?;
+        let command = [EMW_OP_TRANSPORT_SESSION, subcommand, source];
+        runtime
+            .block_on(async {
+                tokio::time::timeout(
+                    Duration::from_millis(timeout_ms),
+                    send_command(transport.as_mut(), &command),
+                )
+                .await
+            })
+            .map_err(|_| "Transport session command timed out.".to_string())?
+            .map_err(|err| format!("Transport session command failed: {err}"))
+    }
+
+    fn begin_transport_session_if_required(&mut self) -> Result<(), String> {
+        let source = match self.device.as_ref().map(|device| &device.transport) {
+            Some(TransportKind::Ble) => EMW_COMMAND_SOURCE_BLE,
+            Some(TransportKind::Wifi) => EMW_COMMAND_SOURCE_WIFI,
+            _ => return Ok(()),
+        };
+        self.log(format!(
+            "SESSION CONNECT {} source=0x{source:02X}",
+            self.device
+                .as_ref()
+                .map(|device| transport_label(&device.transport))
+                .unwrap_or("DEVICE")
+        ));
+        let response =
+            self.send_transport_session_command(EMW_TRANSPORT_SESSION_CONNECT, source, 1500)?;
+        match response.first().copied() {
+            Some(RESPONSE_OK) => {
+                self.transport_session_source = Some(source);
+                self.last_transport_session_heartbeat = Some(Instant::now());
+                self.log("SESSION CONNECTED");
+                Ok(())
+            }
+            Some(RESPONSE_BUSY) => {
+                Err("Device is busy with another transport session.".to_string())
+            }
+            Some(RESPONSE_ERR) => Err("Device rejected the transport session command.".to_string()),
+            Some(status) => Err(format!(
+                "Device returned unexpected transport session status 0x{status:02X}."
+            )),
+            None => Err("Device returned an empty transport session response.".to_string()),
+        }
+    }
+
+    fn send_transport_session_heartbeat_if_due(&mut self) -> Result<(), String> {
+        let Some(source) = self.transport_session_source else {
+            return Ok(());
+        };
+        if self
+            .last_transport_session_heartbeat
+            .map(|instant| instant.elapsed() < TRANSPORT_SESSION_HEARTBEAT_INTERVAL)
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+        let response =
+            self.send_transport_session_command(EMW_TRANSPORT_SESSION_HEARTBEAT, source, 1000)?;
+        if response.first().copied() == Some(RESPONSE_OK) {
+            self.last_transport_session_heartbeat = Some(Instant::now());
+            Ok(())
+        } else {
+            Err("Transport session heartbeat was rejected by the device.".to_string())
+        }
+    }
+
+    fn end_transport_session(&mut self) {
+        let Some(source) = self.transport_session_source.take() else {
+            return;
+        };
+        let _ = self.send_transport_session_command(EMW_TRANSPORT_SESSION_DISCONNECT, source, 1000);
     }
 
     fn ensure_connected(&mut self) -> Result<(), String> {
@@ -1001,6 +1102,11 @@ impl ScriptPacketBridge {
         self.log(format!("CONNECTED {}", transport_label(&device.transport)));
         self.runtime = Some(runtime);
         self.transport = Some(transport);
+        if let Err(err) = self.begin_transport_session_if_required() {
+            self.transport = None;
+            self.runtime = None;
+            return Err(err);
+        }
         Ok(())
     }
 }
@@ -1024,6 +1130,7 @@ fn hex_bytes(bytes: &[u8], max: usize) -> String {
 
 impl Drop for ScriptPacketBridge {
     fn drop(&mut self) {
+        self.end_transport_session();
         if let (Some(runtime), Some(mut transport)) = (self.runtime.as_ref(), self.transport.take())
         {
             let _ = runtime.block_on(transport.close());
