@@ -4,76 +4,198 @@ const RELEASE_DOWNLOAD_BASE = "https://github.com/continualmi/emwaver/releases/d
 const APP_STORE_URL = "https://apps.apple.com/us/app/emwaver/id6747035939";
 const PLAY_INTERNAL_TEST_URL = "https://play.google.com/apps/internaltest/4701722111058615569";
 
-function InstallOptions() {
+type BadgeLink = {
+  label: string;
+  href: string;
+  badge: string;
+  badgeAlt: string;
+  note?: string;
+};
+
+type FileDownload = {
+  label: string;
+  href: string;
+  ext: string;
+  detail: string;
+};
+
+function DownloadIcon() {
   return (
-    <div className="grid gap-3 md:grid-cols-2">
-      <a
-        href={APP_STORE_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">iOS — Primary</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">App Store</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Install EMWaver on iPhone or iPad through the App Store.</div>
-      </a>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 3v11m0 0 4-4m-4 4-4-4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
 
-      <a
-        href={PLAY_INTERNAL_TEST_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Primary</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Google Play internal test</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Join internal testing to install EMWaver through Google Play.</div>
-      </a>
+function BadgeDownload({ item }: { item: BadgeLink }) {
+  return (
+    <a
+      href={item.href}
+      target="_blank"
+      rel="noreferrer"
+      className="inline-flex flex-col items-start gap-2 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-4 no-underline transition hover:bg-[color:var(--surface-2)]"
+    >
+      <img
+        src={item.badge}
+        alt={item.badgeAlt}
+        className="h-12 w-auto max-w-[220px] object-contain drop-shadow-[0_10px_24px_var(--shadow)]"
+      />
+      <div>
+        <div className="text-sm font-semibold text-[color:var(--ink)]">{item.label}</div>
+        {item.note ? <div className="mt-1 text-xs leading-5 text-[color:var(--ink-dim)]">{item.note}</div> : null}
+      </div>
+    </a>
+  );
+}
 
-      <a
-        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`}
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Android — Direct</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">APK</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Direct APK download outside Google Play.</div>
-      </a>
+function FileDownloadCard({ item }: { item: FileDownload }) {
+  return (
+    <a
+      href={item.href}
+      target="_blank"
+      rel="noreferrer"
+      className="group inline-flex min-h-16 items-center gap-3 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-4 py-3 text-left text-[color:var(--ink)] no-underline transition hover:bg-[color:var(--surface-3)]"
+    >
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[color:var(--sky-tint-2)] text-[color:var(--sky)] transition group-hover:bg-[color:var(--sky-tint)]">
+        <DownloadIcon />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-semibold">
+          <span>{item.label}</span>
+          <span className="rounded-full border border-[color:var(--line)] bg-[color:var(--surface-3)] px-2 py-0.5 text-[10px] font-bold tracking-[0.12em] text-[color:var(--sky)]">
+            .{item.ext}
+          </span>
+        </div>
+        <div className="mt-1 text-xs leading-5 text-[color:var(--ink-dim)]">{item.detail}</div>
+      </div>
+    </a>
+  );
+}
 
-      <a
-        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`}
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">macOS — Dev & Advanced</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">DMG</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">For firmware flashing, multi-device bench testing, and advanced development.</div>
-      </a>
+function PlatformPanel({
+  eyebrow,
+  title,
+  description,
+  badge,
+  badgeAlt,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  badge?: string;
+  badgeAlt?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--sky)]">{eyebrow}</div>
+          <div className="mt-2 text-lg font-semibold text-[color:var(--ink)]">{title}</div>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--ink-dim)]">{description}</p>
+        </div>
+        {badge ? (
+          <div className="rounded-2xl border border-[color:var(--line)] bg-black/45 px-4 py-3">
+            <img src={badge} alt={badgeAlt || title} className="h-11 w-auto max-w-[210px] object-contain opacity-95" />
+          </div>
+        ) : null}
+      </div>
+      <div className="mt-5 flex flex-wrap gap-3">{children}</div>
+    </div>
+  );
+}
 
-      <a
-        href={`${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`}
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows — Preview</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">EXE installer</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Preview Windows installer for testing local EMWaver workflows.</div>
-      </a>
+function InstallOptions() {
+  const mobile: BadgeLink[] = [
+    {
+      label: "iPhone and iPad",
+      href: APP_STORE_URL,
+      badge: "/emwaver/badges/app-store.png",
+      badgeAlt: "Download on the App Store",
+      note: "Primary iOS install path.",
+    },
+    {
+      label: "Android through Google Play",
+      href: PLAY_INTERNAL_TEST_URL,
+      badge: "/emwaver/badges/google-play.png",
+      badgeAlt: "Get it on Google Play",
+      note: "Join the internal test.",
+    },
+    {
+      label: "Android direct download",
+      href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-android.apk`,
+      badge: "/emwaver/badges/android-apk.png",
+      badgeAlt: "Download Android APK",
+      note: "Direct APK outside Google Play.",
+    },
+  ];
 
-      <a
-        href={`${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`}
-        className="no-underline rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface)] p-5 hover:bg-[color:var(--surface-2)]"
-      >
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Windows — Preview</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">ZIP</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Portable Windows preview package from the release assets.</div>
-      </a>
+  return (
+    <div className="grid gap-4">
+      <div>
+        <h3 className="mt-0">Mobile apps</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          {mobile.map((item) => <BadgeDownload key={item.label} item={item} />)}
+        </div>
+      </div>
+
+      <div>
+        <h3>Desktop downloads</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-2">
+          <PlatformPanel
+            eyebrow="macOS — Dev & Advanced"
+            title="macOS app"
+            description="For firmware flashing, multi-device bench testing, and long automation runs."
+            badge="/emwaver/badges/macos.png"
+            badgeAlt="Available for Mac"
+          >
+            <FileDownloadCard
+              item={{
+                label: "Download macOS app",
+                href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
+                ext: "DMG",
+                detail: "Disk image installer",
+              }}
+            />
+          </PlatformPanel>
+
+          <PlatformPanel
+            eyebrow="Windows — Preview"
+            title="Windows app"
+            description="Preview build for testing local EMWaver workflows on Windows 11."
+            badge="/emwaver/badges/windows.png"
+            badgeAlt="Available for Windows"
+          >
+            <FileDownloadCard
+              item={{
+                label: "Download installer",
+                href: `${RELEASE_DOWNLOAD_BASE}/EMWaverSetup-windows-x64.exe`,
+                ext: "EXE",
+                detail: "Recommended Windows installer",
+              }}
+            />
+            <FileDownloadCard
+              item={{
+                label: "Download portable package",
+                href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-windows-x64.zip`,
+                ext: "ZIP",
+                detail: "Portable build archive",
+              }}
+            />
+          </PlatformPanel>
+        </div>
+      </div>
 
       <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
-        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Linux</div>
+        <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">Linux</div>
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
         <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Linux packaging is planned after the V1 mobile launch.</div>
       </div>
     </div>
   );
 }
-
 
 export default function InstallDocPage() {
   return (
@@ -155,7 +277,6 @@ export default function InstallDocPage() {
         for ordinary local hardware control. See the{" "}
         <Link href="/emwaver/docs/scripts">scripting guide</Link> for script details.
       </p>
-
     </>
   );
 }
