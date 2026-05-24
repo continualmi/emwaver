@@ -861,28 +861,48 @@ pub fn build_main_window(app: &adw::Application) {
     window.present();
 }
 
-fn script_packet_handler(device: Option<DeviceRecord>) -> PacketHandler {
-    let mut bridge = ScriptPacketBridge::new(device);
-    Box::new(move |packet, _timeout_ms| bridge.send(&packet))
+fn script_packet_handler(
+    device: Option<DeviceRecord>,
+    log_tx: mpsc::Sender<ScriptUiSessionEvent>,
+) -> PacketHandler {
+    let mut bridge = ScriptPacketBridge::new(device, log_tx);
+    Box::new(move |packet, timeout_ms| bridge.send(&packet, timeout_ms))
 }
 
 struct ScriptPacketBridge {
     device: Option<DeviceRecord>,
+    log_tx: mpsc::Sender<ScriptUiSessionEvent>,
     runtime: Option<tokio::runtime::Runtime>,
     transport: Option<Box<dyn EmwaverTransport>>,
 }
 
 impl ScriptPacketBridge {
-    fn new(device: Option<DeviceRecord>) -> Self {
+    fn new(device: Option<DeviceRecord>, log_tx: mpsc::Sender<ScriptUiSessionEvent>) -> Self {
         Self {
             device,
+            log_tx,
             runtime: None,
             transport: None,
         }
     }
 
-    fn send(&mut self, packet: &[u8]) -> Result<Vec<u8>, String> {
+    fn log(&self, line: impl Into<String>) {
+        let _ = self.log_tx.send(ScriptUiSessionEvent::Log(line.into()));
+    }
+
+    fn send(&mut self, packet: &[u8], timeout_ms: u32) -> Result<Vec<u8>, String> {
         self.ensure_connected()?;
+        let device = self
+            .device
+            .as_ref()
+            .ok_or_else(|| "No selected device for script packet send.".to_string())?;
+        let transport_name = transport_label(&device.transport);
+        let opcode = packet.first().copied().unwrap_or(0);
+        let timeout_ms = timeout_ms.max(1);
+        self.log(format!(
+            "TX {transport_name} opcode=0x{opcode:02X} timeout={timeout_ms}ms bytes={}",
+            hex_bytes(packet, 18)
+        ));
         let runtime = self
             .runtime
             .as_ref()
@@ -891,16 +911,38 @@ impl ScriptPacketBridge {
             .transport
             .as_mut()
             .ok_or_else(|| "Script packet transport is not available.".to_string())?;
-        runtime
-            .block_on(async {
-                tokio::time::timeout(
-                    Duration::from_secs(3),
-                    send_command(transport.as_mut(), packet),
-                )
-                .await
-            })
-            .map_err(|_| "Device command timed out waiting for a board response.".to_string())?
-            .map_err(|err| format!("Device command failed: {err}"))
+        let result = runtime.block_on(async {
+            tokio::time::timeout(
+                Duration::from_millis(timeout_ms as u64),
+                send_command(transport.as_mut(), packet),
+            )
+            .await
+        });
+        match result {
+            Ok(Ok(response)) => {
+                self.log(format!(
+                    "RX {transport_name} opcode=0x{opcode:02X} bytes={}",
+                    hex_bytes(&response, 18)
+                ));
+                Ok(response)
+            }
+            Ok(Err(err)) => {
+                let message = format!("Device command failed: {err}");
+                self.log(format!(
+                    "ERR {transport_name} opcode=0x{opcode:02X} {message}"
+                ));
+                Err(message)
+            }
+            Err(_) => {
+                let message = format!(
+                    "Device command timed out waiting for a board response (opcode 0x{opcode:02X}, timeout {timeout_ms}ms)."
+                );
+                self.log(format!(
+                    "TIMEOUT {transport_name} opcode=0x{opcode:02X} after {timeout_ms}ms"
+                ));
+                Err(message)
+            }
+        }
     }
 
     fn ensure_connected(&mut self) -> Result<(), String> {
@@ -915,6 +957,11 @@ impl ScriptPacketBridge {
             .enable_all()
             .build()
             .map_err(|err| format!("Failed to create script packet runtime: {err}"))?;
+        self.log(format!(
+            "CONNECT {} {}",
+            transport_label(&device.transport),
+            device.display_name
+        ));
         let mut transport: Box<dyn EmwaverTransport> = match device.transport {
             TransportKind::Simulator => {
                 return Err("Simulator is an internal test transport and is not available in the Linux app UI.".to_string());
@@ -942,13 +989,37 @@ impl ScriptPacketBridge {
                 ));
             }
         };
-        runtime
-            .block_on(transport.connect())
-            .map_err(|err| format!("Device connect failed: {err}"))?;
+        if let Err(err) = runtime.block_on(transport.connect()) {
+            let message = format!("Device connect failed: {err}");
+            self.log(format!(
+                "CONNECT FAILED {} {}",
+                transport_label(&device.transport),
+                message
+            ));
+            return Err(message);
+        }
+        self.log(format!("CONNECTED {}", transport_label(&device.transport)));
         self.runtime = Some(runtime);
         self.transport = Some(transport);
         Ok(())
     }
+}
+
+fn hex_bytes(bytes: &[u8], max: usize) -> String {
+    if bytes.is_empty() {
+        return "<empty>".to_string();
+    }
+    let take = bytes.len().min(max);
+    let mut text = bytes
+        .iter()
+        .take(take)
+        .map(|byte| format!("{byte:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if bytes.len() > take {
+        text.push_str(&format!(" … (+{})", bytes.len() - take));
+    }
+    text
 }
 
 impl Drop for ScriptPacketBridge {
@@ -1298,7 +1369,7 @@ fn start_script_ui_session(
         let mut runtime = match ScriptUiRuntime::new_with_session_handlers(
             &source,
             &module_sources,
-            script_packet_handler(device),
+            script_packet_handler(device, event_tx.clone()),
             Box::new(move |tree| {
                 let _ = render_event_tx.send(ScriptUiSessionEvent::Rendered {
                     root: tree.root,
