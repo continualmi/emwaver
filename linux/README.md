@@ -45,6 +45,47 @@ Important constraints:
 - User-facing UI should say "script action" or describe the action itself; internal terms like "handler" should not leak into normal UI.
 - The end state is parity with macOS `_scriptSendPacket`/`ScriptDeviceWrapper.sendCommand(...)`: local, account-free, real device I/O, with the UI remaining responsive.
 
+## Native transport contract
+
+Linux transport/runtime work must start from the native app contract, not from isolated packet symptoms. The script device path is a lifecycle:
+
+```text
+connect selected local transport
+  -> claim transport session when required
+  -> send command-lane packets / receive response lanes
+  -> keep the session alive
+  -> release the transport session
+  -> close transport
+```
+
+This is required for BLE and Wi-Fi script hardware access and for ESP32-class transports that arbitrate command ownership. Matching SysEx bytes alone is not enough: firmware may ignore, reject, or return unusable data if the host has not claimed the transport session first.
+
+Session opcodes are part of the internal transport contract:
+
+```text
+0x0B 0x01 <source>   transport-session connect
+0x0B 0x02 <source>   transport-session disconnect
+0x0B 0x03 <source>   transport-session heartbeat
+
+source 0x01          USB
+source 0x02          BLE
+source 0x03          Wi-Fi
+```
+
+Native references:
+- macOS: `MacUSBManager.beginScriptTransportSession(...)`, `sendTransportSessionCommandInternal(...)`, `startTransportSessionHeartbeatInternal(...)`.
+- Android: `USBService.beginTransportSession(...)`, `startHeartbeat(...)`, `endTransportSession(...)`.
+- Windows: `WindowsDeviceManager` transport-session lifecycle.
+
+Linux requirements:
+- BLE and Wi-Fi script packet sessions must send CONNECT before normal hardware packets.
+- Long-lived BLE/Wi-Fi sessions must send HEARTBEAT while claimed.
+- Sessions must send DISCONNECT during teardown when practical.
+- Packet bridge fixes must compare against the full native lifecycle before changing framing/codec code.
+- Do not add Linux-only fake responses or widget shims to mask missing session ownership.
+
+See also `TRANSPORT_PARITY_AUDIT.md` for active differences and follow-up items.
+
 ## Workspace layout
 
 - `crates/emwaver-linux-app` - GTK4/libadwaita app shell.
