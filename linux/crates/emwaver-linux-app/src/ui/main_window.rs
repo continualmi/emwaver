@@ -12,6 +12,7 @@ use emwaver_linux_transport::{
     EmwaverTransport,
 };
 use gtk::{gio, Align, Orientation, PolicyType};
+use sourceview5::prelude::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -94,12 +95,21 @@ pub fn build_main_window(app: &adw::Application) {
     )));
     device_list.select_row(device_list.row_at_index(0).as_ref());
 
-    let editor = gtk::TextView::builder()
+    let source_buffer = make_source_buffer();
+    let editor = sourceview5::View::builder()
+        .buffer(&source_buffer)
         .monospace(true)
+        .show_line_numbers(true)
+        .highlight_current_line(true)
+        .auto_indent(true)
+        .insert_spaces_instead_of_tabs(true)
+        .tab_width(4)
+        .smart_backspace(true)
         .top_margin(12)
         .bottom_margin(12)
         .left_margin(12)
         .right_margin(12)
+        .wrap_mode(gtk::WrapMode::None)
         .build();
     let editor_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
@@ -108,6 +118,32 @@ pub fn build_main_window(app: &adw::Application) {
         .vscrollbar_policy(PolicyType::Automatic)
         .child(&editor)
         .build();
+    let preview_label = gtk::Label::builder()
+        .label("Run a script to preview its UI here.")
+        .wrap(true)
+        .xalign(0.0)
+        .yalign(0.0)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(16)
+        .margin_end(16)
+        .css_classes(vec!["dim-label"])
+        .build();
+    let preview_scroll = gtk::ScrolledWindow::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .hscrollbar_policy(PolicyType::Automatic)
+        .vscrollbar_policy(PolicyType::Automatic)
+        .child(&preview_label)
+        .build();
+    let editor_stack = gtk::Stack::builder()
+        .hexpand(true)
+        .vexpand(true)
+        .transition_type(gtk::StackTransitionType::Crossfade)
+        .build();
+    editor_stack.add_named(&editor_scroll, Some("editor"));
+    editor_stack.add_named(&preview_scroll, Some("preview"));
+    editor_stack.set_visible_child_name("editor");
     let script_title = gtk::Label::builder()
         .label("No Script")
         .xalign(0.0)
@@ -125,6 +161,27 @@ pub fn build_main_window(app: &adw::Application) {
         .xalign(0.0)
         .css_classes(vec!["dim-label"])
         .visible(false)
+        .build();
+    let search_entry = gtk::SearchEntry::builder()
+        .placeholder_text("Find in script")
+        .hexpand(true)
+        .visible(false)
+        .build();
+    let find_button = gtk::Button::builder()
+        .icon_name("edit-find-symbolic")
+        .tooltip_text("Find")
+        .build();
+    let go_to_line_button = gtk::Button::builder()
+        .icon_name("go-jump-symbolic")
+        .tooltip_text("Go to line")
+        .build();
+    let line_wrap_button = gtk::ToggleButton::builder()
+        .icon_name("format-justify-fill-symbolic")
+        .tooltip_text("Toggle line wrap")
+        .build();
+    let preview_button = gtk::ToggleButton::builder()
+        .icon_name("view-reveal-symbolic")
+        .tooltip_text("Toggle script preview")
         .build();
 
     let log_view = gtk::TextView::builder()
@@ -171,6 +228,10 @@ pub fn build_main_window(app: &adw::Application) {
         .selection_mode(gtk::SelectionMode::Single)
         .css_classes(vec!["boxed-list"])
         .build();
+    let script_search_entry = gtk::SearchEntry::builder()
+        .placeholder_text("Search scripts")
+        .hexpand(true)
+        .build();
 
     let library = gtk::Box::new(Orientation::Vertical, 10);
     library.set_margin_top(12);
@@ -178,6 +239,7 @@ pub fn build_main_window(app: &adw::Application) {
     library.set_margin_start(12);
     library.set_margin_end(12);
     library.append(&section_label("Scripts"));
+    library.append(&script_search_entry);
     library.append(&script_list);
 
     let new_script_button = gtk::Button::builder()
@@ -212,9 +274,17 @@ pub fn build_main_window(app: &adw::Application) {
     main_stack.set_margin_bottom(12);
     main_stack.set_margin_start(12);
     main_stack.set_margin_end(12);
-    main_stack.append(&editor_toolbar(&script_title, &script_kind));
+    main_stack.append(&editor_toolbar(
+        &script_title,
+        &script_kind,
+        &find_button,
+        &go_to_line_button,
+        &line_wrap_button,
+        &preview_button,
+    ));
+    main_stack.append(&search_entry);
     main_stack.append(&read_only_notice);
-    main_stack.append(&editor_scroll);
+    main_stack.append(&editor_stack);
     main_stack.append(&section_label("Run Log"));
     main_stack.append(&log_scroll);
     workspace.set_start_child(Some(&main_stack));
@@ -237,6 +307,7 @@ pub fn build_main_window(app: &adw::Application) {
         let script_row_indices = Rc::clone(&script_row_indices);
         let selected_script = Rc::clone(&selected_script);
         let editor = editor.clone();
+        let source_buffer = source_buffer.clone();
         let script_title = script_title.clone();
         let script_kind = script_kind.clone();
         let read_only_notice = read_only_notice.clone();
@@ -253,7 +324,7 @@ pub fn build_main_window(app: &adw::Application) {
             };
             match script_repository.read_script(&item) {
                 Ok(source) => {
-                    editor.buffer().set_text(&source);
+                    source_buffer.set_text(&source);
                     editor.set_editable(item.is_editable());
                     read_only_notice.set_visible(!item.is_editable());
                     script_title.set_label(&item.name);
@@ -281,6 +352,7 @@ pub fn build_main_window(app: &adw::Application) {
         &script_items,
         &script_row_indices,
         &log_view,
+        script_search_entry.text().as_str(),
     );
     script_list.select_row(first_script_row(&script_list, &script_row_indices).as_ref());
     {
@@ -289,8 +361,9 @@ pub fn build_main_window(app: &adw::Application) {
         let script_row_indices = Rc::clone(&script_row_indices);
         let script_list = script_list.clone();
         let selected_script = Rc::clone(&selected_script);
-        let editor = editor.clone();
+        let source_buffer = source_buffer.clone();
         let log_view = log_view.clone();
+        let script_search_entry = script_search_entry.clone();
         new_script_button.connect_clicked(move |_| {
             match script_repository.create_script("script.js", default_script_template()) {
                 Ok(item) => {
@@ -301,9 +374,10 @@ pub fn build_main_window(app: &adw::Application) {
                         &script_items,
                         &script_row_indices,
                         &log_view,
+                        script_search_entry.text().as_str(),
                     );
                     select_script_by_id(&script_list, &script_items, &script_row_indices, &item.id);
-                    editor.buffer().set_text(default_script_template());
+                    source_buffer.set_text(default_script_template());
                     *selected_script.borrow_mut() = Some(item);
                 }
                 Err(err) => append_log(&log_view, &format!("New script failed: {err}")),
@@ -317,6 +391,7 @@ pub fn build_main_window(app: &adw::Application) {
         let script_list = script_list.clone();
         let selected_script = Rc::clone(&selected_script);
         let log_view = log_view.clone();
+        let script_search_entry = script_search_entry.clone();
         copy_script_button.connect_clicked(move |_| {
             let Some(item) = selected_script.borrow().clone() else {
                 append_log(&log_view, "No selected script to copy.");
@@ -334,6 +409,7 @@ pub fn build_main_window(app: &adw::Application) {
                         &script_items,
                         &script_row_indices,
                         &log_view,
+                        script_search_entry.text().as_str(),
                     );
                     select_script_by_id(&script_list, &script_items, &script_row_indices, &copy.id);
                 }
@@ -344,20 +420,90 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let script_repository = Rc::clone(&script_repository);
         let selected_script = Rc::clone(&selected_script);
-        let editor = editor.clone();
+        let source_buffer = source_buffer.clone();
         let log_view = log_view.clone();
         save_script_button.connect_clicked(move |_| {
             let Some(item) = selected_script.borrow().clone() else {
                 append_log(&log_view, "No selected script to save.");
                 return;
             };
-            let buffer = editor.buffer();
-            let source = buffer
-                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+            let source = source_buffer
+                .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                 .to_string();
             match script_repository.save_script(&item, &source) {
                 Ok(()) => append_log(&log_view, &format!("Saved {}.", item.name)),
                 Err(err) => append_log(&log_view, &format!("Save failed: {err}")),
+            }
+        });
+    }
+    {
+        let script_repository = Rc::clone(&script_repository);
+        let script_items = Rc::clone(&script_items);
+        let script_row_indices = Rc::clone(&script_row_indices);
+        let script_list = script_list.clone();
+        let log_view = log_view.clone();
+        script_search_entry.connect_search_changed(move |entry| {
+            refresh_script_list(
+                &script_list,
+                &script_repository,
+                &script_items,
+                &script_row_indices,
+                &log_view,
+                entry.text().as_str(),
+            );
+            script_list.select_row(first_script_row(&script_list, &script_row_indices).as_ref());
+        });
+    }
+    {
+        let search_entry = search_entry.clone();
+        find_button.connect_clicked(move |_| {
+            search_entry.set_visible(!search_entry.is_visible());
+            if search_entry.is_visible() {
+                search_entry.grab_focus();
+            }
+        });
+    }
+    {
+        let source_buffer = source_buffer.clone();
+        search_entry.connect_search_changed(move |entry| {
+            select_first_match(&source_buffer, entry.text().as_str());
+        });
+    }
+    {
+        let window = window.clone();
+        let editor = editor.clone();
+        let source_buffer = source_buffer.clone();
+        go_to_line_button.connect_clicked(move |_| {
+            present_go_to_line_dialog(&window, &editor, &source_buffer);
+        });
+    }
+    {
+        let editor = editor.clone();
+        line_wrap_button.connect_toggled(move |button| {
+            editor.set_wrap_mode(if button.is_active() {
+                gtk::WrapMode::WordChar
+            } else {
+                gtk::WrapMode::None
+            });
+        });
+    }
+    {
+        let editor_stack = editor_stack.clone();
+        let preview_label = preview_label.clone();
+        let selected_script = Rc::clone(&selected_script);
+        preview_button.connect_toggled(move |button| {
+            if button.is_active() {
+                let name = selected_script
+                    .borrow()
+                    .as_ref()
+                    .map(|script| script.name.clone())
+                    .unwrap_or_else(|| "No script".to_string());
+                preview_label.set_label(&format!(
+                    "{name} preview\n\nScript UI rendering will appear here after the Linux ScriptRenderView parity layer is ported. Running a script still uses the local runtime and selected device."
+                ));
+                editor_stack.set_visible_child_name("preview");
+            } else {
+                editor_stack.set_visible_child_name("editor");
             }
         });
     }
@@ -404,7 +550,7 @@ pub fn build_main_window(app: &adw::Application) {
     }
     {
         let model = Rc::clone(&model);
-        let editor = editor.clone();
+        let source_buffer = source_buffer.clone();
         let selected_script = Rc::clone(&selected_script);
         let log_view = log_view.clone();
         let active_session = Rc::clone(&active_session);
@@ -417,9 +563,8 @@ pub fn build_main_window(app: &adw::Application) {
                 append_log(&log_view, &format!("{} is not runnable.", item.name));
                 return;
             }
-            let buffer = editor.buffer();
-            let source = buffer
-                .text(&buffer.start_iter(), &buffer.end_iter(), true)
+            let source = source_buffer
+                .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                 .to_string();
             let result = model.borrow_mut().run_script(&item.name, source);
             match result {
@@ -434,8 +579,8 @@ pub fn build_main_window(app: &adw::Application) {
                     );
                     let execution_log = run_selected_script(
                         &model.borrow().selected_device(),
-                        &buffer
-                            .text(&buffer.start_iter(), &buffer.end_iter(), true)
+                        &source_buffer
+                            .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                             .to_string(),
                     );
                     for line in execution_log {
@@ -637,11 +782,98 @@ fn section_label(text: &str) -> gtk::Label {
         .build()
 }
 
-fn editor_toolbar(title: &gtk::Label, detail: &gtk::Label) -> gtk::Box {
+fn make_source_buffer() -> sourceview5::Buffer {
+    let manager = sourceview5::LanguageManager::default();
+    let buffer = manager
+        .language("javascript")
+        .map(|language| sourceview5::Buffer::with_language(&language))
+        .unwrap_or_else(|| sourceview5::Buffer::new(None::<&gtk::TextTagTable>));
+    buffer.set_highlight_syntax(true);
+    buffer.set_highlight_matching_brackets(true);
+    buffer
+}
+
+fn editor_toolbar(
+    title: &gtk::Label,
+    detail: &gtk::Label,
+    find_button: &gtk::Button,
+    go_to_line_button: &gtk::Button,
+    line_wrap_button: &gtk::ToggleButton,
+    preview_button: &gtk::ToggleButton,
+) -> gtk::Box {
     let toolbar = gtk::Box::new(Orientation::Horizontal, 8);
     toolbar.append(title);
     toolbar.append(detail);
+    let spacer = gtk::Box::new(Orientation::Horizontal, 0);
+    spacer.set_hexpand(true);
+    toolbar.append(&spacer);
+    toolbar.append(find_button);
+    toolbar.append(go_to_line_button);
+    toolbar.append(line_wrap_button);
+    toolbar.append(preview_button);
     toolbar
+}
+
+fn select_first_match(buffer: &sourceview5::Buffer, query: &str) {
+    let query = query.trim();
+    if query.is_empty() {
+        return;
+    }
+    let source = buffer
+        .text(&buffer.start_iter(), &buffer.end_iter(), true)
+        .to_string();
+    let Some(byte_offset) = source.to_lowercase().find(&query.to_lowercase()) else {
+        return;
+    };
+    let char_offset = source[..byte_offset].chars().count() as i32;
+    let char_len = query.chars().count() as i32;
+    let start = buffer.iter_at_offset(char_offset);
+    let end = buffer.iter_at_offset(char_offset + char_len);
+    buffer.select_range(&start, &end);
+}
+
+fn present_go_to_line_dialog(
+    parent: &adw::ApplicationWindow,
+    editor: &sourceview5::View,
+    buffer: &sourceview5::Buffer,
+) {
+    let dialog = gtk::Dialog::builder()
+        .transient_for(parent)
+        .modal(true)
+        .title("Go to Line")
+        .default_width(320)
+        .build();
+    dialog.add_button("Cancel", gtk::ResponseType::Cancel);
+    dialog.add_button("Go", gtk::ResponseType::Accept);
+
+    let entry = gtk::Entry::builder()
+        .input_purpose(gtk::InputPurpose::Number)
+        .text("1")
+        .activates_default(true)
+        .margin_top(16)
+        .margin_bottom(16)
+        .margin_start(16)
+        .margin_end(16)
+        .build();
+    dialog.set_default_response(gtk::ResponseType::Accept);
+    dialog.content_area().append(&entry);
+
+    let editor = editor.clone();
+    let buffer = buffer.clone();
+    dialog.connect_response(move |dialog, response| {
+        if response == gtk::ResponseType::Accept {
+            if let Ok(line) = entry.text().trim().parse::<i32>() {
+                let line = line.clamp(1, buffer.line_count().max(1)) - 1;
+                if let Some(mut iter) = buffer.iter_at_line(line) {
+                    buffer.place_cursor(&iter);
+                    editor.scroll_to_iter(&mut iter, 0.2, true, 0.0, 0.2);
+                    editor.grab_focus();
+                }
+            }
+        }
+        dialog.close();
+    });
+    dialog.present();
 }
 
 fn refresh_script_list(
@@ -650,6 +882,7 @@ fn refresh_script_list(
     items: &Rc<RefCell<Vec<ScriptListItem>>>,
     row_indices: &Rc<RefCell<Vec<Option<usize>>>>,
     log_view: &gtk::TextView,
+    filter_query: &str,
 ) {
     while let Some(row) = list.first_child() {
         list.remove(&row);
@@ -657,13 +890,24 @@ fn refresh_script_list(
     items.borrow_mut().clear();
     row_indices.borrow_mut().clear();
 
-    let scripts = match repository.list_scripts() {
+    let mut scripts = match repository.list_scripts() {
         Ok(scripts) => scripts,
         Err(err) => {
             append_log(log_view, &format!("Script library load failed: {err}"));
             return;
         }
     };
+    let filter_query = filter_query.trim().to_lowercase();
+    if !filter_query.is_empty() {
+        scripts.retain(|script| {
+            script.name.to_lowercase().contains(&filter_query)
+                || script.kind_label().to_lowercase().contains(&filter_query)
+                || script
+                    .section_title()
+                    .to_lowercase()
+                    .contains(&filter_query)
+        });
+    }
 
     let mut current_section = String::new();
     for script in scripts {

@@ -13,4 +13,5 @@ emwaver-linux-firmware = { path = "../emwaver-linux-firmware" }
 emwaver-linux-runtime = { path = "../emwaver-linux-runtime" }
 emwaver-linux-transport = { path = "../emwaver-linux-transport" }
 gtk = { package = "gtk4", version = "0.9" }
+sourceview5 = "0.9.1"
 tokio.workspace = true
