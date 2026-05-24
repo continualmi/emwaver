@@ -6,8 +6,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use btleplug::api::{
-    Central, CharPropFlags, Characteristic, Manager as _, Peripheral as _, ScanFilter,
-    ValueNotification, WriteType,
+    Central, Characteristic, Manager as _, Peripheral as _, ScanFilter, ValueNotification,
+    WriteType,
 };
 use btleplug::platform::{Adapter, Manager, Peripheral};
 use emwaver_linux_core::TransportKind;
@@ -224,18 +224,10 @@ impl EmwaverTransport for LinuxBleTransport {
             .command_characteristic
             .as_ref()
             .ok_or(TransportError::NotConnected)?;
-        let write_type = if characteristic
-            .properties
-            .contains(CharPropFlags::WRITE_WITHOUT_RESPONSE)
-        {
-            WriteType::WithoutResponse
-        } else {
-            WriteType::WithResponse
-        };
         let sysex = encode_superframe_to_sysex(&frame.bytes)
             .map_err(|err| TransportError::Ble(format!("BLE SysEx encode failed: {err}")))?;
         peripheral
-            .write(characteristic, &sysex, write_type)
+            .write(characteristic, &sysex, WriteType::WithResponse)
             .await
             .map_err(|err| TransportError::Ble(format!("BLE write failed: {err}")))
     }
@@ -247,12 +239,11 @@ impl EmwaverTransport for LinuxBleTransport {
         while let Some(notification) = stream.next().await {
             if notification.uuid == notify_uuid {
                 for sysex in self.sysex_accumulator.feed(&notification.value) {
-                    let superframe = decode_sysex_to_superframe(&sysex).map_err(|err| {
-                        TransportError::Ble(format!("BLE SysEx decode failed: {err}"))
-                    })?;
-                    return Ok(EmwFrame {
-                        bytes: superframe.to_vec(),
-                    });
+                    if let Ok(superframe) = decode_sysex_to_superframe(&sysex) {
+                        return Ok(EmwFrame {
+                            bytes: superframe.to_vec(),
+                        });
+                    }
                 }
             }
         }
