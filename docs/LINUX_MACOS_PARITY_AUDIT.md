@@ -13,8 +13,8 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 
 2. Script UI rendering
    - macOS executes default scripts through `ScriptPreviewManager`, transpiles imports/JSX, and renders `ScriptRenderView` nodes.
-   - Linux executes the early command/gpio/device JavaScript API and now has local module loading, JSX transform, `__emwUI`/`__emwRender`, typed script tree capture, and an initial GTK renderer for common node types.
-   - Needed: invoke captured handler tokens back into the running script, add plot/modal polish, and validate GTK rendering on a Linux machine.
+   - Linux executes the early command/gpio/device JavaScript API and now has local module loading, JSX transform, `__emwUI`/`__emwRender`, typed script tree capture, an initial GTK renderer for common node types, and live handler invocation for tap/change/submit controls through a persistent script UI runtime.
+   - Needed: add plot/modal polish, continue broadening control-specific behavior, and validate GTK rendering/event handling on a Linux machine.
 
 3. Agent tool parity
    - macOS Agent exposes local tools for listing/reading/patching/running scripts, stopping scripts, device status, and hardware primitives.
@@ -47,6 +47,7 @@ This is the working checklist for the native Linux GTK4 port against the macOS a
 - Linux script execution can load bundled library/kernel module sources through a local `require` loader after import-line rewriting.
 - Linux runtime can transform uppercase JSX and capture the rendered script UI tree from the shared `emw-jsx.js`/`emw-ui.js` modules.
 - Linux GTK can render captured script UI trees for common layout/control nodes instead of showing only a text tree summary.
+- Linux script UI preview now keeps a live `ScriptUiRuntime` and invokes captured handler tokens from GTK buttons, tiles, sliders, pickers, toggles, and text-field submit/change callbacks.
 - Linux editor uses GtkSourceView with syntax highlighting, line numbers, find, go-to-line, and line wrap.
 - Linux has USB MIDI, Wi-Fi WebSocket/mDNS, and BlueZ BLE GATT transport paths behind the shared transport trait.
 - Linux firmware flow can plan bundled STM32 and ESP32-S3 images and call the local flashing backends.

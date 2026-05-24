@@ -12,7 +12,7 @@ use emwaver_linux_firmware::{
     stm32_dfu::{flash_stm32_dfu_with_progress, is_stm32_dfu_connected, plan_bundled_stm32_dfu},
     FirmwarePlan, FirmwareTarget,
 };
-use emwaver_linux_runtime::{execute_javascript_with_modules, render_javascript_ui, ScriptUiNode};
+use emwaver_linux_runtime::{execute_javascript_with_modules, ScriptUiNode, ScriptUiRuntime};
 use emwaver_linux_transport::{
     ble::{BleTarget, LinuxBleManager, LinuxBleTransport},
     simulator::SimulatorTransport,
@@ -148,6 +148,7 @@ pub fn build_main_window(app: &adw::Application) {
     preview_root.append(&runtime_status_label(
         "Run a script to see its runtime output here.",
     ));
+    let preview_runtime = Rc::new(RefCell::new(None::<ScriptUiRuntime>));
     let preview_scroll = gtk::ScrolledWindow::builder()
         .hexpand(true)
         .vexpand(true)
@@ -603,6 +604,7 @@ pub fn build_main_window(app: &adw::Application) {
     {
         let editor_stack = editor_stack.clone();
         let preview_root = preview_root.clone();
+        let preview_runtime = Rc::clone(&preview_runtime);
         let selected_script = Rc::clone(&selected_script);
         let source_buffer = source_buffer.clone();
         let script_repository = Rc::clone(&script_repository);
@@ -616,23 +618,33 @@ pub fn build_main_window(app: &adw::Application) {
                 let source = source_buffer
                     .text(&source_buffer.start_iter(), &source_buffer.end_iter(), true)
                     .to_string();
-                while let Some(child) = preview_root.first_child() {
-                    preview_root.remove(&child);
-                }
+                *preview_runtime.borrow_mut() = None;
+                clear_box(&preview_root);
                 preview_root.append(&section_label(&format!("{name} Runtime Output")));
                 match script_repository.module_sources() {
-                    Ok(modules) => match render_javascript_ui(&source, &modules) {
-                        Ok(Some(tree)) => {
-                            preview_root.append(&runtime_status_label(
-                                "Rendered from the captured script UI tree. Event handler invocation is still being ported.",
-                            ));
-                            preview_root.append(&render_script_node(&tree.root));
-                        }
-                        Ok(None) => {
-                            preview_root.append(&runtime_status_label(
-                                "No script UI tree was rendered.",
-                            ));
-                        }
+                    Ok(modules) => match ScriptUiRuntime::new(&source, &modules) {
+                        Ok(mut runtime) => match runtime.tree() {
+                            Ok(Some(tree)) => {
+                                *preview_runtime.borrow_mut() = Some(runtime);
+                                render_script_preview_tree(
+                                    &preview_root,
+                                    &preview_runtime,
+                                    &tree.root,
+                                    "Rendered from the live script UI runtime.",
+                                );
+                            }
+                            Ok(None) => {
+                                *preview_runtime.borrow_mut() = Some(runtime);
+                                preview_root.append(&runtime_status_label(
+                                    "No script UI tree was rendered.",
+                                ));
+                            }
+                            Err(err) => {
+                                preview_root.append(&runtime_status_label(&format!(
+                                    "Script UI render failed: {err}"
+                                )));
+                            }
+                        },
                         Err(err) => {
                             preview_root.append(&runtime_status_label(&format!(
                                 "Script UI render failed: {err}"
@@ -640,13 +652,13 @@ pub fn build_main_window(app: &adw::Application) {
                         }
                     },
                     Err(err) => {
-                        preview_root.append(&runtime_status_label(&format!(
-                            "Module load failed: {err}"
-                        )));
+                        preview_root
+                            .append(&runtime_status_label(&format!("Module load failed: {err}")));
                     }
                 }
                 editor_stack.set_visible_child_name("preview");
             } else {
+                *preview_runtime.borrow_mut() = None;
                 editor_stack.set_visible_child_name("editor");
             }
         });
@@ -1125,13 +1137,70 @@ fn runtime_status_label(text: &str) -> gtk::Label {
         .build()
 }
 
-fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
+fn clear_box(container: &gtk::Box) {
+    while let Some(child) = container.first_child() {
+        container.remove(&child);
+    }
+}
+
+fn render_script_preview_tree(
+    preview_root: &gtk::Box,
+    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    root: &ScriptUiNode,
+    status: &str,
+) {
+    clear_box(preview_root);
+    preview_root.append(&section_label("Runtime Output"));
+    preview_root.append(&runtime_status_label(status));
+    preview_root.append(&render_script_node(root, runtime, preview_root));
+}
+
+fn invoke_script_handler(
+    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    preview_root: &gtk::Box,
+    token: String,
+    arguments: Vec<serde_json::Value>,
+) {
+    let result = {
+        let mut runtime = runtime.borrow_mut();
+        let Some(runtime) = runtime.as_mut() else {
+            clear_box(preview_root);
+            preview_root.append(&runtime_status_label("No active script UI runtime."));
+            return;
+        };
+        runtime.invoke_handler(&token, &arguments)
+    };
+
+    match result {
+        Ok(Some(tree)) => {
+            render_script_preview_tree(
+                preview_root,
+                runtime,
+                &tree.root,
+                "Updated after script handler invocation.",
+            );
+        }
+        Ok(None) => {}
+        Err(err) => {
+            clear_box(preview_root);
+            preview_root.append(&runtime_status_label(&format!(
+                "Script handler failed: {err}"
+            )));
+        }
+    }
+}
+
+fn render_script_node(
+    node: &ScriptUiNode,
+    runtime: &Rc<RefCell<Option<ScriptUiRuntime>>>,
+    preview_root: &gtk::Box,
+) -> gtk::Widget {
     match node.node_type.as_str() {
         "column" => {
             let column = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&column, node);
             for child in &node.children {
-                column.append(&render_script_node(child));
+                column.append(&render_script_node(child, runtime, preview_root));
             }
             column.upcast()
         }
@@ -1139,7 +1208,7 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let row = gtk::Box::new(Orientation::Horizontal, node_spacing(node));
             apply_node_padding(&row, node);
             for child in &node.children {
-                row.append(&render_script_node(child));
+                row.append(&render_script_node(child, runtime, preview_root));
             }
             row.upcast()
         }
@@ -1147,7 +1216,7 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child));
+                content.append(&render_script_node(child, runtime, preview_root));
             }
             gtk::Frame::builder().child(&content).build().upcast()
         }
@@ -1155,9 +1224,17 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child));
+                content.append(&render_script_node(child, runtime, preview_root));
             }
-            gtk::Button::builder().child(&content).build().upcast()
+            let button = gtk::Button::builder().child(&content).build();
+            if let Some(token) = node.handlers.get("tap").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                button.connect_clicked(move |_| {
+                    invoke_script_handler(&runtime, &preview_root, token.clone(), Vec::new());
+                });
+            }
+            button.upcast()
         }
         "text" => {
             let text = node_text(node);
@@ -1179,8 +1256,13 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
         }
         "button" => {
             let button = gtk::Button::builder().label(node_label(node)).build();
-            if let Some(token) = node.handlers.get("tap") {
+            if let Some(token) = node.handlers.get("tap").cloned() {
                 button.set_tooltip_text(Some(&format!("Script handler {token}")));
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                button.connect_clicked(move |_| {
+                    invoke_script_handler(&runtime, &preview_root, token.clone(), Vec::new());
+                });
             }
             button.upcast()
         }
@@ -1190,6 +1272,18 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let step = node_prop_f64(node, "step").unwrap_or(1.0).max(0.000_001);
             let scale = gtk::Scale::with_range(Orientation::Horizontal, min, max, step);
             scale.set_value(node_prop_f64(node, "value").unwrap_or(min));
+            if let Some(token) = node.handlers.get("change").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                scale.connect_value_changed(move |scale| {
+                    invoke_script_handler(
+                        &runtime,
+                        &preview_root,
+                        token.clone(),
+                        vec![serde_json::json!(scale.value())],
+                    );
+                });
+            }
             scale.upcast()
         }
         "logViewer" => {
@@ -1215,7 +1309,7 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let content = gtk::Box::new(Orientation::Vertical, node_spacing(node));
             apply_node_padding(&content, node);
             for child in &node.children {
-                content.append(&render_script_node(child));
+                content.append(&render_script_node(child, runtime, preview_root));
             }
             gtk::ScrolledWindow::builder()
                 .hexpand(true)
@@ -1226,11 +1320,37 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
                 .build()
                 .upcast()
         }
-        "textField" => gtk::Entry::builder()
-            .text(node_prop_string(node, "value").unwrap_or_default())
-            .placeholder_text(node_prop_string(node, "placeholder").unwrap_or_default())
-            .build()
-            .upcast(),
+        "textField" => {
+            let entry = gtk::Entry::builder()
+                .text(node_prop_string(node, "value").unwrap_or_default())
+                .placeholder_text(node_prop_string(node, "placeholder").unwrap_or_default())
+                .build();
+            if let Some(token) = node.handlers.get("change").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                entry.connect_changed(move |entry| {
+                    invoke_script_handler(
+                        &runtime,
+                        &preview_root,
+                        token.clone(),
+                        vec![serde_json::json!(entry.text().to_string())],
+                    );
+                });
+            }
+            if let Some(token) = node.handlers.get("submit").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                entry.connect_activate(move |entry| {
+                    invoke_script_handler(
+                        &runtime,
+                        &preview_root,
+                        token.clone(),
+                        vec![serde_json::json!(entry.text().to_string())],
+                    );
+                });
+            }
+            entry.upcast()
+        }
         "textEditor" => {
             let view = gtk::TextView::builder()
                 .wrap_mode(gtk::WrapMode::WordChar)
@@ -1274,13 +1394,40 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
                     combo.set_active(Some(index));
                 }
             }
+            if let Some(token) = node.handlers.get("change").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                combo.connect_changed(move |combo| {
+                    let value = combo.active_id().map(|value| value.to_string());
+                    invoke_script_handler(
+                        &runtime,
+                        &preview_root,
+                        token.clone(),
+                        vec![serde_json::json!(value.unwrap_or_default())],
+                    );
+                });
+            }
             combo.upcast()
         }
-        "toggle" => gtk::CheckButton::builder()
-            .label(node_label(node))
-            .active(node_prop_bool(node, "value").unwrap_or(false))
-            .build()
-            .upcast(),
+        "toggle" => {
+            let toggle = gtk::CheckButton::builder()
+                .label(node_label(node))
+                .active(node_prop_bool(node, "value").unwrap_or(false))
+                .build();
+            if let Some(token) = node.handlers.get("change").cloned() {
+                let runtime = Rc::clone(runtime);
+                let preview_root = preview_root.clone();
+                toggle.connect_toggled(move |toggle| {
+                    invoke_script_handler(
+                        &runtime,
+                        &preview_root,
+                        token.clone(),
+                        vec![serde_json::json!(toggle.is_active())],
+                    );
+                });
+            }
+            toggle.upcast()
+        }
         "grid" => {
             let grid = gtk::Grid::builder()
                 .column_spacing(node_spacing(node) as u32)
@@ -1289,7 +1436,7 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
             let columns = node_prop_i32(node, "columns").unwrap_or(2).max(1);
             for (index, child) in node.children.iter().enumerate() {
                 grid.attach(
-                    &render_script_node(child),
+                    &render_script_node(child, runtime, preview_root),
                     (index as i32) % columns,
                     (index as i32) / columns,
                     1,
@@ -1309,7 +1456,7 @@ fn render_script_node(node: &ScriptUiNode) -> gtk::Widget {
                     .build(),
             );
             for child in &node.children {
-                content.append(&render_script_node(child));
+                content.append(&render_script_node(child, runtime, preview_root));
             }
             gtk::Frame::builder().child(&content).build().upcast()
         }

@@ -37,6 +37,11 @@ pub struct ScriptUiNode {
     pub children: Vec<ScriptUiNode>,
 }
 
+pub struct ScriptUiRuntime {
+    context: Context,
+    render_version: u64,
+}
+
 #[derive(Debug, Deserialize)]
 struct RawScriptUiNode {
     #[serde(rename = "type")]
@@ -47,6 +52,12 @@ struct RawScriptUiNode {
     handlers: BTreeMap<String, String>,
     #[serde(default)]
     children: Vec<RawScriptUiNode>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RawScriptUiSnapshot {
+    version: u64,
+    tree: Option<RawScriptUiNode>,
 }
 
 impl From<RawScriptUiNode> for ScriptUiNode {
@@ -102,27 +113,76 @@ pub fn render_javascript_ui(
     source: &str,
     module_sources: &BTreeMap<String, String>,
 ) -> Result<Option<ScriptUiTree>, JavaScriptRuntimeError> {
-    let source = transform_script_source(source)?;
-    let module_loader = module_loader_script(module_sources)?;
-    let wrapped =
-        format!("{JS_PRELUDE}\n{module_loader}\n{source}\nJSON.stringify(__emwRenderedTree);");
-    let mut context = Context::default();
-    let value = context
-        .eval(Source::from_bytes(wrapped.as_bytes()))
-        .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
-    if value.is_null() || value.is_undefined() {
-        return Ok(None);
+    let mut runtime = ScriptUiRuntime::new(source, module_sources)?;
+    runtime.tree()
+}
+
+impl ScriptUiRuntime {
+    pub fn new(
+        source: &str,
+        module_sources: &BTreeMap<String, String>,
+    ) -> Result<Self, JavaScriptRuntimeError> {
+        let source = transform_script_source(source)?;
+        let module_loader = module_loader_script(module_sources)?;
+        let wrapped = format!("{JS_PRELUDE}\n{module_loader}\n{source}");
+        let mut context = Context::default();
+        context
+            .eval(Source::from_bytes(wrapped.as_bytes()))
+            .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
+        Ok(Self {
+            context,
+            render_version: 0,
+        })
     }
-    let json = value
-        .to_string(&mut context)
-        .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?
-        .to_std_string_escaped();
-    if json == "null" {
-        return Ok(None);
+
+    pub fn tree(&mut self) -> Result<Option<ScriptUiTree>, JavaScriptRuntimeError> {
+        self.evaluate_tree_json(
+            "JSON.stringify({ version: __emwRenderVersion, tree: __emwRenderedTree });",
+            true,
+        )
     }
-    let root: RawScriptUiNode =
-        serde_json::from_str(&json).map_err(|err| JavaScriptRuntimeError::Json(err.to_string()))?;
-    Ok(Some(ScriptUiTree { root: root.into() }))
+
+    pub fn invoke_handler(
+        &mut self,
+        token: &str,
+        arguments: &[serde_json::Value],
+    ) -> Result<Option<ScriptUiTree>, JavaScriptRuntimeError> {
+        let token = serde_json::to_string(token)
+            .map_err(|err| JavaScriptRuntimeError::Json(err.to_string()))?;
+        let arguments = serde_json::to_string(arguments)
+            .map_err(|err| JavaScriptRuntimeError::Json(err.to_string()))?;
+        self.evaluate_tree_json(&format!(
+            "__emwInvokeHandler({token}, {arguments}); JSON.stringify({{ version: __emwRenderVersion, tree: __emwRenderedTree }});"
+        ), false)
+    }
+
+    fn evaluate_tree_json(
+        &mut self,
+        script: &str,
+        accept_unchanged: bool,
+    ) -> Result<Option<ScriptUiTree>, JavaScriptRuntimeError> {
+        let value = self
+            .context
+            .eval(Source::from_bytes(script.as_bytes()))
+            .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
+        if value.is_null() || value.is_undefined() {
+            return Ok(None);
+        }
+        let json = value
+            .to_string(&mut self.context)
+            .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?
+            .to_std_string_escaped();
+        if json == "null" {
+            return Ok(None);
+        }
+        let snapshot: RawScriptUiSnapshot = serde_json::from_str(&json)
+            .map_err(|err| JavaScriptRuntimeError::Json(err.to_string()))?;
+        if !accept_unchanged && snapshot.version == self.render_version {
+            return Ok(None);
+        }
+        self.render_version = snapshot.version;
+        Ok(snapshot.tree.map(|root| ScriptUiTree { root: root.into() }))
+    }
 }
 
 pub async fn execute_javascript(
@@ -683,6 +743,7 @@ globalThis.__emwModuleSources = {json};
 const JS_PRELUDE: &str = r#"
 const __emwCommands = [];
 let __emwRenderedTree = null;
+let __emwRenderVersion = 0;
 let __emwNextHandlerId = 1;
 const __emwHandlers = {};
 function __emwByte(value, name) {
@@ -778,7 +839,15 @@ const __emwJSX = {
 };
 function __emwRender(node) {
   __emwRenderedTree = node;
+  __emwRenderVersion += 1;
   return node;
+}
+function __emwInvokeHandler(token, args) {
+  const handler = __emwHandlers[token];
+  if (typeof handler !== 'function') {
+    throw new Error('Script handler not found: ' + token);
+  }
+  return handler.apply(null, Array.isArray(args) ? args : []);
 }
 const device = {
   version() { emw.command([0x01], "device.version"); },
@@ -940,6 +1009,68 @@ mod tests {
                 .get("tap")
                 .map(String::as_str),
             Some("handler:1")
+        );
+    }
+
+    #[test]
+    fn invokes_captured_ui_handlers_against_live_runtime() {
+        let modules = BTreeMap::from([
+            (
+                "emw-jsx.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+            ),
+            (
+                "emw-ui.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+            ),
+        ]);
+        let mut runtime = ScriptUiRuntime::new(
+            r#"
+            import { JSX, render } from "emw-jsx";
+            import { Column, Text, Button, Picker } from "emw-ui";
+            let count = 0;
+            let mode = "slow";
+            function redraw() {
+              render(
+                <Column>
+                  <Text>Count {count}</Text>
+                  <Text>Mode {mode}</Text>
+                  <Button onTap={() => { count += 1; redraw(); }}>Increment</Button>
+                  <Picker selected={mode} options={[{ value: "slow", label: "Slow" }, { value: "fast", label: "Fast" }]} onChange={(value) => { mode = String(value); redraw(); }} />
+                </Column>
+              );
+            }
+            redraw();
+            "#,
+            &modules,
+        )
+        .unwrap();
+
+        let tree = runtime.tree().unwrap().unwrap();
+        assert_eq!(
+            tree.root.children[0].props.get("text"),
+            Some(&serde_json::Value::String("Count0".to_string()))
+        );
+
+        let tap_token = tree.root.children[2].handlers.get("tap").unwrap().clone();
+        let tree = runtime.invoke_handler(&tap_token, &[]).unwrap().unwrap();
+        assert_eq!(
+            tree.root.children[0].props.get("text"),
+            Some(&serde_json::Value::String("Count1".to_string()))
+        );
+
+        let change_token = tree.root.children[3]
+            .handlers
+            .get("change")
+            .unwrap()
+            .clone();
+        let tree = runtime
+            .invoke_handler(&change_token, &[serde_json::json!("fast")])
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            tree.root.children[1].props.get("text"),
+            Some(&serde_json::Value::String("Modefast".to_string()))
         );
     }
 
