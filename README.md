@@ -24,13 +24,13 @@
 
 EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
 
-The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through local transports such as USB, BLE, and Wi-Fi.
+The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through local transports such as USB, BLE, and Wi-Fi. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
 
 > Status: EMWaver is in an early open-source platform release. The architecture is working across the native apps, while packaging, documentation, supported-board coverage, and installer polish are still improving.
 
 ## Why EMWaver
 
-Embedded development often means setting up toolchains, compiling firmware, flashing boards, and repeating that loop for every small hardware experiment. EMWaver moves the iteration loop into local scripts:
+Embedded development often means setting up toolchains, compiling firmware, flashing boards, and repeating that loop for every small hardware experiment. EMWaver moves the iteration loop into local scripts, closer to the speed of a software REPL than the usual edit-build-flash cycle:
 
 ```js
 // Example direction: script against a connected device immediately.
@@ -44,7 +44,9 @@ Use EMWaver when you want to:
 - run repeatable hardware scripts from a phone, tablet, or desktop;
 - control hardware directly from native apps;
 - use native apps instead of asking every user to install an MCU toolchain;
-- bring AI assistance into hardware scripting while keeping the local runtime useful on its own.
+- iterate faster than traditional Arduino-style edit-build-flash workflows;
+- carry a compact USB-C hardware lab that plugs directly into phones, tablets, and laptops;
+- let an Agent inspect hardware, run primitive tools, probe modules, debug failures, and help with authorized security research.
 
 ## What Works Today
 
@@ -135,11 +137,11 @@ Core hardware control is designed to work without cloud activation, hosted devic
 
 Remote access, when needed, should be user-owned: local network, SSH, VPN, Tailscale, or similar tools around the local app/runtime.
 
-## Agent Assistance
+## Agent-Ready Hardware Interface
 
-EMWaver is built to work well with an optional Agent that can help write, explain, debug, and improve hardware scripts. The local scripting and hardware-control path remains useful without Agent assistance.
+EMWaver's Agent is more than a script-writing assistant. When enabled, it can work through the same hardware interface exposed to scripts: named primitives such as `spi_transfer`, GPIO reads/writes, analog reads, and board/module probes. That lets the Agent inspect connected hardware, test assumptions, debug wiring or protocol failures, and assist with authorized security research.
 
-Agent features may use an API key and network access when enabled by the user. Scripts and device control remain local by default.
+The local scripting and hardware-control path remains useful without Agent assistance. Agent features may use an API key and network access when enabled by the user. Scripts and device control remain local by default.
 
 ## Documentation
 
