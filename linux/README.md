@@ -28,11 +28,12 @@ The first native slice is M0/M1:
 - Rust USB MIDI SysEx/superframe codec matches the STM32 fixed 36-byte superframe, 48-byte SysEx, and 64-byte USB-MIDI transaction contract;
 - STM32 run-mode USB MIDI transport can open the discovered device, claim the MIDI interface, send encoded superframes, and read decoded response superframes;
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
+- transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, firmware and Agent panels.
 
-Full script runtime routing over USB, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full JavaScript runtime parity, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 

@@ -1,5 +1,6 @@
 pub mod ble;
 pub mod command;
+pub mod runtime;
 pub mod simulator;
 pub mod usb;
 pub mod usb_midi_sysex;
