@@ -39,9 +39,13 @@ pub struct ScriptUiNode {
 }
 
 pub type PacketHandler = Box<dyn FnMut(Vec<u8>, u32) -> Result<Vec<u8>, String>>;
+pub type RenderHandler = Box<dyn FnMut(ScriptUiTree)>;
+pub type ConsoleHandler = Box<dyn FnMut(String)>;
 
 thread_local! {
     static ACTIVE_PACKET_HANDLER: RefCell<Option<PacketHandler>> = RefCell::new(None);
+    static ACTIVE_RENDER_HANDLER: RefCell<Option<RenderHandler>> = RefCell::new(None);
+    static ACTIVE_CONSOLE_HANDLER: RefCell<Option<ConsoleHandler>> = RefCell::new(None);
 }
 
 pub struct ScriptUiRuntime {
@@ -126,12 +130,26 @@ pub fn render_javascript_ui(
     runtime.tree()
 }
 
+impl Drop for ScriptUiRuntime {
+    fn drop(&mut self) {
+        ACTIVE_PACKET_HANDLER.with(|handler| {
+            *handler.borrow_mut() = None;
+        });
+        ACTIVE_RENDER_HANDLER.with(|handler| {
+            *handler.borrow_mut() = None;
+        });
+        ACTIVE_CONSOLE_HANDLER.with(|handler| {
+            *handler.borrow_mut() = None;
+        });
+    }
+}
+
 impl ScriptUiRuntime {
     pub fn new(
         source: &str,
         module_sources: &BTreeMap<String, String>,
     ) -> Result<Self, JavaScriptRuntimeError> {
-        Self::new_with_optional_packet_handler(source, module_sources, None)
+        Self::new_with_handlers(source, module_sources, None, None, None)
     }
 
     pub fn new_with_packet_handler(
@@ -139,16 +157,55 @@ impl ScriptUiRuntime {
         module_sources: &BTreeMap<String, String>,
         packet_handler: PacketHandler,
     ) -> Result<Self, JavaScriptRuntimeError> {
-        Self::new_with_optional_packet_handler(source, module_sources, Some(packet_handler))
+        Self::new_with_handlers(source, module_sources, Some(packet_handler), None, None)
     }
 
-    fn new_with_optional_packet_handler(
+    pub fn new_with_packet_and_render_handler(
+        source: &str,
+        module_sources: &BTreeMap<String, String>,
+        packet_handler: PacketHandler,
+        render_handler: RenderHandler,
+    ) -> Result<Self, JavaScriptRuntimeError> {
+        Self::new_with_handlers(
+            source,
+            module_sources,
+            Some(packet_handler),
+            Some(render_handler),
+            None,
+        )
+    }
+
+    pub fn new_with_session_handlers(
+        source: &str,
+        module_sources: &BTreeMap<String, String>,
+        packet_handler: PacketHandler,
+        render_handler: RenderHandler,
+        console_handler: ConsoleHandler,
+    ) -> Result<Self, JavaScriptRuntimeError> {
+        Self::new_with_handlers(
+            source,
+            module_sources,
+            Some(packet_handler),
+            Some(render_handler),
+            Some(console_handler),
+        )
+    }
+
+    fn new_with_handlers(
         source: &str,
         module_sources: &BTreeMap<String, String>,
         packet_handler: Option<PacketHandler>,
+        render_handler: Option<RenderHandler>,
+        console_handler: Option<ConsoleHandler>,
     ) -> Result<Self, JavaScriptRuntimeError> {
         ACTIVE_PACKET_HANDLER.with(|handler| {
             *handler.borrow_mut() = packet_handler;
+        });
+        ACTIVE_RENDER_HANDLER.with(|handler| {
+            *handler.borrow_mut() = render_handler;
+        });
+        ACTIVE_CONSOLE_HANDLER.with(|handler| {
+            *handler.borrow_mut() = console_handler;
         });
         let source = transform_script_source(source)?;
         let module_loader = module_loader_script(module_sources)?;
@@ -157,7 +214,7 @@ impl ScriptUiRuntime {
             wrap_user_source(&source)
         );
         let mut context = Context::default();
-        install_packet_bridge(&mut context)?;
+        install_host_bridges(&mut context)?;
         context
             .eval(Source::from_bytes(wrapped.as_bytes()))
             .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
@@ -235,14 +292,84 @@ pub async fn execute_javascript_with_modules(
         .map_err(|err| JavaScriptRuntimeError::Transport(err.to_string()))
 }
 
-fn install_packet_bridge(context: &mut Context) -> Result<(), JavaScriptRuntimeError> {
+fn install_host_bridges(context: &mut Context) -> Result<(), JavaScriptRuntimeError> {
     context
         .register_global_callable(
             js_string!("__rustSendPacket"),
             2,
             NativeFunction::from_fn_ptr(rust_send_packet),
         )
+        .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
+    context
+        .register_global_callable(
+            js_string!("__rustRender"),
+            1,
+            NativeFunction::from_fn_ptr(rust_render),
+        )
+        .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))?;
+    context
+        .register_global_callable(
+            js_string!("__rustConsole"),
+            0,
+            NativeFunction::from_fn_ptr(rust_console),
+        )
         .map_err(|err| JavaScriptRuntimeError::Eval(err.to_string()))
+}
+
+fn rust_console(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let mut parts = Vec::new();
+    for arg in args {
+        let text = if arg.is_object() {
+            match arg.to_json(context).ok().flatten() {
+                Some(json) => {
+                    serde_json::to_string(&json).unwrap_or_else(|_| "[object]".to_string())
+                }
+                None => arg
+                    .to_string(context)
+                    .map(|value| value.to_std_string_escaped())
+                    .unwrap_or_else(|_| "[object]".to_string()),
+            }
+        } else {
+            arg.to_string(context)
+                .map(|value| value.to_std_string_escaped())
+                .unwrap_or_else(|_| "[value]".to_string())
+        };
+        parts.push(text);
+    }
+    ACTIVE_CONSOLE_HANDLER.with(|handler| {
+        if let Some(handler) = handler.borrow_mut().as_mut() {
+            handler(parts.join(" "));
+        }
+    });
+    Ok(JsValue::undefined())
+}
+
+fn rust_render(
+    _this: &JsValue,
+    args: &[JsValue],
+    context: &mut Context,
+) -> boa_engine::JsResult<JsValue> {
+    let Some(raw) = args.first() else {
+        return Ok(JsValue::undefined());
+    };
+    let json = raw
+        .to_string(context)
+        .map_err(|err| JsNativeError::typ().with_message(err.to_string()))?
+        .to_std_string_escaped();
+    let snapshot: RawScriptUiSnapshot = serde_json::from_str(&json)
+        .map_err(|err| JsNativeError::typ().with_message(err.to_string()))?;
+    if let Some(root) = snapshot.tree {
+        ACTIVE_RENDER_HANDLER.with(|handler| {
+            if let Some(handler) = handler.borrow_mut().as_mut() {
+                handler(ScriptUiTree { root: root.into() });
+            }
+        });
+    }
+    Ok(JsValue::undefined())
 }
 
 fn rust_send_packet(
@@ -876,6 +1003,26 @@ var __emwCommands = [];
 var __emwRenderedTree = null;
 var __emwRenderVersion = 0;
 var __emwNextHandlerId = 1;
+var console = (function() {
+  function send(prefix, args) {
+    var out = [];
+    for (var i = 0; i < args.length; i += 1) {
+      var value = args[i];
+      if (value === null) out.push('null');
+      else if (value === undefined) out.push('undefined');
+      else if (typeof value === 'object') {
+        try { out.push(JSON.stringify(value)); } catch (e) { out.push(String(value)); }
+      } else out.push(String(value));
+    }
+    if (prefix) out.unshift(prefix);
+    if (typeof __rustConsole === 'function') __rustConsole.apply(null, out);
+  }
+  return {
+    log: function() { send('', arguments); },
+    warn: function() { send('[warn]', arguments); },
+    error: function() { send('[error]', arguments); }
+  };
+})();
 var __emwHandlers = {};
 function __emwByte(value, name) {
   if (!Number.isInteger(value) || value < 0 || value > 255) {
@@ -997,6 +1144,9 @@ var __emwJSX = {
 function __emwRender(node) {
   __emwRenderedTree = node;
   __emwRenderVersion += 1;
+  if (typeof __rustRender === 'function') {
+    __rustRender(JSON.stringify({ version: __emwRenderVersion, tree: __emwRenderedTree }));
+  }
   return node;
 }
 function __emwInvokeHandler(token, args) {
@@ -1243,6 +1393,95 @@ mod tests {
         let updated = runtime.invoke_handler(&token, &[]).unwrap();
 
         assert!(updated.is_some());
+    }
+
+    #[test]
+    fn streams_console_calls_from_script_actions() {
+        let modules = BTreeMap::from([
+            (
+                "emw-jsx.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+            ),
+            (
+                "emw-ui.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+            ),
+        ]);
+        let lines = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let lines_for_handler = std::rc::Rc::clone(&lines);
+        let mut runtime = ScriptUiRuntime::new_with_session_handlers(
+            r#"
+            import { JSX, render } from "emw-jsx";
+            import { Button } from "emw-ui";
+            render(<Button onTap={() => { console.log("init", 1); console.warn("step", { ok: true }); }}>Initialize & Read</Button>);
+            "#,
+            &modules,
+            Box::new(|_, _| Ok(vec![0x80])),
+            Box::new(|_| {}),
+            Box::new(move |line| lines_for_handler.borrow_mut().push(line)),
+        )
+        .unwrap();
+        let tree = runtime.tree().unwrap().unwrap();
+        let token = tree.root.handlers.get("tap").unwrap().clone();
+        let _ = runtime.invoke_handler(&token, &[]).unwrap();
+
+        let lines = lines.borrow();
+        assert!(lines.iter().any(|line| line == "init 1"));
+        assert!(lines.iter().any(|line| line == "[warn] step {\"ok\":true}"));
+    }
+
+    #[test]
+    fn streams_render_calls_from_script_actions() {
+        let modules = BTreeMap::from([
+            (
+                "emw-jsx.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-jsx.js").to_string(),
+            ),
+            (
+                "emw-ui.js".to_string(),
+                include_str!("../../../../assets/default-scripts/emw-ui.js").to_string(),
+            ),
+        ]);
+        let rendered = std::rc::Rc::new(std::cell::RefCell::new(Vec::<String>::new()));
+        let rendered_for_handler = std::rc::Rc::clone(&rendered);
+        let mut runtime = ScriptUiRuntime::new_with_packet_and_render_handler(
+            r#"
+            import { JSX, render } from "emw-jsx";
+            import { Column, Text, Button, Progress } from "emw-ui";
+            let progress = 0;
+            function redraw() {
+              render(
+                <Column>
+                  <Text>Progress {progress}</Text>
+                  <Progress value={progress / 3} />
+                  <Button onTap={() => { progress = 1; redraw(); progress = 2; redraw(); progress = 3; redraw(); }}>Initialize & Read</Button>
+                </Column>
+              );
+            }
+            redraw();
+            "#,
+            &modules,
+            Box::new(|_, _| Ok(vec![0x80])),
+            Box::new(move |tree| {
+                if let Some(text) = tree.root.children[0]
+                    .props
+                    .get("text")
+                    .and_then(serde_json::Value::as_str)
+                {
+                    rendered_for_handler.borrow_mut().push(text.to_string());
+                }
+            }),
+        )
+        .unwrap();
+
+        let tree = runtime.tree().unwrap().unwrap();
+        let tap_token = tree.root.children[2].handlers.get("tap").unwrap().clone();
+        let _ = runtime.invoke_handler(&tap_token, &[]).unwrap();
+
+        let rendered = rendered.borrow();
+        assert!(rendered.iter().any(|text| text == "Progress1"));
+        assert!(rendered.iter().any(|text| text == "Progress2"));
+        assert!(rendered.iter().any(|text| text == "Progress3"));
     }
 
     #[test]

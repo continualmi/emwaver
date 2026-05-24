@@ -57,6 +57,8 @@ enum ScriptUiSessionCommand {
 enum ScriptUiSessionEvent {
     Rendered { root: ScriptUiNode, status: String },
     Empty { status: String },
+    Log(String),
+    ActionFinished(String),
     Failed(String),
 }
 
@@ -461,6 +463,7 @@ pub fn build_main_window(app: &adw::Application) {
             render_source_preview(
                 &preview_root,
                 &preview_session,
+                &log_view,
                 &model.borrow().selected_device(),
                 &item.name,
                 &source,
@@ -807,6 +810,7 @@ pub fn build_main_window(app: &adw::Application) {
                         render_source_preview(
                             &preview_root,
                             &preview_session,
+                            &log_view,
                             &model.borrow().selected_device(),
                             &name,
                             &source,
@@ -1301,11 +1305,22 @@ fn start_script_ui_session(
 ) {
     let (command_tx, command_rx) = mpsc::channel::<ScriptUiSessionCommand>();
     let (event_tx, event_rx) = mpsc::channel::<ScriptUiSessionEvent>();
+    let render_event_tx = event_tx.clone();
     thread::spawn(move || {
-        let mut runtime = match ScriptUiRuntime::new_with_packet_handler(
+        let console_event_tx = event_tx.clone();
+        let mut runtime = match ScriptUiRuntime::new_with_session_handlers(
             &source,
             &module_sources,
             script_packet_handler(device),
+            Box::new(move |tree| {
+                let _ = render_event_tx.send(ScriptUiSessionEvent::Rendered {
+                    root: tree.root,
+                    status: "Rendered from the live script UI runtime.".to_string(),
+                });
+            }),
+            Box::new(move |line| {
+                let _ = console_event_tx.send(ScriptUiSessionEvent::Log(line));
+            }),
         ) {
             Ok(runtime) => runtime,
             Err(err) => {
@@ -1344,11 +1359,14 @@ fn start_script_ui_session(
                                 root: tree.root,
                                 status: "Updated after script action.".to_string(),
                             });
+                            let _ = event_tx.send(ScriptUiSessionEvent::ActionFinished(
+                                "Script action completed.".to_string(),
+                            ));
                         }
                         Ok(None) => {
-                            let _ = event_tx.send(ScriptUiSessionEvent::Empty {
-                                status: "Script action completed.".to_string(),
-                            });
+                            let _ = event_tx.send(ScriptUiSessionEvent::ActionFinished(
+                                "Script action completed.".to_string(),
+                            ));
                         }
                         Err(err) => {
                             let _ = event_tx.send(ScriptUiSessionEvent::Failed(format!(
@@ -1374,6 +1392,7 @@ fn start_script_ui_session(
 fn render_source_preview(
     preview_root: &gtk::Box,
     session_slot: &Rc<RefCell<Option<Rc<ScriptUiSessionHandle>>>>,
+    log_view: &gtk::TextView,
     device: &Option<DeviceRecord>,
     name: &str,
     source: &str,
@@ -1387,11 +1406,17 @@ fn render_source_preview(
         start_script_ui_session(device.clone(), source.to_string(), module_sources.clone());
     preview_root.append(&session.status_label);
     *session_slot.borrow_mut() = Some(Rc::clone(&session));
-    poll_script_ui_session_events(preview_root.clone(), Rc::downgrade(&session), event_rx);
+    poll_script_ui_session_events(
+        preview_root.clone(),
+        log_view.clone(),
+        Rc::downgrade(&session),
+        event_rx,
+    );
 }
 
 fn poll_script_ui_session_events(
     preview_root: gtk::Box,
+    log_view: gtk::TextView,
     session: std::rc::Weak<ScriptUiSessionHandle>,
     event_rx: mpsc::Receiver<ScriptUiSessionEvent>,
 ) {
@@ -1403,10 +1428,17 @@ fn poll_script_ui_session_events(
         while let Ok(event) = event_rx.borrow_mut().try_recv() {
             match event {
                 ScriptUiSessionEvent::Rendered { root, status } => {
-                    session.busy.set(false);
                     render_script_preview_tree(&preview_root, &session, &root, &status);
                 }
                 ScriptUiSessionEvent::Empty { status } => {
+                    session.busy.set(false);
+                    session.status_label.set_label(&status);
+                }
+                ScriptUiSessionEvent::Log(line) => {
+                    append_log(&log_view, &line);
+                    session.status_label.set_label(&line);
+                }
+                ScriptUiSessionEvent::ActionFinished(status) => {
                     session.busy.set(false);
                     session.status_label.set_label(&status);
                 }

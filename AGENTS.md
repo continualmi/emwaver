@@ -236,6 +236,7 @@ If a folder has a README, detailed documentation should live there.
 
 - Prefer docs and code updates in the same PR when behavior changes.
 - When changing a specific subsystem, update that folder's README.
+- When porting or matching behavior from another supported platform, read the actual source implementation for the reference platform first, not just docs or summaries. Match the real architecture and user-visible behavior; do not invent platform-local shims, fake previews, substitute UI, or prototype-only approximations when a working implementation already exists elsewhere in the repo.
 - Keep AGENTS concise; do not re-expand it with subsystem internals.
 - Do not move secrets into repo docs.
 - Keep local runtime work account-free and cloud-free. The only planned network integration is the paid Agent API key flow to the future Continual MI/MGPT backend.
