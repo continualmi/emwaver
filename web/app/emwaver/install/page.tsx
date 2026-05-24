@@ -78,6 +78,8 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
       {
         label: "Download DMG",
         href: `${RELEASE_DOWNLOAD_BASE}/EMWaver-macos.dmg`,
+        badge: "/emwaver/badges/macos.png",
+        badgeAlt: "Download for Mac",
       },
     ],
   },
@@ -97,35 +99,51 @@ const DESKTOP_PLATFORMS: PlatformCard[] = [
 ];
 
 function ActionButton({ action }: { action: InstallAction }) {
+  if (action.badge) {
+    const content = (
+      <>
+        <img
+          src={action.badge}
+          alt={action.badgeAlt || action.label}
+          className="h-12 w-auto max-w-[210px] shrink-0 object-contain drop-shadow-[0_10px_24px_var(--shadow)]"
+        />
+        {action.note ? <span className="text-xs font-semibold text-[color:var(--ink-dim)]">{action.note}</span> : null}
+      </>
+    );
+
+    if (!action.href) {
+      return (
+        <div className="inline-flex cursor-not-allowed flex-col items-start gap-1 opacity-70" aria-disabled="true">
+          {content}
+        </div>
+      );
+    }
+
+    return (
+      <a href={action.href} className="inline-flex flex-col items-start gap-1 no-underline transition hover:scale-[1.02]" target="_blank" rel="noreferrer">
+        {content}
+      </a>
+    );
+  }
+
   const className = [
-    "flex min-h-12 items-center justify-center gap-3 rounded-xl border px-4 py-3 text-sm font-semibold no-underline transition",
+    "inline-flex min-h-11 items-center justify-center rounded-xl border px-5 py-2.5 text-sm font-semibold no-underline transition",
     action.muted || !action.href
       ? "cursor-not-allowed border-dashed border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink-dim)] opacity-70"
       : "border-[color:var(--line)] bg-[color:var(--surface-2)] text-[color:var(--ink)] hover:bg-[color:var(--surface-3)]",
   ].join(" ");
 
-  const content = (
-    <>
-      {action.badge ? (
-        <img src={action.badge} alt={action.badgeAlt || action.label} className="h-9 w-auto max-w-[190px] shrink-0 object-contain" />
-      ) : (
-        <span>{action.label}</span>
-      )}
-      {action.note ? <span className="text-xs text-[color:var(--ink-dim)]">{action.note}</span> : null}
-    </>
-  );
-
   if (!action.href) {
     return (
       <div className={className} aria-disabled="true">
-        {content}
+        {action.label}
       </div>
     );
   }
 
   return (
     <a href={action.href} className={className} target="_blank" rel="noreferrer">
-      {content}
+      {action.label}
     </a>
   );
 }
@@ -148,7 +166,7 @@ function PlatformCardView({ platform }: { platform: PlatformCard }) {
           </p>
         </div>
       </div>
-      <div className="mt-5 grid gap-3">
+      <div className="mt-5 flex flex-wrap items-center gap-4">
         {platform.actions.map((action) => (
           <ActionButton key={action.label} action={action} />
         ))}
