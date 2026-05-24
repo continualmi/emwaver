@@ -1,3 +1,4 @@
+use crate::usb_midi_sysex::{decode_sysex_to_superframe, encode_superframe_to_sysex};
 use crate::{
     EmwFrame, EmwaverTransport, TransportDescriptor, TransportError, TransportId, TransportResult,
 };
@@ -227,8 +228,10 @@ impl EmwaverTransport for LinuxBleTransport {
         } else {
             WriteType::WithResponse
         };
+        let sysex = encode_superframe_to_sysex(&frame.bytes)
+            .map_err(|err| TransportError::Ble(format!("BLE SysEx encode failed: {err}")))?;
         peripheral
-            .write(characteristic, &frame.bytes, write_type)
+            .write(characteristic, &sysex, write_type)
             .await
             .map_err(|err| TransportError::Ble(format!("BLE write failed: {err}")))
     }
@@ -239,8 +242,12 @@ impl EmwaverTransport for LinuxBleTransport {
         let stream = notifications.as_mut().ok_or(TransportError::NotConnected)?;
         while let Some(notification) = stream.next().await {
             if notification.uuid == notify_uuid {
+                let superframe =
+                    decode_sysex_to_superframe(&notification.value).map_err(|err| {
+                        TransportError::Ble(format!("BLE SysEx decode failed: {err}"))
+                    })?;
                 return Ok(EmwFrame {
-                    bytes: notification.value,
+                    bytes: superframe.to_vec(),
                 });
             }
         }
