@@ -26,10 +26,12 @@ The first native slice is M0/M1:
 - script sessions enforce selected-device claims and busy-device rejection;
 - USB discovery classifies STM32 run-mode USB MIDI, STM32 DFU, and common ESP32 serial adapters with permission diagnostics;
 - Rust USB MIDI SysEx/superframe codec matches the STM32 fixed 36-byte superframe, 48-byte SysEx, and 64-byte USB-MIDI transaction contract;
+- STM32 run-mode USB MIDI transport can open the discovered device, claim the MIDI interface, send encoded superframes, and read decoded response superframes;
+- the GTK shell seeds discovered USB candidates into the local device list alongside the simulator;
 - Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, firmware and Agent panels.
 
-USB packet I/O, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
+Full script runtime routing over USB, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.
 
 ## Build and validation
 

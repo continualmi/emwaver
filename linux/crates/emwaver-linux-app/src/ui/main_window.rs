@@ -1,6 +1,10 @@
 use adw::prelude::*;
 use emwaver_linux_core::{AppModel, DeviceRecord, TransportKind};
-use emwaver_linux_transport::{simulator::SimulatorTransport, EmwaverTransport};
+use emwaver_linux_transport::{
+    simulator::SimulatorTransport,
+    usb::{LinuxUsbManager, UsbAccessState},
+    EmwaverTransport,
+};
 use gtk::{gio, Align, Orientation};
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -8,6 +12,7 @@ use std::rc::Rc;
 pub fn build_main_window(app: &adw::Application) {
     let model = Rc::new(RefCell::new(AppModel::default()));
     seed_simulator_device(&model);
+    seed_usb_devices(&model);
 
     let window = adw::ApplicationWindow::builder()
         .application(app)
@@ -156,6 +161,24 @@ fn seed_simulator_device(model: &Rc<RefCell<AppModel>>) {
     device.firmware_version = descriptor.firmware_version;
     device.connected = true;
     model.borrow_mut().upsert_device(device);
+}
+
+fn seed_usb_devices(model: &Rc<RefCell<AppModel>>) {
+    let Ok(candidates) = LinuxUsbManager::default().discover() else {
+        return;
+    };
+
+    for candidate in candidates {
+        let access = candidate.access.clone();
+        let mut display_name = candidate.display_name();
+        if access != UsbAccessState::Accessible {
+            display_name = format!("{display_name} ({access:?})");
+        }
+
+        let mut device = DeviceRecord::new(candidate.id, display_name, candidate.transport, None);
+        device.connected = access == UsbAccessState::Accessible;
+        model.borrow_mut().upsert_device(device);
+    }
 }
 
 fn refresh_device_list(list: &gtk::ListBox, devices: &[DeviceRecord]) {

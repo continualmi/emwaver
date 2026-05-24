@@ -1,7 +1,16 @@
-use crate::{TransportError, TransportResult};
+use crate::usb_midi_sysex::{
+    decode_usb_midi_to_superframe, encode_superframe_to_usb_midi, LANE_SIZE_BYTES,
+    SUPERFRAME_SIZE_BYTES, USB_MIDI_PACKET_SIZE_BYTES,
+};
+use crate::{
+    EmwFrame, EmwaverTransport, TransportDescriptor, TransportError, TransportId, TransportResult,
+};
+use async_trait::async_trait;
 use emwaver_linux_core::TransportKind;
-use rusb::{Context, UsbContext};
+use rusb::{Context, DeviceHandle, UsbContext};
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
+use std::time::Duration;
 
 pub const STM32_VENDOR_ID: u16 = 0x0483;
 pub const STM32_RUN_MODE_PRODUCT_ID: u16 = 0x5740;
@@ -12,6 +21,11 @@ pub const CP210X_VENDOR_ID: u16 = 0x10c4;
 pub const CP210X_USB_UART_PRODUCT_ID: u16 = 0xea60;
 pub const WCH_VENDOR_ID: u16 = 0x1a86;
 pub const WCH_CH9102_PRODUCT_ID: u16 = 0x55d4;
+
+pub const USB_MIDI_INTERFACE_NUMBER: u8 = 1;
+pub const USB_MIDI_OUT_ENDPOINT: u8 = 0x01;
+pub const USB_MIDI_IN_ENDPOINT: u8 = 0x81;
+const USB_MIDI_IO_TIMEOUT: Duration = Duration::from_millis(600);
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub enum UsbDeviceRole {
@@ -135,6 +149,167 @@ impl LinuxUsbManager {
     }
 }
 
+#[derive(Debug)]
+pub struct LinuxUsbMidiTransport {
+    candidate: UsbDeviceCandidate,
+    context: Option<Context>,
+    handle: Option<Mutex<DeviceHandle<Context>>>,
+}
+
+impl LinuxUsbMidiTransport {
+    pub fn new(candidate: UsbDeviceCandidate) -> TransportResult<Self> {
+        if candidate.role != UsbDeviceRole::Stm32RunModeMidi {
+            return Err(TransportError::Usb(format!(
+                "USB MIDI transport requires STM32 run-mode candidate, got {:?}",
+                candidate.role
+            )));
+        }
+
+        Ok(Self {
+            candidate,
+            context: None,
+            handle: None,
+        })
+    }
+
+    pub fn command_lane_superframe(command_lane: &[u8]) -> TransportResult<EmwFrame> {
+        if command_lane.len() > LANE_SIZE_BYTES {
+            return Err(TransportError::Usb(format!(
+                "command lane is {} bytes; expected at most {LANE_SIZE_BYTES}",
+                command_lane.len()
+            )));
+        }
+
+        let mut superframe = [0u8; SUPERFRAME_SIZE_BYTES];
+        superframe[..command_lane.len()].copy_from_slice(command_lane);
+        Ok(EmwFrame {
+            bytes: superframe.to_vec(),
+        })
+    }
+
+    fn open_matching_handle(&self) -> TransportResult<(Context, DeviceHandle<Context>)> {
+        let context = Context::new().map_err(|err| TransportError::Usb(err.to_string()))?;
+        let devices = context
+            .devices()
+            .map_err(|err| TransportError::Usb(err.to_string()))?;
+
+        for device in devices.iter() {
+            if device.bus_number() != self.candidate.bus_number
+                || device.address() != self.candidate.address
+            {
+                continue;
+            }
+
+            let descriptor = device
+                .device_descriptor()
+                .map_err(|err| TransportError::Usb(err.to_string()))?;
+            if descriptor.vendor_id() != self.candidate.vendor_id
+                || descriptor.product_id() != self.candidate.product_id
+            {
+                continue;
+            }
+
+            let handle = device
+                .open()
+                .map_err(|err| usb_open_error(err, &self.candidate))?;
+            return Ok((context, handle));
+        }
+
+        Err(TransportError::Usb(format!(
+            "USB device {} is no longer present",
+            self.candidate.id
+        )))
+    }
+}
+
+#[async_trait]
+impl EmwaverTransport for LinuxUsbMidiTransport {
+    fn descriptor(&self) -> TransportDescriptor {
+        TransportDescriptor {
+            id: TransportId(self.candidate.id.clone()),
+            kind: TransportKind::UsbMidi,
+            display_name: self.candidate.display_name(),
+            hardware_uid: None,
+            firmware_version: None,
+        }
+    }
+
+    async fn connect(&mut self) -> TransportResult<()> {
+        let (context, handle) = self.open_matching_handle()?;
+        let _ = handle.set_auto_detach_kernel_driver(true);
+
+        match handle.claim_interface(USB_MIDI_INTERFACE_NUMBER) {
+            Ok(()) => {}
+            Err(original) => {
+                let _ = handle.set_active_configuration(1);
+                handle
+                    .claim_interface(USB_MIDI_INTERFACE_NUMBER)
+                    .map_err(|err| {
+                        TransportError::Usb(format!(
+                            "failed to claim USB MIDI interface {USB_MIDI_INTERFACE_NUMBER}: {err}; original error: {original}. {}",
+                            kernel_busy_guidance()
+                        ))
+                    })?;
+            }
+        }
+
+        self.context = Some(context);
+        self.handle = Some(Mutex::new(handle));
+        Ok(())
+    }
+
+    async fn send_frame(&mut self, frame: EmwFrame) -> TransportResult<()> {
+        let packet = encode_superframe_to_usb_midi(&frame.bytes)
+            .map_err(|err| TransportError::Usb(err.to_string()))?;
+        let handle = self.handle.as_ref().ok_or(TransportError::NotConnected)?;
+        let written = handle
+            .lock()
+            .map_err(|_| TransportError::Usb("USB MIDI handle lock poisoned".to_string()))?
+            .write_bulk(USB_MIDI_OUT_ENDPOINT, &packet, USB_MIDI_IO_TIMEOUT)
+            .map_err(|err| TransportError::Usb(format!("USB MIDI write failed: {err}")))?;
+
+        if written != USB_MIDI_PACKET_SIZE_BYTES {
+            return Err(TransportError::Usb(format!(
+                "USB MIDI write sent {written} bytes; expected {USB_MIDI_PACKET_SIZE_BYTES}"
+            )));
+        }
+        Ok(())
+    }
+
+    async fn next_frame(&mut self) -> TransportResult<EmwFrame> {
+        let handle = self.handle.as_ref().ok_or(TransportError::NotConnected)?;
+        let mut packet = [0u8; USB_MIDI_PACKET_SIZE_BYTES];
+        let read = handle
+            .lock()
+            .map_err(|_| TransportError::Usb("USB MIDI handle lock poisoned".to_string()))?
+            .read_bulk(USB_MIDI_IN_ENDPOINT, &mut packet, USB_MIDI_IO_TIMEOUT)
+            .map_err(|err| TransportError::Usb(format!("USB MIDI read failed: {err}")))?;
+
+        if read != USB_MIDI_PACKET_SIZE_BYTES {
+            return Err(TransportError::Usb(format!(
+                "USB MIDI read returned {read} bytes; expected {USB_MIDI_PACKET_SIZE_BYTES}"
+            )));
+        }
+
+        let superframe = decode_usb_midi_to_superframe(&packet)
+            .map_err(|err| TransportError::Usb(err.to_string()))?;
+        Ok(EmwFrame {
+            bytes: superframe.to_vec(),
+        })
+    }
+
+    async fn close(&mut self) -> TransportResult<()> {
+        if let Some(handle) = self.handle.take() {
+            let _ = handle
+                .lock()
+                .map_err(|_| TransportError::Usb("USB MIDI handle lock poisoned".to_string()))?
+                .release_interface(USB_MIDI_INTERFACE_NUMBER);
+        }
+        self.context = None;
+        Ok(())
+    }
+}
+
 pub fn classify_usb_device(vendor_id: u16, product_id: u16) -> UsbDeviceRole {
     match (vendor_id, product_id) {
         (STM32_VENDOR_ID, STM32_RUN_MODE_PRODUCT_ID) => UsbDeviceRole::Stm32RunModeMidi,
@@ -170,6 +345,22 @@ fn permission_guidance() -> String {
 
 fn kernel_busy_guidance() -> String {
     "A kernel driver currently owns this interface. The Linux app will detach only for direct flashing/control paths; close other serial/MIDI tools and reconnect the board.".to_string()
+}
+
+fn usb_open_error(err: rusb::Error, candidate: &UsbDeviceCandidate) -> TransportError {
+    match err {
+        rusb::Error::Access => TransportError::Usb(format!(
+            "permission denied opening {}. {}",
+            candidate.id,
+            permission_guidance()
+        )),
+        rusb::Error::Busy => TransportError::Usb(format!(
+            "USB interface for {} is busy. {}",
+            candidate.id,
+            kernel_busy_guidance()
+        )),
+        err => TransportError::Usb(format!("failed to open {}: {err}", candidate.id)),
+    }
 }
 
 #[cfg(test)]
@@ -238,5 +429,19 @@ mod tests {
         };
 
         assert_eq!(candidate.display_name(), "EMWaver STM32 USB MIDI");
+    }
+
+    #[test]
+    fn command_lane_superframe_pads_to_fixed_size() {
+        let frame = LinuxUsbMidiTransport::command_lane_superframe(&[0x08]).unwrap();
+        assert_eq!(frame.bytes.len(), SUPERFRAME_SIZE_BYTES);
+        assert_eq!(frame.bytes[0], 0x08);
+        assert!(frame.bytes[1..].iter().all(|byte| *byte == 0));
+    }
+
+    #[test]
+    fn command_lane_superframe_rejects_oversized_commands() {
+        let command = [0xaa; LANE_SIZE_BYTES + 1];
+        assert!(LinuxUsbMidiTransport::command_lane_superframe(&command).is_err());
     }
 }
