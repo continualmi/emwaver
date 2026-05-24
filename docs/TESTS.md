@@ -1,175 +1,127 @@
 # EMWaver Hardware Test Suite
 
-This document tracks only the active manual tests.
+This document tracks active manual and semi-automated validation for the current native-app architecture.
 
 Status legend: `[x]` = passed, `[ ]` = pending. Dates are recorded only for fully passed test codes.
 
-## Automation Bench Goal
+## Validation Model
 
-The hardware test suite should move toward an agent-driven local automation bench: one machine running the `emw`/`emwaver` CLI and localhost Gateway, connected to multiple EMWaver boards and modules. The target bench is at least two simultaneous devices: two ESP32-S3 BLE boards, or one ESP32-S3 BLE board plus one USB MIDI STM32 board. With that box, a coding agent should be able to create local custom `.emw` scripts, run them, inspect `ui.snapshot` output/status, send `ui.event` interactions, stop/reset scripts, and validate hardware loops such as CC1101, sampler/retransmit, RFID, PWM, GPIO, ADC, SPI, I2C, and UART with minimal manual intervention.
+Tests should validate the product users actually run:
+
+```text
+native app -> local JavaScript script -> USB/BLE/Wi-Fi transport -> board firmware -> hardware
+```
+
+Agent-driven tests should use named hardware primitives such as `spi_transfer`, `gpio_read`, `gpio_write`, and `analog_read`. UI panels are tested as script-defined native interfaces, not as the Agent's primary hardware access path.
 
 ## Test Code Index
 
-| Code | Status | Systems | Passed Date |
-| --- | --- | --- | --- |
-| `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` |
-| `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` |
-| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | macOS, iOS | |
-| `004_MFRC522_READ_WRITE_RFID_CARD` | `[ ]` |  | |
-| `005_SERVO_PWM_POSITION_CONTROL` | `[ ]` |  | |
-| `006_AGENT_CLI_GATEWAY_SCRIPT_LOOP` | `[ ]` | macOS, Linux | |
-| `007_MULTI_DEVICE_AGENT_BENCH` | `[ ]` | macOS, Linux | |
-| `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION` | `[ ]` | macOS, Linux, ESP32-S3 | |
-| `009_ESP32_WIFI_VPN_BY_IP_EXECUTION` | `[ ]` | macOS, Linux, ESP32-S3 | |
+| Code | Status | Systems | Passed Date | Notes |
+| --- | --- | --- | --- | --- |
+| `001_BLINK_LED_HOST_DEVICE_COMMS` | `[x]` | macOS | `2026-02-06` | Legacy pass; revalidate with `.js` script naming. |
+| `002_CC1101_INIT_AND_REGISTER_READBACK` | `[x]` | macOS | `2026-02-07` | Legacy pass; superseded by `010`. |
+| `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY` | `[ ]` | macOS, iOS | | |
+| `004_MFRC522_READ_WRITE_RFID_CARD` | `[ ]` | iOS, Android, macOS, Windows | | |
+| `005_SERVO_PWM_POSITION_CONTROL` | `[ ]` | iOS, Android, macOS, Windows | | |
+| `010_CC1101_JS_CROSS_PLATFORM_REGISTER_RW` | `[x]` | iOS, Android, macOS, Windows | `2026-05-24` | `cc1101.js` reads and writes all registers on tested platforms. |
+| `011_AGENT_SPI_TRANSFER_CC1101_PROBE` | `[ ]` | native apps with Agent tools | | Agent uses `spi_transfer` directly to probe CC1101 registers. |
+| `012_SCRIPT_DEFINED_MODULE_UI` | `[ ]` | iOS, Android, macOS, Windows | | `.js` script defines a native UI panel for a module. |
+| `013_ESP32_WIFI_LAN_SCRIPT_EXECUTION` | `[ ]` | native app + ESP32-S3 | | Same-LAN Wi-Fi script execution. |
+| `014_ESP32_WIFI_REMOTE_BY_IP_EXECUTION` | `[ ]` | native app + ESP32-S3 | | LAN/VPN/Tailscale-style remote-by-IP control. |
+| `015_MULTI_DEVICE_NATIVE_BENCH` | `[ ]` | macOS first, then all apps | | Two simultaneous boards with isolated command/session buffers. |
 
-## Remote Case Matrix
+## Platform Matrix
 
-- Letter map: `M`=macOS, `W`=Windows, `I`=iOS, `A`=Android, `F`=Gateway browser UI, `L`=Linux headless Gateway host.
-- Remote variants cover user-owned network paths only. Native apps are self-contained local surfaces; terminal/browser workflows use Gateway.
+| Platform | USB | BLE | Wi-Fi | Script UI | Agent primitives | CC1101 `cc1101.js` |
+| --- | --- | --- | --- | --- | --- | --- |
+| iOS / iPadOS | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` |
+| Android | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` |
+| macOS | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[x]` | `[x]` |
+| Windows | `[x]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[x]` |
+| Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
 
-| Case | Controller | Host | `001R` | `002R` | `003R` | `004R` | `005R` |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `MW` | macOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `MI` | macOS | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `MA` | macOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WM` | Windows | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WI` | Windows | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WA` | Windows | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IM` | iOS | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IW` | iOS | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IA` | iOS | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AM` | Android | macOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AW` | Android | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AI` | Android | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FM` | Frontend | macOS | `[x]` | `[x]` | `[x]` | `[ ]` | `[ ]` |
-| `FW` | Frontend | Windows | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FI` | Frontend | iOS | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FA` | Frontend | Android | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `ML` | macOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `WL` | Windows | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `IL` | iOS | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `AL` | Android | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
-| `FL` | Frontend | Linux | `[ ]` | `[ ]` | `[ ]` | `[ ]` | `[ ]` |
+Update this matrix only with concise evidence: app build/version, board, transport, script, observed result, date, and tester.
 
 ## `001_BLINK_LED_HOST_DEVICE_COMMS`
 
-### Local
-
-- Script: `blink.emw`
-- Steps: connect board over USB and run `blink.emw`.
-- Tests: host-device comms and basic script runtime execution.
-- Expected: LED blinks as defined, with no stalls/failures.
-
-### Remote (`001R_REMOTE_BLINK_LED_HOST_CONTROLLER_COMMS`)
-
-- Steps: run the same blink flow through remote host control across the full remote case matrix.
-- Expected: matches local `001` in all cases.
+- Script: `blink.js`
+- Steps: connect a supported board over USB and run the blink script.
+- Tests: native app connection, command packet path, basic script runtime execution.
+- Expected: LED blinks as defined with no stalls or disconnects.
 
 ## `002_CC1101_INIT_AND_REGISTER_READBACK`
 
-### Local
-
-- Script: `cc1101.emw`
-- Steps: in `cc1101.emw` press `Init RX` or `Init TX`, then `Initialize & Read` to read all registers.
-- Tests: SPI path, CC1101 init path, register write/readback integrity.
-- Expected: `115000` baud, `433.92 MHz`, `ASK/OOK`, and no repeated-init garbage.
-
-### Remote (`002R_REMOTE_CC1101_INIT_AND_REGISTER_READBACK`)
-
-- Steps: run the same CC1101 init/readback flow through remote host control across the full remote case matrix.
-- Expected: matches local `002` in all cases.
+- Script: `cc1101.js`
+- Steps: initialize the CC1101 and read registers.
+- Tests: SPI path, CC1101 init path, register readback integrity.
+- Expected: register values match the configured state and repeated init/read cycles remain stable.
 
 ## `003_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY`
 
-### Local
-
-- Scripts: `sampler.emw` + `cc1101.emw`
-- Systems: macOS, iOS
-- Steps: in `cc1101.emw` press `initRx`; capture a real 433 MHz signal in `sampler.emw`; confirm chart capture is continuous, including idle-low or sparse regions; save `.raw`; clear and reload; save timings `.txt`; switch to `initTx`; press `Retransmit`.
-- Tests: sampler capture integrity, uninterrupted recording, all-zero lane continuity, `.raw` reload parity, timings export/import parity, TX replay, flow-control retransmit path.
-- Expected: chart keeps advancing during active sampling even when the signal is idle-low; reloaded captures match the original waveform; retransmit causes same real-world effect as original remote; optional RTL-SDR check within about 5-10 us pulse-width margin for current sampler resolution.
-
-### Remote (`003R_REMOTE_SAMPLER_CAPTURE_AND_RETRANSMIT_INTEGRITY`)
-
-- Steps: run the same sampler capture/retransmit flow through remote host control across the full remote case matrix, including iOS host cases where supported.
-- Expected: matches local `003` in all cases.
+- Scripts: sampler and CC1101 JavaScript scripts.
+- Systems: macOS and iOS first, then Android and Windows.
+- Steps: initialize RX, capture a real 433 MHz signal, confirm continuous capture including idle-low or sparse regions, save/reload capture, initialize TX, retransmit.
+- Tests: sampler capture integrity, export/import parity, TX replay, flow-control retransmit path.
+- Expected: capture stays continuous, reload matches the original waveform, and retransmit causes the same real-world effect as the original remote.
 
 ## `004_MFRC522_READ_WRITE_RFID_CARD`
 
-### Local
-
-- Script target: `mfrc522_read_write.emw`
-- Setup: wire MFRC522 (RC522) to EMWaver over SPI and place a valid RFID/NFC card near reader.
-- Steps: run the script; read card UID; select block + key; write test payload; read back same block and verify exact match.
+- Script target: MFRC522 JavaScript script.
+- Setup: wire MFRC522/RC522 to EMWaver over SPI and place a valid RFID/NFC card near the reader.
+- Steps: read card UID, select block/key, write test payload, read back the same block.
 - Tests: MFRC522 SPI comms, card detect/select, auth, block write, readback verification.
 - Expected: UID is read reliably and written block reads back exactly as written.
 
-### Remote (`004R_REMOTE_MFRC522_READ_WRITE_RFID_CARD`)
-
-- Steps: run the same MFRC522 read/write/verify flow through remote host control across the full remote case matrix.
-- Expected: matches local `004` in all cases.
-
 ## `005_SERVO_PWM_POSITION_CONTROL`
 
-### Local
-
-- Script: `pwm.emw`
-- Steps: connect servo signal to selected PWM pin, power servo from external 5V, share GND with EMWaver; run `pwm.emw`; test `Min`, `Center`, `Max`, then slider + `Move Slider Position`.
+- Script: PWM JavaScript script.
+- Steps: connect servo signal to selected PWM pin, power servo from external 5V, share GND with EMWaver, run the PWM script, test min/center/max and variable positions.
 - Tests: PWM servo control on real hardware, preset positions, freeform position setting.
-- Expected: servo reaches distinct Min/Center/Max positions and tracks slider-selected positions consistently.
+- Expected: servo reaches distinct min/center/max positions and tracks selected positions consistently.
 
-### Remote (`005R_REMOTE_SERVO_PWM_POSITION_CONTROL`)
+## `010_CC1101_JS_CROSS_PLATFORM_REGISTER_RW`
 
-- Steps: run the same servo PWM flow through remote host control across the full remote case matrix.
-- Expected: matches local `005` in all cases.
+- Script: `cc1101.js`
+- Systems: iOS, Android, macOS, Windows.
+- Steps: connect supported hardware, run `cc1101.js`, initialize the CC1101 path, read all registers, write configurable registers, read back changed values.
+- Tests: cross-platform native app script execution, USB transport, SPI register transactions, register write/readback integrity.
+- Expected: every tested platform reads and writes CC1101 registers successfully.
+- Current result: passed on iOS, Android, macOS, and Windows.
+- Evidence to add in future: app build/version for each platform, board name, transport, CC1101 module/path, register list/hash, date, and tester.
 
-## `006_AGENT_CLI_GATEWAY_SCRIPT_LOOP`
+## `011_AGENT_SPI_TRANSFER_CC1101_PROBE`
 
-### Local
+- Tool target: `spi_transfer`.
+- Steps: enable Agent tools, ask the Agent to identify/probe the CC1101, run direct SPI register reads, then write/read back one safe configurable register.
+- Tests: Agent direct hardware primitive access, SPI transaction correctness, error reporting, safe register write/readback.
+- Expected: the Agent can probe the module without relying on UI snapshot scraping or arbitrary script eval.
 
-- Script target: custom `.emw` file created outside `assets/default-scripts`.
-- Setup: run localhost Gateway against a real board.
-- Steps: from the terminal/agent, create or edit a local `.emw` script; run it with `emwaver run`; wait for `script.started`; capture the latest `ui.snapshot`; send at least one `ui.event`; verify a changed snapshot or hardware effect; stop the script; confirm no stale active script remains.
-- Tests: terminal-first agent workflow, Gateway execution, custom local script loading, UI snapshot inspection, UI event dispatch, stop/reset behavior, and hardware command execution.
-- Expected: the agent can iterate on a custom script without using the app UI manually, and the hardware ends in a known safe state after stop/reset.
+## `012_SCRIPT_DEFINED_MODULE_UI`
 
-## `007_MULTI_DEVICE_AGENT_BENCH`
+- Script: JavaScript file using JSX-style UI syntax.
+- Steps: open a module script that renders a native UI panel, use buttons/sliders/forms to trigger hardware actions, verify UI state updates after hardware responses.
+- Tests: JSX-style syntax transform, native UI rendering, event callbacks, hardware calls from UI handlers, state updates.
+- Expected: a single `.js` file can expose a usable native control panel for a connected module.
 
-### Local
+## `013_ESP32_WIFI_LAN_SCRIPT_EXECUTION`
 
-- Script target: multi-device diagnostic `.emw` scripts or equivalent CLI-driven test scripts.
-- Setup: connect at least two EMWaver boards simultaneously, initially either two ESP32-S3 BLE devices or one ESP32-S3 BLE device plus one USB MIDI STM32 device. Attach representative modules such as CC1101, RFID, PWM servo, ADC/GPIO loopback, I2C, SPI, or UART fixtures.
-- Steps: discover both devices; connect to both at the same time; assign stable names/ids; run per-device commands; run a coordinated test where one board generates or transmits and another board observes or samples; collect snapshots/status for each device; stop/reset both devices.
-- Tests: multi-device discovery, stable selection, concurrent BLE/USB ownership, command routing by device, per-device UI/status attribution, and agent-driven validation of hardware loops across boards.
-- Expected: one local agent session can control the bench as a hardware validation box and repeatedly probe EMWaver capabilities without manual reconnect/reconfigure steps.
+- Script targets: blink, GPIO, ADC, PWM, sampler, and CC1101 JavaScript scripts as hardware allows.
+- Setup: provision Wi-Fi locally over USB/BLE, keep USB available for recovery, attach representative fixtures.
+- Steps: discover or manually enter the ESP32 endpoint from a native app, connect over same-LAN Wi-Fi, run scripts, verify reconnect behavior after a Wi-Fi drop, verify second-client busy handling if supported.
+- Tests: same-LAN discovery/manual IP, WebSocket payload transport, single-session ownership, disconnect/reconnect diagnostics, USB/BLE recovery.
+- Expected: the native app can run scripts through Wi-Fi on the LAN, recover from failures, and keep local provisioning paths available.
 
-## `008_ESP32_WIFI_LAN_SCRIPT_EXECUTION`
+## `014_ESP32_WIFI_REMOTE_BY_IP_EXECUTION`
 
-### Local
+- Script targets: blink plus one representative hardware script from `013`.
+- Setup: put an ESP32-S3 board on a lab/home LAN and connect the controller device through a user-owned routed path such as VPN, Tailscale, SSH tunnel, or port forwarding.
+- Steps: enter the private/routed IP in the native app, run scripts, repeat with mDNS unavailable, test transient network drop/reconnect behavior.
+- Tests: remote-by-IP execution, routed-network latency tolerance, manual endpoint entry, reconnect behavior.
+- Expected: scripts run through the user-owned network path by IP when the board is reachable.
 
-- Script targets: `assets/default-scripts/blink.emw`, `assets/default-scripts/gpio.emw`, `assets/default-scripts/adc.emw`, `assets/default-scripts/pwm.emw`, `assets/default-scripts/sampler.emw`, and `assets/default-scripts/cc1101.emw`.
-- Setup: flash the current ESP32-S3 firmware payload; provision Wi-Fi with SSID/password only over USB or BLE; keep USB available for recovery; attach LED, ADC/GPIO loopback, PWM/servo, CC1101 SPI, and sampler/retransmit fixtures as available.
-- Steps: discover the board through `_emwaver._tcp`; run `emwaver devices`; start `emwaver gateway serve --wifi <mdns-host>`; run `emwaver run assets/default-scripts/blink.emw`; repeat by direct IP; verify the macOS native app manual connect/discovery path; connect multiple same-LAN ESP32 boards on port `3922`; attempt a second simultaneous client and confirm `busy`; drop Wi-Fi during a running script; clear/reprovision Wi-Fi over USB or BLE.
-- Tests: same-LAN mDNS discovery, same-LAN manual IP, LAN-trust WebSocket command transport, per-endpoint single-session ownership, multiple same-LAN board selection, disconnect reporting/recovery, and USB/BLE recovery after bad Wi-Fi configuration.
-- Expected: CLI and macOS app can run scripts through Wi-Fi without accounts, cloud relay, hosted activation, or extra transport credentials; second simultaneous clients are rejected as busy; Wi-Fi drops leave the runtime recoverable; USB/BLE provisioning remains available.
-- Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, provisioning transport used, SSID/network shape, mDNS hostname, direct IP, exact CLI commands and exit results, macOS app version/build, observed script behavior for each hardware fixture, second-client busy result, Wi-Fi drop/reconnect result, USB/BLE recovery result, date, and tester.
+## `015_MULTI_DEVICE_NATIVE_BENCH`
 
-### Hardware Coverage
-
-- GPIO blink visibly matches script timing.
-- ADC read returns plausible values from the test fixture.
-- SPI module readback matches the expected CC1101 register state.
-- PWM output drives servo Min/Center/Max and slider positions consistently.
-- Sampler start/stop reports runtime activity and preserves capture continuity.
-- Retransmit flow-control status is reported without corrupting captured script data.
-
-## `009_ESP32_WIFI_VPN_BY_IP_EXECUTION`
-
-### Local
-
-- Script targets: `assets/default-scripts/blink.emw`, plus one representative hardware script from `008`.
-- Setup: put an ESP32-S3 board on a home/lab LAN; provision Wi-Fi locally; connect the controller machine through a user-owned VPN, SSH tunnel, Tailscale subnet route, or equivalent routed private network. Do not use an EMWaver-hosted relay.
-- Steps: start `emwaver gateway serve --wifi <private-ip>` from outside the LAN; run `emwaver run assets/default-scripts/blink.emw`; repeat with mDNS unavailable; verify the manual IP path in Gateway and macOS app where available; attempt a second simultaneous client and confirm `busy`; stop/reset the script and reconnect after a transient network drop.
-- Tests: VPN-by-IP direct execution, manual endpoint entry when mDNS does not cross the tunnel, routed-network latency tolerance, busy handling, reconnect behavior, and local-first remote posture.
-- Expected: scripts run through a user-owned routed path by private IP with LAN/VPN reachability as the trust boundary; no hosted relay, cloud account, subscription check, or backend device ownership check is involved.
-- Evidence to record before marking passed: ESP32-S3 board model, firmware commit/hash or bundle version, user-owned routed path type, controller network location, private IP tested, exact CLI commands and exit results, gateway/macOS manual IP result where tested, second-client busy result, transient network drop/reconnect result, confirmation that no EMWaver-hosted relay/account path was used, date, and tester.
+- Setup: connect at least two EMWaver boards simultaneously, initially macOS first.
+- Steps: discover both devices, connect to both, assign stable labels, run per-device commands, and run a coordinated test where one board generates/transmits and another observes/samples.
+- Tests: multi-device discovery, stable selection, concurrent transport ownership, command routing by device, per-device script/session isolation.
+- Expected: the native app can control a small hardware bench without cross-device buffer leakage or stale session state.

@@ -5,16 +5,16 @@ export default function ScriptsDocPage() {
     <>
       <h1>Scripting guide</h1>
       <p>
-        EMWaver scripts are local JavaScript programs. Current bundled scripts use <code>.js</code> files,
-        extensionless imports such as <code>"emw-ui"</code>, JSX components, and small hardware modules
-        such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
+        EMWaver scripts are local JavaScript programs. Scripts use <code>.js</code> files and can include
+        JSX-style UI syntax for native panels, extensionless imports such as <code>"emw-ui"</code>, and
+        hardware modules such as <code>emw-gpio</code>, <code>emw-spi</code>, and <code>emw-sampler</code>.
       </p>
       <h2>How scripts run</h2>
       <ol>
         <li>The app loads the visible runtime libraries from the bundled script assets.</li>
         <li>Imports are resolved from EMWaver modules such as <code>emw-ui</code>, <code>emw-jsx</code>, <code>emw-gpio</code>, and <code>emw-spi</code>.</li>
-        <li>JSX is transpiled into EMWaver UI nodes.</li>
-        <li>Your script renders a UI snapshot with <code>render(&lt;App /&gt;)</code>.</li>
+        <li>JSX-style syntax is transpiled into native EMWaver UI nodes.</li>
+        <li>Your script renders a native panel with <code>render(&lt;App /&gt;)</code>.</li>
         <li>Callbacks such as <code>onTap</code>, <code>onChange</code>, and <code>onViewportChange</code> handle user events and then re-render.</li>
       </ol>
       <p>
@@ -62,8 +62,8 @@ rerender();`}</code>
         <li><strong>Imports</strong>: bring in the UI renderer, JSX factory, components, and hardware modules.</li>
         <li><strong>State</strong>: keep state in normal JavaScript variables.</li>
         <li><strong>Actions</strong>: callbacks mutate state, perform device work, then re-render.</li>
-        <li><strong>App component</strong>: returns a JSX tree made from EMWaver UI components.</li>
-        <li><strong>Render function</strong>: one small <code>render(&lt;App /&gt;)</code> wrapper is the UI snapshot contract.</li>
+        <li><strong>App component</strong>: returns a JSX-style tree made from EMWaver UI components.</li>
+        <li><strong>Render function</strong>: one small <code>render(&lt;App /&gt;)</code> wrapper updates the native panel.</li>
       </ul>
 
       <h2>Board-aware GPIO example</h2>
@@ -164,7 +164,7 @@ rerender();`}</code>
         </table>
       </div>
 
-      <h2>Timing and UI snapshots</h2>
+      <h2>Timing</h2>
       <pre>
         <code className="language-javascript">{`delay(500);          // blocking sleep (ms)
 sleep(100);          // alias for delay
@@ -177,8 +177,9 @@ const timer = every(1000, () => {
 timer.stop();`}</code>
       </pre>
       <p>
-        Agent, CLI, browser, and native automation should inspect rendered UI snapshots and dispatch
-        UI events. Do not rely on <code>console.log</code> as a parallel automation contract.
+        Use rendered panels for user interaction. Agent hardware automation should use named hardware
+        primitives such as SPI transfers, GPIO reads/writes, analog reads, and module probes rather than
+        screen-scraping UI state.
       </p>
 
       <h2>Next</h2>

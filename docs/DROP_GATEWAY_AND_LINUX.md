@@ -1,10 +1,12 @@
 # Gateway and Linux Support Removal
 
+> Historical note: this is a May 2026 decision record for removing the old Gateway/CLI/browser architecture and the old Linux path. It is not the current Linux app plan. The current Linux direction is a native Rust + GTK4/libadwaita app under `linux/`.
+
 ## Decision
 
-The `gateway/` directory, all CLI release packaging, and Linux as a supported platform are being removed from EMWaver.
+The `gateway/` directory, all CLI release packaging, and the old Linux support path were removed from EMWaver.
 
-Supported platforms going forward: **iOS, Android, macOS, Windows.**
+Supported platforms immediately after that removal were **iOS, Android, macOS, and Windows**. Linux is now being rebuilt as a native app.
 
 ---
 
@@ -102,15 +104,15 @@ The Rust crates in `crates/` (`emwaver-dfu`, `emwaver-dfu-helper`) are unrelated
 
 ---
 
-## Supported Platforms After This Change
+## Supported Platforms Immediately After This Historical Change
 
-| Platform | Method        | Status                      |
+| Platform | Method        | Status at the time          |
 |----------|---------------|-----------------------------|
 | macOS    | Native app    | Active                      |
 | Windows  | Native app    | Active                      |
 | Android  | Native app    | Active (APK preview)        |
 | iOS      | Native app    | Active (TestFlight / store) |
-| Linux    | —             | Not supported               |
+| Linux    | —             | Old path removed            |
 
 ---
 

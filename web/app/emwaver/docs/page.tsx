@@ -110,13 +110,13 @@ export default function DocsIndex() {
         </li>
         <li>
           <strong>Install the app</strong> through the{" "}
-          <Link href="/emwaver/docs/install">App Store, Google Play internal test, Android APK, or macOS DMG</Link>.
+          <Link href="/emwaver/docs/install">App Store, Google Play internal test, Android APK, macOS DMG, or Windows download</Link>.
         </li>
         <li>
           <strong>Flash the fixed EMWaver firmware</strong> if your board is not already pre-flashed. Use the bundled ESP32-S3 or STM32F042 target image rather than building firmware manually.
         </li>
         <li>
-          <strong>Plug in locally</strong>. EMWaver should run supported local scripts without account sign-in or cloud activation.
+          <strong>Plug in locally</strong>. EMWaver runs supported scripts directly through the native app and connected board.
         </li>
         <li>
           <strong>Open a script</strong> such as <code>sampler.js</code>, <code>cc1101.js</code>, or <code>rfid.js</code>,
@@ -129,8 +129,8 @@ export default function DocsIndex() {
         <li><strong>iOS</strong> on the App Store</li>
         <li><strong>Android</strong> through the Google Play internal test or direct APK download</li>
         <li><strong>macOS</strong> direct DMG download for development and advanced use</li>
-        <li><strong>Windows</strong> preview EXE installer and ZIP downloads</li>
-        <li><strong>Linux</strong> coming soon after V1</li>
+        <li><strong>Windows</strong> EXE installer and ZIP downloads</li>
+        <li><strong>Linux</strong> native app in progress</li>
       </ul>
 
       <h2>What to read next</h2>
@@ -143,7 +143,7 @@ export default function DocsIndex() {
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">Scripts</div>
             <div className="mt-1 text-lg font-semibold text-[color:var(--ink)]">Learn the scripting model</div>
             <div className="mt-1 text-sm text-[color:var(--ink-dim)]">
-              JSX components, imported device modules, script structure, and the built-in examples.
+              JavaScript scripts, JSX-style UI syntax, imported device modules, and built-in examples.
             </div>
           </div>
           <div className="mt-1 text-sm font-semibold text-[color:var(--ink-dim)] transition group-hover:text-[color:var(--ink)]">

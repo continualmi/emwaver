@@ -42,8 +42,8 @@ MGPT loads the universe from server-side cache/storage, composes private prompts
 
 ## Current Implementation Prep
 
-- Browser Gateway Agent tooling should be implemented in TypeScript and send `userInput` plus the configured universe id when it is reintroduced.
-- Terminal Agent tooling should live outside the Rust device backend.
+- Native app Agent clients should send `userInput` plus the configured universe id.
+- Hardware primitive tooling should live in the native app/device integration layer, outside the generic MGPT universe boundary.
 - Windows Agent API sends `userInput` and the configured universe id.
 - Android Agent API sends `userInput` and the configured universe id.
 

@@ -22,9 +22,9 @@
   <img src="https://continualmi.com/emwaver/banner.jpeg" alt="EMWaver running across phone, desktop, and supported boards" width="860">
 </p>
 
-EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript or JSX-style scripts, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
+EMWaver turns supported MCU boards into a scriptable hardware lab. Write JavaScript, press run, and talk to real electronics from native apps without rebuilding firmware for every experiment.
 
-The core runtime is local-first: scripts run on your device, hardware access does not require an EMWaver account, and supported boards are controlled through USB, BLE, and Wi-Fi transports. USB-C gives direct plug-in control, BLE enables cable-free mobile use, and Wi-Fi can support LAN/VPN-style remote hardware control for boards designed around it. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
+The core runtime is local-first: scripts run on your device and supported boards are controlled through USB, BLE, and Wi-Fi transports. USB-C gives direct plug-in control, BLE enables cable-free mobile use, and Wi-Fi can support LAN/VPN-style remote hardware control for boards designed around it. The hardware direction is mobile-first too: compact USB-C male boards can plug directly into modern phones, tablets, and laptops for a portable lab that goes far beyond fixed-purpose handheld tools.
 
 > Status: EMWaver is in an early open-source platform release. The architecture is working across the native apps, while packaging, documentation, supported-board coverage, and installer polish are still improving.
 
@@ -76,7 +76,7 @@ EMWaver currently includes native app work for:
 
 The platform is designed around:
 
-- local JavaScript and JSX-style scripts (`.js`, `.jsx`);
+- local JavaScript scripts (`.js`) with JSX-style UI syntax;
 - managed board firmware;
 - USB as a first-class transport;
 - BLE and Wi-Fi for board classes that support them;
@@ -170,7 +170,7 @@ native app
   -> electronics
 ```
 
-Core hardware control is designed to work without cloud activation, hosted device ownership checks, cloud script storage, or an account-required runtime.
+Scripts and hardware control run locally by default.
 
 Wi-Fi-capable boards can also be controlled over a local network or through user-owned remote access such as VPN, Tailscale, SSH tunneling, or port forwarding.
 
@@ -182,22 +182,17 @@ The local scripting and hardware-control path remains useful without Agent assis
 
 ## Documentation
 
-Start here:
+User documentation lives on the EMWaver website:
 
-- [docs/CURRENT.md](docs/CURRENT.md) — current repository orientation
-- [docs/TESTS.md](docs/TESTS.md) — active hardware validation notes
-- [docs/SIMULATOR.md](docs/SIMULATOR.md) — simulator direction
-- [docs/AGENT_API.md](docs/AGENT_API.md) — optional Agent API boundary
-- [docs/ESP32_WIFI_TRANSPORT_PLAN.md](docs/ESP32_WIFI_TRANSPORT_PLAN.md) — ESP32 Wi-Fi transport plan
-- [docs/parity/](docs/parity/) — cross-platform parity contracts
-- [AGENTS.md](AGENTS.md) — repository-wide contributor guidance
+- [emwaver.ai/emwaver/docs](https://emwaver.ai/emwaver/docs/)
+
+Repository docs are mainly for contributors working on apps, firmware, hardware, tests, and release engineering. Start with the README closest to the subsystem you are changing.
 
 ## Contributing
 
 EMWaver is open source and local-first. Contributions should preserve these principles:
 
-- local scripts should run without account sign-in;
-- local hardware access should not require cloud activation or subscription checks;
+- local scripts and hardware control should keep working offline/local-first;
 - scripts should stay local by default;
 - normal users should not need to build or flash firmware manually for everyday scripting;
 - behavior changes should update the relevant README or documentation file.

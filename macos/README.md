@@ -4,7 +4,7 @@ Native macOS EMWaver application (Swift/SwiftUI + Xcode).
 
 This is the desktop Apple host app for local USB/BLE/Wi-Fi workflows, Agent client UI, and firmware/update UX on macOS.
 
-The local-first rule is that connected supported boards can run local JavaScript scripts immediately without account sign-in, backend activation, subscription checks, claimed-device cache membership, hardware-UID registration, device minting, or device limits.
+The local-first rule is that connected supported boards can run local JavaScript scripts immediately through the native app. Hardware UIDs may be used for local labels/diagnostics, not product activation or ownership gates.
 
 Important board-class split:
 - STM32 boards currently use the DFU-oriented update path.
@@ -92,13 +92,12 @@ Transport behavior:
 - If auto-connect is enabled and no wired EMWaver runtime is connected, macOS tries advertised Wi-Fi endpoints, then scans for the ESP32-S3 EMWaver BLE GATT service.
 - BLE scanning may continue while a device is connected so additional ESP32-S3 boards can be discovered for the multi-device bench path.
 - The first multi-device implementation can keep multiple ESP32-S3 BLE peripherals connected and lets the user select the active board for the in-app runtime.
-- The app queries `EMW_OP_HARDWARE_UID_GET` after USB/BLE connection, refreshes connected USB/BLE UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication; it must not be used for account activation, ownership, device limits, or subscription checks.
+- The app queries `EMW_OP_HARDWARE_UID_GET` after USB/BLE connection, refreshes connected USB/BLE UID checks during the regular 5-second connection poll, and uses that local hardware UID to merge the same physical device across transports when known. Wi-Fi uses fresh UID probe responses every 5 seconds as its live connection metric, not a cached UID. This UID is only for local labels/diagnostics/device-list deduplication.
 - BLE carries the same EMWaver SysEx/superframe payload as USB MIDI; opcodes and command behavior must stay shared in firmware and scripts.
 
-Gateway boundary:
-- The macOS app is self-contained and does not connect to the Gateway as a runtime owner.
-- Browser and CLI control use the Rust Gateway backend.
-- macOS keeps its own native script UI, local transport managers, and firmware/update flows.
+Runtime boundary:
+- The macOS app is self-contained and owns its native script UI, local transport managers, Agent surface, and firmware/update flows.
+- Do not reintroduce the removed Gateway/browser/CLI control plane as the macOS runtime path.
 
 Local Debug builds create a derived-data-only ESP helper wrapper from `tools/emwaver-esp-helper/emwaver_esp_helper.py` when PyInstaller is unavailable. Release packaging should still use a frozen helper bundle.
 
@@ -194,7 +193,7 @@ As with other app folders, avoid relying on Linux agent environment for native a
 ## 6) Contributor guardrails
 
 1. Keep macOS-specific host UI and settings here; move shared logic to `/apple`.
-2. Keep remote-control protocol compatibility aligned with the localhost gateway and other local clients.
+2. Keep USB/BLE/Wi-Fi transport behavior aligned with the shared native-app contracts.
 3. Ensure firmware update helper integration remains stable when changing update flow.
 4. Document any new app-level env/config toggles in this README.
 

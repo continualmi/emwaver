@@ -172,7 +172,6 @@ Use the local README first when working in a folder:
 - `docs/AGENT_API.md` — paid Agent API-key and endpoint direction
 - `docs/AGENT_EVAL_RUNTIME.md` — current Agent automation model: named hardware primitive tools (spi_transfer, gpio_read/write, analog_read)
 - `docs/AGENT_RUNTIME_AND_TOOLS.html` — visual Agent runtime/tooling document
-- `docs/CROSS_PLATFORM_AGENT_UI_MIGRATION_PLAN.html` — cross-platform Agent/UI parity plan
 - `docs/ESP32_WIFI_REMOTE_ACCESS.md` — user-owned LAN/VPN remote access for ESP32 Wi-Fi
 - `docs/ESP32_WIFI_TRANSPORT_AUDIT.md` — ESP32 Wi-Fi transport audit
 - `docs/ESP32_WIFI_TRANSPORT_PLAN.md` — ESP32 Wi-Fi transport plan
@@ -181,7 +180,7 @@ Use the local README first when working in a folder:
 - `docs/TESTS.md` — active manual hardware test suite, test codes, and pass/pending tracking
 - `docs/SIMULATOR.md` — shared device simulator for cross-platform testing
 - `docs/parity/` — cross-platform feature parity contracts (agent, transport, scripting, firmware, local-first)
-- `docs/archive/` — archived docs from the Gateway/CLI/Linux era
+- `docs/archive/` — archived docs from the Gateway/CLI/Linux era and superseded script/UI planning passes
 - `videos/README.md` — video planning, direction, lightweight production rules, and writing guidance
 - `.agents/skills/` — canonical EMWaver Codex skills for repo-local product guidance
 - `.agents/skills/archive/` — archived skills (Gateway/CLI)

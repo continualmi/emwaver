@@ -190,8 +190,8 @@ function InstallOptions() {
 
       <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
         <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--ink-dim)]">Linux</div>
-        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
-        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Linux packaging is planned after the V1 mobile launch.</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">In progress</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">The native Linux app port is underway. Public packages are not available yet.</div>
       </div>
     </div>
   );
@@ -208,8 +208,8 @@ export default function InstallDocPage() {
       <h2>1. Install the app</h2>
       <p>
         iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
-        Android is available through the Google Play internal test and as a direct APK download. macOS is available
-        for development and advanced use. Windows preview downloads are available, and Linux is coming soon after V1.
+        Android is available through the Google Play internal test and as a direct APK download. macOS and Windows
+        downloads are available for desktop use. The native Linux app is in progress.
       </p>
       <InstallOptions />
 
@@ -267,14 +267,14 @@ export default function InstallDocPage() {
 
       <h2>5. Run local scripts</h2>
       <p>
-        Open the Scripts view in the app, pick a built-in script or create your own JSX-based <code>.js</code> file,
-        and press Run. Local script execution should not require sign-in, cloud activation, or a hosted relay.
+        Open the Scripts view in the app, pick a built-in script or create your own <code>.js</code> file,
+        and press Run. Scripts can include JSX-style UI syntax for native module panels.
       </p>
 
       <h2>6. Optional Agent key</h2>
       <p>
-        The paid Agent can use an API key to help write and debug scripts, but that key should not be required
-        for ordinary local hardware control. See the{" "}
+        The optional Agent can use an API key to inspect hardware through primitive tools, probe modules,
+        and help write or debug scripts. The local script runtime works without Agent access. See the{" "}
         <Link href="/emwaver/docs/scripts">scripting guide</Link> for script details.
       </p>
     </>

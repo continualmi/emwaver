@@ -118,11 +118,11 @@
         <div class="card"><span class="tag native">UI</span><h3>GTK4/libadwaita</h3><p>GNOME-class native UI, adaptive layouts, settings, dialogs, toasts, device sheets, and polished desktop behavior.</p></div>
         <div class="card"><span class="tag native">Language</span><h3>Rust</h3><p>One language for UI glue, async runtime, protocol, USB, BLE, Wi-Fi, Agent client, helpers, tests, and packaging scripts where practical.</p></div>
         <div class="card"><span class="tag hardware">Hardware</span><h3>Linux APIs</h3><p>libusb/udev/serial/HID, BlueZ D-Bus, NetworkManager D-Bus when Wi-Fi configuration is needed, and native sockets/WebSockets.</p></div>
-        <div class="card"><span class="tag agent">Business</span><h3>Local-first + optional Agent</h3><p>No account, activation, hosted relay, device registration, or subscription check for local scripts or firmware setup.</p></div>
+        <div class="card"><span class="tag agent">Agent</span><h3>Local-first + optional Agent</h3><p>Scripts and firmware setup run through the native app, with optional Agent assistance when configured.</p></div>
       </div>
       <div class="callout risk">
         <h3>Do not restore the removed Linux architecture</h3>
-        <p>This plan is not a Gateway revival. No browser UI, localhost daemon requirement, hosted relay, or CLI-first control plane. The Linux app owns its own native runtime just like macOS owns its native runtime.</p>
+        <p>This plan is not a Gateway revival. No browser UI, localhost daemon requirement, or CLI-first control plane. The Linux app owns its own native runtime just like macOS owns its native runtime.</p>
       </div>
     </section>
 
@@ -143,9 +143,9 @@
         <div class="card">
           <h3>Non-goals</h3>
           <ul>
-            <li>No EMWaver account system or cloud activation.</li>
+            <li>Keep local scripts and firmware setup local-first.</li>
             <li>No cloud script storage or sync by default.</li>
-            <li>No hosted device ownership, UID minting, subscription gating, or device limit checks.</li>
+            <li>Use local diagnostics and labels rather than product activation or ownership gates.</li>
             <li>No dependency on ESP-IDF as an end-user runtime.</li>
             <li>No system-wide daemon unless a narrowly scoped helper becomes unavoidable for firmware flashing permissions.</li>
             <li>No Flatpak-only first release; hardware permissions are too important for the initial Linux target.</li>
@@ -278,7 +278,7 @@
           <tr>
             <td>Wi-Fi</td>
             <td><code>mdns-sd</code> or Avahi D-Bus, <code>tokio-tungstenite</code>, standard TCP/IP</td>
-            <td>mDNS discovery, manual hostname/IP + port validation, WebSocket payload transport, UID liveness poll, LAN/VPN trust boundary, no hosted relay.</td>
+            <td>mDNS discovery, manual hostname/IP + port validation, WebSocket payload transport, UID liveness poll, and LAN/VPN reachability.</td>
           </tr>
           <tr>
             <td>Wi-Fi provisioning</td>
