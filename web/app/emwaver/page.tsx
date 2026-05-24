@@ -29,6 +29,12 @@ const comparisonRows = [
   ["Core access", "Account-free local control", "Device-local", "Account-free local control"],
 ];
 
+const trailer = {
+  title: "EMWaver Trailer",
+  href: "https://www.youtube.com/watch?v=6acoNgBqpe0",
+  embedUrl: "https://www.youtube-nocookie.com/embed/6acoNgBqpe0?rel=0",
+};
+
 const gettingStarted = [
   {
     step: "1",
@@ -82,9 +88,15 @@ export default function HomePage() {
                 >
                   Build EMWaver
                 </Link>
+                <a
+                  href="#trailer"
+                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-6 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
+                >
+                  Watch trailer
+                </a>
                 <Link
                   href="/emwaver/scripts"
-                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface)] px-6 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
+                  className="inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-transparent px-6 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-2)]"
                 >
                   Browse scripts
                 </Link>
@@ -101,6 +113,43 @@ export default function HomePage() {
                 unoptimized
                 className="h-auto w-full rounded-xl object-cover"
               />
+            </div>
+          </div>
+        </section>
+
+        <section id="trailer" className="mx-auto max-w-6xl px-5 py-14">
+          <div className="grid gap-6 rounded-[2rem] border border-[color:var(--line)] bg-[color:var(--surface)] p-5 shadow-[0_24px_70px_var(--shadow)] md:grid-cols-[0.85fr_1.15fr] md:items-center md:p-6">
+            <div className="px-1 py-2 md:px-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--aqua)]">
+                Trailer
+              </div>
+              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
+                See EMWaver in motion.
+              </h2>
+              <p className="mt-4 text-[15px] leading-7 text-[color:var(--ink-dim)]">
+                The launch trailer is the fastest way to understand EMWaver: a phone-first,
+                script-first electronics platform that keeps local hardware control open and immediate.
+              </p>
+              <a
+                href={trailer.href}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-6 inline-flex items-center justify-center rounded-xl border border-[color:var(--line)] bg-[color:var(--surface-2)] px-5 py-3 text-sm font-semibold text-[color:var(--ink)] transition hover:bg-[color:var(--surface-3)]"
+              >
+                Open on YouTube
+              </a>
+            </div>
+            <div className="overflow-hidden rounded-[1.5rem] border border-[color:var(--line)] bg-black/30 shadow-xl shadow-black/20">
+              <div className="aspect-video">
+                <iframe
+                  src={trailer.embedUrl}
+                  title={trailer.title}
+                  className="h-full w-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  referrerPolicy="strict-origin-when-cross-origin"
+                  allowFullScreen
+                />
+              </div>
             </div>
           </div>
         </section>
@@ -187,50 +236,75 @@ export default function HomePage() {
         </section>
 
         <section className="mx-auto max-w-6xl px-5 py-14">
-          <div className="grid gap-10 md:grid-cols-[0.9fr_1.1fr] md:items-start">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
-                Different from handhelds and dev boards
-              </div>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
-                Why EMWaver over Flipper Zero or Arduino?
-              </h2>
-              <p className="mt-4 text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                EMWaver is not a Flipper clone and not a conventional MCU board
-                workflow. It uses the host for the things hosts are good at, then
-                keeps hardware interaction scriptable and local.
-              </p>
+          <div className="max-w-3xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.16em] text-[color:var(--copper)]">
+              Different from handhelds and dev boards
             </div>
-            <div className="overflow-x-auto rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)]">
-              <table className="min-w-[760px] w-full text-left text-sm">
-                <thead className="bg-[color:var(--table-header-bg)]">
-                  <tr>
-                    <th className="px-4 py-3 font-semibold text-[color:var(--ink)]" />
-                    <th className="px-4 py-3 font-semibold text-[color:var(--aqua)]">
-                      EMWaver
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-[color:var(--ink-dim)]">
-                      Flipper Zero
-                    </th>
-                    <th className="px-4 py-3 font-semibold text-[color:var(--ink-dim)]">
-                      Arduino
-                    </th>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
+              Why EMWaver over Flipper Zero or Arduino?
+            </h2>
+            <p className="mt-4 text-[15px] leading-7 text-[color:var(--ink-dim)]">
+              EMWaver is not a Flipper clone and not a conventional MCU board
+              workflow. It uses the host for the things hosts are good at, then
+              keeps hardware interaction scriptable and local.
+            </p>
+          </div>
+          <div className="mt-8 rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-3 md:p-4">
+            <div className="grid gap-3 md:hidden">
+              {comparisonRows.map(([feature, emwaver, flipper, arduino]) => (
+                <article key={feature} className="rounded-xl border border-[color:var(--table-border)] bg-[color:var(--surface-2)] p-4">
+                  <h3 className="font-semibold text-[color:var(--ink)]">{feature}</h3>
+                  <dl className="mt-3 grid gap-2 text-sm leading-6">
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--aqua)]">EMWaver</dt>
+                      <dd className="text-[color:var(--aqua)]">{emwaver}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-dim)]">Flipper Zero</dt>
+                      <dd className="text-[color:var(--ink-dim)]">{flipper}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-xs font-semibold uppercase tracking-[0.14em] text-[color:var(--ink-dim)]">Arduino</dt>
+                      <dd className="text-[color:var(--ink-dim)]">{arduino}</dd>
+                    </div>
+                  </dl>
+                </article>
+              ))}
+            </div>
+            <table className="hidden w-full table-fixed text-left text-sm md:table">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[30%]" />
+                <col className="w-[26%]" />
+                <col className="w-[26%]" />
+              </colgroup>
+              <thead className="bg-[color:var(--table-header-bg)]">
+                <tr>
+                  <th className="rounded-tl-xl px-4 py-3 font-semibold text-[color:var(--ink)]" />
+                  <th className="px-4 py-3 font-semibold text-[color:var(--aqua)]">
+                    EMWaver
+                  </th>
+                  <th className="px-4 py-3 font-semibold text-[color:var(--ink-dim)]">
+                    Flipper Zero
+                  </th>
+                  <th className="rounded-tr-xl px-4 py-3 font-semibold text-[color:var(--ink-dim)]">
+                    Arduino
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="text-[color:var(--ink-dim)]">
+                {comparisonRows.map(([feature, emwaver, flipper, arduino]) => (
+                  <tr key={feature} className="border-t border-[color:var(--table-border)] align-top">
+                    <td className="px-4 py-4 font-medium text-[color:var(--ink)]">
+                      {feature}
+                    </td>
+                    <td className="px-4 py-4 text-[color:var(--aqua)]">{emwaver}</td>
+                    <td className="px-4 py-4">{flipper}</td>
+                    <td className="px-4 py-4">{arduino}</td>
                   </tr>
-                </thead>
-                <tbody className="text-[color:var(--ink-dim)]">
-                  {comparisonRows.map(([feature, emwaver, flipper, arduino]) => (
-                    <tr key={feature} className="border-t border-[color:var(--table-border)]">
-                      <td className="px-4 py-3 font-medium text-[color:var(--ink)]">
-                        {feature}
-                      </td>
-                      <td className="px-4 py-3 text-[color:var(--aqua)]">{emwaver}</td>
-                      <td className="px-4 py-3">{flipper}</td>
-                      <td className="px-4 py-3">{arduino}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 
@@ -241,25 +315,26 @@ export default function HomePage() {
                 AI-assisted hardware
               </div>
               <h2 className="mt-3 text-3xl font-semibold tracking-tight text-[color:var(--ink)] md:text-4xl">
-                An Agent that can write, run, and improve scripts.
+                An Agent with hardware tools, not just chat.
               </h2>
               <p className="mt-4 max-w-xl text-[15px] leading-7 text-[color:var(--ink-dim)]">
-                The Agent product direction is paid API usage, not a cloud gate for
-                local hardware. Apps collect local script, device, UI, and error
-                context only when you choose to ask for help.
+                The Agent can help you hack on and interface with devices directly. It uses
+                named hardware primitives like <code>spi_transfer</code>, <code>gpio_read</code>,
+                <code>gpio_write</code>, and <code>analog_read</code>, then turns working flows into
+                local <code>.js</code> scripts with UI controls, plots, logs, and buttons.
               </p>
             </div>
             <div className="rounded-2xl border border-[color:var(--line)] bg-[color:var(--surface-3)] p-5">
               <div className="flex items-center justify-between gap-4 text-xs font-semibold text-[color:var(--ink-dim)]">
-                <span>Agent workflow</span>
-                <span>prompt to script to test</span>
+                <span>Agent tool loop</span>
+                <span>tools to local UI scripts</span>
               </div>
               <div className="mt-4 space-y-3 font-mono text-[12px] leading-6 text-[color:var(--ink)]">
                 {[
-                  ["You", "Build a UI for this RC522 module. Read cards and show UID."],
-                  ["Agent", "Writes the SPI setup, creates the controls, runs the script, reads the result, then tightens the flow."],
-                  ["You", "Capture this IR remote signal and make a replay button."],
-                  ["Agent", "Configures capture, saves the waveform locally, and generates a one-tap retransmit UI."],
+                  ["You", "Find this SPI sensor, read its ID register, and show me what responds."],
+                  ["Agent", "Calls spi_transfer with candidate modes, toggles chip-select with gpio_write, and checks returned bytes."],
+                  ["You", "Turn that into a reusable dashboard."],
+                  ["Agent", "Writes a local .js script with buttons, live analog_read plots, gpio_read status, and a log viewer UI."],
                 ].map(([speaker, text]) => (
                   <div
                     key={`${speaker}-${text}`}

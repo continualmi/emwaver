@@ -52,6 +52,12 @@ function InstallOptions() {
         <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
         <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Windows support is planned after the V1 mobile launch.</div>
       </div>
+
+      <div className="rounded-2xl border border-dashed border-[color:var(--line)] bg-[color:var(--surface)] p-5 opacity-75">
+        <div className="text-xs font-semibold text-[color:var(--ink-dim)]">Linux</div>
+        <div className="pt-2 text-lg font-semibold text-[color:var(--ink)]">Coming soon</div>
+        <div className="pt-2 text-sm text-[color:var(--ink-dim)]">Linux packaging is planned after the V1 mobile launch.</div>
+      </div>
     </div>
   );
 }
@@ -69,7 +75,7 @@ export default function InstallDocPage() {
       <p>
         iOS and Android are the primary EMWaver platforms. iOS is available through the App Store.
         Android is available through the Google Play internal test and as a direct APK download. macOS is available
-        for development and advanced use, and Windows is coming soon after V1.
+        for development and advanced use, and Windows and Linux are coming soon after V1.
       </p>
       <InstallOptions />
 

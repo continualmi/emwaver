@@ -117,7 +117,7 @@ export default function DocsIndex() {
         <li><strong>iOS</strong> on the App Store</li>
         <li><strong>Android</strong> through the Google Play internal test or direct APK download</li>
         <li><strong>macOS</strong> direct DMG download for development and advanced use</li>
-        <li><strong>Windows</strong> coming soon after V1</li>
+        <li><strong>Windows</strong> and <strong>Linux</strong> coming soon after V1</li>
       </ul>
 
       <h2>What to read next</h2>
