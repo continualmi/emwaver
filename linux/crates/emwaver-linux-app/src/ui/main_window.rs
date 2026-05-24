@@ -399,7 +399,8 @@ pub fn build_main_window(app: &adw::Application) {
                 Ok(reply) => append_agent_message(&agent_messages, "Agent", &reply),
                 Err(err) => append_agent_message(&agent_messages, "Agent", &err),
             }
-            agent_status_label.set_label(agent_status_text().as_str());
+            let status = agent_status_text();
+            agent_status_label.set_label(&status);
         });
     }
     {
@@ -419,11 +420,13 @@ pub fn build_main_window(app: &adw::Application) {
         let save_script_button = save_script_button.clone();
         script_list.connect_row_selected(move |_, row| {
             let Some(row) = row else { return };
-            let Some(Some(script_index)) = script_row_indices.borrow().get(row.index() as usize)
-            else {
+            let Some(script_index) = ({
+                let rows = script_row_indices.borrow();
+                rows.get(row.index() as usize).copied().flatten()
+            }) else {
                 return;
             };
-            let Some(item) = script_items.borrow().get(*script_index).cloned() else {
+            let Some(item) = script_items.borrow().get(script_index).cloned() else {
                 return;
             };
             match script_repository.read_script(&item) {
@@ -2258,7 +2261,7 @@ fn firmware_plan_card(plan: Option<&FirmwarePlan>, title: &str) -> gtk::Frame {
                     })
                     .wrap(true)
                     .xalign(0.0)
-                    .monospace(true)
+                    .css_classes(vec!["monospace"])
                     .build(),
             );
         }
