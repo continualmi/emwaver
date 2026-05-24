@@ -31,10 +31,12 @@ The first native slice is M0/M1:
 - shared command probes read firmware version, board type, and local hardware UID over any transport implementation;
 - transport-backed command script execution can run command-lane steps over any transport, stop on busy/error responses, and produce a local execution report;
 - JavaScript runtime compiler supports early `emw.command`, `device.*`, and `gpio.*` APIs and emits transport command steps for the runner;
+- the runtime crate exports both JavaScript compilation and execution entry points for the GTK app;
 - the GTK Run button routes selected simulator and STM32 USB MIDI devices through the JavaScript runtime and transport runner;
 - the GTK shell seeds discovered USB candidates into the local device list alongside the simulator and probes accessible STM32 run-mode boards for local metadata;
 - the GTK shell is now script-workspace first, with a local script list, editor/log workspace, selected-device toolbar state, device options dialog, and Agent/firmware/settings entry points aligned with the macOS app shell;
-- Agent and firmware crates expose local-first orchestration boundaries without storing secrets or flashing real hardware yet;
+- the firmware crate can plan bundled STM32 and ESP32-S3 images, validate required bundled assets, and flash STM32 DFU through the existing Rust DFU backend;
+- Agent and firmware crates expose local-first orchestration boundaries without storing secrets or gating local hardware access;
 - the app crate contains a GTK4/libadwaita shell that shows the simulator, script editor controls, log output, local device metadata, firmware, settings, and Agent panels.
 
 Full JavaScript runtime parity beyond the initial command/gpio/device API, BLE, Wi-Fi, real firmware flashing, and packaged installers are staged behind the crate boundaries and are not complete yet.

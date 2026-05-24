@@ -365,6 +365,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91622ff5e7162018101f2fea40d6ebf4a78bbe5a49736a2020649edf9693679e"
 
 [[package]]
+name = "emwaver-dfu"
+version = "1.0.0"
+dependencies = [
+ "rusb",
+]
+
+[[package]]
 name = "emwaver-linux-agent"
 version = "0.1.0"
 dependencies = [
@@ -401,6 +408,7 @@ dependencies = [
 name = "emwaver-linux-firmware"
 version = "0.1.0"
 dependencies = [
+ "emwaver-dfu",
  "serde",
  "thiserror 1.0.69",
 ]

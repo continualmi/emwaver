@@ -28,6 +28,12 @@ pub struct FirmwarePlan {
 pub enum FirmwareError {
     #[error("missing firmware image: {0}")]
     MissingImage(String),
+    #[error("invalid firmware plan: {0}")]
+    InvalidPlan(String),
+    #[error("dfu device unavailable: {0}")]
+    DfuUnavailable(String),
+    #[error("dfu flash failed: {0}")]
+    DfuFlash(String),
     #[error("flashing backend is not implemented yet: {0}")]
     NotImplemented(&'static str),
 }

@@ -6,6 +6,6 @@ license.workspace = true
 repository.workspace = true
 
 [dependencies]
+emwaver-dfu = { path = "../../../crates/emwaver-dfu" }
 serde.workspace = true
 thiserror.workspace = true
-
